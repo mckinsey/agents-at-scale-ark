@@ -1,11 +1,11 @@
-FROM node:24.13.0-alpine AS deps
+FROM node:24.14.1-alpine AS deps
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:24.13.0-alpine AS builder
+FROM node:24.14.1-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY templates ./templates
 
 RUN npx tsc && chmod +x dist/index.js
 
-FROM node:24.13.0-alpine AS runner
+FROM node:24.14.1-alpine AS runner
 
 WORKDIR /app
 

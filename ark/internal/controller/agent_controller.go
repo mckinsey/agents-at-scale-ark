@@ -19,6 +19,8 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 )
 
@@ -106,6 +108,8 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 		if ok, msg := r.checkModelDependency(ctx, agent); !ok {
 			return false, "ModelNotFound", msg
 		}
+	} else if agentRequiresModel(agent) {
+		return false, "ModelNotConfigured", "Agent has no model configured; the default executor requires a model"
 	}
 
 	// Check execution engine dependency
@@ -122,6 +126,15 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 
 	// All dependencies resolved
 	return true, "Available", "All dependencies are available"
+}
+
+// agentRequiresModel reports whether the agent needs a model to run. A2A agents
+// (model is external) and agents delegating to an ExecutionEngine are exempt.
+func agentRequiresModel(agent *arkv1alpha1.Agent) bool {
+	if _, isA2A := agent.Annotations[annotations.A2AServerName]; isA2A {
+		return false
+	}
+	return agent.Spec.ExecutionEngine == nil
 }
 
 // checkModelDependency validates model dependency
@@ -186,6 +199,14 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 // checkExecutionEngineDependency validates execution engine dependency
 func (r *AgentReconciler) checkExecutionEngineDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string, string) {
 	engineName := agent.Spec.ExecutionEngine.Name
+
+	// The "a2a" engine is built into the controller, not a deployed
+	// ExecutionEngine resource, so there is no CR to look up. Availability for
+	// A2A agents is governed by the owning A2AServer (checkA2AServerDependency).
+	if engineName == arka2a.ExecutionEngineA2A {
+		return true, "", ""
+	}
+
 	engineNamespace := agent.Namespace
 
 	if agent.Spec.ExecutionEngine.Namespace != "" {
@@ -274,30 +295,83 @@ func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.A
 
 	err := r.Status().Update(ctx, agent)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		logf.FromContext(ctx).Error(err, "failed to update agent status")
 	}
 	return err
 }
 
+// agentModelRefIndexer returns the model reference name for field-based Agent lookups.
+func agentModelRefIndexer(obj client.Object) []string {
+	agent := obj.(*arkv1alpha1.Agent)
+	if agent.Spec.ModelRef == nil {
+		return nil
+	}
+	return []string{agent.Spec.ModelRef.Name}
+}
+
+// agentExecutionEngineIndexer returns the execution engine name for field-based Agent lookups.
+func agentExecutionEngineIndexer(obj client.Object) []string {
+	agent := obj.(*arkv1alpha1.Agent)
+	if agent.Spec.ExecutionEngine == nil {
+		return nil
+	}
+	return []string{agent.Spec.ExecutionEngine.Name}
+}
+
+// agentToolNamesIndexer returns indexed tool names for field-based Agent lookups, skipping built-in tools.
+func agentToolNamesIndexer(obj client.Object) []string {
+	agent := obj.(*arkv1alpha1.Agent)
+	var names []string
+	for _, tool := range agent.Spec.Tools {
+		if tool.Type == "built-in" {
+			continue
+		}
+		if tool.Name != "" {
+			names = append(names, tool.Name)
+		}
+		if tool.Partial != nil && tool.Partial.Name != "" {
+			names = append(names, tool.Partial.Name)
+		}
+	}
+	return names
+}
+
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(), &arkv1alpha1.Agent{}, ".spec.modelRef.name", agentModelRefIndexer,
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(), &arkv1alpha1.Agent{}, ".spec.executionEngine.name", agentExecutionEngineIndexer,
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(), &arkv1alpha1.Agent{}, ".spec.tools.name", agentToolNamesIndexer,
+	); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Agent{}).
-		// Watch for Tool events and reconcile dependent agents
 		Watches(
 			&arkv1alpha1.Tool{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForTool),
 		).
-		// Watch for Model events and reconcile dependent agents
 		Watches(
 			&arkv1alpha1.Model{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForModel),
 		).
-		// Watch for A2AServer events and reconcile owned agents
 		Watches(
 			&arkv1prealpha1.A2AServer{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForA2AServer),
 		).
-		// Watch for ExecutionEngine events and reconcile dependent agents
 		Watches(
 			&arkv1prealpha1.ExecutionEngine{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForExecutionEngine),
@@ -306,105 +380,47 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// findAgentsForTool finds agents that depend on the given tool
 func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Object) []reconcile.Request {
-	tool, ok := obj.(*arkv1alpha1.Tool)
-	if !ok {
-		return nil
-	}
-
-	return r.findAgentsForDependency(ctx, tool.Name, tool.Namespace, "tool", func(agent *arkv1alpha1.Agent) bool {
-		return r.agentDependsOnTool(agent, tool.Name)
-	})
-}
-
-// findAgentsForModel finds agents that depend on the given model
-func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
-	model, ok := obj.(*arkv1alpha1.Model)
-	if !ok {
-		return nil
-	}
-
-	return r.findAgentsForDependency(ctx, model.Name, model.Namespace, "model", func(agent *arkv1alpha1.Agent) bool {
-		return r.agentDependsOnModel(agent, model.Name)
-	})
-}
-
-// findAgentsForDependency is a generic function to find agents that depend on a given resource
-func (r *AgentReconciler) findAgentsForDependency(ctx context.Context, resourceName, namespace, resourceType string, dependencyCheck func(*arkv1alpha1.Agent) bool) []reconcile.Request {
-	log := logf.Log.WithName("agent-controller").WithValues(resourceType, resourceName, "namespace", namespace)
-
-	// List all agents in the same namespace
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(ctx, &agentList, client.InNamespace(namespace)); err != nil {
-		log.Error(err, "Failed to list agents for dependency check", "resourceType", resourceType)
+	if err := r.List(ctx, &agentList,
+		client.InNamespace(obj.GetNamespace()),
+		client.MatchingFields{".spec.tools.name": obj.GetName()},
+	); err != nil {
 		return nil
 	}
+	return agentsToRequests(agentList.Items)
+}
 
-	var requests []reconcile.Request
-	seenAgents := make(map[string]bool) // Deduplication map
-
-	for _, agent := range agentList.Items {
-		// Check if this agent depends on the resource
-		if dependencyCheck(&agent) {
-			agentKey := agent.Namespace + "/" + agent.Name
-
-			// Skip if we've already added this agent
-			if seenAgents[agentKey] {
-				continue
-			}
-			seenAgents[agentKey] = true
-
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      agent.Name,
-					Namespace: agent.Namespace,
-				},
-			})
-		}
+func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
+	var agentList arkv1alpha1.AgentList
+	if err := r.List(ctx, &agentList,
+		client.InNamespace(obj.GetNamespace()),
+		client.MatchingFields{".spec.modelRef.name": obj.GetName()},
+	); err != nil {
+		return nil
 	}
-
-	return requests
+	return agentsToRequests(agentList.Items)
 }
 
-// agentDependsOnTool checks if an agent depends on a specific tool
-func (r *AgentReconciler) agentDependsOnTool(agent *arkv1alpha1.Agent, toolName string) bool {
-	for _, toolSpec := range agent.Spec.Tools {
-		// Skip built-in tools - they don't reference Tool CRDs
-		if toolSpec.Type == "built-in" {
-			continue
-		}
-		// Check both the exposed name and the actual tool name (for partial tools)
-		if toolSpec.Name == toolName {
-			return true
-		}
-		if toolSpec.Partial != nil && toolSpec.Partial.Name == toolName {
-			return true
-		}
-	}
-	return false
-}
-
-// agentDependsOnModel checks if an agent depends on a specific model
-func (r *AgentReconciler) agentDependsOnModel(agent *arkv1alpha1.Agent, modelName string) bool {
-	return agent.Spec.ModelRef != nil && agent.Spec.ModelRef.Name == modelName
-}
-
-// findAgentsForExecutionEngine finds agents that depend on the given execution engine
 func (r *AgentReconciler) findAgentsForExecutionEngine(ctx context.Context, obj client.Object) []reconcile.Request {
-	engine, ok := obj.(*arkv1prealpha1.ExecutionEngine)
-	if !ok {
+	var agentList arkv1alpha1.AgentList
+	if err := r.List(ctx, &agentList,
+		client.InNamespace(obj.GetNamespace()),
+		client.MatchingFields{".spec.executionEngine.name": obj.GetName()},
+	); err != nil {
 		return nil
 	}
-
-	return r.findAgentsForDependency(ctx, engine.Name, engine.Namespace, "executionEngine", func(agent *arkv1alpha1.Agent) bool {
-		return r.agentDependsOnExecutionEngine(agent, engine.Name)
-	})
+	return agentsToRequests(agentList.Items)
 }
 
-// agentDependsOnExecutionEngine checks if an agent depends on a specific execution engine
-func (r *AgentReconciler) agentDependsOnExecutionEngine(agent *arkv1alpha1.Agent, engineName string) bool {
-	return agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name == engineName
+func agentsToRequests(agents []arkv1alpha1.Agent) []reconcile.Request {
+	requests := make([]reconcile.Request, len(agents))
+	for i, agent := range agents {
+		requests[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: agent.Name, Namespace: agent.Namespace},
+		}
+	}
+	return requests
 }
 
 // findAgentsForA2AServer finds agents owned by the given A2AServer

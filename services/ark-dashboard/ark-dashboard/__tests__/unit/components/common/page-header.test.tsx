@@ -5,10 +5,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: vi.fn(() => new URLSearchParams('namespace=test-ns')),
 }));
 
-vi.mock('@/components/ui/sidebar', () => ({
-  SidebarTrigger: () => <button>sidebar</button>,
-}));
-
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
@@ -29,12 +25,12 @@ describe('PageHeader', () => {
   it('preserves namespace in breadcrumb links', () => {
     render(
       <PageHeader
-        breadcrumbs={[{ href: '/', label: 'ARK Dashboard' }]}
+        breadcrumbs={[{ href: '/', label: 'Ark Dashboard' }]}
         currentPage="Agents"
       />,
     );
 
-    const links = screen.getAllByRole('link', { name: 'ARK Dashboard' });
+    const links = screen.getAllByRole('link', { name: 'Ark Dashboard' });
     for (const link of links) {
       expect(link).toHaveAttribute('href', '/?namespace=test-ns');
     }
@@ -44,7 +40,7 @@ describe('PageHeader', () => {
     render(
       <PageHeader
         breadcrumbs={[
-          { href: '/', label: 'ARK Dashboard' },
+          { href: '/', label: 'Ark Dashboard' },
           { href: '/agents', label: 'Agents' },
         ]}
         currentPage="Agent Detail"
@@ -52,7 +48,7 @@ describe('PageHeader', () => {
     );
 
     const dashboardLinks = screen.getAllByRole('link', {
-      name: 'ARK Dashboard',
+      name: 'Ark Dashboard',
     });
     for (const link of dashboardLinks) {
       expect(link).toHaveAttribute('href', '/?namespace=test-ns');
@@ -68,7 +64,7 @@ describe('PageHeader', () => {
     render(
       <PageHeader
         breadcrumbs={[
-          { href: '/', label: 'ARK Dashboard' },
+          { href: '/', label: 'Ark Dashboard' },
           { href: '/agents', label: 'Agents' },
           { href: '/agents/details', label: 'Details' },
         ]}
@@ -77,7 +73,7 @@ describe('PageHeader', () => {
     );
 
     const dashboardLinks = screen.getAllByRole('link', {
-      name: 'ARK Dashboard',
+      name: 'Ark Dashboard',
     });
     for (const link of dashboardLinks) {
       expect(link).toHaveAttribute('href', '/?namespace=test-ns');

@@ -14,7 +14,29 @@ vi.mock('@/lib/api/client', () => ({
     post: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),
+    setDefaultParam: vi.fn(),
   },
+  APIClient: vi.fn().mockImplementation(() => ({
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    setDefaultParam: vi.fn(),
+    getDefaultParams: vi.fn().mockReturnValue({}),
+    buildUrl: vi.fn((endpoint: string) => `/api/v1/proxy/services/file-gateway-api/${endpoint}`),
+  })),
+}));
+
+vi.mock('@/lib/api/files-client', () => ({
+  filesApiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(),
+    setDefaultParam: vi.fn(),
+    getDefaultParams: vi.fn().mockReturnValue({}),
+    buildUrl: vi.fn((endpoint: string) => `/api/v1/proxy/services/file-gateway-api/${endpoint}`),
+  },
+  FILES_API_BASE_URL: '/api/v1/proxy/services/file-gateway-api/',
 }));
 
 describe('TeamEditor', () => {
@@ -207,24 +229,6 @@ describe('TeamEditor', () => {
   });
 
   describe('selector strategy defaults', () => {
-    it('should populate default selector prompt when switching to selector strategy', async () => {
-      const user = userEvent.setup();
-      render(<TeamEditor {...defaultProps} />);
-
-      const combobox = screen.getByRole('combobox');
-      await user.click(combobox);
-
-      const selectorOption = screen.getByRole('option', { name: /selector/i });
-      await user.click(selectorOption);
-
-      await waitFor(() => {
-        const textarea = screen.getByPlaceholderText(
-          'Enter the selector prompt...',
-        );
-        expect(textarea).toHaveValue(DEFAULT_SELECTOR_PROMPT);
-      });
-    });
-
     it('should populate default selector prompt when editing a team with selector strategy and no prompt', async () => {
       const selectorTeam = {
         id: 'team-selector',

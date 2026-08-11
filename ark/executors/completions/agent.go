@@ -2,10 +2,12 @@ package completions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/packages/param"
+	"github.com/openai/openai-go/shared/constant"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,20 +22,21 @@ import (
 )
 
 type Agent struct {
-	Name              string
-	Namespace         string
-	Prompt            string
-	Description       string
-	Parameters        []arkv1alpha1.Parameter
-	Model             *Model
-	Tools             *ToolRegistry
-	telemetryRecorder telemetry.AgentRecorder
-	eventingRecorder  eventing.AgentRecorder
-	eventing          eventing.Provider
-	ExecutionEngine   *arkv1alpha1.ExecutionEngineRef
-	Annotations       map[string]string
-	OutputSchema      *runtime.RawExtension
-	client            client.Client
+	Name                  string
+	Namespace             string
+	Prompt                string
+	Description           string
+	Parameters            []arkv1alpha1.Parameter
+	Model                 *Model
+	Tools                 *ToolRegistry
+	telemetryRecorder     telemetry.AgentRecorder
+	eventingRecorder      eventing.AgentRecorder
+	eventing              eventing.Provider
+	ExecutionEngine       *arkv1alpha1.ExecutionEngineRef
+	Annotations           map[string]string
+	OutputSchema          *runtime.RawExtension
+	client                client.Client
+	approvalRequiredTools map[string]*arkv1alpha1.ToolApprovalConfig
 }
 
 // FullName returns the namespace/name format for the agent
@@ -41,24 +44,45 @@ func (a *Agent) FullName() string {
 	return a.Namespace + "/" + a.Name
 }
 
-// Execute executes the agent with optional event emission for tool calls
-func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (a *Agent) Close() {
+	if a.Tools != nil {
+		_ = a.Tools.Close()
+	}
+}
+
+func (a *Agent) GetToolRegistry() *ToolRegistry {
+	return a.Tools
+}
+
+// Execute executes the agent with optional event emission for tool calls.
+// opts carries caller-controlled options such as forcing a tool call; pass ExecuteOptions{} for defaults.
+func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
 	defer span.End()
 
+	ctx = WithExecutionMetadata(ctx, map[string]interface{}{
+		"agent": a.Name,
+	})
+
 	operationData := map[string]string{
-		"agent": a.FullName(),
+		"agent": a.Name,
 	}
 	ctx = a.eventingRecorder.Start(ctx, "AgentExecution", fmt.Sprintf("Executing agent %s", a.FullName()), operationData)
 
-	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
+	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream, opts)
 	if err != nil {
-		a.telemetryRecorder.RecordError(span, err)
-		if !IsTerminateTeam(err) {
-			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
-			return nil, err
+		if signalResult, handled := a.handleSignalError(ctx, span, result, err, operationData); handled {
+			return signalResult, nil
 		}
-		return result, err
+		var approvalErr *ApprovalRequiredError
+		if errors.As(err, &approvalErr) {
+			a.telemetryRecorder.RecordSuccess(span)
+			a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution paused for tool approval", operationData)
+			return result, err
+		}
+		a.telemetryRecorder.RecordError(span, err)
+		a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
+		return nil, err
 	}
 
 	a.telemetryRecorder.RecordSuccess(span)
@@ -66,14 +90,34 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	return result, nil
 }
 
-func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (a *Agent) handleSignalError(ctx context.Context, span telemetry.Span, result *ExecutionResult, err error, operationData map[string]string) (*ExecutionResult, bool) {
+	if result == nil {
+		result = &ExecutionResult{}
+	}
+	if IsTerminateTeam(err) {
+		result.Signal = &TerminateSignal{}
+		a.telemetryRecorder.RecordSuccess(span)
+		a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with termination", operationData)
+		return result, true
+	}
+	var selectionMade *SelectionMade
+	if errors.As(err, &selectionMade) {
+		result.Signal = &SelectionMadeSignal{SelectedName: selectionMade.SelectedName}
+		a.telemetryRecorder.RecordSuccess(span)
+		a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with selection", operationData)
+		return result, true
+	}
+	return nil, false
+}
+
+func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
 	if a.ExecutionEngine != nil {
 		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 	}
 
-	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
+	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream, opts)
 	if err != nil {
-		if IsTerminateTeam(err) {
+		if IsTerminateTeam(err) || IsSelectionMade(err) {
 			return &ExecutionResult{Messages: messages}, err
 		}
 		return nil, err
@@ -100,13 +144,11 @@ func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history 
 }
 
 // executeModelCall executes a single model call with optional streaming support.
-func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, tools []openai.ChatCompletionToolParam, eventStream EventStreamInterface) (*openai.ChatCompletion, error) {
-	// Set schema information on the model
+func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, eventStream EventStreamInterface, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
 	a.Model.OutputSchema = a.OutputSchema
-	// Truncate schema name to 64 chars for OpenAI API compatibility - name is purely an identifier
 	a.Model.SchemaName = fmt.Sprintf("%.64s", fmt.Sprintf("namespace-%s-agent-%s", a.Namespace, a.Name))
 
-	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools)
+	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools, toolChoice)
 	if err != nil {
 		return nil, fmt.Errorf("agent %s execution failed: %w", a.FullName(), err)
 	}
@@ -122,7 +164,7 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 	assistantMessage := Message(choice.Message.ToParam())
 
 	if m := assistantMessage.OfAssistant; m != nil {
-		m.Name = param.Opt[string]{Value: a.Name}
+		m.Name = param.NewOpt(a.Name)
 	}
 
 	return assistantMessage
@@ -130,7 +172,14 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
-	toolMessage := ToolMessage(result.Content, result.ID)
+
+	// If the result has an error field set, use that as the message content
+	// This allows tool results to communicate errors (e.g., HITL rejection) back to the model
+	content := result.Content
+	if result.Error != "" {
+		content = result.Error
+	}
+	toolMessage := ToolMessage(content, result.ID)
 
 	if err != nil {
 		return toolMessage, err
@@ -140,6 +189,43 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 }
 
 func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, agentMessages, newMessages *[]Message) error {
+	// First pass: check if any tools require approval
+	var toolCallsNeedingApproval []ToolCall
+	var approvalConfig *arkv1alpha1.ToolApprovalConfig
+
+	for _, tc := range toolCalls {
+		if config := a.requiresApproval(tc.Function.Name); config != nil {
+			toolCallsNeedingApproval = append(toolCallsNeedingApproval, ToolCall(tc))
+			if approvalConfig == nil {
+				approvalConfig = config
+			}
+		}
+	}
+
+	// If any tools need approval, return error to pause execution
+	if len(toolCallsNeedingApproval) > 0 {
+		// Get conversation ID from query context
+		conversationID := ""
+		if query, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query); ok {
+			conversationID = query.Spec.ConversationId
+		}
+
+		execContext := &ExecutionContext{
+			ConversationID:       conversationID,
+			PendingToolCallIndex: 0,
+			CompletedToolResults: []ToolResult{},
+			AgentName:            a.Name,
+			AgentNamespace:       a.Namespace,
+		}
+
+		return &ApprovalRequiredError{
+			ToolCalls: toolCallsNeedingApproval,
+			Config:    approvalConfig,
+			Context:   execContext,
+		}
+	}
+
+	// No approval needed, execute normally
 	for _, tc := range toolCalls {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -157,7 +243,7 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 }
 
 // executeLocally executes the agent using the built-in OpenAI-compatible engine
-func (a *Agent) executeLocally(ctx context.Context, userInput Message, history []Message, _ MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
+func (a *Agent) executeLocally(ctx context.Context, userInput Message, history []Message, _ MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) ([]Message, error) {
 	var tools []openai.ChatCompletionToolParam
 	if a.Tools != nil {
 		tools = a.Tools.ToOpenAITools()
@@ -179,7 +265,7 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 			return newMessages, ctx.Err()
 		}
 
-		response, err := a.executeModelCall(ctx, agentMessages, tools, eventStream)
+		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, opts.ToolChoice)
 		if err != nil {
 			return nil, err
 		}
@@ -196,12 +282,33 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 
 		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
 			logger := logf.FromContext(ctx)
-			if !IsTerminateTeam(err) {
+			if !IsTerminateTeam(err) && !IsSelectionMade(err) {
 				logger.Error(err, "Tool execution failed", "agent", a.FullName())
 			}
 			return newMessages, err
 		}
 	}
+}
+
+// ResumeFromApproval resumes agent execution after tool approval is granted
+// It takes the original tool calls and their execution results
+func (a *Agent) ResumeFromApproval(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, approvedResults []ToolResult, memory MemoryInterface, eventStream EventStreamInterface, originalInput []Message) (*ExecutionResult, error) {
+	if a.Model == nil {
+		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
+	}
+
+	agentMessages, newMessages, err := a.reconstructMessagesForResumption(ctx, toolCalls, approvedResults, memory, originalInput)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepare tools
+	var tools []openai.ChatCompletionToolParam
+	if a.Tools != nil {
+		tools = a.Tools.ToOpenAITools()
+	}
+
+	return a.runAgenticLoopFromResumption(ctx, agentMessages, newMessages, eventStream, tools)
 }
 
 func (a *Agent) GetName() string {
@@ -354,20 +461,134 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		return nil, err
 	}
 
+	// Pre-compute approval requirements for O(1) lookup during execution
+	approvalMap := make(map[string]*arkv1alpha1.ToolApprovalConfig)
+	for _, tool := range crd.Spec.Tools {
+		if tool.Approval != nil && tool.Approval.Required {
+			approvalMap[tool.Name] = tool.Approval
+		}
+	}
+
 	return &Agent{
-		Name:              crd.Name,
-		Namespace:         crd.Namespace,
-		Prompt:            crd.Spec.Prompt,
-		Description:       crd.Spec.Description,
-		Parameters:        crd.Spec.Parameters,
-		Model:             resolvedModel,
-		Tools:             tools,
-		telemetryRecorder: telemetryProvider.AgentRecorder(),
-		eventingRecorder:  eventingProvider.AgentRecorder(),
-		eventing:          eventingProvider,
-		ExecutionEngine:   crd.Spec.ExecutionEngine,
-		Annotations:       crd.Annotations,
-		OutputSchema:      crd.Spec.OutputSchema,
-		client:            k8sClient,
+		Name:                  crd.Name,
+		Namespace:             crd.Namespace,
+		Prompt:                crd.Spec.Prompt,
+		Description:           crd.Spec.Description,
+		Parameters:            crd.Spec.Parameters,
+		Model:                 resolvedModel,
+		Tools:                 tools,
+		telemetryRecorder:     telemetryProvider.AgentRecorder(),
+		eventingRecorder:      eventingProvider.AgentRecorder(),
+		eventing:              eventingProvider,
+		ExecutionEngine:       crd.Spec.ExecutionEngine,
+		Annotations:           crd.Annotations,
+		OutputSchema:          crd.Spec.OutputSchema,
+		client:                k8sClient,
+		approvalRequiredTools: approvalMap,
 	}, nil
+}
+
+// reconstructMessagesForResumption fetches memory messages and appends tool call and results
+func (a *Agent) reconstructMessagesForResumption(
+	ctx context.Context,
+	toolCalls []openai.ChatCompletionMessageToolCall,
+	approvedResults []ToolResult,
+	memory MemoryInterface,
+	originalInput []Message,
+) ([]Message, []Message, error) {
+	log := logf.FromContext(ctx)
+
+	// Get existing messages from memory
+	agentMessages, err := memory.GetMessages(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch conversation history: %w", err)
+	}
+
+	// If memory is empty, use the original input to provide context
+	if len(agentMessages) == 0 && len(originalInput) > 0 {
+		log.Info("Memory returned no messages, using original input for context", "inputCount", len(originalInput))
+		agentMessages = originalInput
+	}
+
+	log.Info("Fetched messages from memory for resumption", "count", len(agentMessages))
+
+	// Reconstruct the assistant message with tool_calls that triggered the approval
+	assistantMsg := openai.ChatCompletionMessage{
+		Role:      constant.Assistant("assistant"),
+		ToolCalls: toolCalls,
+	}
+	assistantMsgConverted := Message(assistantMsg.ToParam())
+	agentMessages = append(agentMessages, assistantMsgConverted)
+
+	// Append tool results as tool messages
+	toolResultMessages := []Message{}
+	for _, result := range approvedResults {
+		content := result.Content
+		if result.Error != "" {
+			content = result.Error
+		}
+		toolMsg := ToolMessage(content, result.ID)
+		agentMessages = append(agentMessages, toolMsg)
+		toolResultMessages = append(toolResultMessages, toolMsg)
+	}
+
+	log.Info("Reconstructed conversation for resumption", "totalMessages", len(agentMessages), "toolResults", len(approvedResults))
+
+	// newMessages should contain the reconstructed messages so they get saved to memory
+	newMessages := []Message{assistantMsgConverted}
+	newMessages = append(newMessages, toolResultMessages...)
+	log.Info("Starting resumption with reconstructed messages in newMessages", "count", len(newMessages))
+
+	return agentMessages, newMessages, nil
+}
+
+// runAgenticLoopFromResumption continues the agentic loop after approval resumption
+func (a *Agent) runAgenticLoopFromResumption(
+	ctx context.Context,
+	agentMessages []Message,
+	newMessages []Message,
+	eventStream EventStreamInterface,
+	tools []openai.ChatCompletionToolParam,
+) (*ExecutionResult, error) {
+	for {
+		if ctx.Err() != nil {
+			return &ExecutionResult{Messages: newMessages}, ctx.Err()
+		}
+
+		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, ToolChoiceUnset)
+		if err != nil {
+			return nil, err
+		}
+
+		choice := response.Choices[0]
+		assistantMessage := a.processAssistantMessage(choice)
+
+		agentMessages = append(agentMessages, assistantMessage)
+		newMessages = append(newMessages, assistantMessage)
+
+		if len(choice.Message.ToolCalls) == 0 {
+			return &ExecutionResult{Messages: newMessages}, nil
+		}
+
+		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
+			newMessages = a.handleResumptionToolError(ctx, err, newMessages)
+			return &ExecutionResult{Messages: newMessages}, err
+		}
+	}
+}
+
+// handleResumptionToolError logs a genuine tool failure and, for a cascading
+// approval, drops the trailing assistant message whose tool_calls were not run.
+func (a *Agent) handleResumptionToolError(ctx context.Context, err error, newMessages []Message) []Message {
+	logger := logf.FromContext(ctx)
+	if !IsTerminateTeam(err) && !IsSelectionMade(err) {
+		logger.Error(err, "Tool execution failed during approval resumption", "agent", a.FullName())
+	}
+
+	var approvalErr *ApprovalRequiredError
+	if errors.As(err, &approvalErr) && len(newMessages) > 0 {
+		logger.Info("Removing last assistant message with pending tool_calls from result", "messageCount", len(newMessages))
+		newMessages = newMessages[:len(newMessages)-1]
+	}
+	return newMessages
 }

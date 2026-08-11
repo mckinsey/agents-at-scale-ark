@@ -1,29 +1,21 @@
 'use client';
 
-import { ArrowLeft, Code, Save, Settings, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { NamespacedLink } from '@/components/namespaced-link';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
-import type { BreadcrumbElement } from '@/components/common/page-header';
-import { PageHeader } from '@/components/common/page-header';
-import { PanelToggleButton } from '@/components/common/panel-toggle-button';
+import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 import { YamlViewer } from '@/components/common/yaml-viewer';
-import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { ChevronLeft } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { IconShell } from '@/components/ui/icon-shell';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Team } from '@/lib/services';
 import { teamsService } from '@/lib/services';
+import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import {
@@ -36,19 +28,12 @@ import {
 import { TeamFormMode, type TeamFormProps } from './types';
 import { useTeamForm } from './use-team-form';
 
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/teams', label: 'Teams' },
-];
-
 export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { push } = useNamespacedNavigation();
-  const { namespace } = useNamespace();
-  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
+  const { readOnlyMode } = useNamespace();
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const isViewing = mode === TeamFormMode.VIEW;
   const isCreating = mode === TeamFormMode.CREATE;
@@ -84,85 +69,30 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { setSelectedMembers, setGraphEdges, setUnavailableMembers, onSubmit } =
     actions;
 
-  const teamYaml = useMemo(() => {
-    if (!team) return '';
+  const [teamYaml, setTeamYaml] = useState('');
 
-    const lines: string[] = [
-      'apiVersion: ark.mckinsey.com/v1alpha1',
-      'kind: Team',
-      'metadata:',
-      `  name: ${team.name}`,
-      `  namespace: ${team.namespace}`,
-      'spec:',
-    ];
-
-    if (team.description) {
-      lines.push(`  description: ${team.description}`);
-    }
-
-    if (team.strategy) {
-      lines.push(`  strategy: ${team.strategy}`);
-    }
-
-    if (team.loops) {
-      lines.push(`  loops: ${team.loops}`);
-    }
-
-    if (team.maxTurns) {
-      lines.push(`  maxTurns: ${team.maxTurns}`);
-    }
-
-    if (team.members && team.members.length > 0) {
-      lines.push('  members:');
-      team.members.forEach(member => {
-        lines.push(`    - name: ${member.name}`);
-        lines.push(`      type: ${member.type}`);
-      });
-    }
-
-    if (team.selector) {
-      lines.push('  selector:');
-      if (team.selector.agent) {
-        lines.push(`    agent: ${team.selector.agent}`);
-      }
-      if (team.selector.selectorPrompt) {
-        lines.push('    selectorPrompt: |');
-        team.selector.selectorPrompt.split('\n').forEach(line => {
-          lines.push(`      ${line}`);
-        });
-      }
-    }
-
-    if (team.graph && team.graph.edges && team.graph.edges.length > 0) {
-      lines.push('  graph:');
-      lines.push('    edges:');
-      team.graph.edges.forEach(edge => {
-        lines.push(`      - from: ${edge.from}`);
-        lines.push(`        to: ${edge.to}`);
-      });
-    }
-
-    return lines.join('\n');
-  }, [team]);
-
-  const handleDelete = async () => {
-    if (!team) return;
-
+  const fetchTeamYaml = useCallback(async (name: string) => {
     try {
-      await teamsService.deleteById(team.id);
-      toast.success('Team Deleted', {
-        description: `Successfully deleted ${team.name}`,
-      });
-      push('/teams');
-    } catch (error) {
-      toast.error('Failed to Delete Team', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
-      });
+      const raw = await teamsService.getRawResource(name);
+      setTeamYaml(toKubernetesYaml(raw));
+    } catch {
+      setTeamYaml('');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (team?.name && showYaml) {
+      fetchTeamYaml(team.name);
+    }
+  }, [team?.name, showYaml, fetchTeamYaml]);
+
+  const prevSavingRef = useRef(false);
+  useEffect(() => {
+    if (prevSavingRef.current && !saving && team?.name && showYaml) {
+      fetchTeamYaml(team.name);
+    }
+    prevSavingRef.current = saving;
+  }, [saving, team?.name, showYaml, fetchTeamYaml]);
 
   if (loading) {
     return (
@@ -175,7 +105,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   if (isViewing && !team) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-muted-foreground">Team not found</div>
+        <div className="text-fg-secondary">Team not found</div>
       </div>
     );
   }
@@ -184,7 +114,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     <>
       <BasicInfoSection form={form} mode={mode} disabled={saving} />
 
-      <StrategySection form={form} agents={agents} selectedMembers={selectedMembers} disabled={saving} />
+      <StrategySection
+        form={form}
+        agents={agents}
+        selectedMembers={selectedMembers}
+        disabled={saving}
+      />
 
       <MembersSection
         agents={agents}
@@ -217,172 +152,99 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
         onGraphEdgesChange={setGraphEdges}
         disabled={saving}
       />
-
     </>
   );
 
-  return (
-    <div className="absolute inset-0 flex flex-col overflow-hidden">
-      <div className="flex-none">
-        <PageHeader
-          breadcrumbs={breadcrumbs}
-          currentPage={isCreating ? 'New Team' : team?.name || 'Team'}
-          actions={
-            isViewing ? (
-              <div className="flex items-center gap-2">
-                <Button variant="outline" asChild>
-                  <NamespacedLink href="/teams">
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back
-                  </NamespacedLink>
-                </Button>
-                <Button
-                  onClick={form.handleSubmit(onSubmit)}
-                  disabled={saving || !hasChanges}>
-                  {saving ? (
-                    <Spinner className="mr-2 h-4 w-4" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  Save Changes
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setDeleteConfirmOpen(true)}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </Button>
-              </div>
-            ) : isCreating ? (
-              <div className="flex items-center gap-2">
-                <Button variant="outline" asChild>
-                  <NamespacedLink href="/teams">
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back
-                  </NamespacedLink>
-                </Button>
-                <Button onClick={form.handleSubmit(onSubmit)} disabled={saving}>
-                  {saving ? (
-                    <Spinner className="mr-2 h-4 w-4" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  Create Team
-                </Button>
-              </div>
-            ) : null
-          }
-        />
-      </div>
-
-      {isViewing ? (
-        <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          {/* Left Panel - Configuration */}
-          <div
-            className={`flex h-full min-h-0 flex-col overflow-hidden border-r transition-all duration-300 ${
-              isLeftPanelCollapsed ? 'w-0 border-r-0' : 'w-1/2'
-            }`}>
-            {!isLeftPanelCollapsed && (
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div className="bg-muted/30 flex items-center gap-2 border-b px-4 py-2">
-                  <Settings className="text-muted-foreground h-4 w-4" />
-                  <Select
-                    value={teamName}
-                    onValueChange={value =>
-                      push(`/teams/${encodeURIComponent(value)}`)
-                    }>
-                    <SelectTrigger className="border-border h-8 w-[180px] bg-transparent px-2 text-sm font-medium">
-                      <SelectValue placeholder="Select team" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teamsLoading ? (
-                        <SelectItem value="loading" disabled>
-                          Loading...
-                        </SelectItem>
-                      ) : (
-                        allTeams.map(t => (
-                          <SelectItem key={t.name} value={t.name}>
-                            {t.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant={showYaml ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => setShowYaml(!showYaml)}
-                    className="h-7 gap-1 px-2 text-xs">
-                    <Code className="h-3 w-3" />
-                    YAML
-                  </Button>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {showYaml ? (
-                    <YamlViewer
-                      yaml={teamYaml}
-                      fileName={team?.name || 'team'}
-                    />
-                  ) : (
-                    <div className="space-y-4 p-4">
-                      <Form {...form}>{formSections}</Form>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+  if (isCreating) {
+    return (
+      <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
+        <header className="flex flex-none flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <nav
+              aria-label="Breadcrumb"
+              className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+              <NamespacedLink
+                href="/teams"
+                className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
+                <IconShell size="sm" className="opacity-100">
+                  <ChevronLeft />
+                </IconShell>
+                Teams
+              </NamespacedLink>
+              <span aria-hidden="true" className="text-fg-secondary">
+                /
+              </span>
+              <span aria-current="page" className="text-fg-secondary">
+                Create team
+              </span>
+            </nav>
+            <div className="flex items-center gap-2">
+              <NamespacedLink href="/teams">
+                <Button variant="outline">Cancel</Button>
+              </NamespacedLink>
+              <Button
+                onClick={form.handleSubmit(onSubmit)}
+                disabled={saving}>
+                {saving && <Spinner className="mr-2 h-4 w-4" />}
+                Create
+              </Button>
+            </div>
           </div>
+          <h1 className="text-fg-primary text-xl leading-7">
+            New team configuration
+          </h1>
+        </header>
 
-          <PanelToggleButton
-            isCollapsed={isLeftPanelCollapsed}
-            onToggle={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
-          />
-
-          {/* Right Panel - Chat */}
-          <div
-            className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
-              isLeftPanelCollapsed ? 'w-full' : 'w-1/2'
-            }`}>
-            <EmbeddedChatPanel
-              name={teamName || ''}
-              type="team"
-              strategy={team?.strategy}
-              selectorAgentName={team?.selector?.agent ?? undefined}
-              graphEdges={team?.graph?.edges}
-            />
-          </div>
-        </div>
-      ) : isCreating ? (
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-              <div className="bg-muted/30 flex items-center gap-2 border-b px-4 py-3">
-                <Settings className="text-muted-foreground h-4 w-4" />
-                <span className="text-sm font-medium">Team Configuration</span>
+            className="flex min-h-0 flex-1 flex-col">
+            <ScrollArea type="scroll" className="h-0 min-h-0 flex-1">
+              <div className="flex w-full max-w-[576px] flex-col gap-6 pb-6 pl-px pr-2">
+                {formSections}
               </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="space-y-4 p-4">{formSections}</div>
-              </div>
-            </div>
+            </ScrollArea>
           </form>
         </Form>
-      ) : null}
+      </div>
+    );
+  }
 
-      {team && (
-        <ConfirmationDialog
-          open={deleteConfirmOpen}
-          onOpenChange={setDeleteConfirmOpen}
-          title="Delete Team"
-          description={`Do you want to delete "${team.name}" team? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          onConfirm={handleDelete}
-          variant="destructive"
+  const displayName = team?.name || '';
+
+  return (
+    <ResourceStudioLayout
+      listHref="/teams"
+      listLabel="Teams"
+      displayName={displayName}
+      saving={saving}
+      hasChanges={hasChanges}
+      readOnlyMode={readOnlyMode}
+      onSave={form.handleSubmit(onSubmit)}
+      switcherValue={teamName}
+      switcherPlaceholder="Select team"
+      switcherItems={allTeams}
+      switcherLoading={teamsLoading}
+      onSwitcherSelect={value => push(`/teams/${encodeURIComponent(value)}`)}
+      showYaml={showYaml}
+      onToggleYaml={() => setShowYaml(!showYaml)}
+      yamlContent={
+        <YamlViewer yaml={teamYaml} fileName={team?.name || 'team'} />
+      }
+      formContent={
+        <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
+          <Form {...form}>{formSections}</Form>
+        </div>
+      }
+      chatPanel={
+        <EmbeddedChatPanel
+          name={teamName || ''}
+          type="team"
+          strategy={team?.strategy}
+          selectorAgentName={team?.selector?.agent ?? undefined}
+          graphEdges={team?.graph?.edges}
         />
-      )}
-    </div>
+      }
+    />
   );
 }

@@ -1,9 +1,12 @@
+import { Callout } from 'nextra/components'
+
 # Ark Broker
 
 In-memory storage service with Server-Sent Events (SSE) streaming support for Ark queries.
 
-- In-memory message storage, or optionally peristed to disk / persistent volume
-- Implements the [Memory API](/reference/resources/memory#memory-api-specification)
+- In-memory message storage by default, optionally persisted to disk / persistent volume, or backed by Postgres for the messages, operation events, and sessions stores
+- Completion chunks held in memory by default, optionally backed by Redis Streams for live streaming across broker replicas
+- Implements the [Memory API](/reference/resources/memory#memory-http-api)
 - Supports [streaming queries](/developer-guide/queries/streaming)
 
 This service provides a basic but complete memory system for an Ark cluster, as well as offering the up-coming streaming APIs which enable real-time streaming responses to queries.
@@ -46,6 +49,275 @@ Environment variables:
 
 The Helm chart can optionally configure a persistent volume for data storage by setting `persistence.enabled=true`.
 
+## Message backend (Postgres)
+
+By default the broker keeps all stores in memory. The **messages** store can opt in to Postgres so messages survive pod restarts. This section covers the messages store; operation events and sessions have their own Postgres opt-ins (see [Event backend (Postgres)](#event-backend-postgres) and [Sessions backend (Postgres)](#sessions-backend-postgres)) and completion chunks can opt in to Redis (see [Chunk backend (Redis)](#chunk-backend-redis)), while traces remain in memory (or file-based, as above).
+
+This is separate from the controller's [PostgreSQL storage backend](/operations-guide/postgres-storage-backend), which stores Ark resources (CRDs) via the aggregated API server. The two use different databases and serve different purposes.
+
+Enable it in the Helm chart:
+
+```yaml
+backends:
+  message: postgres
+
+database:
+  url: "postgres://user:password@host:5432/ark_broker"
+```
+
+<Callout type="warning">
+  In a multi-tenant deployment, each broker release must use its own database (or schema): the `messages` table has no per-tenant row separation (no `tenant_id` column, no row-level security). Never share a `DATABASE_URL` across brokers of different tenants. See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+</Callout>
+
+When enabled, the chart renders a `migrate/migrate` init container (image `ark-broker-migrate`) that applies pending schema migrations before the broker starts. The broker image itself carries no migration tooling and never runs DDL.
+
+Key environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MESSAGE_BACKEND` | `memory` | Message storage backend: `memory` or `postgres` |
+| `DATABASE_URL` | — | Postgres connection string. Required when `MESSAGE_BACKEND=postgres`. |
+| `DATABASE_POOL_MAX` | `10` | Max connections in the pool |
+| `DATABASE_CONNECT_TIMEOUT_MS` | `10000` | Connection timeout |
+| `DATABASE_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement timeout |
+| `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
+| `DATABASE_DEBUG_QUERIES` | `false` | Log SQL at debug level (SQL text + parameter count, never values) |
+| `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate. When set, the broker reads the file and passes it to the Postgres driver for server certificate verification (`sslmode=verify-full`). Set automatically by the Helm chart when `database.tls.enabled=true`. |
+
+Messages carry a TTL-based expiry: each message is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `MESSAGE_VISIBILITY_TTL_SECONDS` when no per-message TTL is supplied.
+
+Messages are also removed when their originating `Query` is deleted: the controller issues `DELETE /queries/{queryId}/messages`, which hard-deletes every message for that query across all conversations. On the Postgres backend this is a single indexed delete. This complements the TTL above — TTL is time-based, this is triggered by the Query's removal. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
+
+See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace, running migrations, and integration tests.
+
+### Securing the Postgres connection
+
+**In-transit encryption (`sslmode=require`)**
+
+No certificates to mount. Append `?sslmode=require` to the connection URL:
+
+```yaml
+database:
+  url: "postgres://user:password@host:5432/ark_broker?sslmode=require"
+```
+
+**CA verification (`sslmode=verify-full`) — recommended for production**
+
+Create a Kubernetes Secret containing the Postgres CA certificate:
+
+```bash
+kubectl create secret generic pg-tls \
+  --from-file=ca.crt=/path/to/postgres-ca.crt
+```
+
+Then enable the TLS mount:
+
+```yaml
+database:
+  url: "postgres://user:password@host:5432/ark_broker?sslmode=verify-full"
+  tls:
+    enabled: true
+    secretName: pg-tls
+    mountPath: /etc/pg-ssl
+```
+
+When `tls.enabled=true`, the chart automatically sets `DATABASE_SSL_ROOT_CERT_PATH={mountPath}/ca.crt` in the broker container. The broker reads the CA certificate from that path and passes it to the Postgres driver for server certificate verification.
+
+Do **not** add `sslrootcert=` to `DATABASE_URL`. The postgres.js driver does not read certificate files from URL parameters — it forwards unknown query parameters to PostgreSQL as `SET` commands, which the server rejects. Certificate loading happens through `DATABASE_SSL_ROOT_CERT_PATH` instead.
+
+**`database.migrateUrl`**
+
+The migrate init container uses golang-migrate, which reads `sslrootcert` from the URL as a client-side file path (different from postgres.js). When using `sslmode=verify-full`, set `database.migrateUrl` separately so the migrate container can verify the server certificate:
+
+```yaml
+database:
+  url: "postgres://user:password@host:5432/ark_broker?sslmode=verify-full"
+  migrateUrl: "postgres://user:password@host:5432/ark_broker?sslmode=verify-full&sslrootcert=/etc/pg-ssl/ca.crt"
+  tls:
+    enabled: true
+    secretName: pg-tls
+    mountPath: /etc/pg-ssl
+```
+
+When `migrateUrl` is not set, the migrate container falls back to `database.url`.
+
+**Hiding the connection URL from Helm values**
+
+`database.url` embeds the password in plain text, which is visible in `kubectl get deployment -o yaml`. For production, store the full URL in a Secret and reference it instead:
+
+```bash
+kubectl create secret generic broker-db-url \
+  --from-literal=database-url="postgres://user:password@host:5432/ark_broker?sslmode=require"
+```
+
+```yaml
+database:
+  urlSecretRef:
+    name: broker-db-url
+    key: database-url   # default key; can be omitted
+```
+
+`urlSecretRef` takes priority over `database.url` and applies to both the broker container and the migrate init container.
+
+## Event backend (Postgres)
+
+Operation events — the controller lifecycle events emitted as a query executes (`QueryExecutionStart`, `LLMCallComplete`, and so on) — are kept in memory by default. The **events** store can opt in to Postgres so they survive pod restarts, independently of the messages store.
+
+The event backend shares the same `DATABASE_URL`, connection pool, and `migrate/migrate` init container as the [Message backend](#message-backend-postgres): the `events` and `messages` tables live in one schema. You can enable either backend on its own or both together.
+
+Enable it in the Helm chart:
+
+```yaml
+backends:
+  event: postgres        # combine with `message: postgres` to persist both
+
+database:
+  url: "postgres://user:password@host:5432/ark_broker"
+```
+
+<Callout type="warning">
+  The same multi-tenant caveat as the messages store applies: the `events` table has no per-tenant row separation (no `tenant_id` column, no row-level security). Each broker release must use its own database (or schema), and never share a `DATABASE_URL` across brokers of different tenants. See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+</Callout>
+
+Key environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EVENT_BACKEND` | `memory` | Event storage backend: `memory` or `postgres` |
+| `DATABASE_URL` | — | Postgres connection string. Required when `EVENT_BACKEND=postgres`. Shared with the message backend. |
+| `EVENT_VISIBILITY_TTL_SECONDS` | `2592000` | Default event TTL (30 days) |
+
+The other `DATABASE_*` variables (`DATABASE_POOL_MAX`, `DATABASE_CONNECT_TIMEOUT_MS`, `DATABASE_STATEMENT_TIMEOUT_MS`, `DATABASE_DEBUG_QUERIES`, `DATABASE_SSL_ROOT_CERT_PATH`) are shared with the message backend — see the table above. Securing the connection (TLS, `migrateUrl`, hiding the URL in a Secret) works identically; see [Securing the Postgres connection](#securing-the-postgres-connection).
+
+Events carry a TTL-based expiry: each event is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `EVENT_VISIBILITY_TTL_SECONDS` when no per-query TTL is supplied.
+
+Events are also removed when their originating `Query` is deleted, through a path separate from messages: events aren't part of the [Memory API](/reference/resources/memory#memory-http-api), so the controller calls `DELETE /events/{queryId}` directly on the broker endpoint discovered via the `ark-config-broker` ConfigMap, rather than going through a `Memory` resource. Events are keyed by the Query's UID rather than its name, so `{queryId}` here is the UID. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
+
+## Sessions backend (Postgres)
+
+Sessions — the materialized index of participants, conversations, status, and per-query progress that backs the dashboard's session list and live session panel — are kept in memory by default. The **sessions** store can opt in to Postgres so it survives pod restarts and is shared by every broker replica.
+
+Unlike the messages and events stores, this backend cannot be enabled on its own: a session is materialized from both of those streams, so `backends.sessions: postgres` also requires `backends.message: postgres` and `backends.event: postgres`. The broker validates this at startup and exits with an explanatory error otherwise. The reason is sequence numbering: the watermarks that stop an out-of-order write from regressing a session are the sequence numbers of the messages and events themselves, and an in-memory stream numbers its items per process starting from 1 — two replicas would feed the same sequences into one shared watermark and each would discard the other's writes.
+
+The sessions backend shares the same `DATABASE_URL`, connection pool, and `migrate/migrate` init container as the [Message backend](#message-backend-postgres) and [Event backend](#event-backend-postgres). It adds two tables to that schema: `sessions`, one header row per session, and `session_queries`, one row per query, foreign-keyed to its session with `ON DELETE CASCADE`.
+
+Enable it in the Helm chart:
+
+```yaml
+backends:
+  message: postgres
+  event: postgres
+  sessions: postgres
+
+database:
+  url: "postgres://user:password@host:5432/ark_broker"
+```
+
+<Callout type="warning">
+  The same multi-tenant caveat as the messages and events stores applies: neither `sessions` nor `session_queries` has a `tenant_id` column or row-level security, and both live in the database the other two backends already share. Each broker release must use its own database (or schema). See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+</Callout>
+
+Key environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SESSIONS_BACKEND` | `memory` | Sessions storage backend: `memory` or `postgres`. `postgres` requires `MESSAGE_BACKEND=postgres` and `EVENT_BACKEND=postgres`. |
+| `DATABASE_URL` | — | Postgres connection string. Required when `SESSIONS_BACKEND=postgres`. Shared with the message and event backends. |
+| `SESSIONS_VISIBILITY_TTL_SECONDS` | `2592000` | Session TTL (30 days). Must be at least as long as `MESSAGE_VISIBILITY_TTL_SECONDS` and `EVENT_VISIBILITY_TTL_SECONDS`. |
+
+The other `DATABASE_*` variables are shared with the message and event backends — see the [Message backend](#message-backend-postgres) table. Securing the connection (TLS, `migrateUrl`, hiding the URL in a Secret) works identically; see [Securing the Postgres connection](#securing-the-postgres-connection).
+
+Session expiry is a **sliding** window rather than the write-time snapshot used for messages and events: every event or message on a session pushes `expires_at` out by `SESSIONS_VISIBILITY_TTL_SECONDS`, so a session stays visible for as long as it is in use, and the value does not track the originating query's `spec.ttl`. The minimum enforced at startup exists because a session is the index into its own messages and events — hiding it earlier than they expire would strand data that is still retained. Expiry hides a session from reads; it does not delete the row, and a later event or message on an expired session makes it visible again.
+
+Deleting a `Query` does **not** remove it from the sessions read model. Messages and events have per-query cleanup paths (see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup)); sessions do not, so the query's row stays in `session_queries` and its session keeps listing it. `DELETE /sessions` purges every session and its queries.
+
+### Cross-replica session updates
+
+`GET /sessions?watch=true` opens an SSE stream of session updates. With the in-memory store that stream only carries updates produced by the replica holding the connection, so a dashboard connected to one replica never sees a session updated through another.
+
+On Postgres the writing replica issues a `NOTIFY` once its transaction commits, and every replica holds a `LISTEN` on the same channel, so each one pushes the update to its own SSE clients regardless of where the write landed. This is for sessions what the [Chunk backend (Redis)](#chunk-backend-redis) is for streaming chunks.
+
+## Chunk backend (Redis)
+
+By default the broker holds completion chunks in process memory, served from a single replica. The **chunks** store can opt in to Redis Streams so that chunks produced by one broker replica can be streamed live to a client whose SSE connection landed on another replica. Only the chunks store is affected — messages, operation events, and sessions stay wherever their own backends put them, and traces remain in memory (or file-based, as above).
+
+Each query gets its own Redis Stream key (`{prefix}:chunks:{queryId}`), plus a capped global key (`{prefix}:chunks:all`) backing the paginated and watch endpoints. Live tail uses `XREAD BLOCK` so chunks arrive cross-replica.
+
+Enable it in the Helm chart:
+
+```yaml
+backends:
+  chunk: redis
+
+redis:
+  url: "redis://:password@redis-host:6379"
+```
+
+<Callout type="warning">
+  In a multi-tenant deployment, each broker release must use its own Redis instance (or keyspace): the chunk streams carry no per-tenant separation. `REDIS_KEY_PREFIX` namespaces keys but is not an isolation boundary. Never share a `REDIS_URL` across brokers of different tenants. See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+</Callout>
+
+Key environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CHUNK_BACKEND` | `memory` | Completion chunk storage backend: `memory` or `redis` |
+| `REDIS_URL` | — | Redis connection string. Required when `CHUNK_BACKEND=redis`. Use `redis://` for plain or `rediss://` for TLS. |
+| `REDIS_USERNAME` | — | Redis ACL username (optional) |
+| `REDIS_PASSWORD` | — | Redis password (optional) |
+| `REDIS_TLS_CA_CERT_PATH` | — | Path to a CA certificate for TLS connections with self-signed certs. Set automatically by the Helm chart when `redis.tls.enabled=true`. |
+| `REDIS_KEY_PREFIX` | `ark-broker` | Prefix for all Redis keys |
+| `REDIS_STREAM_TTL_SECONDS` | `3600` | TTL applied to per-query chunk streams |
+| `REDIS_CONNECT_TIMEOUT_MS` | `10000` | Redis connection timeout |
+| `REDIS_DEBUG_COMMANDS` | `false` | Log Redis connection lifecycle events at debug level (never logs payloads) |
+
+See the [service README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-broker/README.md) for local development with devspace and integration tests.
+
+### Securing the Redis connection
+
+**In-transit encryption (`rediss://`)**
+
+Use the `rediss://` scheme in the connection URL to connect over TLS. For a Redis endpoint with a CA trusted by the system store, no certificates need to be mounted.
+
+**CA verification (self-signed certs) — recommended for production**
+
+Create a Kubernetes Secret containing the Redis CA certificate:
+
+```bash
+kubectl create secret generic redis-tls \
+  --from-file=ca.crt=/path/to/redis-ca.crt
+```
+
+Then enable the TLS mount:
+
+```yaml
+redis:
+  url: "rediss://:password@redis-host:6380"
+  tls:
+    enabled: true
+    secretName: redis-tls
+```
+
+When `tls.enabled=true`, the chart mounts the secret and sets `REDIS_TLS_CA_CERT_PATH` in the broker container automatically. The secret must contain a `ca.crt` key.
+
+**Hiding the connection URL from Helm values**
+
+`redis.url` embeds the password in plain text, which is visible in `kubectl get deployment -o yaml`. For production, store the full URL in a Secret and reference it instead:
+
+```bash
+kubectl create secret generic broker-redis-url \
+  --from-literal=redis-url="rediss://:password@redis-host:6380"
+```
+
+```yaml
+redis:
+  urlSecretRef:
+    name: broker-redis-url
+    key: redis-url   # default key; can be omitted
+```
+
+The password can also be supplied separately from the URL via `redis.passwordSecretRef`, sourced into `REDIS_PASSWORD`.
+
 ## Sessions Endpoint
 
 The `/sessions` endpoint provides a live, event-sourced index of active sessions and their queries. It materializes state from the existing event and message streams — no additional data ingestion is needed.
@@ -57,4 +329,4 @@ The `/sessions` endpoint provides a live, event-sourced index of active sessions
 | GET | `/sessions?watch=true&session_id=X` | SSE stream filtered to one session |
 | DELETE | `/sessions` | Purge all session data |
 
-Set `SESSIONS_FILE_PATH` to enable persistence to disk.
+Set `SESSIONS_FILE_PATH` to enable persistence to disk, or enable the [Sessions backend (Postgres)](#sessions-backend-postgres) to persist sessions in Postgres and share them across broker replicas.

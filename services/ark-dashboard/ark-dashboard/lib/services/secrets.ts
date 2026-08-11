@@ -18,6 +18,11 @@ export const secretsService = {
     return response.items;
   },
 
+  // Get a single secret's details, including the names of its keys
+  async get(name: string): Promise<SecretDetailResponse> {
+    return apiClient.get<SecretDetailResponse>(`/api/v1/secrets/${name}`);
+  },
+
   // Create a new secret
   async create(name: string, password: string): Promise<SecretDetailResponse> {
     const request: SecretCreateRequest = {

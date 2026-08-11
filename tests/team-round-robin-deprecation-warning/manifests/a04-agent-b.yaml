@@ -5,4 +5,4 @@ metadata:
 spec:
   prompt: You are a test agent.
   modelRef:
-    name: test-model
+    name: non-existent-model

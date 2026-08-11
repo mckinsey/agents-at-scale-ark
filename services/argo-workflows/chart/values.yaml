@@ -114,7 +114,6 @@ httpRoute:
       - name: localhost-gateway
         namespace: ark-system
     hostnames:
-      - "argo.127.0.0.1.nip.io"
       - "argo.default.127.0.0.1.nip.io"
 
   minio:
@@ -123,5 +122,4 @@ httpRoute:
       - name: localhost-gateway
         namespace: ark-system
     hostnames:
-      - "minio.127.0.0.1.nip.io"
       - "minio.default.127.0.0.1.nip.io"

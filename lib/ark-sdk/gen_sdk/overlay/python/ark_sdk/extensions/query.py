@@ -3,9 +3,14 @@
 Extension spec: ark/api/extensions/query/v1/
 """
 
+import base64
 import logging
+import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
+
+from kubernetes_asyncio import client
+from ark_sdk.k8s import create_api_client
 
 from ..executor import (
     AgentConfig,
@@ -31,13 +36,25 @@ class QueryRef:
     namespace: str
 
 
+def _parse_go_duration_to_seconds(duration: str) -> Optional[int]:
+    if not duration:
+        return None
+    total = sum(
+        int(v) * {"h": 3600, "m": 60, "s": 1}[u]
+        for v, u in re.findall(r"(\d+)([hms])", duration)
+    )
+    return total or None
+
+
 def extract_query_ref(message: Any) -> QueryRef:
     """Extract QueryRef from an A2A message's extension metadata.
 
     Raises ValueError if the extension metadata is missing or malformed.
     """
     metadata = {}
-    if hasattr(message, "metadata") and message.metadata:
+    if isinstance(message, dict):
+        metadata = message.get("metadata") or {}
+    elif hasattr(message, "metadata") and message.metadata:
         metadata = message.metadata
 
     ref_data = metadata.get(QUERY_EXTENSION_METADATA_KEY)
@@ -68,14 +85,13 @@ async def resolve_query(
     """
     from ..client import V1_ALPHA1, with_ark_client
     from ..k8s import init_k8s
-
     await init_k8s()
     async with with_ark_client(query_ref.namespace, V1_ALPHA1) as ark:
         query = await ark.queries.a_get(query_ref.name, query_ref.namespace)
         return await _resolve_from_query(ark, query, query_ref.namespace, user_input, conversation_id)
 
 
-async def _resolve_from_query(ark, query, namespace: str, user_input: str, conversation_id: str = "") -> ExecutionEngineRequest:
+async def _resolve_from_query(ark: Any, query: Any, namespace: str, user_input: str, conversation_id: str = "") -> ExecutionEngineRequest:
     target = query.spec.target
     if not target:
         raise ValueError(f"Query '{query.metadata['name']}' has no target")
@@ -89,15 +105,37 @@ async def _resolve_from_query(ark, query, namespace: str, user_input: str, conve
     agent_config = await _build_agent_config(ark, agent, query, namespace)
     mcp_servers = await _build_mcp_servers(ark, agent, namespace)
 
+    query_annotations = query.metadata.get("annotations", {}) if query.metadata else {}
+    execution_engine_annotations = await _resolve_execution_engine_annotations(agent, namespace)
+
+    raw_ttl = getattr(query.spec, "ttl", None)
+    message_ttl_seconds = _parse_go_duration_to_seconds(raw_ttl) if isinstance(raw_ttl, str) else None
+
     return ExecutionEngineRequest(
         agent=agent_config,
         userInput=Message(role="user", content=user_input),
         mcpServers=mcp_servers,
         conversationId=conversation_id,
+        query_annotations=query_annotations,
+        execution_engine_annotations=execution_engine_annotations,
+        message_ttl_seconds=message_ttl_seconds,
     )
 
 
-async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
+async def _resolve_execution_engine_annotations(agent, namespace: str) -> dict[str, str]:
+    ee_ref = getattr(agent.spec, "execution_engine", None) or getattr(agent.spec, "executionEngine", None)
+    if not ee_ref:
+        return {}
+    ee_name = _get_attr_or_key(ee_ref, "name")
+    if not ee_name:
+        raise ValueError(f"ExecutionEngine reference on agent '{agent.metadata.get('name')}' has no name")
+    from ..client import V1_PREALPHA1, with_ark_client
+    async with with_ark_client(namespace, V1_PREALPHA1) as prealpha_ark:
+        ee = await prealpha_ark.executionengines.a_get(ee_name, namespace)
+        return ee.metadata.get("annotations", {}) if ee.metadata else {}
+
+
+async def _build_agent_config(ark: Any, agent: Any, query: Any, namespace: str) -> AgentConfig:
     spec = agent.spec
     model = Model(name="", type="", config={})
 
@@ -111,6 +149,7 @@ async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
         prompt = prompt.replace(f"{{{param.name}}}", param.value)
 
     labels = agent.metadata.get("labels", {}) if agent.metadata else {}
+    annotations = agent.metadata.get("annotations", {}) if agent.metadata else {}
 
     return AgentConfig(
         name=agent.metadata.get("name", "unknown") if agent.metadata else "unknown",
@@ -120,10 +159,11 @@ async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
         parameters=parameters,
         model=model,
         labels=labels,
+        annotations=annotations,
     )
 
 
-def _get_attr_or_key(obj, attr_name: str, dict_key: str = None):
+def _get_attr_or_key(obj: Any, attr_name: str, dict_key: Optional[str] = None) -> Any:
     if dict_key is None:
         dict_key = attr_name
     if isinstance(obj, dict):
@@ -131,7 +171,7 @@ def _get_attr_or_key(obj, attr_name: str, dict_key: str = None):
     return getattr(obj, attr_name, None)
 
 
-def _extract_value_source_refs(vs):
+def _extract_value_source_refs(vs: Any) -> tuple[Optional[str], Any, Any]:
     if isinstance(vs, dict):
         if vs.get("value"):
             return vs["value"], None, None
@@ -148,13 +188,12 @@ def _extract_value_source_refs(vs):
     return None, secret_ref, cm_ref
 
 
-async def _resolve_secret_ref(secret_ref, namespace: str) -> str:
+async def _resolve_secret_ref(secret_ref: Any, namespace: str) -> str:
     ref_name = _get_attr_or_key(secret_ref, "name")
     ref_key = _get_attr_or_key(secret_ref, "key")
     if not (ref_name and ref_key):
         return ""
     try:
-        import base64
         sc = SecretClient(namespace=namespace)
         result = await sc.get_secret_value(ref_name, ref_key)
         return base64.b64decode(result["value"]).decode("utf-8")
@@ -163,15 +202,13 @@ async def _resolve_secret_ref(secret_ref, namespace: str) -> str:
         return ""
 
 
-async def _resolve_configmap_ref(cm_ref, namespace: str) -> str:
+async def _resolve_configmap_ref(cm_ref: Any, namespace: str) -> str:
     ref_name = _get_attr_or_key(cm_ref, "name")
     ref_key = _get_attr_or_key(cm_ref, "key")
     if not (ref_name and ref_key):
         return ""
     try:
-        from kubernetes_asyncio import client
-        from kubernetes_asyncio.client.api_client import ApiClient
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             cm = await v1.read_namespaced_config_map(name=ref_name, namespace=namespace)
             return (cm.data or {}).get(ref_key, "")
@@ -180,7 +217,7 @@ async def _resolve_configmap_ref(cm_ref, namespace: str) -> str:
         return ""
 
 
-async def _resolve_value_source(vs, namespace: str) -> str:
+async def _resolve_value_source(vs: Any, namespace: str) -> str:
     direct_value, secret_ref, cm_ref = _extract_value_source_refs(vs)
     if direct_value:
         return direct_value
@@ -193,7 +230,7 @@ async def _resolve_value_source(vs, namespace: str) -> str:
     return ""
 
 
-async def _resolve_provider_config(provider_config_obj, namespace: str) -> dict:
+async def _resolve_provider_config(provider_config_obj: Any, namespace: str) -> dict[str, Any]:
     config = {}
     api_key_vs = getattr(provider_config_obj, "api_key", None) or getattr(provider_config_obj, "apiKey", None)
     if api_key_vs:
@@ -201,12 +238,15 @@ async def _resolve_provider_config(provider_config_obj, namespace: str) -> dict:
     base_url_vs = getattr(provider_config_obj, "base_url", None) or getattr(provider_config_obj, "baseUrl", None)
     if base_url_vs:
         config["baseUrl"] = await _resolve_value_source(base_url_vs, namespace)
+    api_version_vs = getattr(provider_config_obj, "api_version", None) or getattr(provider_config_obj, "apiVersion", None)
+    if api_version_vs:
+        config["apiVersion"] = await _resolve_value_source(api_version_vs, namespace)
     if hasattr(provider_config_obj, "properties") and provider_config_obj.properties:
         config["properties"] = provider_config_obj.properties
     return config
 
 
-async def _resolve_model(ark, model_ref, namespace: str) -> Model:
+async def _resolve_model(ark: Any, model_ref: Any, namespace: str) -> Model:
     model_name = model_ref.name
     model_namespace = getattr(model_ref, "namespace", None) or namespace
 
@@ -231,8 +271,8 @@ async def _resolve_model(ark, model_ref, namespace: str) -> Model:
     return Model(name=resolved_name, type=provider, config={provider: config} if config else {})
 
 
-def _build_query_param_map(query_params: Optional[list]) -> Dict[str, str]:
-    param_map: Dict[str, str] = {}
+def _build_query_param_map(query_params: Optional[list]) -> dict[str, str]:
+    param_map: dict[str, str] = {}
     if not query_params:
         return param_map
     for qp in query_params:
@@ -243,7 +283,7 @@ def _build_query_param_map(query_params: Optional[list]) -> Dict[str, str]:
     return param_map
 
 
-def _resolve_param_value(param, query_param_map: Dict[str, str]) -> str:
+def _resolve_param_value(param: Any, query_param_map: dict[str, str]) -> str:
     value = _get_attr_or_key(param, "value")
     if value:
         return value
@@ -261,7 +301,7 @@ def _resolve_param_value(param, query_param_map: Dict[str, str]) -> str:
 def _resolve_parameters(
     agent_params: Optional[list],
     query_params: Optional[list],
-) -> List[Parameter]:
+) -> list[Parameter]:
     query_param_map = _build_query_param_map(query_params)
     if not agent_params:
         return []
@@ -274,7 +314,7 @@ def _resolve_parameters(
     return resolved
 
 
-async def _resolve_mcp_server(ark, server_name: str, namespace: str) -> Optional[MCPServerConfig]:
+async def _resolve_mcp_server(ark: Any, server_name: str, namespace: str) -> Optional[MCPServerConfig]:
     server_namespace = namespace
     try:
         server_crd = await ark.mcpservers.a_get(server_name, server_namespace)
@@ -288,7 +328,7 @@ async def _resolve_mcp_server(ark, server_name: str, namespace: str) -> Optional
         logger.warning(f"MCPServer '{server_name}' has no resolvable address")
         return None
 
-    headers: Dict[str, str] = {}
+    headers: dict[str, str] = {}
     if spec.headers:
         for header in spec.headers:
             header_name = _get_attr_or_key(header, "name")
@@ -311,11 +351,11 @@ async def _resolve_mcp_server(ark, server_name: str, namespace: str) -> Optional
     )
 
 
-async def _build_mcp_servers(ark, agent, namespace: str) -> List[MCPServerConfig]:
+async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPServerConfig]:
     if not agent.spec.tools:
         return []
 
-    server_tools: Dict[str, List[str]] = {}
+    server_tools: dict[str, list[str]] = {}
     for agent_tool in agent.spec.tools:
         tool_name = getattr(agent_tool, "name", None)
         if not tool_name:
@@ -346,7 +386,7 @@ async def _build_mcp_servers(ark, agent, namespace: str) -> List[MCPServerConfig
         except Exception as e:
             logger.warning(f"Failed to resolve tool '{tool_name}': {e}")
 
-    servers: List[MCPServerConfig] = []
+    servers: list[MCPServerConfig] = []
     for server_name, tool_names in server_tools.items():
         server_config = await _resolve_mcp_server(ark, server_name, namespace)
         if server_config:

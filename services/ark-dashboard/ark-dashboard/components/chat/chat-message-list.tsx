@@ -1,8 +1,10 @@
-import { AlertCircle } from 'lucide-react';
 import { useMemo, useEffect } from 'react';
 import type { RefObject } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
+import { ErrorIcon } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
+import { ConversationStoppedEvent } from '@/components/chat/conversation-stopped-event';
 import { GraphEnd } from '@/components/chat/graph-end';
 import { GraphTransition } from '@/components/chat/graph-transition';
 import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
@@ -21,10 +23,14 @@ interface ChatMessageListProps {
   graphEdges?: GraphEdge[];
   debugMode: boolean;
   isProcessing: boolean;
+  processingPhase?: string;
+  statusText?: string;
+  isWaitingForApprovalResponse: boolean;
   error: string | null;
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
   messageTokenUsage?: Record<number, TokenUsage>;
+  pollAfterApproval: () => Promise<void>;
 }
 
 function extractMessageContent(msg: ChatMessageType): string {
@@ -103,18 +109,22 @@ function determineMessageFlags(
     msg.role === 'system' && content.includes('maximum turns limit');
   const isSelectorFailureMessage =
     msg.role === 'system' && content.includes('Selector returned invalid agent name');
+  const isConversationStoppedMessage =
+    msg.role === 'system' && content === 'Conversation stopped by user';
   const hasToolCalls =
     debugMode && !!toolCallsWithResults && toolCallsWithResults.length > 0;
   const hasContent =
     !!content &&
     content.trim().length > 0 &&
     !isMaxTurnsMessage &&
-    !isSelectorFailureMessage;
+    !isSelectorFailureMessage &&
+    !isConversationStoppedMessage;
   const hasTermination = terminateToolCall !== undefined;
 
   return {
     isMaxTurnsMessage,
     isSelectorFailureMessage,
+    isConversationStoppedMessage,
     hasToolCalls,
     hasContent,
     hasTermination,
@@ -129,10 +139,14 @@ export function ChatMessageList({
   graphEdges,
   debugMode,
   isProcessing,
+  processingPhase,
+  statusText,
+  isWaitingForApprovalResponse,
   error,
   viewMode = 'markdown',
   messagesEndRef,
   messageTokenUsage,
+  pollAfterApproval,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
     if (!graphEdges || graphEdges.length === 0)
@@ -170,9 +184,11 @@ export function ChatMessageList({
       terminateMessage: string | undefined;
       isMaxTurnsMessage: boolean;
       isSelectorFailureMessage: boolean;
+      isConversationStoppedMessage: boolean;
       hasToolCalls: boolean;
       hasContent: boolean;
       hasTermination: boolean;
+      hasApprovalRequest: boolean;
     }> = [];
 
     messages.forEach((message, index) => {
@@ -192,17 +208,22 @@ export function ChatMessageList({
       const {
         isMaxTurnsMessage,
         isSelectorFailureMessage,
+        isConversationStoppedMessage,
         hasToolCalls,
         hasContent,
         hasTermination,
       } = determineMessageFlags(msg, content, toolCallsWithResults, terminateToolCall, debugMode);
+
+      const hasApprovalRequest = message.approvalRequest !== undefined;
 
       if (
         !hasToolCalls &&
         !hasContent &&
         !hasTermination &&
         !isMaxTurnsMessage &&
-        !isSelectorFailureMessage
+        !isSelectorFailureMessage &&
+        !isConversationStoppedMessage &&
+        !hasApprovalRequest
       ) {
         return;
       }
@@ -225,9 +246,11 @@ export function ChatMessageList({
         terminateMessage,
         isMaxTurnsMessage,
         isSelectorFailureMessage,
+        isConversationStoppedMessage,
         hasToolCalls,
         hasContent,
         hasTermination,
+        hasApprovalRequest,
       });
     });
 
@@ -274,14 +297,16 @@ export function ChatMessageList({
   return (
     <>
       {error && (
-        <div className="text-destructive bg-destructive/10 flex items-center gap-2 rounded-md p-3 text-sm">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+        <div className="text-status-error bg-status-error/10 flex items-center gap-2 p-3 text-sm">
+          <IconShell size="sm" className="flex-shrink-0">
+            <ErrorIcon />
+          </IconShell>
           <span>{error}</span>
         </div>
       )}
 
       {messages.length === 0 && !error && (
-        <div className="text-muted-foreground py-8 text-center">
+        <div className="text-fg-secondary py-8 text-center">
           Start a conversation with the {type}
         </div>
       )}
@@ -357,7 +382,22 @@ export function ChatMessageList({
                 status={pm.message.metadata?.status}
                 queryName={pm.message.metadata?.queryName}
                 tokenUsage={messageTokenUsage?.[pm.index]}
+                approvalRequest={pm.message.approvalRequest}
+                pollAfterApproval={pollAfterApproval}
               />
+            )}
+            {!pm.hasContent && pm.message.approvalRequest && (
+              <>
+                {console.log('[HITL Debug] Rendering approval request for message:', pm.index, pm.message.approvalRequest)}
+                <ChatMessage
+                  role="assistant"
+                  content=""
+                  viewMode={viewMode}
+                  queryName={pm.message.metadata?.queryName}
+                  approvalRequest={pm.message.approvalRequest}
+                  pollAfterApproval={pollAfterApproval}
+                />
+              </>
             )}
             {pm.hasTermination && (
               <div className="mt-2 flex flex-col gap-2">
@@ -378,13 +418,14 @@ export function ChatMessageList({
               (isGraphStrategy || isSelectorStrategy ? (
                 <MaxTurnsEvent message={pm.content} />
               ) : (
-                <div className="text-muted-foreground text-sm italic">
+                <div className="text-fg-tertiary text-sm italic">
                   {pm.content}
                 </div>
               ))}
             {pm.isSelectorFailureMessage && (
               <SelectorFailureEvent message={pm.content} />
             )}
+            {pm.isConversationStoppedMessage && <ConversationStoppedEvent />}
           </div>
         );
       })}
@@ -392,6 +433,32 @@ export function ChatMessageList({
       {showGraphEnd && <GraphEnd />}
 
       {isProcessing && (
+        <div className="flex justify-start">
+          <div className="bg-surface-bg-secondary max-w-[80%] px-3 py-2">
+            <div className="flex items-center gap-2">
+              <div className="flex space-x-1">
+                <div className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"></div>
+                <div
+                  className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"
+                  style={{ animationDelay: '0.1s' }}></div>
+                <div
+                  className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"
+                  style={{ animationDelay: '0.2s' }}></div>
+              </div>
+              {statusText ? (
+                <span className="text-fg-secondary text-xs">{statusText}</span>
+              ) : (
+                processingPhase === 'provisioning' && (
+                  <span className="text-fg-secondary text-xs">
+                    Preparing new workspace...
+                  </span>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {isWaitingForApprovalResponse && (
         <div className="flex justify-start">
           <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
             <div className="flex space-x-1">

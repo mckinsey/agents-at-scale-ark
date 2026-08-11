@@ -1,5 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 
 // Tool interface for UI compatibility
 export interface Tool {
@@ -7,7 +8,7 @@ export interface Tool {
   name: string;
   type?: string;
   description?: string;
-  annotations?: unknown;
+  annotations?: Record<string, string>;
   labels?: unknown;
 }
 
@@ -20,24 +21,60 @@ export interface ToolDetail {
   annotations?: Record<string, string>;
   spec?: {
     inputSchema?: Record<string, unknown>;
+    http?: { url?: string };
+    agent?: { name?: string };
+    team?: { name?: string };
     [key: string]: unknown;
     type: string;
   };
   status?: Record<string, unknown>;
 }
 
-// Tool list response
-interface ToolListResponse {
-  items: Tool[];
-  count: number;
+// Fields shared by tool create and update used to build the tool spec
+interface ToolSpecInput {
+  type: string;
+  description: string;
+  inputSchema?: Record<string, unknown> | string;
+  url?: string;
+  agent?: string;
+  team?: string;
+}
+
+// Build a Tool CR spec from form-level fields, parsing the input schema
+function buildToolSpec({
+  type,
+  description,
+  inputSchema,
+  url,
+  agent,
+  team,
+}: ToolSpecInput): Record<string, unknown> {
+  let parsedInputSchema: Record<string, unknown> | undefined = undefined;
+  if (typeof inputSchema === 'string' && inputSchema.trim()) {
+    try {
+      parsedInputSchema = JSON.parse(inputSchema);
+    } catch {
+      parsedInputSchema = undefined;
+    }
+  } else if (typeof inputSchema === 'object' && inputSchema !== null) {
+    parsedInputSchema = inputSchema;
+  }
+  return {
+    type,
+    description,
+    ...(parsedInputSchema ? { inputSchema: parsedInputSchema } : {}),
+    ...(type === 'http' && url ? { http: { url } } : {}),
+    ...(type === 'agent' && agent ? { agent: { name: agent } } : {}),
+    ...(type === 'team' && team ? { team: { name: team } } : {}),
+  };
 }
 
 // Service for tool operations
 export const toolsService = {
   // Get all tools in a namespace
   async getAll(): Promise<Tool[]> {
-    const response = await apiClient.get<ToolListResponse>(`/api/v1/tools`);
-    return response.items.map(item => ({ ...item, id: item.name }));
+    const items = await fetchAllPages<Omit<Tool, 'id'>>(`/api/v1/tools`);
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get detailed tool information including schema
@@ -60,51 +97,19 @@ export const toolsService = {
   },
 
   // Create a new tool
-  async create(tool: {
-    name: string;
-    type: string;
-    description: string;
-    inputSchema?: Record<string, unknown> | string;
-    annotations?: Record<string, string>;
-    url?: string;
-    agent?: string;
-    team?: string;
-    namespace?: string;
-  }): Promise<void> {
-    const {
-      name,
-      type,
-      description,
-      inputSchema,
-      annotations,
-      url,
-      agent,
-      team,
-      namespace,
-    } = tool;
-    let parsedInputSchema: Record<string, unknown> | undefined = undefined;
-    if (typeof inputSchema === 'string' && inputSchema.trim()) {
-      try {
-        parsedInputSchema = JSON.parse(inputSchema);
-      } catch {
-        parsedInputSchema = undefined;
-      }
-    } else if (typeof inputSchema === 'object' && inputSchema !== null) {
-      parsedInputSchema = inputSchema;
-    }
-    const spec: Record<string, unknown> = {
-      type,
-      description,
-      ...(parsedInputSchema ? { inputSchema: parsedInputSchema } : {}),
-      ...(type === 'http' && url ? { http: { url } } : {}),
-      ...(type === 'agent' && agent ? { agent: { name: agent } } : {}),
-      ...(type === 'team' && team ? { team: { name: team } } : {}),
-    };
+  async create(
+    tool: ToolSpecInput & {
+      name: string;
+      annotations?: Record<string, string>;
+      namespace?: string;
+    },
+  ): Promise<void> {
+    const { name, type, annotations, namespace } = tool;
     const payload = {
       name,
       namespace: namespace || 'default',
       annotations,
-      spec,
+      spec: buildToolSpec(tool),
     };
     await apiClient.post(`/api/v1/tools`, payload);
 

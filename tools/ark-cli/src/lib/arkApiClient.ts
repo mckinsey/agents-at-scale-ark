@@ -1,3 +1,5 @@
+const PAGE_LIMIT = 100;
+
 export interface QueryTarget {
   id: string;
   name: string;
@@ -52,6 +54,38 @@ export class ArkApiClient {
     return this.baseUrl;
   }
 
+  /**
+   * Fetch every page of a cursor-paginated ark-api list endpoint and return
+   * the concatenated items. Follows the `continue_token` returned by ark-api
+   * until the server reports the last page (`continue_token` null/absent).
+   */
+  private async fetchAllPages<T>(path: string): Promise<T[]> {
+    const items: T[] = [];
+    let continueToken: string | null | undefined;
+
+    do {
+      const url = new URL(`${this.baseUrl}${path}`);
+      url.searchParams.set('limit', String(PAGE_LIMIT));
+      if (continueToken) {
+        url.searchParams.set('continue', continueToken);
+      }
+
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = (await response.json()) as {
+        items?: T[];
+        continue_token?: string | null;
+      };
+
+      if (data.items) items.push(...data.items);
+      continueToken = data.continue_token;
+    } while (continueToken);
+
+    return items;
+  }
+
   async getQueryTargets(): Promise<QueryTarget[]> {
     try {
       const targets: QueryTarget[] = [];
@@ -64,17 +98,14 @@ export class ArkApiClient {
 
       for (const ep of endpoints) {
         try {
-          const response = await fetch(`${this.baseUrl}${ep.path}`);
-          if (response.ok) {
-            const data = (await response.json()) as { items?: Array<{ name: string; description?: string }> };
-            for (const item of data.items || []) {
-              targets.push({
-                id: `${ep.type}/${item.name}`,
-                name: item.name,
-                type: ep.type,
-                description: item.description || item.name,
-              });
-            }
+          const items = await this.fetchAllPages<{ name: string; description?: string }>(ep.path);
+          for (const item of items) {
+            targets.push({
+              id: `${ep.type}/${item.name}`,
+              name: item.name,
+              type: ep.type,
+              description: item.description || item.name,
+            });
           }
         } catch {
           // Skip unavailable resource types
@@ -92,12 +123,7 @@ export class ArkApiClient {
 
   async getAgents(): Promise<Agent[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/agents`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = (await response.json()) as {items?: Agent[]};
-      return data.items || [];
+      return await this.fetchAllPages<Agent>('/v1/agents');
     } catch (error) {
       throw new Error(
         `Failed to get agents: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -108,12 +134,7 @@ export class ArkApiClient {
 
   async getModels(): Promise<Model[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/models`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = (await response.json()) as {items?: Model[]};
-      return data.items || [];
+      return await this.fetchAllPages<Model>('/v1/models');
     } catch (error) {
       throw new Error(
         `Failed to get models: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -124,12 +145,7 @@ export class ArkApiClient {
 
   async getTools(): Promise<Tool[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/tools`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = (await response.json()) as {items?: Tool[]};
-      return data.items || [];
+      return await this.fetchAllPages<Tool>('/v1/tools');
     } catch (error) {
       throw new Error(
         `Failed to get tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -140,12 +156,7 @@ export class ArkApiClient {
 
   async getTeams(): Promise<Team[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/teams`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = (await response.json()) as {items?: Team[]};
-      return data.items || [];
+      return await this.fetchAllPages<Team>('/v1/teams');
     } catch (error) {
       throw new Error(
         `Failed to get teams: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -230,6 +241,7 @@ export class ArkApiClient {
     sessionId?: string;
     conversationId?: string;
     timeout?: string;
+    parameters?: Array<{ name: string; value?: string }>;
     metadata?: { annotations?: Record<string, string> };
   }): Promise<Record<string, unknown>> {
     const response = await fetch(`${this.baseUrl}/v1/queries/`, {
@@ -243,6 +255,9 @@ export class ArkApiClient {
         sessionId: params.sessionId,
         conversationId: params.conversationId,
         timeout: params.timeout,
+        ...(params.parameters && params.parameters.length > 0
+          ? { parameters: params.parameters }
+          : {}),
         ...(params.metadata ? { metadata: params.metadata } : {}),
       }),
     });

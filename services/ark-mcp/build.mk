@@ -49,11 +49,11 @@ $(ARK_MCP_STAMP_DEPS): $(ARK_MCP_SERVICE_SOURCE_DIR)/pyproject.toml $(ARK_SDK_WH
 	rm -f $(ARK_MCP_SERVICE_SOURCE_DIR)/ark_sdk-*.whl
 	# Copy wheel to service directory for Docker build
 	cp $(ARK_SDK_WHL) $(ARK_MCP_SERVICE_SOURCE_DIR)/
-	# Update pyproject.toml to use local wheel file
+	# Update pyproject.toml to use local wheel file (use actual wheel filename from ARK_SDK_WHL)
 	cd $(ARK_MCP_SERVICE_SOURCE_DIR) && \
-	sed -i.bak 's|path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl"|' pyproject.toml && \
+	sed -i.bak 's|path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./$(notdir $(ARK_SDK_WHL))"|' pyproject.toml && \
 	uv remove ark_sdk || true && \
-	uv add ./ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl && \
+	uv add ./$(notdir $(ARK_SDK_WHL)) && \
 	rm -f uv.lock && uv sync
 	@touch $@
 

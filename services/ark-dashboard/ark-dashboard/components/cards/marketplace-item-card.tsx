@@ -1,10 +1,10 @@
 'use client';
 
-import { Bot, Check, Copy, ExternalLink, Loader2, Server, Terminal } from 'lucide-react';
+import { Bot, Check, ExternalLink, Loader2, Server } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import copyToClipboard from 'copy-to-clipboard';
 
+import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,13 +16,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -31,6 +24,7 @@ import {
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
 import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
+import { getOriginIcon } from '@/lib/utils/origin-icon';
 
 interface MarketplaceItemCardProps {
   item: MarketplaceItem;
@@ -133,6 +127,8 @@ export function MarketplaceItemCard({
     return null;
   };
 
+  const originIcon = getOriginIcon(item.repository, 'repository');
+
   return (
     <Card
       className={cn(
@@ -160,9 +156,7 @@ export function MarketplaceItemCard({
 
         {/* Title and Description */}
         <div>
-          <CardTitle className="text-xl font-semibold">
-            {item.name}
-          </CardTitle>
+          <CardTitle className="text-xl font-semibold">{item.name}</CardTitle>
           <CardDescription className="mt-2 line-clamp-2">
             {item.shortDescription}
           </CardDescription>
@@ -175,9 +169,9 @@ export function MarketplaceItemCard({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="text-xs text-muted-foreground cursor-default">
+                <div className="text-muted-foreground cursor-default text-xs">
                   <span>Source: </span>
-                  <span className="truncate inline-block max-w-[calc(100%-60px)] align-bottom">
+                  <span className="inline-block max-w-[calc(100%-60px)] truncate align-bottom">
                     {item.source}
                   </span>
                 </div>
@@ -195,14 +189,14 @@ export function MarketplaceItemCard({
             {item.tags.slice(0, 4).map(tag => (
               <Badge
                 key={tag}
-                variant="secondary"
+                variant="alternative"
                 className="px-2 py-0.5 text-xs">
                 {tag}
               </Badge>
             ))}
             {item.tags.length > 4 && (
               <Badge
-                variant="secondary"
+                variant="alternative"
                 className="px-2 py-0.5 text-xs">
                 +{item.tags.length - 4}
               </Badge>
@@ -212,137 +206,76 @@ export function MarketplaceItemCard({
       </CardContent>
 
       <CardFooter className="flex-none pt-4">
-        <div className="flex w-full items-center justify-between">
-          <div className="text-xs text-muted-foreground">v{item.version}</div>
-
-          {item.type === 'demo' ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={() => item.repository && window.open(item.repository, '_blank')}
-              disabled={!item.repository}>
-              View
-              <ExternalLink className="ml-1 h-3 w-3" />
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={handleInstall}
-              disabled={isInstalling || localStatus === 'installed'}>
-              {localStatus === 'installed' && (
-                <>
-                  Installed
-                  <Check className="ml-1 h-3 w-3" />
-                </>
-              )}
-              {isInstalling && localStatus !== 'installed' && (
-                <>
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  Loading...
-                </>
-              )}
-              {!isInstalling && localStatus !== 'installed' && 'Get'}
-            </Button>
+        <div className="flex w-full flex-col gap-3">
+          {/* UI URLs */}
+          {localStatus === 'installed' && item.uis && item.uis.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {item.uis.map(ui => (
+                <Button
+                  key={ui.url}
+                  variant="secondary"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => window.open(ui.url, '_blank')}>
+                  {ui.label}
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </Button>
+              ))}
+            </div>
           )}
+
+          {/* Version and Install/View Button */}
+          <div className="flex w-full items-center justify-between">
+            <div className="flex items-center gap-x-1.5">
+              <p className="text-muted-foreground text-xs">v{item.version}</p>
+              <span>{originIcon}</span>
+            </div>
+
+            {item.type === 'demo' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() =>
+                  item.repository && window.open(item.repository, '_blank')
+                }
+                disabled={!item.repository}>
+                View
+                <ExternalLink className="ml-1 h-3 w-3" />
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={handleInstall}
+                disabled={isInstalling || localStatus === 'installed'}>
+                {localStatus === 'installed' && (
+                  <>
+                    Installed
+                    <Check className="ml-1 h-3 w-3" />
+                  </>
+                )}
+                {isInstalling && localStatus !== 'installed' && (
+                  <>
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    Loading...
+                  </>
+                )}
+                {!isInstalling && localStatus !== 'installed' && 'Get'}
+              </Button>
+            )}
+          </div>
         </div>
       </CardFooter>
 
-      <InstallCommandDialog
+      <MarketplaceCommandDialog
         open={showCommandDialog}
         onOpenChange={setShowCommandDialog}
-        installCommand={installCommand}
+        command={installCommand}
         itemName={item.name}
+        action="install"
       />
     </Card>
-  );
-}
-
-function InstallCommandDialog({
-  open,
-  onOpenChange,
-  installCommand,
-  itemName,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  installCommand: {
-    helmCommand?: string;
-    arkCommand?: string;
-    name?: string;
-  };
-  itemName: string;
-}) {
-  const handleCopy = (text: string) => {
-    const success = copyToClipboard(text);
-    if (success) {
-      toast.success('Command copied to clipboard');
-    } else {
-      toast.error('Failed to copy to clipboard');
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5" />
-            Install {installCommand.name || itemName}
-          </DialogTitle>
-          <DialogDescription>
-            Run one of these commands in your terminal to install the
-            marketplace item:
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {installCommand.arkCommand && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Using Ark CLI (Recommended)
-              </label>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm">
-                  {installCommand.arkCommand}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopy(installCommand.arkCommand!)}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {installCommand.helmCommand && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Using Helm directly</label>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm break-all">
-                  {installCommand.helmCommand}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopy(installCommand.helmCommand!)}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              💡 Make sure you have kubectl configured to the correct cluster
-              before running these commands.
-            </p>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }

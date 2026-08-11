@@ -3,11 +3,14 @@ import logging
 import json
 import re
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.agents import (
     AgentResponse,
@@ -15,11 +18,12 @@ from ...models.agents import (
     AgentCreateRequest,
     AgentUpdateRequest,
     AgentDetailResponse,
-    ModelRef
 )
 from ...models.common import extract_availability_from_conditions
 from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
 from .exceptions import handle_k8s_errors
+from .pagination import PaginationParams
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +39,7 @@ def agent_to_response(agent: dict) -> AgentResponse:
     status = agent.get("status", {})
 
     # Extract model ref name if exists
-    model_ref = "default"
+    model_ref = None
     if spec.get("modelRef"):
         model_ref = spec["modelRef"].get("name")
 
@@ -88,7 +92,7 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
         executionEngine=spec.get("executionEngine"),
-        modelRef=spec.get("modelRef", ModelRef(name="default")),
+        modelRef=spec.get("modelRef"),
         parameters=spec.get("parameters"),
         prompt=spec.get("prompt"),
         tools=spec.get("tools"),
@@ -103,32 +107,35 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
 
 @router.get("", response_model=AgentListResponse)
 @handle_k8s_errors(operation="list", resource_type="agent")
-async def list_agents(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentListResponse:
+async def list_agents(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentListResponse:
     """
-    List all Agent CRs in a namespace.
+    List a page of Agent CRs in a namespace.
 
     Args:
         namespace: The namespace to list agents from (defaults to current context)
-        
+        pagination: limit and continue token for server-side pagination
+
     Returns:
-        AgentListResponse: List of all agents in the namespace
+        AgentListResponse: One page of agents plus the continuation token
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
-        agents = await ark_client.agents.a_list()
-        
-        agent_list = []
-        for agent in agents:
-            agent_list.append(agent_to_response(agent.to_dict()))
-        
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
+        page = await ark_client.agents.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
+
+        agent_list = [agent_to_response(agent.to_dict()) for agent in page.items]
+
         return AgentListResponse(
             items=agent_list,
-            count=len(agent_list)
+            count=len(agent_list),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
         )
 
 
 @router.post("", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="agent")
-async def create_agent(body: AgentCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentDetailResponse:
+async def create_agent(request: Request, body: AgentCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
     """
     Create a new Agent CR.
     
@@ -139,7 +146,7 @@ async def create_agent(body: AgentCreateRequest, namespace: Optional[str] = Quer
     Returns:
         AgentDetailResponse: The created agent details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Build the agent spec
         agent_spec = {}
         
@@ -178,7 +185,7 @@ async def create_agent(body: AgentCreateRequest, namespace: Optional[str] = Quer
 
 @router.get("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="agent")
-async def get_agent(agent_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentDetailResponse:
+async def get_agent(request: Request, agent_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
     """
     Get a specific Agent CR by name.
     
@@ -189,7 +196,7 @@ async def get_agent(agent_name: str, namespace: Optional[str] = Query(None, desc
     Returns:
         AgentDetailResponse: The agent details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         agent = await ark_client.agents.a_get(agent_name)
         
         return agent_to_detail_response(agent.to_dict())
@@ -197,7 +204,7 @@ async def get_agent(agent_name: str, namespace: Optional[str] = Query(None, desc
 
 @router.put("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="agent")
-async def update_agent(agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentDetailResponse:
+async def update_agent(request: Request, agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
     """
     Update an Agent CR by name.
     
@@ -209,7 +216,7 @@ async def update_agent(agent_name: str, body: AgentUpdateRequest, namespace: Opt
     Returns:
         AgentDetailResponse: The updated agent details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Get the existing agent first
         existing_agent = await ark_client.agents.a_get(agent_name)
         existing_spec = existing_agent.to_dict()["spec"]
@@ -251,7 +258,7 @@ async def update_agent(agent_name: str, body: AgentUpdateRequest, namespace: Opt
 
 @router.delete("/{agent_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="agent")
-async def delete_agent(agent_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
+async def delete_agent(request: Request, agent_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete an Agent CR by name.
     
@@ -259,5 +266,5 @@ async def delete_agent(agent_name: str, namespace: Optional[str] = Query(None, d
         namespace: The namespace containing the agent
         agent_name: The name of the agent
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.agents.a_delete(agent_name)

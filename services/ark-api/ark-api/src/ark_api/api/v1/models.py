@@ -1,14 +1,17 @@
 """Kubernetes models API endpoints."""
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 
 from kubernetes_asyncio.client import CustomObjectsApi
-from kubernetes_asyncio.client.api_client import ApiClient
 
 from ark_sdk.client import with_ark_client
 from ark_sdk.k8s import get_context
+from ark_sdk.impersonation import ImpersonationConfig
+
+from ...auth.dependencies import get_impersonation_config
+from .client_utils import get_impersonating_api_client
 
 from ...models.models import (
     ModelResponse,
@@ -25,6 +28,8 @@ from ...models.models import (
 )
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -110,32 +115,35 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
 
 @router.get("", response_model=ModelListResponse)
 @handle_k8s_errors(operation="list", resource_type="model")
-async def list_models(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelListResponse:
+async def list_models(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
     """
-    List all Model CRs in a namespace.
-    
+    List a page of Model CRs in a namespace.
+
     Args:
         namespace: The namespace to list models from
-        
+        pagination: limit and continue token for server-side pagination
+
     Returns:
-        ModelListResponse: List of all models in the namespace
+        ModelListResponse: One page of models plus the continuation token
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
-        models = await ark_client.models.a_list()
-        
-        model_list = []
-        for model in models:
-            model_list.append(model_to_response(model.to_dict()))
-        
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
+        page = await ark_client.models.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
+
+        model_list = [model_to_response(model.to_dict()) for model in page.items]
+
         return ModelListResponse(
             items=model_list,
-            count=len(model_list)
+            count=len(model_list),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
         )
 
 
 @router.post("", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="model")
-async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
+async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
     """
     Create a new Model CR.
 
@@ -215,7 +223,7 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
         "metadata": {"name": body.name, "namespace": namespace},
         "spec": model_spec,
     }
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         created_cr = await custom_api.create_namespaced_custom_object(
             group=MODEL_CRD_GROUP,
@@ -229,7 +237,7 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
 
 @router.get("/{model_name}", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="model")
-async def get_model(model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
+async def get_model(model_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
     """
     Get a specific Model CR by name.
     
@@ -245,7 +253,7 @@ async def get_model(model_name: str, namespace: Optional[str] = Query(None, desc
     """
     if namespace is None:
         namespace = get_context()["namespace"]
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         model_cr = await custom_api.get_namespaced_custom_object(
             group=MODEL_CRD_GROUP,
@@ -311,7 +319,7 @@ def _build_config_dict_from_body(body_config, provider: str) -> dict:
 
 @router.put("/{model_name}", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="model")
-async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
+async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
     """
     Update a Model CR by name.
 
@@ -320,7 +328,7 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
     """
     if namespace is None:
         namespace = get_context()["namespace"]
-    async with ApiClient() as api_client:
+    async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         existing_cr = await custom_api.get_namespaced_custom_object(
             group=MODEL_CRD_GROUP,
@@ -329,18 +337,17 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
             plural=MODEL_CRD_PLURAL,
             name=model_name,
         )
-    spec = existing_cr.get("spec", {})
-    provider = get_provider_from_spec(spec)
+        spec = existing_cr.get("spec", {})
+        provider = get_provider_from_spec(spec)
 
-    if body.model is not None:
-        spec["model"] = {"value": body.model}
+        if body.model is not None:
+            spec["model"] = {"value": body.model}
 
-    if body.config is not None:
-        spec["config"] = _build_config_dict_from_body(body.config, provider)
+        if body.config is not None:
+            spec["config"] = _build_config_dict_from_body(body.config, provider)
 
-    existing_cr["spec"] = spec
-    async with ApiClient() as api_client:
-        custom_api = CustomObjectsApi(api_client)
+        existing_cr["spec"] = spec
+
         updated_cr = await custom_api.replace_namespaced_custom_object(
             group=MODEL_CRD_GROUP,
             version=VERSION,
@@ -354,7 +361,7 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
 
 @router.delete("/{model_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="model")
-async def delete_model(model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
+async def delete_model(request: Request, model_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete a Model CR by name.
     
@@ -362,5 +369,5 @@ async def delete_model(model_name: str, namespace: Optional[str] = Query(None, d
         namespace: The namespace containing the model
         model_name: The name of the model
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.models.a_delete(model_name)

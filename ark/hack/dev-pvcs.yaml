@@ -1,0 +1,33 @@
+# Pre-created PVCs for Go module and build caches in dev mode.
+#
+# DevSpace creates PVCs for persistPaths entries using the same name as the dev
+# container (e.g. ark-controller-devspace). These PVCs are tracked by DevSpace
+# and deleted on `devspace purge`, which would wipe the Go cache and force a full
+# re-download of modules on the next dev session.
+#
+# By applying these PVCs before `start_dev` (see devspace.yaml dev pipeline), they
+# are not owned by DevSpace and survive purge. DevSpace reuses the existing PVC
+# instead of creating a new one.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ark-controller-devspace
+  namespace: ark-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ark-completions-devspace
+  namespace: ark-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 4Gi

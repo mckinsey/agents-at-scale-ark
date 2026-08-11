@@ -1,102 +1,82 @@
-import { getToken } from 'next-auth/jwt';
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 
-import type { NextRequestWithAuth } from './auth';
-import { auth } from './auth';
-import { COOKIE_SESSION_TOKEN, SIGNIN_PATH } from './lib/constants/auth';
+import { type NextRequestWithAuth, auth } from './auth';
+import { SIGNIN_PATH } from './lib/constants/auth';
 
-async function middleware(request: NextRequest) {
-  // Get the base path from environment (no default)
-  const basePath = process.env.ARK_DASHBOARD_BASE_PATH || '';
+// Auth-only edge gate. The proxy logic that used to live here now lives in
+// app/api/v1/[...proxy]/route.ts; this file restores the authentication gate
+// that was lost when the original middleware.ts was renamed (commit 001616dd9).
+//
+// In open mode, auth.ts's openauth wrapper injects a dummy session, so req.auth
+// is always truthy and nothing is redirected. In sso mode NextAuth populates
+// req.auth from the session; an unauthenticated request is redirected to the
+// sign-in page.
+//
+// NB: we deliberately do NOT use `export const config = { matcher }`. The
+// negative-lookahead matcher string that worked on the pre-16 build compiles to
+// an invalid RegExp under Next.js 16 ("Unmatched ')'"), crashing the server on
+// every request. Filtering excluded paths in-code is version-robust and matches
+// the same exclusions the old matcher expressed.
+const PUBLIC_PREFIXES = [
+  '/api/auth',
+  '/signout',
+  '/healthz',
+  '/_next/static',
+  '/_next/image',
+];
 
-  // Proxy anything starting with /api/ to the backend, stripping the /api prefix
-  // This includes: /api/v1/*, /api/docs, /api/openapi.json
-  // BUT exclude Next.js API routes like /api/marketplace
-  const apiPath = `${basePath}/api/`;
+// Strip trailing slashes without a regex (avoids Sonar S5852 ReDoS heuristics).
+function stripTrailingSlashes(value?: string): string | undefined {
+  if (!value) return value;
+  let end = value.length;
+  while (end > 0 && value.charAt(end - 1) === '/') end -= 1;
+  return value.slice(0, end);
+}
 
-  // Check if this is a marketplace route (handled by Next.js, not proxied)
-  if (request.nextUrl.pathname.startsWith(`${basePath}/api/marketplace`)) {
-    return NextResponse.next();
-  }
-
-  if (request.nextUrl.pathname.startsWith(apiPath)) {
-    const token = await getToken({
-      req: request,
-      secret: process.env.AUTH_SECRET,
-      cookieName: COOKIE_SESSION_TOKEN,
-    });
-    // Read environment variables at runtime
-    const host = process.env.ARK_API_SERVICE_HOST || 'localhost';
-    const port = process.env.ARK_API_SERVICE_PORT || '8000';
-    const protocol = process.env.ARK_API_SERVICE_PROTOCOL || 'http';
-
-    // Remove the base path and /api prefix to get the backend path
-    let backendPath = request.nextUrl.pathname.replace(basePath, '');
-    backendPath = backendPath.replace('/api', '');
-
-    // Construct the target URL
-    const targetUrl = `${protocol}://${host}:${port}${backendPath}${request.nextUrl.search}`;
-
-    // Rewrite the request to the backend with standard HTTP forwarding headers
-    // These X-Forwarded-* headers help the backend understand the external request context:
-    // - X-Forwarded-Prefix: tells backend it's being served from /api path externally
-    // - X-Forwarded-Host: original host header from the client request
-    // - X-Forwarded-Proto: original protocol (http/https) from the client request
-    // The backend uses these to generate correct URLs for OpenAPI specs and CORS handling
-    // Create new headers for the backend request (NOT the frontend response)
-    const backendHeaders = new Headers(request.headers);
-    backendHeaders.set('X-Forwarded-Prefix', '/api');
-    backendHeaders.set('X-Forwarded-Host', request.headers.get('host') || '');
-    backendHeaders.set(
-      'X-Forwarded-Proto',
-      request.nextUrl.protocol.slice(0, -1),
-    ); // Remove trailing ':'
-    if (token?.access_token) {
-      backendHeaders.set('Authorization', `Bearer ${token.access_token}`);
-    }
-
-    const fetchOptions: RequestInit = {
-      method: request.method,
-      headers: backendHeaders,
-    };
-
-    if (request.body) {
-      fetchOptions.body = request.body;
-    }
-    const backendResponse = await fetch(targetUrl, fetchOptions);
-
-    return new Response(backendResponse.body, {
-      status: backendResponse.status,
-      statusText: backendResponse.statusText,
-      headers: backendResponse.headers,
-    });
-  }
-
-  // For all other requests, continue normally
-  return NextResponse.next();
+// Under a tenant prefix, Next.js does not reliably strip the configured
+// basePath from req.nextUrl.pathname in middleware, so the request arrives as
+// e.g. /tenant-a/api/auth/signin. The public/sign-in allow-list below is
+// expressed with root-absolute paths, so we must normalise the pathname first
+// or /tenant-a/api/auth/signin fails startsWith('/api/auth') and !== SIGNIN_PATH,
+// and the gate redirects the sign-in route to itself forever. No-op when Next
+// already stripped the prefix, or when NEXT_PUBLIC_BASE_PATH is unset (root
+// hosting). Same env var the api-url helper uses; substituted at container start.
+function stripBasePath(pathname: string, basePath: string): string {
+  if (!basePath) return pathname;
+  if (pathname === basePath) return '/';
+  if (pathname.startsWith(`${basePath}/`)) return pathname.slice(basePath.length);
+  return pathname;
 }
 
 export default auth(async (req: NextRequestWithAuth) => {
-  //If no user session redirect to signin page
-  if (!req.auth) {
-    //If the user is trying to access a page other than the signin page, set it as the callback url.
-    if (req.nextUrl.pathname !== SIGNIN_PATH) {
-      const baseURL = process.env.BASE_URL;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  const pathname = stripBasePath(req.nextUrl.pathname, basePath);
 
-      const newUrl = new URL(
-        `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(baseURL!)}`,
-        baseURL,
-      );
-
-      return NextResponse.redirect(newUrl);
-    }
+  if (
+    pathname === '/favicon.ico' ||
+    PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
+  ) {
     return NextResponse.next();
   }
 
-  return middleware(req);
+  if (!req.auth && pathname !== SIGNIN_PATH) {
+    const callbackUrl = encodeURIComponent(req.nextUrl.href);
+    // Hub model: when AUTH_HUB_URL is set, send unauthenticated users to the
+    // central landing-page login rather than this tenant's own signin. Under a
+    // basePath the local signin path resolves wrong (a leading-slash path drops
+    // the prefix), and the hub issues a Path=/ session cookie shared by every
+    // tenant on the host — so one login at the hub covers them all.
+    //
+    // Both branches concatenate onto the (hub or tenant) base URL rather than
+    // using `new URL(SIGNIN_PATH, base)`: SIGNIN_PATH is root-absolute, so
+    // `new URL` would discard the base's path segment and drop the tenant
+    // prefix (e.g. https://host/tenant-a -> https://host/api/auth/signin).
+    const hubUrl = stripTrailingSlashes(process.env.AUTH_HUB_URL);
+    const baseUrl = stripTrailingSlashes(process.env.BASE_URL) ?? '';
+    const target = hubUrl
+      ? `${hubUrl}${SIGNIN_PATH}?callbackUrl=${callbackUrl}`
+      : `${baseUrl}${SIGNIN_PATH}?callbackUrl=${callbackUrl}`;
+    return NextResponse.redirect(target);
+  }
+  return NextResponse.next();
 });
-
-export const config = {
-  matcher: '/((?!api/auth|signout|_next/static|_next/image|favicon.ico).*)',
-};

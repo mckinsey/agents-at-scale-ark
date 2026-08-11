@@ -6,7 +6,11 @@ from typing import Callable, Any
 
 from fastapi import HTTPException
 from kubernetes_asyncio.client.rest import ApiException
+from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 from kubernetes.client.exceptions import ApiException as SyncApiException
+
+from ...auth.impersonation_config import ImpersonationSettings
+from ...auth.impersonation_errors import build_impersonation_forbidden_response
 
 logger = logging.getLogger(__name__)
 
@@ -95,13 +99,40 @@ def handle_k8s_errors(
                     raise HTTPException(status_code=422, detail=_extract_error_detail(e))
                 
                 elif e.status == 403:
+                    impersonation = kwargs.get("impersonation")
+                    if impersonation is not None:
+                        settings = ImpersonationSettings.from_env()
+                        if settings.fallback:
+                            logger.warning(
+                                f"Impersonation fallback: user={impersonation.username} "
+                                f"action={operation} resource={resource_type} namespace={namespace}"
+                            )
+                            kwargs["impersonation"] = None
+                            response = await func(*args, **kwargs)
+                            if hasattr(response, "headers"):
+                                response.headers["X-Ark-Impersonation-Fallback"] = "true"
+                            return response
+
+                        imp_response = build_impersonation_forbidden_response(
+                            e, impersonation, resource_type, operation, namespace
+                        )
+                        if imp_response is not None:
+                            return imp_response
                     raise HTTPException(status_code=403, detail=_extract_error_detail(e))
-                
+
                 raise HTTPException(
                     status_code=e.status,
                     detail=_extract_error_detail(e)
                 )
-                
+
+            except ResourceNotFoundError as e:
+                kind = kwargs.get("kind", resource_type)
+                logger.error(f"Failed to {operation} {resource_type}: resource type '{kind}' not available in cluster: {e}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Resource type '{kind}' is not available in the cluster (CRD not installed)"
+                )
+
             except HTTPException:
                 # Re-raise HTTP exceptions as-is
                 raise

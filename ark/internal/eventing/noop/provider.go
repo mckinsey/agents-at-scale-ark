@@ -6,21 +6,25 @@ import (
 )
 
 type noopProvider struct {
-	queryRecorder eventing.QueryRecorder
-	modelRecorder eventing.ModelRecorder
-	agentRecorder eventing.AgentRecorder
-	teamRecorder  eventing.TeamRecorder
-	toolRecorder  eventing.ToolRecorder
+	queryRecorder           eventing.QueryRecorder
+	modelRecorder           eventing.ModelRecorder
+	agentRecorder           eventing.AgentRecorder
+	teamRecorder            eventing.TeamRecorder
+	toolRecorder            eventing.ToolRecorder
+	mcpServerRecorder       eventing.MCPServerRecorder
+	executionEngineRecorder eventing.ExecutionEngineRecorder
 }
 
 func NewProvider() eventing.Provider {
 	emitter := NewNoopEventEmitter()
 	return &noopProvider{
-		queryRecorder: NewQueryRecorder(),
-		modelRecorder: recorder.NewModelRecorder(emitter, emitter),
-		agentRecorder: recorder.NewAgentRecorder(emitter, emitter),
-		teamRecorder:  recorder.NewTeamRecorder(emitter, emitter),
-		toolRecorder:  recorder.NewToolRecorder(emitter, emitter),
+		queryRecorder:           NewQueryRecorder(),
+		modelRecorder:           recorder.NewModelRecorder(emitter, emitter),
+		agentRecorder:           recorder.NewAgentRecorder(emitter, emitter),
+		teamRecorder:            recorder.NewTeamRecorder(emitter, emitter),
+		toolRecorder:            recorder.NewToolRecorder(emitter, emitter),
+		mcpServerRecorder:       recorder.NewMCPServerRecorder(emitter),
+		executionEngineRecorder: recorder.NewExecutionEngineRecorder(emitter, emitter),
 	}
 }
 
@@ -41,11 +45,11 @@ func (p *noopProvider) TeamRecorder() eventing.TeamRecorder {
 }
 
 func (p *noopProvider) ExecutionEngineRecorder() eventing.ExecutionEngineRecorder {
-	return nil
+	return p.executionEngineRecorder
 }
 
 func (p *noopProvider) MCPServerRecorder() eventing.MCPServerRecorder {
-	return nil
+	return p.mcpServerRecorder
 }
 
 func (p *noopProvider) QueryRecorder() eventing.QueryRecorder {

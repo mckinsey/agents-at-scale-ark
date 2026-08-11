@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api/client';
-import { API_CONFIG } from '@/lib/api/config';
+import { apiUrl } from '@/lib/api/config';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 import {
@@ -9,14 +10,17 @@ import {
 } from '@/lib/services/export-utils';
 
 // Resource types from the API
+export type AgentResponse = components['schemas']['AgentResponse'];
+export type ModelResponse = components['schemas']['ModelResponse'];
+export type TeamResponse = components['schemas']['TeamResponse'];
+export type MCPServerResponse = components['schemas']['MCPServerResponse'];
+export type A2AServerResponse = components['schemas']['A2AServerResponse'];
 export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type ModelListResponse = components['schemas']['ModelListResponse'];
 export type TeamListResponse = components['schemas']['TeamListResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
 export type MCPServerListResponse =
   components['schemas']['MCPServerListResponse'];
-export type A2AServerListResponse =
-  components['schemas']['A2AServerListResponse'];
 
 // Export configuration types
 export interface ExportConfig {
@@ -33,6 +37,7 @@ export interface ExportItem {
   id: string;
   name: string;
   type: string;
+  description?: string;
   selected?: boolean;
 }
 
@@ -68,6 +73,10 @@ export interface ExportHistoryResponse {
   export_count: number;
 }
 
+function currentNamespace(): string | undefined {
+  return apiClient.getDefaultParams().namespace;
+}
+
 // Export service
 export const exportService = {
   // Get last export timestamp from backend
@@ -86,12 +95,16 @@ export const exportService = {
   // Fetch all resources for export selection
   async fetchAllResources(): Promise<ResourceExportData> {
     const results = await Promise.allSettled([
-      apiClient.get<AgentListResponse>('/api/v1/agents'),
-      apiClient.get<TeamListResponse>('/api/v1/teams'),
-      apiClient.get<ModelListResponse>('/api/v1/models'),
+      fetchAllPages<AgentResponse>('/api/v1/agents').then(items => ({ items })),
+      fetchAllPages<TeamResponse>('/api/v1/teams').then(items => ({ items })),
+      fetchAllPages<ModelResponse>('/api/v1/models').then(items => ({ items })),
       apiClient.get<QueryListResponse>('/api/v1/queries'),
-      apiClient.get<A2AServerListResponse>('/api/v1/a2a-servers'),
-      apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers'),
+      fetchAllPages<A2AServerResponse>('/api/v1/a2a-servers').then(items => ({
+        items,
+      })),
+      fetchAllPages<MCPServerResponse>('/api/v1/mcp-servers').then(items => ({
+        items,
+      })),
       workflowTemplatesService.list(),
     ]);
 
@@ -121,7 +134,7 @@ export const exportService = {
 
     // Call backend export endpoint using fetch directly for blob response
     const response = await fetch(
-      `${API_CONFIG.baseURL}/api/v1/export/resources`,
+      apiUrl('/api/v1/export/resources'),
       {
         method: 'POST',
         headers: {
@@ -130,6 +143,7 @@ export const exportService = {
         body: JSON.stringify({
           resource_types: resourceTypes,
           resource_ids: resourceIds,
+          namespace: currentNamespace(),
         }),
       },
     );
@@ -145,12 +159,12 @@ export const exportService = {
   // Export all resources using the unified export endpoint
   async exportAll(): Promise<void> {
     // Call backend export endpoint without resource_types to export all
-    const response = await fetch(`${API_CONFIG.baseURL}/api/v1/export/resources`, {
+    const response = await fetch(apiUrl('/api/v1/export/resources'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ namespace: currentNamespace() }),
     });
 
     if (!response.ok) {

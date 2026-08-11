@@ -24,6 +24,8 @@ import (
 	"mckinsey.com/ark/internal/common"
 )
 
+const finishReasonStop = "stop"
+
 // StreamMetadata contains ARK-specific metadata for streaming chunks
 type StreamMetadata struct {
 	Query          string             `json:"query,omitempty"`
@@ -197,6 +199,111 @@ func StreamError(ctx context.Context, eventStream EventStreamInterface, err erro
 	}
 }
 
+// ToolApprovalRequestEvent represents an approval request for tool calls
+type ToolApprovalRequestEvent struct {
+	Type         string                 `json:"type"`
+	TaskID       string                 `json:"taskId"`
+	ToolCalls    []ToolCall             `json:"toolCalls"`
+	Timeout      string                 `json:"timeout,omitempty"`
+	OnTimeout    string                 `json:"onTimeout,omitempty"`
+	AgentName    string                 `json:"agentName"`
+	AgentContext map[string]interface{} `json:"agentContext,omitempty"`
+}
+
+// ToolApprovalResponseEvent represents the user's response to an approval request
+type ToolApprovalResponseEvent struct {
+	Type      string `json:"type"`
+	TaskID    string `json:"taskId"`
+	Action    string `json:"action"` // "approved" or "rejected"
+	Timestamp string `json:"timestamp"`
+}
+
+// StreamApprovalRequest emits an approval request event with full tool context
+func StreamApprovalRequest(ctx context.Context, eventStream EventStreamInterface, taskID string, toolCalls []ToolCall, config *arkv1alpha1.ToolApprovalConfig, agentName string) {
+	if eventStream == nil {
+		return
+	}
+
+	timeoutStr := ""
+	if config.Timeout != nil {
+		timeoutStr = config.Timeout.Duration.String()
+	}
+
+	approvalEvent := ToolApprovalRequestEvent{
+		Type:      "tool_approval_request",
+		TaskID:    taskID,
+		ToolCalls: toolCalls,
+		Timeout:   timeoutStr,
+		OnTimeout: config.OnTimeout,
+		AgentName: agentName,
+	}
+
+	if err := eventStream.StreamChunk(ctx, approvalEvent); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to stream approval request event")
+	}
+}
+
+// StreamApprovalResponse emits an approval response event
+func StreamApprovalResponse(
+	ctx context.Context,
+	eventStream EventStreamInterface,
+	taskID string,
+	action string,
+) {
+	if eventStream == nil {
+		return
+	}
+
+	approvalResponse := ToolApprovalResponseEvent{
+		Type:      "tool_approval_response",
+		TaskID:    taskID,
+		Action:    action,
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	if err := eventStream.StreamChunk(ctx, approvalResponse); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to stream approval response event")
+	}
+}
+
+type A2AStatusEvent struct {
+	Type      string `json:"type"`
+	TaskID    string `json:"taskId,omitempty"`
+	State     string `json:"state,omitempty"`
+	Message   string `json:"message,omitempty"`
+	AgentName string `json:"agentName,omitempty"`
+}
+
+func StreamA2AStatus(ctx context.Context, eventStream EventStreamInterface, taskID, state, message, agentName string) {
+	if eventStream == nil {
+		return
+	}
+
+	statusEvent := A2AStatusEvent{
+		Type:      "a2a_status",
+		TaskID:    taskID,
+		State:     state,
+		Message:   message,
+		AgentName: agentName,
+	}
+
+	if err := eventStream.StreamChunk(ctx, statusEvent); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to stream a2a status event")
+	}
+}
+
+func StreamContentBoundary(ctx context.Context, eventStream EventStreamInterface, completionID, modelID string) {
+	if eventStream == nil {
+		return
+	}
+	chunk := NewContentChunk(completionID, modelID, "")
+	chunk.Choices[0].FinishReason = finishReasonStop
+	chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
+	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to send A2A content boundary chunk")
+	}
+}
+
 // WrapChunkWithMetadata adds ARK metadata to a streaming chunk
 // If query is provided, includes complete query object in metadata (for final chunk only)
 func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string, query *arkv1alpha1.Query) interface{} {
@@ -311,7 +418,7 @@ func NewEventStreamForQuery(ctx context.Context, k8sClient client.Client, namesp
 		baseURL:   baseURL,
 		sessionId: sessionId,
 		queryName: queryName,
-		client:    common.NewHTTPClientWithoutTracing(),
+		client:    common.NewHTTPClientForStreaming(),
 	}, nil
 }
 
@@ -367,12 +474,14 @@ func (h *HTTPEventStream) startStream(ctx context.Context) error {
 	// Construct the streaming URL with proper escaping
 	streamURL := fmt.Sprintf("%s/stream/%s", h.baseURL, url.QueryEscape(h.queryName))
 
-	// CRITICAL: Use context.Background() instead of the query context for the streaming HTTP request.
+	// CRITICAL: Detach from the query context's cancellation for the streaming HTTP request.
 	// This allows the HTTP POST to complete gracefully when NotifyCompletion is called.
 	// The streaming lifecycle is managed by closing the pipe writer in NotifyCompletion,
 	// which causes the HTTP request to finish sending all data and complete normally.
-	// Using the query context would cause "context canceled" errors when the query completes.
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, streamURL, pipeReader)
+	// Inheriting the query context's cancellation would cause "context canceled" errors when
+	// the query completes; context.WithoutCancel drops its cancellation/deadline while keeping
+	// its values (logger/trace). No timeout is applied — the stream runs until the pipe closes.
+	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), http.MethodPost, streamURL, pipeReader)
 	if err != nil {
 		return fmt.Errorf("failed to create streaming request: %w", err)
 	}
@@ -423,9 +532,15 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 		h.streamWriter = nil
 	}
 
-	// Send completion signal
+	// Send completion signal. Detach from the request context's cancellation via
+	// context.WithoutCancel: on the drain-deadline path ctx is already cancelled (server
+	// shutdown), which would fail this POST even though the broker still needs the explicit
+	// terminal completion signal. WithoutCancel keeps ctx's values (logger/trace) while
+	// dropping its cancellation and deadline; the WithTimeout below still bounds this request.
+	completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
 	completeURL := fmt.Sprintf("%s/stream/%s/complete", h.baseURL, url.QueryEscape(h.queryName))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, completeURL, bytes.NewReader([]byte("{}")))
+	req, err := http.NewRequestWithContext(completeCtx, http.MethodPost, completeURL, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		return fmt.Errorf("failed to create completion request: %w", err)
 	}

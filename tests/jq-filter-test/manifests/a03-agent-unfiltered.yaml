@@ -6,6 +6,8 @@ spec:
   description: Test agent without filtering on tool responses
   prompt: |
     You are a test agent. Use the test-json-api tool to get data and respond with the results verbatim.
+  modelRef:
+    name: test-model-mock
   tools:
   - type: http
     name: test-json-api

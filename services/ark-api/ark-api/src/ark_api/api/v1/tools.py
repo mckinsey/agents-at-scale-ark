@@ -1,12 +1,15 @@
 """Kubernetes tools API endpoints."""
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 from ark_sdk.models.tool_v1alpha1 import ToolV1alpha1
 from ark_sdk.models.tool_v1alpha1_spec import ToolV1alpha1Spec
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.tools import (
     ToolResponse,
@@ -16,6 +19,8 @@ from ...models.tools import (
     ToolDetailResponse
 )
 from .exceptions import handle_k8s_errors
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -59,32 +64,35 @@ def tool_to_detail_response(tool: dict) -> ToolDetailResponse:
 
 @router.get("", response_model=ToolListResponse)
 @handle_k8s_errors(operation="list", resource_type="tool")
-async def list_tools(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ToolListResponse:
+async def list_tools(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolListResponse:
     """
-    List all Tool CRs in a namespace.
-    
+    List a page of Tool CRs in a namespace.
+
     Args:
         namespace: The namespace to list tools from
-        
+        pagination: limit and continue token for server-side pagination
+
     Returns:
-        ToolListResponse: List of all tools in the namespace
+        ToolListResponse: One page of tools plus the continuation token
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
-        tools = await ark_client.tools.a_list()
-        
-        tool_list = []
-        for tool in tools:
-            tool_list.append(tool_to_response(tool.to_dict()))
-        
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
+        page = await ark_client.tools.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
+
+        tool_list = [tool_to_response(tool.to_dict()) for tool in page.items]
+
         return ToolListResponse(
             items=tool_list,
-            total=len(tool_list)
+            count=len(tool_list),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
         )
 
 
 @router.post("", response_model=ToolDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="create", resource_type="tool")
-async def create_tool(body: ToolCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ToolDetailResponse:
+async def create_tool(request: Request, body: ToolCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
     """
     Create a new Tool CR.
     
@@ -95,7 +103,7 @@ async def create_tool(body: ToolCreateRequest, namespace: Optional[str] = Query(
     Returns:
         ToolDetailResponse: The created tool details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Build the tool spec
         tool_spec = body.spec.model_dump(by_alias=True, exclude_none=True)
         
@@ -117,7 +125,7 @@ async def create_tool(body: ToolCreateRequest, namespace: Optional[str] = Query(
 
 @router.get("/{tool_name}", response_model=ToolDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="tool")
-async def get_tool(tool_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ToolDetailResponse:
+async def get_tool(request: Request, tool_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
     """
     Get a specific Tool CR by name.
     
@@ -128,7 +136,7 @@ async def get_tool(tool_name: str, namespace: Optional[str] = Query(None, descri
     Returns:
         ToolDetailResponse: The tool details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         tool = await ark_client.tools.a_get(tool_name)
         
         return tool_to_detail_response(tool.to_dict())
@@ -136,7 +144,7 @@ async def get_tool(tool_name: str, namespace: Optional[str] = Query(None, descri
 
 @router.put("/{tool_name}", response_model=ToolDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="tool")
-async def update_tool(tool_name: str, body: ToolUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ToolDetailResponse:
+async def update_tool(request: Request, tool_name: str, body: ToolUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
     """
     Update a Tool CR by name.
     
@@ -148,7 +156,7 @@ async def update_tool(tool_name: str, body: ToolUpdateRequest, namespace: Option
     Returns:
         ToolDetailResponse: The updated tool details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Get the existing tool first
         existing_tool = await ark_client.tools.a_get(tool_name)
         existing_dict = existing_tool.to_dict()
@@ -173,7 +181,7 @@ async def update_tool(tool_name: str, body: ToolUpdateRequest, namespace: Option
 
 @router.delete("/{tool_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="tool")
-async def delete_tool(tool_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
+async def delete_tool(request: Request, tool_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete a Tool CR by name.
     
@@ -181,5 +189,5 @@ async def delete_tool(tool_name: str, namespace: Optional[str] = Query(None, des
         namespace: The namespace containing the tool
         tool_name: The name of the tool
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.tools.a_delete(tool_name)

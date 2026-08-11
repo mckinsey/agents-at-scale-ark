@@ -60,8 +60,9 @@ spec:
               Links the task to its originating query and captures task parameters.
             properties:
               a2aServerRef:
-                description: A2AServerRef references the A2AServer to poll for task
-                  status updates.
+                description: |-
+                  A2AServerRef references the A2AServer to poll for task status updates.
+                  Optional for tasks created directly by the executor (e.g., approval tasks).
                 properties:
                   name:
                     description: Name of the A2AServer resource.
@@ -72,8 +73,6 @@ spec:
                       Namespace where the A2AServer resource is located.
                       If empty, defaults to the same namespace as the A2ATask.
                     type: string
-                required:
-                - name
                 type: object
               agentRef:
                 description: AgentRef references the agent executing this task.
@@ -140,7 +139,6 @@ spec:
                   After this duration, the resource may be automatically deleted.
                 type: string
             required:
-            - a2aServerRef
             - agentRef
             - queryRef
             - taskId

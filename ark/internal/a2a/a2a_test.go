@@ -2,6 +2,7 @@ package a2a
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -224,6 +225,101 @@ func TestExtractTextFromTask(t *testing.T) {
 			expected:    "Part 1 Part 2",
 			expectError: false,
 		},
+		{
+			name: "completed task with result only in text artifact",
+			task: &protocol.Task{
+				ID: "task-artifact",
+				Status: protocol.TaskStatus{
+					State: TaskStateCompleted,
+				},
+				Artifacts: []protocol.Artifact{
+					{
+						ArtifactID: "artifact-1",
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Answer from artifact"},
+						},
+					},
+				},
+			},
+			expected:    "Answer from artifact",
+			expectError: false,
+		},
+		{
+			name: "completed task prefers artifacts over history",
+			task: &protocol.Task{
+				ID: "task-history-and-artifact",
+				Status: protocol.TaskStatus{
+					State: TaskStateCompleted,
+				},
+				History: []protocol.Message{
+					{
+						Role: protocol.MessageRoleAgent,
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Answer from history"},
+						},
+					},
+				},
+				Artifacts: []protocol.Artifact{
+					{
+						ArtifactID: "artifact-1",
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Answer from artifact"},
+						},
+					},
+				},
+			},
+			expected:    "Answer from artifact",
+			expectError: false,
+		},
+		{
+			name: "completed task prefers terminal status message over history",
+			task: &protocol.Task{
+				ID: "task-status-and-history",
+				Status: protocol.TaskStatus{
+					State: TaskStateCompleted,
+					Message: &protocol.Message{
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Answer from status"},
+						},
+					},
+				},
+				History: []protocol.Message{
+					{
+						Role: protocol.MessageRoleAgent,
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Answer from history"},
+						},
+					},
+				},
+			},
+			expected:    "Answer from status",
+			expectError: false,
+		},
+		{
+			name: "completed task with multiple text artifacts",
+			task: &protocol.Task{
+				ID: "task-multi-artifact",
+				Status: protocol.TaskStatus{
+					State: TaskStateCompleted,
+				},
+				Artifacts: []protocol.Artifact{
+					{
+						ArtifactID: "artifact-1",
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "First artifact"},
+						},
+					},
+					{
+						ArtifactID: "artifact-2",
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Second artifact"},
+						},
+					},
+				},
+			},
+			expected:    "First artifact\nSecond artifact",
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -238,6 +334,65 @@ func TestExtractTextFromTask(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
+		})
+	}
+}
+
+func TestArtifactTexts(t *testing.T) {
+	name := func(s string) *string { return &s }
+	tests := []struct {
+		name      string
+		artifacts []protocol.Artifact
+		expected  []string
+	}{
+		{
+			name:      "nil artifacts",
+			artifacts: nil,
+			expected:  []string{},
+		},
+		{
+			name: "single text artifact",
+			artifacts: []protocol.Artifact{
+				{ArtifactID: "a1", Parts: []protocol.Part{protocol.TextPart{Text: "one"}}},
+			},
+			expected: []string{"one"},
+		},
+		{
+			name: "multi-part single artifact concatenates parts",
+			artifacts: []protocol.Artifact{
+				{ArtifactID: "a1", Parts: []protocol.Part{protocol.TextPart{Text: "one "}, protocol.TextPart{Text: "two"}}},
+			},
+			expected: []string{"one two"},
+		},
+		{
+			name: "multiple distinct artifacts stay separate in order",
+			artifacts: []protocol.Artifact{
+				{ArtifactID: "a1", Parts: []protocol.Part{protocol.TextPart{Text: "first"}}},
+				{ArtifactID: "a2", Parts: []protocol.Part{protocol.TextPart{Text: "second"}}},
+			},
+			expected: []string{"first", "second"},
+		},
+		{
+			name: "same name collapses to latest",
+			artifacts: []protocol.Artifact{
+				{ArtifactID: "a1", Name: name("report"), Parts: []protocol.Part{protocol.TextPart{Text: "v1"}}},
+				{ArtifactID: "a2", Name: name("report"), Parts: []protocol.Part{protocol.TextPart{Text: "v2"}}},
+			},
+			expected: []string{"v2"},
+		},
+		{
+			name: "non-text artifact skipped",
+			artifacts: []protocol.Artifact{
+				{ArtifactID: "file-1", Parts: []protocol.Part{protocol.NewFilePartWithBytes("f.bin", "application/octet-stream", "YmluYXJ5")}},
+				{ArtifactID: "text-1", Parts: []protocol.Part{protocol.TextPart{Text: "kept"}}},
+			},
+			expected: []string{"kept"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, ArtifactTexts(tt.artifacts))
 		})
 	}
 }
@@ -291,4 +446,48 @@ func TestExtractTextFromParts(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestExtractApprovalTimeout(t *testing.T) {
+	t.Run("nil metadata returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(nil)
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("missing timeout key returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"other": "value"})
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("non-string timeout returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": 42})
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("empty string returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": ""})
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("malformed duration returns ok=false", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": "not-a-duration"})
+		assert.False(t, ok)
+		assert.Equal(t, time.Duration(0), d)
+	})
+
+	t.Run("valid duration is parsed", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": "5m"})
+		assert.True(t, ok)
+		assert.Equal(t, 5*time.Minute, d)
+	})
+
+	t.Run("compound duration is parsed", func(t *testing.T) {
+		d, ok := extractApprovalTimeout(map[string]any{"timeout": "1h30m"})
+		assert.True(t, ok)
+		assert.Equal(t, 90*time.Minute, d)
+	})
 }

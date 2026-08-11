@@ -9,9 +9,8 @@ import re
 from datetime import datetime, timezone
 from typing import Optional, Tuple, Dict, Any
 from kubernetes_asyncio import client
-from kubernetes_asyncio.client.api_client import ApiClient
 
-from ark_sdk.k8s import get_context
+from ark_sdk.k8s import get_context, create_api_client
 
 from ..models.auth import (
     APIKeyCreateRequest,
@@ -148,17 +147,19 @@ class APIKeyService:
         created_at: datetime,
         expires_at: Optional[datetime] = None,
         last_used_at: Optional[datetime] = None,
-        deleted_at: Optional[datetime] = None
+        deleted_at: Optional[datetime] = None,
+        created_by: Optional[str] = None
     ) -> str:
         """Create JSON annotation for API key metadata.
-        
+
         Args:
             name: API key name
             created_at: Creation timestamp
             expires_at: Optional expiration timestamp
             last_used_at: Optional last used timestamp
             deleted_at: Optional deletion timestamp
-            
+            created_by: Optional identity of the user who created the key
+
         Returns:
             JSON string with API key metadata
         """
@@ -166,14 +167,16 @@ class APIKeyService:
             "name": name,
             "createdAt": self._format_datetime(created_at)
         }
-        
+
         if expires_at:
             metadata["expiresAt"] = self._format_datetime(expires_at)
         if last_used_at:
             metadata["lastUsedAt"] = self._format_datetime(last_used_at)
         if deleted_at:
             metadata["deletedAt"] = self._format_datetime(deleted_at)
-        
+        if created_by is not None:
+            metadata["createdBy"] = created_by
+
         return json.dumps(metadata)
     
     def _parse_api_key_annotation(self, annotation_json: str) -> Dict[str, Any]:
@@ -192,7 +195,8 @@ class APIKeyService:
                 "created_at": self._parse_datetime(metadata.get("createdAt")),
                 "expires_at": self._parse_datetime(metadata.get("expiresAt")),
                 "last_used_at": self._parse_datetime(metadata.get("lastUsedAt")),
-                "deleted_at": self._parse_datetime(metadata.get("deletedAt"))
+                "deleted_at": self._parse_datetime(metadata.get("deletedAt")),
+                "created_by": metadata.get("createdBy")
             }
         except (json.JSONDecodeError, Exception) as e:
             logger.error(f"Error parsing API key annotation: {e}")
@@ -201,29 +205,34 @@ class APIKeyService:
                 "created_at": None,
                 "expires_at": None,
                 "last_used_at": None,
-                "deleted_at": None
+                "deleted_at": None,
+                "created_by": None
             }
     
-    async def create_api_key(self, request: APIKeyCreateRequest) -> APIKeyCreateResponse:
+    async def create_api_key(
+        self, request: APIKeyCreateRequest, created_by: Optional[str] = None
+    ) -> APIKeyCreateResponse:
         """Create a new API key.
-        
+
         Args:
             request: API key creation request
-            
+            created_by: Optional identity of the user creating the key
+
         Returns:
             API key creation response with secret key
         """
         # Generate key pair
         public_key, secret_key = self._generate_key_pair()
         secret_key_hash = self._hash_secret_key(secret_key)
-        
+
         # Prepare metadata
         now = datetime.now(timezone.utc)
-        
+
         api_key_json = self._create_api_key_annotation(
             name=request.name,
             created_at=now,
-            expires_at=request.expires_at
+            expires_at=request.expires_at,
+            created_by=created_by
         )
         
         annotations = {
@@ -253,7 +262,7 @@ class APIKeyService:
             }
         )
         
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             created_secret = await v1.create_namespaced_secret(
                 namespace=self.namespace,
@@ -271,13 +280,16 @@ class APIKeyService:
             expires_at=request.expires_at
         )
     
-    async def list_api_keys(self) -> APIKeyListResponse:
+    async def list_api_keys(self, created_by: Optional[str] = None) -> APIKeyListResponse:
         """List all active API keys (without secret keys).
-        
+
+        Args:
+            created_by: When given, only keys created by this identity are returned
+
         Returns:
             List of API key responses
         """
-        async with ApiClient() as api:
+        async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             
             # List secrets with our API key label
@@ -308,7 +320,11 @@ class APIKeyService:
                 # Skip soft-deleted keys
                 if deleted_at is not None or not is_active:
                     continue
-                
+
+                # Skip keys owned by someone else when scoping is requested
+                if created_by is not None and metadata.get("created_by") != created_by:
+                    continue
+
                 api_keys.append(APIKeyResponse(
                     id=str(secret.metadata.uid),
                     name=name,
@@ -327,19 +343,22 @@ class APIKeyService:
             count=len(api_keys)
         )
     
-    async def get_api_key_by_public_key(self, public_key: str) -> Optional[Dict[str, Any]]:
+    async def get_api_key_by_public_key(
+        self, public_key: str, created_by: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """Get API key data by public key for authentication.
-        
+
         Args:
             public_key: The public key to look up
-            
+            created_by: When given, the key must have been created by this identity
+
         Returns:
             Dictionary with API key data or None if not found
         """
         secret_name = self._secret_name_from_public_key(public_key)
         
         try:
-            async with ApiClient() as api:
+            async with create_api_client() as api:
                 v1 = client.CoreV1Api(api)
                 secret = await v1.read_namespaced_secret(
                     name=secret_name,
@@ -370,12 +389,15 @@ class APIKeyService:
             deleted_at = metadata["deleted_at"]
             if not is_active or deleted_at is not None:
                 return None
-            
+
             # Check expiration
             expires_at = metadata["expires_at"]
             if expires_at and expires_at < datetime.now(timezone.utc):
                 return None
-            
+
+            if created_by is not None and metadata.get("created_by") != created_by:
+                return None
+
             return {
                 "id": str(secret.metadata.uid),
                 "name": metadata["name"],
@@ -383,7 +405,8 @@ class APIKeyService:
                 "secret_key_hash": secret_key_hash,
                 "is_active": is_active,
                 "expires_at": expires_at,
-                "secret_name": secret_name
+                "secret_name": secret_name,
+                "created_by": metadata.get("created_by")
             }
             
         except client.rest.ApiException as e:
@@ -427,7 +450,7 @@ class APIKeyService:
         try:
             now = datetime.now(timezone.utc)
             
-            async with ApiClient() as api:
+            async with create_api_client() as api:
                 v1 = client.CoreV1Api(api)
                 
                 # Get current secret
@@ -447,7 +470,8 @@ class APIKeyService:
                     created_at=metadata["created_at"] or now,
                     expires_at=metadata["expires_at"],
                     last_used_at=now,
-                    deleted_at=metadata["deleted_at"]
+                    deleted_at=metadata["deleted_at"],
+                    created_by=metadata.get("created_by")
                 )
                 
                 # Update annotations
@@ -466,12 +490,15 @@ class APIKeyService:
         except Exception as e:
             logger.error(f"Error updating last used timestamp for {secret_name}: {e}")
     
-    async def delete_api_key(self, public_key: str) -> bool:
+    async def delete_api_key(
+        self, public_key: str, created_by: Optional[str] = None
+    ) -> bool:
         """Soft delete an API key by marking it as inactive.
-        
+
         Args:
             public_key: The public key of the API key to delete
-            
+            created_by: When given, the key must have been created by this identity
+
         Returns:
             True if deleted successfully, False otherwise
         """
@@ -480,7 +507,7 @@ class APIKeyService:
         try:
             now = datetime.now(timezone.utc)
             
-            async with ApiClient() as api:
+            async with create_api_client() as api:
                 v1 = client.CoreV1Api(api)
                 
                 # Get current secret
@@ -493,14 +520,18 @@ class APIKeyService:
                 annotations = secret.metadata.annotations or {}
                 api_key_json = annotations.get(API_KEY_ANNOTATION, "{}")
                 metadata = self._parse_api_key_annotation(api_key_json)
-                
+
+                if created_by is not None and metadata.get("created_by") != created_by:
+                    return False
+
                 # Update deleted timestamp
                 updated_json = self._create_api_key_annotation(
                     name=metadata["name"],
                     created_at=metadata["created_at"] or now,
                     expires_at=metadata["expires_at"],
                     last_used_at=metadata["last_used_at"],
-                    deleted_at=now
+                    deleted_at=now,
+                    created_by=metadata.get("created_by")
                 )
                 
                 # Update to mark as deleted (soft delete)

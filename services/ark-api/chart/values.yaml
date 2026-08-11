@@ -75,6 +75,42 @@ app:
     # Read-only mode - set to "true" to disable write operations
     - name: READ_ONLY_MODE
       value: "false"
+    # MCP authorization endpoints. Leave ARK_API_PUBLIC_CALLBACK_URL unset to
+    # disable the four /api/v1/mcp-servers/{name}/auth/* endpoints (they will
+    # return 503). When set, the URL MUST be https unless the host is a
+    # loopback literal (127.0.0.1, [::1] bracketed per RFC 3986 §3.2.2, or
+    # localhost). The path /v1/mcp/auth/callback is appended automatically
+    # if the configured URL has no path.
+    # The default is a loopback literal, which RFC 8252-strict IdPs (Notion,
+    # Google) accept as an OAuth redirect_uri. `ark mcp auth login` already
+    # port-forwards ark-api to 127.0.0.1:34780, so the IdP redirect reaches
+    # ark-api through that forward with no manual setup. A non-literal host
+    # that merely resolves to loopback (e.g. nip.io) is rejected by strict IdPs.
+    # Dashboard-only flows need a manual loopback port-forward or a public https
+    # ingress. Override with a public https ingress URL for real deployments.
+    - name: ARK_API_PUBLIC_CALLBACK_URL
+      value: "http://127.0.0.1:34780/v1/mcp/auth/callback"
+    # Optional: base URL of the dashboard, used to redirect the browser back
+    # after a dashboard-initiated MCP auth flow. The redirect target is
+    # <ARK_API_DASHBOARD_URL>/mcp, so this value MUST include any path prefix
+    # under which the dashboard is served (e.g. behind an X-Forwarded-Prefix).
+    # Same scheme rules as ARK_API_PUBLIC_CALLBACK_URL: https, unless the host
+    # is a loopback literal (127.0.0.1, [::1] bracketed, or localhost) which may
+    # use http. Required only for the dashboard redirect-completion path; the
+    # CLI flow is unaffected. When unset, dashboard flows fall back to the HTML
+    # completion page.
+    # The default is the local devspace dashboard host, which resolves to
+    # loopback (so http is permitted). Override with a public https ingress URL
+    # for real deployments.
+    - name: ARK_API_DASHBOARD_URL
+      value: "http://dashboard.default.127.0.0.1.nip.io:8080"
+    # Optional tuning knobs (defaults shown). All accept positive integers.
+    # - name: ARK_API_MCP_AUTH_CACHE_TTL_SECONDS
+    #   value: "600"
+    # - name: ARK_API_MCP_AUTH_DCR_TIMEOUT_SECONDS
+    #   value: "15"
+    # - name: ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS
+    #   value: "15"
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:
@@ -129,8 +165,22 @@ httpRoute:
       namespace: ark-system
   # Hostnames this route matches
   hostnames:
-    - "ark-api.127.0.0.1.nip.io"
     - "ark-api.default.127.0.0.1.nip.io"
+
+# Impersonation configuration
+# When enabled, SSO/JWT-authenticated requests use K8s user impersonation
+# so that RBAC rules apply to the actual user, not the ark-api service account.
+impersonation:
+  enabled: false
+  fallback: false
+  usernameClaim: email
+  groupsClaim: groups
+  prefix: ""
+
+# Network policy configuration
+networkPolicy:
+  enabled: false
+  allowNamespaces: []
 
 # Service account configuration
 serviceAccount:

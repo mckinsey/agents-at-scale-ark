@@ -43,6 +43,11 @@ on:
         required: false
         type: boolean
         default: false
+      source_ref:
+        description: 'Commit/ref to BUILD from (blank = the version tag''s commit). Used by promotion to build a tested RC commit as the stable version.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -56,7 +61,7 @@ jobs:
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       clean_version: ${{ steps.resolve.outputs.clean_version }}
-      sha: ${{ steps.resolve.outputs.sha }}
+      sha: ${{ steps.build_sha.outputs.sha }}
       has_version: ${{ steps.resolve.outputs.has_version }}
     steps:
       - uses: actions/checkout@v6
@@ -66,6 +71,16 @@ jobs:
         uses: ./.github/actions/resolve-version
         with:
           ark_version: ${{ github.event.inputs.ark_version }}
+
+      - name: Pick build SHA (source_ref override for promotion)
+        id: build_sha
+        run: |
+          if [ -n "${{ github.event.inputs.source_ref }}" ]; then
+            echo "sha=${{ github.event.inputs.source_ref }}" >> "$GITHUB_OUTPUT"
+            echo "Building from source_ref ${{ github.event.inputs.source_ref }} (publishing as ${{ steps.resolve.outputs.version }})"
+          else
+            echo "sha=${{ steps.resolve.outputs.sha }}" >> "$GITHUB_OUTPUT"
+          fi
 
   deploy:
     needs: [resolve_version]
@@ -91,6 +106,9 @@ jobs:
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
           - path: services/ark-broker/ark-broker
             image: ark-broker
+          - path: services/ark-broker/ark-broker
+            image: ark-broker-migrate
+            dockerfile: Dockerfile.migrate
           - path: tools/ark-cli
             image: ark-cli
             prebuild: "make ark-cli-build"
@@ -109,8 +127,22 @@ jobs:
         with:
           ref: ${{ needs.resolve_version.outputs.sha }}
 
+      # Promotion: source_ref is an RC commit whose files carry the RC version.
+      # Stamp the stable version so built artifacts (Go ldflags VERSION, bundled
+      # ark-sdk wheel, etc.) carry the published version while using RC code.
+      - name: Stamp published version onto source
+        if: ${{ github.event.inputs.source_ref != '' }}
+        run: |
+          # source_ref (RC commit) predates the release tooling; fetch the stamp
+          # script from main before running it against the RC checkout.
+          git fetch origin main --depth 1
+          git checkout origin/main -- scripts/stamp-version.sh
+          bash scripts/stamp-version.sh "${{ needs.resolve_version.outputs.clean_version }}"
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Build libraries
         run: make libs-build-all
@@ -165,7 +197,7 @@ jobs:
       - uses: actions/checkout@v6
       
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: '3.14.0'
 
@@ -208,6 +240,7 @@ jobs:
       matrix:
         chart:
           - ark-controller
+          - ark-apiserver
           - ark-completions
           - ark-api
           - ark-dashboard
@@ -227,7 +260,7 @@ jobs:
       - uses: actions/checkout@v6
       
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: '3.14.0'
           
@@ -263,7 +296,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
           
       - name: Build Docs
         run: |
@@ -300,7 +333,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
           registry-url: https://registry.npmjs.org/
 
       - name: Publish to npm
@@ -347,12 +380,11 @@ jobs:
         with:
           metrics-enabled: false
           traefik-enabled: false
-          k3s-channel: latest
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Install published ark-cli from npm
         run: |

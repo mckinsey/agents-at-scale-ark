@@ -12,14 +12,15 @@ spec:
     try:
     - apply:
         file: ../shared/mock-weather-api.yaml
-    - assert:
-        resource:
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: mock-weather-api
-          status:
-            readyReplicas: 1
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: mock-weather-api
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
     - assert:
         resource:
           apiVersion: v1
@@ -29,30 +30,23 @@ spec:
     - script:
         content: |
           MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
+          echo "$(date -u +%H:%M:%S) starting kubectl run for mock weather readiness probe"
           kubectl run test-mock-weather-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
-            curl -f -s "${MOCK_URL}/v1/forecast?latitude=40.71&longitude=-74.01&current_weather=true"
+            curl -f -s --retry 5 --retry-connrefused --retry-delay 1 "${MOCK_URL}/v1/forecast?latitude=40.71&longitude=-74.01&current_weather=true"
+          echo "$(date -u +%H:%M:%S) mock weather readiness probe complete"
         env:
         - name: NAMESPACE
           value: ($namespace)
-        timeout: 30s
+        timeout: 45s
     catch:
     - events: {}
 
   - name: setup-mock-llm
     try:
     - script:
+        timeout: 180s
         content: |
-          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.28 \
-            --namespace $NAMESPACE \
-            --values mock-llm-values.yaml \
-            --wait --timeout=120s
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -105,15 +99,15 @@ spec:
           kind: Agent
           metadata:
             name: weather-agent
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: weather-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: weather-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -140,7 +134,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

@@ -79,6 +79,11 @@ function setupMocks(overrides?: {
 }) {
   const installMutate = vi.fn();
   const uninstallMutate = vi.fn();
+  const uninstallMutateAsync = vi.fn().mockResolvedValue({
+    status: 'command',
+    helmCommand: 'helm uninstall test',
+    name: 'Test Item',
+  });
 
   vi.mocked(useRouter).mockReturnValue({
     push: mockPush,
@@ -104,10 +109,11 @@ function setupMocks(overrides?: {
 
   mockUseUninstallMarketplaceItem.mockReturnValue({
     mutate: uninstallMutate,
+    mutateAsync: uninstallMutateAsync,
     isPending: overrides?.uninstallIsPending ?? false,
   } as any);
 
-  return { installMutate, uninstallMutate };
+  return { installMutate, uninstallMutate, uninstallMutateAsync };
 }
 
 describe('MarketplaceDetailPage', () => {
@@ -174,7 +180,7 @@ describe('MarketplaceDetailPage', () => {
 
   it('shows uninstall button and "Currently installed" when status is installed', async () => {
     const installedItem = { ...baseItem, status: 'installed' as const };
-    const { uninstallMutate } = setupMocks({ item: installedItem });
+    const { uninstallMutateAsync } = setupMocks({ item: installedItem });
 
     renderWithProviders(<MarketplaceDetailPage />);
 
@@ -183,7 +189,7 @@ describe('MarketplaceDetailPage', () => {
     expect(screen.getByText('Currently installed')).toBeInTheDocument();
 
     await userEvent.click(uninstallButton);
-    expect(uninstallMutate).toHaveBeenCalledWith('test-item');
+    expect(uninstallMutateAsync).toHaveBeenCalledWith('test-item');
   });
 
   it('disables install button while install mutation is pending', () => {
@@ -291,5 +297,127 @@ describe('MarketplaceDetailPage', () => {
     await userEvent.click(backButton);
 
     expect(mockPush).toHaveBeenCalledWith('/marketplace');
+  });
+
+  describe('UI buttons for installed items', () => {
+    it('renders UI buttons when item is installed and has uis array', () => {
+      const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      const installedItemWithUI = {
+        ...baseItem,
+        status: 'installed' as const,
+        uis: [
+          { url: 'https://phoenix.example.com', label: 'Phoenix Dashboard' },
+        ],
+      };
+      setupMocks({ item: installedItemWithUI });
+
+      renderWithProviders(<MarketplaceDetailPage />);
+
+      const uiButton = screen.getByRole('button', { name: /phoenix dashboard/i });
+      expect(uiButton).toBeInTheDocument();
+
+      fireEvent.click(uiButton);
+      expect(spy).toHaveBeenCalledWith('https://phoenix.example.com', '_blank');
+
+      spy.mockRestore();
+    });
+
+    it('renders multiple UI buttons when item has multiple uis', () => {
+      const installedItemWithMultipleUIs = {
+        ...baseItem,
+        status: 'installed' as const,
+        uis: [
+          { url: 'https://phoenix.example.com', label: 'Phoenix' },
+          { url: 'https://minio.example.com', label: 'MinIO Console' },
+        ],
+      };
+      setupMocks({ item: installedItemWithMultipleUIs });
+
+      renderWithProviders(<MarketplaceDetailPage />);
+
+      expect(screen.getByRole('button', { name: /^Phoenix$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /minio console/i })).toBeInTheDocument();
+    });
+
+    it('does not render UI buttons when item is not installed', () => {
+      const availableItemWithUI = {
+        ...baseItem,
+        status: 'available' as const,
+        uis: [
+          { url: 'https://phoenix.example.com', label: 'Phoenix' },
+        ],
+      };
+      setupMocks({ item: availableItemWithUI });
+
+      renderWithProviders(<MarketplaceDetailPage />);
+
+      expect(screen.queryByRole('button', { name: /phoenix/i })).not.toBeInTheDocument();
+    });
+
+    it('does not render UI buttons section when uis array is empty', () => {
+      const installedItemNoUI = {
+        ...baseItem,
+        status: 'installed' as const,
+        uis: [],
+      };
+      setupMocks({ item: installedItemNoUI });
+
+      renderWithProviders(<MarketplaceDetailPage />);
+
+      expect(screen.getByRole('button', { name: /uninstall/i })).toBeInTheDocument();
+    });
+
+    it('does not render UI buttons when uis is undefined', () => {
+      const installedItemNoUIs = {
+        ...baseItem,
+        status: 'installed' as const,
+      };
+      setupMocks({ item: installedItemNoUIs });
+
+      renderWithProviders(<MarketplaceDetailPage />);
+
+      expect(screen.getByRole('button', { name: /uninstall/i })).toBeInTheDocument();
+    });
+
+    it('opens URL in new tab when UI button is clicked', () => {
+      const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      const installedItemWithUI = {
+        ...baseItem,
+        status: 'installed' as const,
+        uis: [
+          { url: 'https://test.example.com/ui', label: 'Test UI' },
+        ],
+      };
+      setupMocks({ item: installedItemWithUI });
+
+      renderWithProviders(<MarketplaceDetailPage />);
+
+      const uiButton = screen.getByRole('button', { name: /test ui/i });
+      fireEvent.click(uiButton);
+
+      expect(spy).toHaveBeenCalledWith('https://test.example.com/ui', '_blank');
+      spy.mockRestore();
+    });
+
+    it('renders UI buttons in sidebar between Uninstall and Version info', () => {
+      const installedItemWithUI = {
+        ...baseItem,
+        status: 'installed' as const,
+        uis: [
+          { url: 'https://phoenix.example.com', label: 'Phoenix' },
+        ],
+      };
+      setupMocks({ item: installedItemWithUI });
+
+      renderWithProviders(<MarketplaceDetailPage />);
+
+      const uninstallButton = screen.getByRole('button', { name: /uninstall/i });
+      const phoenixButton = screen.getByRole('button', { name: /phoenix/i });
+      const versionText = screen.getByText(/Version/i);
+
+      expect(uninstallButton).toBeInTheDocument();
+      expect(phoenixButton).toBeInTheDocument();
+      expect(versionText).toBeInTheDocument();
+    });
   });
 });

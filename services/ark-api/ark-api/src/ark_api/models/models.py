@@ -3,7 +3,7 @@ from typing import List, Dict, Optional, Literal, Union, Any
 
 from pydantic import BaseModel, Field
 
-from .common import AvailabilityStatus
+from .common import AvailabilityStatus, PaginatedListResponse
 from .agents import AgentHeader
 
 # Provider constants
@@ -67,9 +67,11 @@ class AzureConfig(BaseModel):
 class BedrockConfig(BaseModel):
     """Bedrock model configuration."""
     region: Optional[Union[str, ModelValueSource]] = None
+    base_url: Optional[Union[str, ModelValueSource]] = Field(None, alias="baseUrl")
     access_key_id: Optional[Union[str, ModelValueSource]] = Field(None, alias="accessKeyId")
     secret_access_key: Optional[Union[str, ModelValueSource]] = Field(None, alias="secretAccessKey")
     session_token: Optional[Union[str, ModelValueSource]] = Field(None, alias="sessionToken")
+    api_key: Optional[Union[str, ModelValueSource]] = Field(None, alias="apiKey")
     model_arn: Optional[Union[str, ModelValueSource]] = Field(None, alias="modelArn")
     max_tokens: Optional[int] = Field(None, alias="maxTokens", ge=1, le=100000)
     temperature: Optional[str] = Field(None, pattern=r"^(0(\.\d+)?|1(\.0+)?)$")
@@ -102,10 +104,9 @@ class ModelResponse(BaseModel):
     annotations: Optional[Dict[str, str]] = None
 
 
-class ModelListResponse(BaseModel):
+class ModelListResponse(PaginatedListResponse):
     """List of models response model."""
     items: List[ModelResponse]
-    count: int
 
 
 class ModelCreateRequest(BaseModel):

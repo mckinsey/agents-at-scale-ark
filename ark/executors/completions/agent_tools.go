@@ -137,14 +137,19 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		return nil, fmt.Errorf("failed to build MCP server URL: %w", err)
 	}
 
-	headers := make(map[string]string)
-	for _, header := range mcpServerCRD.Spec.Headers {
-		value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
-		}
-		headers[header.Name] = value
+	headers, err := ResolveHeaders(ctx, k8sClient, mcpServerCRD.Spec.Headers, mcpServerNamespace)
+	if err != nil {
+		return nil, err
 	}
+
+	authMaterial, authWarnings, err := arkmcp.ResolveAuthorizationMaterial(ctx, k8sClient, &mcpServerCRD)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve authorization for MCP server %v: %w", mcpServerKey, err)
+	}
+	for _, warning := range authWarnings {
+		logf.FromContext(ctx).V(1).Info(warning, "mcpServer", mcpServerKey.String(), "tool", tool.Name)
+	}
+	authMaterial.ApplyBearer(headers)
 
 	// Parse timeout from MCPServer spec (default to 30s if not specified)
 	timeout := 30 * time.Second
@@ -156,6 +161,12 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		timeout = parsedTimeout
 	}
 
+	toolCallTimeout, err := arkmcp.ParseToolCallTimeout(mcpServerCRD.Spec.ToolCallTimeout)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "ignoring invalid MCPServer spec.toolCallTimeout; tool calls will inherit the query execution budget",
+			"mcpServer", mcpServerKey.String(), "tool", tool.Name)
+	}
+
 	mcpClient, err := mcpPool.GetOrCreateClient(
 		ctx,
 		arkmcp.MCPClientConfig{
@@ -165,6 +176,7 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 			Headers:         headers,
 			Transport:       mcpServerCRD.Spec.Transport,
 			Timeout:         timeout,
+			ToolCallTimeout: toolCallTimeout,
 		},
 		mcpSettings,
 	)
@@ -287,6 +299,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 			Error: fmt.Sprintf("failed to create agent %s: %v", a.AgentName, err),
 		}, err
 	}
+	defer agent.Close()
 
 	// Prepare user input. No conversation history is ever provided
 	userInput := NewUserMessage(inputStr)
@@ -295,7 +308,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 	// Call the agent's Execute function
 	// Pass nil for memory and eventStream (agents-as-tools don't use memory or streaming)
 	// See ARKQB-137 for discussion on streaming support for agents as tools
-	result, err := agent.Execute(ctx, userInput, history, nil, nil)
+	result, err := agent.Execute(ctx, userInput, history, nil, nil, ExecuteOptions{})
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -369,12 +382,13 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 			Error: fmt.Sprintf("failed to create team %s: %v", t.TeamName, err),
 		}, err
 	}
+	defer team.Close()
 
 	// Prepare user input. No conversation history is ever provided
 	userInput := NewUserMessage(inputStr)
 	history := []Message{}
 
-	result, err := team.Execute(ctx, userInput, history, nil, nil)
+	result, err := team.Execute(ctx, userInput, history, nil, nil, ExecuteOptions{})
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,

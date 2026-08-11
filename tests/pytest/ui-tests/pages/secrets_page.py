@@ -1,11 +1,7 @@
 import logging
-import os
 import random
-import pytest
 from datetime import datetime
-from pathlib import Path
-from playwright.sync_api import Page
-from dotenv import load_dotenv
+from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -13,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class SecretsPage(BasePage):
-    
+
     ADD_SECRET_BUTTON = "button:has-text('Add Secret'), button:has-text('Create Secret'), button:has-text('New Secret')"
     SECRET_NAME_INPUT = "input[name='name'], input[placeholder*='name' i], input[id*='name'], input[type='text']:first-of-type"
     SECRET_VALUE_INPUT = "input[name='value'], textarea[name='value'], input[placeholder*='value' i], input[type='password'], textarea, input[type='text']:last-of-type"
@@ -23,24 +19,12 @@ class SecretsPage(BasePage):
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
     LOADING_INDICATOR = "[data-testid='loading'], [aria-busy='true'], .skeleton, [class*='skeleton'], [class*='loading'], [class*='spinner']"
-    
-    def __init__(self, page: Page):
-        super().__init__(page)
-        self._load_env()
-    
-    def _load_env(self) -> None:
-        env_path = Path(__file__).parent.parent / ".env"
-        if env_path.exists():
-            load_dotenv(env_path)
-    
-    def get_password_from_env(self, key: str = "SECRET_PASSWORD") -> str:
-        return os.getenv(key, "default-test-password")
-    
+
     def generate_secret_name(self, prefix: str = "secret") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
         rand = random.randint(100, 999)
         return f"{prefix}-{date_str}{rand}"
-    
+
     def navigate_to_secrets_tab(self) -> None:
         self._close_dialog_if_open()
         dashboard = DashboardPage(self.page)
@@ -48,7 +32,7 @@ class SecretsPage(BasePage):
         self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
         self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
         self._close_dialog_if_open()
-    
+
     def _close_dialog_if_open(self) -> None:
         for attempt in range(3):
             try:
@@ -59,12 +43,12 @@ class SecretsPage(BasePage):
                     self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']", timeout=3000)
                 else:
                     return
-            except:
+            except Exception:
                 pass
         self.page.keyboard.press("Escape")
-    
+
     def _goto_secrets(self) -> None:
-        self.page.goto("http://localhost:3274/secrets")
+        self.page.goto("http://localhost:3274/secrets", wait_until="domcontentloaded")
         self.wait_for_navigation_complete()
         self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
         self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
@@ -82,13 +66,12 @@ class SecretsPage(BasePage):
                     self.page.wait_for_timeout(3000)
                     self._goto_secrets()
         return False
-    
-    def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:
-        secret_name = self.generate_secret_name(prefix)
-        secret_value = self.get_password_from_env(env_key)
 
-        logger.info(f"Creating secret: {secret_name} with key: {env_key}")
-        logger.info(f"Secret value length: {len(secret_value)}")
+    def create_secret_with_verification(self, prefix: str) -> dict:
+        secret_name = self.generate_secret_name(prefix)
+        secret_value = "dummy-api-key"
+
+        logger.info(f"Creating secret: {secret_name}")
 
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
         self.wait_for_modal_open()
@@ -129,7 +112,7 @@ class SecretsPage(BasePage):
             "in_table": in_table,
             "prefix": prefix
         }
-    
+
     def delete_secret_with_verification(self, secret_name: str) -> dict:
         if not self.is_secret_in_table(secret_name):
             logger.warning("Secret '%s' not found in table after retries", secret_name)
@@ -138,25 +121,29 @@ class SecretsPage(BasePage):
             name_element = self.page.get_by_text(secret_name, exact=True).first
             name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete secret'] or .//button[.//*[contains(@class,'lucide-trash')]]  ][1]")
-            delete_btn = card.locator("button[aria-label='Delete secret'], button:has(svg.lucide-trash-2)").first
+            row = self.page.get_by_role("row").filter(has_text=secret_name).first
+            delete_btn = row.get_by_role("button", name="Delete secret")
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click(force=True)
+            # The delete action is disabled while the secret is still used by a model.
+            # After the using model is deleted, the "in use" status can take a moment to
+            # refresh, so wait for the button to become enabled before clicking.
+            expect(delete_btn).to_be_enabled(timeout=15000)
+            delete_btn.click()
         except Exception as e:
             logger.warning("Delete button not accessible for secret '%s': %s", secret_name, e)
             return self._delete_not_available(secret_name)
-        
+
         self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
-        
+
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
-        
+
         self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_toast_popup()
         deleted_from_table = not self.is_secret_in_table(secret_name, retries=0)
-        
+
         return {
             "secret_name": secret_name,
             "delete_available": True,
@@ -165,7 +152,7 @@ class SecretsPage(BasePage):
             "popup_visible": popup_visible,
             "deleted_from_table": deleted_from_table
         }
-    
+
     def _delete_not_available(self, secret_name: str) -> dict:
         return {
             "secret_name": secret_name,
@@ -175,14 +162,3 @@ class SecretsPage(BasePage):
             "popup_visible": False,
             "deleted_from_table": False
         }
-    
-    def create_secret_for_test(self, prefix: str, env_key: str):
-        self.navigate_to_secrets_tab()
-        
-        if not self.is_visible(self.ADD_SECRET_BUTTON):
-            pytest.skip("Add Secret button not available")
-        
-        result = self.create_secret_with_verification(prefix, env_key)
-        logger.info(f"Secret created: {result['name']}")
-        
-        return result

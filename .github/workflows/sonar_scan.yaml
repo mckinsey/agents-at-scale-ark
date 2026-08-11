@@ -1,9 +1,6 @@
 name: SonarQube Scan
 
 on:
-  pull_request:
-    branches: ["main"]
-    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       branch:
@@ -39,7 +36,7 @@ jobs:
 
       - name: Download coverage artifacts
         id: download-coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: coverage-*
           path: coverage-artifacts
@@ -102,7 +99,7 @@ jobs:
         if: steps.check-coverage.outputs.found == 'false'
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.5"
           cache: true
           cache-dependency-path: ark/go.sum
 
@@ -110,15 +107,17 @@ jobs:
         if: steps.check-coverage.outputs.found == 'false'
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
 
       - name: Install uv
         if: steps.check-coverage.outputs.found == 'false'
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
 
       - name: Install Helm
         if: steps.check-coverage.outputs.found == 'false'
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: "3.18.6"
 
@@ -148,7 +147,32 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
+
+      - name: Compute WARP apt cache key
+        id: warp-cache-key
+        run: echo "week=$(date -u +%Y-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore WARP apt packages
+        id: warp-apt-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/warp-apt-cache
+          key: warp-apt-${{ runner.os }}-${{ runner.arch }}-v1-${{ steps.warp-cache-key.outputs.week }}
+          restore-keys: |
+            warp-apt-${{ runner.os }}-${{ runner.arch }}-v1-
+
+      - name: Prime apt archive from cache
+        run: |
+          mkdir -p "$HOME/warp-apt-cache"
+          shopt -s nullglob
+          debs=("$HOME"/warp-apt-cache/*.deb)
+          if (( ${#debs[@]} )); then
+            sudo cp -n "${debs[@]}" /var/cache/apt/archives/
+            echo "Primed ${#debs[@]} cached .debs into /var/cache/apt/archives/"
+          else
+            echo "WARP apt cache empty; first run will download fresh packages."
+          fi
 
       - name: Set up Cloudflare WARP
         uses: Boostport/setup-cloudflare-warp@v1
@@ -156,6 +180,15 @@ jobs:
           organization: ${{ secrets.CF_ORGANIZATION }}
           auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
           auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+
+      - name: Sync apt archive back to cache
+        if: always()
+        run: |
+          mkdir -p "$HOME/warp-apt-cache"
+          sudo find /var/cache/apt/archives -maxdepth 1 -name '*.deb' \
+            -exec cp -n {} "$HOME/warp-apt-cache/" \;
+          sudo chown -R "$USER" "$HOME/warp-apt-cache"
+          echo "WARP apt cache now contains $(ls "$HOME/warp-apt-cache" | wc -l) .debs"
 
       - name: Run SonarQube Scan (Branch)
         if: github.event_name != 'pull_request'

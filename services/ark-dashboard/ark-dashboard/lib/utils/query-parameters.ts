@@ -1,12 +1,14 @@
 'use client';
 
 import type { components } from '@/lib/api/generated/types';
+import { generateUUID } from '@/lib/utils/uuid';
 
-type QueryParameterInput = components['schemas']['QueryParameter-Input'];
-type QueryParameterOutput = components['schemas']['QueryParameter-Output'];
-type AgentParameterOutput = components['schemas']['AgentParameter-Output'];
+type QueryParameterInput = components['schemas']['QueryParameter'];
+type QueryParameterOutput = components['schemas']['QueryParameter'];
+type AgentParameterOutput = components['schemas']['AgentParameter'];
 
 export interface QueryParameter {
+  id?: string;
   name: string;
   value: string;
   source?: 'input' | 'agent';
@@ -57,6 +59,7 @@ export function transformApiToQueryParameters(
   if (!params) return [];
 
   return params.map(p => ({
+    id: generateUUID(),
     name: p.name,
     value: p.value || '',
   }));

@@ -12,12 +12,13 @@ type OperationTracker interface {
 	InitializeQueryContext(ctx context.Context, query *arkv1alpha1.Query) context.Context
 	Start(ctx context.Context, operation, message string, data map[string]string) context.Context
 	Complete(ctx context.Context, operation, message string, data map[string]string)
+	Cancel(ctx context.Context, operation, message string, data map[string]string)
 	Fail(ctx context.Context, operation, message string, err error, data map[string]string)
 }
 
 type TokenCollector interface {
 	StartTokenCollection(ctx context.Context) context.Context
-	AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens int64)
+	AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens, cachedTokens int64)
 	AddTokenUsage(ctx context.Context, usage arkv1alpha1.TokenUsage)
 	AddCompletionUsage(ctx context.Context, usage openai.CompletionUsage)
 	GetTokenSummary(ctx context.Context) arkv1alpha1.TokenUsage
@@ -56,6 +57,9 @@ type MCPServerRecorder interface {
 	ClientCreationFailed(ctx context.Context, obj runtime.Object, reason string)
 	ToolListingFailed(ctx context.Context, obj runtime.Object, reason string)
 	ToolCreationFailed(ctx context.Context, obj runtime.Object, reason string)
+	AuthorizationRequired(ctx context.Context, obj runtime.Object, reason string)
+	TokenRejected(ctx context.Context, obj runtime.Object, reason string)
+	AuthorizationSecretUnresolvable(ctx context.Context, obj runtime.Object, reason string)
 }
 
 type TeamRecorder interface {

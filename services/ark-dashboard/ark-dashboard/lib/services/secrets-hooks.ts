@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import { APIError } from '@/lib/api/client';
 
@@ -7,6 +7,7 @@ import { secretsService } from './secrets';
 import type { Secret, SecretDetailResponse } from './secrets';
 
 export const GET_ALL_SECRETS_QUERY_KEY = 'get-all-secrets';
+export const GET_SECRET_QUERY_KEY = 'get-secret';
 export const CREATE_SECRET_MUTATION_KEY = 'create-secret';
 export const UPDATE_SECRET_MUTATION_KEY = 'update-secret';
 export const DELETE_SECRET_MUTATION_KEY = 'delete-secret';
@@ -15,6 +16,14 @@ export const useGetAllSecrets = () => {
   return useQuery({
     queryKey: [GET_ALL_SECRETS_QUERY_KEY],
     queryFn: secretsService.getAll,
+  });
+};
+
+export const useGetSecret = (name: string | undefined) => {
+  return useQuery({
+    queryKey: [GET_SECRET_QUERY_KEY, name],
+    queryFn: () => secretsService.get(name ?? ''),
+    enabled: Boolean(name),
   });
 };
 
@@ -52,9 +61,7 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
       return { previousTodos };
     },
     onSuccess: data => {
-      toast.success('Secret Created', {
-        description: `Successfully created secret ${data.name}`,
-      });
+      toast.success('Secret created successfully');
 
       if (props.onSuccess) {
         props.onSuccess(data);
@@ -102,9 +109,7 @@ export const useUpdateSecret = (props: UseUpdateSecretProps) => {
       return secretsService.update(name, password);
     },
     onSuccess: data => {
-      toast.success('Secret Updated', {
-        description: `Successfully updated secret ${data.name}`,
-      });
+      toast.success('Secret updated successfully');
 
       if (props.onSuccess) {
         props.onSuccess(data);
@@ -144,9 +149,7 @@ export const useDeleteSecret = (props?: UseDeleteSecretProps) => {
       return secretsService.delete(name);
     },
     onSuccess: () => {
-      toast.success('Secret Deleted', {
-        description: 'Successfully deleted the secret',
-      });
+      toast.success('Secret deleted successfully');
 
       if (props?.onSuccess) {
         props.onSuccess();

@@ -2,7 +2,7 @@ import {Command} from 'commander';
 import chalk from 'chalk';
 import {execute} from '../../lib/commands.js';
 import inquirer from 'inquirer';
-import type {ArkConfig} from '../../lib/config.js';
+import type {ArkConfig, PostgresStorageConfig} from '../../lib/config.js';
 import {showNoClusterError} from '../../lib/startup.js';
 import output from '../../lib/output.js';
 import {
@@ -25,6 +25,121 @@ import {
   type WaitProgress,
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
+import {runReadinessChecks} from '../../lib/readinessChecks.js';
+
+type Backend = 'etcd' | 'postgresql';
+
+function validatePostgresConfig(
+  pg: PostgresStorageConfig | undefined
+): PostgresStorageConfig {
+  if (!pg) {
+    throw new Error(
+      "missing 'storage.postgresql' block in .arkrc.yaml"
+    );
+  }
+  for (const key of ['host', 'user', 'passwordSecretName'] as const) {
+    if (!pg[key]) {
+      throw new Error(
+        `missing required field storage.postgresql.${key} in .arkrc.yaml`
+      );
+    }
+  }
+  return pg;
+}
+
+function backendInstallArgs(
+  service: ArkService,
+  backend: Backend,
+  values?: PostgresStorageConfig
+): string[] {
+  if (backend === 'etcd') return [];
+  if (!values) return [];
+  if (service.helmReleaseName === 'ark-controller') {
+    return ['--set', 'storage.backend=postgresql'];
+  }
+  if (service.helmReleaseName === 'ark-apiserver') {
+    const args: string[] = [];
+    args.push('--set', `postgresql.host=${values.host}`);
+    if (values.port !== undefined)
+      args.push('--set', `postgresql.port=${values.port}`);
+    if (values.database)
+      args.push('--set', `postgresql.database=${values.database}`);
+    args.push('--set', `postgresql.user=${values.user}`);
+    args.push(
+      '--set',
+      `postgresql.passwordSecretName=${values.passwordSecretName}`
+    );
+    if (values.passwordSecretKey)
+      args.push(
+        '--set',
+        `postgresql.passwordSecretKey=${values.passwordSecretKey}`
+      );
+    if (values.sslMode)
+      args.push('--set', `postgresql.sslMode=${values.sslMode}`);
+    return args;
+  }
+  return [];
+}
+
+function isValidVersion(version: string): boolean {
+  return /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/.test(version);
+}
+
+function notFoundVersion(
+  error: unknown,
+  options: {
+    arkVersion?: string;
+    marketplaceVersion?: string;
+  }
+): string | null {
+  let errorMsg = '';
+
+  if (error && typeof error === 'object') {
+    const err = error as any;
+    // Check stderr first (execa captures this with pipe), then message
+    errorMsg = err.stderr || err.message || String(error);
+  } else {
+    errorMsg = String(error);
+  }
+
+  if (options.arkVersion && errorMsg.includes(`:${options.arkVersion}: not found`)) {
+    return options.arkVersion;
+  }
+
+  if (options.marketplaceVersion && errorMsg.includes(`:${options.marketplaceVersion}: not found`)) {
+    return options.marketplaceVersion;
+  }
+
+  return null;
+}
+
+function handleInstallError(
+  error: unknown,
+  service: ArkService,
+  options: {
+    arkVersion?: string;
+    marketplaceVersion?: string;
+  }
+): string | false {
+  const version = notFoundVersion(error, options);
+  if (version !== null) {
+    return version; // should continue to next service
+  }
+
+  // Other errors still fail
+  output.error(`failed to install ${service.name}`);
+  console.error(error);
+  process.exit(1);
+}
+
+function exitIfServicesSkipped(skipped: {name: string; version: string}[]): void {
+  if (skipped.length === 0) return;
+  const detail = skipped.map((s) => `${s.name}@${s.version}`).join(', ');
+  output.error(
+    `installation incomplete: ${skipped.length} service(s) skipped because the requested version was not found: ${detail}`
+  );
+  process.exit(1);
+}
 
 async function uninstallPrerequisites(
   service: ArkService,
@@ -71,7 +186,13 @@ async function checkAndCleanFailedRelease(
   }
 }
 
-async function installService(service: ArkService, verbose: boolean = false) {
+async function installService(
+  service: ArkService,
+  verbose: boolean = false,
+  arkVersionOverride?: string,
+  marketplaceVersionOverride?: string,
+  extraArgs?: string[]
+) {
   await uninstallPrerequisites(service, verbose);
   await checkAndCleanFailedRelease(
     service.helmReleaseName,
@@ -79,11 +200,38 @@ async function installService(service: ArkService, verbose: boolean = false) {
     verbose
   );
 
+  let chartPath = service.chartPath!;
+
+  // Override version for ARK core services
+  if (
+    arkVersionOverride &&
+    chartPath.includes('ghcr.io/mckinsey/agents-at-scale-ark/charts')
+  ) {
+    chartPath = chartPath.replace(/:[^:]+$/, `:${arkVersionOverride}`);
+  }
+
+  // Override version for marketplace items
+  if (
+    marketplaceVersionOverride &&
+    chartPath.includes('ghcr.io/mckinsey/agents-at-scale-marketplace/charts')
+  ) {
+    // Check if version tag exists after the last slash
+    const lastSlashIndex = chartPath.lastIndexOf('/');
+    const afterLastSlash = chartPath.slice(lastSlashIndex + 1);
+    if (afterLastSlash.includes(':')) {
+      // Replace existing version
+      chartPath = chartPath.replace(/:[^:/]+$/, `:${marketplaceVersionOverride}`);
+    } else {
+      // Append version
+      chartPath = `${chartPath}:${marketplaceVersionOverride}`;
+    }
+  }
+
   const helmArgs = [
     'upgrade',
     '--install',
     service.helmReleaseName,
-    service.chartPath!,
+    chartPath,
   ];
 
   // Only add namespace flag if service has explicit namespace
@@ -94,14 +242,42 @@ async function installService(service: ArkService, verbose: boolean = false) {
   // Add any additional install args
   helmArgs.push(...(service.installArgs || []));
 
-  await execute('helm', helmArgs, {stdio: 'inherit'}, {verbose});
+  if (extraArgs) helmArgs.push(...extraArgs);
+
+  await execute(
+    'helm',
+    helmArgs,
+    {
+      stdout: 'inherit',
+      stderr: 'pipe',
+    },
+    {verbose}
+  );
 }
 
 export async function installArk(
   config: ArkConfig,
-  serviceName?: string,
-  options: {yes?: boolean; waitForReady?: string; verbose?: boolean} = {}
+  serviceNames: string[] = [],
+  options: {
+    yes?: boolean;
+    waitForReady?: string;
+    verbose?: boolean;
+    arkVersion?: string;
+    marketplaceVersion?: string;
+    backend?: string;
+  } = {}
 ) {
+  // Validate version strings
+  if (options.arkVersion && !isValidVersion(options.arkVersion)) {
+    output.error(`Invalid ARK version format: ${options.arkVersion}. Expected semantic versioning (e.g., 0.1.50)`);
+    process.exit(1);
+  }
+
+  if (options.marketplaceVersion && !isValidVersion(options.marketplaceVersion)) {
+    output.error(`Invalid marketplace version format: ${options.marketplaceVersion}. Expected semantic versioning (e.g., 0.1.7)`);
+    process.exit(1);
+  }
+
   // Validate that --wait-for-ready requires -y
   if (options.waitForReady && !options.yes) {
     output.error('--wait-for-ready requires -y flag for non-interactive mode');
@@ -120,84 +296,152 @@ export async function installArk(
   output.success(`connected to cluster: ${chalk.bold(clusterInfo.context)}`);
   console.log(); // Add blank line after cluster info
 
-  // If a specific service is requested, install only that service
-  if (serviceName) {
-    // Check if it's a marketplace item
-    if (isMarketplaceService(serviceName)) {
-      const service = await getMarketplaceItem(serviceName);
+  const requestedBackend = options.backend ?? config.storage?.backend ?? 'etcd';
+  if (requestedBackend !== 'etcd' && requestedBackend !== 'postgresql') {
+    output.error(
+      `Invalid backend value: ${requestedBackend}. Expected 'etcd' or 'postgresql'.`
+    );
+    process.exit(1);
+  }
+  const backend: Backend = requestedBackend;
+
+  const skippedServices: {name: string; version: string}[] = [];
+
+  let postgresValues: PostgresStorageConfig | undefined;
+  if (backend === 'postgresql') {
+    try {
+      postgresValues = validatePostgresConfig(config.storage?.postgresql);
+    } catch (err) {
+      output.error(
+        `${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
+  }
+
+  // If specific services are requested, install only those services
+  if (serviceNames.length > 0) {
+    for (const serviceName of serviceNames) {
+      // Check if it's a marketplace item
+      if (isMarketplaceService(serviceName)) {
+        const service = await getMarketplaceItem(serviceName);
+
+        if (!service) {
+          output.error(`marketplace item '${serviceName}' not found`);
+          output.info('available marketplace items:');
+          const marketplaceServices = await getAllMarketplaceServices();
+          if (marketplaceServices) {
+            for (const name of Object.keys(marketplaceServices)) {
+              output.info(`  marketplace/services/${name}`);
+            }
+          }
+          const marketplaceAgents = await getAllMarketplaceAgents();
+          if (marketplaceAgents) {
+            for (const name of Object.keys(marketplaceAgents)) {
+              output.info(`  marketplace/agents/${name}`);
+            }
+          }
+          const marketplaceExecutors = await getAllMarketplaceExecutors();
+          if (marketplaceExecutors) {
+            for (const name of Object.keys(marketplaceExecutors)) {
+              output.info(`  marketplace/executors/${name}`);
+            }
+          }
+          if (!marketplaceServices && !marketplaceAgents && !marketplaceExecutors) {
+            output.warning('Marketplace unavailable');
+          }
+          process.exit(1);
+        }
+
+        output.info(`installing marketplace item ${service.name}...`);
+        try {
+          await installService(
+            service,
+            options.verbose,
+            options.arkVersion,
+            options.marketplaceVersion,
+            []
+          );
+          output.success(`${service.name} installed successfully`);
+        } catch (error) {
+          const skippedVersion = handleInstallError(error, service, options);
+          if (skippedVersion) {
+            skippedServices.push({name: service.name, version: skippedVersion});
+            continue;
+          }
+        }
+        continue;
+      }
+
+      // Core ARK service
+      const services = getInstallableServices(backend);
+      const service = Object.values(services).find((s) => s.name === serviceName);
 
       if (!service) {
-        output.error(`marketplace item '${serviceName}' not found`);
-        output.info('available marketplace items:');
-        const marketplaceServices = await getAllMarketplaceServices();
-        if (marketplaceServices) {
-          for (const name of Object.keys(marketplaceServices)) {
-            output.info(`  marketplace/services/${name}`);
-          }
-        }
-        const marketplaceAgents = await getAllMarketplaceAgents();
-        if (marketplaceAgents) {
-          for (const name of Object.keys(marketplaceAgents)) {
-            output.info(`  marketplace/agents/${name}`);
-          }
-        }
-        const marketplaceExecutors = await getAllMarketplaceExecutors();
-        if (marketplaceExecutors) {
-          for (const name of Object.keys(marketplaceExecutors)) {
-            output.info(`  marketplace/executors/${name}`);
-          }
-        }
-        if (!marketplaceServices && !marketplaceAgents && !marketplaceExecutors) {
-          output.warning('Marketplace unavailable');
+        output.error(`service '${serviceName}' not found`);
+        output.info('available services:');
+        for (const s of Object.values(services)) {
+          output.info(`  ${s.name}`);
         }
         process.exit(1);
       }
 
-      output.info(`installing marketplace item ${service.name}...`);
+      output.info(`installing ${service.name}...`);
       try {
-        await installService(service, options.verbose);
+        await installService(
+          service,
+          options.verbose,
+          options.arkVersion,
+          options.marketplaceVersion,
+          backendInstallArgs(service, backend, postgresValues)
+        );
         output.success(`${service.name} installed successfully`);
+
+        // Wait for ark-apiserver to be ready before continuing to other services
+        if (service.helmReleaseName === 'ark-apiserver' && backend === 'postgresql') {
+          const spinner = ora('Waiting for ark-apiserver to be ready...').start();
+          try {
+            const results = await runReadinessChecks(120, backend); // 2 minute timeout
+            const failed = results.find((r) => !r.passed);
+            if (failed) {
+              spinner.fail(`ark-apiserver readiness check failed: ${failed.message || 'unknown error'}`);
+              output.error('ark-apiserver is not ready. Stopping installation.');
+              process.exit(1);
+            }
+            spinner.succeed('ark-apiserver is ready');
+          } catch (error) {
+            spinner.fail('Failed to check ark-apiserver readiness');
+            throw error;
+          }
+        }
       } catch (error) {
-        output.error(`failed to install ${service.name}`);
-        console.error(error);
-        process.exit(1);
+        const skippedVersion = handleInstallError(error, service, options);
+        if (skippedVersion) {
+          skippedServices.push({name: service.name, version: skippedVersion});
+          continue;
+        }
       }
-      return;
     }
-
-    // Core ARK service
-    const services = getInstallableServices();
-    const service = Object.values(services).find((s) => s.name === serviceName);
-
-    if (!service) {
-      output.error(`service '${serviceName}' not found`);
-      output.info('available services:');
-      for (const s of Object.values(services)) {
-        output.info(`  ${s.name}`);
-      }
-      process.exit(1);
-    }
-
-    output.info(`installing ${service.name}...`);
-    try {
-      await installService(service, options.verbose);
-      output.success(`${service.name} installed successfully`);
-    } catch (error) {
-      output.error(`failed to install ${service.name}`);
-      console.error(error);
-      process.exit(1);
-    }
+    exitIfServicesSkipped(skippedServices);
     return;
   }
 
   // If not using -y flag, show checklist interface
   if (!options.yes) {
+    const backendMatch = (s: ArkService) =>
+      !s.requiresBackend || s.requiresBackend === backend;
+
     const coreServices = Object.values(arkServices)
-      .filter((s) => s.category === 'core')
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .filter((s) => s.category === 'core' && backendMatch(s))
+      .sort((a, b) => {
+        // Ensure ark-controller is always first
+        if (a.name === 'ark-controller') return -1;
+        if (b.name === 'ark-controller') return 1;
+        return a.name.localeCompare(b.name);
+      });
 
     const otherServices = Object.values(arkServices)
-      .filter((s) => s.category === 'service')
+      .filter((s) => s.category === 'service' && backendMatch(s))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const mandatoryServiceNames = [...coreServices, ...otherServices]
@@ -351,12 +595,41 @@ export async function installArk(
 
       output.info(`installing ${service.name}...`);
       try {
-        await installService(service, options.verbose);
+        await installService(
+          service,
+          options.verbose,
+          options.arkVersion,
+          options.marketplaceVersion,
+          backendInstallArgs(service, backend, postgresValues)
+        );
+
+        // Wait for ark-apiserver to be ready before continuing to other services
+        if (service.helmReleaseName === 'ark-apiserver' && backend === 'postgresql') {
+          const spinner = ora('Waiting for ark-apiserver to be ready...').start();
+          try {
+            const results = await runReadinessChecks(120, backend); // 2 minute timeout
+            const failed = results.find((r) => !r.passed);
+            if (failed) {
+              spinner.fail(`ark-apiserver readiness check failed: ${failed.message || 'unknown error'}`);
+              output.error('ark-apiserver is not ready. Stopping installation.');
+              process.exit(1);
+            }
+            spinner.succeed('ark-apiserver is ready');
+          } catch (error) {
+            spinner.fail('Failed to check ark-apiserver readiness');
+            throw error;
+          }
+        }
 
         console.log(); // Add blank line after command output
-      } catch {
+      } catch (error) {
+        const skippedVersion = handleInstallError(error, service, options);
+        if (skippedVersion) {
+          skippedServices.push({name: service.name, version: skippedVersion});
+          console.log(); // Add blank line after warning
+          continue;
+        }
         console.log(); // Add blank line after error output
-        process.exit(1);
       }
     }
   } else {
@@ -383,22 +656,39 @@ export async function installArk(
     }
 
     // Install all services
-    const services = getInstallableServices();
-    for (const service of Object.values(services)) {
+    const services = getInstallableServices(backend);
+    const sortedServices = Object.values(services).sort((a, b) => {
+      // Ensure ark-controller is always first
+      if (a.name === 'ark-controller') return -1;
+      if (b.name === 'ark-controller') return 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const service of sortedServices) {
       output.info(`installing ${service.name}...`);
 
       try {
-        await installService(service, options.verbose);
+        await installService(
+          service,
+          options.verbose,
+          options.arkVersion,
+          options.marketplaceVersion,
+          backendInstallArgs(service, backend, postgresValues)
+        );
         console.log(); // Add blank line after command output
-      } catch {
+      } catch (error) {
+        const skippedVersion = handleInstallError(error, service, options);
+        if (skippedVersion) {
+          skippedServices.push({name: service.name, version: skippedVersion});
+          console.log(); // Add blank line after warning
+          continue;
+        }
         console.log(); // Add blank line after error output
-        process.exit(1);
       }
     }
   }
 
   // Show next steps after successful installation
-  if (!serviceName || serviceName === 'all') {
+  if (serviceNames.length === 0) {
     printNextSteps();
   }
 
@@ -412,7 +702,9 @@ export async function installArk(
           s.enabled &&
           s.category === 'core' &&
           s.k8sDeploymentName &&
-          s.namespace
+          s.namespace &&
+          (!s.requiresBackend || s.requiresBackend === backend) &&
+          !skippedServices.some((sk) => sk.name === s.name)
       );
 
       const spinner = ora(
@@ -457,6 +749,8 @@ export async function installArk(
       process.exit(1);
     }
   }
+
+  exitIfServicesSkipped(skippedServices);
 }
 
 export function createInstallCommand(config: ArkConfig) {
@@ -464,15 +758,27 @@ export function createInstallCommand(config: ArkConfig) {
 
   command
     .description('Install ARK components using Helm')
-    .argument('[service]', 'specific service to install, or all if omitted')
+    .argument('[service...]', 'specific services to install, or all if omitted')
     .option('-y, --yes', 'automatically confirm all installations')
+    .option(
+      '--ark-version <version>',
+      'ARK version to install (e.g., 0.1.50, defaults to CLI version)'
+    )
+    .option(
+      '--marketplace-version <version>',
+      'Marketplace item version to install (e.g., 0.1.5)'
+    )
     .option(
       '--wait-for-ready <timeout>',
       'wait for Ark to be ready after installation (e.g., 30s, 2m)'
     )
+    .option(
+      '--backend <type>',
+      "storage backend: 'etcd' (default) or 'postgresql' (overrides storage.backend in .arkrc.yaml)"
+    )
     .option('-v, --verbose', 'show commands being executed')
-    .action(async (service, options) => {
-      await installArk(config, service, options);
+    .action(async (services, options) => {
+      await installArk(config, services, options);
     });
 
   return command;

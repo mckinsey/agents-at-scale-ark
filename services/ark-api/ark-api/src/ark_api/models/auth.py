@@ -1,7 +1,14 @@
-"""Authentication models for API keys."""
+"""Authentication models for API keys and user identity."""
 from typing import List, Optional
+from dataclasses import dataclass, field
 from datetime import datetime
 from pydantic import BaseModel, Field
+
+
+@dataclass(frozen=True)
+class UserIdentity:
+    username: str
+    groups: List[str] = field(default_factory=list)
 
 
 class APIKeyCreateRequest(BaseModel):

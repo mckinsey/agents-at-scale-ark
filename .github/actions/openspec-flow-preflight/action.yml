@@ -1,0 +1,77 @@
+name: OpenSpec Flow — Preflight
+description: >
+  Validates pre-conditions before an agent step runs. For the plan job,
+  checks that the issue body meets a minimum length threshold; exits with
+  a skip comment when the condition is not met. For implement and respond
+  jobs, skips the body-length check and always passes. Sets a `skip`
+  output that callers can gate subsequent steps on.
+  AGENT_COMMENT_MARKER and REENGAGE_FOOTER must NOT appear in the skip
+  comment — it is informational only and is not pruned by prune-comments.
+
+inputs:
+  gh-token:
+    description: GitHub token with issues write permission
+    required: true
+  repo:
+    description: Repository in owner/name format
+    required: true
+  issue-number:
+    description: Issue or PR number to inspect and post on
+    required: true
+  job:
+    description: "Job being guarded: plan | implement | respond"
+    required: true
+  min-body-length:
+    description: Minimum issue body character count (plan job only)
+    required: false
+    default: "40"
+
+outputs:
+  skip:
+    description: "'true' if the agent step should be skipped, 'false' otherwise"
+    value: ${{ steps.check.outputs.skip }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run preflight checks
+      id: check
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh-token }}
+        REPO: ${{ inputs.repo }}
+        ISSUE_NUMBER: ${{ inputs.issue-number }}
+        JOB: ${{ inputs.job }}
+        MIN_BODY_LENGTH: ${{ inputs.min-body-length }}
+        RUN_URL: ${{ github.server_url }}/${{ inputs.repo }}/actions/runs/${{ github.run_id }}
+      run: |
+        case "$JOB" in
+          plan)
+            body_length=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" \
+              --json body --jq '.body | length' 2>/dev/null || echo "0")
+            echo "Issue body length: $body_length (min: $MIN_BODY_LENGTH)"
+            if [ "$body_length" -lt "$MIN_BODY_LENGTH" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              {
+                echo "> **OpenSpec Flow preflight skipped this run.**"
+                echo "> The issue body is too short ($body_length chars; minimum is $MIN_BODY_LENGTH)."
+                echo "> Please add more context to the issue description and re-trigger."
+                echo ">"
+                echo "> [View run]($RUN_URL)"
+              } > /tmp/preflight-skip.md
+              gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file /tmp/preflight-skip.md
+              echo "Preflight: issue body too short — skip=true"
+              exit 0
+            fi
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Preflight: issue body length OK — skip=false"
+            ;;
+          implement|respond)
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Preflight: no body-length check for $JOB job — skip=false"
+            ;;
+          *)
+            echo "::warning::Unknown job '$JOB' passed to preflight — defaulting to skip=false"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            ;;
+        esac

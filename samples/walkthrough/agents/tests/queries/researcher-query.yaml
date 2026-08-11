@@ -4,6 +4,6 @@ metadata:
   name: researcher-test-query
 spec:
   input: "Research the benefits of Kubernetes in enterprise environments. Focus on scalability, cost efficiency, and operational advantages. Please provide structured findings with sources."
-  targets:
-    - type: agent
-      name: researcher
+  target:
+    type: agent
+    name: researcher

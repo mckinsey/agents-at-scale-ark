@@ -9,18 +9,9 @@ spec:
     try:
     # Install mock-llm with A2A agents enabled
     - script:
+        timeout: 180s
         content: |
-          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.28 \
-            --namespace $NAMESPACE \
-            --values mock-llm-values.yaml
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    # Install ark-tenant for RBAC
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -36,16 +27,16 @@ spec:
     # Apply Query targeting countdown agent
     - apply:
         file: manifests/a01-query.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: countdown-test-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
-    # Verify response contains full countdown history
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: countdown-test-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    # Verify response contains the final result artifact; intermediate task status updates are excluded from reply content
     - assert:
         timeout: 1s
         resource:
@@ -56,10 +47,9 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'countdown-agent'
-            (contains(response.content, 'Starting countdown from 2 seconds')): true
-            (contains(response.content, '1 seconds remaining')): true
-            (contains(response.content, '0 seconds remaining')): true
             (contains(response.content, 'Countdown complete!')): true
+            (contains(response.content, 'Starting countdown')): false
+            (contains(response.content, 'seconds remaining')): false
     catch:
     - events: {}
     - describe:
@@ -75,7 +65,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

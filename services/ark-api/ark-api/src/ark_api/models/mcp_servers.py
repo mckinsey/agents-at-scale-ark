@@ -1,8 +1,8 @@
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, model_serializer
 
-from .common import AvailabilityStatus
+from .common import AvailabilityStatus, PaginatedListResponse
 
 
 class MCPServerConfigMapKeyRef(BaseModel):
@@ -57,6 +57,19 @@ class MCPServerHeader(BaseModel):
     value: MCPServerValueSource
 
 
+class MCPServerAuthorization(BaseModel):
+    """Authorization state of an MCPServer, for rendering state and expiry.
+
+    Sourced from status.authorization and the mcp-auth-authorized-* annotations.
+    Never carries token or Secret material.
+    """
+    state: str
+    resourceName: Optional[str] = None
+    authorizedBy: Optional[str] = None
+    authorizedAt: Optional[str] = None
+    expiresAt: Optional[str] = None
+
+
 class MCPServerResponse(BaseModel):
     name: str
     namespace: str
@@ -66,11 +79,11 @@ class MCPServerResponse(BaseModel):
     available: Optional[AvailabilityStatus] = None
     status_message: Optional[str] = None
     tool_count: Optional[int] = None
+    authorization: Optional[MCPServerAuthorization] = None
 
 
-class MCPServerListResponse(BaseModel):
+class MCPServerListResponse(PaginatedListResponse):
     items: List[MCPServerResponse]
-    total: int
 
 
 class MCPServerDetailResponse(BaseModel):
@@ -84,6 +97,7 @@ class MCPServerDetailResponse(BaseModel):
     transport: Optional[str] = None
     headers: Optional[List[MCPServerHeader]]
     tool_count: Optional[int] = None
+    authorization: Optional[MCPServerAuthorization] = None
 
 
 class MCPTransport(BaseModel):

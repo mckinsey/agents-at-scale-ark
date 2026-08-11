@@ -14,6 +14,6 @@ spec:
   config:
     openai:
       baseUrl:
-        value: http://mock-llm.($namespace).svc.cluster.local:8080/v1
+        value: http://mock-llm.($namespace).svc.cluster.local:6556/v1
       apiKey:
         value: mock-api-key

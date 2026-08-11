@@ -94,3 +94,11 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - arkconfigs
+  verbs:
+  - get
+  - list
+  - watch

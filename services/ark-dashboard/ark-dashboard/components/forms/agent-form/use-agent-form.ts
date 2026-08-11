@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import type { Parameter } from '@/components/ui/parameter-editor';
@@ -29,6 +29,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
 import {
+  agentParametersChanged,
   transformAgentParametersToForm,
   transformFormParametersToApi,
 } from './utils';
@@ -98,7 +99,7 @@ export function useAgentForm({
                 ? executionEnginesService.getAll()
                 : Promise.resolve([]),
             ]);
-          
+
           if (!agentData) {
             toast.error('Agent not found');
             onSuccessRef.current?.();
@@ -225,22 +226,31 @@ export function useAgentForm({
 
           await agentsService.update(agent.name, updateData);
           toast.success('Agent updated successfully');
+
+          form.reset(values);
+          setInitialTools(selectedTools);
+          setInitialParameters(parameters);
         }
 
         onSuccessRef.current?.();
       } catch (error) {
         const action = mode === AgentFormMode.CREATE ? 'create' : 'update';
-        toast.error(`Failed to ${action} agent`, {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
+        console.error(`Failed to ${action} agent`, error);
+        toast.error(`Unable to ${action} agent`);
       } finally {
         setSaving(false);
       }
     },
-    [mode, agent, selectedTools, mapParametersToApi, queryClient, namespace],
+    [
+      mode,
+      agent,
+      selectedTools,
+      parameters,
+      mapParametersToApi,
+      queryClient,
+      namespace,
+      form,
+    ],
   );
 
   const handleToolToggle = useCallback((tool: Tool, checked: boolean) => {
@@ -269,13 +279,10 @@ export function useAgentForm({
     return selectedNames.some((name, i) => name !== initialNames[i]);
   }, [selectedTools, initialTools]);
 
-  const hasParametersChanged = useCallback(() => {
-    if (parameters.length !== initialParameters.length) return true;
-    return parameters.some((param, i) => {
-      const initial = initialParameters[i];
-      return param.name !== initial?.name || param.value !== initial?.value;
-    });
-  }, [parameters, initialParameters]);
+  const hasParametersChanged = useCallback(
+    () => agentParametersChanged(parameters, initialParameters),
+    [parameters, initialParameters],
+  );
 
   const hasChanges =
     form.formState.isDirty || hasToolsChanged() || hasParametersChanged();

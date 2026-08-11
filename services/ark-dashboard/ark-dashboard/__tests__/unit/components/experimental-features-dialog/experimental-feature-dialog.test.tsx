@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider } from 'jotai';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -93,6 +99,46 @@ describe('ExperimentalFeaturesDialog component', () => {
       const storedValue = localStorage.getItem(QUERY_TIMEOUT_SETTING_KEY);
       // Default might not be set yet, or should be '5m'
       expect(storedValue === null || storedValue === '"5m"').toBe(true);
+    });
+
+    it('persists a valid value typed into the timeout input', async () => {
+      render(
+        <JotaiProvider>
+          <ExperimentalFeaturesDialog />
+        </JotaiProvider>,
+      );
+
+      await userEvent.keyboard('{Control>}e{/Control}');
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+      });
+
+      fireEvent.change(screen.getByRole('spinbutton'), {
+        target: { value: '7' },
+      });
+
+      await waitFor(() => {
+        expect(localStorage.getItem(QUERY_TIMEOUT_SETTING_KEY)).toBe('"7m"');
+      });
+    });
+
+    it('ignores a non-positive value typed into the timeout input', async () => {
+      render(
+        <JotaiProvider>
+          <ExperimentalFeaturesDialog />
+        </JotaiProvider>,
+      );
+
+      await userEvent.keyboard('{Control>}e{/Control}');
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+      });
+
+      fireEvent.change(screen.getByRole('spinbutton'), {
+        target: { value: '0' },
+      });
+
+      expect(localStorage.getItem(QUERY_TIMEOUT_SETTING_KEY)).not.toBe('"0m"');
     });
   });
 });

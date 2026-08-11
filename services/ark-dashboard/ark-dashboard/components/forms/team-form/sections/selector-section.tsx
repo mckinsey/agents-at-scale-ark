@@ -1,8 +1,15 @@
-import { AlertCircle, ChevronDown, ChevronRight, Maximize2, Minimize2, RotateCcw, Settings2, Zap } from 'lucide-react';
 import { useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  ChevronDown,
+  ChevronRight,
+  CollapseContent,
+  ExpandContent,
+  RestartAlt,
+  Tune,
+  Warning,
+} from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -11,13 +18,15 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+  FieldDescription,
+  FieldError,
+  FieldSet,
+  FieldTitle,
+} from '@/components/ui/field';
+import { FormField } from '@/components/ui/form';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
+  GHOST_TRIGGER,
   Select,
   SelectContent,
   SelectItem,
@@ -41,6 +50,12 @@ interface SelectorSectionProps {
   disabled?: boolean;
 }
 
+const RequiredMarker = () => (
+  <span aria-hidden="true" className="text-fg-secondary">
+    *
+  </span>
+);
+
 export function SelectorSection({
   form,
   agents,
@@ -56,45 +71,31 @@ export function SelectorSection({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Zap className="text-muted-foreground h-4 w-4" />
-        <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-          Selector Configuration
-        </h3>
-      </div>
-
-      <div className="bg-muted/50 rounded-md border p-3">
-        <p className="text-muted-foreground mb-3 text-xs">
-          Selector strategy uses an AI agent to choose the next team member.
-        </p>
-      </div>
-
+    <>
       <FormField
         control={form.control}
         name="selectorAgent"
         render={({ field }) => (
-          <FormItem>
-            <FormLabel>
-              Selector Agent <span className="text-red-500">*</span>
-            </FormLabel>
+          <FieldSet className="gap-2">
+            <FieldTitle>
+              Selector Agent <RequiredMarker />
+            </FieldTitle>
             <Select
               onValueChange={field.onChange}
               value={field.value}
               disabled={disabled}>
-              <FormControl>
-                <SelectTrigger
-                  className={cn(
-                    '',
-                    unavailableAgents.includes(field.value || '') &&
-                      'border-red-500',
-                  )}>
-                  <SelectValue placeholder="Select an agent" />
-                </SelectTrigger>
-              </FormControl>
+              <SelectTrigger
+                className={cn(
+                  GHOST_TRIGGER,
+                  'w-full',
+                  unavailableAgents.includes(field.value || '') &&
+                    'border-b-stroke-status-error',
+                )}>
+                <SelectValue placeholder="Select an agent" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">
-                  <span className="text-muted-foreground">None (Unset)</span>
+                  <span className="text-fg-tertiary">None (Unset)</span>
                 </SelectItem>
                 {field.value && unavailableAgents.includes(field.value) && (
                   <SelectItem key={field.value} value={field.value}>
@@ -108,20 +109,22 @@ export function SelectorSection({
                 ))}
               </SelectContent>
             </Select>
-            <FormMessage />
-          </FormItem>
+            <FieldDescription>
+              Selector strategy uses an AI agent to choose the next team member.
+            </FieldDescription>
+          </FieldSet>
         )}
       />
 
       <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
-        <CollapsibleTrigger className="flex w-full items-center justify-start gap-2 px-0 hover:bg-transparent">
-          {isAdvancedOpen ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          )}
-          <Settings2 className="h-4 w-4 text-muted-foreground" />
-          <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        <CollapsibleTrigger className="text-fg-secondary flex w-full items-center justify-start gap-2 px-0 hover:bg-transparent">
+          <IconShell size="sm" variant="secondary">
+            {isAdvancedOpen ? <ChevronDown /> : <ChevronRight />}
+          </IconShell>
+          <IconShell size="sm" variant="secondary">
+            <Tune />
+          </IconShell>
+          <span className="text-fg-secondary text-xs font-semibold tracking-wide uppercase">
             Advanced Settings
           </span>
         </CollapsibleTrigger>
@@ -130,12 +133,12 @@ export function SelectorSection({
             control={form.control}
             name="selectorPrompt"
             render={({ field }) => (
-              <FormItem>
+              <FieldSet className="gap-2">
                 <div className="flex items-center justify-between">
-                  <FormLabel>Selector Prompt</FormLabel>
+                  <FieldTitle>Selector Prompt</FieldTitle>
                   <div className="flex items-center gap-2">
                     {field.value && field.value.length > 0 && (
-                      <span className="text-muted-foreground text-xs">
+                      <span className="text-fg-tertiary text-xs">
                         {field.value.length} characters
                       </span>
                     )}
@@ -143,51 +146,45 @@ export function SelectorSection({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setIsPromptExpanded(!isPromptExpanded)}
-                      className="h-8 px-2">
-                      {isPromptExpanded ? (
-                        <>
-                          <Minimize2 className="mr-1 h-4 w-4" />
-                          Collapse
-                        </>
-                      ) : (
-                        <>
-                          <Maximize2 className="mr-1 h-4 w-4" />
-                          Expand
-                        </>
-                      )}
+                      onClick={() => setIsPromptExpanded(!isPromptExpanded)}>
+                      <IconShell size="sm" variant="secondary">
+                        {isPromptExpanded ? <CollapseContent /> : <ExpandContent />}
+                      </IconShell>
+                      {isPromptExpanded ? 'Collapse' : 'Expand'}
                     </Button>
                   </div>
                 </div>
-                <FormControl>
-                  <Textarea
-                    placeholder="Enter the selector prompt..."
-                    disabled={disabled}
-                    className={`resize-none transition-all duration-200 ${
-                      isPromptExpanded
-                        ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
-                        : 'max-h-[150px] min-h-[100px]'
-                    }`}
-                    style={{
-                      whiteSpace: 'pre-wrap',
-                      wordWrap: 'break-word',
-                    }}
-                    {...field}
-                  />
-                </FormControl>
+                <Textarea
+                  placeholder="Enter the selector prompt..."
+                  disabled={disabled}
+                  className={`scrollbar-thin resize-none transition-all duration-200 ${
+                    isPromptExpanded
+                      ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
+                      : 'max-h-48 min-h-48 overflow-y-auto'
+                  }`}
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    wordWrap: 'break-word',
+                  }}
+                  {...field}
+                />
                 {isPromptExpanded && field.value && field.value.length > 0 && (
-                  <div className="text-muted-foreground text-xs">
+                  <div className="text-fg-tertiary text-xs">
                     {field.value.split('\n').length} lines
                   </div>
                 )}
-                <FormMessage />
-                <Alert variant="warning" className="mt-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Changing the prompt will affect team turn order and can worsen performance.
-                    Use the reset button to restore the default prompt.
-                  </AlertDescription>
-                </Alert>
+                <div className="mt-2 flex items-start gap-1">
+                  <IconShell
+                    size="sm"
+                    className="text-status-warning shrink-0 opacity-100">
+                    <Warning />
+                  </IconShell>
+                  <span className="text-fg-secondary text-sm leading-5">
+                    Changing the prompt will affect team turn order and can
+                    worsen performance. Use the reset button to restore the
+                    default prompt.
+                  </span>
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -195,50 +192,48 @@ export function SelectorSection({
                   onClick={() => form.setValue('selectorPrompt', DEFAULT_SELECTOR_PROMPT, { shouldDirty: true })}
                   disabled={disabled}
                   className="mt-2">
-                  <RotateCcw className="mr-2 h-4 w-4" />
+                  <IconShell size="sm" variant="secondary">
+                    <RestartAlt />
+                  </IconShell>
                   Reset to Default Prompt
                 </Button>
-              </FormItem>
+              </FieldSet>
             )}
           />
           <FormField
             control={form.control}
             name="enableTerminateTool"
             render={({ field }) => (
-              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                <FormControl>
-                  <Checkbox
-                    checked={field.value ?? true}
-                    onCheckedChange={field.onChange}
-                    disabled={disabled}
-                  />
-                </FormControl>
+              <div className="flex flex-row items-start gap-3">
+                <Checkbox
+                  checked={field.value ?? true}
+                  onCheckedChange={field.onChange}
+                  disabled={disabled}
+                />
                 <div className="space-y-1 leading-none">
-                  <FormLabel>Enable Terminate Tool</FormLabel>
-                  <p className="text-muted-foreground text-xs">
+                  <FieldTitle>Enable Terminate Tool</FieldTitle>
+                  <p className="text-fg-tertiary text-xs">
                     Allow the selector agent to use the terminate tool to end
                     the conversation early when appropriate.
                   </p>
                 </div>
-              </FormItem>
+              </div>
             )}
           />
           {form.watch('enableTerminateTool') && (
             <FormField
               control={form.control}
               name="terminatePrompt"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Terminate Prompt</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Enter the terminate prompt..."
-                      disabled={disabled}
-                      className="min-h-[60px] resize-none"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
+              render={({ field, fieldState }) => (
+                <FieldSet className="gap-2">
+                  <FieldTitle>Terminate Prompt</FieldTitle>
+                  <Textarea
+                    placeholder="Enter the terminate prompt..."
+                    disabled={disabled}
+                    className="scrollbar-thin min-h-[60px] resize-none"
+                    {...field}
+                  />
+                  <FieldError>{fieldState.error?.message}</FieldError>
                   <Button
                     type="button"
                     variant="outline"
@@ -250,15 +245,17 @@ export function SelectorSection({
                     }
                     disabled={disabled}
                     className="mt-2">
-                    <RotateCcw className="mr-2 h-4 w-4" />
+                    <IconShell size="sm" variant="secondary">
+                      <RestartAlt />
+                    </IconShell>
                     Reset to Default Prompt
                   </Button>
-                </FormItem>
+                </FieldSet>
               )}
             />
           )}
         </CollapsibleContent>
       </Collapsible>
-    </div>
+    </>
   );
 }

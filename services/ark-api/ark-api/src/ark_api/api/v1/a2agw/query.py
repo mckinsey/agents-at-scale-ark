@@ -2,8 +2,10 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from ark_sdk.client import V1_ALPHA1, with_ark_client
+from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec
 from ark_sdk.models.query_v1alpha1_spec_target import QueryV1alpha1SpecTarget
@@ -12,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 async def post_query(
-    namespace: str, target_type: str, target: str, query: str, timeout: int = 60
+    namespace: str, target_type: str, target: str, query: str, timeout: int = 60,
+    impersonation: Optional[ImpersonationConfig] = None,
 ) -> str:
     """
     Post a query to ARK and return the query name.
@@ -27,8 +30,7 @@ async def post_query(
     Returns:
         The name of the created query
     """
-    async with with_ark_client(namespace, V1_ALPHA1) as ark_client:
-        # Create query spec
+    async with with_ark_client(namespace, V1_ALPHA1, impersonation=impersonation) as ark_client:
         query_spec = QueryV1alpha1Spec(
             input=query,
             target=QueryV1alpha1SpecTarget(name=target, type=target_type),
@@ -51,7 +53,7 @@ async def post_query(
         return query_name
 
 
-async def wait_for_query(namespace: str, query_name: str, timeout: int = 60) -> str:
+async def wait_for_query(namespace: str, query_name: str, timeout: int = 60, impersonation: Optional[ImpersonationConfig] = None) -> str:
     """
     Wait for a query to complete and return the result.
 
@@ -63,7 +65,7 @@ async def wait_for_query(namespace: str, query_name: str, timeout: int = 60) -> 
     Returns:
         The response content from the query
     """
-    async with with_ark_client(namespace, V1_ALPHA1) as ark_client:
+    async with with_ark_client(namespace, V1_ALPHA1, impersonation=impersonation) as ark_client:
         try:
             # Poll for completion
             start_time = datetime.now()
@@ -99,7 +101,8 @@ async def wait_for_query(namespace: str, query_name: str, timeout: int = 60) -> 
 
 
 async def post_query_and_wait(
-    namespace: str, target_type: str, target: str, query: str, timeout: int = 60
+    namespace: str, target_type: str, target: str, query: str, timeout: int = 60,
+    impersonation: Optional[ImpersonationConfig] = None,
 ) -> str:
     """
     Post a query to ARK and wait for the result.
@@ -114,5 +117,5 @@ async def post_query_and_wait(
     Returns:
         The response content from the query
     """
-    query_name = await post_query(namespace, target_type, target, query, timeout)
-    return await wait_for_query(namespace, query_name, timeout)
+    query_name = await post_query(namespace, target_type, target, query, timeout, impersonation=impersonation)
+    return await wait_for_query(namespace, query_name, timeout, impersonation=impersonation)

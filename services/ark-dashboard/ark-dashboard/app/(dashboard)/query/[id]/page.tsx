@@ -1,36 +1,35 @@
 'use client';
 
 import { useAtomValue } from 'jotai';
-import { Copy } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
 import { queryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
-import JsonDisplay from '@/components/JsonDisplay';
-import type { BreadcrumbElement } from '@/components/common/page-header';
-import { PageHeader } from '@/components/common/page-header';
+import { JsonViewer } from '@/components/common/json-viewer';
+import { ChevronLeft, ContentCopy } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
 import { QueryTargetsField } from '@/components/query-fields/query-targets-field';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { PromptEditor } from '@/components/ui/prompt-editor';
 import { QueryParameterEditor } from '@/components/ui/query-parameter-editor';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import {
   agentsService,
   memoriesService,
@@ -39,10 +38,10 @@ import {
   toolsService,
 } from '@/lib/services';
 import type { Agent } from '@/lib/services/agents';
+import { useArkConfig } from '@/lib/services/arkconfig-hooks';
 import { queriesService } from '@/lib/services/queries';
 import type { ToolDetail } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
-import { useNamespace } from '@/providers/NamespaceProvider';
 import {
   type QueryParameter,
   extractAgentRequiredParams,
@@ -50,6 +49,7 @@ import {
   transformQueryParametersToApi,
 } from '@/lib/utils/query-parameters';
 import { simplifyDuration } from '@/lib/utils/time';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 // Component for rendering response content
 function ResponseContent({
@@ -61,7 +61,7 @@ function ResponseContent({
   viewMode: 'content' | 'text' | 'markdown' | 'raw';
   rawJson?: unknown;
 }) {
-  const markdownContent = useMarkdownProcessor(content);
+  const markdownContent = renderMarkdown(content);
 
   if (viewMode === 'raw') {
     const getJsonDisplay = () => {
@@ -89,11 +89,8 @@ function ResponseContent({
     };
 
     return (
-      <div className="text-sm">
-        <JsonDisplay
-          value={getJsonDisplay()}
-          className="rounded bg-black p-4 font-mono text-sm break-words whitespace-pre-wrap text-white"
-        />
+      <div className="overflow-hidden rounded-lg">
+        <JsonViewer value={getJsonDisplay()} />
       </div>
     );
   }
@@ -144,198 +141,308 @@ interface TypedQueryDetailResponse
   timeout?: string | null;
 }
 
-// Reusable styles for table field headings
-const FIELD_HEADING_STYLES =
-  'px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 w-1/3 text-left';
-
-interface QueryFieldProps {
-  mode: 'new' | 'view';
-  value: string | null | undefined;
-  onChange?: (value: string) => void;
-  label: string;
-  placeholder?: string;
-  inputRef?: React.RefObject<HTMLInputElement | null>;
-  tooltip?: string;
-}
-
-function QueryDurationField({
-  mode,
-  value,
-  onChange,
-  label,
-  placeholder,
-  inputRef,
-  tooltip,
-}: QueryFieldProps) {
-  if (mode === 'new') {
-    return (
-      <tr className="border-b border-gray-100 dark:border-gray-800">
-        <td className={FIELD_HEADING_STYLES}>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger className="cursor-help text-left" tabIndex={-1}>
-                {label}
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{tooltip}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </td>
-        <td className="px-3 py-2">
-          <Input
-            ref={inputRef}
-            value={value || ''}
-            onChange={e => onChange?.(e.target.value)}
-            placeholder={placeholder}
-            className="text-xs"
-          />
-        </td>
-      </tr>
-    );
-  }
-
-  // View mode - use simplifyDuration for duration values
+function QueryDetailCard({
+  title,
+  children,
+}: Readonly<{ title: string; children: ReactNode }>) {
   return (
-    <tr className="border-b border-gray-100 dark:border-gray-800">
-      <td className={FIELD_HEADING_STYLES}>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger className="cursor-help text-left" tabIndex={-1}>
-              {label}
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{tooltip}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </td>
-      <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-        {simplifyDuration(value)}
-      </td>
-    </tr>
+    <div className="flex flex-1 flex-col">
+      <div className="bg-fill-onsurface-ui-1 flex items-center p-2">
+        <p className="label-regular-primary text-fg-primary">{title}</p>
+      </div>
+      <div className="border-stroke-divider flex flex-1 flex-col border-r border-b border-l px-2">
+        {children}
+      </div>
+    </div>
   );
 }
 
-function QueryNameField({
-  mode,
-  value,
-  onChange,
+function QueryDetailRow({
   label,
-  placeholder,
-  inputRef,
-  tooltip,
-}: QueryFieldProps) {
-  if (mode === 'new') {
-    return (
-      <tr className="border-b border-gray-100 dark:border-gray-800">
-        <td className={FIELD_HEADING_STYLES}>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger className="cursor-help text-left" tabIndex={-1}>
-                {label}
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  {tooltip ||
-                    'Identifier of the query, must be unique in the namespace'}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </td>
-        <td className="px-3 py-2">
-          <Input
-            ref={inputRef}
-            value={value || ''}
-            onChange={e => onChange?.(e.target.value)}
-            placeholder={placeholder || 'Enter query name'}
-            className="text-xs"
-          />
-        </td>
-      </tr>
-    );
-  }
-
-  // View mode - existing display
-  return (
-    <tr className="border-b border-gray-100 dark:border-gray-800">
-      <td className={FIELD_HEADING_STYLES}>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger className="cursor-help text-left" tabIndex={-1}>
-              {label}
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {tooltip ||
-                  'Identifier of the query, must be unique in the namespace'}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </td>
-      <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-        {value || '—'}
-      </td>
-    </tr>
-  );
-}
-
-interface QueryStreamingFieldProps {
-  mode: 'new' | 'view';
-  value: boolean;
-  onChange?: (value: boolean) => void;
+  value,
+  last = false,
+  valueClassName,
+}: Readonly<{
   label: string;
-  tooltip?: string;
-  metadata?: { annotations?: Record<string, string> };
-}
-
-function QueryStreamingField({
-  mode,
-  value,
-  onChange,
-  label,
-  tooltip,
-  metadata,
-}: QueryStreamingFieldProps) {
-  // For view mode, check if streaming annotation exists
-  const isStreamingEnabled =
-    mode === 'view'
-      ? metadata?.annotations?.[ARK_ANNOTATIONS.STREAMING_ENABLED] === 'true'
-      : value;
-
+  value: ReactNode;
+  last?: boolean;
+  valueClassName?: string;
+}>) {
   return (
-    <tr className="border-b border-gray-100 dark:border-gray-800">
-      <td className={FIELD_HEADING_STYLES}>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger className="cursor-help text-left" tabIndex={-1}>
-              {label}
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {tooltip ||
-                  'Enable real-time streaming for live response updates'}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </td>
-      <td className="px-3 py-2">
-        {mode === 'view' ? (
-          <span className="text-xs text-gray-700 dark:text-gray-300">
-            {isStreamingEnabled ? 'Yes' : 'No'}
-          </span>
-        ) : (
-          <Checkbox
-            id="streaming"
-            checked={isStreamingEnabled}
-            onCheckedChange={onChange}
-          />
+    <div
+      className={cn(
+        'flex items-center gap-2 py-2',
+        !last && 'border-stroke-divider border-b',
+      )}>
+      <span className="label-regular-primary text-fg-secondary w-[140px] shrink-0">
+        {label}
+      </span>
+      <span
+        className={cn(
+          'label-regular-primary text-fg-primary min-w-0 flex-1',
+          valueClassName ?? 'truncate',
         )}
-      </td>
-    </tr>
+        title={typeof value === 'string' ? value : undefined}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function QuerySectionCard({
+  title,
+  headerRight,
+  children,
+}: Readonly<{ title: string; headerRight?: ReactNode; children: ReactNode }>) {
+  return (
+    <div className="flex flex-col">
+      <div className="bg-fill-onsurface-ui-1 flex items-center gap-2 p-2">
+        <p className="label-regular-primary text-fg-primary flex-1">{title}</p>
+        {headerRight}
+      </div>
+      <div className="border-stroke-divider border-r border-b border-l px-2">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function QueryViewSegmentedToggle<T extends string>({
+  options,
+  value,
+  onChange,
+}: Readonly<{
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}>) {
+  return (
+    <div className="flex items-center gap-2">
+      {options.map(option => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            'flex h-5 items-center px-2 text-sm tracking-[-0.028px] transition-colors',
+            value === option.value
+              ? 'bg-fill-muted text-fg-primary'
+              : 'text-fg-tertiary hover:bg-fill-muted hover:text-fg-primary',
+          )}>
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function getStringInput(input: unknown): string {
+  return typeof input === 'string' ? input : '';
+}
+
+function formatQueryInput(input: unknown): string {
+  if (typeof input === 'string') return input;
+  if (Array.isArray(input)) return JSON.stringify(input, null, 2);
+  return '';
+}
+
+interface QueryViewModeProps {
+  query: TypedQueryDetailResponse;
+  responseViewMode: 'content' | 'raw';
+  setResponseViewMode: (mode: 'content' | 'raw') => void;
+  errorViewMode: 'events' | 'details';
+  setErrorViewMode: (mode: 'events' | 'details') => void;
+  queryParameters: QueryParameter[];
+  streaming: boolean;
+}
+
+function QueryViewMode({
+  query,
+  responseViewMode,
+  setResponseViewMode,
+  errorViewMode,
+  setErrorViewMode,
+  queryParameters,
+  streaming,
+}: Readonly<QueryViewModeProps>) {
+  const phase = query.status?.phase;
+  const hasResponse = !!query.status?.response;
+  const isFailed = phase === 'failed' || phase === 'error';
+  const targetDisplay = query.target
+    ? `${query.target.type}:${query.target.name}`
+    : '—';
+  const tokenUsage = query.status?.tokenUsage
+    ? `${query.status.tokenUsage.promptTokens || 0} / ${query.status.tokenUsage.completionTokens || 0}`
+    : '—';
+  const inputText = formatQueryInput(query.input);
+  const eventsHref = `/events?kind=Query&name=${query.name}`;
+
+  return (
+    <div className="flex w-full content-shell flex-col gap-5">
+      <header className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+            <NamespacedLink
+              href="/queries"
+              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
+              <IconShell size="sm" className="opacity-100">
+                <ChevronLeft />
+              </IconShell>
+              Queries
+            </NamespacedLink>
+            <span aria-hidden="true" className="text-fg-secondary">
+              /
+            </span>
+            <span aria-current="page" className="text-fg-secondary">
+              {query.name}
+            </span>
+          </nav>
+          <div className="flex items-center gap-3">
+            <a href={eventsHref} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline">View events</Button>
+            </a>
+            <NamespacedLink href="/query/new">
+              <Button>New Query</Button>
+            </NamespacedLink>
+          </div>
+        </div>
+        <h1 className="text-fg-primary text-xl leading-7">{query.name}</h1>
+      </header>
+
+      <div className="flex items-stretch gap-3">
+        <QueryDetailCard title="Query details">
+          <QueryDetailRow
+            label="Svc account"
+            value={query.serviceAccount || '—'}
+          />
+          <QueryDetailRow label="Target" value={targetDisplay} />
+          <QueryDetailRow label="Session ID" value={query.sessionId || '—'} />
+          <QueryDetailRow
+            label="Conversation ID"
+            value={query.conversationId || '—'}
+            last
+          />
+        </QueryDetailCard>
+
+        <QueryDetailCard title="Configuration">
+          <QueryDetailRow
+            label="Timeout"
+            value={simplifyDuration(query.timeout) || '—'}
+          />
+          <QueryDetailRow
+            label="TTL"
+            value={simplifyDuration(query.ttl) || '—'}
+          />
+          <QueryDetailRow label="Memory" value={query.memory?.name || '—'} />
+          <QueryDetailRow label="Streaming" value={streaming ? 'Yes' : 'No'} />
+          <QueryDetailRow
+            label="Parameters"
+            value={
+              query.parameters?.length
+                ? `${query.parameters.length} param(s)`
+                : '—'
+            }
+            last
+          />
+        </QueryDetailCard>
+
+        <QueryDetailCard title="Advanced Settings">
+          <QueryDetailRow
+            label="Selector"
+            value={query.selector ? 'Configured' : '—'}
+            last
+          />
+        </QueryDetailCard>
+
+        <QueryDetailCard title="Status & Results">
+          <QueryDetailRow label="Phase" value={phase || '—'} />
+          <QueryDetailRow
+            label="Cancel"
+            value={query.cancel ? 'Requested' : 'No'}
+          />
+          <QueryDetailRow
+            label="Output"
+            value={hasResponse ? 'Available' : 'None'}
+          />
+          <QueryDetailRow label="Token usage" value={tokenUsage} last />
+        </QueryDetailCard>
+      </div>
+
+      <QuerySectionCard title="Input">
+        <div className="text-fg-primary py-2 text-base leading-6 tracking-[-0.032px] whitespace-pre-wrap">
+          {inputText || '—'}
+        </div>
+      </QuerySectionCard>
+
+      {hasResponse && (
+        <QuerySectionCard
+          title="Output"
+          headerRight={
+            <QueryViewSegmentedToggle
+              options={[
+                { value: 'content', label: 'Content' },
+                { value: 'raw', label: 'Raw' },
+              ]}
+              value={responseViewMode}
+              onChange={setResponseViewMode}
+            />
+          }>
+          <div className="py-2">
+            <ResponseContent
+              content={query.status?.response?.content || 'No content'}
+              viewMode={responseViewMode}
+              rawJson={query.status?.response}
+            />
+          </div>
+        </QuerySectionCard>
+      )}
+
+      {!hasResponse && isFailed && (
+        <QuerySectionCard
+          title="Error"
+          headerRight={
+            <QueryViewSegmentedToggle
+              options={[
+                { value: 'events', label: 'Events' },
+                { value: 'details', label: 'Details' },
+              ]}
+              value={errorViewMode}
+              onChange={setErrorViewMode}
+            />
+          }>
+          <div className="py-2">
+            <ErrorResponseContent query={query} viewMode={errorViewMode} />
+          </div>
+        </QuerySectionCard>
+      )}
+
+      {queryParameters.length > 0 && (
+        <QuerySectionCard title="Parameters">
+          <div className="flex flex-col gap-2 py-2">
+            {queryParameters.map(param => (
+              <div key={param.id} className="flex items-center gap-4">
+                <span className="text-fg-secondary w-[140px] shrink-0 font-mono text-xs">
+                  {param.name}
+                </span>
+                <span className="text-fg-primary text-sm">
+                  {param.value || (
+                    <span className="text-fg-tertiary italic">empty</span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </QuerySectionCard>
+      )}
+
+      <p className="text-fg-tertiary text-center text-xs">
+        Note: Events expire after a certain amount of time and may no longer be
+        available for viewing.
+      </p>
+    </div>
   );
 }
 
@@ -348,6 +455,9 @@ function QueryDetailContent() {
   const targetTool = searchParams.get('target_tool');
   const isNew = queryId === 'new';
   const mode = isNew ? 'new' : 'view';
+
+  const { data: arkConfig } = useArkConfig();
+  const ttlPlaceholder = `Default: ${arkConfig?.queryTTL || '720h'}`;
 
   const [query, setQuery] = useState<TypedQueryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -598,7 +708,6 @@ function QueryDetailContent() {
             ARK_ANNOTATIONS.STREAMING_ENABLED
           ] === 'true';
         setStreaming(isStreamingEnabled);
-
       } catch (error) {
         toast.error('Failed to Load Query', {
           description:
@@ -667,496 +776,286 @@ function QueryDetailContent() {
     );
   }
 
-  const breadcrumbs: BreadcrumbElement[] = [
-    ...BASE_BREADCRUMBS,
-    { href: '/queries', label: 'Queries' },
-  ];
+  if (mode === 'view') {
+    return (
+      <QueryViewMode
+        query={query}
+        responseViewMode={responseViewMode}
+        setResponseViewMode={setResponseViewMode}
+        errorViewMode={errorViewMode}
+        setErrorViewMode={setErrorViewMode}
+        queryParameters={queryParameters}
+        streaming={streaming}
+      />
+    );
+  }
 
-  const pageTitle = isNew ? 'New Query' : query?.name || queryId;
+  const isToolTarget = toolSchema && query.target?.type === 'tool';
 
   return (
-    <>
-      <PageHeader
-        breadcrumbs={breadcrumbs}
-        currentPage={pageTitle}
-        actions={
-          <>
-            {isNew && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => push(`/query/new`)}>
-                  New Query
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleSaveQuery}
-                  disabled={saving}>
-                  {saving ? 'Executing...' : 'Execute Query'}
-                </Button>
-              </>
-            )}
-            {!isNew && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => push(`/query/new`)}>
-                New Query
-              </Button>
-            )}
-          </>
-        }
-      />
-      <div className="flex h-full flex-col">
-        {/* Query Details - Three Column Layout */}
-        <div className="border-b bg-gray-50/30 px-4 py-3 dark:bg-gray-900/10">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-            {/* Query Column */}
-            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-              <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                    Query
-                  </h3>
-                  <a
-                    href={`/events?kind=Query&name=${query.name}`}
-                    className="text-xs text-blue-600 hover:underline dark:text-blue-400"
-                    target="_blank"
-                    rel="noopener noreferrer">
-                    View Events
-                  </a>
-                </div>
-              </div>
-              <table className="w-full">
-                <tbody>
-                  <QueryNameField
-                    mode={mode}
-                    value={query.name}
-                    onChange={name =>
-                      setQuery(prev => (prev ? { ...prev, name } : null))
-                    }
-                    label="Name"
-                    placeholder="Default: Auto-generated"
-                    inputRef={nameFieldRef}
-                  />
-                  <tr className="border-b border-gray-100 dark:border-gray-800">
-                    <td className="w-1/3 bg-gray-50 px-3 py-2 text-left text-xs font-medium text-gray-400 dark:bg-gray-900/50 dark:text-gray-600">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger
-                            className="cursor-help text-left"
-                            tabIndex={-1}>
-                            Svc. Account
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>
-                              Kubernetes ServiceAccount used for RBAC
-                              permissions during query execution
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </td>
-                    <td className="px-3 py-2 text-xs text-gray-400 dark:text-gray-600">
-                      {query.serviceAccount || '—'}
-                    </td>
-                  </tr>
-                  <QueryTargetsField
-                    mode={mode}
-                    value={query.target ? [query.target] : []}
-                    onChange={targets =>
-                      setQuery(prev =>
-                        prev ? { ...prev, target: targets[0] } : null,
-                      )
-                    }
-                    label="Target"
-                    availableTargets={availableTargets}
-                    loading={targetsLoading}
-                  />
-                  <QueryNameField
-                    mode={mode}
-                    value={query.sessionId}
-                    onChange={sessionId =>
-                      setQuery(prev => (prev ? { ...prev, sessionId } : null))
-                    }
-                    label="Session ID"
-                    placeholder="Default: Auto-generated"
-                    tooltip="Identifier for grouping related queries"
-                  />
-                  <QueryNameField
-                    mode={mode}
-                    value={query.conversationId}
-                    onChange={conversationId =>
-                      setQuery(prev =>
-                        prev ? { ...prev, conversationId } : null,
-                      )
-                    }
-                    label="Conversation ID"
-                    placeholder="Default: Auto-generated"
-                    tooltip="Identifier for conversation history and memory chain"
-                  />
-                </tbody>
-              </table>
-            </div>
-
-            {/* Configuration Column */}
-            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-              <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  Configuration
-                </h3>
-              </div>
-              <table className="w-full">
-                <tbody>
-                  <QueryDurationField
-                    mode={mode}
-                    value={query.timeout}
-                    onChange={timeout =>
-                      setQuery(prev => (prev ? { ...prev, timeout } : null))
-                    }
-                    label="Timeout"
-                    placeholder="Default: 5m"
-                    tooltip="How long the query can execute for before it is stopped"
-                  />
-                  <QueryDurationField
-                    mode={mode}
-                    value={query.ttl}
-                    onChange={ttl =>
-                      setQuery(prev => (prev ? { ...prev, ttl } : null))
-                    }
-                    label="TTL"
-                    placeholder="Default: 720h"
-                    tooltip="How long the query will remain in the system before it is deleted"
-                  />
-                  <QueryMemoryField
-                    mode={mode}
-                    value={query.memory}
-                    onChange={memory =>
-                      setQuery(prev => (prev ? { ...prev, memory } : null))
-                    }
-                    label="Memory"
-                    availableMemories={availableMemories}
-                    loading={memoriesLoading}
-                  />
-                  <QueryStreamingField
-                    mode={mode}
-                    value={streaming}
-                    onChange={setStreaming}
-                    label="Streaming"
-                    metadata={query.metadata}
-                  />
-                  <tr>
-                    <td className={FIELD_HEADING_STYLES}>Parameters</td>
-                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {query.parameters?.length
-                        ? `${query.parameters.length} param(s)`
-                        : '—'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Advanced Settings Column */}
-            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-              <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  Advanced Settings
-                </h3>
-              </div>
-              <table className="w-full">
-                <tbody>
-                  <tr className="border-b border-gray-100 dark:border-gray-800">
-                    <td className={FIELD_HEADING_STYLES}>Selector</td>
-                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {query.selector ? 'Configured' : '—'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Status & Results Column */}
-            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-              <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  Status & Results
-                </h3>
-              </div>
-              <table className="w-full">
-                <tbody>
-                  <tr className="border-b border-gray-100 dark:border-gray-800">
-                    <td className={FIELD_HEADING_STYLES}>Phase</td>
-                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {isNew ? '—' : query.status?.phase}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-100 dark:border-gray-800">
-                    <td className={FIELD_HEADING_STYLES}>Cancel</td>
-                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {query.cancel ? 'Requested' : 'No'}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-100 dark:border-gray-800">
-                    <td className={FIELD_HEADING_STYLES}>Response</td>
-                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {query.status?.response ? 'Available' : 'None'}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-gray-100 dark:border-gray-800">
-                    <td className={FIELD_HEADING_STYLES}>Token Usage</td>
-                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {query.status?.tokenUsage
-                        ? `${query.status.tokenUsage.promptTokens || 0} / ${query.status.tokenUsage.completionTokens || 0}`
-                        : '—'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+    <div className="flex w-full content-shell flex-col gap-5">
+      <header className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
+            <NamespacedLink
+              href="/queries"
+              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
+              <IconShell size="sm" className="opacity-100">
+                <ChevronLeft />
+              </IconShell>
+              Queries
+            </NamespacedLink>
+            <span aria-hidden="true" className="text-fg-secondary">
+              /
+            </span>
+            <span aria-current="page" className="text-fg-secondary">
+              New Query
+            </span>
+          </nav>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => push('/query/new')}>
+              New Query
+            </Button>
+            <Button onClick={handleSaveQuery} disabled={saving}>
+              {saving ? 'Executing...' : 'Execute Query'}
+            </Button>
           </div>
         </div>
+        <h1 className="text-fg-primary text-xl leading-7">New Query</h1>
+      </header>
 
-        {/* Input and Responses Section */}
-        <div className="flex min-h-0 flex-1 flex-col">
-          <ScrollArea className="flex-1 p-3">
-            <div className="space-y-3">
-              {/* Input Section */}
-              <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-                {/* Header */}
-                {mode === 'new' &&
-                toolSchema &&
-                query.target?.type === 'tool' ? (
-                  <div className="grid grid-cols-2 gap-0 border-b bg-gray-100 dark:bg-gray-800">
-                    <div className="border-r border-gray-200 px-3 py-2 dark:border-gray-700">
-                      <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                        Input
-                      </h3>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                        Input Schema
-                      </h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={copySchemaToClipboard}
-                        className="h-auto p-0 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
-                        <Copy className="h-2 w-2" />
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      Input
-                    </h3>
-                  </div>
-                )}
+      <div className="flex items-stretch gap-3">
+        <QueryDetailCard title="Query details">
+          <QueryDetailRow
+            label="Name"
+            valueClassName=""
+            value={
+              <Input
+                ref={nameFieldRef}
+                variant="inline"
+                size="sm"
+                value={query.name || ''}
+                onChange={e =>
+                  setQuery(prev =>
+                    prev ? { ...prev, name: e.target.value } : null,
+                  )
+                }
+                placeholder="Default: Auto-generated"
+              />
+            }
+          />
+          <QueryDetailRow
+            label="Svc account"
+            value={query.serviceAccount || '—'}
+          />
+          <QueryDetailRow
+            label="Target"
+            valueClassName=""
+            value={
+              <QueryTargetsField
+                value={query.target ? [query.target] : []}
+                onChange={targets =>
+                  setQuery(prev =>
+                    prev ? { ...prev, target: targets[0] } : null,
+                  )
+                }
+                availableTargets={availableTargets}
+                loading={targetsLoading}
+              />
+            }
+          />
+          <QueryDetailRow
+            label="Session ID"
+            valueClassName=""
+            value={
+              <Input
+                variant="inline"
+                size="sm"
+                value={query.sessionId || ''}
+                onChange={e =>
+                  setQuery(prev =>
+                    prev ? { ...prev, sessionId: e.target.value } : null,
+                  )
+                }
+                placeholder="Default: Auto-generated"
+              />
+            }
+          />
+          <QueryDetailRow
+            label="Conversation ID"
+            valueClassName=""
+            last
+            value={
+              <Input
+                variant="inline"
+                size="sm"
+                value={query.conversationId || ''}
+                onChange={e =>
+                  setQuery(prev =>
+                    prev ? { ...prev, conversationId: e.target.value } : null,
+                  )
+                }
+                placeholder="Default: Auto-generated"
+              />
+            }
+          />
+        </QueryDetailCard>
 
-                {/* Content */}
-                {mode === 'new' ? (
-                  <div
-                    className={cn(
-                      toolSchema && query.target?.type === 'tool'
-                        ? 'grid grid-cols-2 gap-0'
-                        : 'p-3',
-                    )}>
-                    {/* Input Section */}
-                    <div
-                      className={cn(
-                        'min-h-[260px] flex-1',
-                        toolSchema && query.target?.type === 'tool'
-                          ? 'border-r border-gray-200 dark:border-gray-700'
-                          : '',
-                      )}>
-                      <PromptEditor
-                        value={
-                          typeof query.input === 'string'
-                            ? query.input || ''
-                            : ''
-                        }
-                        onChange={value =>
-                          setQuery(prev =>
-                            prev ? { ...prev, input: value } : null,
-                          )
-                        }
-                        placeholder="Enter your query input... Use {{.paramName}} for variables."
-                        parameters={queryParameters}
-                        className="h-full min-h-[260px]"
-                        textareaClassName="border-0 rounded-none focus:ring-0 focus:ring-offset-0"
-                        highlightClassName="rounded-none"
-                      />
-                    </div>
+        <QueryDetailCard title="Configuration">
+          <QueryDetailRow
+            label="Timeout"
+            valueClassName=""
+            value={
+              <Input
+                variant="inline"
+                size="sm"
+                value={query.timeout || ''}
+                onChange={e =>
+                  setQuery(prev =>
+                    prev ? { ...prev, timeout: e.target.value } : null,
+                  )
+                }
+                placeholder="Default: 5m"
+              />
+            }
+          />
+          <QueryDetailRow
+            label="TTL"
+            valueClassName=""
+            value={
+              <Input
+                variant="inline"
+                size="sm"
+                value={query.ttl || ''}
+                onChange={e =>
+                  setQuery(prev =>
+                    prev ? { ...prev, ttl: e.target.value } : null,
+                  )
+                }
+                placeholder={ttlPlaceholder}
+              />
+            }
+          />
+          <QueryDetailRow
+            label="Memory"
+            valueClassName=""
+            value={
+              <QueryMemoryField
+                value={query.memory}
+                onChange={memory =>
+                  setQuery(prev => (prev ? { ...prev, memory } : null))
+                }
+                availableMemories={availableMemories}
+                loading={memoriesLoading}
+              />
+            }
+          />
+          <QueryDetailRow
+            label="Streaming"
+            valueClassName=""
+            value={
+              <Switch checked={streaming} onCheckedChange={setStreaming} />
+            }
+          />
+          <QueryDetailRow
+            label="Parameters"
+            last
+            value={
+              queryParameters.length
+                ? `${queryParameters.length} param(s)`
+                : '—'
+            }
+          />
+        </QueryDetailCard>
 
-                    {/* Tool Schema Example - only show for tool target */}
-                    {toolSchema && query.target?.type === 'tool' && (
-                      <div className="flex min-h-[260px] flex-col">
-                        <Textarea
-                          value={
-                            toolSchema.spec?.inputSchema
-                              ? getSchemaExample(toolSchema.spec.inputSchema) ||
-                                '{}'
-                              : '{}'
-                          }
-                          readOnly
-                          className="h-full min-h-[260px] w-full resize-none border-0 bg-transparent font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                        />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <pre className="bg-gray-50 p-3 font-mono text-sm whitespace-pre-wrap text-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
-                    {typeof query.input === 'string'
-                      ? query.input
-                      : Array.isArray(query.input)
-                        ? JSON.stringify(query.input, null, 2)
-                        : ''}
-                  </pre>
-                )}
-              </div>
+        <QueryDetailCard title="Advanced Settings">
+          <QueryDetailRow
+            label="Selector"
+            value={query.selector ? 'Configured' : '—'}
+            last
+          />
+        </QueryDetailCard>
 
-              {/* Parameters Section */}
-              {mode === 'new' ? (
-                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-                  <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      Parameters
-                    </h3>
-                  </div>
-                  <div className="p-3">
-                    <QueryParameterEditor
-                      parameters={queryParameters}
-                      onChange={setQueryParameters}
-                      inputText={
-                        typeof query.input === 'string' ? query.input : ''
-                      }
-                      agentRequiredParams={agentRequiredParams}
-                    />
-                  </div>
-                </div>
-              ) : queryParameters.length > 0 ? (
-                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-                  <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      Parameters
-                    </h3>
-                  </div>
-                  <div className="p-3">
-                    <div className="space-y-2">
-                      {queryParameters.map((param, index) => (
-                        <div
-                          key={index}
-                          className="bg-muted/30 flex items-center gap-4 rounded-md border px-3 py-2">
-                          <div className="flex-1">
-                            <span className="text-muted-foreground font-mono text-xs">
-                              {param.name}
-                            </span>
-                          </div>
-                          <div className="flex-1">
-                            <span className="text-sm">
-                              {param.value || (
-                                <span className="text-muted-foreground italic">
-                                  empty
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Conditional Response or Error Section */}
-              {query.status?.response ? (
-                /* Response Section - show when there is a response */
-                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-                  <div className="flex items-center justify-between border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      Response
-                    </h3>
-                    <div className="flex flex-shrink-0 items-center gap-1 overflow-x-auto text-xs whitespace-nowrap">
-                      <button
-                        className={`rounded px-2 py-1 ${
-                          responseViewMode === 'content'
-                            ? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('content')}>
-                        Content
-                      </button>
-                      <button
-                        className={`rounded px-2 py-1 ${
-                          responseViewMode === 'raw'
-                            ? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('raw')}>
-                        Raw
-                      </button>
-                    </div>
-                  </div>
-                  <div className="p-3">
-                    <ResponseContent
-                      content={query.status.response.content || 'No content'}
-                      viewMode={responseViewMode}
-                      rawJson={query.status.response}
-                    />
-                  </div>
-                </div>
-              ) : !isNew &&
-                (query.status?.phase === 'failed' ||
-                  query.status?.phase === 'error') ? (
-                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-                  <div className="flex items-center justify-between border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      Error
-                    </h3>
-                    <div className="flex flex-shrink-0 items-center gap-1 overflow-x-auto text-xs whitespace-nowrap">
-                      <button
-                        className={`rounded px-2 py-1 ${
-                          errorViewMode === 'events'
-                            ? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setErrorViewMode('events')}>
-                        Events
-                      </button>
-                      <button
-                        className={`rounded px-2 py-1 ${
-                          errorViewMode === 'details'
-                            ? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setErrorViewMode('details')}>
-                        Details
-                      </button>
-                    </div>
-                  </div>
-                  <div className="p-3">
-                    <ErrorResponseContent
-                      query={query}
-                      viewMode={errorViewMode}
-                    />
-                  </div>
-                </div>
-              ) : null}
-
-              {!isNew && (
-                <div className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
-                  Note: Events expire after a certain amount of time and may no
-                  longer be available for viewing.
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </div>
+        <QueryDetailCard title="Status & Results">
+          <QueryDetailRow label="Phase" value="—" />
+          <QueryDetailRow label="Cancel" value="No" />
+          <QueryDetailRow label="Output" value="None" />
+          <QueryDetailRow label="Token usage" value="—" last />
+        </QueryDetailCard>
       </div>
-    </>
+
+      <QuerySectionCard
+        title="Input"
+        headerRight={
+          isToolTarget ? (
+            <div className="flex items-center gap-2">
+              <span className="label-regular-primary text-fg-secondary">
+                Input Schema
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={copySchemaToClipboard}>
+                <IconShell size="sm">
+                  <ContentCopy />
+                </IconShell>
+              </Button>
+            </div>
+          ) : undefined
+        }>
+        {isToolTarget ? (
+          <div className="grid grid-cols-2 gap-0 py-2">
+            <div className="border-stroke-divider min-h-[260px] border-r pr-2">
+              <PromptEditor
+                value={getStringInput(query.input)}
+                onChange={value =>
+                  setQuery(prev => (prev ? { ...prev, input: value } : null))
+                }
+                placeholder="Enter your query input... Use {{.paramName}} for variables."
+                parameters={queryParameters}
+                className="h-full min-h-[260px]"
+                textareaClassName="border-0 rounded-none focus:ring-0 focus:ring-offset-0"
+                highlightClassName="rounded-none"
+              />
+            </div>
+            <div className="flex min-h-[260px] flex-col pl-2">
+              <Textarea
+                value={
+                  toolSchema?.spec?.inputSchema
+                    ? getSchemaExample(toolSchema.spec.inputSchema) || '{}'
+                    : '{}'
+                }
+                readOnly
+                className="h-full min-h-[260px] w-full resize-none border-0 bg-transparent font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="min-h-[260px] py-2">
+            <PromptEditor
+              value={typeof query.input === 'string' ? query.input || '' : ''}
+              onChange={value =>
+                setQuery(prev => (prev ? { ...prev, input: value } : null))
+              }
+              placeholder="Enter your query input... Use {{.paramName}} for variables."
+              parameters={queryParameters}
+              className="h-full min-h-[260px]"
+              textareaClassName="border-0 rounded-none focus:ring-0 focus:ring-offset-0"
+              highlightClassName="rounded-none"
+            />
+          </div>
+        )}
+      </QuerySectionCard>
+
+      <QueryParameterEditor
+        parameters={queryParameters}
+        onChange={setQueryParameters}
+        inputText={getStringInput(query.input)}
+        agentRequiredParams={agentRequiredParams}
+      />
+    </div>
   );
 }
 

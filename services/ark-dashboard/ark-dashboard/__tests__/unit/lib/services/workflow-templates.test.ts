@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api/client';
-import { workflowTemplatesService } from '@/lib/services/workflow-templates';
+import {
+  WORKFLOW_TEMPLATE_ANNOTATIONS,
+  workflowTemplatesService,
+} from '@/lib/services/workflow-templates';
 import type {
   WorkflowTemplate,
   WorkflowTemplateList,
@@ -10,6 +13,9 @@ import type {
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
     get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -42,6 +48,17 @@ describe('workflowTemplatesService', () => {
     vi.clearAllMocks();
   });
 
+  describe('annotation keys', () => {
+    it('exposes the argo title/description annotation keys', () => {
+      expect(WORKFLOW_TEMPLATE_ANNOTATIONS.TITLE).toBe(
+        'workflows.argoproj.io/title',
+      );
+      expect(WORKFLOW_TEMPLATE_ANNOTATIONS.DESCRIPTION).toBe(
+        'workflows.argoproj.io/description',
+      );
+    });
+  });
+
   describe('list', () => {
     it('should fetch all workflow templates and return items array', async () => {
       const mockListResponse: WorkflowTemplateList = {
@@ -62,6 +79,9 @@ describe('workflowTemplatesService', () => {
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate',
+        {
+          params: { labelSelector: 'ark.mckinsey.com/dashboard-hidden!=true' },
+        },
       );
       expect(result).toHaveLength(2);
       expect(result[0].metadata.name).toBe('test-template');
@@ -170,6 +190,150 @@ spec:
       await expect(
         workflowTemplatesService.getYaml('non-existent'),
       ).rejects.toThrow('Not found');
+    });
+  });
+
+  describe('save', () => {
+    const validYaml = `apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: my-template
+spec:
+  entrypoint: main`;
+
+    it('should POST the parsed object to the collection endpoint on create', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockWorkflowTemplate);
+
+      const result = await workflowTemplatesService.save(validYaml, 'create');
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate',
+        {
+          apiVersion: 'argoproj.io/v1alpha1',
+          kind: 'WorkflowTemplate',
+          metadata: { name: 'my-template' },
+          spec: { entrypoint: 'main' },
+        },
+      );
+      expect(result).toEqual(mockWorkflowTemplate);
+    });
+
+    it('should PUT the parsed object to the named endpoint on update', async () => {
+      vi.mocked(apiClient.put).mockResolvedValueOnce(mockWorkflowTemplate);
+
+      const result = await workflowTemplatesService.save(validYaml, 'update');
+
+      expect(apiClient.put).toHaveBeenCalledWith(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/my-template',
+        {
+          apiVersion: 'argoproj.io/v1alpha1',
+          kind: 'WorkflowTemplate',
+          metadata: { name: 'my-template' },
+          spec: { entrypoint: 'main' },
+        },
+      );
+      expect(result).toEqual(mockWorkflowTemplate);
+    });
+
+    it('should reject YAML whose kind is not WorkflowTemplate', async () => {
+      const wrongKind = `apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: my-template`;
+
+      await expect(
+        workflowTemplatesService.save(wrongKind, 'create'),
+      ).rejects.toThrow('WorkflowTemplate');
+      expect(apiClient.post).not.toHaveBeenCalled();
+    });
+
+    it('should reject unparseable YAML', async () => {
+      const badYaml = 'kind: WorkflowTemplate\n  bad: : indentation';
+
+      await expect(
+        workflowTemplatesService.save(badYaml, 'create'),
+      ).rejects.toThrow('Invalid YAML');
+      expect(apiClient.post).not.toHaveBeenCalled();
+    });
+
+    it('should reject YAML that is not a mapping', async () => {
+      await expect(
+        workflowTemplatesService.save('- just\n- a\n- list', 'create'),
+      ).rejects.toThrow('mapping');
+    });
+
+    it('should require metadata.name on update', async () => {
+      const noName = `apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+spec:
+  entrypoint: main`;
+
+      await expect(
+        workflowTemplatesService.save(noName, 'update'),
+      ).rejects.toThrow('metadata.name');
+      expect(apiClient.put).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('nameExists', () => {
+    it('should return true when a template with the name exists', async () => {
+      const mockListResponse: WorkflowTemplateList = {
+        apiVersion: 'argoproj.io/v1alpha1',
+        kind: 'WorkflowTemplateList',
+        items: [mockWorkflowTemplate],
+      };
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockListResponse);
+
+      const result = await workflowTemplatesService.nameExists('test-template');
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false when no template matches the name', async () => {
+      const mockListResponse: WorkflowTemplateList = {
+        apiVersion: 'argoproj.io/v1alpha1',
+        kind: 'WorkflowTemplateList',
+        items: [mockWorkflowTemplate],
+      };
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockListResponse);
+
+      const result = await workflowTemplatesService.nameExists('other');
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('canCreate / canUpdate', () => {
+    it('should check create access on workflowtemplates', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ allowed: true });
+
+      const result = await workflowTemplatesService.canCreate();
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/resources/access-review',
+        {
+          group: 'argoproj.io',
+          resource: 'workflowtemplates',
+          verb: 'create',
+        },
+      );
+      expect(result).toBe(true);
+    });
+
+    it('should check update access on workflowtemplates', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ allowed: false });
+
+      const result = await workflowTemplatesService.canUpdate();
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/resources/access-review',
+        {
+          group: 'argoproj.io',
+          resource: 'workflowtemplates',
+          verb: 'update',
+        },
+      );
+      expect(result).toBe(false);
     });
   });
 });

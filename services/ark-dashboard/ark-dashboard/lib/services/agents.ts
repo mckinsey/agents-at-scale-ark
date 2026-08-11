@@ -1,13 +1,7 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, APIError } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
-
-// Helper type for axios errors
-interface AxiosError extends Error {
-  response?: {
-    status: number;
-  };
-}
 
 // Use the generated types from OpenAPI
 export type AgentResponse = components['schemas']['AgentResponse'];
@@ -50,11 +44,11 @@ export type Agent = AgentDetailResponseWithA2A & { id: string };
 export const agentsService = {
   // Get all agents
   async getAll(): Promise<Agent[]> {
-    const response = await apiClient.get<AgentListResponse>(`/api/v1/agents`);
+    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`);
 
     // Map the response items to include id for UI compatibility
     const agents = await Promise.all(
-      response.items.map(async item => {
+      items.map(async item => {
         // Fetch detailed info for each agent to get full data
         const detailed = await agentsService.getByName(item.name);
         return detailed!;
@@ -75,7 +69,7 @@ export const agentsService = {
         id: response.name, // Use name as id for UI compatibility
       };
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (error instanceof APIError && error.status === 404) {
         return null;
       }
       throw error;
@@ -132,7 +126,7 @@ export const agentsService = {
         id: response.name,
       };
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (error instanceof APIError && error.status === 404) {
         return null;
       }
       throw error;
@@ -161,7 +155,7 @@ export const agentsService = {
 
       return true;
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (error instanceof APIError && error.status === 404) {
         return false;
       }
       throw error;
@@ -172,5 +166,11 @@ export const agentsService = {
   async deleteById(id: number | string): Promise<boolean> {
     const name = String(id);
     return agentsService.delete(name);
+  },
+
+  async getRawResource(name: string): Promise<Record<string, unknown>> {
+    return apiClient.get<Record<string, unknown>>(
+      `/api/v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent/${name}`,
+    );
   },
 };

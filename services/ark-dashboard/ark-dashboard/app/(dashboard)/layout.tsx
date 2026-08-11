@@ -2,9 +2,9 @@
 
 import { AppSidebar } from '@/components/app-sidebar';
 import ChatManager from '@/components/chat-manager';
-import { SettingsModal } from '@/components/settings-modal';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
+import { NavigationGuardProvider } from '@/lib/hooks/use-navigation-guard';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import './layout.css';
@@ -21,7 +21,7 @@ export default function DashboardLayout({
       <div className="flex h-screen w-screen flex-col items-center justify-center gap-2">
         <Spinner className="mr-2" />
         <div className="muted text-lg font-semibold">
-          Loading ARK Dashboard...
+          Loading Ark Dashboard...
         </div>
       </div>
     );
@@ -35,12 +35,13 @@ export default function DashboardLayout({
             '--sidebar-width-icon': '5rem',
           } as React.CSSProperties
         }>
-        <AppSidebar />
-        <SidebarInset className="ml-8 min-w-0 p-10 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]">
-          {children}
-        </SidebarInset>
+        <NavigationGuardProvider>
+          <AppSidebar />
+          <SidebarInset className="h-screen min-w-0 overflow-x-hidden overflow-y-auto px-12 pt-10 pb-5 transition-[width,margin,padding] duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]">
+            {children}
+          </SidebarInset>
+        </NavigationGuardProvider>
       </SidebarProvider>
-      <SettingsModal />
       <ChatManager />
     </>
   );

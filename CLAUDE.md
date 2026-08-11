@@ -2,14 +2,35 @@
 
 **NEVER add comments** to generated code unless explicitly requested by the user
 
+# Pre-Push Gates (Non-Negotiable)
+
+BEFORE pushing ANY commit, `make lint` and `make test` MUST pass locally
+in every directory the change touches. Exact commands per stack live in
+"Build Instructions" below; do not skip them.
+
+- **Never push with lint failures.** Same rules CI enforces
+  (`golangci-lint` + `gofumpt` for Go, `ruff`/`pyright` for Python,
+  `eslint` for TypeScript). Local pass is the minimum bar.
+- **Never push with failing tests.**
+- **Never bypass hooks** (`--no-verify`, `--no-gpg-sign`) unless the user
+  explicitly asks.
+- **"One-line changes" hide `gofumpt` and whitespace diffs the most.** Run
+  the gates regardless of change size.
+- **Tooling gotcha (Go):** `GOLANGCI_LINT_VERSION` in `ark/Makefile` may
+  lag local Go. If `make lint` errors with *"Go language version ... used
+  to build golangci-lint is lower than the targeted Go version"*, fall
+  back to `gofumpt -l .` (install via `go install mvdan.cc/gofumpt@latest`)
+  — this catches the formatting rule that breaks CI most often. Full
+  `golangci-lint` still runs in CI.
+
 # Project Structure
 
 ## Core Folders
 
-- **`ark/`** - Kubernetes operator and default executor (Go)
+- **`ark/`** - Kubernetes operator (Go)
   - Controller reconciles CRDs: Agent, Model, Query, Team, MCPServer, ExecutionEngine, A2AServer
   - Webhooks for validation and mutation (including migration warnings)
-  - `executors/completions/` - Built-in default execution engine
+  - `executors/completions/` - Default executor (separate deployment, communicates with controller via A2A)
   - The controller dispatches queries to the appropriate executor via A2A protocol
 
 - **`lib/ark-sdk/`** - Python SDK (generated + overlay)
@@ -202,6 +223,10 @@ One sentence description.
 - **Use case**: When to use it
 ```
 
+# Build & CI/CD
+
+For build failures, CI issues, CVEs, dependabot management, and test failures, use the **ark-build-manager** agent. It triages failures across workflow runs and delegates to appropriate skills (chainsaw, vulnerability-fixer, ark-dependabot-management, etc.).
+
 # Testing Guidelines
 
 When writing tests for any service, consult `tests/CLAUDE.md` for comprehensive testing patterns and best practices.
@@ -219,6 +244,12 @@ When creating pull requests, use this simple format:
 ```
 
 DO NOT include "Test plan" sections in PR descriptions.
+
+## Environment Variable Naming
+
+Duration env vars must include a unit suffix:
+- `_MS` for milliseconds (e.g., `REQUEST_TIMEOUT_MS`)
+- `_SECONDS` for seconds (e.g., `ARK_MEMORY_HTTP_TIMEOUT_SECONDS`)
 
 ## Pull Request Maintenance
 

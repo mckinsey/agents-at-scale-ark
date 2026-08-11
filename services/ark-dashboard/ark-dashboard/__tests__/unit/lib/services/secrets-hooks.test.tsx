@@ -10,20 +10,22 @@ import {
   useCreateSecret,
   useDeleteSecret,
   useGetAllSecrets,
+  useGetSecret,
   useUpdateSecret,
 } from '@/lib/services/secrets-hooks';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 vi.mock('@/lib/services/secrets', () => ({
   secretsService: {
     getAll: vi.fn(),
+    get: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
   },
 }));
 
-vi.mock('sonner', () => ({
+vi.mock('@/components/ui/sonner', () => ({
   toast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -83,6 +85,53 @@ describe('secrets-hooks', () => {
     });
   });
 
+  describe('useGetSecret', () => {
+    it('should fetch a secret and return its keys when a name is provided', async () => {
+      const mockSecret = {
+        name: 'aws-credentials',
+        id: 'aws-credentials',
+        type: 'Opaque',
+        secret_length: 2,
+        keys: ['accessKeyId', 'secretAccessKey'],
+      };
+      vi.mocked(secretsService.get).mockResolvedValue(mockSecret as any);
+
+      const { result } = renderHook(() => useGetSecret('aws-credentials'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(secretsService.get).toHaveBeenCalledWith('aws-credentials');
+      expect(result.current.data?.keys).toEqual([
+        'accessKeyId',
+        'secretAccessKey',
+      ]);
+    });
+
+    it('should be disabled and not fetch when name is undefined', () => {
+      const { result } = renderHook(() => useGetSecret(undefined), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.fetchStatus).toBe('idle');
+      expect(secretsService.get).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors when fetching a secret', async () => {
+      const error = new Error('Failed to fetch secret');
+      vi.mocked(secretsService.get).mockRejectedValue(error);
+
+      const { result } = renderHook(() => useGetSecret('aws-credentials'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(result.current.error).toBe(error);
+    });
+  });
+
   describe('useCreateSecret', () => {
     it('should create a secret successfully', async () => {
       const mockResponse = { name: 'test-secret' };
@@ -115,9 +164,7 @@ describe('secrets-hooks', () => {
         'test-secret',
         'password123',
       );
-      expect(toast.success).toHaveBeenCalledWith('Secret Created', {
-        description: 'Successfully created secret test-secret',
-      });
+      expect(toast.success).toHaveBeenCalledWith('Secret created successfully');
       expect(onSuccess).toHaveBeenCalledWith(mockResponse);
     });
 
@@ -211,9 +258,7 @@ describe('secrets-hooks', () => {
         'updated-secret',
         'newpassword123',
       );
-      expect(toast.success).toHaveBeenCalledWith('Secret Updated', {
-        description: 'Successfully updated secret updated-secret',
-      });
+      expect(toast.success).toHaveBeenCalledWith('Secret updated successfully');
       expect(onSuccess).toHaveBeenCalledWith(mockResponse);
     });
 
@@ -304,9 +349,7 @@ describe('secrets-hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(secretsService.delete).toHaveBeenCalledWith('delete-me');
-      expect(toast.success).toHaveBeenCalledWith('Secret Deleted', {
-        description: 'Successfully deleted the secret',
-      });
+      expect(toast.success).toHaveBeenCalledWith('Secret deleted successfully');
       expect(onSuccess).toHaveBeenCalled();
     });
 

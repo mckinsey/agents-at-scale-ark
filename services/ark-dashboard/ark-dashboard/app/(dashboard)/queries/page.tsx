@@ -1,38 +1,173 @@
 'use client';
 
-import { Plus } from 'lucide-react';
-import { useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { PageHeader } from '@/components/common/page-header';
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
+import { Autorenew, DatabaseSearch } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { QueriesSection } from '@/components/sections/queries-section';
+import {
+  LearnMoreButton,
+  ResourceEmptyState,
+  ResourceSearchInput,
+} from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { IconShell } from '@/components/ui/icon-shell';
+import { Pagination } from '@/components/ui/pagination';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { useListQueries } from '@/lib/services/queries-hooks';
+import {
+  DEFAULT_PAGE_SIZE,
+  parsePage,
+  parsePageSize,
+} from '@/lib/utils/pagination';
+
+const PAGE_SIZE_OPTIONS = [10, 15, 25, 50, 100];
+const SEARCH_DEBOUNCE_MS = 400;
 
 export default function QueriesPage() {
-  const queriesSectionRef = useRef<{ openAddEditor: () => void }>(null);
-  const { data: queries } = useListQueries();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const pageTitle = queries ? `Queries (${queries.count})` : 'Queries';
+  const page = parsePage(searchParams.get('page'));
+  const pageSize = parsePageSize(searchParams.get('pageSize'));
+  const urlSearch = searchParams.get('q') ?? '';
+
+  const [searchInput, setSearchInput] = useState<string>(urlSearch);
+
+  const queriesQuery = useListQueries({
+    page,
+    pageSize,
+    search: urlSearch || undefined,
+  });
+
+  const { data, isLoading, isFetching, isError, refetch } = queriesQuery;
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const isEmpty = !isLoading && !isError && total === 0 && !urlSearch;
+
+  const searchParamsRef = useRef(searchParams);
+  useEffect(() => {
+    searchParamsRef.current = searchParams;
+  }, [searchParams]);
+
+  const updateParams = useCallback(
+    (next: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParamsRef.current.toString());
+      for (const [key, value] of Object.entries(next)) {
+        if (value === null || value === '') {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      }
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : '?');
+    },
+    [router],
+  );
+
+  useEffect(() => {
+    if (searchInput === urlSearch) return;
+    const t = setTimeout(() => {
+      updateParams({ q: searchInput || null, page: null });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput, urlSearch, updateParams]);
+
+  useEffect(() => {
+    setSearchInput(urlSearch);
+  }, [urlSearch]);
+
+  useEffect(() => {
+    if (total === 0) return;
+    if (page > totalPages) {
+      updateParams({ page: null });
+    }
+  }, [page, total, totalPages, updateParams]);
+
+  const handlePageChange = (next: number) => {
+    updateParams({ page: next === 1 ? null : String(next) });
+  };
+
+  const handlePageSizeChange = (next: number) => {
+    updateParams({
+      pageSize: next === DEFAULT_PAGE_SIZE ? null : String(next),
+      page: null,
+    });
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput('');
+    updateParams({ q: null, page: null });
+  };
 
   return (
-    <>
-      <PageHeader
-        breadcrumbs={BASE_BREADCRUMBS}
-        currentPage="Queries"
+    <div className="flex min-h-0 w-full content-shell flex-1 flex-col">
+      <ResourcePageHeader
+        icon={<DatabaseSearch />}
+        title={total > 0 ? `Query logs (${total})` : 'Query logs'}
+        description="Monitor query activity, execution time, status, and errors"
         actions={
-          <Button onClick={() => queriesSectionRef.current?.openAddEditor()}>
-            <Plus className="h-4 w-4" />
-            Create Query
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isFetching}>
+              <IconShell size="sm">
+                <Autorenew />
+              </IconShell>
+              Refresh
+            </Button>
+            <NamespacedLink href="/query/new">
+              <Button>Create query</Button>
+            </NamespacedLink>
+          </>
         }
       />
-      <div className="flex flex-1 flex-col">
-        <div>
-          <h1 className="text-xl">{pageTitle}</h1>
+
+      {isEmpty ? (
+        <ResourceEmptyState
+          icon={<DatabaseSearch />}
+          title="No queries yet"
+          description={
+            <>
+              <p>You haven&apos;t created any query yet.</p>
+              <p>Get started by creating your query to see results.</p>
+            </>
+          }
+          actions={<LearnMoreButton href={DOCS_URLS.queries} />}
+        />
+      ) : (
+        <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+          <div className="flex flex-none items-center">
+            <ResourceSearchInput
+              value={searchInput}
+              onChange={setSearchInput}
+              placeholder="Search query text..."
+              className="w-[493px]"
+            />
+          </div>
+
+          <QueriesSection
+            searchTerm={urlSearch}
+            onClearSearch={handleClearSearch}
+            queryResult={queriesQuery}
+          />
+
+          {total > pageSize && (
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              itemsPerPage={pageSize}
+              onPageChange={handlePageChange}
+              onItemsPerPageChange={handlePageSizeChange}
+              itemsPerPageOptions={PAGE_SIZE_OPTIONS}
+            />
+          )}
         </div>
-        <QueriesSection ref={queriesSectionRef} />
-      </div>
-    </>
+      )}
+    </div>
   );
 }

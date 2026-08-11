@@ -1,12 +1,15 @@
 """Kubernetes A2A servers API endpoints."""
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 from ark_sdk.models.a2_a_server_v1prealpha1 import A2AServerV1prealpha1
 from ark_sdk.models.a2_a_server_v1prealpha1_spec import A2AServerV1prealpha1Spec
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
+
+from ...auth.dependencies import get_impersonation_config
 
 from ...models.a2a_servers import (
     A2AServerResponse,
@@ -16,6 +19,8 @@ from ...models.a2a_servers import (
     A2AServerDetailResponse
 )
 from .exceptions import handle_k8s_errors
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -77,32 +82,35 @@ def a2a_server_to_detail_response(a2a_server: dict) -> A2AServerDetailResponse:
 
 @router.get("", response_model=A2AServerListResponse)
 @handle_k8s_errors(operation="list", resource_type="a2a server")
-async def list_a2a_servers(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2AServerListResponse:
+async def list_a2a_servers(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2AServerListResponse:
     """
-    List all A2AServer CRs in a namespace.
-    
+    List a page of A2AServer CRs in a namespace.
+
     Args:
         namespace: The namespace to list A2A servers from
-        
+        pagination: limit and continue token for server-side pagination
+
     Returns:
-        A2AServerListResponse: List of all A2A servers in the namespace
+        A2AServerListResponse: One page of A2A servers plus the continuation token
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
-        a2a_servers = await ark_client.a2aservers.a_list()
-        
-        a2a_server_list = []
-        for a2a_server in a2a_servers:
-            a2a_server_list.append(a2a_server_to_response(a2a_server.to_dict()))
-        
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
+        page = await ark_client.a2aservers.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
+
+        a2a_server_list = [a2a_server_to_response(a2a_server.to_dict()) for a2a_server in page.items]
+
         return A2AServerListResponse(
             items=a2a_server_list,
-            total=len(a2a_server_list)
+            count=len(a2a_server_list),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
         )
 
 
 @router.post("", response_model=A2AServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="create", resource_type="a2a server")
-async def create_a2a_server(body: A2AServerCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2AServerDetailResponse:
+async def create_a2a_server(request: Request, body: A2AServerCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2AServerDetailResponse:
     """
     Create a new A2AServer CR.
     
@@ -113,7 +121,7 @@ async def create_a2a_server(body: A2AServerCreateRequest, namespace: Optional[st
     Returns:
         A2AServerDetailResponse: The created A2A server details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Build the A2A server spec
         a2a_server_spec = body.spec.model_dump(exclude_none=True)
         
@@ -135,7 +143,7 @@ async def create_a2a_server(body: A2AServerCreateRequest, namespace: Optional[st
 
 @router.get("/{a2a_server_name}", response_model=A2AServerDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="a2a server")
-async def get_a2a_server(a2a_server_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2AServerDetailResponse:
+async def get_a2a_server(request: Request, a2a_server_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2AServerDetailResponse:
     """
     Get a specific A2AServer CR by name.
     
@@ -146,7 +154,7 @@ async def get_a2a_server(a2a_server_name: str, namespace: Optional[str] = Query(
     Returns:
         A2AServerDetailResponse: The A2A server details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         a2a_server = await ark_client.a2aservers.a_get(a2a_server_name)
         
         return a2a_server_to_detail_response(a2a_server.to_dict())
@@ -154,7 +162,7 @@ async def get_a2a_server(a2a_server_name: str, namespace: Optional[str] = Query(
 
 @router.put("/{a2a_server_name}", response_model=A2AServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="a2a server")
-async def update_a2a_server(a2a_server_name: str, body: A2AServerUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2AServerDetailResponse:
+async def update_a2a_server(request: Request, a2a_server_name: str, body: A2AServerUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2AServerDetailResponse:
     """
     Update a A2AServer CR by name.
     
@@ -166,7 +174,7 @@ async def update_a2a_server(a2a_server_name: str, body: A2AServerUpdateRequest, 
     Returns:
         A2AServerDetailResponse: The updated A2A server details
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Get the existing A2A server first
         existing_a2a_server = await ark_client.a2aservers.a_get(a2a_server_name)
         existing_dict = existing_a2a_server.to_dict()
@@ -191,7 +199,7 @@ async def update_a2a_server(a2a_server_name: str, body: A2AServerUpdateRequest, 
 
 @router.delete("/{a2a_server_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="a2a server")
-async def delete_a2a_server(a2a_server_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
+async def delete_a2a_server(request: Request, a2a_server_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete a A2AServer CR by name.
     
@@ -199,5 +207,5 @@ async def delete_a2a_server(a2a_server_name: str, namespace: Optional[str] = Que
         namespace: The namespace containing the A2A server
         a2a_server_name: The name of the A2A server
     """
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         await ark_client.a2aservers.a_delete(a2a_server_name)

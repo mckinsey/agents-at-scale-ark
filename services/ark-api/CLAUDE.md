@@ -19,5 +19,40 @@ Python/FastAPI REST gateway for Ark resources. Wraps the Kubernetes API with aut
 - Pass the version and namespace to `with_ark_client`
 - The sync and async functions on the ark client have the same signatures, the async ones start with `a_`
 
+### Exception handling
+
+**Never hide exceptions.** If something goes wrong, let it propagate and crash loudly. Silent failures are harder to debug than loud ones.
+
+A fallback (returning a default value on error) is only acceptable when:
+- The caller has explicitly designed for a degraded/default state
+- The absence of data is a valid, expected runtime condition (e.g. optional config, missing optional resource)
+- The default value is semantically correct and safe to use
+
+In all other cases, raise or re-raise — do not swallow the exception.
+
+```python
+# BAD — hides misconfiguration, returns wrong data silently
+try:
+    result = fetch_something()
+    return result
+except Exception as e:
+    logger.warning(f"Failed: {e}")
+    return {}
+
+# GOOD — let it propagate
+result = fetch_something()
+return result
+
+# GOOD — explicit fallback only when the absence is a valid state
+ee_ref = getattr(agent.spec, "execution_engine", None)
+if not ee_ref:
+    return {}  # no execution engine configured — valid case, not an error
+ee = await fetch_execution_engine(ee_ref.name)  # let this raise if it fails
+```
+
+- No `try/except` blocks that return default values unless absence is a designed-for condition
+- Crash hard and early — a clear exception at the source is always better than a silent wrong result downstream
+- Logging a warning and continuing is not acceptable as a substitute for proper error handling
+
 ### Making changes
 - After making changes run `make test`

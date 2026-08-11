@@ -4,6 +4,7 @@ package validation
 import (
 	"context"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -135,4 +136,66 @@ func TestValidateAgent(t *testing.T) {
 			t.Fatalf("expected 1 warning, got %d", len(warnings))
 		}
 	})
+}
+
+func TestValidateAgentToolApproval(t *testing.T) {
+	v := NewValidator(newMockLookup())
+	ctx := context.Background()
+
+	positiveTimeout := &metav1.Duration{Duration: 5 * time.Minute}
+	zeroTimeout := &metav1.Duration{Duration: 0}
+	negativeTimeout := &metav1.Duration{Duration: -1 * time.Second}
+
+	tests := []struct {
+		name      string
+		approval  *arkv1alpha1.ToolApprovalConfig
+		expectErr bool
+	}{
+		{name: "nil approval config", approval: nil},
+		{
+			name:     "valid config with reject onTimeout",
+			approval: &arkv1alpha1.ToolApprovalConfig{Required: true, Timeout: positiveTimeout, OnTimeout: "reject"},
+		},
+		{
+			name:     "valid config with proceed onTimeout",
+			approval: &arkv1alpha1.ToolApprovalConfig{Required: true, OnTimeout: "proceed"},
+		},
+		{
+			name:     "empty onTimeout (defaults to reject)",
+			approval: &arkv1alpha1.ToolApprovalConfig{Required: true},
+		},
+		{
+			name:      "zero timeout is rejected",
+			approval:  &arkv1alpha1.ToolApprovalConfig{Required: true, Timeout: zeroTimeout},
+			expectErr: true,
+		},
+		{
+			name:      "negative timeout is rejected",
+			approval:  &arkv1alpha1.ToolApprovalConfig{Required: true, Timeout: negativeTimeout},
+			expectErr: true,
+		},
+		{
+			name:      "invalid onTimeout value is rejected",
+			approval:  &arkv1alpha1.ToolApprovalConfig{Required: true, OnTimeout: "bogus"},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
+				Spec: arkv1alpha1.AgentSpec{
+					Tools: []arkv1alpha1.AgentTool{{Type: "mcp", Name: "t", Approval: tt.approval}},
+				},
+			}
+			_, err := v.ValidateAgent(ctx, agent)
+			if tt.expectErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tt.expectErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }

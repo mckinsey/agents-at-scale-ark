@@ -2,15 +2,17 @@
 
 import {
   Bot,
+  CheckCircle,
   ChevronLeft,
   ChevronRight,
   Search,
   Server,
   SquarePlay,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
+import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +25,15 @@ import type {
 import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
 
+const FILTERS: Record<string, Partial<MarketplaceFilters>> = {
+  all: { category: undefined, type: undefined, status: undefined },
+  agents: { category: 'agents' as MarketplaceCategory, type: undefined, status: undefined },
+  mcp: { category: 'mcp-servers' as MarketplaceCategory, type: undefined, status: undefined },
+  demo: { category: undefined, type: 'demo' as MarketplaceItemType, status: undefined },
+  services: { category: undefined, type: 'service' as MarketplaceItemType, status: undefined },
+  installed: { category: undefined, type: undefined, status: 'installed' },
+} as const;
+
 export default function MarketplacePage() {
   const [filters, setFilters] = useState<MarketplaceFilters>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,6 +43,18 @@ export default function MarketplacePage() {
 
   const { data, isPending } = useGetMarketplaceItems(filters);
 
+  // Silent migration: discard the legacy per-browser source list. Sources now
+  // live in the cluster (marketplace-sources ConfigMap). One-shot and
+  // idempotent — subsequent loads find no key and noop.
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      localStorage.getItem('marketplace-sources') !== null
+    ) {
+      localStorage.removeItem('marketplace-sources');
+    }
+  }, []);
+
   const totalItems = data?.items.length || 0;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -40,48 +63,29 @@ export default function MarketplacePage() {
 
   const pageTitle = data ? `Marketplace (${data.items.length})` : 'Marketplace';
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1);
+      setFilters(prev => ({
+        ...prev,
+        search: searchQuery || undefined,
+      }));
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const handleSearch = (value: string) => {
     setSearchQuery(value);
-    setCurrentPage(1); // Reset to first page on search
-    setFilters(prev => ({
-      ...prev,
-      search: value || undefined,
-    }));
   };
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
     setCurrentPage(1); // Reset to first page on category change
-    if (category === 'all') {
-      setFilters(prev => ({
-        ...prev,
-        category: undefined,
-        type: undefined,
-      }));
-    } else if (category === 'agents') {
-      setFilters(prev => ({
-        ...prev,
-        category: 'agents' as MarketplaceCategory,
-        type: undefined,
-      }));
-    } else if (category === 'mcp') {
-      setFilters((prev: MarketplaceFilters) => ({
-        ...prev,
-        category: 'mcp-servers' as MarketplaceCategory,
-        type: undefined,
-      }));
-    } else if (category === 'demo') {
-      setFilters((prev: MarketplaceFilters) => ({
-        ...prev,
-        category: undefined,
-        type: 'demo' as MarketplaceItemType,
-      }));
-    } else if (category === 'services') {
-      setFilters(prev => ({
-        ...prev,
-        category: undefined,
-        type: 'service' as MarketplaceItemType,
-      }));
+
+    const newFilter = FILTERS[category];
+    if (newFilter) {
+      setFilters(prev => ({ ...prev, ...newFilter }));
     }
   };
 
@@ -176,7 +180,26 @@ export default function MarketplacePage() {
             <Server className="h-3.5 w-3.5" />
             Services
           </Button>
+          <Button
+            variant={selectedCategory === 'installed' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => handleCategoryChange('installed')}
+            className={cn(
+              'flex h-8 items-center gap-1.5 px-4',
+              selectedCategory === 'installed'
+                ? ''
+                : 'text-muted-foreground hover:text-foreground',
+            )}>
+            <CheckCircle className="h-3.5 w-3.5" />
+            Installed
+          </Button>
         </div>
+
+        {!isPending && (
+          <div className="mb-4">
+            <MarketplaceSourceErrors errors={data?.sourceErrors} />
+          </div>
+        )}
 
         {/* Loading state */}
         {isPending && (

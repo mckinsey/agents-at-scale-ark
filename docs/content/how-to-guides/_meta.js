@@ -1,7 +1,7 @@
 export default {
   index: 'Overview',
   
-  '---build': { type: 'separator', title: 'Build with ARK (application developers)' },
+  '---build': { type: 'separator', title: 'Basic use' },
   models: {
     title: 'Configure providers and models',
     href: '/user-guide/models'
@@ -15,16 +15,12 @@ export default {
     href: '/user-guide/teams'
   },
   queries: {
-    title: 'Run work and manage sessions',
+    title: 'Run queries / chat with agents and teams',
     href: '/user-guide/queries'
   },
   tools: {
     title: 'Add tools and MCP servers',
     href: '/user-guide/tools'
-  },
-  'workflow-templates': {
-    title: 'Workflow Templates',
-    href: '/user-guide/workflow-templates'
   },
   'ark-cli': {
     title: 'Use the Ark CLI',
@@ -32,10 +28,28 @@ export default {
   },
   samples: {
     title: 'Sample patterns',
-    href: '/user-guide/samples/teams/team-strategies'
+    href: '/user-guide/samples/teams/github-team'
   },
   
-  '---extend': { type: 'separator', title: 'Extend ARK (contributors)' },
+  '---extend': { type: 'separator', title: 'Advanced use' },
+  marketplace: {
+    title: 'Publish to the Marketplace',
+    href: '/developer-guide/marketplace'
+  },
+  'a2a-servers': {
+    title: 'Build A2A servers',
+    href: '/developer-guide/building-a2a-servers'
+  },
+  workflows: {
+    title: 'Add workflows',
+    href: '/developer-guide/workflows'
+  },
+  observability: {
+    title: 'Observability',
+    href: '/developer-guide/observability'
+  },
+
+  '---develop': { type: 'separator', title: 'Develop ARK' },
   'local-development': {
     title: 'Build and run locally',
     href: '/developer-guide/local-development'
@@ -48,47 +62,35 @@ export default {
     title: 'Implement APIs and services',
     href: '/developer-guide/services'
   },
-  'a2a-servers': {
-    title: 'Build A2A servers',
-    href: '/developer-guide/building-a2a-servers'
-  },
-  workflows: {
-    title: 'Add workflows',
-    href: '/developer-guide/workflows'
-  },
   testing: {
     title: 'End to end testing',
     href: '/developer-guide/testing'
-  },
-  observability: {
-    title: 'Observability',
-    href: '/developer-guide/observability'
-  },
-  
-  '---operate': { type: 'separator', title: 'Operate ARK (operators / SRE)' },
-  provisioning: {
-    title: 'Cloud infrastructure',
-    href: '/operations-guide/provisioning'
-  },
-  deploying: {
-    title: 'Deploy ARK',
-    href: '/operations-guide/deploying-ark'
   },
   pipelines: {
     title: 'Build pipelines',
     href: '/operations-guide/build-pipelines'
   },
-  'pen-testing': {
-    title: 'Penetration testing',
-    href: '/operations-guide/penetration-testing-reports'
+
+  '---operate': { type: 'separator', title: 'Operate ARK (operators / SRE)' },
+  deploying: {
+    title: 'Deploy ARK',
+    href: '/operations-guide/deploying-ark'
   },
-  'code-analysis': {
-    title: 'Code analysis',
-    href: '/operations-guide/code-analysis-reports'
+  'multi-tenant-dashboard': {
+    title: 'Host the dashboard for multiple namespaces',
+    href: '/operations-guide/multi-tenant-dashboard-hosting'
   },
-  'artifact-analysis': {
-    title: 'Artifact analysis',
-    href: '/operations-guide/artifact-analysis-reports'
+  'tenant-namespaces': {
+    title: 'Manage tenants and namespaces',
+    href: '/operations-guide/tenant-namespace-management'
+  },
+  'operate-marketplace': {
+    title: 'Marketplace',
+    href: '/operations-guide/marketplace'
+  },
+  provisioning: {
+    title: 'Cloud deployments',
+    href: '/operations-guide/provisioning'
   }
 }
 
