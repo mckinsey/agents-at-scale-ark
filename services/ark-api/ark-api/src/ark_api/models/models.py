@@ -3,7 +3,7 @@ from typing import List, Dict, Optional, Literal, Union, Any
 
 from pydantic import BaseModel, Field
 
-from .common import AvailabilityStatus
+from .common import AvailabilityStatus, PaginatedListResponse
 from .agents import AgentHeader
 
 # Provider constants
@@ -104,10 +104,9 @@ class ModelResponse(BaseModel):
     annotations: Optional[Dict[str, str]] = None
 
 
-class ModelListResponse(BaseModel):
+class ModelListResponse(PaginatedListResponse):
     """List of models response model."""
     items: List[ModelResponse]
-    count: int
 
 
 class ModelCreateRequest(BaseModel):

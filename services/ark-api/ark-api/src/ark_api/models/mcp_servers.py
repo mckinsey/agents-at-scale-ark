@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, model_serializer
 
-from .common import AvailabilityStatus
+from .common import AvailabilityStatus, PaginatedListResponse
 
 
 class MCPServerConfigMapKeyRef(BaseModel):
@@ -82,9 +82,8 @@ class MCPServerResponse(BaseModel):
     authorization: Optional[MCPServerAuthorization] = None
 
 
-class MCPServerListResponse(BaseModel):
+class MCPServerListResponse(PaginatedListResponse):
     items: List[MCPServerResponse]
-    total: int
 
 
 class MCPServerDetailResponse(BaseModel):
