@@ -129,19 +129,24 @@ type Config struct {
 	AuditEnabled    bool
 	AuditPolicyFile string
 	AuditLogPath    string
-	// PolicyRequired makes CEL enforcement a startup precondition rather than best-effort.
-	PolicyRequired bool
-	// PolicyDisabled skips CEL enforcement wiring entirely, so the apiserver never watches
-	// cluster-wide policy objects. Inverted from the chart's `policy.enabled` deliberately:
+	// CELDisabled skips CEL enforcement wiring entirely, so the apiserver never watches
+	// cluster-wide policy objects. Inverted from the chart's `policy.cel.enabled` deliberately:
 	// the zero value must leave enforcement on, so a Config built without this field cannot
 	// end up silently unenforced.
-	PolicyDisabled bool
+	CELDisabled bool
+	// CELRequired makes CEL enforcement a startup precondition rather than best-effort.
+	CELRequired bool
 	// ThirdPartyWebhooks runs the webhook admission plugins, so ValidatingWebhookConfiguration
 	// and MutatingWebhookConfiguration objects — Kyverno, OPA/Gatekeeper — fire on Ark resources
 	// in apiserver mode, including on the direct service path. Off by default: it puts a
 	// synchronous call to every matching webhook on the write path, and Ark's own webhook
 	// configurations have to be suppressed first or Ark's validation runs twice.
 	ThirdPartyWebhooks bool
+	// ThirdPartyWebhooksRequired is the webhook counterpart of CELRequired, and is separate from
+	// it because the two mechanisms fail for unrelated reasons and a deployment can depend on
+	// either alone. A cluster that mandates Kyverno on Ark resources but does not use CEL policy
+	// needs strict webhooks with CEL off, which one shared flag cannot express.
+	ThirdPartyWebhooksRequired bool
 }
 
 const readyzPingTimeout = 2 * time.Second
@@ -383,7 +388,7 @@ func (s *Server) applyAudit(serverConfig *genericapiserver.Config) error {
 
 // applyAdmission wires the ValidatingAdmissionPolicy (CEL) plugin. Policy objects live in
 // the host cluster, so its informers and clients are built from RestConfig. Returns nil when
-// enforcement is not wired; PolicyRequired turns those cases into a startup error.
+// enforcement is not wired; a mechanism marked required turns its own cases into a startup error.
 // admissionPlan is what this apiserver will actually enforce, after config, host capability and
 // RBAC have each had a chance to veto. The two mechanisms are independent: CEL policy is
 // evaluated in-process, third-party webhooks are called out to, and losing one must not silently
@@ -395,23 +400,34 @@ type admissionPlan struct {
 
 func (p admissionPlan) any() bool { return p.cel || p.webhooks }
 
+// anyRequired reports whether a mechanism the operator declared mandatory is still in the plan,
+// so a failure that takes down every remaining mechanism at once — no REST config, for instance —
+// is judged against what was actually asked for rather than against CEL alone.
+func (s *Server) anyRequired(p admissionPlan) bool {
+	return (p.cel && s.config.CELRequired) || (p.webhooks && s.config.ThirdPartyWebhooksRequired)
+}
+
 func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiserver.Config) (informers.SharedInformerFactory, error) {
 	// Contradictory rather than merely redundant: honouring either one silently discards the
 	// operator's other instruction, and this is the class of misconfiguration where guessing
-	// means serving unenforced.
-	if s.config.PolicyDisabled && s.config.PolicyRequired {
-		return nil, fmt.Errorf("policy enforcement cannot be both disabled (policy.enabled=false) and required (policy.required=true); set at most one")
+	// means serving unenforced. Checked per mechanism, because "CEL off, webhooks mandatory" is
+	// a coherent request, not a contradiction.
+	if s.config.CELDisabled && s.config.CELRequired {
+		return nil, fmt.Errorf("CEL policy enforcement cannot be both disabled (policy.cel.enabled=false) and required (policy.cel.required=true); set at most one")
+	}
+	if !s.config.ThirdPartyWebhooks && s.config.ThirdPartyWebhooksRequired {
+		return nil, fmt.Errorf("third-party admission webhooks cannot be both disabled (policy.thirdPartyWebhooks.enabled=false) and required (policy.thirdPartyWebhooks.required=true); set at most one")
 	}
 
-	plan := admissionPlan{cel: !s.config.PolicyDisabled, webhooks: s.config.ThirdPartyWebhooks}
+	plan := admissionPlan{cel: !s.config.CELDisabled, webhooks: s.config.ThirdPartyWebhooks}
 	if !plan.any() {
-		klog.Info("Admission enforcement disabled by configuration (policy.enabled=false, policy.thirdPartyWebhooks=false); the apiserver will not watch cluster-wide policy or webhook objects — Ark in-process validation and audit remain active")
+		klog.Info("Admission enforcement disabled by configuration (policy.cel.enabled=false, policy.thirdPartyWebhooks.enabled=false); the apiserver will not watch cluster-wide policy or webhook objects — Ark in-process validation and audit remain active")
 		return nil, nil
 	}
 
 	if s.config.RestConfig == nil {
-		if s.config.PolicyRequired {
-			return nil, fmt.Errorf("policy enforcement is required but no host REST config is available to build the admission plugin's clients")
+		if s.anyRequired(plan) {
+			return nil, fmt.Errorf("admission enforcement is required but no host REST config is available to build the admission plugins' clients")
 		}
 		klog.Warning("No host REST config available; admission enforcement disabled — Ark in-process validation and audit remain active")
 		return nil, nil
@@ -456,16 +472,17 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 	// ApplyTo needs a non-nil gate; Complete() would default it, but only later.
 	serverConfig.FeatureGate = utilfeature.DefaultFeatureGate
 
-	admissionOpts, policyGate := s.admissionOptionsFor(plan, admissionInformers)
+	admissionOpts, gates := s.admissionOptionsFor(plan, admissionInformers)
 	if err := admissionOpts.ApplyTo(serverConfig, admissionInformers, kubeClient, dynClient, serverConfig.FeatureGate); err != nil {
 		return nil, fmt.Errorf("failed to apply admission options: %w", err)
 	}
 
 	if plan.cel {
-		metrics.SetPolicyReadyFunc(policyGate.ready)
+		metrics.SetEnforcementReadyFunc(metrics.MechanismCEL, gates.cel.ready)
 		klog.Info("ValidatingAdmissionPolicy (CEL) enforcement enabled")
 	}
 	if plan.webhooks {
+		metrics.SetEnforcementReadyFunc(metrics.MechanismWebhooks, gates.webhooks.ready)
 		// Ark's own webhook configurations must not be present in this mode or its validation
 		// runs twice; the controller chart stops rendering them when storage.backend is not etcd.
 		klog.Info("Third-party admission webhooks enabled; ValidatingWebhookConfiguration/MutatingWebhookConfiguration registered by Kyverno, OPA/Gatekeeper and similar now fire on Ark resources, including on the direct service path")
@@ -473,9 +490,16 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 	return admissionInformers, nil
 }
 
+// admissionGates holds the readiness gate for each wired mechanism. They back the enforcement
+// metric and select what best-effort degradation applies to; a mechanism that is off is nil.
+type admissionGates struct {
+	cel      *readinessGate
+	webhooks *readinessGate
+}
+
 // admissionOptionsFor selects the plugins for a plan and wraps them for best-effort degradation.
-// Also returns the CEL readiness gate, which backs the enforcement metric, or nil when CEL is off.
-func (s *Server) admissionOptionsFor(plan admissionPlan, admissionInformers informers.SharedInformerFactory) (*genericoptions.AdmissionOptions, *readinessGate) {
+// Also returns the readiness gates, which back the enforcement metric.
+func (s *Server) admissionOptionsFor(plan admissionPlan, admissionInformers informers.SharedInformerFactory) (*genericoptions.AdmissionOptions, admissionGates) {
 	// NamespaceLifecycle would judge namespace existence from this apiserver's own cache,
 	// duplicating what the host already enforces on the proxied path. MutatingAdmissionPolicy is
 	// out of scope: Ark applies its own defaulting in the storage path.
@@ -491,42 +515,49 @@ func (s *Server) admissionOptionsFor(plan admissionPlan, admissionInformers info
 	// Build a gate only for what is actually wired. Constructing one registers its informers on
 	// the shared factory and Complete() starts everything registered, so a gate built for a
 	// disabled mechanism leaves a reflector retrying a Forbidden list for the life of the process.
-	var policyGate *readinessGate
-	gates := map[string]*readinessGate{}
+	var gates admissionGates
 	if plan.cel {
-		policyGate = newPolicyReadinessGate(admissionInformers)
-		gates[validatingAdmissionPolicyPlugin] = policyGate
+		gates.cel = newPolicyReadinessGate(admissionInformers)
 	}
 	if plan.webhooks {
-		webhookGate := newWebhookReadinessGate(admissionInformers)
-		gates[validatingAdmissionWebhookPlugin] = webhookGate
-		gates[mutatingAdmissionWebhookPlugin] = webhookGate
+		gates.webhooks = newWebhookReadinessGate(admissionInformers)
 	}
 
 	// Best-effort mode short-circuits to allow when a plugin's informers have not synced; required
-	// mode leaves them unwrapped so they keep failing closed. Appended, not assigned:
-	// NewAdmissionOptions seeds Decorators with WithControllerMetrics.
-	if len(gates) > 0 && !s.config.PolicyRequired {
-		opts.Decorators = append(opts.Decorators, bestEffortDecorator(gates))
+	// mode leaves that mechanism's plugins unwrapped so they keep failing closed. Selected per
+	// mechanism, so requiring one does not quietly harden the other. Gates are still built for a
+	// required mechanism — the metric samples them either way.
+	degrade := map[string]*readinessGate{}
+	if plan.cel && !s.config.CELRequired {
+		degrade[validatingAdmissionPolicyPlugin] = gates.cel
 	}
-	return opts, policyGate
+	if plan.webhooks && !s.config.ThirdPartyWebhooksRequired {
+		degrade[validatingAdmissionWebhookPlugin] = gates.webhooks
+		degrade[mutatingAdmissionWebhookPlugin] = gates.webhooks
+	}
+
+	// Appended, not assigned: NewAdmissionOptions seeds Decorators with WithControllerMetrics.
+	if len(degrade) > 0 {
+		opts.Decorators = append(opts.Decorators, bestEffortDecorator(degrade))
+	}
+	return opts, gates
 }
 
-// resolveCELSupport reports whether CEL policy can be wired, honouring PolicyRequired: a host
-// that cannot serve ValidatingAdmissionPolicy is a startup error when policy is required and a
+// resolveCELSupport reports whether CEL policy can be wired, honouring CELRequired: a host
+// that cannot serve ValidatingAdmissionPolicy is a startup error when CEL policy is required and a
 // logged fallback otherwise.
 func (s *Server) resolveCELSupport(ctx context.Context, d discovery.DiscoveryInterface) (bool, error) {
 	served, err := discoverPolicySupport(ctx, d, policyDiscoveryAttempts, policyDiscoveryDelay)
 	switch {
 	case err != nil:
-		if s.config.PolicyRequired {
-			return false, fmt.Errorf("policy enforcement is required but ValidatingAdmissionPolicy support could not be determined: %w", err)
+		if s.config.CELRequired {
+			return false, fmt.Errorf("CEL policy enforcement is required but ValidatingAdmissionPolicy support could not be determined: %w", err)
 		}
-		klog.Errorf("Could not determine whether the host cluster serves ValidatingAdmissionPolicy: %v. CEL policy enforcement is DISABLED for the lifetime of this process (Ark in-process validation and audit remain active). This is a fallback after a failed discovery probe, not a version check — set policy.required=true to fail startup instead of continuing unenforced.", err)
+		klog.Errorf("Could not determine whether the host cluster serves ValidatingAdmissionPolicy: %v. CEL policy enforcement is DISABLED for the lifetime of this process (Ark in-process validation and audit remain active). This is a fallback after a failed discovery probe, not a version check — set policy.cel.required=true to fail startup instead of continuing unenforced.", err)
 		return false, nil
 	case !served:
-		if s.config.PolicyRequired {
-			return false, fmt.Errorf("policy enforcement is required but the host cluster does not serve ValidatingAdmissionPolicy (requires k8s >=1.30)")
+		if s.config.CELRequired {
+			return false, fmt.Errorf("CEL policy enforcement is required but the host cluster does not serve ValidatingAdmissionPolicy (requires k8s >=1.30)")
 		}
 		klog.Warning("Host cluster does not serve ValidatingAdmissionPolicy (requires k8s >=1.30); CEL policy enforcement disabled — Ark in-process validation and audit remain active")
 		return false, nil
@@ -539,16 +570,19 @@ func (s *Server) resolveCELSupport(ctx context.Context, d discovery.DiscoveryInt
 func (s *Server) resolveWatchPermissions(ctx context.Context, c authorizationv1client.AuthorizationV1Interface, plan admissionPlan) (admissionPlan, error) {
 	if plan.cel {
 		if err := checkWatchPermissions(ctx, c, policyWatchResources, "ark-apiserver-admission-policy"); err != nil {
-			if s.config.PolicyRequired {
-				return plan, fmt.Errorf("policy enforcement is required but %w", err)
+			if s.config.CELRequired {
+				return plan, fmt.Errorf("CEL policy enforcement is required but %w", err)
 			}
-			klog.Errorf("%v. CEL policy enforcement is DISABLED for the lifetime of this process (Ark in-process validation and audit remain active) — set policy.required=true to fail startup instead of continuing unenforced.", err)
+			klog.Errorf("%v. CEL policy enforcement is DISABLED for the lifetime of this process (Ark in-process validation and audit remain active) — set policy.cel.required=true to fail startup instead of continuing unenforced.", err)
 			plan.cel = false
 		}
 	}
 	if plan.webhooks {
 		if err := checkWatchPermissions(ctx, c, webhookWatchResources, "ark-apiserver-admission-webhooks"); err != nil {
-			klog.Errorf("%v. Third-party admission webhooks are DISABLED for the lifetime of this process (Ark in-process validation and audit remain active).", err)
+			if s.config.ThirdPartyWebhooksRequired {
+				return plan, fmt.Errorf("third-party admission webhooks are required but %w", err)
+			}
+			klog.Errorf("%v. Third-party admission webhooks are DISABLED for the lifetime of this process (Ark in-process validation and audit remain active) — set policy.thirdPartyWebhooks.required=true to fail startup instead of continuing unenforced.", err)
 			plan.webhooks = false
 		}
 	}
@@ -581,7 +615,7 @@ var webhookWatchResources = []authorizationv1.ResourceAttributes{
 // informers watch, so a missing grant lands on the same fallback as an unsupported host. The
 // review itself needs no extra RBAC: system:basic-user grants selfsubjectaccessreviews to every
 // authenticated identity. It only covers the grant existing now — a binding deleted later still
-// fails at request time, which is what policy.required is for.
+// fails at request time, which is what that mechanism's `required` is for.
 func checkWatchPermissions(ctx context.Context, c authorizationv1client.AuthorizationV1Interface, resources []authorizationv1.ResourceAttributes, boundBy string) error {
 	for _, attrs := range resources {
 		review := &authorizationv1.SelfSubjectAccessReview{

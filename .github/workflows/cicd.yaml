@@ -730,7 +730,7 @@ jobs:
         with:
           artifact-name: coverage-reports-standard-${{ matrix.storage-backend }}
 
-  # Separate from e2e-tests-standard because it needs policy.thirdPartyWebhooks=true,
+  # Separate from e2e-tests-standard because it needs policy.thirdPartyWebhooks.enabled=true,
   # which the standard postgresql leg deliberately leaves off so its tests exercise the
   # shipped default. Enabling it there would put every write in that leg on the webhook
   # admission path.

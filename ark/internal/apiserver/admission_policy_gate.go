@@ -61,11 +61,12 @@ func newWebhookReadinessGate(f informers.SharedInformerFactory) *readinessGate {
 	}}
 }
 
-// bestEffortDecorator makes policy.required=false mean at runtime what it already means at
+// bestEffortDecorator makes a mechanism's required=false mean at runtime what it already means at
 // startup. Upstream does not degrade when a plugin's informers stall — it fails closed, per
 // request, after a 10s wait. That is correct for required=true, where the operator has declared
-// policy a control and the plugins are left unwrapped. It contradicts required=false, which
-// promises the apiserver keeps serving with enforcement off.
+// that mechanism a control and its plugins are left unwrapped. It contradicts required=false,
+// which promises the apiserver keeps serving with enforcement off. Only the plugins of a
+// mechanism left best-effort are passed in, so requiring one does not harden the other.
 //
 // Append this to AdmissionOptions.Decorators rather than replacing the slice: NewAdmissionOptions
 // seeds it with WithControllerMetrics, and overwriting it drops the admission metrics.
@@ -106,7 +107,7 @@ func (b bestEffortBase) skip(a admission.Attributes) bool {
 	if b.gate.ready() {
 		return false
 	}
-	klog.V(2).InfoS("Admitting without evaluating an admission plugin: its informers have not synced (policy.required=false)",
+	klog.V(2).InfoS("Admitting without evaluating an admission plugin: its informers have not synced (required=false for this mechanism)",
 		"plugin", b.plugin, "resource", a.GetResource().String(), "operation", a.GetOperation(),
 		"namespace", a.GetNamespace(), "name", a.GetName())
 	return true

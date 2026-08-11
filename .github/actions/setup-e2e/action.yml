@@ -43,7 +43,7 @@ inputs:
     required: false
     default: 'false'
   enable-third-party-webhooks:
-    description: 'Set policy.thirdPartyWebhooks=true on the aggregated apiserver (postgresql backend only)'
+    description: 'Set policy.thirdPartyWebhooks.enabled=true on the aggregated apiserver (postgresql backend only)'
     required: false
     default: 'false'
 

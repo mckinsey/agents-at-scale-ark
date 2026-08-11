@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --install-broker        Install ark-broker (only needed for tests that use it)"
       echo "  --storage-backend       Storage backend to use (default: etcd)"
       echo "  --prefetch-test-images  Pre-pull chainsaw test images (mock-llm, curl, mockserver, etc.)"
-      echo "  --enable-third-party-webhooks  Set policy.thirdPartyWebhooks=true on the apiserver (postgresql only)"
+      echo "  --enable-third-party-webhooks  Set policy.thirdPartyWebhooks.enabled=true on the apiserver (postgresql only)"
       exit 0
       ;;
     *)
@@ -229,7 +229,7 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
     --set postgresql.sslMode=verify-full \
     --set postgresql.sslSecretName=ark-storage-dev-tls \
     --set postgresql.sslRootCertKey=ca.crt \
-    --set policy.thirdPartyWebhooks="${ENABLE_THIRD_PARTY_WEBHOOKS}"
+    --set policy.thirdPartyWebhooks.enabled="${ENABLE_THIRD_PARTY_WEBHOOKS}"
 fi
 
 echo "=== Installing ARK Completions (background) ==="

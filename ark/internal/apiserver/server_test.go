@@ -19,8 +19,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
+	"k8s.io/apiserver/pkg/admission"
 	genericapiserver "k8s.io/apiserver/pkg/server"
+	genericoptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	clientrest "k8s.io/client-go/rest"
 	k8stesting "k8s.io/client-go/testing"
@@ -223,11 +226,11 @@ func TestApplyAdmission_SucceedsWithoutAnAuthorizer(t *testing.T) {
 	}
 }
 
-// PolicyRequired must fail loudly rather than start silently unenforced.
-func TestApplyAdmission_PolicyRequiredFailsClosed(t *testing.T) {
+// A required mechanism must fail loudly rather than start silently unenforced.
+func TestApplyAdmission_RequiredFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	s := &Server{config: Config{PolicyRequired: true}} // no RestConfig => cannot wire policy
+	s := &Server{config: Config{CELRequired: true}} // no RestConfig => cannot wire policy
 	_, err := s.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
 	if err == nil {
 		t.Fatal("expected startup to fail when policy is required but cannot be wired")
@@ -240,7 +243,7 @@ func TestApplyAdmission_PolicyRequiredFailsClosed(t *testing.T) {
 func TestApplyAdmission_BestEffortSkipsWhenUnwirable(t *testing.T) {
 	t.Parallel()
 
-	s := &Server{config: Config{PolicyRequired: false}} // no RestConfig
+	s := &Server{config: Config{CELRequired: false}} // no RestConfig
 	inf, err := s.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
 	if err != nil {
 		t.Fatalf("best-effort mode should not fail startup: %v", err)
@@ -250,12 +253,12 @@ func TestApplyAdmission_BestEffortSkipsWhenUnwirable(t *testing.T) {
 	}
 }
 
-// policy.enabled=false must skip wiring before any host call, so an operator who opts out is
+// policy.cel.enabled=false must skip wiring before any host call, so an operator who opts out is
 // not left depending on discovery or RBAC succeeding.
 func TestApplyAdmission_DisabledSkipsWiringEntirely(t *testing.T) {
 	t.Parallel()
 
-	s := &Server{config: Config{PolicyDisabled: true, RestConfig: &clientrest.Config{Host: "https://unreachable.invalid"}}}
+	s := &Server{config: Config{CELDisabled: true, RestConfig: &clientrest.Config{Host: "https://unreachable.invalid"}}}
 	cfg := genericapiserver.NewConfig(Codecs)
 	inf, err := s.applyAdmission(context.Background(), cfg)
 	if err != nil {
@@ -274,7 +277,7 @@ func TestApplyAdmission_DisabledSkipsWiringEntirely(t *testing.T) {
 func TestApplyAdmission_DisabledAndRequiredConflict(t *testing.T) {
 	t.Parallel()
 
-	s := &Server{config: Config{PolicyDisabled: true, PolicyRequired: true}}
+	s := &Server{config: Config{CELDisabled: true, CELRequired: true}}
 	_, err := s.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
 	if err == nil {
 		t.Fatal("expected startup to fail when policy enforcement is both disabled and required")
@@ -284,6 +287,184 @@ func TestApplyAdmission_DisabledAndRequiredConflict(t *testing.T) {
 			t.Errorf("error should mention %q, got: %v", want, err)
 		}
 	}
+}
+
+// The webhook mechanism gets the same contradiction check as CEL, rather than silently ignoring
+// an operator who marked it mandatory.
+func TestApplyAdmission_WebhooksDisabledAndRequiredConflict(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{config: Config{ThirdPartyWebhooksRequired: true}} // ThirdPartyWebhooks left off
+	_, err := s.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
+	if err == nil {
+		t.Fatal("expected startup to fail when third-party webhooks are both disabled and required")
+	}
+	for _, want := range []string{"webhooks", "disabled", "required"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
+	}
+}
+
+// "No CEL, strict webhooks" is the deployment that motivated splitting the flag: an external
+// engine is the compliance control on Ark resources and CEL policy is not in use. A single shared
+// `required` could not express it, because disabling CEL and requiring enforcement was rejected
+// outright. It must now reach the wiring and fail on the webhook mechanism's own terms.
+func TestApplyAdmission_StrictWebhooksWithoutCELIsReachable(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{config: Config{
+		CELDisabled:                true,
+		ThirdPartyWebhooks:         true,
+		ThirdPartyWebhooksRequired: true,
+	}}
+	_, err := s.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
+	if err == nil {
+		t.Fatal("expected startup to fail: webhooks are required and there is no host REST config to wire them")
+	}
+	// Failing for the right reason. A config-level rejection would report the combination as
+	// contradictory rather than reporting what could not be wired.
+	if strings.Contains(err.Error(), "set at most one") {
+		t.Errorf("the combination must not be rejected as contradictory, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "REST config") {
+		t.Errorf("error should name the missing REST config, got: %v", err)
+	}
+}
+
+// The gap this change closes: a ServiceAccount that cannot watch the webhook configurations left
+// the plugins silently off, whatever the operator asked for. Someone enables third-party webhooks
+// because Kyverno must apply to Ark resources, the ClusterRoleBinding is missing, and the only
+// trace is a log line.
+func TestResolveWatchPermissions_WebhookRBACHonoursRequired(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		required bool
+		wantErr  string
+		wantPlan admissionPlan
+	}{
+		{
+			name:     "best-effort degrades to unenforced",
+			wantPlan: admissionPlan{cel: true},
+		},
+		{
+			name:     "required fails startup",
+			required: true,
+			wantErr:  "ark-apiserver-admission-webhooks",
+			wantPlan: admissionPlan{cel: true, webhooks: true},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Only the webhook watches are denied, so a failure here cannot be the CEL branch.
+			cs := fake.NewSimpleClientset()
+			cs.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				review := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+				resource := review.Spec.ResourceAttributes.Resource
+				review.Status.Allowed = resource != "validatingwebhookconfigurations" &&
+					resource != "mutatingwebhookconfigurations"
+				return true, review, nil
+			})
+
+			s := &Server{config: Config{ThirdPartyWebhooks: true, ThirdPartyWebhooksRequired: tc.required}}
+			plan, err := s.resolveWatchPermissions(context.Background(), cs.AuthorizationV1(),
+				admissionPlan{cel: true, webhooks: true})
+
+			assertWebhookRBACOutcome(t, err, tc.wantErr)
+			if plan != tc.wantPlan {
+				t.Errorf("plan = %+v, want %+v", plan, tc.wantPlan)
+			}
+			if !plan.cel {
+				t.Error("a missing webhook grant must not take CEL enforcement with it")
+			}
+		})
+	}
+}
+
+func assertWebhookRBACOutcome(t *testing.T, err error, wantErr string) {
+	t.Helper()
+
+	if wantErr == "" {
+		if err != nil {
+			t.Fatalf("best-effort mode must not fail startup: %v", err)
+		}
+		return
+	}
+	if err == nil {
+		t.Fatal("expected startup to fail when the webhook watches are required but not granted")
+	}
+	// Both halves matter: which grant is missing, and that it was the webhook mechanism's own
+	// required flag that turned it into a startup failure.
+	for _, want := range []string{wantErr, "required"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
+	}
+}
+
+// Requiring one mechanism must not quietly harden the other: the runtime best-effort wrapper is
+// what makes required=false mean at runtime what it means at startup, and it is selected per
+// mechanism.
+func TestAdmissionOptionsFor_BestEffortScopedPerMechanism(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name                      string
+		celRequired, webhooksReq  bool
+		wantCELGated, wantWHGated bool
+	}{
+		{name: "neither required wraps both", wantCELGated: true, wantWHGated: true},
+		{name: "CEL required leaves CEL failing closed", celRequired: true, wantWHGated: true},
+		{name: "webhooks required leaves webhooks failing closed", webhooksReq: true, wantCELGated: true},
+		{name: "both required wraps nothing", celRequired: true, webhooksReq: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := &Server{config: Config{
+				CELRequired:                tc.celRequired,
+				ThirdPartyWebhooks:         true,
+				ThirdPartyWebhooksRequired: tc.webhooksReq,
+			}}
+			informerFactory := informers.NewSharedInformerFactory(fake.NewSimpleClientset(), 0)
+			opts, gates := s.admissionOptionsFor(admissionPlan{cel: true, webhooks: true}, informerFactory)
+
+			// Gates are built for every wired mechanism regardless of strictness -- the
+			// enforcement metric samples them either way.
+			if gates.cel == nil || gates.webhooks == nil {
+				t.Fatalf("expected a gate per wired mechanism, got %+v", gates)
+			}
+
+			for plugin, want := range map[string]bool{
+				validatingAdmissionPolicyPlugin:  tc.wantCELGated,
+				validatingAdmissionWebhookPlugin: tc.wantWHGated,
+				mutatingAdmissionWebhookPlugin:   tc.wantWHGated,
+			} {
+				if got := pluginIsGated(opts, plugin); got != want {
+					t.Errorf("%s best-effort gated = %v, want %v", plugin, got, want)
+				}
+			}
+		})
+	}
+}
+
+// pluginIsGated reports whether the best-effort decorator wraps a plugin. Only the appended
+// decorator is consulted: NewAdmissionOptions seeds the slice with WithControllerMetrics, which
+// wraps everything and would mask the distinction.
+func pluginIsGated(opts *genericoptions.AdmissionOptions, plugin string) bool {
+	seeded := len(genericoptions.NewAdmissionOptions().Decorators)
+	if len(opts.Decorators) == seeded {
+		return false
+	}
+	inner := &stubValidator{}
+	return opts.Decorators[len(opts.Decorators)-1].Decorate(inner, plugin) != admission.Interface(inner)
 }
 
 func TestCheckWatchPermissions(t *testing.T) {
@@ -391,7 +572,7 @@ func TestApplyAdmission_MissingWatchRBACFallsBack(t *testing.T) {
 		t.Error("expected no admission chain, since its informers could never sync")
 	}
 
-	required := &Server{config: Config{RestConfig: restCfg, PolicyRequired: true}}
+	required := &Server{config: Config{RestConfig: restCfg, CELRequired: true}}
 	_, err = required.applyAdmission(context.Background(), genericapiserver.NewConfig(Codecs))
 	if err == nil {
 		t.Fatal("expected startup to fail on missing watch RBAC when policy is required")
@@ -835,7 +1016,7 @@ func TestResolveCELSupport(t *testing.T) {
 				cancel()
 			}
 
-			s := &Server{config: Config{PolicyRequired: tc.policyRequired}}
+			s := &Server{config: Config{CELRequired: tc.policyRequired}}
 			cel, err := s.resolveCELSupport(ctx, tc.discovery)
 
 			if tc.wantErr != "" {
@@ -852,7 +1033,7 @@ func TestResolveCELSupport(t *testing.T) {
 	}
 }
 
-// assertFailsClosed pins the PolicyRequired outcome: a startup error naming the reason, and no
+// assertFailsClosed pins the CELRequired outcome: a startup error naming the reason, and no
 // claim that CEL is enabled alongside it.
 func assertFailsClosed(t *testing.T, cel bool, err error, wantErr string) {
 	t.Helper()

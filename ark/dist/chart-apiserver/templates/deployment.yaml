@@ -19,8 +19,11 @@ spec:
       {{- if or (and $ssl.sslClientCertKey (not $ssl.sslClientKeyKey)) (and $ssl.sslClientKeyKey (not $ssl.sslClientCertKey)) }}
       {{- fail "postgresql.sslClientCertKey and postgresql.sslClientKeyKey must be set together for mutual TLS" }}
       {{- end }}
-      {{- if and .Values.policy.required (not .Values.policy.enabled) }}
-      {{- fail "policy.required=true conflicts with policy.enabled=false: enforcement cannot be both mandatory and switched off — the apiserver would refuse to start" }}
+      {{- if and .Values.policy.cel.required (not .Values.policy.cel.enabled) }}
+      {{- fail "policy.cel.required=true conflicts with policy.cel.enabled=false: enforcement cannot be both mandatory and switched off — the apiserver would refuse to start" }}
+      {{- end }}
+      {{- if and .Values.policy.thirdPartyWebhooks.required (not .Values.policy.thirdPartyWebhooks.enabled) }}
+      {{- fail "policy.thirdPartyWebhooks.required=true conflicts with policy.thirdPartyWebhooks.enabled=false: enforcement cannot be both mandatory and switched off — the apiserver would refuse to start" }}
       {{- end }}
       serviceAccountName: {{ .Values.serviceAccountName }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
@@ -64,12 +67,14 @@ spec:
             - name: ARK_APISERVER_AUDIT_ENABLED
               value: "false"
             {{- end }}
-            - name: ARK_APISERVER_POLICY_ENABLED
-              value: {{ .Values.policy.enabled | quote }}
-            - name: ARK_APISERVER_POLICY_REQUIRED
-              value: {{ .Values.policy.required | quote }}
-            - name: ARK_APISERVER_THIRD_PARTY_WEBHOOKS
-              value: {{ .Values.policy.thirdPartyWebhooks | quote }}
+            - name: ARK_APISERVER_POLICY_CEL_ENABLED
+              value: {{ .Values.policy.cel.enabled | quote }}
+            - name: ARK_APISERVER_POLICY_CEL_REQUIRED
+              value: {{ .Values.policy.cel.required | quote }}
+            - name: ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_ENABLED
+              value: {{ .Values.policy.thirdPartyWebhooks.enabled | quote }}
+            - name: ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED
+              value: {{ .Values.policy.thirdPartyWebhooks.required | quote }}
             {{- range $key, $value := .Values.extraEnv }}
             - name: {{ $key }}
               value: {{ $value | quote }}

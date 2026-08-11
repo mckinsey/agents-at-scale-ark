@@ -45,7 +45,7 @@ one #2684 calls out as completely unprotected.
 
 - The `postgresql` backend matrix — in etcd mode Ark resources are CRDs on the main
   kube-apiserver, which already runs the webhook chain, so none of this applies.
-- `policy.thirdPartyWebhooks=true` on the `chart-apiserver` chart. Off by default: it puts a
+- `policy.thirdPartyWebhooks.enabled=true` on the `chart-apiserver` chart. Off by default: it puts a
   synchronous call to every matching webhook on the write path, and a webhook with
   `failurePolicy: Fail` couples Ark writes to that engine's availability.
 

@@ -399,7 +399,7 @@ func TestBestEffortSinglePhaseHandlers(t *testing.T) {
 	}{
 		{
 			// The whole point: an unsynced plugin would stall 10s in WaitForReady and then 403.
-			// policy.required=false promises we keep serving instead.
+			// required=false promises we keep serving instead.
 			name:       "unsynced short-circuits to allow without reaching the plugin",
 			synced:     false,
 			innerErr:   denied,

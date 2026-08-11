@@ -89,7 +89,7 @@ subjects:
   - kind: ServiceAccount
     name: {{ .Values.serviceAccountName }}
     namespace: {{ .Release.Namespace }}
-{{- if .Values.policy.enabled }}
+{{- if .Values.policy.cel.enabled }}
 ---
 # The ValidatingAdmissionPolicy admission plugin watches policy objects from the
 # host kube-apiserver to enforce CEL policy on Ark resources in apiserver mode.
@@ -131,7 +131,7 @@ subjects:
     name: {{ .Values.serviceAccountName }}
     namespace: {{ .Release.Namespace }}
 {{- end }}
-{{- if .Values.policy.thirdPartyWebhooks }}
+{{- if .Values.policy.thirdPartyWebhooks.enabled }}
 ---
 # The webhook admission plugins watch the webhook configurations from the host kube-apiserver to
 # know which webhooks to call for a given resource. Without this the managers' informers cannot
@@ -149,7 +149,7 @@ rules:
     verbs: ["get", "list", "watch"]
   # Webhook matching evaluates namespaceSelector, so the namespace informer is load-bearing here
   # too. Granted independently of the policy role: third-party webhooks can run with
-  # policy.enabled=false, and then nothing else would grant it.
+  # policy.cel.enabled=false, and then nothing else would grant it.
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get", "list", "watch"]

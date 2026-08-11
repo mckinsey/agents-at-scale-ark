@@ -157,8 +157,10 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 		"ARK_APISERVER_AUDIT_ENABLED",
 		"ARK_APISERVER_AUDIT_POLICY_FILE",
 		"ARK_APISERVER_AUDIT_LOG_PATH",
-		"ARK_APISERVER_POLICY_REQUIRED",
-		"ARK_APISERVER_POLICY_ENABLED",
+		"ARK_APISERVER_POLICY_CEL_ENABLED",
+		"ARK_APISERVER_POLICY_CEL_REQUIRED",
+		"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_ENABLED",
+		"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED",
 	}
 
 	cases := []struct {
@@ -190,30 +192,48 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 			want: apiserver.Config{PostgresSSL: "require", AuditEnabled: true, AuditLogPath: "-"},
 		},
 		{
-			name: "policy enforcement can be made a startup requirement",
-			env:  map[string]string{"ARK_APISERVER_POLICY_REQUIRED": "true"},
-			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-", PolicyRequired: true},
+			name: "CEL enforcement can be made a startup requirement",
+			env:  map[string]string{"ARK_APISERVER_POLICY_CEL_REQUIRED": "true"},
+			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-", CELRequired: true},
 		},
 		{
-			name:    "invalid policy required bool",
-			env:     map[string]string{"ARK_APISERVER_POLICY_REQUIRED": "sometimes"},
-			wantErr: "ARK_APISERVER_POLICY_REQUIRED",
+			name:    "invalid CEL required bool",
+			env:     map[string]string{"ARK_APISERVER_POLICY_CEL_REQUIRED": "sometimes"},
+			wantErr: "ARK_APISERVER_POLICY_CEL_REQUIRED",
 		},
 		{
-			// Enabled is the default, so only an explicit opt-out sets PolicyDisabled.
-			name: "policy enforcement can be switched off",
-			env:  map[string]string{"ARK_APISERVER_POLICY_ENABLED": "false"},
-			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-", PolicyDisabled: true},
+			// Enabled is the default, so only an explicit opt-out sets CELDisabled.
+			name: "CEL enforcement can be switched off",
+			env:  map[string]string{"ARK_APISERVER_POLICY_CEL_ENABLED": "false"},
+			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-", CELDisabled: true},
 		},
 		{
-			name: "policy enabled explicitly leaves enforcement wired",
-			env:  map[string]string{"ARK_APISERVER_POLICY_ENABLED": "true"},
+			name: "CEL enabled explicitly leaves enforcement wired",
+			env:  map[string]string{"ARK_APISERVER_POLICY_CEL_ENABLED": "true"},
 			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-"},
 		},
 		{
-			name:    "invalid policy enabled bool",
-			env:     map[string]string{"ARK_APISERVER_POLICY_ENABLED": "maybe"},
-			wantErr: "ARK_APISERVER_POLICY_ENABLED",
+			name:    "invalid CEL enabled bool",
+			env:     map[string]string{"ARK_APISERVER_POLICY_CEL_ENABLED": "maybe"},
+			wantErr: "ARK_APISERVER_POLICY_CEL_ENABLED",
+		},
+		{
+			// The combination one shared flag could not express: webhooks mandatory with CEL
+			// left at its best-effort default.
+			name: "third-party webhooks can be required independently of CEL",
+			env: map[string]string{
+				"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_ENABLED":  "true",
+				"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED": "true",
+			},
+			want: apiserver.Config{
+				PostgresSSL: "require", AuditLogPath: "-",
+				ThirdPartyWebhooks: true, ThirdPartyWebhooksRequired: true,
+			},
+		},
+		{
+			name:    "invalid third-party webhooks required bool",
+			env:     map[string]string{"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED": "sometimes"},
+			wantErr: "ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED",
 		},
 		{
 			name: "every variable set",

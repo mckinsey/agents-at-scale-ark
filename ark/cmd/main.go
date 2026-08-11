@@ -483,19 +483,22 @@ func apiserverConfigFromEnv() (apiserver.Config, error) {
 		cfg.AuditEnabled = false
 	}
 
-	// Unset means enabled: enforcement is the default, and only an explicit opt-out removes
+	// Unset means enabled: CEL enforcement is the default, and only an explicit opt-out removes
 	// the cluster-wide policy watches.
-	policyEnabled := true
-	if err := envBool("ARK_APISERVER_POLICY_ENABLED", &policyEnabled); err != nil {
+	celEnabled := true
+	if err := envBool("ARK_APISERVER_POLICY_CEL_ENABLED", &celEnabled); err != nil {
 		return cfg, err
 	}
-	cfg.PolicyDisabled = !policyEnabled
+	cfg.CELDisabled = !celEnabled
+	if err := envBool("ARK_APISERVER_POLICY_CEL_REQUIRED", &cfg.CELRequired); err != nil {
+		return cfg, err
+	}
 
 	// Off unless asked for: enabling it puts a synchronous webhook call on every write.
-	if err := envBool("ARK_APISERVER_THIRD_PARTY_WEBHOOKS", &cfg.ThirdPartyWebhooks); err != nil {
+	if err := envBool("ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_ENABLED", &cfg.ThirdPartyWebhooks); err != nil {
 		return cfg, err
 	}
-	if err := envBool("ARK_APISERVER_POLICY_REQUIRED", &cfg.PolicyRequired); err != nil {
+	if err := envBool("ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED", &cfg.ThirdPartyWebhooksRequired); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
