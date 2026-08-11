@@ -43,6 +43,7 @@ export function ChatPanel({
     messages,
     isProcessing,
     processingPhase,
+    statusText,
     isWaitingForApprovalResponse,
     error,
     sendMessage,
@@ -130,6 +131,7 @@ export function ChatPanel({
             debugMode={debugMode}
             isProcessing={isProcessing}
             processingPhase={processingPhase}
+            statusText={statusText}
             isWaitingForApprovalResponse={isWaitingForApprovalResponse}
             error={error}
             viewMode={viewMode}

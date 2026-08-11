@@ -106,7 +106,73 @@ class TestARKResourceClient(BaseTestCase):
             plural="testresources",
             label_selector="app=test"
         )
-    
+
+    def _page_client(self):
+        return ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default"
+        )
+
+    def test_list_page_passes_limit_and_continue(self):
+        """list_page forwards limit and _continue to the API server"""
+        self.mock_api_client.list_namespaced_custom_object.return_value = {
+            'items': [self.sample_resource_data],
+            'metadata': {'continue': 'next-token', 'remainingItemCount': 5},
+        }
+
+        result = self._page_client().list_page(limit=1, continue_token="prev-token")
+
+        self.mock_api_client.list_namespaced_custom_object.assert_called_once_with(
+            group="test.io",
+            version="v1",
+            namespace="default",
+            plural="testresources",
+            limit=1,
+            _continue="prev-token"
+        )
+        self.assertEqual(len(result.items), 1)
+        self.assertEqual(result.continue_token, "next-token")
+        self.assertEqual(result.remaining_item_count, 5)
+
+    def test_list_page_omits_none_kwargs(self):
+        """list_page must NOT pass limit/_continue when they are None"""
+        self.mock_api_client.list_namespaced_custom_object.return_value = {'items': []}
+
+        self._page_client().list_page()
+
+        self.mock_api_client.list_namespaced_custom_object.assert_called_once_with(
+            group="test.io",
+            version="v1",
+            namespace="default",
+            plural="testresources"
+        )
+
+    def test_list_page_continue_token_none_on_last_page(self):
+        """list_page returns continue_token=None when the API omits continue"""
+        self.mock_api_client.list_namespaced_custom_object.return_value = {
+            'items': [self.sample_resource_data],
+            'metadata': {},
+        }
+
+        result = self._page_client().list_page(limit=10)
+
+        self.assertIsNone(result.continue_token)
+        self.assertIsNone(result.remaining_item_count)
+
+    def test_list_page_empty_continue_string_becomes_none(self):
+        """An empty continue string from the API is normalized to None"""
+        self.mock_api_client.list_namespaced_custom_object.return_value = {
+            'items': [],
+            'metadata': {'continue': ''},
+        }
+
+        result = self._page_client().list_page(limit=10)
+
+        self.assertIsNone(result.continue_token)
+
     def test_update_resource(self):
         """Test updating a resource"""
         

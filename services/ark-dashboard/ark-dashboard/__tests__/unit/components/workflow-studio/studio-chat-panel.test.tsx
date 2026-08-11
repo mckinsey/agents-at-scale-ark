@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioChatPanel } from '@/components/workflow-studio/studio-chat-panel';
+import { EXPERIMENTAL_NOTICE_STORAGE_KEY } from '@/components/workflow-studio/use-experimental-notice';
 import { useStudioChat } from '@/components/workflow-studio/use-studio-chat';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { chatService } from '@/lib/services/chat';
@@ -199,6 +200,8 @@ async function waitForTurnComplete() {
 describe('StudioChatPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
+    window.localStorage.setItem(EXPERIMENTAL_NOTICE_STORAGE_KEY, 'true');
   });
 
   describe('loading', () => {
@@ -591,6 +594,45 @@ describe('StudioChatPanel', () => {
       expect(screen.getByTestId('studio-chat-input')).toHaveValue(
         'a much longer prompt written in the modal',
       );
+    });
+  });
+
+  describe('experimental notice', () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it('blocks the composer on first use and unblocks it after dismissal', async () => {
+      renderPanel();
+
+      expect(
+        await screen.findByTestId('studio-experimental-notice'),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+      expect(screen.getByTestId('studio-chat-send')).toBeDisabled();
+      expect(screen.getByTestId('studio-chat-suggestion-0')).toBeDisabled();
+
+      fireEvent.click(
+        screen.getByTestId('studio-experimental-notice-dismiss'),
+      );
+
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId('studio-experimental-notice'),
+        ).toBeNull(),
+      );
+      expect(screen.getByTestId('studio-chat-input')).not.toBeDisabled();
+      expect(screen.getByTestId('studio-chat-suggestion-0')).not.toBeDisabled();
+    });
+
+    it('stays hidden once acknowledged in localStorage', () => {
+      window.localStorage.setItem(EXPERIMENTAL_NOTICE_STORAGE_KEY, 'true');
+      renderPanel();
+
+      expect(
+        screen.queryByTestId('studio-experimental-notice'),
+      ).toBeNull();
+      expect(screen.getByTestId('studio-chat-input')).not.toBeDisabled();
     });
   });
 
