@@ -52,6 +52,11 @@ class MCPServerValueSource(BaseModel):
             }
 
 
+class MCPServerAddressSource(BaseModel):
+    value: Optional[str] = None
+    valueFrom: Optional[MCPServerValueFrom] = None
+
+
 class MCPServerHeader(BaseModel):
     name: str
     value: MCPServerValueSource
@@ -95,7 +100,7 @@ class MCPServerDetailResponse(BaseModel):
     annotations: Optional[Dict[str, str]] = None
     available: Optional[AvailabilityStatus] = None
     address: Optional[str] = None
-    address_source: Optional[MCPServerValueSource] = None
+    address_source: Optional[MCPServerAddressSource] = None
     transport: Optional[str] = None
     headers: Optional[List[MCPServerHeader]]
     tool_count: Optional[int] = None

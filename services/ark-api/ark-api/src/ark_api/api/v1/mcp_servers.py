@@ -18,7 +18,7 @@ from ...models.mcp_servers import (
     MCPServerUpdateRequest,
     MCPServerDetailResponse,
     MCPServerAuthorization,
-    MCPServerValueSource,
+    MCPServerAddressSource,
 )
 from ...models.common import AvailabilityStatus, extract_availability_from_conditions
 from ...services.mcp_auth_persistence import (
@@ -105,7 +105,7 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
         available=availability,
         status=status,
         address=status.get("resolvedAddress"),
-        address_source=MCPServerValueSource(**address_spec) if address_spec else None,
+        address_source=MCPServerAddressSource(**address_spec) if address_spec else None,
         transport=spec.get("transport"),
         tool_count=status.get("toolCount"),
         authorization=_build_authorization(status, metadata.get("annotations")),

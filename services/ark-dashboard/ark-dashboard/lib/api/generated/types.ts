@@ -3701,6 +3701,12 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
+        /** MCPServerAddressSource */
+        MCPServerAddressSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MCPServerValueFrom"] | null;
+        };
         /**
          * MCPServerAuthorization
          * @description Authorization state of an MCPServer, for rendering state and expiry.
@@ -3749,6 +3755,7 @@ export interface components {
         MCPServerDetailResponse: {
             /** Address */
             address?: string | null;
+            address_source?: components["schemas"]["MCPServerAddressSource"] | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;

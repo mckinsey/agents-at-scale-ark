@@ -169,6 +169,22 @@ class TestAddressSource(unittest.TestCase):
         )
         self.assertEqual(resp.address, "https://resolved.example/mcp")
 
+    def test_reference_survives_serialization(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp(
+                {
+                    "valueFrom": {
+                        "configMapKeyRef": {"name": "github-mcp-url", "key": "value"}
+                    }
+                }
+            )
+        )
+        dumped = resp.model_dump()["address_source"]
+        self.assertEqual(
+            dumped["valueFrom"]["configMapKeyRef"]["name"], "github-mcp-url"
+        )
+        self.assertIsNone(dumped["value"])
+
 
 if __name__ == "__main__":
     unittest.main()

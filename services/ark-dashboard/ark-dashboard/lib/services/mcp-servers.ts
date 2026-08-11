@@ -11,6 +11,10 @@ export type MCPServerCreateRequest =
   components['schemas']['MCPServerCreateRequest'];
 export type MCPServerSpec = components['schemas']['MCPServerSpec'];
 export type MCPHeader = components['schemas']['MCPServerHeader-Output'];
+export type MCPServerAddressSource =
+  components['schemas']['MCPServerAddressSource'];
+export type MCPServerServiceRef =
+  components['schemas']['MCPServerServiceRef'];
 
 export type MCPServer = MCPServerResponse & { id: string };
 export type MCPServerDetail = MCPServerDetailResponse & { id: string };
