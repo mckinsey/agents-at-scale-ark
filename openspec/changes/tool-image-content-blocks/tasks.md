@@ -14,14 +14,14 @@
 
 - [x] 3.1 Add `extractMessageParts` returning text, images and role; keep `extractMessageContent` as the text-only wrapper
 - [x] 3.2 Add `imageFromDataURL` parsing `data:<media type>;base64,<data>` and rejecting anything else
-- [ ] 3.3 Extend the message content block type with an optional `source` (`anthropicImageSource`), replacing `anthropicMessageContent`
-- [ ] 3.4 Replace the inline cache-block rendering in `convertMessagesToAnthropic` with `renderAnthropicContent(text, images, cached)` — bare JSON string when there is no image and no cache breakpoint, block array otherwise
-- [ ] 3.5 Keep a message that carries an image but no text (skip only when both are empty)
+- [x] 3.3 Extend the message content block type with an optional `source` (`anthropicImageSource`), replacing `anthropicMessageContent`
+- [x] 3.4 Replace the inline cache-block rendering in `convertMessagesToAnthropic` with `renderAnthropicContent(text, images, cached)` — bare JSON string when there is no image and no cache breakpoint, block array otherwise
+- [x] 3.5 Keep a message that carries an image but no text (skip only when both are empty)
 
 ## 4. Tests
 
-- [ ] 4.1 Add `image_content_test.go` — data URL round-trip and rejection, MCP image part not flattened into text, `NewUserImageMessage` parts, `renderAnthropicContent` output, images preserved through `convertMessagesToAnthropic`
-- [ ] 4.2 Update `anthropic_format_test.go` for the renamed content block type
+- [x] 4.1 Add `image_content_test.go` — data URL round-trip and rejection, MCP image part not flattened into text, `NewUserImageMessage` parts, `renderAnthropicContent` output, images preserved through `convertMessagesToAnthropic`
+- [x] 4.2 Update `anthropic_format_test.go` for the renamed content block type
 - [ ] 4.3 `make lint` and `make test` pass in `ark/`
 
 ## 5. End-to-End Verification

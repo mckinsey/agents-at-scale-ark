@@ -2,9 +2,10 @@ package completions
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"testing"
-	
+
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,3 +79,72 @@ func TestNewUserImageMessageCarriesImageParts(t *testing.T) {
 	assert.Equal(t, pngBytes, images[0].Data)
 }
 
+func TestRenderAnthropicContent(t *testing.T) {
+	t.Run("text only is a bare string", func(t *testing.T) {
+		raw := renderAnthropicContent("just text", nil, false)
+		assert.JSONEq(t, `"just text"`, string(raw))
+	})
+
+	t.Run("an image becomes an image block, not base64 text", func(t *testing.T) {
+		raw := renderAnthropicContent("what does this say?",
+			[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}}, false)
+
+		var blocks []map[string]any
+		require.NoError(t, json.Unmarshal(raw, &blocks))
+		require.Len(t, blocks, 2)
+
+		assert.Equal(t, "image", blocks[0]["type"])
+		source, ok := blocks[0]["source"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "base64", source["type"])
+		assert.Equal(t, "image/png", source["media_type"])
+		assert.Equal(t, base64.StdEncoding.EncodeToString(pngBytes), source["data"])
+		assert.NotContains(t, blocks[0], "text")
+
+		assert.Equal(t, "text", blocks[1]["type"])
+		assert.Equal(t, "what does this say?", blocks[1]["text"])
+	})
+
+	t.Run("an image with no caption is a lone image block", func(t *testing.T) {
+		raw := renderAnthropicContent("",
+			[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}}, false)
+
+		var blocks []map[string]any
+		require.NoError(t, json.Unmarshal(raw, &blocks))
+		require.Len(t, blocks, 1)
+		assert.Equal(t, "image", blocks[0]["type"])
+	})
+
+	t.Run("a cached image message keeps its cache breakpoint", func(t *testing.T) {
+		raw := renderAnthropicContent("what does this say?",
+			[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}}, true)
+
+		var blocks []anthropicContentBlock
+		require.NoError(t, json.Unmarshal(raw, &blocks))
+		require.Len(t, blocks, 2)
+		assert.Nil(t, blocks[0].CacheControl)
+		require.NotNil(t, blocks[1].CacheControl)
+		assert.Equal(t, "ephemeral", blocks[1].CacheControl.Type)
+	})
+}
+
+func TestConvertMessagesToAnthropicKeepsImages(t *testing.T) {
+	messages := []Message{
+		NewUserMessage("read receipt.png"),
+		NewUserImageMessage("Image returned by the read tool.",
+			[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}}),
+		NewUserMessage("what does it say?"),
+	}
+
+	converted, _ := convertMessagesToAnthropic(messages)
+	require.Len(t, converted, 3, "the image message must not be dropped")
+
+	assert.JSONEq(t, `"read receipt.png"`, string(converted[0].Content))
+
+	var blocks []map[string]any
+	require.NoError(t, json.Unmarshal(converted[1].Content, &blocks))
+	assert.Equal(t, "image", blocks[0]["type"])
+	source, ok := blocks[0]["source"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, base64.StdEncoding.EncodeToString(pngBytes), source["data"])
+}
