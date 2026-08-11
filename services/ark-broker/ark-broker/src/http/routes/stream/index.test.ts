@@ -236,4 +236,36 @@ describe('Streaming API', () => {
       );
     });
   });
+
+  describe('A2A status passthrough', () => {
+    it('forwards a2a_status chunks verbatim without terminating the stream', async () => {
+      const queryId = 'test-query-a2a';
+      const statusChunk = {
+        type: 'a2a_status',
+        taskId: 'task-1',
+        state: 'working',
+        message: 'Analyzing your request',
+        agentName: 'weather-agent',
+      };
+      const chunks = [
+        statusChunk,
+        createTextChunk('The answer'),
+        createFinishChunk(),
+      ];
+
+      const streamPromise = consumeStream(queryId);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sendChunks(queryId, chunks);
+      await request(app).post(`/stream/${queryId}/complete`);
+
+      const events = await streamPromise;
+
+      expect(events.length).toBe(4);
+      expect(JSON.parse(events[0])).toEqual(statusChunk);
+      expect(JSON.parse(events[1]).choices[0].delta.content).toBe('The answer');
+      expect(JSON.parse(events[2]).choices[0].finish_reason).toBe('stop');
+      expect(events[3]).toBe('[DONE]');
+    });
+  });
 });
