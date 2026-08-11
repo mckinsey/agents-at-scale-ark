@@ -96,4 +96,3 @@ Users who worked around the issue by hand-adding `ark.mckinsey.com/a2a-server-ad
 
 - Should the ExecutionEngine controller record engine-declared extensions in `status`, turning the version-floor failure into a pre-flight condition?
 - Should mixed teams be revisited now that the technical justification for rejecting them is weaker?
-- Should the completions chart inject the engine's own name, enabling a self-dispatch check at admission rather than at query time?

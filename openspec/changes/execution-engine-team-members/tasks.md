@@ -8,6 +8,8 @@
 - [ ] 1.6 Name `input-required` explicitly in `ExtractTextFromTask`, so both A2A transports report unsupported HITL rather than a generic protocol error
 - [ ] 1.7 Return a real recorder from the noop eventing provider's `A2aRecorder()`, which is `nil` today while both A2A paths dereference it unconditionally
 
+
+
 ## 2. Executor-side dispatch
 
 - [ ] 2.1 `NamedExecutionEngine` in `ark/executors/completions/execution_engine.go`
@@ -16,6 +18,8 @@
 - [ ] 2.4 `renderEngineHistory` renders system messages, which `buildHistory` drops — a selector's entire prompt arrives as one
 - [ ] 2.5 Recursion guard: an inbound sub-target agent runs locally
 
+
+
 ## 3. Sub-target contract (receiving side)
 
 - [ ] 3.1 Input taken from the inbound A2A message, not the Query's own input
@@ -23,6 +27,8 @@
 - [ ] 3.3 No broker stream created, so no chunk publishing or stream finalisation
 - [ ] 3.4 Excluded from HITL resumption, which is keyed off the parent Query's A2A task
 - [ ] 3.5 Unmarshal the inbound payload into the shared `QueryExtensionRef` rather than re-declaring it, retiring the receive-side `arkMetadata`/`queryRef`/`metadataTarget` types so the wire contract is defined once
+
+
 
 ## 4. Engine-backed selectors
 
@@ -34,11 +40,15 @@
 - [ ] 4.6 A configured `spec.selector.terminatePrompt` is honoured; only the mechanism sentence differs for engines
 - [ ] 4.7 No new admission rejection for engine-backed selectors
 
+
+
 ## 5. Model loading and readiness
 
 - [ ] 5.1 Skip model loading for agents dispatched over A2A
 - [ ] 5.2 Stop reporting engine-backed agents unavailable for the `modelRef` the webhook defaults onto them
 - [ ] 5.3 Explain the model requirement when an agent is pinned local by the recursion guard
+
+
 
 ## 6. Protocol
 
@@ -46,11 +56,15 @@
 - [ ] 6.2 Document `target`, fallback semantics and the sub-target contract in the extension README
 - [ ] 6.3 Correct the `X-A2A-Extensions` header in the Wire Format block — nothing sets it; `message.extensions` is what is sent
 
+
+
 ## 7. Python SDK
 
 - [ ] 7.1 `QueryTargetRef`; `QueryRef.target`; parse and validate in `extract_query_ref`
 - [ ] 7.2 Thread the override through `resolve_query`, with the version floor in the rejection message
 - [ ] 7.3 Skip broker and status updater for sub-target invocations
+
+
 
 ## 8. Tests
 
@@ -65,6 +79,8 @@
 - [ ] 8.9 Chainsaw `tests/execution-engine-team/`
 - [ ] 8.10 `TestResolveDispatchAddress` passes unmodified through the refactor
 
+
+
 ## 9. Docs
 
 - [ ] 9.1 Extension schema and README
@@ -72,9 +88,11 @@
 - [ ] 9.3 `query-execution.mdx` and `executionengine.mdx` wording
 - [ ] 9.4 `tests/README.md` coverage rows
 
+
+
 ## 10. Follow-up (not in this change)
 
-- [ ] 10.1 Promote the ark-sdk echo engine to `images/ark-echo-engine/` with `build.mk` and CI wiring, and add chainsaw coverage for the **selector** and **sub-target** paths. Six review rounds found fourteen defects, every one in code no committed test exercises — `tests/execution-engine-team/` covers only `strategy: sequential`.
+- [ ] 10.1 Promote the ark-sdk echo engine to `images/ark-echo-engine/` with `build.mk` and CI wiring, and add chainsaw coverage for the **selector** and **sub-target** paths.
 - [ ] 10.2 Marketplace PR: bump the three executor `ark-sdk` pins; gate the Claude scheduler's status writes on `target`
 - [ ] 10.3 Deterministic per-`(query, agent)` contextId, so a member reuses its sandbox instead of one per turn
 - [ ] 10.4 HITL approval forwarding over A2A
