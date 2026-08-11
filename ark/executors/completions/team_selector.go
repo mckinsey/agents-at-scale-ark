@@ -36,9 +36,14 @@ const defaultTerminatePrompt = `If the most recent user message has been given a
 const engineTerminateToken = "TERMINATE"
 
 // parseEngineTerminate reports whether an engine-backed selector's reply asks to
-// terminate, and returns any closing response that followed the token. The token
-// must stand alone or be followed by punctuation or whitespace, so a candidate
-// named "terminated-agent" is not mistaken for a termination.
+// terminate, and returns any closing response that followed the token.
+//
+// Supported forms are "TERMINATE", "TERMINATE: text" and "TERMINATE text".
+// The token must stand alone or be followed by whitespace or a colon. A hyphen is
+// deliberately not a separator: it is legal inside a Kubernetes resource name, so
+// accepting it would read a member called "terminate-agent" as a termination
+// command carrying the response "agent". Anything else following the token is
+// preserved verbatim as part of the response.
 func parseEngineTerminate(reply string) (string, bool) {
 	trimmed := strings.TrimSpace(reply)
 	if len(trimmed) < len(engineTerminateToken) || !strings.EqualFold(trimmed[:len(engineTerminateToken)], engineTerminateToken) {
@@ -49,13 +54,48 @@ func parseEngineTerminate(reply string) (string, bool) {
 	if rest == "" {
 		return "", true
 	}
-	switch rest[0] {
-	case ':', '.', '-', ' ', '\t', '\n', '\r':
-	default:
+	if rest[0] != ':' && !isASCIISpace(rest[0]) {
 		return "", false
 	}
 
-	return strings.TrimSpace(strings.TrimLeft(rest, ":.- \t\n\r")), true
+	return strings.TrimSpace(strings.TrimLeft(rest, ": \t\n\r")), true
+}
+
+func isASCIISpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+// isNameChar reports whether c can appear inside an agent name for the purposes
+// of the boundary check. Hyphen counts, so "agent" does not match inside
+// "agent-2". A dot deliberately does not: a sentence-ending period after a name
+// is far more common in a selector's reply than a dotted agent name would be.
+func isNameChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-'
+}
+
+// containsWholeName reports whether needle appears in haystack bounded by
+// characters that cannot form part of a resource name. Both arguments must
+// already be lowercased. Without the boundary check a member called "ana" would
+// match inside "analysis".
+func containsWholeName(haystack, needle string) bool {
+	if needle == "" {
+		return false
+	}
+	for offset := 0; offset <= len(haystack)-len(needle); {
+		idx := strings.Index(haystack[offset:], needle)
+		if idx < 0 {
+			return false
+		}
+		start := offset + idx
+		end := start + len(needle)
+		startsClean := start == 0 || !isNameChar(haystack[start-1])
+		endsClean := end == len(haystack) || !isNameChar(haystack[end])
+		if startsClean && endsClean {
+			return true
+		}
+		offset = start + 1
+	}
+	return false
 }
 
 type SelectorTemplateData struct {
@@ -103,6 +143,32 @@ func buildRoles(members []TeamMember) string {
 		}
 	}
 	return strings.Join(roles, ", ")
+}
+
+// defaultEngineTerminatePrompt replaces defaultTerminatePrompt for engine-backed
+// selectors, which have no tools to call.
+const defaultEngineTerminatePrompt = `If the most recent user message has been given an adequate response, do not return a role.`
+
+// terminatePromptFor builds the terminate guidance for the selector.
+//
+// A configured spec.selector.terminatePrompt describes *when* to stop, which is
+// the author's intent and applies to any selector. Only the *mechanism* differs:
+// a local selector calls the terminate tool, an engine-backed one has no tools
+// and must say so in text. Previously the engine branch discarded the configured
+// prompt entirely and used a hard-coded sentence.
+func (t *Team) terminatePromptFor(engineBacked bool) string {
+	prompt := defaultTerminatePrompt
+	if engineBacked {
+		prompt = defaultEngineTerminatePrompt
+	}
+	if t.Selector != nil && t.Selector.TerminatePrompt != "" {
+		prompt = t.Selector.TerminatePrompt
+	}
+
+	if !engineBacked {
+		return prompt
+	}
+	return fmt.Sprintf("%s\n\nYou have no tools available. To stop, reply with %s instead of a name, optionally followed by a colon and a closing response to the user.", prompt, engineTerminateToken)
 }
 
 func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {
@@ -172,17 +238,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 
 	terminateEnabled := t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool
 	if terminateEnabled {
-		if engineBacked {
-			// The configured terminate prompt tells the model to call a tool it
-			// cannot reach, so give an engine the text equivalent instead.
-			selectorMessage = fmt.Sprintf("%s\n\nIf the most recent user message has already been answered adequately, reply with %s instead of a name. You may follow it with a colon and a closing response to the user.", selectorMessage, engineTerminateToken)
-		} else {
-			terminatePrompt := defaultTerminatePrompt
-			if t.Selector.TerminatePrompt != "" {
-				terminatePrompt = t.Selector.TerminatePrompt
-			}
-			selectorMessage = selectorMessage + "\n\n" + terminatePrompt
-		}
+		selectorMessage = selectorMessage + "\n\n" + t.terminatePromptFor(engineBacked)
 	}
 
 	membersToSearch := t.Members
@@ -263,7 +319,7 @@ func matchSelectedName(response string, candidates []string) (string, error) {
 	lowered := strings.ToLower(selected)
 	var mentioned []string
 	for _, candidate := range candidates {
-		if strings.Contains(lowered, strings.ToLower(candidate)) {
+		if containsWholeName(lowered, strings.ToLower(candidate)) {
 			mentioned = append(mentioned, candidate)
 		}
 	}
