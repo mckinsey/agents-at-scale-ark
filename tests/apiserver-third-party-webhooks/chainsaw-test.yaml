@@ -106,6 +106,39 @@ spec:
         - script:
             content: kubectl delete validatingwebhookconfiguration tpw-unreachable-fail --ignore-not-found
 
+    # Removed in its own step, not in `cleanup`: step-level cleanup runs at test
+    # teardown, which would leave this webhook enforcing during the Ignore step below
+    # and block its agent for the wrong reason. Step order is deterministic.
+    - name: remove-fail-policy-webhook
+      try:
+        - script:
+            timeout: 180s
+            content: |
+              set -eu
+              kubectl delete validatingwebhookconfiguration tpw-unreachable-fail --ignore-not-found
+              # Wait for the removal to reach the apiserver's webhook informers, so the
+              # next step is not racing a webhook that is still briefly enforcing.
+              for i in $(seq 1 30); do
+                if kubectl create -f - --namespace "$NAMESPACE" >/dev/null 2>&1 <<EOF
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                generateName: probe-tpw-removal-
+              spec:
+                prompt: probe
+              EOF
+                then
+                  echo "fail-policy webhook no longer enforcing"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "FAIL: fail-policy webhook still enforcing after deletion"
+              exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+
     - name: ignore-policy-is-honoured
       description: >
         Same unreachable webhook at failurePolicy Ignore. The write must succeed, proving
