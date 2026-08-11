@@ -195,6 +195,11 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
+	toolMessage, _, err := a.executeToolCallWithImages(ctx, toolCall)
+	return toolMessage, err
+}
+
+func (a *Agent) executeToolCallWithImages(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, []ToolResultImage, error) {
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
 
 	// If the result has an error field set, use that as the message content
@@ -206,10 +211,10 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 	toolMessage := ToolMessage(content, result.ID)
 
 	if err != nil {
-		return toolMessage, err
+		return toolMessage, nil, err
 	}
 
-	return toolMessage, nil
+	return toolMessage, result.Images, nil
 }
 
 func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, agentMessages, newMessages *[]Message) error {
@@ -255,9 +260,16 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 			return ctx.Err()
 		}
 
-		toolMessage, err := a.executeToolCall(ctx, tc)
+		toolMessage, images, err := a.executeToolCallWithImages(ctx, tc)
 		*agentMessages = append(*agentMessages, toolMessage)
 		*newMessages = append(*newMessages, toolMessage)
+
+		if len(images) > 0 {
+			imageMessage := NewUserImageMessage(
+				fmt.Sprintf("Image returned by the %s tool call.", tc.Function.Name), images)
+			*agentMessages = append(*agentMessages, imageMessage)
+			*newMessages = append(*newMessages, imageMessage)
+		}
 
 		if err != nil {
 			return err

@@ -7,8 +7,8 @@
 
 ## 2. Agent Loop
 
-- [ ] 2.1 Add `executeToolCallWithImages` in `agent.go` returning the tool message plus its images; keep `executeToolCall` as the text-only wrapper used by the approval path in `handler.go`
-- [ ] 2.2 Append a `NewUserImageMessage` after the tool message in `executeToolCalls` when a tool returned images, to both `agentMessages` and `newMessages`
+- [x] 2.1 Add `executeToolCallWithImages` in `agent.go` returning the tool message plus its images; keep `executeToolCall` as the text-only wrapper used by the approval path in `handler.go`
+- [x] 2.2 Append a `NewUserImageMessage` after the tool message in `executeToolCalls` when a tool returned images, to both `agentMessages` and `newMessages`
 
 ## 3. Anthropic Request Format
 
@@ -22,9 +22,9 @@
 
 - [x] 4.1 Add `image_content_test.go` — data URL round-trip and rejection, MCP image part not flattened into text, `NewUserImageMessage` parts, `renderAnthropicContent` output, images preserved through `convertMessagesToAnthropic`
 - [x] 4.2 Update `anthropic_format_test.go` for the renamed content block type
-- [ ] 4.3 `make lint` and `make test` pass in `ark/`
+- [x] 4.3 `make lint` and `make test` pass in `ark/`
 
 ## 5. End-to-End Verification
 
-- [ ] 5.1 Deploy the built executor to a cluster with an MCP tool that returns an image and confirm the agent answers a question about it
-- [ ] 5.2 Confirm a text-only query is unaffected
+- [x] 5.1 Deploy the built executor to a cluster with an MCP tool that returns an image and confirm the agent answers a question about it
+- [x] 5.2 Confirm a text-only query is unaffected
