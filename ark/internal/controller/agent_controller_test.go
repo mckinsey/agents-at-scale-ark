@@ -253,6 +253,74 @@ var _ = Describe("Agent Controller", func() {
 			Expect(condition.Reason).NotTo(Equal("ModelNotConfigured"))
 		})
 
+		It("should keep an engine-backed agent available when its defaulted model is missing", func() {
+			const engineAgentName = "test-engine-modelless-agent"
+			engineAgentNamespacedName := types.NamespacedName{
+				Name:      engineAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an ExecutionEngine for the agent to delegate to")
+			engine := &arkv1prealpha1.ExecutionEngine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-modelless-engine",
+					Namespace: "default",
+				},
+				Spec: arkv1prealpha1.ExecutionEngineSpec{
+					Address: arkv1prealpha1.ValueSource{Value: "http://test-modelless-engine:8080"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, engine)).To(Succeed())
+			}()
+
+			By("creating an engine-backed agent whose modelRef points at a Model that does not exist")
+			// This mirrors what the mutating webhook produces: it defaults
+			// modelRef to 'default' for any agent without one, including agents
+			// that delegate to an execution engine and never load a model.
+			engineAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      engineAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef:        &arkv1alpha1.AgentModelRef{Name: "default"},
+					Prompt:          "test prompt for engine-backed agent",
+					ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "test-modelless-engine"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, engineAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, engineAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: engineAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: engineAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the agent is not reported unavailable for a model it never uses")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, engineAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Reason).NotTo(Equal("ModelNotFound"))
+			Expect(condition.Reason).NotTo(Equal("ModelNotConfigured"))
+		})
+
 		It("should handle agents with partial tool dependencies", func() {
 			const partialToolAgentName = "test-partial-tool-agent"
 			partialToolAgentTypeNamespacedName := types.NamespacedName{

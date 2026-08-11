@@ -49,24 +49,6 @@ func mergeShutdown(reqCtx, serverCtx context.Context) (context.Context, context.
 	return ctx, func() { stop(); cancel() }
 }
 
-type arkMetadata struct {
-	Agent   json.RawMessage `json:"agent"`
-	Tools   json.RawMessage `json:"tools"`
-	History json.RawMessage `json:"history"`
-	Query   queryRef        `json:"query"`
-	Target  *metadataTarget `json:"target,omitempty"`
-}
-
-type metadataTarget struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
-}
-
-type queryRef struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-}
-
 type executionState struct {
 	query          arkv1alpha1.Query
 	target         *arkv1alpha1.QueryTarget
@@ -85,6 +67,10 @@ type executionState struct {
 	// memoryDegraded is true when a Memory backend was reachable but reading the
 	// conversation history from it failed, so the query ran without prior context.
 	memoryDegraded bool
+	// isSubTarget is true when an execution engine dispatched a single resource of
+	// this Query to us. The calling engine owns the Query's input, memory and
+	// broker stream for the whole run, so we must not write to any of them.
+	isSubTarget bool
 }
 
 func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
@@ -140,12 +126,16 @@ func (h *Handler) ProcessMessage(
 		return nil, err
 	}
 
+	if agentName := subTargetAgent(message); agentName != "" {
+		ctx = WithSubTargetAgent(ctx, agentName)
+	}
+
 	var a2aContextId string
 	if message.ContextID != nil {
 		a2aContextId = *message.ContextID
 	}
 
-	ctx, state, err := h.setupExecution(ctx, query, target, a2aContextId)
+	ctx, state, err := h.setupExecution(ctx, query, target, a2aContextId, arka2a.ExtractTextFromParts(message.Parts))
 	if err != nil {
 		return nil, err
 	}
@@ -154,9 +144,13 @@ func (h *Handler) ProcessMessage(
 
 	log := logf.FromContext(ctx)
 
-	// Check if this is a resumption from HITL approval or rejection
+	// Check if this is a resumption from HITL approval or rejection.
+	// Never for a sub-target: resumption is keyed off the parent Query's A2A task,
+	// which belongs to the orchestrator's approval cycle. A member invocation that
+	// happened to arrive while such a task exists would replay the approval instead
+	// of running the member it was asked to run.
 	//nolint:nestif // TODO: Refactor to reduce nesting complexity
-	if isResumption, a2aTask := h.checkResumption(ctx, query); isResumption {
+	if isResumption, a2aTask := h.checkResumptionForState(ctx, state, query); isResumption {
 		state.isResumption = true
 		decision := "approved"
 		if a2aTask.Status.Phase == arka2a.PhaseFailed {
@@ -228,45 +222,53 @@ func (h *Handler) ProcessMessage(
 }
 
 func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, error) {
-	meta, err := extractArkMetadata(message)
+	ref, err := extractQueryRef(message)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to extract ark metadata: %w", err)
 	}
 
-	if meta.Query.Name == "" || meta.Query.Namespace == "" {
+	if ref.Name == "" || ref.Namespace == "" {
 		return nil, nil, fmt.Errorf("query reference is required in ark metadata")
 	}
 
 	var query arkv1alpha1.Query
 	if err := h.k8sClient.Get(ctx, types.NamespacedName{
-		Name:      meta.Query.Name,
-		Namespace: meta.Query.Namespace,
+		Name:      ref.Name,
+		Namespace: ref.Namespace,
 	}, &query); err != nil {
-		return nil, nil, fmt.Errorf("failed to get query %s/%s: %w", meta.Query.Namespace, meta.Query.Name, err)
+		return nil, nil, fmt.Errorf("failed to get query %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
-	target := query.Spec.Target
-	if target == nil && meta.Target != nil {
+	// An explicit target from the caller wins over the Query's own target: the
+	// caller is an engine dispatching one member of a team, whose Query targets
+	// the team rather than the member.
+	var target *arkv1alpha1.QueryTarget
+	if ref.Target != nil {
 		target = &arkv1alpha1.QueryTarget{
-			Type: meta.Target.Type,
-			Name: meta.Target.Name,
+			Type: ref.Target.Type,
+			Name: ref.Target.Name,
 		}
+	}
+	if target == nil {
+		target = query.Spec.Target
 	}
 	if target == nil && query.Spec.Selector != nil {
 		resolved, err := h.resolveSelector(ctx, &query)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to resolve selector for query %s/%s: %w", meta.Query.Namespace, meta.Query.Name, err)
+			return nil, nil, fmt.Errorf("failed to resolve selector for query %s/%s: %w", ref.Namespace, ref.Name, err)
 		}
 		target = resolved
 	}
 	if target == nil {
-		return nil, nil, fmt.Errorf("query %s/%s has no target", meta.Query.Namespace, meta.Query.Name)
+		return nil, nil, fmt.Errorf("query %s/%s has no target", ref.Namespace, ref.Name)
 	}
 
 	return &query, target, nil
 }
 
-func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, target *arkv1alpha1.QueryTarget, a2aContextId string) (context.Context, *executionState, error) {
+func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, target *arkv1alpha1.QueryTarget, a2aContextId, inboundText string) (context.Context, *executionState, error) {
+	isSubTarget := GetSubTargetAgent(ctx) != ""
+
 	ctx = context.WithValue(ctx, QueryContextKey, query)
 	ctx = h.eventing.QueryRecorder().InitializeQueryContext(ctx, query)
 	ctx = h.eventing.QueryRecorder().StartTokenCollection(ctx)
@@ -282,20 +284,40 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		ctx = WithA2AContextID(ctx, a2aContextID)
 	}
 
-	inputMessages, err := GetQueryInputMessages(ctx, *query, h.k8sClient)
-	if err != nil {
-		querySpan.End()
-		return ctx, nil, fmt.Errorf("failed to get input messages: %w", err)
+	// A sub-target runs against the text the calling engine sent, not the Query's
+	// own input: that text carries the accumulated team transcript, and the
+	// Query's input is the question posed to the team as a whole.
+	var inputMessages []Message
+	if isSubTarget {
+		inputMessages = []Message{NewUserMessage(inboundText)}
+	} else {
+		var err error
+		inputMessages, err = GetQueryInputMessages(ctx, *query, h.k8sClient)
+		if err != nil {
+			querySpan.End()
+			return ctx, nil, fmt.Errorf("failed to get input messages: %w", err)
+		}
 	}
 
 	conversationId := a2aContextId
 	if conversationId == "" {
 		conversationId = query.Spec.ConversationId
 	}
-	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, common.TtlSecondsFromQuery(query), h.eventing.MemoryRecorder())
-	if err != nil {
-		querySpan.End()
-		return ctx, nil, fmt.Errorf("failed to create memory client: %w", err)
+	// A sub-target must not touch the parent Query's memory at all: the calling
+	// engine persists the whole run when it finishes, and there are several write
+	// paths here (final messages, error messages, pre-approval saves). Swapping in
+	// NoopMemory neutralises every one of them, and the read too — the transcript
+	// already arrives in the inbound text.
+	var memory MemoryInterface
+	if isSubTarget {
+		memory = NewNoopMemory()
+	} else {
+		var err error
+		memory, err = NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, common.TtlSecondsFromQuery(query), h.eventing.MemoryRecorder())
+		if err != nil {
+			querySpan.End()
+			return ctx, nil, fmt.Errorf("failed to create memory client: %w", err)
+		}
 	}
 
 	if httpMemory, ok := memory.(*HTTPMemory); ok {
@@ -303,7 +325,7 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	}
 
 	_, isNoop := memory.(*NoopMemory)
-	memoryUnavailable := isNoop && conversationId != ""
+	memoryUnavailable := isNoop && conversationId != "" && !isSubTarget
 
 	memoryMessages, err := memory.GetMessages(ctx)
 	memoryDegraded := false
@@ -314,9 +336,16 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		memoryDegraded = true
 	}
 
-	eventStream, err := NewEventStreamForQuery(ctx, h.k8sClient, query.Namespace, sessionId, query.Name)
-	if err != nil {
-		log.Error(err, "failed to create event stream, continuing without streaming")
+	// No broker stream for a sub-target. Chunks are keyed by query name, so a
+	// member publishing here would interleave with — and complete — the stream the
+	// calling engine owns for the same Query.
+	var eventStream EventStreamInterface
+	if !isSubTarget {
+		var err error
+		eventStream, err = NewEventStreamForQuery(ctx, h.k8sClient, query.Namespace, sessionId, query.Name)
+		if err != nil {
+			log.Error(err, "failed to create event stream, continuing without streaming")
+		}
 	}
 
 	userContent := ExtractUserMessageContent(inputMessages)
@@ -339,6 +368,7 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 
 		memoryUnavailable: memoryUnavailable,
 		memoryDegraded:    memoryDegraded,
+		isSubTarget:       isSubTarget,
 	}
 
 	return ctx, state, nil
@@ -632,7 +662,10 @@ func firstItemName[T any, PT interface {
 }
 
 // Query extension spec: ark/api/extensions/query/v1/
-func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
+// extractQueryRef reads the Ark query extension payload from an inbound A2A
+// message. It unmarshals into the same type the sender builds, so the two sides
+// of the wire contract cannot drift.
+func extractQueryRef(message protocol.Message) (*arka2a.QueryExtensionRef, error) {
 	if message.Metadata == nil {
 		return nil, fmt.Errorf("message has no metadata")
 	}
@@ -647,14 +680,27 @@ func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
 		return nil, fmt.Errorf("failed to marshal query ref: %w", err)
 	}
 
-	var ref queryRef
+	var ref arka2a.QueryExtensionRef
 	if err := json.Unmarshal(raw, &ref); err != nil {
 		return nil, fmt.Errorf("failed to parse query ref: %w", err)
 	}
 
-	meta := arkMetadata{Query: ref}
+	if ref.Target != nil && (ref.Target.Type == "" || ref.Target.Name == "") {
+		return nil, fmt.Errorf("query ref target must contain 'type' and 'name'")
+	}
 
-	return &meta, nil
+	return &ref, nil
+}
+
+// subTargetAgent returns the agent named by an explicit query extension target,
+// or "" when the caller sent none. Such an agent runs locally instead of being
+// dispatched onwards; see dispatchesToEngine.
+func subTargetAgent(message protocol.Message) string {
+	ref, err := extractQueryRef(message)
+	if err != nil || ref.Target == nil || ref.Target.Type != ToolTypeAgent {
+		return ""
+	}
+	return ref.Target.Name
 }
 
 func extractAssistantText(messages []Message) string {
@@ -758,6 +804,14 @@ func (h *Handler) handleApprovalRequired(
 }
 
 // checkResumption checks if this query execution is a resumption from HITL approval or rejection
+// checkResumptionForState is checkResumption with the sub-target exclusion applied.
+func (h *Handler) checkResumptionForState(ctx context.Context, state *executionState, query *arkv1alpha1.Query) (bool, *arkv1alpha1.A2ATask) {
+	if state.isSubTarget {
+		return false, nil
+	}
+	return h.checkResumption(ctx, query)
+}
+
 func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query) (bool, *arkv1alpha1.A2ATask) {
 	log := logf.FromContext(ctx)
 
@@ -998,7 +1052,10 @@ func (h *Handler) saveErrorMessagesToMemory(ctx context.Context, state *executio
 
 // saveFinalMessagesToMemory saves final messages to memory after successful execution
 func (h *Handler) saveFinalMessagesToMemory(ctx context.Context, state *executionState, responseMessages []Message) {
-	if state.memory == nil || len(responseMessages) == 0 {
+	// The calling engine writes the whole run to memory when it completes; a
+	// sub-target writing here would duplicate its own turn into the parent's
+	// conversation.
+	if state.memory == nil || len(responseMessages) == 0 || state.isSubTarget {
 		return
 	}
 

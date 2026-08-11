@@ -31,9 +31,19 @@ QUERY_EXTENSION_METADATA_KEY = f"{QUERY_EXTENSION_URI}/ref"
 
 
 @dataclass
+class QueryTargetRef:
+    type: str
+    name: str
+
+
+@dataclass
 class QueryRef:
     name: str
     namespace: str
+    # Optional override naming the resource to execute. Sent when the caller
+    # dispatches a single team member, whose Query targets the team rather than
+    # the member. When absent, the Query's own spec.target is used.
+    target: Optional[QueryTargetRef] = None
 
 
 def _parse_go_duration_to_seconds(duration: str) -> Optional[int]:
@@ -70,7 +80,26 @@ def extract_query_ref(message: Any) -> QueryRef:
             f"QueryRef must contain 'name' and 'namespace', got: {ref_data}"
         )
 
-    return QueryRef(name=name, namespace=namespace)
+    return QueryRef(name=name, namespace=namespace, target=_extract_target(ref_data))
+
+
+def _extract_target(ref_data: dict) -> Optional[QueryTargetRef]:
+    """Parse the optional target override. Absent is fine; malformed is not."""
+    target_data = ref_data.get("target")
+    if target_data is None:
+        return None
+
+    if not isinstance(target_data, dict):
+        raise ValueError(f"QueryRef 'target' must be an object, got: {target_data}")
+
+    target_type = target_data.get("type")
+    target_name = target_data.get("name")
+    if not target_type or not target_name:
+        raise ValueError(
+            f"QueryRef 'target' must contain 'type' and 'name', got: {target_data}"
+        )
+
+    return QueryTargetRef(type=target_type, name=target_name)
 
 
 async def resolve_query(
@@ -88,20 +117,41 @@ async def resolve_query(
     await init_k8s()
     async with with_ark_client(query_ref.namespace, V1_ALPHA1) as ark:
         query = await ark.queries.a_get(query_ref.name, query_ref.namespace)
-        return await _resolve_from_query(ark, query, query_ref.namespace, user_input, conversation_id)
+        return await _resolve_from_query(
+            ark, query, query_ref.namespace, user_input, conversation_id,
+            target_override=query_ref.target,
+        )
 
 
-async def _resolve_from_query(ark: Any, query: Any, namespace: str, user_input: str, conversation_id: str = "") -> ExecutionEngineRequest:
-    target = query.spec.target
+async def _resolve_from_query(
+    ark: Any,
+    query: Any,
+    namespace: str,
+    user_input: str,
+    conversation_id: str = "",
+    target_override: Optional[QueryTargetRef] = None,
+) -> ExecutionEngineRequest:
+    # An explicit target from the caller wins over the Query's own target: the
+    # caller is dispatching one member of a team, whose Query targets the team.
+    target = target_override or query.spec.target
     if not target:
         raise ValueError(f"Query '{query.metadata['name']}' has no target")
 
-    if target.type != "agent":
+    target_type = _get_attr_or_key(target, "type")
+    target_name = _get_attr_or_key(target, "name")
+
+    if target_type != "agent":
+        if target_override is None:
+            raise ValueError(
+                f"Query extension resolution only supports agent targets, got '{target_type}'. "
+                "Executing a member of a team requires the caller to send a query extension "
+                "target, which requires ark >= 0.1.68."
+            )
         raise ValueError(
-            f"Query extension resolution only supports agent targets, got '{target.type}'"
+            f"Query extension target override only supports agent targets, got '{target_type}'"
         )
 
-    agent = await ark.agents.a_get(target.name, namespace)
+    agent = await ark.agents.a_get(target_name, namespace)
     agent_config = await _build_agent_config(ark, agent, query, namespace)
     mcp_servers = await _build_mcp_servers(ark, agent, namespace)
 

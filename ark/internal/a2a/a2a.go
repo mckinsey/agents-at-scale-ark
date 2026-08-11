@@ -225,7 +225,7 @@ func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aCli
 		return nil, fmt.Errorf("A2A server call failed: %w", err)
 	}
 
-	response, err := extractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, obj)
+	response, err := ExtractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, obj)
 	if err != nil {
 		if a2aRecorder != nil {
 			a2aRecorder.A2AResponseParseError(ctx, fmt.Sprintf("Failed to parse A2A response: %v", err))
@@ -247,7 +247,9 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 	return httpClient.Do(req)
 }
 
-func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, obj client.Object) (*A2AResponse, error) {
+// ExtractResponseFromMessageResult converts an A2A send result into an
+// A2AResponse, recording an A2ATask resource when the peer returned a Task.
+func ExtractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, obj client.Object) (*A2AResponse, error) {
 	log := logf.FromContext(ctx)
 	if result == nil {
 		return nil, fmt.Errorf("result is nil")
@@ -307,6 +309,13 @@ func ExtractTextFromTask(task *protocol.Task) (string, error) {
 			errorMsg = ExtractTextFromParts(task.Status.Message.Parts)
 		}
 		return "", fmt.Errorf("%s", errorMsg)
+
+	case TaskStateInputRequired:
+		// Applies to both A2A transports: an approval raised by a peer cannot be
+		// forwarded to the orchestrator that owns the Query, so the run cannot
+		// continue. Named explicitly because the generic message below reads as a
+		// protocol error rather than an unsupported capability.
+		return "", fmt.Errorf("task %s is in state '%s': human-in-the-loop approval is not supported for agents executed over A2A", task.ID, TaskStateInputRequired)
 
 	default:
 		return "", fmt.Errorf("task in state '%s' (expected %s or %s)", task.Status.State, TaskStateCompleted, TaskStateFailed)

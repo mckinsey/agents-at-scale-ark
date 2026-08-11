@@ -65,7 +65,7 @@ Secrets never leave the cluster over A2A — they are resolved locally within yo
 
 ## Extension Spec
 
-The query extension contract is defined at [`ark/api/extensions/query/v1/`](https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1). The schema is minimal: just `name` and `namespace` fields identifying the Query resource.
+The query extension contract is defined at [`ark/api/extensions/query/v1/`](https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1). The schema is minimal: `name` and `namespace` identifying the Query resource, plus an optional `target` (see below).
 
 ## Deploying to Kubernetes
 
@@ -115,6 +115,20 @@ spec:
 ```
 
 Without this annotation, streaming requests are handled transparently — clients still receive a valid SSE response, just without incremental chunks.
+
+## Team Membership
+
+An engine-backed Agent can be a member of a `Team`. Teams are orchestrated by the completions executor, which calls your engine once per member turn.
+
+A member call differs from a top-level dispatch in three ways:
+
+- **The extension carries an explicit `target`.** The Query targets the team, not the member, so the caller sends `target: {type: agent, name: <member>}` alongside the QueryRef. It overrides `query.spec.target`. The SDK resolves it for you, and `execute_agent()` receives the member's `ExecutionEngineRequest` as usual.
+- **Your engine must not write to the query's stream, memory or status.** The calling completions engine owns all three for the whole team run; a second writer double-writes memory and churns `status.phase`. The SDK enforces this by disabling the broker client and the status updater whenever `target` is present — but if your engine writes query status independently of the SDK, gate it on `target` being absent.
+- **`streaming-supported` is ignored.** Member calls use blocking `message/send`, because broker chunks are keyed by query name and would interleave across members.
+
+The preceding team transcript is folded into `userInput` as text, so a sequential member sees what the members before it said. There is no separate history field on `ExecutionEngineRequest`.
+
+Resolving `target` requires ark-sdk >= 0.1.68. An older engine ignores the field, sees `spec.target.type: team`, and rejects the call — top-level dispatches are unaffected, since they never carry a `target`.
 
 ## Per-tenant built-in completions
 

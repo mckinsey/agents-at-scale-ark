@@ -7,7 +7,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
 	telemetrynoop "mckinsey.com/ark/internal/telemetry/noop"
 )
@@ -179,4 +182,65 @@ func TestExecuteSequential_ContextCancelled(t *testing.T) {
 	_, err := team.Execute(ctx, NewUserMessage("hello"), nil, nil, nil, ExecuteOptions{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// A sequential team accumulates its transcript and hands it to each member. An
+// engine-backed member only ever sees text, so losing this would make every
+// member answer the original question in isolation.
+func TestExecuteSequential_ForwardsTranscriptToMembers(t *testing.T) {
+	var secondMemberHistory []Message
+
+	members := []TeamMember{
+		&execMockTeamMember{
+			name: "m1",
+			execFunc: func(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+				return &ExecutionResult{Messages: []Message{NewAssistantMessage("the capital is Paris")}}, nil
+			},
+		},
+		&execMockTeamMember{
+			name: "m2",
+			execFunc: func(_ context.Context, _ Message, history []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+				secondMemberHistory = history
+				return &ExecutionResult{Messages: []Message{NewAssistantMessage("population is 2.1m")}}, nil
+			},
+		},
+	}
+
+	team := newTestTeam(members, "sequential", false, nil)
+	_, err := team.Execute(context.Background(), NewUserMessage("tell me about France"), nil, nil, nil, ExecuteOptions{})
+	require.NoError(t, err)
+
+	rendered := renderEngineInput(NewUserMessage("tell me about France"), secondMemberHistory)
+	assert.Contains(t, rendered, "the capital is Paris", "the second member must see the first member's output")
+}
+
+func TestMakeTeam_EngineMemberNeedsNoModel(t *testing.T) {
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "engine-member", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Prompt:          "You are helpful",
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		},
+	}
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: "http://mock-engine:8080"},
+	}
+	teamCRD := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "engine-team", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "sequential",
+			Members:  []arkv1alpha1.TeamMember{{Type: MemberTypeAgent, Name: "engine-member"}},
+		},
+	}
+
+	k8sClient := engineTestClient(t, agent, engine)
+	ctx := engineQueryContext(t)
+
+	// No Model exists in the cluster, and the member declares no modelRef: an
+	// engine-backed member never runs the local loop, so it must not need one.
+	team, err := MakeTeam(ctx, k8sClient, teamCRD, telemetrynoop.NewProvider(), eventingnoop.NewProvider())
+	require.NoError(t, err)
+	require.Len(t, team.Members, 1)
+	assert.Equal(t, "engine-member", team.Members[0].GetName())
 }

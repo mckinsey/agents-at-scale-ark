@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -12,6 +13,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -24,6 +26,37 @@ Read the following conversation, then use the select-next-speaker tool to select
 Read the above conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.`
 
 const defaultTerminatePrompt = `If the most recent user message has been given an adequate response, do not return a role. Instead call the terminate tool.`
+
+// engineTerminateToken is how an engine-backed selector says "we are done".
+// The terminate tool is registered in-process and can never reach an external
+// engine, so without a text equivalent such a selector has no way to end a run
+// and can only loop to maxTurns. Anything after the token is the selector's
+// closing response, mirroring the payload a local selector returns through the
+// terminate tool.
+const engineTerminateToken = "TERMINATE"
+
+// parseEngineTerminate reports whether an engine-backed selector's reply asks to
+// terminate, and returns any closing response that followed the token. The token
+// must stand alone or be followed by punctuation or whitespace, so a candidate
+// named "terminated-agent" is not mistaken for a termination.
+func parseEngineTerminate(reply string) (string, bool) {
+	trimmed := strings.TrimSpace(reply)
+	if len(trimmed) < len(engineTerminateToken) || !strings.EqualFold(trimmed[:len(engineTerminateToken)], engineTerminateToken) {
+		return "", false
+	}
+
+	rest := trimmed[len(engineTerminateToken):]
+	if rest == "" {
+		return "", true
+	}
+	switch rest[0] {
+	case ':', '.', '-', ' ', '\t', '\n', '\r':
+	default:
+		return "", false
+	}
+
+	return strings.TrimSpace(strings.TrimLeft(rest, ":.- \t\n\r")), true
+}
 
 type SelectorTemplateData struct {
 	Roles        string
@@ -120,20 +153,36 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, err
 	}
 
-	selectorMessage := buf.String()
-	selectorMessage += "\n\nUse the select-next-speaker tool to express your next speaker selection."
-
-	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
-		terminatePrompt := defaultTerminatePrompt
-		if t.Selector.TerminatePrompt != "" {
-			terminatePrompt = t.Selector.TerminatePrompt
-		}
-		selectorMessage = selectorMessage + "\n\n" + terminatePrompt
-	}
-
 	selectorAgent, err := t.loadSelectorAgent(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	// A named engine executes the agent out of process, where the runtime
+	// select-next-speaker tool does not exist, so ask for a plain-text name and
+	// match it against the candidates instead.
+	engineBacked := arka2a.IsNamedEngine(selectorAgent.GetExecutionEngine())
+
+	selectorMessage := buf.String()
+	if engineBacked {
+		selectorMessage += fmt.Sprintf("\n\nIgnore any instruction above to use a tool: no tools are available to you. Reply with only the name of the next speaker, exactly as written in %s, and nothing else.", participantsList)
+	} else {
+		selectorMessage += "\n\nUse the select-next-speaker tool to express your next speaker selection."
+	}
+
+	terminateEnabled := t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool
+	if terminateEnabled {
+		if engineBacked {
+			// The configured terminate prompt tells the model to call a tool it
+			// cannot reach, so give an engine the text equivalent instead.
+			selectorMessage = fmt.Sprintf("%s\n\nIf the most recent user message has already been answered adequately, reply with %s instead of a name. You may follow it with a colon and a closing response to the user.", selectorMessage, engineTerminateToken)
+		} else {
+			terminatePrompt := defaultTerminatePrompt
+			if t.Selector.TerminatePrompt != "" {
+				terminatePrompt = t.Selector.TerminatePrompt
+			}
+			selectorMessage = selectorMessage + "\n\n" + terminatePrompt
+		}
 	}
 
 	membersToSearch := t.Members
@@ -148,18 +197,30 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	if len(candidateNames) == 0 {
 		return nil, NewTerminateTeamWithReason("no candidates available for selection")
 	}
-	if err := t.registerSelectNextSpeakerTool(ctx, selectorAgent, candidateNames); err != nil {
-		return nil, err
-	}
-
 	userPrompt := "Select the next speaker to respond using the select-next-speaker tool."
-	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
-		userPrompt = "Select the next speaker to respond using the select-next-speaker tool, or use the terminate tool if you think the user's original question has been answered."
+	opts := ExecuteOptions{ToolChoice: ToolChoiceRequired}
+	if engineBacked {
+		userPrompt = "Reply with only the name of the next speaker to respond."
+		if terminateEnabled {
+			userPrompt = fmt.Sprintf("Reply with only the name of the next speaker to respond, or %s (optionally followed by a colon and a closing response) if the original question has been answered.", engineTerminateToken)
+		}
+		opts = ExecuteOptions{}
+	} else {
+		if err := t.registerSelectNextSpeakerTool(ctx, selectorAgent, candidateNames); err != nil {
+			return nil, err
+		}
+		if terminateEnabled {
+			userPrompt = "Select the next speaker to respond using the select-next-speaker tool, or use the terminate tool if you think the user's original question has been answered."
+		}
 	}
 
-	result, err := selectorAgent.Execute(ctx, NewUserMessage(userPrompt), []Message{NewSystemMessage(selectorMessage)}, nil, nil, ExecuteOptions{ToolChoice: ToolChoiceRequired})
+	result, err := selectorAgent.Execute(ctx, NewUserMessage(userPrompt), []Message{NewSystemMessage(selectorMessage)}, nil, nil, opts)
 	if err != nil {
 		return nil, fmt.Errorf("selector agent call failed: %w", err)
+	}
+
+	if engineBacked && result.Signal == nil {
+		return t.resolveEngineSelection(ctx, result, terminateEnabled, candidateNames, membersToSearch)
 	}
 
 	if result.Signal == nil {
@@ -178,6 +239,81 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	}
 
 	return nil, fmt.Errorf("selector agent returned unexpected signal: %s", result.Signal.SignalType())
+}
+
+// matchSelectedName resolves the free-text reply of an engine-backed selector to
+// a candidate name: an exact match first, then case-insensitive, then a single
+// candidate mentioned somewhere in the reply. A candidate contained in another
+// matched candidate is discarded, so "agent-2" wins over "agent" rather than
+// reading as ambiguous. No match, or a genuinely ambiguous one, is an
+// InvalidAgentError, which the selector loop already handles.
+func matchSelectedName(response string, candidates []string) (string, error) {
+	selected := strings.TrimSpace(response)
+
+	if slices.Contains(candidates, selected) {
+		return selected, nil
+	}
+
+	for _, candidate := range candidates {
+		if strings.EqualFold(candidate, selected) {
+			return candidate, nil
+		}
+	}
+
+	lowered := strings.ToLower(selected)
+	var mentioned []string
+	for _, candidate := range candidates {
+		if strings.Contains(lowered, strings.ToLower(candidate)) {
+			mentioned = append(mentioned, candidate)
+		}
+	}
+
+	var longest []string
+	for _, candidate := range mentioned {
+		contained := slices.ContainsFunc(mentioned, func(other string) bool {
+			return other != candidate && strings.Contains(strings.ToLower(other), strings.ToLower(candidate))
+		})
+		if !contained {
+			longest = append(longest, candidate)
+		}
+	}
+
+	if len(longest) == 1 {
+		return longest[0], nil
+	}
+
+	return "", &InvalidAgentError{SelectedName: selected}
+}
+
+// resolveEngineSelection interprets an engine-backed selector's free-text reply:
+// a termination (optionally carrying a closing response), or the name of the next
+// speaker. An engine cannot call the select-next-speaker or terminate tools, so
+// both outcomes have to be expressed in, and read back out of, plain text.
+func (t *Team) resolveEngineSelection(ctx context.Context, result *ExecutionResult, terminateEnabled bool, candidateNames []string, membersToSearch []TeamMember) (TeamMember, error) {
+	reply := ExtractLastAssistantMessageContent(result.Messages)
+
+	if terminateEnabled {
+		if response, terminated := parseEngineTerminate(reply); terminated {
+			if response != "" {
+				// Carry the parsed response, not the raw reply. These messages are
+				// appended to the team transcript and become the query's final
+				// content, so passing result.Messages through would surface the
+				// TERMINATE control token to the user — and disagree with the
+				// stream, which already receives the parsed text.
+				return nil, &TerminateTeamWithResponse{
+					Response: response,
+					Messages: []Message{NewAssistantMessage(response)},
+				}
+			}
+			return nil, NewTerminateTeamWithReason("selector agent terminated")
+		}
+	}
+
+	selectedName, err := matchSelectedName(reply, candidateNames)
+	if err != nil {
+		return nil, err
+	}
+	return t.resolveSelectedMember(ctx, selectedName, membersToSearch)
 }
 
 func (t *Team) resolveSelectedMember(ctx context.Context, selectedName string, members []TeamMember) (TeamMember, error) {

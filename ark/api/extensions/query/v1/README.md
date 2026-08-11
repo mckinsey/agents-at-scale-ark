@@ -17,6 +17,24 @@ The extension metadata carries a `QueryRef` — a reference to an Ark Query reso
 
 See [schema.json](./schema.json) for the formal JSON Schema definition.
 
+### Target override
+
+`target` is optional. It names the resource the engine should execute, overriding the Query's own `spec.target`:
+
+```json
+{
+  "name": "my-query",
+  "namespace": "default",
+  "target": { "type": "agent", "name": "researcher" }
+}
+```
+
+The completions engine sends it when dispatching one member of a team, because the Query targets the team rather than the member. The controller never sends it for a top-level dispatch, where `spec.target` is authoritative.
+
+An engine that does not understand `target` ignores it and reads `spec.target`, so a top-level dispatch is unaffected. Resolving a team member requires ark-sdk >= 0.1.68.
+
+A `target` invocation is a sub-request: the calling engine owns the Query's status, memory and broker stream, so the receiving engine must not write to any of them.
+
 ## Metadata Key
 
 ```
@@ -41,17 +59,20 @@ Engines that support this extension declare it in their agent card:
 
 ## Wire Format
 
-Request:
+Request. Activation is signalled by `message.extensions`; Ark does not currently send the `X-A2A-Extensions` request header:
 
 ```http
 POST /message HTTP/1.1
-X-A2A-Extensions: https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1
 
 {
   "jsonrpc": "2.0",
   "method": "message/send",
   "params": {
-    "message": { "role": "user", "parts": [...] },
+    "message": {
+      "role": "user",
+      "parts": [...],
+      "extensions": ["https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1"]
+    },
     "metadata": {
       "https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1/ref": {
         "name": "my-query",

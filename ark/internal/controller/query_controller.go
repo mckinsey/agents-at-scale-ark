@@ -505,30 +505,16 @@ func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target ark
 		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
-	if agentCRD.Spec.ExecutionEngine == nil {
+	if !arka2a.IsNamedEngine(agentCRD.Spec.ExecutionEngine) {
 		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
-	if agentCRD.Spec.ExecutionEngine.Name == arka2a.ExecutionEngineA2A {
-		return r.resolveDefaultEngineAddress(ctx, namespace), nil
+	address, _, err := arka2a.ResolveExecutionEngineAddress(ctx, r.Client, agentCRD.Spec.ExecutionEngine, namespace)
+	if err != nil {
+		return "", err
 	}
 
-	engineName := agentCRD.Spec.ExecutionEngine.Name
-	engineNamespace := agentCRD.Spec.ExecutionEngine.Namespace
-	if engineNamespace == "" {
-		engineNamespace = namespace
-	}
-
-	var engineCRD arkv1prealpha1.ExecutionEngine
-	if err := r.Get(ctx, types.NamespacedName{Name: engineName, Namespace: engineNamespace}, &engineCRD); err != nil {
-		return "", fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, engineNamespace, err)
-	}
-
-	if engineCRD.Status.LastResolvedAddress == "" {
-		return "", fmt.Errorf("execution engine %s address not yet resolved", engineName)
-	}
-
-	return engineCRD.Status.LastResolvedAddress, nil
+	return address, nil
 }
 
 // resolveDefaultEngineAddress returns the dispatch address for queries with no
@@ -555,56 +541,28 @@ func (r *QueryReconciler) resolveDefaultEngineAddress(ctx context.Context, names
 func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (*arkv1alpha1.Response, engineResponseMeta, error) {
 	log := logf.FromContext(ctx)
 
-	metadata := map[string]any{
-		arka2a.QueryExtensionMetadataKey: map[string]string{
-			"name":      query.Name,
-			"namespace": query.Namespace,
-		},
-	}
-
-	userText := extractUserInput(ctx, query, r.Client)
-	var message protocol.Message
 	// Use conversationId from spec (user-provided) or status (from previous execution/resumption)
 	// This ensures we maintain the same conversation across approvals and resumptions
 	conversationId := query.Spec.ConversationId
 	if conversationId == "" {
 		conversationId = query.Status.ConversationId
 	}
-	if conversationId != "" {
-		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(userText),
-		}, nil, &conversationId)
-	} else {
-		message = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(userText),
-		})
-	}
-	message.Metadata = metadata
-	message.Extensions = []string{arka2a.QueryExtensionURI}
+
+	// No Target: for a top-level dispatch the Query's own target is authoritative.
+	message := arka2a.NewQueryExtensionMessage(
+		extractUserInput(ctx, query, r.Client),
+		conversationId,
+		arka2a.QueryExtensionRef{Name: query.Name, Namespace: query.Namespace},
+	)
 
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
-
-	a2aClient, err := arka2a.CreateA2AClient(execCtx, r.Client, address, nil, query.Namespace, query.Name, nil)
-	if err != nil {
-		cancel()
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
-	}
 	defer cancel()
 
-	blocking := true
-	params := protocol.SendMessageParams{
-		RPCID:   protocol.GenerateRPCID(),
-		Message: message,
-		Configuration: &protocol.SendMessageConfiguration{
-			Blocking: &blocking,
-		},
-	}
-
-	result, err := a2aClient.SendMessage(execCtx, params)
+	result, err := arka2a.SendQueryExtensionMessage(execCtx, r.Client, address, nil, query.Namespace, query.Name, message, nil)
 	if err != nil {
 		return nil, engineResponseMeta{}, fmt.Errorf("query execution failed: %w", err)
 	}

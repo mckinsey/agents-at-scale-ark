@@ -9,6 +9,7 @@ from ark_sdk.extensions.query import (
     QUERY_EXTENSION_URI,
     QUERY_EXTENSION_METADATA_KEY,
     QueryRef,
+    QueryTargetRef,
     extract_query_ref,
     resolve_query,
     _resolve_value_source,
@@ -78,6 +79,58 @@ class TestExtractQueryRef(unittest.TestCase):
         with self.assertRaises(ValueError):
             extract_query_ref(message)
 
+    def test_target_absent_is_none(self):
+        message = SimpleNamespace(
+            metadata={
+                QUERY_EXTENSION_METADATA_KEY: {
+                    "name": "my-query",
+                    "namespace": "test-ns",
+                }
+            }
+        )
+        self.assertIsNone(extract_query_ref(message).target)
+
+    def test_extracts_target(self):
+        message = SimpleNamespace(
+            metadata={
+                QUERY_EXTENSION_METADATA_KEY: {
+                    "name": "my-query",
+                    "namespace": "test-ns",
+                    "target": {"type": "agent", "name": "member-a"},
+                }
+            }
+        )
+        target = extract_query_ref(message).target
+        self.assertEqual(target, QueryTargetRef(type="agent", name="member-a"))
+
+    def test_raises_on_non_dict_target(self):
+        message = SimpleNamespace(
+            metadata={
+                QUERY_EXTENSION_METADATA_KEY: {
+                    "name": "my-query",
+                    "namespace": "test-ns",
+                    "target": "member-a",
+                }
+            }
+        )
+        with self.assertRaises(ValueError) as ctx:
+            extract_query_ref(message)
+        self.assertIn("must be an object", str(ctx.exception))
+
+    def test_raises_on_incomplete_target(self):
+        message = SimpleNamespace(
+            metadata={
+                QUERY_EXTENSION_METADATA_KEY: {
+                    "name": "my-query",
+                    "namespace": "test-ns",
+                    "target": {"type": "agent"},
+                }
+            }
+        )
+        with self.assertRaises(ValueError) as ctx:
+            extract_query_ref(message)
+        self.assertIn("'type' and 'name'", str(ctx.exception))
+
 
 class TestResolveQuery(unittest.IsolatedAsyncioTestCase):
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
@@ -139,6 +192,72 @@ class TestResolveQuery(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError) as ctx:
             await resolve_query(ref, "hello")
         self.assertIn("agent targets", str(ctx.exception))
+        self.assertIn("ark >= 0.1.68", str(ctx.exception))
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_target_override_resolves_member_of_team_query(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "my-query"}
+        mock_query.spec.target.type = "team"
+        mock_query.spec.target.name = "my-team"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "member-a", "labels": {}}
+        mock_agent.spec.prompt = "You are helpful"
+        mock_agent.spec.description = "Test agent"
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(
+            name="my-query",
+            namespace="default",
+            target=QueryTargetRef(type="agent", name="member-a"),
+        )
+        request = await resolve_query(ref, "hello")
+
+        self.assertEqual(request.agent.name, "member-a")
+        mock_ark.agents.a_get.assert_awaited_once_with("member-a", "default")
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_raises_on_non_agent_target_override(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "my-query"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "my-agent"
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(
+            name="my-query",
+            namespace="default",
+            target=QueryTargetRef(type="team", name="my-team"),
+        )
+        with self.assertRaises(ValueError) as ctx:
+            await resolve_query(ref, "hello")
+        self.assertIn("target override only supports agent targets", str(ctx.exception))
 
 
 class TestResolveValueSource(unittest.IsolatedAsyncioTestCase):

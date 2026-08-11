@@ -19,6 +19,10 @@ type SelectorAgentInterface interface {
 	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error)
 	FullName() string
 	GetToolRegistry() *ToolRegistry
+	// GetExecutionEngine reports the engine the agent runs on, or nil for a
+	// local agent. A selector on a named engine cannot call the runtime
+	// select-next-speaker tool, so its selection is read from its reply text.
+	GetExecutionEngine() *arkv1alpha1.ExecutionEngineRef
 }
 
 type Team struct {

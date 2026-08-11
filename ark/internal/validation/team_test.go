@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 func TestValidateTeam(t *testing.T) { //nolint:gocognit
@@ -253,4 +254,72 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 			t.Fatal("expected error for loops on selector strategy")
 		}
 	})
+}
+
+// validateNoMixedTeam had no test before the IsNamedEngine refactor. These pin
+// its behaviour so the shared helper cannot silently change classification.
+func TestValidateNoMixedTeam(t *testing.T) {
+	engineAgent := func(engine string) *arkv1alpha1.Agent {
+		agent := &arkv1alpha1.Agent{}
+		if engine != "" {
+			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{Name: engine}
+		}
+		return agent
+	}
+
+	tests := []struct {
+		name       string
+		agents     map[string]*arkv1alpha1.Agent
+		wantReject bool
+	}{
+		{
+			name:   "all internal agents",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent(""), "b": engineAgent("")},
+		},
+		{
+			name:   "all external agents",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent("mock-engine"), "b": engineAgent("mock-engine")},
+		},
+		{
+			name:   "a2a agents count as internal",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent(arka2a.ExecutionEngineA2A), "b": engineAgent("")},
+		},
+		{
+			name:       "internal beside external is rejected",
+			agents:     map[string]*arkv1alpha1.Agent{"a": engineAgent(""), "b": engineAgent("mock-engine")},
+			wantReject: true,
+		},
+		{
+			name:       "a2a beside a named engine is rejected",
+			agents:     map[string]*arkv1alpha1.Agent{"a": engineAgent(arka2a.ExecutionEngineA2A), "b": engineAgent("mock-engine")},
+			wantReject: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lookup := newMockLookup()
+			members := make([]arkv1alpha1.TeamMember, 0, len(tt.agents))
+			for _, name := range []string{"a", "b"} {
+				lookup.addResource("Agent", "default", name, tt.agents[name])
+				members = append(members, arkv1alpha1.TeamMember{Name: name, Type: "agent"})
+			}
+
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+				Spec:       arkv1alpha1.TeamSpec{Strategy: "sequential", Members: members},
+			}
+
+			err := NewValidator(lookup).validateNoMixedTeam(context.Background(), team)
+			if tt.wantReject {
+				if err == nil {
+					t.Fatal("expected a mixed-team rejection")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }

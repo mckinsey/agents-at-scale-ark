@@ -13,7 +13,7 @@ from ark_sdk.executor import (
     Model,
 )
 from ark_sdk.executor_app import A2AExecutorAdapter, ExecutorApp
-from ark_sdk.extensions.query import QUERY_EXTENSION_URI, QueryRef
+from ark_sdk.extensions.query import QUERY_EXTENSION_URI, QueryRef, QueryTargetRef
 
 
 class StubExecutor(BaseExecutor):
@@ -237,6 +237,89 @@ class TestAdapterBrokerFinalChunk:
             return_value=MagicMock(),
         ):
             await adapter._do_execute(context, event_queue)
+
+
+class TestAdapterSubTargetInvocation:
+    """A target override means the caller owns the query's stream and status."""
+
+    @pytest.mark.anyio
+    async def test_sub_target_skips_broker_and_status_updater(self):
+        executor = StubExecutor("test")
+        adapter = A2AExecutorAdapter(executor)
+
+        context = MagicMock()
+        context.get_user_input.return_value = "hi"
+        context.message.context_id = "conv-1"
+        context.message.message_id = "msg-1"
+        event_queue = AsyncMock()
+
+        discover = AsyncMock(return_value="http://broker")
+        broker_cls = MagicMock()
+        status_cls = MagicMock()
+
+        with patch(
+            "ark_sdk.executor_app.extract_query_ref",
+            return_value=QueryRef(
+                name="q",
+                namespace="ns",
+                target=QueryTargetRef(type="agent", name="member-a"),
+            ),
+        ), patch(
+            "ark_sdk.executor_app.resolve_query",
+            new=AsyncMock(return_value=_make_request()),
+        ), patch(
+            "ark_sdk.executor_app.discover_broker_url",
+            new=discover,
+        ), patch(
+            "ark_sdk.executor_app.BrokerClient",
+            broker_cls,
+        ), patch(
+            "ark_sdk.executor_app.QueryStatusUpdater",
+            status_cls,
+        ):
+            await adapter._do_execute(context, event_queue)
+
+        discover.assert_not_awaited()
+        broker_cls.assert_not_called()
+        status_cls.assert_not_called()
+        event_queue.enqueue_event.assert_awaited_once()
+
+    @pytest.mark.anyio
+    async def test_top_level_uses_broker_and_status_updater(self):
+        executor = StubExecutor("test")
+        adapter = A2AExecutorAdapter(executor)
+
+        context = MagicMock()
+        context.get_user_input.return_value = "hi"
+        context.message.context_id = "conv-1"
+        context.message.message_id = "msg-1"
+        event_queue = AsyncMock()
+
+        discover = AsyncMock(return_value="http://broker")
+        broker_cls = MagicMock(return_value=AsyncMock())
+        status_cls = MagicMock()
+
+        with patch(
+            "ark_sdk.executor_app.extract_query_ref",
+            return_value=QueryRef(name="q", namespace="ns"),
+        ), patch(
+            "ark_sdk.executor_app.resolve_query",
+            new=AsyncMock(return_value=_make_request()),
+        ), patch(
+            "ark_sdk.executor_app.discover_broker_url",
+            new=discover,
+        ), patch(
+            "ark_sdk.executor_app.BrokerClient",
+            broker_cls,
+        ), patch(
+            "ark_sdk.executor_app.QueryStatusUpdater",
+            status_cls,
+        ):
+            await adapter._do_execute(context, event_queue)
+
+        discover.assert_awaited_once()
+        broker_cls.assert_called_once()
+        status_cls.assert_called_once()
 
 
 if __name__ == "__main__":

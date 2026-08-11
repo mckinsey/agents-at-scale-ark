@@ -210,17 +210,24 @@ class A2AExecutorAdapter(AgentExecutor):
         query_ref = extract_query_ref(context.message)
         request = await resolve_query(query_ref, user_text, conversation_id=conversation_id)
 
-        broker_url = await discover_broker_url(query_ref.namespace)
-        broker = BrokerClient(
-            base_url=broker_url,
-            query_name=query_ref.name,
-            session_id=conversation_id,
-            agent_name=request.agent.name,
-            message_ttl_seconds=request.message_ttl_seconds,
-        ) if broker_url else None
+        # A target override means this is a sub-request for one member of a team:
+        # the calling engine owns the query's stream, memory and status, so writing
+        # to them here would double-write memory and churn status.phase.
+        sub_target = query_ref.target is not None
+
+        broker = None
+        if not sub_target:
+            broker_url = await discover_broker_url(query_ref.namespace)
+            broker = BrokerClient(
+                base_url=broker_url,
+                query_name=query_ref.name,
+                session_id=conversation_id,
+                agent_name=request.agent.name,
+                message_ttl_seconds=request.message_ttl_seconds,
+            ) if broker_url else None
 
         self.executor._broker_client = broker
-        self.executor._query_status_updater = QueryStatusUpdater(query_ref)
+        self.executor._query_status_updater = None if sub_target else QueryStatusUpdater(query_ref)
         self.executor._streamed = False
 
         try:
