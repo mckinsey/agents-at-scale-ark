@@ -1,10 +1,25 @@
 #!/usr/bin/env bash
 # Usage: bash psql-query.sh "<sql>"
-# Runs a SQL query against ark-storage-dev postgres.
-# Auto-detects the namespace (ark-system in CI, default in devspace).
+# Runs a SQL query against the broker's ark-storage-dev postgres.
+# Targets the postgres co-located with the ark-broker deployment (its
+# DATABASE_URL uses the bare service name, so the DB is in the broker's
+# namespace) - ark-system in CI, default in devspace.
 set -eu
-NS=$(kubectl get deployment --all-namespaces \
-  -o jsonpath='{range .items[?(@.metadata.name=="ark-storage-dev")]}{.metadata.namespace}{end}' 2>/dev/null)
+NS=""
+for candidate in ark-system default; do
+  if kubectl -n "$candidate" get deployment ark-broker >/dev/null 2>&1; then
+    NS="$candidate"
+    break
+  fi
+done
+if [ -z "$NS" ]; then
+  for candidate in ark-system default; do
+    if kubectl -n "$candidate" get deployment ark-storage-dev >/dev/null 2>&1; then
+      NS="$candidate"
+      break
+    fi
+  done
+fi
 NS=${NS:-ark-system}
 PGPASSWORD=$(kubectl -n "$NS" get secret ark-storage-dev-password \
   -o jsonpath='{.data.password}' | base64 -d)
