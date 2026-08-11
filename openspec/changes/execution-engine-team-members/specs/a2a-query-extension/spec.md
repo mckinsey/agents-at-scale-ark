@@ -128,11 +128,22 @@ No match, or an ambiguous one, SHALL surface as the existing invalid-agent error
 - **WHEN** an engine-backed selector's reply matches no candidate, or matches more than one ambiguously
 - **THEN** the selection fails with an invalid-agent error and the team terminates as it does for a local selector
 
-### Requirement: Human-in-the-loop approval is not supported over A2A
+### Requirement: The controller's approval flow is preserved
 
-An agent executed over either A2A transport SHALL NOT be able to raise a human-in-the-loop approval, because the approval cannot be forwarded to the orchestrator that owns the Query. A peer returning a task in the `input-required` state SHALL be reported as an unsupported capability rather than a generic protocol error.
+This requirement constrains only the A2A hops the **completions executor** makes outbound: an agent with `executionEngine: a2a`, and a named engine handed a sub-target. It does not constrain the controller's dispatch to an engine.
 
-#### Scenario: Peer returns an input-required task
+The controller SHALL continue to support human-in-the-loop approval on its dispatch to an execution engine. An engine that returns a task in the `input-required` state SHALL result in an A2ATask resource and a Query in phase `input-required`, resumable as it is today. No part of this change SHALL remove or weaken that flow.
 
-- **WHEN** an agent dispatched over A2A returns a task in state `input-required`
-- **THEN** the run fails with an error naming the task and stating that HITL approval is not supported for agents executed over A2A
+#### Scenario: An engine asks the controller for approval
+
+- **WHEN** an engine the controller dispatched a Query to returns a task in state `input-required`
+- **THEN** an A2ATask is created carrying the task and context IDs, and the Query moves to phase `input-required` awaiting approval
+
+### Requirement: Approval requests on the executor's outbound hops are reported as unsupported
+
+An agent the completions executor calls over A2A SHALL NOT be able to raise a human-in-the-loop approval, because the executor has no way to forward the approval to the orchestrator that owns the Query. Such a peer returning a task in the `input-required` state SHALL be reported as an unsupported capability rather than a generic protocol error. This is the behaviour today; the change only improves the message.
+
+#### Scenario: Peer returns an input-required task to the executor
+
+- **WHEN** an agent the completions executor dispatched over A2A returns a task in state `input-required`
+- **THEN** the run fails with an error naming the task and stating that HITL approval is not supported on this hop

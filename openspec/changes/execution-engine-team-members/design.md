@@ -9,13 +9,13 @@ Even with dispatch fixed, the engine cannot tell **which** member to run: the wi
 **Goals**
 
 - A `Query → Team → member/selector` on a named engine executes correctly, with members seeing each other's output.
-- One dispatch implementation shared by the controller and the completions engine.
+- One dispatch implementation shared by the controller and the completions engine, covering address resolution and message construction. Result handling stays separate by design: the controller turns an `input-required` task into an A2ATask and pauses the Query, which the executor has no way to do.
 - No change to any currently-working configuration, guaranteed by construction rather than by care.
 
 **Non-Goals**
 
 - Mixed teams (`validateNoMixedTeam` untouched — it does not block this issue).
-- HITL approvals over A2A.
+- HITL approvals raised on the executor's own outbound A2A hops (sub-target, `executionEngine: a2a`).
 - Streaming on the engine path.
 - Marketplace executor changes.
 
@@ -49,6 +49,8 @@ An Agent with `spec.executionEngine.name` pointing at a completions engine would
 The guard marks sub-target invocations in the context and executes locally instead of re-dispatching. This is name-independent, needs no self-identity knowledge the executor does not have (no engine-name env var exists in the completions chart), and bounds every chain at one extra hop. Semantically it is exactly right: an engine asked to run agent X runs X rather than delegating again.
 
 `MakeAgent` and `executeAgent` share the same predicate (`dispatchesToEngine`) so model loading and execution routing cannot disagree.
+
+This rests on one invariant worth naming: the executor stamps `target` on its own outbound dispatch even though the controller does not (Decision 2). A top-level Query on a self-dispatching agent therefore arrives with no target and dispatches once, then returns to the engine *with* a target — hop two runs locally and the chain ends. Remove that stamp and the guard silently becomes the infinite loop it exists to prevent. `dispatchesToEngine`'s unit table drives the predicate from a synthetic context, so it does not cover this; 10.8 (chart injects the engine's own name) is the admission-time backstop.
 
 ### 5. A sub-target must not touch the parent Query — enforced structurally
 

@@ -2,10 +2,10 @@
 
 - [ ] 1.1 `IsNamedEngine` and `ResolveExecutionEngineAddress` in `ark/internal/a2a/engine.go`
 - [ ] 1.2 `QueryExtensionRef`/`QueryExtensionTarget`, `NewQueryExtensionMessage`, `SendQueryExtensionMessage` in `ark/internal/a2a/query_extension.go`
-- [ ] 1.3 Export `ExtractResponseFromMessageResult`
-- [ ] 1.4 Refactor `sendQueryA2A` and `resolveDispatchAddress` onto the helpers
+- [ ] 1.3 Export `ExtractResponseFromMessageResult` for the executor's sub-target path. **Not** for `sendQueryA2A`: on a `*protocol.Task` the helper calls `ExtractTextFromTask` first and returns on its error, so `HandleA2ATaskResponse` is reached only when the task state is `completed` — `input-required` and `failed` both bail before it
+- [ ] 1.4 Refactor `sendQueryA2A` and `resolveDispatchAddress` onto the helpers — address resolution and message construction only. Its `*protocol.Task` → `statusInputRequired` branch stays as it is: that branch is what turns a tool-approval pause into an A2ATask plus a Query in phase `input-required`. Routing the result through `ExtractResponseFromMessageResult` instead would surface every approval pause as an error and fail the query
 - [ ] 1.5 Adopt `IsNamedEngine` at all five duplicated call sites
-- [ ] 1.6 Name `input-required` explicitly in `ExtractTextFromTask`, so both A2A transports report unsupported HITL rather than a generic protocol error
+- [ ] 1.6 Name `input-required` explicitly in `ExtractTextFromTask`, so both of the executor's outbound A2A hops report unsupported HITL rather than a generic protocol error. Only reachable from the two `ExtractResponseFromMessageResult` callers (`a2a.go`, `execution_engine.go`) — `sendQueryA2A` does not route through it, so the controller's A2ATask approval flow is unaffected
 - [ ] 1.7 Return a real recorder from the noop eventing provider's `A2aRecorder()`, which is `nil` today while both A2A paths dereference it unconditionally
 
 
@@ -96,7 +96,7 @@
 - [ ] 10.1 Promote the ark-sdk echo engine to `images/ark-echo-engine/` with `build.mk` and CI wiring, and add chainsaw coverage for the **selector** and **sub-target** paths.
 - [ ] 10.2 Marketplace PR: bump the three executor `ark-sdk` pins; gate the Claude scheduler's status writes on `target`
 - [ ] 10.3 Deterministic per-`(query, agent)` contextId, so a member reuses its sandbox instead of one per turn
-- [ ] 10.4 HITL approval forwarding over A2A
+- [ ] 10.4 Forward an `input-required` approval raised on one of the executor's outbound A2A hops back to the controller that owns the Query, so a sub-target or `executionEngine: a2a` agent can use the A2ATask flow the controller already has
 - [ ] 10.5 A2A `message/stream` on the engine path
 - [ ] 10.6 Record engine-declared extensions in `ExecutionEngine.status` for pre-flight capability checks
 - [ ] 10.7 Revisit `validateNoMixedTeam`
