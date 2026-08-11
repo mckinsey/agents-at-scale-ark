@@ -49,7 +49,9 @@ describe('a2aTasksService', () => {
       const result = await a2aTasksService.getAll();
 
       expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks');
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks', {
+        params: { limit: 100 },
+      });
 
       expect(result).toHaveLength(2);
       expect(result[0]).toMatchObject({
