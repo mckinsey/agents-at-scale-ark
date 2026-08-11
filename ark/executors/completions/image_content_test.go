@@ -22,6 +22,25 @@ func TestToolResultImageEncoding(t *testing.T) {
 	t.Run("data url carries media type and base64", func(t *testing.T) {
 		assert.Equal(t, "data:image/png;base64,"+image.Base64(), image.DataURL())
 	})
+
+	t.Run("data url round-trips", func(t *testing.T) {
+		back, ok := imageFromDataURL(image.DataURL())
+		require.True(t, ok)
+		assert.Equal(t, "image/png", back.MediaType)
+		assert.Equal(t, pngBytes, back.Data)
+	})
+
+	t.Run("a non-data url is rejected rather than sent as text", func(t *testing.T) {
+		for _, url := range []string{
+			"https://example.com/cat.png",
+			"data:image/png,notbase64",
+			"data:;base64," + image.Base64(),
+			"data:image/png;base64,!!!not-base64!!!",
+		} {
+			_, ok := imageFromDataURL(url)
+			assert.False(t, ok, url)
+		}
+	})
 }
 
 func TestMCPImageContentIsNotFlattened(t *testing.T) {
@@ -45,5 +64,17 @@ func TestMCPImageContentIsNotFlattened(t *testing.T) {
 	assert.Equal(t, pngBytes, images[0].Data)
 	assert.Equal(t, "here is the page", text.String())
 	assert.NotContains(t, text.String(), base64.StdEncoding.EncodeToString(pngBytes))
+}
+
+func TestNewUserImageMessageCarriesImageParts(t *testing.T) {
+	msg := NewUserImageMessage("Image returned by the read tool.",
+		[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}})
+
+	text, images, role := extractMessageParts(msg)
+	assert.Equal(t, RoleUser, role)
+	assert.Equal(t, "Image returned by the read tool.", text)
+	require.Len(t, images, 1)
+	assert.Equal(t, "image/png", images[0].MediaType)
+	assert.Equal(t, pngBytes, images[0].Data)
 }
 

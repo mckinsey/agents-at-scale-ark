@@ -33,6 +33,19 @@ func ToolMessage[T string | []openai.ChatCompletionContentPartTextParam](content
 	return Message(openai.ToolMessage(content, toolCallID))
 }
 
+func NewUserImageMessage(caption string, images []ToolResultImage) Message {
+	parts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(images)+1)
+	if caption != "" {
+		parts = append(parts, openai.TextContentPart(caption))
+	}
+	for _, image := range images {
+		parts = append(parts, openai.ImageContentPart(
+			openai.ChatCompletionContentPartImageImageURLParam{URL: image.DataURL()},
+		))
+	}
+	return Message(openai.UserMessage(parts))
+}
+
 type TeamMember interface {
 	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error)
 	GetName() string

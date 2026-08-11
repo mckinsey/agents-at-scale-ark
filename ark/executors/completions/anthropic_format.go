@@ -1,12 +1,62 @@
 package completions
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"strings"
 
 	"github.com/openai/openai-go"
 )
 
 func extractMessageContent(msg Message) (string, string) {
+	text, _, role := extractMessageParts(msg)
+	return text, role
+}
+
+func extractMessageParts(msg Message) (string, []ToolResultImage, string) {
+	openaiMsg := openai.ChatCompletionMessageParamUnion(msg)
+
+	if userMsg := openaiMsg.OfUser; userMsg != nil {
+		if parts := userMsg.Content.OfArrayOfContentParts; len(parts) > 0 {
+			var text string
+			var images []ToolResultImage
+			for _, part := range parts {
+				switch {
+				case part.OfText != nil:
+					text += part.OfText.Text
+				case part.OfImageURL != nil:
+					if image, ok := imageFromDataURL(part.OfImageURL.ImageURL.URL); ok {
+						images = append(images, image)
+					}
+				}
+			}
+			return text, images, RoleUser
+		}
+	}
+
+	text, role := extractMessageString(msg)
+	return text, nil, role
+}
+
+func imageFromDataURL(url string) (ToolResultImage, bool) {
+	const prefix = "data:"
+	const marker = ";base64,"
+	if !strings.HasPrefix(url, prefix) {
+		return ToolResultImage{}, false
+	}
+	markerAt := strings.Index(url, marker)
+	if markerAt < 0 {
+		return ToolResultImage{}, false
+	}
+	mediaType := url[len(prefix):markerAt]
+	data, err := base64.StdEncoding.DecodeString(url[markerAt+len(marker):])
+	if err != nil || mediaType == "" || len(data) == 0 {
+		return ToolResultImage{}, false
+	}
+	return ToolResultImage{MediaType: mediaType, Data: data}, true
+}
+
+func extractMessageString(msg Message) (string, string) {
 	openaiMsg := openai.ChatCompletionMessageParamUnion(msg)
 
 	if systemMsg := openaiMsg.OfSystem; systemMsg != nil {

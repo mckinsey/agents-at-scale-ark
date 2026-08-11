@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add `ToolResultImage` (media type + raw bytes) with `DataURL()` and `Base64()` helpers to `ark/executors/completions/types.go`
 - [x] 1.2 Add `Images []ToolResultImage` to `ToolResult`
-- [ ] 1.3 Add `NewUserImageMessage(caption, images)` building a user message with one image content part per image
+- [x] 1.3 Add `NewUserImageMessage(caption, images)` building a user message with one image content part per image
 - [x] 1.4 Handle `*mcpsdk.ImageContent` in `MCPExecutor.Execute` (`mcp.go`) — collect the bytes, write a one-line note to the tool text, keep the JSON fallback for other part types
 
 ## 2. Agent Loop
@@ -12,8 +12,8 @@
 
 ## 3. Anthropic Request Format
 
-- [ ] 3.1 Add `extractMessageParts` returning text, images and role; keep `extractMessageContent` as the text-only wrapper
-- [ ] 3.2 Add `imageFromDataURL` parsing `data:<media type>;base64,<data>` and rejecting anything else
+- [x] 3.1 Add `extractMessageParts` returning text, images and role; keep `extractMessageContent` as the text-only wrapper
+- [x] 3.2 Add `imageFromDataURL` parsing `data:<media type>;base64,<data>` and rejecting anything else
 - [ ] 3.3 Extend the message content block type with an optional `source` (`anthropicImageSource`), replacing `anthropicMessageContent`
 - [ ] 3.4 Replace the inline cache-block rendering in `convertMessagesToAnthropic` with `renderAnthropicContent(text, images, cached)` — bare JSON string when there is no image and no cache breakpoint, block array otherwise
 - [ ] 3.5 Keep a message that carries an image but no text (skip only when both are empty)
