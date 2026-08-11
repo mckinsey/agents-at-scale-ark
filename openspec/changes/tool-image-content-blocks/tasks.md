@@ -3,7 +3,7 @@
 - [x] 1.1 Add `ToolResultImage` (media type + raw bytes) with `DataURL()` and `Base64()` helpers to `ark/executors/completions/types.go`
 - [x] 1.2 Add `Images []ToolResultImage` to `ToolResult`
 - [ ] 1.3 Add `NewUserImageMessage(caption, images)` building a user message with one image content part per image
-- [ ] 1.4 Handle `*mcpsdk.ImageContent` in `MCPExecutor.Execute` (`mcp.go`) — collect the bytes, write a one-line note to the tool text, keep the JSON fallback for other part types
+- [x] 1.4 Handle `*mcpsdk.ImageContent` in `MCPExecutor.Execute` (`mcp.go`) — collect the bytes, write a one-line note to the tool text, keep the JSON fallback for other part types
 
 ## 2. Agent Loop
 

@@ -51,13 +51,18 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, e
 	}
 	log.V(2).Info("tool call response", "tool", m.ToolName, "response", response)
 	var result strings.Builder
+	var images []ToolResultImage
 	for _, content := range response.Content {
-		if textContent, ok := content.(*mcpsdk.TextContent); ok {
-			result.WriteString(textContent.Text)
-		} else {
+		switch typed := content.(type) {
+		case *mcpsdk.TextContent:
+			result.WriteString(typed.Text)
+		case *mcpsdk.ImageContent:
+			images = append(images, ToolResultImage{MediaType: typed.MIMEType, Data: typed.Data})
+			result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes]", typed.MIMEType, len(typed.Data)))
+		default:
 			jsonBytes, _ := json.MarshalIndent(content, "", "  ")
 			result.WriteString(string(jsonBytes))
 		}
 	}
-	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: result.String()}, nil
+	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: result.String(), Images: images}, nil
 }
