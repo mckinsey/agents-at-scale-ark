@@ -27,6 +27,7 @@
 - [ ] 3.3 No broker stream created, so no chunk publishing or stream finalisation
 - [ ] 3.4 Excluded from HITL resumption, which is keyed off the parent Query's A2A task
 - [ ] 3.5 Unmarshal the inbound payload into the shared `QueryExtensionRef` rather than re-declaring it, retiring the receive-side `arkMetadata`/`queryRef`/`metadataTarget` types so the wire contract is defined once
+- [ ] 3.6 Refuse a tool approval raised inside a sub-target at the point of origin, naming the agent and tool, rather than encoding it as a task carrying the parent's conversation for the caller to reject
 
 
 
@@ -99,3 +100,4 @@
 - [ ] 10.5 A2A `message/stream` on the engine path
 - [ ] 10.6 Record engine-declared extensions in `ExecutionEngine.status` for pre-flight capability checks
 - [ ] 10.7 Revisit `validateNoMixedTeam`
+- [ ] 10.8 Have the completions chart inject the engine's own name, so a self-dispatching `executionEngine` can be caught at admission rather than at query time

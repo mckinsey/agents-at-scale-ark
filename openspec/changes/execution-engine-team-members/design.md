@@ -60,9 +60,40 @@ Instead a sub-target is handed `NoopMemory` and a nil event stream at setup, whi
 
 The `select-next-speaker` and `terminate` tools are registered at runtime on a local `ToolRegistry` and can never reach an out-of-process engine, so text is the only viable mechanism.
 
-Matching is exact → case-insensitive → a single candidate mentioned as a **whole name**. Boundary matching matters: raw substring matching selects a member called `ana` from the word `analysis`. Hyphen counts as a name character so `agent` does not match inside `agent-2`; a dot does not, so a sentence-ending period still matches.
+**Selection.** Try in order: exact match → case-insensitive match → a single candidate appearing as a whole name.
 
-Termination uses a `TERMINATE` token, optionally followed by a closing response. The token must stand alone or be followed by whitespace or a colon — a hyphen is **not** a separator, because it is legal inside a Kubernetes name and a member called `terminate-agent` must remain selectable.
+```
+NAME_CHAR = [A-Za-z0-9-]     # hyphen is legal in a resource name; a dot is not treated as one
+
+containsWholeName(haystack, needle):          # both already lowercased
+  for each index i where haystack[i:] starts with needle:
+    before_ok = (i == 0) or haystack[i-1] not in NAME_CHAR
+    after_ok  = (i + len(needle) == len(haystack)) or haystack[i + len(needle)] not in NAME_CHAR
+    if before_ok and after_ok: return true
+  return false
+```
+
+Raw substring matching would select a member called `ana` from the word `analysis`. Hyphen is a name character, so `agent` does not match inside `agent-2`. A dot is not, so `analyst.` at the end of a sentence still matches `analyst` — sentence punctuation is far more common in a reply than a dotted agent name would be.
+
+This is expressible as a regex only with lookaround (`(?<![A-Za-z0-9-])name(?![A-Za-z0-9-])`), which Go's RE2 engine does not support. Consuming the boundary characters instead mis-handles adjacent occurrences, hence the scan.
+
+If more than one candidate matches, discard any that is a substring of another match; if exactly one remains it wins, otherwise the selection is ambiguous and fails.
+
+**Termination.**
+
+```
+SEPARATOR = [: \t\n\r]       # NOT hyphen or dot: both are legal in a resource name
+
+parseTerminate(reply):
+  s = trim(reply)
+  if s does not start with "TERMINATE" (case-insensitive): return (none, false)
+  rest = s[len("TERMINATE"):]
+  if rest == "":               return ("", true)        # bare token, no closing response
+  if rest[0] not in SEPARATOR: return (none, false)     # e.g. "terminate-agent" is a member name
+  return (trim(trimLeft(rest, SEPARATOR)), true)        # closing response
+```
+
+Accepted forms are `TERMINATE`, `TERMINATE: text` and `TERMINATE text`. A member called `terminate-agent` remains selectable. The closing response, not the token, is what reaches the user.
 
 Deliberately **no new admission rejection**: with text matching, engine-backed selectors work, so rejecting them would reject valid configurations.
 
@@ -91,8 +122,3 @@ The controller would have to reimplement strategies, turn accounting, transcript
 None. No CRD, API type or chart changes. Existing single-agent, built-in-team and A2AServer configurations are untouched.
 
 Users who worked around the issue by hand-adding `ark.mckinsey.com/a2a-server-address` to engine-backed agents should remove those annotations and any synthetic `A2AServer`: those agents will now take the engine path and resolve the `ExecutionEngine` address instead.
-
-## Open Questions
-
-- Should the ExecutionEngine controller record engine-declared extensions in `status`, turning the version-floor failure into a pre-flight condition?
-- Should mixed teams be revisited now that the technical justification for rejecting them is weaker?

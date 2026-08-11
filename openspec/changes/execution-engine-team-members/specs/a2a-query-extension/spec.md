@@ -39,6 +39,8 @@ A sub-target SHALL take its input from the inbound A2A message rather than the Q
 
 The `streaming-supported` annotation SHALL be ignored for sub-target invocations, which use blocking `message/send`, because broker chunks are keyed by query name and would interleave across members.
 
+A tool approval raised inside a sub-target SHALL fail at the point of origin, naming the agent and the tool, rather than being encoded as a task carrying the parent's conversation. The approval cycle is keyed to the parent Query, which the caller owns and through which it cannot resume the sub-target; only the sub-target knows which agent and tool are involved.
+
 #### Scenario: SDK suppresses broker and status for a sub-target
 
 - **WHEN** an A2A message with a `target` arrives at an engine built with the Python SDK
@@ -52,6 +54,12 @@ The `streaming-supported` annotation SHALL be ignored for sub-target invocations
 - **THEN** it executes agent X against the inbound message text
 - **AND** it writes nothing to the Query's memory, broker stream or status
 - **AND** it does not enter the approval-resumption path even if the parent Query has an A2A task
+
+#### Scenario: A tool inside a sub-target requires approval
+
+- **WHEN** an agent executing as a sub-target calls a tool configured to require approval
+- **THEN** the run fails with an error naming that agent and that tool, and stating that approval is not supported for agents executed over A2A
+- **AND** no approval task carrying the parent Query's conversation is created
 
 #### Scenario: SDK keeps broker and status for a top-level call
 
