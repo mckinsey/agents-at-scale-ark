@@ -55,7 +55,7 @@ func isMachineManaged(mcpServer *arkv1alpha1.MCPServer) bool {
 //
 // Deferring because discovery has not run yet is not a failure and
 // returns a nil error.
-func (r *MCPServerReconciler) ensureToken(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, material *authorizationMaterial) (*authorizationMaterial, error) {
+func (r *MCPServerReconciler) ensureToken(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, material *arkmcp.AuthorizationMaterial) (*arkmcp.AuthorizationMaterial, error) {
 	if !isMachineManaged(mcpServer) || material == nil {
 		return material, nil
 	}
@@ -156,37 +156,38 @@ func (r *MCPServerReconciler) ensureToken(ctx context.Context, mcpServer *arkv1a
 	r.Eventing.MCPServerRecorder().TokenAcquired(ctx, mcpServer, fmt.Sprintf(
 		"acquired access token via client_credentials for client %q at %s", cc.ClientID, tokenEndpoint))
 
-	return &authorizationMaterial{
-		accessToken: tr.AccessToken,
-		expiresAt:   expiresAt,
-		secretName:  material.secretName,
+	// writeTokenSecret has just created or updated the Secret, so the material
+	// this reconcile goes on to use is no longer missing one.
+	return &arkmcp.AuthorizationMaterial{
+		AccessToken: tr.AccessToken,
+		ExpiresAt:   expiresAt,
 	}, nil
 }
 
 // hasUsableToken reports whether material carries a token that has not
 // already expired. A token inside the renewal skew is still usable — the
 // skew is headroom, not an expiry.
-func hasUsableToken(material *authorizationMaterial) bool {
-	if material == nil || material.accessToken == "" {
+func hasUsableToken(material *arkmcp.AuthorizationMaterial) bool {
+	if material == nil || material.AccessToken == "" {
 		return false
 	}
-	if material.expiresAt == nil {
+	if material.ExpiresAt == nil {
 		return true
 	}
-	return time.Now().Before(material.expiresAt.Time)
+	return time.Now().Before(material.ExpiresAt.Time)
 }
 
 // tokenNeedsRenewal reports whether the current material is missing a
 // token or is within tokenRenewalSkew of expiry. A token with no
 // recorded expiry is left alone — the 401 path handles rejection.
-func tokenNeedsRenewal(material *authorizationMaterial) bool {
-	if material.accessToken == "" {
+func tokenNeedsRenewal(material *arkmcp.AuthorizationMaterial) bool {
+	if material.AccessToken == "" {
 		return true
 	}
-	if material.expiresAt == nil {
+	if material.ExpiresAt == nil {
 		return false
 	}
-	return time.Until(material.expiresAt.Time) < tokenRenewalSkew
+	return time.Until(material.ExpiresAt.Time) < tokenRenewalSkew
 }
 
 // resolveTokenEndpoint prefers the explicit spec override, falling back
@@ -262,15 +263,11 @@ func (r *MCPServerReconciler) readSigningKey(ctx context.Context, mcpServer *ark
 // renewals. Existing keys the controller does not own — refresh_token,
 // client_id from a prior browser flow — are preserved.
 func (r *MCPServerReconciler) writeTokenSecret(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, accessToken string, expiresAt *metav1.Time) error {
+	// Same helpers the resolver reads through, so a mint and the next read of
+	// what it wrote cannot disagree on which keys hold the token.
 	ref := mcpServer.Spec.Authorization.TokenSecretRef
-	accessKey := ref.AccessTokenKey
-	if accessKey == "" {
-		accessKey = "access_token"
-	}
-	expiresKey := ref.ExpiresAtKey
-	if expiresKey == "" {
-		expiresKey = "expires_at"
-	}
+	accessKey := ref.ResolvedAccessTokenKey()
+	expiresKey := ref.ResolvedExpiresAtKey()
 
 	secret := &corev1.Secret{}
 	nn := types.NamespacedName{Name: ref.Name, Namespace: mcpServer.Namespace}
@@ -349,16 +346,16 @@ func (r *MCPServerReconciler) reconcileConditionsTokenAcquisitionFailed(ctx cont
 // Callers must not use this after a failed acquisition: a token already
 // inside the skew floors the result at one second, which against a
 // failing authorization server becomes a retry every second.
-func tokenRenewalRequeue(mcpServer *arkv1alpha1.MCPServer, material *authorizationMaterial) time.Duration {
+func tokenRenewalRequeue(mcpServer *arkv1alpha1.MCPServer, material *arkmcp.AuthorizationMaterial) time.Duration {
 	poll := getPollInterval(mcpServer.Spec.PollInterval)
 	if mcpServer.Spec.Authorization == nil || mcpServer.Spec.Authorization.ClientCredentials == nil {
 		return poll
 	}
-	if material == nil || material.expiresAt == nil {
+	if material == nil || material.ExpiresAt == nil {
 		return poll
 	}
 
-	untilRenewal := time.Until(material.expiresAt.Time) - tokenRenewalSkew
+	untilRenewal := time.Until(material.ExpiresAt.Time) - tokenRenewalSkew
 
 	// Disperse the herd. A fixed authorization-server policy hands every
 	// client the same TTL, so servers minted in the same moment — an
