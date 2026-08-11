@@ -116,7 +116,11 @@ func (e *NamedExecutionEngine) Execute(ctx context.Context, req NamedEngineReque
 		return nil, err
 	}
 
-	streamFinalResponseChunk(ctx, req.EventStream, modelID, a2aResponse.Content)
+	// streamBlockingA2AResponse does not guard against a nil stream, and a
+	// sub-target invocation deliberately has none.
+	if req.EventStream != nil {
+		streamBlockingA2AResponse(ctx, req.EventStream, a2aResponse, modelID)
+	}
 
 	e.eventingRecorder.Complete(ctx, "ExecutionEngineExecution", "Execution engine execution completed successfully", operationData)
 
