@@ -1726,3 +1726,29 @@ func TestSubTargetSkipsResumption(t *testing.T) {
 		assert.True(t, isResumption, "the orchestrator's own approval cycle must still work")
 	})
 }
+
+// A sub-target cannot pause for approval: the approval cycle is keyed to the
+// parent Query, which the calling engine owns and which has no way to resume us.
+// Failing here rather than at the caller is what preserves the agent and tool
+// names in the error.
+func TestSubTargetApprovalIsRejectedAtOrigin(t *testing.T) {
+	approvalErr := &ApprovalRequiredError{
+		ToolCalls: []ToolCall{{Function: ToolCallFunction{Name: "delete-database"}}},
+	}
+
+	assert.Equal(t, "tool delete-database", approvalToolNames(approvalErr))
+
+	t.Run("names the agent and the tool", func(t *testing.T) {
+		err := fmt.Errorf("agent %s requires approval for %s, which is not supported for agents executed over A2A",
+			"member-b", approvalToolNames(approvalErr))
+		assert.Contains(t, err.Error(), "member-b")
+		assert.Contains(t, err.Error(), "delete-database")
+		assert.Contains(t, err.Error(), "not supported for agents executed over A2A")
+	})
+
+	t.Run("falls back to a count when no tool name is present", func(t *testing.T) {
+		assert.Equal(t, "2 tool call(s)", approvalToolNames(&ApprovalRequiredError{
+			ToolCalls: []ToolCall{{}, {}},
+		}))
+	})
+}
