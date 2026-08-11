@@ -1,5 +1,5 @@
 # To integrate with Prometheus.
-{{- if and .Values.prometheus.enable (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+{{- if and .Values.prometheus.enable .Values.metrics.enable (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -31,8 +31,9 @@ spec:
           name: metrics-server-cert
           key: tls.key
         {{- else }}
-        # Secure TLS configuration (self-signed certificates)
-        insecureSkipVerify: false
+        # No cert-manager: metrics server uses an ephemeral self-signed cert with
+        # no CA to verify against, so skip verification (still TLS on the wire).
+        insecureSkipVerify: true
         {{- end }}
   selector:
     matchLabels:
