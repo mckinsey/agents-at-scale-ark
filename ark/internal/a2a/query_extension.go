@@ -14,9 +14,10 @@ import (
 )
 
 type QueryExtensionRef struct {
-	Name      string                `json:"name"`
-	Namespace string                `json:"namespace"`
-	Target    *QueryExtensionTarget `json:"target,omitempty"`
+	Name           string                `json:"name"`
+	Namespace      string                `json:"namespace"`
+	Target         *QueryExtensionTarget `json:"target,omitempty"`
+	ConversationID string                `json:"conversationId,omitempty"`
 }
 
 type QueryExtensionTarget struct {

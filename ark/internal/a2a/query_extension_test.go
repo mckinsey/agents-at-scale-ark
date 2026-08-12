@@ -51,6 +51,30 @@ func TestNewQueryExtensionMessageTarget(t *testing.T) {
 	}`, string(got))
 }
 
+func TestNewQueryExtensionMessageConversationID(t *testing.T) {
+	msg := NewQueryExtensionMessage("hello", "parent-context", QueryExtensionRef{
+		Name:           "my-query",
+		Namespace:      "default",
+		Target:         &QueryExtensionTarget{Type: "agent", Name: "member-a"},
+		ConversationID: "9f2c4e1a7b8d3f50",
+	})
+
+	got, err := json.Marshal(msg.Metadata)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+		"`+QueryExtensionMetadataKey+`": {
+			"name": "my-query",
+			"namespace": "default",
+			"target": {"type": "agent", "name": "member-a"},
+			"conversationId": "9f2c4e1a7b8d3f50"
+		}
+	}`, string(got))
+
+	require.NotNil(t, msg.ContextID)
+	assert.Equal(t, "parent-context", *msg.ContextID, "the scope rides in metadata, not on contextId")
+}
+
 func TestNewQueryExtensionMessageDeclaresExtension(t *testing.T) {
 	msg := NewQueryExtensionMessage("hello", "", QueryExtensionRef{Name: "q", Namespace: "default"})
 

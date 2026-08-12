@@ -4,6 +4,8 @@ package completions
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -61,10 +63,13 @@ func (e *NamedExecutionEngine) Execute(ctx context.Context, req NamedEngineReque
 		return nil, err
 	}
 
+	conversationID := deriveMemberConversationID(req.ContextID, query.Namespace, query.Name, req.AgentName)
+
 	operationData := map[string]string{
 		"executionEngine": req.EngineRef.Name,
 		"engineAddr":      address,
 		"protocol":        "a2a-jsonrpc",
+		"conversationId":  conversationID,
 	}
 	ctx = e.eventingRecorder.Start(ctx, "ExecutionEngineExecution", fmt.Sprintf("Executing agent %s on execution engine %s", req.AgentName, req.EngineRef.Name), operationData)
 
@@ -86,6 +91,7 @@ func (e *NamedExecutionEngine) Execute(ctx context.Context, req NamedEngineReque
 				Type: ToolTypeAgent,
 				Name: req.AgentName,
 			},
+			ConversationID: conversationID,
 		},
 	)
 
@@ -114,6 +120,16 @@ func (e *NamedExecutionEngine) Execute(ctx context.Context, req NamedEngineReque
 		Messages:    []Message{NewAssistantMessage(a2aResponse.Content)},
 		A2AResponse: a2aResponse,
 	}, nil
+}
+
+func deriveMemberConversationID(parentContextID, namespace, queryName, agentName string) string {
+	base := parentContextID
+	if base == "" {
+		base = namespace + "/" + queryName
+	}
+
+	sum := sha256.Sum256([]byte(base + "\x00" + agentName))
+	return hex.EncodeToString(sum[:16])
 }
 
 func renderEngineInput(userInput Message, history []Message) string {

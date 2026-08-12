@@ -203,11 +203,12 @@ class A2AExecutorAdapter(AgentExecutor):
 
     async def _do_execute(self, context: Any, event_queue: EventQueue) -> None:
         user_text = context.get_user_input()
-        conversation_id = ""
-        if hasattr(context.message, "context_id") and context.message.context_id:
+        query_ref = extract_query_ref(context.message)
+
+        conversation_id = query_ref.conversation_id
+        if not conversation_id and hasattr(context.message, "context_id") and context.message.context_id:
             conversation_id = context.message.context_id
 
-        query_ref = extract_query_ref(context.message)
         request = await resolve_query(query_ref, user_text, conversation_id=conversation_id)
 
         # A target override means this is a sub-request for one member of a team:

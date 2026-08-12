@@ -35,6 +35,25 @@ An engine that does not understand `target` ignores it and reads `spec.target`, 
 
 A `target` invocation is a sub-request: the calling engine owns the Query's status, memory and broker stream, so the receiving engine must not write to any of them.
 
+### Conversation scope
+
+`conversationId` is optional and sent only alongside `target`. It scopes the sub-request's conversation, and the engine should prefer it over the message's `contextId`:
+
+```json
+{
+  "name": "my-query",
+  "namespace": "default",
+  "target": { "type": "agent", "name": "researcher" },
+  "conversationId": "9f2c4e1a7b8d3f5061c2a4b6d8e0f123"
+}
+```
+
+Team members share their conversation through the message body, which carries the accumulated transcript with speaker attribution — not through this field. Each member gets its own `conversationId` so that an engine keying per-conversation state on it (a history store, a session directory) does not place every member in one bucket, which would apply the first member's system prompt to the rest.
+
+The value is derived per Query and agent, so it is stable across turns for the same member and different between members. It is opaque, and safe to use as a path segment or store key.
+
+An engine that does not understand the field falls back to `contextId` and behaves as before.
+
 ## Metadata Key
 
 ```

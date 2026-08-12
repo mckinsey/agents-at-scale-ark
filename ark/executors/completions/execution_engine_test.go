@@ -121,6 +121,103 @@ func TestNamedExecutionEngineExecute(t *testing.T) {
 	assert.Equal(t, map[string]any{"type": "agent", "name": "member-a"}, ref["target"])
 }
 
+func capturedMessage(t *testing.T, captured map[string]any) map[string]any {
+	t.Helper()
+	params, ok := captured["params"].(map[string]any)
+	require.True(t, ok, "request has params")
+	message, ok := params["message"].(map[string]any)
+	require.True(t, ok, "params has a message")
+	return message
+}
+
+func capturedRef(t *testing.T, captured map[string]any) map[string]any {
+	t.Helper()
+	metadata, ok := capturedMessage(t, captured)["metadata"].(map[string]any)
+	require.True(t, ok, "message has metadata")
+	ref, ok := metadata[arka2a.QueryExtensionMetadataKey].(map[string]any)
+	require.True(t, ok, "metadata carries the query ref")
+	return ref
+}
+
+func executeAgainstEngineStub(t *testing.T, agentName, contextID string) map[string]any {
+	t.Helper()
+
+	var captured map[string]any
+	stub := engineStub(t, "ok", &captured)
+	defer stub.Close()
+
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: stub.URL},
+	}
+	e := NewNamedExecutionEngine(engineTestClient(t, engine), eventnoop.NewProvider().A2aRecorder())
+
+	_, err := e.Execute(engineQueryContext(t), NamedEngineRequest{
+		AgentName:   agentName,
+		Namespace:   "default",
+		EngineRef:   &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		ContextID:   contextID,
+		UserInput:   NewUserMessage("hi"),
+		EventStream: &mockEventStream{},
+	})
+	require.NoError(t, err)
+
+	return captured
+}
+
+func TestNamedExecutionEngineScopesConversationPerMember(t *testing.T) {
+	memberA := capturedRef(t, executeAgainstEngineStub(t, "member-a", ""))
+	memberB := capturedRef(t, executeAgainstEngineStub(t, "member-b", ""))
+
+	assert.NotEmpty(t, memberA["conversationId"], "a member with no scope shares the caller's")
+	assert.NotEqual(t, memberA["conversationId"], memberB["conversationId"],
+		"members sharing one scope run under the first member's system prompt")
+}
+
+func TestNamedExecutionEngineConversationIDIsStableForAMember(t *testing.T) {
+	first := capturedRef(t, executeAgainstEngineStub(t, "member-a", ""))
+	second := capturedRef(t, executeAgainstEngineStub(t, "member-a", ""))
+
+	assert.Equal(t, first["conversationId"], second["conversationId"],
+		"a member must resume its own state across turns, not start fresh each time")
+}
+
+func TestNamedExecutionEngineConversationIDVariesWithParentContext(t *testing.T) {
+	noParent := capturedRef(t, executeAgainstEngineStub(t, "member-a", ""))
+	sessionOne := capturedRef(t, executeAgainstEngineStub(t, "member-a", "session-1"))
+	sessionTwo := capturedRef(t, executeAgainstEngineStub(t, "member-a", "session-2"))
+
+	assert.NotEqual(t, noParent["conversationId"], sessionOne["conversationId"])
+	assert.NotEqual(t, sessionOne["conversationId"], sessionTwo["conversationId"],
+		"two sessions of the same query must not share member state")
+}
+
+func TestNamedExecutionEngineLeavesContextIDUnchanged(t *testing.T) {
+	t.Run("absent when the caller has none", func(t *testing.T) {
+		assert.Empty(t, capturedMessage(t, executeAgainstEngineStub(t, "member-a", ""))["contextId"])
+	})
+
+	t.Run("forwarded verbatim when the caller has one", func(t *testing.T) {
+		captured := executeAgainstEngineStub(t, "member-a", "parent-context")
+
+		assert.Equal(t, "parent-context", capturedMessage(t, captured)["contextId"])
+		assert.NotEqual(t, "parent-context", capturedRef(t, captured)["conversationId"],
+			"engines keying sandboxes off contextId must see the value they issued")
+	})
+}
+
+func TestDeriveMemberConversationID(t *testing.T) {
+	id := deriveMemberConversationID("", "default", "my-query", "member-a")
+
+	assert.Len(t, id, 32)
+	assert.Regexp(t, "^[0-9a-f]+$", id, "the value is used as a path segment and a store key")
+
+	assert.NotEqual(t, id, deriveMemberConversationID("", "other", "my-query", "member-a"),
+		"the same team in two namespaces must not share member state")
+	assert.NotEqual(t, id, deriveMemberConversationID("", "default", "other-query", "member-a"))
+	assert.Equal(t, id, deriveMemberConversationID("", "default", "my-query", "member-a"))
+}
+
 func TestNamedExecutionEngineSendsRenderedHistory(t *testing.T) {
 	var captured map[string]any
 	stub := engineStub(t, "ok", &captured)

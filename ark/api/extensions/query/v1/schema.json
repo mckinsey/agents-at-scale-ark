@@ -28,6 +28,10 @@
       },
       "required": ["type", "name"],
       "additionalProperties": false
+    },
+    "conversationId": {
+      "type": "string",
+      "description": "Optional conversation scope for the sub-request, sent only alongside 'target'. Each team member receives its own value, so an engine keying per-conversation state on it does not share one bucket across members. When absent, the engine falls back to the message's contextId."
     }
   },
   "required": ["name", "namespace"],

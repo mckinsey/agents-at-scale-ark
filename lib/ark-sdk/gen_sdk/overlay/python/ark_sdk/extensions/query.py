@@ -44,6 +44,7 @@ class QueryRef:
     # dispatches a single team member, whose Query targets the team rather than
     # the member. When absent, the Query's own spec.target is used.
     target: Optional[QueryTargetRef] = None
+    conversation_id: str = ""
 
 
 def _sdk_version() -> str:
@@ -94,7 +95,25 @@ def extract_query_ref(message: Any) -> QueryRef:
             f"QueryRef must contain 'name' and 'namespace', got: {ref_data}"
         )
 
-    return QueryRef(name=name, namespace=namespace, target=_extract_target(ref_data))
+    return QueryRef(
+        name=name,
+        namespace=namespace,
+        target=_extract_target(ref_data),
+        conversation_id=_extract_conversation_id(ref_data),
+    )
+
+
+def _extract_conversation_id(ref_data: dict) -> str:
+    value = ref_data.get("conversationId")
+    if value is None:
+        return ""
+
+    if not isinstance(value, str):
+        raise ValueError(
+            f"QueryRef 'conversationId' must be a string, got: {value}"
+        )
+
+    return value
 
 
 def _extract_target(ref_data: dict) -> Optional[QueryTargetRef]:

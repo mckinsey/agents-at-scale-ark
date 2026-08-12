@@ -131,6 +131,44 @@ class TestExtractQueryRef(unittest.TestCase):
             extract_query_ref(message)
         self.assertIn("'type' and 'name'", str(ctx.exception))
 
+    def test_conversation_id_absent_is_empty(self):
+        message = SimpleNamespace(
+            metadata={
+                QUERY_EXTENSION_METADATA_KEY: {
+                    "name": "my-query",
+                    "namespace": "test-ns",
+                }
+            }
+        )
+        self.assertEqual(extract_query_ref(message).conversation_id, "")
+
+    def test_extracts_conversation_id(self):
+        message = SimpleNamespace(
+            metadata={
+                QUERY_EXTENSION_METADATA_KEY: {
+                    "name": "my-query",
+                    "namespace": "test-ns",
+                    "target": {"type": "agent", "name": "member-a"},
+                    "conversationId": "9f2c4e1a7b8d3f50",
+                }
+            }
+        )
+        self.assertEqual(extract_query_ref(message).conversation_id, "9f2c4e1a7b8d3f50")
+
+    def test_raises_on_non_string_conversation_id(self):
+        message = SimpleNamespace(
+            metadata={
+                QUERY_EXTENSION_METADATA_KEY: {
+                    "name": "my-query",
+                    "namespace": "test-ns",
+                    "conversationId": {"id": "9f2c"},
+                }
+            }
+        )
+        with self.assertRaises(ValueError) as ctx:
+            extract_query_ref(message)
+        self.assertIn("must be a string", str(ctx.exception))
+
 
 class TestResolveQuery(unittest.IsolatedAsyncioTestCase):
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)

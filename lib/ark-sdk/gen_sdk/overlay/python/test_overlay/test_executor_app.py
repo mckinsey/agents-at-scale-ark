@@ -322,5 +322,99 @@ class TestAdapterSubTargetInvocation:
         status_cls.assert_called_once()
 
 
+class TestAdapterConversationScope:
+    """Each team member carries its own conversation scope in the query ref."""
+
+    @pytest.mark.anyio
+    async def test_ref_conversation_id_wins_over_context_id(self):
+        executor = StubExecutor("test")
+        adapter = A2AExecutorAdapter(executor)
+
+        context = MagicMock()
+        context.get_user_input.return_value = "hi"
+        context.message.context_id = "parent-context"
+        context.message.message_id = "msg-1"
+        event_queue = AsyncMock()
+
+        resolve = AsyncMock(return_value=_make_request())
+
+        with patch(
+            "ark_sdk.executor_app.extract_query_ref",
+            return_value=QueryRef(
+                name="q",
+                namespace="ns",
+                target=QueryTargetRef(type="agent", name="member-a"),
+                conversation_id="9f2c4e1a7b8d3f50",
+            ),
+        ), patch(
+            "ark_sdk.executor_app.resolve_query",
+            new=resolve,
+        ):
+            await adapter._do_execute(context, event_queue)
+
+        assert resolve.await_args.kwargs["conversation_id"] == "9f2c4e1a7b8d3f50"
+
+    @pytest.mark.anyio
+    async def test_falls_back_to_context_id_when_ref_scope_absent(self):
+        executor = StubExecutor("test")
+        adapter = A2AExecutorAdapter(executor)
+
+        context = MagicMock()
+        context.get_user_input.return_value = "hi"
+        context.message.context_id = "parent-context"
+        context.message.message_id = "msg-1"
+        event_queue = AsyncMock()
+
+        resolve = AsyncMock(return_value=_make_request())
+
+        with patch(
+            "ark_sdk.executor_app.extract_query_ref",
+            return_value=QueryRef(
+                name="q",
+                namespace="ns",
+                target=QueryTargetRef(type="agent", name="member-a"),
+            ),
+        ), patch(
+            "ark_sdk.executor_app.resolve_query",
+            new=resolve,
+        ):
+            await adapter._do_execute(context, event_queue)
+
+        assert resolve.await_args.kwargs["conversation_id"] == "parent-context"
+
+    @pytest.mark.anyio
+    async def test_top_level_broker_session_uses_context_id(self):
+        executor = StubExecutor("test")
+        adapter = A2AExecutorAdapter(executor)
+
+        context = MagicMock()
+        context.get_user_input.return_value = "hi"
+        context.message.context_id = "conv-1"
+        context.message.message_id = "msg-1"
+        event_queue = AsyncMock()
+
+        broker_cls = MagicMock(return_value=AsyncMock())
+
+        with patch(
+            "ark_sdk.executor_app.extract_query_ref",
+            return_value=QueryRef(name="q", namespace="ns"),
+        ), patch(
+            "ark_sdk.executor_app.resolve_query",
+            new=AsyncMock(return_value=_make_request()),
+        ), patch(
+            "ark_sdk.executor_app.discover_broker_url",
+            new=AsyncMock(return_value="http://broker"),
+        ), patch(
+            "ark_sdk.executor_app.BrokerClient",
+            broker_cls,
+        ), patch(
+            "ark_sdk.executor_app.QueryStatusUpdater",
+            return_value=MagicMock(),
+        ):
+            await adapter._do_execute(context, event_queue)
+
+        assert broker_cls.call_args.kwargs["session_id"] == "conv-1"
+
+
 if __name__ == "__main__":
     unittest.main()
