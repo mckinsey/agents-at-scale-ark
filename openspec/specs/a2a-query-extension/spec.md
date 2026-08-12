@@ -1,10 +1,6 @@
-## Purpose
+## ADDED Requirements
 
-The A2A query extension carries a QueryRef — the `{name, namespace}` reference naming the Query a request belongs to — from the completions engine to a named execution engine. The receiving engine resolves that reference into its execution context rather than reading agent config, tools, or history from the message.
-
-## Requirements
-
-### Requirement: Completions engine forwards QueryRef extension to named engines
+### Requirement: QueryRef carries an optional target override
 The completions engine SHALL forward the QueryRef extension when sending A2A messages to named execution engines. It SHALL NOT send the agent config, tools, or history as metadata. The engine SHALL NOT read a message array from the Query spec input — conversation history is retrieved from the memory service using the conversation ID.
 
 #### Scenario: Completions engine routes to named execution engine
