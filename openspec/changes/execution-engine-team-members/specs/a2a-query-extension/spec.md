@@ -6,7 +6,11 @@ The QueryRef payload SHALL support an optional `target` object with required `ty
 
 The controller SHALL NOT send `target` on a top-level dispatch, where `spec.target` is authoritative. The completions engine SHALL send `target: {type: agent, name: <member>}` when dispatching one member of a team, because that Query targets the team rather than the member.
 
-The extension URI SHALL NOT change: the field is purely additive, and a receiver that does not understand it ignores it.
+The QueryRef payload SHALL also support an optional `conversationId` string, sent only alongside `target`. It scopes the sub-request's conversation, and a receiving engine SHALL prefer it over the A2A `contextId` when keying per-conversation state. When absent the receiver SHALL fall back to `contextId`, which is what an engine built before the field does unconditionally.
+
+Each member of a team SHALL receive a distinct value, stable across turns of the same Query. An engine keying its own state on the conversation would otherwise treat every member as one conversation, so member B would inherit A's system prompt and, in the Claude executor, A's session directory. The A2A `contextId` SHALL be forwarded unchanged, so an engine keying sandbox lifecycle on it behaves exactly as before.
+
+The extension URI SHALL NOT change: both fields are purely additive, and a receiver that does not understand them ignores them.
 
 #### Scenario: Top-level dispatch sends no target
 
@@ -31,11 +35,30 @@ The extension URI SHALL NOT change: the field is purely additive, and a receiver
 - **THEN** it ignores the field, sees `spec.target.type: team`, and rejects the call with an error stating the required ark version
 - **AND** top-level dispatches to that engine continue to work unchanged
 
+#### Scenario: Two members of one team get different conversation scopes
+
+- **WHEN** the completions engine dispatches two different members of the same team to a named engine
+- **THEN** each message carries a different `conversationId`
+- **AND** both carry the same `contextId` as the parent Query
+
+#### Scenario: One member across turns keeps its conversation scope
+
+- **WHEN** the same member is dispatched more than once within a Query, or in a later turn of the same conversation
+- **THEN** every message carries the same `conversationId`
+
+#### Scenario: Engine predating the conversationId field
+
+- **WHEN** an engine that does not understand `conversationId` receives a team member call
+- **THEN** it ignores the field and keys its state on `contextId` as it does today
+- **AND** it is no worse off than before the field existed
+
 ### Requirement: A sub-target invocation does not own the Query
 
 A receiving engine SHALL NOT write to the Query's broker stream, memory, or `status` when the QueryRef carries a `target`, and SHALL NOT treat the invocation as a resumption of the Query's approval cycle. The calling engine owns all of these for the duration of the run; a second writer double-writes memory, churns `status.phase`, and can complete a stream other members are still using.
 
 A sub-target SHALL take its input from the inbound A2A message rather than the Query's own input, because that message carries the accumulated team transcript while the Query records the question posed to the team as a whole.
+
+A sub-target SHALL NOT be given the parent Query's conversation scope. Receiving engines key per-conversation state on it — history buckets, the system prompt seeded when a bucket is created, session directories — so passing the parent's scope to every member merges them into one conversation and leaks the first member's persona to the rest. This does not withhold team context: the transcript in the message body already carries every member's turns with speaker attribution, which is how a sub-target learns what the team has said.
 
 The `streaming-supported` annotation SHALL be ignored for sub-target invocations, which use blocking `message/send`, because broker chunks are keyed by query name and would interleave across members.
 
@@ -65,6 +88,13 @@ A tool approval raised inside a sub-target SHALL fail at the point of origin, na
 
 - **WHEN** an A2A message without a `target` arrives
 - **THEN** the SDK discovers the broker and sets the query status updater exactly as before
+- **AND** it keys the broker session on `contextId`, unaffected by the new field
+
+#### Scenario: SDK surfaces the sub-request's own conversation scope
+
+- **WHEN** an A2A message carrying both `target` and `conversationId` arrives at an engine built with the Python SDK
+- **THEN** `execute_agent()` receives that value as `request.conversationId`, in preference to the message's `contextId`
+- **AND** an executor keying history or a session directory on it gets one per member
 
 ### Requirement: Completions engine dispatches team members to named engines
 

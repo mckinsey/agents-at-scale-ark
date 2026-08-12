@@ -38,7 +38,7 @@ For a top-level dispatch `query.spec.target` is authoritative and every engine v
 Rejected alternatives:
 
 - **History as extension metadata** — the archived change `2026-03-13-standardize-a2a-extensions` deliberately replaced a blob carrying `agent`/`tools`/`history` with a bare QueryRef. Re-adding history reverts a settled decision.
-- **History via `conversationId` + memory** — intra-run team messages are not persisted until the query ends, so there would be nothing to read; and the Claude scheduler rejects any non-UUID4 contextId while sharing one sandbox across every member that passes the same one.
+- **History via `conversationId` + memory** — intra-run team messages are not persisted until the query ends, so there would be nothing to read; and the Claude scheduler shares one sandbox across every member that passes the same contextId, which is the defect Decision 7 addresses.
 
 That leaves the text. Confirmed against the contract: `ExecutionEngineRequest` has `agent`, `userInput` (a *single* `Message`), `mcpServers`, `conversationId`, `query_annotations`, `execution_engine_annotations`, `message_ttl_seconds` — **no history field at all**. Adding one would change the contract for every executor in the marketplace.
 
@@ -99,13 +99,39 @@ Accepted forms are `TERMINATE`, `TERMINATE: text` and `TERMINATE text`. A member
 
 Deliberately **no new admission rejection**: with text matching, engine-backed selectors work, so rejecting them would reject valid configurations.
 
-### 7. Rejected: a child `Query` CRD per member
+### 7. Per-member conversation scope in metadata, not on `contextId`
+
+Forwarding the parent conversation to every member gives an engine that keys its own state on it one conversation for the whole team. Marketplace langchain seeds the system prompt only when a history bucket is created, so member B inherits A's persona and turns; claude-agent-sdk derives `session_dir` from the value and then resumes the previous session, so B resumes A's Claude session.
+
+The defect is a shared **persona**, not shared memory. Team context is delivered in band: `Team.executeMember` passes the accumulated transcript to every member and `renderEngineHistory` renders it with `# <member>:` attribution (Decision 3). Local members already show the intended shape — each gets its own system prompt, then the shared history. Only the engine path merges identities, so scoping per member restores the local semantics and takes nothing away.
+
+**Rejected: a derived, v4-shaped `contextId`.** The obstacle is not the scheduler's `_is_valid_uuid4` check but the branch after it:
+
+```python
+else:                                          # is_new == False
+    info = await sandbox_manager.get_sandbox(conversation_id)
+    if info is None:
+        return Response(_jsonrpc_error(request_id, -32001,
+                        "Session not found or expired"), status_code=404)
+```
+
+`extract_context_id` sets `is_new=True` only when `contextId` is missing or empty, so **any** value Ark sends — deterministic, random, correctly v4-shaped — takes the `else` branch, misses, and 404s. Scheduler-mode teams would fail outright where today they merely share a sandbox. Every "derive a contextId" variant therefore needs a companion marketplace change; none is self-contained.
+
+It is also semantically wrong here: the transcript is re-sent in full on every member call, so a member with a stable engine-side session would receive turn 1 twice.
+
+**Chosen:** carry the scope in the extension metadata and let the SDK surface it as `request.conversationId`. Base is `contextId` when non-empty, else `<namespace>/<query>`, combined with the agent name under SHA-256 and hex-encoded to 16 bytes — the claude executor uses the value as a directory name, so it must be path-safe, which rules out a readable `ns/name#agent` form. The derived value is added to the `ExecutionEngineExecution` event data, which is the only debuggability the hash costs.
+
+The wire `contextId` is untouched, so the scheduler behaves exactly as today, and both marketplace executors are fixed by the ark-sdk bump already required for `target` — no marketplace code change and no new version floor.
+
+No sub-target gate is needed: `Execute` stamps `target` unconditionally and the controller dispatches top-level agent-on-engine queries directly, so completions is never in that path. Decision 2 holds unchanged.
+
+### 8. Rejected: a child `Query` CRD per member
 
 The most attractive alternative — completions could create a Query with `spec.target = {agent, member}`, send a plain `{name, namespace}` ref, and **every existing engine would work unchanged**, with no schema change, no SDK change and no version floor.
 
 Rejected because **there is no way to create a Query the controller will not dispatch**. `QueryReconciler.Reconcile` has no opt-out annotation or label, so each child would also be dispatched independently and every member would execute twice. Making it work means adding a reconciler opt-out plus webhook handling — strictly more invasive than one optional metadata field — on top of N Query objects per team run.
 
-### 8. Rejected: controller-side team orchestration
+### 9. Rejected: controller-side team orchestration
 
 The controller would have to reimplement strategies, turn accounting, transcript accumulation, memory and streaming, all of which live in completions by design — and `query-execution.mdx` already specifies recursive routing *from* completions.
 
@@ -118,6 +144,8 @@ The controller would have to reimplement strategies, turn accounting, transcript
 | Engine members behave differently from local ones | Documented in `building-execution-engines.mdx`; mixed teams remain rejected at admission |
 | New Ark + old engine, team path | Fails with an explicit version-floor message. Broken → broken, never working → broken |
 | Text-based selection is fuzzier than a tool call | Whole-name boundary matching; ambiguity falls through to the existing `InvalidAgentError` |
+| A future edit merges members back into one conversation | Wire assertions that two members differ and that one member is stable, plus that `contextId` is forwarded untouched (8.11) |
+| The scope is a hash, so it is opaque when debugging an engine's state | Recorded in the `ExecutionEngineExecution` event data alongside the engine address |
 
 ## Migration
 

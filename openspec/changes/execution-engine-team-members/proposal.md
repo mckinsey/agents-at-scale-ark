@@ -16,13 +16,14 @@ This closes a gap between docs and code rather than adding surface. All three al
 - **An optional `target` on the QueryRef payload** naming the resource to execute. A team member's Query targets the team, so without it an engine cannot tell which member to run. The controller sends none for a top-level dispatch, keeping those bytes byte-identical.
 - **Transcript forwarding.** The accumulated team transcript is folded into the member's input, because the engine contract has no history field and intra-run messages are not persisted until the query completes.
 - **A sub-target contract.** An inbound `target` marks a sub-request: run the named agent locally rather than dispatching onwards, take input from the inbound message, and write no parent memory, broker stream, status or approval state. The calling engine owns all of those for the run.
+- **A per-member conversation scope.** An optional `conversationId` beside `target`, distinct per member and stable across turns. Forwarding the parent conversation to every member gives an engine that keys its own state on it one conversation for the whole team, so member B inherits A's system prompt and, in the Claude executor, A's session. Team context is unaffected — it travels in the message body. The A2A `contextId` is unchanged, so sandbox lifecycle behaves as today.
 - **Engine-backed selectors** select, and terminate, by reply text — the `select-next-speaker` and `terminate` tools are registered in-process and can never reach an external engine.
 - **No model load for agents dispatched over A2A**, and no reporting them unavailable for the `modelRef` the mutating webhook defaults onto them.
 
 ## Capabilities
 
 ### Modified Capabilities
-- `a2a-query-extension`: optional `target` override on the QueryRef payload, the sub-target invocation contract, engine-backed team dispatch, and text-based selection for engine-backed selectors.
+- `a2a-query-extension`: optional `target` override and per-member `conversationId` on the QueryRef payload, the sub-target invocation contract, engine-backed team dispatch, and text-based selection for engine-backed selectors.
 
 ## Non-Goals
 
@@ -35,9 +36,11 @@ This closes a gap between docs and code rather than adding surface. All three al
 
 - `ark/internal/a2a/` — `engine.go`, `query_extension.go` (new); `ExtractResponseFromMessageResult` exported; `input-required` named explicitly in `ExtractTextFromTask`
 - `ark/internal/controller/` — `query_controller.go` refactored onto the helpers; `agent_controller.go` readiness fix
-- `ark/executors/completions/` — `execution_engine.go` (new); dispatch, sub-target handling and selector changes
+- `ark/executors/completions/` — `execution_engine.go` (new); dispatch, sub-target handling, per-member conversation scope and selector changes
 - `ark/api/extensions/query/v1/` — schema and README
-- `lib/ark-sdk/.../extensions/query.py`, `executor_app.py` — target resolution and sub-target suppression
+- `lib/ark-sdk/.../extensions/query.py`, `executor_app.py` — target resolution, conversation scope and sub-target suppression
 - `tests/execution-engine-team/` — new chainsaw e2e
 
-**Version floor.** Resolving `target` requires ark-sdk >= 0.1.68. Older engines ignore the field and continue serving direct agent queries unchanged; only team membership needs the newer SDK.
+**Version floor.** Resolving `target` requires ark-sdk >= 0.1.68. Older engines ignore both new fields and continue serving direct agent queries unchanged; only team membership needs the newer SDK. `conversationId` adds no floor of its own — it ships in the same bump, and an engine that ignores it falls back to `contextId` and behaves as it does today.
+
+**Marketplace.** No code change. The langchain and claude-agent-sdk executors are fixed by the ark-sdk pin bump already tracked as follow-up 10.2.

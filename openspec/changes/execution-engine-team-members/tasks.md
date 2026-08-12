@@ -56,6 +56,8 @@
 - [ ] 6.1 Optional `target` in `ark/api/extensions/query/v1/schema.json`
 - [ ] 6.2 Document `target`, fallback semantics and the sub-target contract in the extension README
 - [ ] 6.3 Correct the `X-A2A-Extensions` header in the Wire Format block — nothing sets it; `message.extensions` is what is sent
+- [ ] 6.4 Optional `conversationId` in the schema, `omitempty` on `QueryExtensionRef` so the top-level payload stays byte-identical (Decision 2), and a README section stating that team context arrives in the message body rather than through this field
+- [ ] 6.5 Derive it per member in `NamedExecutionEngine.Execute` — SHA-256 over `<base>\x00<agent>`, hex to 16 bytes, base `contextId` or `<namespace>/<query>`; add it to the `ExecutionEngineExecution` event data. Leave the `contextId` argument untouched
 
 
 
@@ -64,6 +66,8 @@
 - [ ] 7.1 `QueryTargetRef`; `QueryRef.target`; parse and validate in `extract_query_ref`
 - [ ] 7.2 Thread the override through `resolve_query`, with the version floor in the rejection message
 - [ ] 7.3 Skip broker and status updater for sub-target invocations
+- [ ] 7.4 `QueryRef.conversation_id`, parsed and type-checked in `extract_query_ref` as `target` is
+- [ ] 7.5 Prefer it over `message.context_id` in `_do_execute`, falling back when absent. The broker is built only when there is no `target`, so `BrokerClient(session_id=…)` keeps keying on `context_id`
 
 
 
@@ -79,6 +83,8 @@
 - [ ] 8.8 Python: target present/absent/malformed; override resolves a member of a team query; sub-target skips broker and status
 - [ ] 8.9 Chainsaw `tests/execution-engine-team/`
 - [ ] 8.10 `TestResolveDispatchAddress` passes unmodified through the refactor
+- [ ] 8.11 Conversation scope on the wire: two agents differ, one agent is stable, the value varies with the parent context, and `contextId` is absent-or-verbatim in every case. The byte-equality test of 8.1 must pass **unmodified**
+- [ ] 8.12 Python: `conversationId` present / absent / non-string; ref value preferred over `context_id` and falling back when absent; top-level broker session still keyed on `context_id`
 
 
 
@@ -94,8 +100,9 @@
 ## 10. Follow-up (not in this change)
 
 - [ ] 10.1 Promote the ark-sdk echo engine to `images/ark-echo-engine/` with `build.mk` and CI wiring, and add chainsaw coverage for the **selector** and **sub-target** paths.
-- [ ] 10.2 Marketplace PR: bump the three executor `ark-sdk` pins; gate the Claude scheduler's status writes on `target`
-- [ ] 10.3 Deterministic per-`(query, agent)` contextId, so a member reuses its sandbox instead of one per turn
+- [ ] 10.2 Marketplace PR: bump the three executor `ark-sdk` pins; gate the Claude scheduler's status writes on `target`. The pin bump also delivers per-member conversation scoping, with no marketplace code change
+- [ ] 10.3 Sandbox capacity in scheduler mode: a member gets a fresh sandbox per turn, since `contextId` is unchanged by this change. Reusing one needs the scheduler to accept an Ark-supplied `contextId` it has not seen — today that misses `get_sandbox` and 404s (Decision 7) — so it is a marketplace-side change and **not** a fix for member contamination, which 6.5 handles
+- [ ] 10.9 Top-level `contextId` collision: an agent-on-engine Query with no `a2a-context-id` annotation sends an empty `contextId`, so the claude executor shares `SESSIONS_DIR` across unrelated queries. Predates this change and lives in the controller's dispatch path
 - [ ] 10.4 Forward an `input-required` approval raised on one of the executor's outbound A2A hops back to the controller that owns the Query, so a sub-target or `executionEngine: a2a` agent can use the A2ATask flow the controller already has
 - [ ] 10.5 A2A `message/stream` on the engine path
 - [ ] 10.6 Record engine-declared extensions in `ExecutionEngine.status` for pre-flight capability checks
