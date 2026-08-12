@@ -7739,7 +7739,10 @@ export interface operations {
     };
     proxy_services_v1_proxy_services__service_name___api_path__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
                 service_name: string;
@@ -7771,7 +7774,10 @@ export interface operations {
     };
     proxy_services_v1_proxy_services__service_name___api_path__head: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
                 service_name: string;
@@ -7803,7 +7809,10 @@ export interface operations {
     };
     proxy_services_v1_proxy_services__service_name___api_path__patch: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
                 service_name: string;
