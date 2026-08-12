@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Usage: bash psql-poll.sh "<sql>" "<expected>" [attempts] [sleep_seconds]
-# Polls <sql> against ark-storage-dev postgres until its trimmed result equals
-# <expected>, looping inside one kubectl exec so connection overhead is paid
-# once. Prints the final result; exits non-zero if it never matched.
-# Auto-detects the namespace (ark-system in CI, default in devspace).
+# Polls <sql> against the broker's ark-storage-dev postgres until its trimmed
+# result equals <expected>, looping inside one kubectl exec so connection
+# overhead is paid once. Prints the final result; exits non-zero if it never
+# matched. Picks the ark-storage-dev whose DB holds the broker schema (CI keeps
+# it in ark-system, devspace in the broker's namespace).
 set -eu
 SQL="$1"
 EXPECTED="$2"
@@ -11,19 +12,17 @@ ATTEMPTS="${3:-80}"
 SLEEP="${4:-0.5}"
 NS=""
 for candidate in ark-system default; do
-  if kubectl -n "$candidate" get deployment ark-broker >/dev/null 2>&1; then
-    NS="$candidate"
-    break
-  fi
+  kubectl -n "$candidate" get deployment ark-storage-dev >/dev/null 2>&1 || continue
+  [ -z "$NS" ] && NS="$candidate"
+  PW=$(kubectl -n "$candidate" get secret ark-storage-dev-password \
+    -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
+  [ -n "$PW" ] || continue
+  HAS=$(kubectl exec -n "$candidate" deployment/ark-storage-dev -- \
+    env "PGPASSWORD=$PW" sh -c \
+    "psql -U postgres -d ark -t -A -c \"SELECT to_regclass('public.messages') IS NOT NULL;\"" \
+    2>/dev/null | tr -d ' \n')
+  [ "$HAS" = "t" ] && { NS="$candidate"; break; }
 done
-if [ -z "$NS" ]; then
-  for candidate in ark-system default; do
-    if kubectl -n "$candidate" get deployment ark-storage-dev >/dev/null 2>&1; then
-      NS="$candidate"
-      break
-    fi
-  done
-fi
 NS=${NS:-ark-system}
 PGPASSWORD=$(kubectl -n "$NS" get secret ark-storage-dev-password \
   -o jsonpath='{.data.password}' | base64 -d)
