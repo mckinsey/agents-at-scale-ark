@@ -23,7 +23,7 @@ func (b *imageTurnBudget) admit(ctx context.Context, toolName string, images []T
 	}
 
 	log := logf.FromContext(ctx)
-	var kept []ToolResultImage
+	kept := make([]ToolResultImage, 0, len(images))
 	var note string
 	for _, image := range images {
 		if len(image.Data) > b.remaining {
