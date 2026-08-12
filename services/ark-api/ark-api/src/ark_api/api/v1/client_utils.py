@@ -1,10 +1,24 @@
 """Utilities for creating Kubernetes API clients with impersonation support."""
 from typing import Optional
 from contextlib import asynccontextmanager
-from ark_sdk.k8s import create_api_client
+from kubernetes import client as sync_client
+from ark_sdk.k8s import create_api_client, create_sync_api_client
 from ark_sdk.impersonation import ImpersonationConfig
 
 USER_AGENT = "ArkAPI"
+
+
+def get_impersonating_sync_api_client(
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> sync_client.ApiClient:
+    """Create a sync ApiClient with optional impersonation headers."""
+    api = create_sync_api_client()
+    api.user_agent = USER_AGENT
+    if impersonation:
+        api.set_default_header("Impersonate-User", impersonation.username)
+        if impersonation.groups:
+            api.set_default_header("Impersonate-Group", ",".join(impersonation.groups))
+    return api
 
 
 @asynccontextmanager

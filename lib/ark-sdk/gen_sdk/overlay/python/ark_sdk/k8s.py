@@ -149,14 +149,18 @@ async def init_k8s():
 class SecretClient:
     """Kubernetes Secret management client."""
 
-    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None):
+    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None, default_headers: Optional[Dict[str, str]] = None):
         if namespace is None:
             namespace = get_context()["namespace"]
         self.namespace = namespace
         self.impersonation = impersonation
+        self.default_headers = default_headers
 
     def _get_api_client(self, api: ApiClient) -> ApiClient:
         """Configure API client with impersonation headers if needed."""
+        if self.default_headers:
+            for header_name, header_value in self.default_headers.items():
+                api.set_default_header(header_name, header_value)
         if self.impersonation:
             api.set_default_header("Impersonate-User", self.impersonation.username)
             if self.impersonation.groups:

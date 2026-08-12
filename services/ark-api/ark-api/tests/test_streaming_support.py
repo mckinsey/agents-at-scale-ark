@@ -70,7 +70,7 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
                 ctx.__aenter__.return_value = mock_prealpha1_client
             return ctx
 
-        mock_with_ark_client.side_effect = lambda ns, v: (
+        mock_with_ark_client.side_effect = lambda ns, v, impersonation=None: (
             _make_ctx(mock_v1alpha1_client) if v == "v1alpha1" else _make_ctx(mock_prealpha1_client)
         )
 
@@ -95,7 +95,7 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
         }
         mock_prealpha1_client.executionengines.a_get = AsyncMock(return_value=mock_engine)
 
-        mock_with_ark_client.side_effect = lambda ns, v: (
+        mock_with_ark_client.side_effect = lambda ns, v, impersonation=None: (
             _make_ctx(mock_v1alpha1_client) if v == "v1alpha1" else _make_ctx(mock_prealpha1_client)
         )
 
@@ -118,7 +118,7 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
         }
         mock_prealpha1_client.executionengines.a_get = AsyncMock(return_value=mock_engine)
 
-        mock_with_ark_client.side_effect = lambda ns, v: (
+        mock_with_ark_client.side_effect = lambda ns, v, impersonation=None: (
             _make_ctx(mock_v1alpha1_client) if v == "v1alpha1" else _make_ctx(mock_prealpha1_client)
         )
 
@@ -151,7 +151,7 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
         mock_prealpha1_client.executionengines.a_get = AsyncMock(return_value=mock_engine)
 
         calls = []
-        mock_with_ark_client.side_effect = lambda ns, v: (
+        mock_with_ark_client.side_effect = lambda ns, v, impersonation=None: (
             calls.append((ns, v)) or
             _make_ctx(mock_v1alpha1_client) if v == "v1alpha1" else _make_ctx(mock_prealpha1_client)
         )

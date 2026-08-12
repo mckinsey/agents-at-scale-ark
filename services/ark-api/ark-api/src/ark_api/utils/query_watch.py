@@ -2,11 +2,13 @@
 
 import logging
 import time
+from typing import Optional
 from fastapi import HTTPException
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
 from kubernetes_asyncio import client, watch
+from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.k8s import create_api_client
 
 from ark_api.core.constants import GROUP
@@ -78,11 +80,15 @@ def _get_error_detail(status: dict) -> dict:
     }
 
 
-async def watch_query_completion(ark_client, query_name: str, model: str, messages: list, timeout_seconds: int) -> ChatCompletion:
+async def watch_query_completion(ark_client, query_name: str, model: str, messages: list, timeout_seconds: int, impersonation: Optional[ImpersonationConfig] = None) -> ChatCompletion:
     """Watch for query completion using Kubernetes watch API and return chat completion response."""
     namespace = ark_client.namespace
 
     api_client = create_api_client()
+    if impersonation:
+        api_client.set_default_header("Impersonate-User", impersonation.username)
+        if impersonation.groups:
+            api_client.set_default_header("Impersonate-Group", ",".join(impersonation.groups))
     custom_api = client.CustomObjectsApi(api_client)
     w = watch.Watch()
 

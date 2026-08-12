@@ -1,11 +1,16 @@
 """A2A Gateway routes for agent-to-agent communication."""
 import logging
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
+from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.k8s import get_namespace
+
+from ...auth.dependencies import get_impersonation_config
 from .a2agw.manager import DynamicManager
-from .a2agw.registry import external_forwarded_base_from_headers, get_registry
+from .a2agw.registry import AgentRegistry, external_forwarded_base_from_headers
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +29,17 @@ def get_a2a_manager() -> DynamicManager:
 
 
 @router.get("/agents", response_model=list[dict])
-async def list_agents(request: Request):
+async def list_agents(
+    request: Request,
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+):
     """List all available agents for A2A communication."""
     # Prefix the agent-card link with the request's external base URL when a
     # forwarding gateway is path-routing this deployment; otherwise fall back to
     # the root-relative path (single-tenant / root hosting).
     headers = {key.lower(): value for key, value in request.headers.items()}
     forwarded_base = external_forwarded_base_from_headers(headers)
-    agents = await get_registry().list_agents()
+    agents = await AgentRegistry(get_namespace(), impersonation).list_agents()
     return [
         {
             "name": agent.name,
