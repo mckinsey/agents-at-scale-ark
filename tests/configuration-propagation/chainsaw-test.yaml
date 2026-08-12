@@ -28,6 +28,8 @@ spec:
         file: manifests/a01-configuration.yaml
     - apply:
         file: manifests/a02-mcpserver.yaml
+    catch:
+    - events: {}
 
   - name: assert-stale-address-in-effect
     try:
@@ -41,6 +43,18 @@ spec:
             resolvedAddress: http://wrong-address.invalid/mcp
             (conditions[?type == 'Available']):
             - status: "False"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: config-driven-mcp
+    - script:
+        content: |
+          kubectl get configmap mcp-endpoint --namespace "$NAMESPACE" -o yaml || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
   - name: update-configuration
     try:
@@ -50,6 +64,14 @@ spec:
             --namespace "$NAMESPACE" \
             --type merge \
             --patch "{\"data\":{\"value\":\"http://mock-llm.$NAMESPACE.svc.cluster.local:6556/mcp\"}}"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl get configmap mcp-endpoint --namespace "$NAMESPACE" -o yaml || true
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -88,6 +110,24 @@ spec:
               name: config-driven-mcp
           status:
             state: Ready
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: config-driven-mcp
+    # pollInterval is 1h, so a failure here means the watch never fired rather
+    # than a slow poll. Dump the ConfigMap to tell "the patch never landed"
+    # apart from "the reconcile never ran", and the mock-llm pod to rule out an
+    # unreachable target.
+    - script:
+        content: |
+          kubectl get configmap mcp-endpoint --namespace "$NAMESPACE" -o yaml || true
+          kubectl get pods --namespace "$NAMESPACE" -l app.kubernetes.io/name=mock-llm -o wide || true
+          kubectl get tools.ark.mckinsey.com --namespace "$NAMESPACE" -l mcp/server=config-driven-mcp || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
   - name: assert-configuration-metadata-survives-update
     try:
@@ -103,3 +143,11 @@ spec:
             annotations:
               ark.mckinsey.com/description: MCP endpoint for this environment
               ark.mckinsey.com/alias: mcp-url
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl get configmap mcp-endpoint --namespace "$NAMESPACE" -o yaml || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
