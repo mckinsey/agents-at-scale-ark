@@ -4,6 +4,8 @@ Guards against the regression class of #3174: a route (or a refactor of one)
 silently running against the Kubernetes API as the ark-api service account
 instead of the authenticated user, bypassing per-user RBAC.
 """
+import unittest
+
 from fastapi.routing import APIRoute
 
 from ark_api.main import app
@@ -49,37 +51,41 @@ def _api_routes():
     return [route for route in app.routes if isinstance(route, APIRoute)]
 
 
-def test_all_routes_declare_impersonation_or_are_allowlisted():
-    missing = []
-    for route in _api_routes():
-        if _has_impersonation_dependency(route.dependant):
-            continue
-        for route_id in _route_ids(route):
-            if route_id not in INTENTIONAL_SERVICE_ACCOUNT_ROUTES:
-                missing.append(route_id)
+class TestRouteImpersonationCoverage(unittest.TestCase):
+    def test_all_routes_declare_impersonation_or_are_allowlisted(self):
+        missing = []
+        for route in _api_routes():
+            if _has_impersonation_dependency(route.dependant):
+                continue
+            for route_id in _route_ids(route):
+                if route_id not in INTENTIONAL_SERVICE_ACCOUNT_ROUTES:
+                    missing.append(route_id)
 
-    assert not missing, (
-        "Routes without the impersonation dependency (their Kubernetes calls run "
-        "as the ark-api service account, bypassing user RBAC): "
-        f"{sorted(missing)}. Add impersonation via Depends(get_impersonation_config) "
-        "or, if service-account access is intentional, allowlist the route here "
-        "with a reason."
-    )
+        self.assertEqual(missing, [], (
+            "Routes without the impersonation dependency (their Kubernetes calls run "
+            "as the ark-api service account, bypassing user RBAC): "
+            f"{sorted(missing)}. Add impersonation via Depends(get_impersonation_config) "
+            "or, if service-account access is intentional, allowlist the route here "
+            "with a reason."
+        ))
+
+    def test_allowlist_has_no_stale_entries(self):
+        all_route_ids = set()
+        impersonated_route_ids = set()
+        for route in _api_routes():
+            ids = _route_ids(route)
+            all_route_ids |= ids
+            if _has_impersonation_dependency(route.dependant):
+                impersonated_route_ids |= ids
+
+        unknown = INTENTIONAL_SERVICE_ACCOUNT_ROUTES - all_route_ids
+        self.assertEqual(unknown, set(), f"Allowlist entries for routes that no longer exist: {sorted(unknown)}")
+
+        covered = INTENTIONAL_SERVICE_ACCOUNT_ROUTES & impersonated_route_ids
+        self.assertEqual(covered, set(), (
+            f"Allowlisted routes now declare the impersonation dependency; remove them: {sorted(covered)}"
+        ))
 
 
-def test_allowlist_has_no_stale_entries():
-    all_route_ids = set()
-    impersonated_route_ids = set()
-    for route in _api_routes():
-        ids = _route_ids(route)
-        all_route_ids |= ids
-        if _has_impersonation_dependency(route.dependant):
-            impersonated_route_ids |= ids
-
-    unknown = INTENTIONAL_SERVICE_ACCOUNT_ROUTES - all_route_ids
-    assert not unknown, f"Allowlist entries for routes that no longer exist: {sorted(unknown)}"
-
-    covered = INTENTIONAL_SERVICE_ACCOUNT_ROUTES & impersonated_route_ids
-    assert not covered, (
-        f"Allowlisted routes now declare the impersonation dependency; remove them: {sorted(covered)}"
-    )
+if __name__ == "__main__":
+    unittest.main()
