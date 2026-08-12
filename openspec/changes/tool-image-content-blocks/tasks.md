@@ -24,7 +24,15 @@
 - [x] 4.2 Update `anthropic_format_test.go` for the renamed content block type
 - [x] 4.3 `make lint` and `make test` pass in `ark/`
 
-## 5. End-to-End Verification
+## 5. Media Type Normalisation and Validation
+
+- [x] 5.1 Add `normalizeImageMediaType` — strip RFC 2397 parameters, lower-case, alias `image/jpg` to `image/jpeg`, and reject anything outside the four media types Anthropic and OpenAI both accept
+- [x] 5.2 Apply it in `imageFromDataURL` (`anthropic_format.go`) so a parameterised media type is normalised and an unsupported one is rejected
+- [x] 5.3 Apply it in `MCPExecutor.Execute` (`mcp.go`) so an unsupported tool image is dropped, with the tool text saying it was not shown to the model
+- [x] 5.4 Tests for both entry points, including the OpenAI `image_url` wire shape
+- [x] 5.5 Extract `collectContent` from `MCPExecutor.Execute` so the MCP path is tested directly rather than through a copy of the loop
+
+## 6. End-to-End Verification
 
 - [x] 5.1 Deploy the built executor to a cluster with an MCP tool that returns an image and confirm the agent answers a question about it
 - [x] 5.2 Confirm a text-only query is unaffected

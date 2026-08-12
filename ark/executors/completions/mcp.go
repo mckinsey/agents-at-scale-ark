@@ -50,19 +50,31 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, e
 		return ToolResult{ID: call.ID, Name: call.Function.Name, Content: ""}, err
 	}
 	log.V(2).Info("tool call response", "tool", m.ToolName, "response", response)
+	content, images := m.collectContent(ctx, response.Content)
+	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: content, Images: images}, nil
+}
+
+func (m *MCPExecutor) collectContent(ctx context.Context, contents []mcpsdk.Content) (string, []ToolResultImage) {
+	log := logf.FromContext(ctx)
 	var result strings.Builder
 	var images []ToolResultImage
-	for _, content := range response.Content {
+	for _, content := range contents {
 		switch typed := content.(type) {
 		case *mcpsdk.TextContent:
 			result.WriteString(typed.Text)
 		case *mcpsdk.ImageContent:
-			images = append(images, ToolResultImage{MediaType: typed.MIMEType, Data: typed.Data})
-			result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes]", typed.MIMEType, len(typed.Data)))
+			mediaType, ok := normalizeImageMediaType(typed.MIMEType)
+			if !ok {
+				log.Info("dropping tool image with unsupported media type", "tool", m.ToolName, "mediaType", typed.MIMEType)
+				result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes - unsupported media type, not shown to the model]", typed.MIMEType, len(typed.Data)))
+				continue
+			}
+			images = append(images, ToolResultImage{MediaType: mediaType, Data: typed.Data})
+			result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes]", mediaType, len(typed.Data)))
 		default:
 			jsonBytes, _ := json.MarshalIndent(content, "", "  ")
 			result.WriteString(string(jsonBytes))
 		}
 	}
-	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: result.String(), Images: images}, nil
+	return result.String(), images
 }

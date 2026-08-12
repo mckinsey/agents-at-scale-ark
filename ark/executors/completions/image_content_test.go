@@ -1,9 +1,9 @@
 package completions
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -50,21 +50,13 @@ func TestMCPImageContentIsNotFlattened(t *testing.T) {
 		&mcpsdk.ImageContent{MIMEType: "image/png", Data: pngBytes},
 	}
 
-	var text strings.Builder
-	var images []ToolResultImage
-	for _, part := range content {
-		switch typed := part.(type) {
-		case *mcpsdk.TextContent:
-			text.WriteString(typed.Text)
-		case *mcpsdk.ImageContent:
-			images = append(images, ToolResultImage{MediaType: typed.MIMEType, Data: typed.Data})
-		}
-	}
+	executor := &MCPExecutor{ToolName: "read"}
+	text, images := executor.collectContent(context.Background(), content)
 
 	require.Len(t, images, 1)
 	assert.Equal(t, pngBytes, images[0].Data)
-	assert.Equal(t, "here is the page", text.String())
-	assert.NotContains(t, text.String(), base64.StdEncoding.EncodeToString(pngBytes))
+	assert.Contains(t, text, "here is the page")
+	assert.NotContains(t, text, base64.StdEncoding.EncodeToString(pngBytes))
 }
 
 func TestNewUserImageMessageCarriesImageParts(t *testing.T) {

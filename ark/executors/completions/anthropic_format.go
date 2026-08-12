@@ -48,9 +48,12 @@ func imageFromDataURL(url string) (ToolResultImage, bool) {
 	if markerAt < 0 {
 		return ToolResultImage{}, false
 	}
-	mediaType := url[len(prefix):markerAt]
+	mediaType, ok := normalizeImageMediaType(url[len(prefix):markerAt])
+	if !ok {
+		return ToolResultImage{}, false
+	}
 	data, err := base64.StdEncoding.DecodeString(url[markerAt+len(marker):])
-	if err != nil || mediaType == "" || len(data) == 0 {
+	if err != nil || len(data) == 0 {
 		return ToolResultImage{}, false
 	}
 	return ToolResultImage{MediaType: mediaType, Data: data}, true

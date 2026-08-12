@@ -59,3 +59,37 @@ A message content part whose image URL is not a base64 data URL SHALL be omitted
 #### Scenario: Malformed data URL
 - **WHEN** an image content part carries a data URL with no media type, no base64 marker, or undecodable data
 - **THEN** no image block SHALL be emitted for it
+
+### Requirement: Image media types are normalised
+A data URL media type SHALL be reduced to its base type before it is used, because RFC 2397 permits parameters between the media type and the base64 marker and a parameter carried through would not be a media type any provider accepts.
+
+#### Scenario: Media type carries a parameter
+- **WHEN** an image content part carries `data:image/png;charset=utf-8;base64,<data>`
+- **THEN** the image SHALL be carried with media type `image/png`
+
+#### Scenario: Media type differs in case
+- **WHEN** an image content part carries a media type such as `IMAGE/PNG`
+- **THEN** the image SHALL be carried with media type `image/png`
+
+#### Scenario: Media type is the informal JPEG spelling
+- **WHEN** an image is carried with media type `image/jpg`
+- **THEN** it SHALL be carried with media type `image/jpeg`
+
+### Requirement: Only media types every provider accepts are carried
+An image SHALL be carried only when its normalised media type is one of `image/jpeg`, `image/png`, `image/gif` or `image/webp`, the set the Anthropic and OpenAI APIs both document. An unsupported media type SHALL cause the image to be dropped rather than sent, because a provider rejects the whole request over one unusable image block.
+
+#### Scenario: MCP tool returns an unsupported image
+- **WHEN** an MCP tool result contains an `ImageContent` part whose MIME type is not a supported media type
+- **THEN** no image SHALL be recorded on `ToolResult.Images`
+- **AND** the tool message text SHALL note that the image was not shown to the model, so the model does not assume it saw one
+
+#### Scenario: Data URL carries an unsupported media type
+- **WHEN** an image content part carries a data URL whose media type is not supported
+- **THEN** no image block SHALL be emitted for it
+
+### Requirement: Images reach OpenAI-compatible providers unchanged
+The user message carrying the images SHALL be an OpenAI-format message holding one `image_url` content part per image, whose URL is a base64 data URL, so that the OpenAI and Azure providers pass the images through without provider-specific encoding.
+
+#### Scenario: Image message sent to an OpenAI-compatible provider
+- **WHEN** the conversation carries a user message built for a tool's images
+- **THEN** each image SHALL appear as an `image_url` part whose URL is `data:<media type>;base64,<data>`
