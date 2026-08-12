@@ -34,5 +34,23 @@
 
 ## 6. End-to-End Verification
 
-- [x] 5.1 Deploy the built executor to a cluster with an MCP tool that returns an image and confirm the agent answers a question about it
-- [x] 5.2 Confirm a text-only query is unaffected
+- [x] 6.1 Deploy the built executor to a cluster with an MCP tool that returns an image and confirm the agent answers a question about it
+- [x] 6.2 Confirm a text-only query is unaffected
+
+## 7. Size Limits
+
+- [x] 7.1 Add `image_config.go` with `toolImageLimitsFromEnv` reading `ARK_TOOL_IMAGE_MAX_BYTES` (5 MiB), `ARK_TOOL_IMAGE_MAX_PER_TOOL_CALL` (4) and `ARK_TOOL_IMAGE_MAX_BYTES_PER_TURN` (15 MiB), following the `mcp_config.go` pattern
+- [x] 7.2 Enforce the per-image and per-tool-call limits in `collectContent` (`mcp.go`), dropping with the breadcrumb text already used for an unsupported media type
+- [x] 7.3 Add `image_budget.go` with `imageTurnBudget`, admitting images greedily against the per-turn budget and returning the note for any it drops
+- [x] 7.4 Hold one budget per call of `executeToolCalls` (`agent.go`) and thread it through `executeToolCallWithImages`, appending the note to the tool message text
+- [x] 7.5 Expose the three limits in `chart/values.yaml`
+- [x] 7.6 Tests — env parsing and fallback, per-image drop and boundary, per-tool-call cap, and the turn budget across two tool calls through `executeToolCalls`
+- [x] 7.7 Distinguish the file-gateway 1 MB upload cap from the executor's per-image cap in `docs/content/user-guide/files.mdx`
+
+## 8. S3 Backend Verification
+
+- [ ] 8.1 Install file-gateway with `versitygw.backend=s3` against an in-cluster MinIO upstream and confirm `filesystem-mcp` runs with `STORAGE_BACKEND=s3`
+- [ ] 8.2 Re-run the image query for both the Anthropic and the OpenAI agent and confirm neither reports `NO IMAGE REACHED THE MODEL`
+- [ ] 8.3 Capture the actual `read-media-file` MCP payload — media type and byte length — as evidence that s3 mode returns an inline `ImageContent` part
+- [ ] 8.4 Confirm an oversized upload trips the per-image limit end to end rather than erroring the request
+- [ ] 8.5 If the s3-mode media type differs from posix mode, prefer `http.DetectContentType` over the declared type in `collectContent`

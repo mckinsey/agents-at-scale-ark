@@ -9,12 +9,13 @@ The two places that need to change are the MCP boundary, where the bytes are cur
 **Goals**
 - An agent can answer a question about an image an MCP tool returned.
 - Text-only requests keep their existing wire format.
+- Image ingress is bounded, so a large or repeated image cannot fail the request or exhaust the context window.
 
 **Non-Goals**
 - Images from non-MCP tools (HTTP, built-in). They return no image content today.
 - Images through the human-in-the-loop approval resume path in `handler.go`, which rebuilds a `ToolResult` from the tool message text.
 - Audio or other non-text modalities.
-- Image resizing, re-encoding, or token budgeting.
+- Image resizing or re-encoding. An image is carried as returned or not at all.
 
 ## Decisions
 
@@ -33,18 +34,26 @@ This was already true before this change: prompt caching renders the breakpoint 
 **A non-base64 image URL is dropped, not passed on.**
 The Anthropic base64 image source cannot carry a remote URL. Emitting the URL as text would put a link in the prompt that the model would either hallucinate about or try to browse. Dropping it is the honest failure.
 
+**Three limits, enforced at two points.**
+`ARK_TOOL_IMAGE_MAX_BYTES` (5 MiB) and `ARK_TOOL_IMAGE_MAX_PER_TOOL_CALL` (4) are enforced in `collectContent`, where the decoded bytes first arrive. `ARK_TOOL_IMAGE_MAX_BYTES_PER_TURN` (15 MiB) is a cumulative budget held across every tool call in one turn, enforced in `executeToolCalls` where the loop already sits. The per-image default is set against the binding provider constraint — Anthropic accepts roughly 5 MB per image, OpenAI roughly 20 MB — and file-gateway, the tool that motivated this feature, caps its own uploads at 1 MB, so the default is generous for legitimate traffic while keeping a single image from failing the request.
+
+Alternative — one total byte limit — cannot distinguish "one absurd image" from "forty reasonable ones", and the two failure modes want different messages to the model. Alternative — capping across the whole agentic loop rather than per turn — needs an eviction policy for images already in the history and is deferred.
+
+**A dropped image is reported, not hidden.**
+Every drop reuses the breadcrumb path already built for an unsupported media type: a line in the tool message text naming the size, the limit, and that the image was not shown. A silently missing image makes the model assert things about an image it never saw. Budget drops write their note into the tool message the image came from rather than a separate message, so the reason sits next to the result that produced it.
+
 ## Risks / Trade-offs
 
-- **Context cost.** An image is still large. It is now spent on something the model can use, and the base64 no longer appears twice (once in the tool text, once nowhere useful). No budgeting is added here.
+- **Context cost.** An image is still large. It is now spent on something the model can use, the base64 no longer appears twice, and the per-turn budget puts a ceiling on it. Images accumulated across many turns are still unbounded — see Open Questions.
 - **Extra base64 round-trip** per image on the Anthropic path → bounded by one encode and one decode per image per request; negligible next to the API call.
 - **The HITL approval path drops images** → out of scope and called out in the proposal; behaviour there is unchanged, not newly broken.
 - **A provider that rejects image blocks** would now receive them where before it received text → only the shared Anthropic format encoder emits blocks, and both providers on it (Anthropic, Bedrock) accept image blocks in the Messages API.
 
 ## Migration Plan
 
-No CRD, config, or API change. The executor image is the only artefact. Rollback is redeploying the previous image; nothing persisted changes shape, and a conversation stored mid-flight replays as an ordinary user message with an image part.
+No CRD or API change. The three image limits are optional executor environment variables with defaults, exposed in the chart values, so an install that sets none behaves as the defaults describe. The executor image and its chart are the only artefacts. Rollback is redeploying the previous image; nothing persisted changes shape, and a conversation stored mid-flight replays as an ordinary user message with an image part.
 
 ## Open Questions
 
 - Should a tool be able to opt out of image pass-through (for example a tool returning a thumbnail purely as an artefact)? Not needed by any current tool.
-- Should images be capped in count or bytes per turn before they reach the provider?
+- Should the byte budget span the whole agentic loop rather than a single turn? A long loop can still accumulate images across turns. Doing so needs a policy for evicting images already in the history, which the per-turn budget does not.

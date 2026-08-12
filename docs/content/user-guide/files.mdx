@@ -59,6 +59,8 @@ To upload a file, drag and drop it into the upload area or click to browse. Ente
 
 The File Gateway service enforces a 1MB limit for file uploads, see the [File Gateway Service documentation](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/#file-size-limitations) for more.
 
+This is separate from the limits Ark applies when a tool returns an image to a model. The completions executor caps each image at 5MB, allows four images per tool result, and allows 15MB of images across all tool calls in one turn. An image over any of these is dropped and the tool result says why, so the model is told rather than left to assume it saw the image. Override the defaults with `ARK_TOOL_IMAGE_MAX_BYTES`, `ARK_TOOL_IMAGE_MAX_PER_TOOL_CALL` and `ARK_TOOL_IMAGE_MAX_BYTES_PER_TURN` in the executor's chart values.
+
 ## Connecting Files to Agents
 
 To give agents access to uploaded files, configure the [filesystem MCP server](/user-guide/tools) in your agent definitions.
