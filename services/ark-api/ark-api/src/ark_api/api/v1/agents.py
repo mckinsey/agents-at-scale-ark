@@ -4,7 +4,7 @@ import json
 import re
 
 from fastapi import APIRouter, Depends, Query, Request
-from typing import Optional
+from typing import Any, Callable, Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
 from ark_sdk.impersonation import ImpersonationConfig
 
@@ -220,29 +220,30 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
         # Get the existing agent first
         existing_agent = await ark_client.agents.a_get(agent_name)
         existing_spec = existing_agent.to_dict()["spec"]
-        
-        # Update only the fields that are provided
-        if body.description is not None:
-            existing_spec["description"] = body.description
-        
-        if body.executionEngine is not None:
-            existing_spec["executionEngine"] = body.executionEngine.model_dump(exclude_none=True)
-        
-        if body.modelRef is not None:
-            existing_spec["modelRef"] = body.modelRef.model_dump(exclude_none=True)
-        
-        if body.parameters is not None:
-            existing_spec["parameters"] = [param.model_dump(exclude_none=True) for param in body.parameters]
-        
-        if body.prompt is not None:
-            existing_spec["prompt"] = body.prompt
-        
-        if body.tools is not None:
-            existing_spec["tools"] = [tool.model_dump(exclude_none=True) for tool in body.tools]
 
-        if body.overrides is not None:
-            existing_spec["overrides"] = [override.model_dump(exclude_none=True) for override in body.overrides]
-        
+        # Apply only the fields the client actually sent. A field set to null
+        # clears it from the spec; an omitted field is left untouched. Using
+        # model_fields_set is what distinguishes "explicitly cleared" from
+        # "not part of this update".
+        fields_set = body.model_fields_set
+
+        def apply_update(field: str, transform: Optional[Callable[[Any], Any]] = None) -> None:
+            if field not in fields_set:
+                return
+            value = getattr(body, field)
+            if value is None:
+                existing_spec.pop(field, None)
+            else:
+                existing_spec[field] = transform(value) if transform else value
+
+        apply_update("description")
+        apply_update("executionEngine", lambda v: v.model_dump(exclude_none=True))
+        apply_update("modelRef", lambda v: v.model_dump(exclude_none=True))
+        apply_update("parameters", lambda v: [param.model_dump(exclude_none=True) for param in v])
+        apply_update("prompt")
+        apply_update("tools", lambda v: [tool.model_dump(exclude_none=True) for tool in v])
+        apply_update("overrides", lambda v: [override.model_dump(exclude_none=True) for override in v])
+
         # Update the agent
         # Get the full existing agent object and update its spec
         existing_agent_dict = existing_agent.to_dict()
