@@ -103,13 +103,19 @@ class ARKResourceClient(Generic[T]):
 
         init_k8s()
 
-        self.api_client = create_sync_api_client()
-        if user_agent:
-            self.api_client.user_agent = user_agent
-        if default_headers:
-            for header_name, header_value in default_headers.items():
-                self.api_client.set_default_header(header_name, header_value)
+        self.user_agent = user_agent
+        self.default_headers = default_headers
+        self.api_client = self._configured_api_client()
         self.custom_api = client.CustomObjectsApi(self.api_client)
+
+    def _configured_api_client(self) -> client.ApiClient:
+        api_client = create_sync_api_client()
+        if self.user_agent:
+            api_client.user_agent = self.user_agent
+        if self.default_headers:
+            for header_name, header_value in self.default_headers.items():
+                api_client.set_default_header(header_name, header_value)
+        return api_client
     
     def create(self, resource: T, namespace: Optional[str] = None) -> T:
         """Create a new resource
@@ -151,7 +157,7 @@ class ARKResourceClient(Generic[T]):
         ns = namespace or self.namespace
 
         # Create fresh client for GET to avoid caching stale data
-        fresh_api_client = client.ApiClient()
+        fresh_api_client = self._configured_api_client()
         fresh_custom_api = client.CustomObjectsApi(fresh_api_client)
 
         try:
@@ -182,7 +188,7 @@ class ARKResourceClient(Generic[T]):
             kwargs['label_selector'] = label_selector
 
         # Create fresh client for LIST to avoid caching stale data
-        fresh_api_client = client.ApiClient()
+        fresh_api_client = self._configured_api_client()
         fresh_custom_api = client.CustomObjectsApi(fresh_api_client)
 
         try:
@@ -230,7 +236,7 @@ class ARKResourceClient(Generic[T]):
             kwargs['_continue'] = continue_token
 
         # Create fresh client for LIST to avoid caching stale data
-        fresh_api_client = client.ApiClient()
+        fresh_api_client = self._configured_api_client()
         fresh_custom_api = client.CustomObjectsApi(fresh_api_client)
 
         try:
