@@ -3,6 +3,7 @@
 import os
 import unittest
 import unittest.mock
+from types import SimpleNamespace
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
 from kubernetes.client.exceptions import ApiException
@@ -10,6 +11,15 @@ from kubernetes.client.exceptions import ApiException
 # Set environment variables before importing the app
 os.environ["AUTH_MODE"] = "open"
 os.environ["READ_ONLY_MODE"] = "false"
+
+
+def _page(items, continue_token=None, remaining_item_count=None):
+    """Build a fake ListResult page for a_list_page mocks."""
+    return SimpleNamespace(
+        items=items,
+        continue_token=continue_token,
+        remaining_item_count=remaining_item_count,
+    )
 
 
 class TestNamespacesEndpoint(unittest.TestCase):
@@ -958,7 +968,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         }
 
         # Mock the API response
-        mock_client.agents.a_list = AsyncMock(return_value=[mock_agent1, mock_agent2])
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([mock_agent1, mock_agent2]))
 
         # Make the request
         response = self.client.get("/v1/agents?namespace=default")
@@ -989,7 +999,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_ark_client.return_value.__aenter__.return_value = mock_client
 
         # Mock empty response
-        mock_client.agents.a_list = AsyncMock(return_value=[])
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([]))
 
         # Make the request
         response = self.client.get("/v1/agents?namespace=test-namespace")
@@ -1260,7 +1270,7 @@ class TestModelsEndpoint(unittest.TestCase):
         }
 
         # Mock the API response
-        mock_client.models.a_list = AsyncMock(return_value=[mock_model1, mock_model2])
+        mock_client.models.a_list_page = AsyncMock(return_value=_page([mock_model1, mock_model2]))
 
         # Make the request
         response = self.client.get("/v1/models?namespace=default")
@@ -1293,7 +1303,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_ark_client.return_value.__aenter__.return_value = mock_client
 
         # Mock empty response
-        mock_client.models.a_list = AsyncMock(return_value=[])
+        mock_client.models.a_list_page = AsyncMock(return_value=_page([]))
 
         # Make the request
         response = self.client.get("/v1/models?namespace=test-namespace")
@@ -2082,7 +2092,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         }
 
         # Mock the API response
-        mock_client.teams.a_list = AsyncMock(return_value=[mock_team1, mock_team2])
+        mock_client.teams.a_list_page = AsyncMock(return_value=_page([mock_team1, mock_team2]))
 
         # Make the request
         response = self.client.get("/v1/teams?namespace=default")
@@ -2114,7 +2124,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_ark_client.return_value.__aenter__.return_value = mock_client
 
         # Mock empty response
-        mock_client.teams.a_list = AsyncMock(return_value=[])
+        mock_client.teams.a_list_page = AsyncMock(return_value=_page([]))
 
         # Make the request
         response = self.client.get("/v1/teams?namespace=test-namespace")

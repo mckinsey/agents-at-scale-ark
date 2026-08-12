@@ -1,5 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 export type MCPServerResponse = components['schemas']['MCPServerResponse'];
@@ -60,11 +61,10 @@ export type ValueFrom = {
 export const mcpServersService = {
   // Get all MCP servers in a namespace
   async getAll(): Promise<MCPServer[]> {
-    const response =
-      await apiClient.get<MCPServerListResponse>(`/api/v1/mcp-servers`);
+    const items = await fetchAllPages<MCPServerResponse>(`/api/v1/mcp-servers`);
 
     const mcpservers = await Promise.all(
-      response.items.map(async item => {
+      items.map(async item => {
         if (item.available !== 'True') {
           const mcp = await mcpServersService.get(item.name);
           item.available = mcp?.available;
