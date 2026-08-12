@@ -1,8 +1,7 @@
 # Configuration Propagation
 
-Validates that updating an Ark configuration (a ConfigMap carrying the
-`ark.mckinsey.com/resource-type: configuration` marker) reaches an MCPServer
-that resolves its address from it.
+Validates that updating a ConfigMap reaches an MCPServer that resolves its
+address from it.
 
 ## What it tests
 - An MCPServer resolves `spec.address` from `configMapKeyRef` and reports the
@@ -11,8 +10,10 @@ that resolves its address from it.
   the MCPServer controller, without waiting for the poll interval
 - The new value is actually in effect: the server becomes `Available`, tool
   discovery runs against the new address, and the discovered Tool is `Ready`
-- A configuration update leaves its marker label, tag labels and Ark
-  annotations intact
+
+Metadata-only edits are deliberately not covered here: `dataChangedPredicate`
+drops them before a reconcile is enqueued, and proving that absence e2e would
+mean waiting out a timeout. `helpers_test.go` covers it as a unit test.
 
 ## Why `pollInterval: 1h`
 

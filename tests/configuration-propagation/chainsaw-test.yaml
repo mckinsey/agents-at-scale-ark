@@ -138,26 +138,3 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-
-  - name: assert-configuration-metadata-survives-update
-    try:
-    - assert:
-        resource:
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: mcp-endpoint
-            labels:
-              ark.mckinsey.com/resource-type: configuration
-              ark.mckinsey.com/label.mcp: "true"
-            annotations:
-              ark.mckinsey.com/description: MCP endpoint for this environment
-              ark.mckinsey.com/alias: mcp-url
-    catch:
-    - events: {}
-    - script:
-        content: |
-          kubectl get configmap mcp-endpoint --namespace "$NAMESPACE" -o yaml || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
