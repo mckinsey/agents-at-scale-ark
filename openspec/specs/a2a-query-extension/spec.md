@@ -1,6 +1,6 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
-### Requirement: QueryRef carries an optional target override
+### Requirement: Completions engine forwards QueryRef extension to named engines
 The completions engine SHALL forward the QueryRef extension when sending A2A messages to named execution engines. It SHALL NOT send the agent config, tools, or history as metadata. The engine SHALL NOT read a message array from the Query spec input — conversation history is retrieved from the memory service using the conversation ID.
 
 #### Scenario: Completions engine routes to named execution engine
