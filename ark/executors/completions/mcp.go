@@ -56,6 +56,7 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, e
 
 func (m *MCPExecutor) collectContent(ctx context.Context, contents []mcpsdk.Content) (string, []ToolResultImage) {
 	log := logf.FromContext(ctx)
+	limits := toolImageLimitsFromEnv()
 	var result strings.Builder
 	var images []ToolResultImage
 	for _, content := range contents {
@@ -67,6 +68,16 @@ func (m *MCPExecutor) collectContent(ctx context.Context, contents []mcpsdk.Cont
 			if !ok {
 				log.Info("dropping tool image with unsupported media type", "tool", m.ToolName, "mediaType", typed.MIMEType)
 				result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes - unsupported media type, not shown to the model]", typed.MIMEType, len(typed.Data)))
+				continue
+			}
+			if len(typed.Data) > limits.MaxBytes {
+				log.Info("dropping oversized tool image", "tool", m.ToolName, "mediaType", mediaType, "bytes", len(typed.Data), "maxBytes", limits.MaxBytes)
+				result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes - exceeds the %d byte limit, not shown to the model]", mediaType, len(typed.Data), limits.MaxBytes))
+				continue
+			}
+			if len(images) >= limits.MaxPerToolCall {
+				log.Info("dropping tool image beyond the per tool call limit", "tool", m.ToolName, "mediaType", mediaType, "bytes", len(typed.Data), "maxPerToolCall", limits.MaxPerToolCall)
+				result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes - image limit of %d per tool call reached, not shown to the model]", mediaType, len(typed.Data), limits.MaxPerToolCall))
 				continue
 			}
 			images = append(images, ToolResultImage{MediaType: mediaType, Data: typed.Data})
