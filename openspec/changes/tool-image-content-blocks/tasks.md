@@ -49,8 +49,9 @@
 
 ## 8. S3 Backend Verification
 
-- [ ] 8.1 Install file-gateway with `versitygw.backend=s3` against an in-cluster MinIO upstream and confirm `filesystem-mcp` runs with `STORAGE_BACKEND=s3`
-- [ ] 8.2 Re-run the image query for both the Anthropic and the OpenAI agent and confirm neither reports `NO IMAGE REACHED THE MODEL`
-- [ ] 8.3 Capture the actual `read-media-file` MCP payload — media type and byte length — as evidence that s3 mode returns an inline `ImageContent` part
-- [ ] 8.4 Confirm an oversized upload trips the per-image limit end to end rather than erroring the request
-- [ ] 8.5 If the s3-mode media type differs from posix mode, prefer `http.DetectContentType` over the declared type in `collectContent`
+- [x] 8.1 Install file-gateway with `versitygw.backend=s3` against an in-cluster MinIO upstream and confirm `filesystem-mcp` runs with `STORAGE_BACKEND=s3`
+- [x] 8.2 Re-run the image query for both the Anthropic and the OpenAI agent and confirm neither reports `NO IMAGE REACHED THE MODEL`
+- [x] 8.3 Capture the actual `read-media-file` MCP payload — media type and byte length — as evidence that s3 mode returns an inline `ImageContent` part
+- [x] 8.4 Confirm an oversized upload trips the per-image limit end to end rather than erroring the request
+- [x] 8.5 Not required — the s3-mode media type is `image/png`, identical to posix mode, so `http.DetectContentType` sniffing is unnecessary
+
