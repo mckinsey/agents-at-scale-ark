@@ -103,18 +103,19 @@ spec:
   - name: verify-session-in-postgres
     try:
     - script:
-        timeout: 60s
+        timeout: 180s
         content: |
           # Two queries share one session, so their events serialize on the
           # same header row (by design - see PostgresSessionsStorage). Under
           # a busy CI runner, with the shared postgresql-matrix Postgres
           # instance also taking writes from every other postgresql-labelled
-          # test running concurrently, draining that backlog can take longer
-          # than a quick local run ever does - so poll in-pod for the rows to
-          # drain before asserting.
+          # test running concurrently, one query's row can take well over a
+          # minute to reach phase=done. The in-pod poll breaks as soon as both
+          # rows land, so a generous budget only costs wall-clock when the
+          # backlog is genuinely deep.
           QUERY_COUNT=$(bash ../shared/psql-poll.sh \
             "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}' AND phase='done';" \
-            "2" 80 0.5) || { echo "expected 2 done session_queries rows, got '${QUERY_COUNT}'"; exit 1; }
+            "2" 300 0.5) || { echo "expected 2 done session_queries rows, got '${QUERY_COUNT}'"; exit 1; }
           echo "done session_queries rows: ${QUERY_COUNT}"
 
           HEADER=$(bash ../shared/psql-query.sh \

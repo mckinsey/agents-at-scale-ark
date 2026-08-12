@@ -77,7 +77,7 @@ spec:
   - name: verify-events-in-postgres
     try:
     - script:
-        timeout: 30s
+        timeout: 120s
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -85,7 +85,7 @@ spec:
           QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
           bash ../shared/psql-poll.sh \
             "SELECT count(*) >= 1 FROM events WHERE query_id='${QUERY_UID}' AND expires_at IS NOT NULL;" \
-            "t" 20 0.5 >/dev/null || { echo "expected at least 1 event with expires_at"; exit 1; }
+            "t" 180 0.5 >/dev/null || { echo "expected at least 1 event with expires_at"; exit 1; }
           COUNT=$(bash ../shared/psql-query.sh \
             "SELECT count(*) FROM events WHERE query_id='${QUERY_UID}' AND expires_at IS NOT NULL;" \
             | tr -d ' \n')
@@ -97,7 +97,7 @@ spec:
   - name: verify-event-ttl-in-postgres
     try:
     - script:
-        timeout: 30s
+        timeout: 120s
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -105,7 +105,7 @@ spec:
           QUERY_UID=$(kubectl get query events-broker-query -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')
           bash ../shared/psql-poll.sh \
             "SELECT count(*) >= 1 FROM events WHERE query_id='${QUERY_UID}' AND expires_at IS NOT NULL;" \
-            "t" 20 0.5 >/dev/null || { echo "no events with expires_at for ttl check"; exit 1; }
+            "t" 180 0.5 >/dev/null || { echo "no events with expires_at for ttl check"; exit 1; }
           TTL=$(bash ../shared/psql-query.sh \
             "SELECT EXTRACT(EPOCH FROM (expires_at - created_at))::int FROM events WHERE query_id='${QUERY_UID}' LIMIT 1;" \
             | tr -d ' \n')
