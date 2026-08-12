@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { MCPHeader } from '@/lib/services/mcp-servers';
 import {
+  type AddressMode,
   buildHeader,
+  buildSpec,
   type HeaderData,
+  mapDetailAddress,
   mapDetailHeaders,
   validateHeaders,
 } from '@/components/forms/mcp-forms/utils';
@@ -14,6 +17,109 @@ const row = (overrides: Partial<HeaderData>): HeaderData => ({
   type: 'direct',
   value: '',
   ...overrides,
+});
+
+const values = {
+  name: 'github-mcp',
+  description: 'GitHub remote MCP',
+  configurationName: 'github-mcp-url',
+  transport: 'http' as const,
+};
+
+describe('mapDetailAddress', () => {
+  it('reads a configuration reference', () => {
+    const state = mapDetailAddress(
+      {
+        valueFrom: { configMapKeyRef: { name: 'github-mcp-url', key: 'value' } },
+      },
+      'https://api.githubcopilot.com/mcp/',
+    );
+    expect(state).toEqual({
+      kind: 'configuration',
+      configurationName: 'github-mcp-url',
+    });
+  });
+
+  it('reads a literal address', () => {
+    const state = mapDetailAddress(
+      { value: 'https://api.githubcopilot.com/mcp/' },
+      'https://api.githubcopilot.com/mcp/',
+    );
+    expect(state).toEqual({
+      kind: 'literal',
+      url: 'https://api.githubcopilot.com/mcp/',
+    });
+  });
+
+  it('reads a service reference and keeps the resolved address', () => {
+    const serviceRef = {
+      name: 'ark-mcp',
+      port: 'http',
+      path: '/mcp',
+      namespace: 'ark',
+    };
+    const state = mapDetailAddress(
+      { valueFrom: { serviceRef } },
+      'http://ark-mcp.ark.svc.cluster.local:80/mcp',
+    );
+    expect(state).toEqual({
+      kind: 'service',
+      serviceRef,
+      resolvedAddress: 'http://ark-mcp.ark.svc.cluster.local:80/mcp',
+    });
+  });
+
+  it('falls back to the resolved address when the source is missing', () => {
+    const state = mapDetailAddress(null, 'https://legacy.example/mcp');
+    expect(state).toEqual({
+      kind: 'literal',
+      url: 'https://legacy.example/mcp',
+    });
+  });
+});
+
+describe('buildSpec', () => {
+  it('writes a configMapKeyRef for the configuration mode', () => {
+    const spec = buildSpec(values, [], { kind: 'configuration' });
+    expect(spec.address).toEqual({
+      valueFrom: {
+        configMapKeyRef: { name: 'github-mcp-url', key: 'value' },
+      },
+    });
+  });
+
+  it('round-trips a serviceRef untouched', () => {
+    const serviceRef = {
+      name: 'ark-mcp',
+      port: 'http',
+      path: '/mcp',
+      namespace: 'ark',
+    };
+    const mode: AddressMode = { kind: 'service', serviceRef };
+    const spec = buildSpec({ ...values, configurationName: '' }, [], mode);
+    expect(spec.address).toEqual({ valueFrom: { serviceRef } });
+  });
+
+  it('still maps headers', () => {
+    const spec = buildSpec(
+      values,
+      [
+        {
+          key: 'row-1',
+          name: 'Authorization',
+          type: 'secret',
+          value: 'github-pat',
+        },
+      ],
+      { kind: 'configuration' },
+    );
+    expect(spec.headers).toEqual([
+      {
+        name: 'Authorization',
+        value: { valueFrom: { secretKeyRef: { name: 'github-pat', key: 'token' } } },
+      },
+    ]);
+  });
 });
 
 describe('validateHeaders', () => {
