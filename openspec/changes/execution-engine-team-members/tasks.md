@@ -94,6 +94,7 @@
 - [ ] 9.2 `building-execution-engines.mdx` — team membership section
 - [ ] 9.3 `query-execution.mdx` and `executionengine.mdx` wording
 - [ ] 9.4 `tests/README.md` coverage rows
+- [ ] 9.5 Restate **Python SDK resolves QueryRef transparently** as a `## MODIFIED Requirements` delta: the merged spec makes `conversation_id` unconditionally equal to `context_id`, which 7.5 narrows. Correct its no-`contextId` scenario, which `a2a-sdk` makes unreachable over A2A (Decision 7)
 
 
 

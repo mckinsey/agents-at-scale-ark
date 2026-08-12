@@ -125,6 +125,8 @@ The wire `contextId` is untouched, so the scheduler behaves exactly as today, an
 
 No sub-target gate is needed: `Execute` stamps `target` unconditionally and the controller dispatches top-level agent-on-engine queries directly, so completions is never in that path. Decision 2 holds unchanged.
 
+**Measured, not assumed (2026-08-12).** `a2a-sdk`'s `RequestContext._check_or_generate_context_id` mints a UUID4 into `message.context_id` whenever the caller sends none, and completions sends an empty `contextId` unless the `a2a-context-id` annotation is set. So before this change every member call reached a standalone executor under a *fresh random* conversation — the validation volume held 32 UUID session directories, none of them shared. Contamination therefore required either a non-empty `contextId` (the A2ATask resumption path) or an executor keying an in-process store on the value, as langchain does; where the value was empty the symptom was per-call churn and no continuity for a member across turns instead. One derivation fixes both. It also means the merged spec's "no `contextId` → empty `conversation_id`" scenario is unreachable over A2A transport, which the MODIFIED delta on that requirement now records.
+
 ### 8. Rejected: a child `Query` CRD per member
 
 The most attractive alternative — completions could create a Query with `spec.target = {agent, member}`, send a plain `{name, namespace}` ref, and **every existing engine would work unchanged**, with no schema change, no SDK change and no version floor.
