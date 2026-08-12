@@ -14,6 +14,16 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl get pods --namespace "$NAMESPACE" -l app.kubernetes.io/name=mock-llm -o wide || true
+          kubectl logs --namespace "$NAMESPACE" -l app.kubernetes.io/name=mock-llm --tail=50 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
     cleanup:
     - script:
         content: |
