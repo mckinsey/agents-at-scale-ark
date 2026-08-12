@@ -73,13 +73,26 @@ rbac:
     # service account specified in each Query resource. This is required for
     # multi-tenancy and namespace isolation.
     #
-    # When enabled (default), the controller can impersonate ANY service account.
-    # When disabled, queries can only run with the controller's own identity.
+    # Disabled by default (opt-in): when disabled, queries always run with the
+    # controller's own identity and no impersonate grant is created. Enable it
+    # only if you use Query.spec.serviceAccount.
+    #
+    # Migration: installs that previously relied on the default-on behaviour
+    # (using Query.spec.serviceAccount) must now set this to true explicitly.
+    #
+    # When enabled, the admission webhook authorizes each Query's requested
+    # service account against the requesting user via a SubjectAccessReview
+    # (the same RBAC that governs `kubectl --as`), so a Query can only run as a
+    # service account the requester is allowed to impersonate.
     #
     # Note: In future releases, query execution will be handled by per-namespace
     # 'query executor' pods, separating concerns between the controller (validation,
     # admission, mutation) and query execution (running with proper identity).
-    enabled: true
+    enabled: false
+    # Restrict which service accounts the controller may impersonate. When set,
+    # the impersonate grant is scoped to these names (resourceNames) instead of
+    # every service account cluster-wide. Leave empty for no name restriction.
+    allowedServiceAccounts: []
 
 # [CRDs]: To enable the CRDs
 crd:
