@@ -125,10 +125,10 @@ func (e *NamedExecutionEngine) Execute(ctx context.Context, req NamedEngineReque
 func deriveMemberConversationID(parentContextID, namespace, queryName, agentName string) string {
 	base := parentContextID
 	if base == "" {
-		base = namespace + "/" + queryName
+		base = queryName
 	}
 
-	sum := sha256.Sum256([]byte(base + "\x00" + agentName))
+	sum := sha256.Sum256([]byte(namespace + "\x00" + base + "\x00" + agentName))
 	return hex.EncodeToString(sum[:16])
 }
 

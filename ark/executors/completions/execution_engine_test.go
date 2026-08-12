@@ -216,6 +216,13 @@ func TestDeriveMemberConversationID(t *testing.T) {
 		"the same team in two namespaces must not share member state")
 	assert.NotEqual(t, id, deriveMemberConversationID("", "default", "other-query", "member-a"))
 	assert.Equal(t, id, deriveMemberConversationID("", "default", "my-query", "member-a"))
+
+	scoped := deriveMemberConversationID("session-1", "default", "my-query", "member-a")
+
+	assert.NotEqual(t, scoped, deriveMemberConversationID("session-1", "other", "my-query", "member-a"),
+		"an explicit session id carries no namespace of its own")
+	assert.Equal(t, scoped, deriveMemberConversationID("session-1", "default", "other-query", "member-a"),
+		"a session continued across queries keeps each member's scope")
 }
 
 func TestNamedExecutionEngineSendsRenderedHistory(t *testing.T) {
