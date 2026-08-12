@@ -124,6 +124,84 @@ var _ = Describe("MCPServer Controller", func() {
 		))
 	})
 
+	It("maps a changed Secret to the MCPServers that reference it", func() {
+		const secretName = "mapped-mcp-secret"
+
+		byAddress := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "mcp-ref-secret-address", Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address: arkv1alpha1.ValueSource{
+					ValueFrom: &arkv1alpha1.ValueFromSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							Key:                  "value",
+						},
+					},
+				},
+				Transport: "http",
+			},
+		}
+		byHeader := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "mcp-ref-secret-header", Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: "http://localhost:8080"},
+				Transport: "http",
+				Headers: []arkv1alpha1.Header{{
+					Name: "X-Api-Key",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+								Key:                  "value",
+							},
+						},
+					},
+				}},
+			},
+		}
+		byAuthorization := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "mcp-ref-secret-authorization", Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: "http://localhost:8080"},
+				Transport: "http",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
+				},
+			},
+		}
+		unrelated := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "mcp-ref-secret-unrelated", Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: "http://localhost:8080"},
+				Transport: "http",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: "some-other-secret"},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, byAddress)).To(Succeed())
+		Expect(k8sClient.Create(ctx, byHeader)).To(Succeed())
+		Expect(k8sClient.Create(ctx, byAuthorization)).To(Succeed())
+		Expect(k8sClient.Create(ctx, unrelated)).To(Succeed())
+
+		controllerReconciler := &MCPServerReconciler{
+			Client:   k8sClient,
+			Scheme:   k8sClient.Scheme(),
+			Eventing: eventnoop.NewProvider(),
+		}
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+		}
+		requests := controllerReconciler.mapSecretToMCPServers(ctx, secret)
+
+		Expect(requests).To(ConsistOf(
+			reconcile.Request{NamespacedName: types.NamespacedName{Name: "mcp-ref-secret-address", Namespace: "default"}},
+			reconcile.Request{NamespacedName: types.NamespacedName{Name: "mcp-ref-secret-header", Namespace: "default"}},
+			reconcile.Request{NamespacedName: types.NamespacedName{Name: "mcp-ref-secret-authorization", Namespace: "default"}},
+		))
+	})
+
 	It("maps a ConfigMap referenced by nothing to no requests", func() {
 		controllerReconciler := &MCPServerReconciler{
 			Client:   k8sClient,

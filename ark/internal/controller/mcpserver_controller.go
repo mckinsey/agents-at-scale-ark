@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -753,33 +754,77 @@ func (r *MCPServerReconciler) convertInputSchemaToRawExtension(schema any) *runt
 func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.MCPServer{}).
-		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToMCPServers)).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToMCPServers), builder.WithPredicates(dataChangedPredicate())).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToMCPServers), builder.WithPredicates(dataChangedPredicate())).
 		Named("mcpserver").
 		Complete(r)
 }
 
+// mapSecretToMCPServers enqueues MCPServers whose address, headers or
+// authorization token reference the Secret.
+func (r *MCPServerReconciler) mapSecretToMCPServers(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapDependencyToMCPServers(ctx, obj, func(s arkv1alpha1.MCPServer) bool {
+		return mcpServerReferencesSecret(s, obj.GetName())
+	})
+}
+
+// mapConfigMapToMCPServers enqueues MCPServers whose address or headers
+// reference the ConfigMap.
 func (r *MCPServerReconciler) mapConfigMapToMCPServers(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapDependencyToMCPServers(ctx, obj, func(s arkv1alpha1.MCPServer) bool {
+		return mcpServerReferencesConfigMap(s, obj.GetName())
+	})
+}
+
+func (r *MCPServerReconciler) mapDependencyToMCPServers(ctx context.Context, obj client.Object, matches func(arkv1alpha1.MCPServer) bool) []reconcile.Request {
 	return mapDependencyRequests(ctx, r.Client, obj, &arkv1alpha1.MCPServerList{},
 		func(l *arkv1alpha1.MCPServerList) []arkv1alpha1.MCPServer { return l.Items },
-		func(s arkv1alpha1.MCPServer) bool {
-			return mcpServerReferencesConfigMap(s, obj.GetName())
-		},
+		matches,
 		func(s arkv1alpha1.MCPServer) types.NamespacedName {
 			return types.NamespacedName{Name: s.Name, Namespace: s.Namespace}
 		})
 }
 
-func mcpServerReferencesConfigMap(server arkv1alpha1.MCPServer, configMapName string) bool {
-	if vf := server.Spec.Address.ValueFrom; vf != nil && vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == configMapName {
+// mcpServerReferences walks the two places an MCPServer resolves a value from a
+// dependency: spec.address and each spec.headers[].value. The two use distinct
+// valueFrom types, so callers supply one matcher per shape.
+func mcpServerReferences(
+	server arkv1alpha1.MCPServer,
+	matchValue func(*arkv1alpha1.ValueFromSource) bool,
+	matchHeader func(*arkv1alpha1.HeaderValueSource) bool,
+) bool {
+	if vf := server.Spec.Address.ValueFrom; vf != nil && matchValue(vf) {
 		return true
 	}
 	for _, header := range server.Spec.Headers {
-		vf := header.Value.ValueFrom
-		if vf != nil && vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == configMapName {
+		if vf := header.Value.ValueFrom; vf != nil && matchHeader(vf) {
 			return true
 		}
 	}
 	return false
+}
+
+func mcpServerReferencesConfigMap(server arkv1alpha1.MCPServer, configMapName string) bool {
+	return mcpServerReferences(server,
+		func(vf *arkv1alpha1.ValueFromSource) bool {
+			return vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == configMapName
+		},
+		func(vf *arkv1alpha1.HeaderValueSource) bool {
+			return vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == configMapName
+		})
+}
+
+func mcpServerReferencesSecret(server arkv1alpha1.MCPServer, secretName string) bool {
+	if auth := server.Spec.Authorization; auth != nil && auth.TokenSecretRef.Name == secretName {
+		return true
+	}
+	return mcpServerReferences(server,
+		func(vf *arkv1alpha1.ValueFromSource) bool {
+			return vf.SecretKeyRef != nil && vf.SecretKeyRef.Name == secretName
+		},
+		func(vf *arkv1alpha1.HeaderValueSource) bool {
+			return vf.SecretKeyRef != nil && vf.SecretKeyRef.Name == secretName
+		})
 }
 
 // parseTimeout returns the MCPServer spec timeout as a duration,
