@@ -1218,17 +1218,16 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["prompt"], "Original prompt")
         self.assertEqual(data["modelRef"]["name"], "gpt-3.5-turbo")
 
-    @patch("ark_api.api.v1.agents.with_ark_client")
-    def test_update_agent_clear_execution_engine(self, mock_ark_client):
-        """Explicit null clears the execution engine from the spec sent to a_update."""
+    @staticmethod
+    def _mock_agent_update(mock_ark_client, spec):
+        """Wire up an existing agent with the given spec.
+
+        a_update echoes back the object it receives, so the response reflects
+        exactly the spec the endpoint would have persisted.
+        """
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
 
-        spec = {
-            "description": "desc",
-            "prompt": "prompt",
-            "executionEngine": {"name": "demo-engine"},
-        }
         existing_agent = Mock()
         existing_agent.to_dict.return_value = {
             "metadata": {"name": "test-agent", "namespace": "default"},
@@ -1236,15 +1235,23 @@ class TestAgentsEndpoint(unittest.TestCase):
             "status": {"phase": "Ready"},
         }
 
-        updated_agent = Mock()
-        updated_agent.to_dict.return_value = {
-            "metadata": {"name": "test-agent", "namespace": "default"},
-            "spec": {"description": "desc", "prompt": "prompt"},
-            "status": {"phase": "Ready"},
-        }
-
         mock_client.agents.a_get = AsyncMock(return_value=existing_agent)
-        mock_client.agents.a_update = AsyncMock(return_value=updated_agent)
+        mock_client.agents.a_update = AsyncMock(
+            side_effect=lambda resource, *a, **k: resource
+        )
+        return mock_client
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_clear_execution_engine(self, mock_ark_client):
+        """Explicit null clears the execution engine from the persisted spec."""
+        self._mock_agent_update(
+            mock_ark_client,
+            {
+                "description": "desc",
+                "prompt": "prompt",
+                "executionEngine": {"name": "demo-engine"},
+            },
+        )
 
         response = self.client.put(
             "/v1/agents/test-agent?namespace=default",
@@ -1252,33 +1259,22 @@ class TestAgentsEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        mock_client.agents.a_update.assert_awaited_once()
-        # The endpoint mutates the spec in place before building the object it
-        # hands to a_update, so the cleared field must be gone from the spec.
-        self.assertNotIn("executionEngine", spec)
+        data = response.json()
+        self.assertIsNone(data["executionEngine"])
+        self.assertEqual(data["description"], "desc")
+        self.assertEqual(data["prompt"], "prompt")
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_omit_execution_engine_preserved(self, mock_ark_client):
         """Omitting executionEngine leaves an existing engine untouched (partial update)."""
-        mock_client = AsyncMock()
-        mock_ark_client.return_value.__aenter__.return_value = mock_client
-
-        spec = {
-            "description": "old desc",
-            "prompt": "prompt",
-            "executionEngine": {"name": "demo-engine"},
-        }
-        existing_agent = Mock()
-        existing_agent.to_dict.return_value = {
-            "metadata": {"name": "test-agent", "namespace": "default"},
-            "spec": spec,
-            "status": {"phase": "Ready"},
-        }
-        updated_agent = Mock()
-        updated_agent.to_dict.return_value = existing_agent.to_dict.return_value
-
-        mock_client.agents.a_get = AsyncMock(return_value=existing_agent)
-        mock_client.agents.a_update = AsyncMock(return_value=updated_agent)
+        self._mock_agent_update(
+            mock_ark_client,
+            {
+                "description": "old desc",
+                "prompt": "prompt",
+                "executionEngine": {"name": "demo-engine"},
+            },
+        )
 
         response = self.client.put(
             "/v1/agents/test-agent?namespace=default",
@@ -1286,31 +1282,17 @@ class TestAgentsEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(spec["executionEngine"], {"name": "demo-engine"})
-        self.assertEqual(spec["description"], "new desc")
+        data = response.json()
+        self.assertEqual(data["executionEngine"]["name"], "demo-engine")
+        self.assertEqual(data["description"], "new desc")
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_clear_prompt(self, mock_ark_client):
-        """Explicit null clears the prompt from the spec sent to a_update."""
-        mock_client = AsyncMock()
-        mock_ark_client.return_value.__aenter__.return_value = mock_client
-
-        spec = {"description": "desc", "prompt": "old prompt"}
-        existing_agent = Mock()
-        existing_agent.to_dict.return_value = {
-            "metadata": {"name": "test-agent", "namespace": "default"},
-            "spec": spec,
-            "status": {"phase": "Ready"},
-        }
-        updated_agent = Mock()
-        updated_agent.to_dict.return_value = {
-            "metadata": {"name": "test-agent", "namespace": "default"},
-            "spec": {"description": "desc"},
-            "status": {"phase": "Ready"},
-        }
-
-        mock_client.agents.a_get = AsyncMock(return_value=existing_agent)
-        mock_client.agents.a_update = AsyncMock(return_value=updated_agent)
+        """Explicit null clears the prompt from the persisted spec."""
+        self._mock_agent_update(
+            mock_ark_client,
+            {"description": "desc", "prompt": "old prompt"},
+        )
 
         response = self.client.put(
             "/v1/agents/test-agent?namespace=default",
@@ -1318,7 +1300,9 @@ class TestAgentsEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn("prompt", spec)
+        data = response.json()
+        self.assertIsNone(data["prompt"])
+        self.assertEqual(data["description"], "desc")
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_delete_agent_success(self, mock_ark_client):

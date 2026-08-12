@@ -4,7 +4,7 @@ import json
 import re
 
 from fastapi import APIRouter, Depends, Query, Request
-from typing import Any, Callable, Optional
+from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
 from ark_sdk.impersonation import ImpersonationConfig
 
@@ -221,28 +221,14 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
         existing_agent = await ark_client.agents.a_get(agent_name)
         existing_spec = existing_agent.to_dict()["spec"]
 
-        # Apply only the fields the client actually sent. A field set to null
-        # clears it from the spec; an omitted field is left untouched. Using
-        # model_fields_set is what distinguishes "explicitly cleared" from
-        # "not part of this update".
-        fields_set = body.model_fields_set
-
-        def apply_update(field: str, transform: Optional[Callable[[Any], Any]] = None) -> None:
-            if field not in fields_set:
-                return
-            value = getattr(body, field)
+        # exclude_unset keeps only the fields the client actually sent, so an
+        # omitted field is left as-is while one explicitly set to null is
+        # cleared. Conflating those two was the original bug.
+        for field, value in body.model_dump(exclude_unset=True).items():
             if value is None:
                 existing_spec.pop(field, None)
             else:
-                existing_spec[field] = transform(value) if transform else value
-
-        apply_update("description")
-        apply_update("executionEngine", lambda v: v.model_dump(exclude_none=True))
-        apply_update("modelRef", lambda v: v.model_dump(exclude_none=True))
-        apply_update("parameters", lambda v: [param.model_dump(exclude_none=True) for param in v])
-        apply_update("prompt")
-        apply_update("tools", lambda v: [tool.model_dump(exclude_none=True) for tool in v])
-        apply_update("overrides", lambda v: [override.model_dump(exclude_none=True) for override in v])
+                existing_spec[field] = value
 
         # Update the agent
         # Get the full existing agent object and update its spec
