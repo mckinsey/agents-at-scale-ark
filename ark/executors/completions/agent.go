@@ -195,11 +195,11 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
-	toolMessage, _, err := a.executeToolCallWithImages(ctx, toolCall)
+	toolMessage, _, err := a.executeToolCallWithImages(ctx, toolCall, newImageTurnBudget())
 	return toolMessage, err
 }
 
-func (a *Agent) executeToolCallWithImages(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, []ToolResultImage, error) {
+func (a *Agent) executeToolCallWithImages(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall, budget *imageTurnBudget) (Message, []ToolResultImage, error) {
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
 
 	// If the result has an error field set, use that as the message content
@@ -208,13 +208,15 @@ func (a *Agent) executeToolCallWithImages(ctx context.Context, toolCall openai.C
 	if result.Error != "" {
 		content = result.Error
 	}
-	toolMessage := ToolMessage(content, result.ID)
+
+	images, note := budget.admit(ctx, toolCall.Function.Name, result.Images)
+	toolMessage := ToolMessage(content+note, result.ID)
 
 	if err != nil {
 		return toolMessage, nil, err
 	}
 
-	return toolMessage, result.Images, nil
+	return toolMessage, images, nil
 }
 
 func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, agentMessages, newMessages *[]Message) error {
@@ -255,12 +257,13 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 	}
 
 	// No approval needed, execute normally
+	budget := newImageTurnBudget()
 	for _, tc := range toolCalls {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 
-		toolMessage, images, err := a.executeToolCallWithImages(ctx, tc)
+		toolMessage, images, err := a.executeToolCallWithImages(ctx, tc, budget)
 		*agentMessages = append(*agentMessages, toolMessage)
 		*newMessages = append(*newMessages, toolMessage)
 
