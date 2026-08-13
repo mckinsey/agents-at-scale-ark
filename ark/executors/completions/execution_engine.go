@@ -75,10 +75,7 @@ func (e *NamedExecutionEngine) Execute(ctx context.Context, req NamedEngineReque
 
 	modelID := fmt.Sprintf("agent/%s", req.AgentName)
 
-	ctx, cancel, err := withA2AExecutionTimeout(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
+	ctx, cancel := withDefaultExecutionTimeout(ctx)
 	defer cancel()
 
 	message := arka2a.NewQueryExtensionMessage(
