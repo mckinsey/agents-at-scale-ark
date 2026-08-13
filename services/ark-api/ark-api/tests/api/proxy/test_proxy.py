@@ -635,6 +635,25 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_request.assert_not_called()
 
     @patch('httpx.AsyncClient.request')
+    @patch('ark_api.api.v1.proxy.proxy.get_context')
+    def test_proxy_services_defaults_namespace_from_context(self, mock_get_context, mock_request):
+        """When no namespace is supplied, the current context namespace is used."""
+        mock_get_context.return_value = {"namespace": "ctx-ns"}
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.content = b'{}'
+        mock_request.return_value = mock_response
+
+        with self._mock_service_lookup():
+            response = self.client.delete("/v1/proxy/services/file-gateway/files/test.txt")
+
+        self.assertEqual(response.status_code, 200)
+        mock_get_context.assert_called_once()
+        call_args = mock_request.call_args
+        self.assertIn("http://file-gateway.ctx-ns.svc.cluster.local/files/test.txt", call_args.kwargs["url"])
+
+    @patch('httpx.AsyncClient.request')
     def test_proxy_patch_request_success(self, mock_request):
         """Test PATCH request proxying to a service."""
         mock_response = AsyncMock()
