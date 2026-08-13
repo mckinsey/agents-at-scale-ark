@@ -46,12 +46,12 @@ max_wal_senders       >= 1
 
 ### Minimum version
 
-The watch stream decodes the WAL with the built-in `pgoutput` plugin and a `CREATE PUBLICATION`, both introduced in **PostgreSQL 10**, which is the hard minimum. Run a currently-supported major (**14 or newer**) in production.
+The watch stream decodes the WAL with the built-in `pgoutput` plugin and a `CREATE PUBLICATION`, introduced in PostgreSQL 10. The hard minimum is **PostgreSQL 13**: slot health checks read `pg_replication_slots.wal_status` and list pagination calls `pg_current_snapshot()`, neither of which exists in earlier majors. Run a currently-supported major (**14 or newer**) in production.
 
 A user/role with permission to:
 
 - `CREATE TABLE`, `CREATE INDEX`, `CREATE PUBLICATION` on the target database
-- `pg_replication_slots` access (typically the `REPLICATION` attribute or a member of `pg_create_logical_replication_slots`)
+- the **`REPLICATION`** attribute (`ALTER ROLE ark REPLICATION`). Postgres permits replication slots only to roles that hold this attribute, and no predefined role grants it. Managed services often withhold `ALTER ROLE` and expose an equivalent grant instead (for example `rds_replication` on AWS RDS) — check your provider's documentation.
 
 For managed services:
 
@@ -81,7 +81,7 @@ On first start, `ark-apiserver` creates:
 - Indexes on `(kind, namespace)`, `(kind, namespace, name)`, a GIN index on `labels`, and a unique partial index on active (non-deleted) rows.
 - A publication and a logical replication slot, both named `ark_cdc`. The slot is what powers `kubectl get -w` and controller informers.
 
-The slot is **persistent**: it survives apiserver restarts and is not removed by `helm uninstall`. See [Uninstall and cleanup](#uninstall-and-cleanup) below.
+The slot is **persistent**: it survives apiserver restarts. It is dropped automatically on `helm uninstall` — see [Uninstall and cleanup](#uninstall-and-cleanup) below.
 
 ## Installing PostgreSQL mode
 
@@ -251,7 +251,14 @@ Treat the `resources` table like any other application table:
 
 `helm uninstall` runs a `post-delete` hook Job that drops the `ark_cdc` replication slot and publication. Without this cleanup, an orphaned slot would pin WAL retention and can fill the disk. The Job connects with the same credentials as the apiserver, so the password secret must still exist when you uninstall.
 
-If the hook Job could not run (for example the database was unreachable, or you removed the release with `--no-hooks`), drop the slot manually:
+Confirm in the database that the slot is gone rather than trusting the Job's log line — both queries should return no rows:
+
+```sql
+SELECT slot_name, active, wal_status FROM pg_replication_slots WHERE slot_name = 'ark_cdc';
+SELECT pubname FROM pg_publication WHERE pubname = 'ark_cdc';
+```
+
+If the hook Job could not run (for example the database was unreachable, you removed the release with `--no-hooks`, or the password secret was deleted first), drop the slot manually:
 
 ```sql
 SELECT pg_drop_replication_slot('ark_cdc');
