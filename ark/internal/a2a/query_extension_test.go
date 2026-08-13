@@ -126,10 +126,15 @@ func sendMessageStub(t *testing.T, reply string, captured *map[string]any) *http
 type recordingA2aRecorder struct {
 	eventing.A2aRecorder
 	messageFailures []string
+	parseErrors     []string
 }
 
 func (r *recordingA2aRecorder) A2AMessageFailed(_ context.Context, reason string) {
 	r.messageFailures = append(r.messageFailures, reason)
+}
+
+func (r *recordingA2aRecorder) A2AResponseParseError(_ context.Context, reason string) {
+	r.parseErrors = append(r.parseErrors, reason)
 }
 
 func TestSendQueryExtensionMessage(t *testing.T) {

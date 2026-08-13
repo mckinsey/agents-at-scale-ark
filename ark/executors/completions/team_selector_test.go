@@ -1576,6 +1576,7 @@ func TestContainsWholeName(t *testing.T) {
 		{name: "the longer name itself matches", haystack: "use agent-2", needle: "agent-2", want: true},
 		{name: "prefix of a word is not a match", haystack: "bananas", needle: "ana", want: false},
 		{name: "absent", haystack: "nobody here", needle: "analyst", want: false},
+		{name: "an unnamed member matches nothing", haystack: "pick analyst next", needle: "", want: false},
 	}
 
 	for _, tt := range tests {

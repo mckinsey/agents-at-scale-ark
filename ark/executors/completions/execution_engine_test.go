@@ -542,3 +542,51 @@ func TestNamedExecutionEngineInvalidResponse(t *testing.T) {
 	assert.Nil(t, result)
 	assert.NotEmpty(t, stream.chunks, "the failure is streamed to the caller")
 }
+
+func TestAgentGetExecutionEngine(t *testing.T) {
+	ref := &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine", Namespace: "default"}
+	withEngine := &Agent{Name: "member-a", ExecutionEngine: ref}
+	local := &Agent{Name: "member-b"}
+
+	assert.Same(t, ref, withEngine.GetExecutionEngine())
+	assert.Nil(t, local.GetExecutionEngine())
+	assert.True(t, arka2a.IsNamedEngine(withEngine.GetExecutionEngine()),
+		"the selector reads the engine through this accessor to decide how to parse the reply")
+	assert.False(t, arka2a.IsNamedEngine(local.GetExecutionEngine()))
+}
+
+func TestValidateExecutionEngine(t *testing.T) {
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+	}
+
+	t.Run("no engine needs no lookup", func(t *testing.T) {
+		require.NoError(t, ValidateExecutionEngine(context.Background(), nil, nil, "default"),
+			"a nil client proves the short circuit returns before reaching the API server")
+	})
+
+	t.Run("reserved a2a engine needs no lookup", func(t *testing.T) {
+		ref := &arkv1alpha1.ExecutionEngineRef{Name: arka2a.ExecutionEngineA2A}
+		require.NoError(t, ValidateExecutionEngine(context.Background(), nil, ref, "default"),
+			"the reserved name has no ExecutionEngine CRD behind it")
+	})
+
+	t.Run("named engine that exists", func(t *testing.T) {
+		ref := &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"}
+		require.NoError(t, ValidateExecutionEngine(context.Background(), engineTestClient(t, engine), ref, "default"))
+	})
+
+	t.Run("named engine that does not exist", func(t *testing.T) {
+		ref := &arkv1alpha1.ExecutionEngineRef{Name: "missing-engine"}
+		err := ValidateExecutionEngine(context.Background(), engineTestClient(t), ref, "default")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "execution engine missing-engine not found in namespace default")
+	})
+
+	t.Run("named engine resolved in its own namespace", func(t *testing.T) {
+		ref := &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine", Namespace: "other"}
+		err := ValidateExecutionEngine(context.Background(), engineTestClient(t, engine), ref, "default")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "in namespace other")
+	})
+}
