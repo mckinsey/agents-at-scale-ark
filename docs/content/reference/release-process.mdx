@@ -29,7 +29,7 @@ Ark uses [Release Please](https://github.com/googleapis/release-please) to drive
 **Stable promotion** does not use Release Please. `scripts/stamp-version.sh` strips the `-rc` suffix across every version file, and a reviewed `release: vX.Y.Z` PR carries that change plus a `.releasing` file recording the exact RC commit to build from.
 
 **Version synchronization** ensures consistency across all artifacts. During the RC cycle, Release Please updates versions in:
-- Root `version.txt` and `ark/version.txt`
+- Root `version.txt`
 - Python packages: 3 `pyproject.toml` files (ark-sdk, ark-api, overlay)
 - Helm charts: 8 `Chart.yaml` files with both `version` and `appVersion` fields
 - Node.js packages: `package.json` for ark-cli, ark-broker, docs site
@@ -323,7 +323,8 @@ The tracked locations are:
 
 **Root versions**:
 - `version.txt` (root)
-- `ark/version.txt` (controller)
+
+> **Note**: `ark/version.txt` (controller) is listed in `.github/release-please-config.json` but is updated by neither path — Release Please leaves it untouched (no `x-release-please-version` annotation) and `scripts/stamp-version.sh` skips it to match. It currently trails the root version.
 
 **Python packages** (3 locations):
 - `lib/ark-sdk/pyproject.toml`
