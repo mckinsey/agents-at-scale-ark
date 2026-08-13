@@ -500,3 +500,45 @@ func TestMakeAgentSelfDispatchingEngineExplainsModelRequirement(t *testing.T) {
 	assert.Contains(t, err.Error(), "resolves back to this completions engine")
 	assert.Contains(t, err.Error(), "needs a usable modelRef")
 }
+
+func TestNamedExecutionEngineInvalidResponse(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		var request map[string]any
+		require.NoError(t, json.Unmarshal(body, &request))
+
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result": map[string]any{
+				"kind":      "task",
+				"id":        "task-1",
+				"contextId": "ctx-1",
+				"status":    map[string]any{},
+			},
+		}))
+	}))
+	defer stub.Close()
+
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: stub.URL},
+	}
+	stream := &mockEventStream{}
+	e := NewNamedExecutionEngine(engineTestClient(t, engine), eventnoop.NewProvider().A2aRecorder())
+
+	result, err := e.Execute(engineQueryContext(t), NamedEngineRequest{
+		AgentName:   "member-a",
+		Namespace:   "default",
+		EngineRef:   &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		UserInput:   NewUserMessage("hi"),
+		EventStream: stream,
+	})
+
+	require.Error(t, err, "an engine reply the executor cannot read is a failure, not an empty answer")
+	assert.Nil(t, result)
+	assert.NotEmpty(t, stream.chunks, "the failure is streamed to the caller")
+}

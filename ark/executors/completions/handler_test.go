@@ -1737,3 +1737,135 @@ func TestSubTargetApprovalIsRejectedAtOrigin(t *testing.T) {
 		}))
 	})
 }
+
+func TestProcessMessageSubTargetRejectsApproval(t *testing.T) {
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"","tool_calls":[{"id":"call-1","type":"function","function":{"name":"noop","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{}}`))
+	}))
+	t.Cleanup(llm.Close)
+
+	model := &arkv1alpha1.Model{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+		Spec: arkv1alpha1.ModelSpec{
+			Model:    arkv1alpha1.ValueSource{Value: "gpt-test"},
+			Provider: ProviderOpenAI,
+			Config: arkv1alpha1.ModelConfig{
+				OpenAI: &arkv1alpha1.OpenAIModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{Value: llm.URL},
+					APIKey:  arkv1alpha1.ValueSource{Value: "test"},
+				},
+			},
+		},
+	}
+	tool := &arkv1alpha1.Tool{
+		ObjectMeta: metav1.ObjectMeta{Name: "noop", Namespace: "default"},
+		Spec: arkv1alpha1.ToolSpec{
+			Type:        ToolTypeBuiltin,
+			Description: "does nothing",
+		},
+	}
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "member-b", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			ModelRef: &arkv1alpha1.AgentModelRef{Name: "test-model"},
+			Tools: []arkv1alpha1.AgentTool{{
+				Type:     "built-in",
+				Name:     "noop",
+				Approval: &arkv1alpha1.ToolApprovalConfig{Required: true},
+			}},
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target: &arkv1alpha1.QueryTarget{Type: "team", Name: "my-team"},
+			Input:  runtime.RawExtension{Raw: []byte(`"deploy it"`)},
+		},
+	}
+
+	h := newTestHandler(model, tool, agent, query)
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("deploy it")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name":      "team-query",
+				"namespace": "default",
+				"target":    map[string]any{"type": "agent", "name": "member-b"},
+			},
+		},
+	}
+	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+
+	result, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+
+	require.Error(t, err, "a sub-target cannot own an approval cycle")
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "member-b")
+	assert.Contains(t, err.Error(), "tool noop")
+	assert.Contains(t, err.Error(), "invoked as a sub-target")
+	assert.NotContains(t, err.Error(), "input-required",
+		"the caller must see a failure, not a task it has no way to resume")
+}
+
+func TestSetupExecutionFailures(t *testing.T) {
+	target := &arkv1alpha1.QueryTarget{Type: "agent", Name: "my-agent"}
+
+	t.Run("unreadable query input", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "bad-input-query", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: target,
+				Input:  runtime.RawExtension{Raw: []byte(`{"not":"a string"}`)},
+			},
+		}
+		h := newTestHandler(query)
+
+		_, state, err := h.setupExecution(context.Background(), query, target, "", "")
+
+		require.Error(t, err)
+		assert.Nil(t, state)
+		assert.Contains(t, err.Error(), "failed to get input messages")
+	})
+
+	t.Run("unreachable memory", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "bad-memory-query", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: target,
+				Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
+				Memory: &arkv1alpha1.MemoryRef{Name: "missing-memory"},
+			},
+		}
+		h := newTestHandler(query)
+
+		_, state, err := h.setupExecution(context.Background(), query, target, "", "")
+
+		require.Error(t, err)
+		assert.Nil(t, state)
+		assert.Contains(t, err.Error(), "failed to create memory client")
+	})
+
+	t.Run("a sub-target needs neither", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "sub-target-query", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: target,
+				Input:  runtime.RawExtension{Raw: []byte(`{"not":"a string"}`)},
+				Memory: &arkv1alpha1.MemoryRef{Name: "missing-memory"},
+			},
+		}
+		h := newTestHandler(query)
+		ctx := WithSubTargetAgent(context.Background(), "my-agent")
+
+		_, state, err := h.setupExecution(ctx, query, target, "", "inbound text")
+
+		require.NoError(t, err, "a sub-target reads its input from the message and writes no parent memory")
+		defer state.querySpan.End()
+		defer state.targetSpan.End()
+		require.Len(t, state.inputMessages, 1)
+		assert.Equal(t, "inbound text", state.inputMessages[0].OfUser.Content.OfString.Value)
+		assert.IsType(t, &NoopMemory{}, state.memory)
+	})
+}
