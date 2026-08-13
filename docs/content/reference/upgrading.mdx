@@ -44,6 +44,8 @@ Also review the version-specific sections below for manual migration steps that 
 
 To move resources to a new cluster, use `ark export` on the source and `ark import` on the destination. This flow assumes the destination has a fresh Ark install with no overlapping resources.
 
+To move resources between storage backends within one cluster (etcd to PostgreSQL or back), see [Migrating between storage backends](/operations-guide/postgres-storage-backend#migrating-between-storage-backends), which covers the export/import ordering around the destructive backend switch.
+
 #### 1. Export from the source cluster
 
 ```bash
