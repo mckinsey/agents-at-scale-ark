@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: execution-engine-team
 spec:
-  description: Test a sequential team whose members all run on a named ExecutionEngine
+  description: Test sequential teams whose members run on a named ExecutionEngine, all-engine and mixed with a local member
   steps:
   - name: step-1
     try:
@@ -24,6 +24,17 @@ spec:
             name: mock-llm-echo
           status:
             (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
+    # The mixed team's local member runs the built-in completions loop, so it
+    # needs the mock Model the chart creates.
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
 
   - name: step-2
     try:
@@ -87,6 +98,27 @@ spec:
             phase: done
             (response != null): true
             (length(response.content) > `0`): true
+    # The mixed team pairs an engine-backed member with a local one. Waiting on
+    # the response content rather than Completed=True keeps the contains() below
+    # from erroring on a nil response.
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: mixed-team-query
+        timeout: 120s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: mixed-team-query
+          status:
+            phase: done
+            (contains(response.content, 'REVIEW:')): true
     catch:
     - events: {}
     - describe:
@@ -101,6 +133,14 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Team
         name: engine-team
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: mixed-team-query
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Team
+        name: mixed-team
 
     cleanup:
     - script:
