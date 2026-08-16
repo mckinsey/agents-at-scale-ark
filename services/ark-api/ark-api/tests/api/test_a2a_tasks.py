@@ -1,11 +1,21 @@
 """Tests for A2A Tasks API."""
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
 
 # Set environment variable to skip authentication before importing the app
 os.environ["AUTH_MODE"] = "open"
+
+
+def _page(items, continue_token=None, remaining_item_count=None):
+    """Build a fake ListResult page returned by a_list_page."""
+    return SimpleNamespace(
+        items=items,
+        continue_token=continue_token,
+        remaining_item_count=remaining_item_count,
+    )
 
 
 class TestA2ATasksEndpoint(unittest.TestCase):
@@ -22,7 +32,7 @@ class TestA2ATasksEndpoint(unittest.TestCase):
         from kubernetes_asyncio.client.rest import ApiException
         
         mock_client = AsyncMock()
-        mock_client.a2atasks.a_list = AsyncMock(side_effect=ApiException(
+        mock_client.a2atasks.a_list_page = AsyncMock(side_effect=ApiException(
             status=500,
             reason="Internal Server Error"
         ))
@@ -74,10 +84,10 @@ class TestA2ATasksEndpoint(unittest.TestCase):
             }
         }
         
-        mock_client.a2atasks.a_list = AsyncMock(return_value=[mock_task1, mock_task2])
-        
+        mock_client.a2atasks.a_list_page = AsyncMock(return_value=_page([mock_task1, mock_task2]))
+
         response = self.client.get("/v1/a2a-tasks?namespace=default")
-        
+
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["count"], 2)
