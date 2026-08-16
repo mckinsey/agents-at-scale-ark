@@ -179,3 +179,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0
 )
+
+// Security fix for CVE-2026-56864, CVE-2026-56865
+require golang.org/x/mod v0.38.0
