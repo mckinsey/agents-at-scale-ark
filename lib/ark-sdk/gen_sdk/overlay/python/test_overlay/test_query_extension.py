@@ -373,6 +373,13 @@ class TestOverrideAuthorization(unittest.IsolatedAsyncioTestCase):
             await self._resolve(self._query("agent", "my-agent"), {})
         self.assertIn("only team targets may delegate", str(ctx.exception))
 
+    async def test_rejects_override_on_a_selector_based_query(self):
+        query = self._query("team", "my-team")
+        query.spec.target = None
+        with self.assertRaises(ValueError) as ctx:
+            await self._resolve(query, {})
+        self.assertIn("resolves its target by selector", str(ctx.exception))
+
     async def test_a_team_cycle_terminates(self):
         with self.assertRaises(ValueError) as ctx:
             await self._resolve(

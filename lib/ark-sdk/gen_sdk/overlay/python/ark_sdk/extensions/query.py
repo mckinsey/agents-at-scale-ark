@@ -216,6 +216,13 @@ async def _authorize_override(ark: Any, query: Any, namespace: str, agent_name: 
     declared_name = _get_attr_or_key(declared, "name") if declared else None
     query_name = query.metadata["name"]
 
+    if declared is None:
+        raise ValueError(
+            f"Query '{query_name}' has no spec.target, so agent '{agent_name}' cannot be "
+            f"authorised as a sub-target: a query that resolves its target by selector "
+            f"cannot delegate to a team member in ark-sdk {_sdk_version()}"
+        )
+
     if declared_type != "team":
         raise ValueError(
             f"Query '{query_name}' targets {declared_type} '{declared_name}', so agent "
