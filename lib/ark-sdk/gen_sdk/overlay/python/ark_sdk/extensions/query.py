@@ -185,6 +185,9 @@ async def _resolve_from_query(
             f"Query extension target override only supports agent targets, got '{target_type}'"
         )
 
+    if target_override is not None:
+        await _authorize_override(ark, query, namespace, target_name)
+
     agent = await ark.agents.a_get(target_name, namespace)
     agent_config = await _build_agent_config(ark, agent, query, namespace)
     mcp_servers = await _build_mcp_servers(ark, agent, namespace)
@@ -204,6 +207,53 @@ async def _resolve_from_query(
         execution_engine_annotations=execution_engine_annotations,
         message_ttl_seconds=message_ttl_seconds,
     )
+
+
+async def _authorize_override(ark: Any, query: Any, namespace: str, agent_name: str) -> None:
+    """Reject an override naming an agent the Query's own target does not reach."""
+    declared = query.spec.target
+    declared_type = _get_attr_or_key(declared, "type") if declared else None
+    declared_name = _get_attr_or_key(declared, "name") if declared else None
+    query_name = query.metadata["name"]
+
+    if declared_type != "team":
+        raise ValueError(
+            f"Query '{query_name}' targets {declared_type} '{declared_name}', so agent "
+            f"'{agent_name}' cannot be executed as a sub-target: only team targets may delegate"
+        )
+
+    if not await _team_reaches_agent(ark, namespace, declared_name, agent_name):
+        raise ValueError(
+            f"Agent '{agent_name}' is not a member or selector of team '{declared_name}' "
+            f"targeted by query '{query_name}'"
+        )
+
+
+async def _team_reaches_agent(ark: Any, namespace: str, team_name: str, agent_name: str) -> bool:
+    """Whether a team transitively contains an agent, as a member or as its selector."""
+    visited: set[str] = set()
+    pending = [team_name]
+
+    while pending:
+        name = pending.pop(0)
+        if name in visited:
+            continue
+        visited.add(name)
+
+        team = await ark.teams.a_get(name, namespace)
+        selector = getattr(team.spec, "selector", None)
+        if selector is not None and _get_attr_or_key(selector, "agent") == agent_name:
+            return True
+
+        for member in getattr(team.spec, "members", None) or []:
+            member_type = _get_attr_or_key(member, "type")
+            member_name = _get_attr_or_key(member, "name")
+            if member_type == "agent" and member_name == agent_name:
+                return True
+            if member_type == "team" and member_name:
+                pending.append(member_name)
+
+    return False
 
 
 async def _resolve_execution_engine_annotations(agent, namespace: str) -> dict[str, str]:
