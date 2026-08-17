@@ -503,8 +503,30 @@ func TestRenderEngineHistoryNeverRendersNull(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			rendered := renderEngineHistory(history)
 			assert.NotContains(t, rendered, "null", "a turn without string content must not put a null token in the transcript")
+			assert.NotContains(t, rendered, "member-a:\n\n", "a turn without string content must be omitted, not rendered blank")
 		})
 	}
+}
+
+func TestRenderEngineHistoryKeepsToolResults(t *testing.T) {
+	toolCallTurn := namedAssistantMessage("member-a", "")
+	toolCallTurn.OfAssistant.ToolCalls = []openai.ChatCompletionMessageToolCallParam{
+		{
+			ID:       "call-1",
+			Function: openai.ChatCompletionMessageToolCallFunctionParam{Name: "get_weather", Arguments: "{}"},
+		},
+	}
+
+	rendered := renderEngineHistory([]Message{
+		NewUserMessage("weather in chicago?"),
+		toolCallTurn,
+		ToolMessage("18C and cloudy", "call-1"),
+		namedAssistantMessage("member-a", "It is 18C and cloudy."),
+	})
+
+	assert.Contains(t, rendered, "# tool:\n18C and cloudy")
+	assert.Contains(t, rendered, "# user:\nweather in chicago?")
+	assert.Contains(t, rendered, "# member-a:\nIt is 18C and cloudy.")
 }
 
 func TestRenderEngineInputKeepsSystemMessages(t *testing.T) {
