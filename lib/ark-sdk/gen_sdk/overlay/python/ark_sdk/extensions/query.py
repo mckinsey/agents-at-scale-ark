@@ -185,9 +185,6 @@ async def _resolve_from_query(
             f"Query extension target override only supports agent targets, got '{target_type}'"
         )
 
-    if target_override is not None:
-        await _authorize_override(ark, query, namespace, target_name)
-
     agent = await ark.agents.a_get(target_name, namespace)
     agent_config = await _build_agent_config(ark, agent, query, namespace)
     mcp_servers = await _build_mcp_servers(ark, agent, namespace)
@@ -207,100 +204,6 @@ async def _resolve_from_query(
         execution_engine_annotations=execution_engine_annotations,
         message_ttl_seconds=message_ttl_seconds,
     )
-
-
-def _label_selector_to_string(selector: Any) -> str:
-    """Render a Kubernetes LabelSelector as metav1.LabelSelectorAsSelector does."""
-    terms = []
-
-    for key, value in (_get_attr_or_key(selector, "match_labels", "matchLabels") or {}).items():
-        terms.append(f"{key}={value}")
-
-    for expr in _get_attr_or_key(selector, "match_expressions", "matchExpressions") or []:
-        key = _get_attr_or_key(expr, "key")
-        operator = _get_attr_or_key(expr, "operator")
-        values = ",".join(_get_attr_or_key(expr, "values") or [])
-        if operator == "In":
-            terms.append(f"{key} in ({values})")
-        elif operator == "NotIn":
-            terms.append(f"{key} notin ({values})")
-        elif operator == "Exists":
-            terms.append(key)
-        elif operator == "DoesNotExist":
-            terms.append(f"!{key}")
-        else:
-            raise ValueError(f"Unsupported label selector operator '{operator}'")
-
-    return ",".join(terms)
-
-
-async def _resolve_selector(ark: Any, query: Any, namespace: str) -> Any:
-    """Resolve a Query's label selector to a target, agents before teams, as the Go receiver does."""
-    label_selector = _label_selector_to_string(query.spec.selector)
-
-    for target_type, collection in (("agent", ark.agents), ("team", ark.teams)):
-        items = await collection.a_list(namespace, label_selector)
-        if items:
-            return {"type": target_type, "name": items[0].metadata["name"]}
-
-    return None
-
-
-async def _authorize_override(ark: Any, query: Any, namespace: str, agent_name: str) -> None:
-    """Reject an override naming an agent the Query's own target does not reach."""
-    query_name = query.metadata["name"]
-
-    declared = query.spec.target
-    if declared is None and getattr(query.spec, "selector", None) is not None:
-        declared = await _resolve_selector(ark, query, namespace)
-
-    if declared is None:
-        raise ValueError(
-            f"Query '{query_name}' has no target, so agent '{agent_name}' "
-            "cannot be authorised as a sub-target"
-        )
-
-    declared_type = _get_attr_or_key(declared, "type")
-    declared_name = _get_attr_or_key(declared, "name")
-
-    if declared_type != "team":
-        raise ValueError(
-            f"Query '{query_name}' targets {declared_type} '{declared_name}', so agent "
-            f"'{agent_name}' cannot be executed as a sub-target: only team targets may delegate"
-        )
-
-    if not await _team_reaches_agent(ark, namespace, declared_name, agent_name):
-        raise ValueError(
-            f"Agent '{agent_name}' is not a member or selector of team '{declared_name}' "
-            f"targeted by query '{query_name}'"
-        )
-
-
-async def _team_reaches_agent(ark: Any, namespace: str, team_name: str, agent_name: str) -> bool:
-    """Whether a team transitively contains an agent, as a member or as its selector."""
-    visited: set[str] = set()
-    pending = [team_name]
-
-    while pending:
-        name = pending.pop(0)
-        if name in visited:
-            continue
-        visited.add(name)
-
-        team = await ark.teams.a_get(name, namespace)
-        selector = getattr(team.spec, "selector", None)
-        if selector is not None and _get_attr_or_key(selector, "agent") == agent_name:
-            return True
-
-        for member in getattr(team.spec, "members", None) or []:
-            member_type = _get_attr_or_key(member, "type")
-            member_name = _get_attr_or_key(member, "name")
-            if member_type == "agent" and member_name == agent_name:
-                return True
-            if member_type == "team" and member_name:
-                pending.append(member_name)
-
-    return False
 
 
 async def _resolve_execution_engine_annotations(agent, namespace: str) -> dict[str, str]:
