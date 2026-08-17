@@ -1,5 +1,6 @@
 'use client';
 
+import { CreateResourceButton } from '@/components/forms/shared/create-resource-dialog';
 import { Trash } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
@@ -96,23 +97,29 @@ export function ConditionalInputRow({
           </>
         ) : (
           <>
-            <Select
-              value={data.value}
-              onValueChange={value => onChange({ value: value as string })}>
-              <SelectTrigger
-                id="thirdValue"
-                className={cn(GHOST_TRIGGER, 'w-full')}
-                aria-invalid={!!valueError}>
-                <SelectValue placeholder="Select a secret" />
-              </SelectTrigger>
-              <SelectContent className="bg-fill-onsurface-ui-2">
-                {secrets.map(secret => (
-                  <SelectItem key={secret.name} value={secret.name}>
-                    <SelectItemText>{secret.name}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-3">
+              <Select
+                value={data.value}
+                onValueChange={value => onChange({ value: value as string })}>
+                <SelectTrigger
+                  id="thirdValue"
+                  className={cn(GHOST_TRIGGER, 'flex-1')}
+                  aria-invalid={!!valueError}>
+                  <SelectValue placeholder="Select a secret" />
+                </SelectTrigger>
+                <SelectContent className="bg-fill-onsurface-ui-2">
+                  {secrets.map(secret => (
+                    <SelectItem key={secret.name} value={secret.name}>
+                      <SelectItemText>{secret.name}</SelectItemText>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <CreateResourceButton
+                kind="secret"
+                onCreated={name => onChange({ value: name })}
+              />
+            </div>
             {valueError && (
               <p className="text-status-error mt-1 text-sm font-normal">
                 {valueError}

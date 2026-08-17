@@ -3,6 +3,7 @@ import { toast } from '@/components/ui/sonner';
 
 import { APIError } from '@/lib/api/client';
 
+import { createResourceErrorMessage } from './resource-error-message';
 import { secretsService } from './secrets';
 import type { Secret, SecretDetailResponse } from './secrets';
 
@@ -75,18 +76,8 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
         onMutateResult?.previousTodos,
       );
 
-      const getMessage = () => {
-        if (error instanceof APIError && error.status === 409) {
-          return `A Secret with the name "${data.name}" already exists.`;
-        }
-        if (error instanceof Error) {
-          return error.message;
-        }
-        return 'An unexpected error occurred';
-      };
-
       toast.error(`Failed to create Secret: ${data.name}`, {
-        description: getMessage(),
+        description: createResourceErrorMessage(error, 'Secret', data.name),
       });
     },
     // Always refetch after error or success:
