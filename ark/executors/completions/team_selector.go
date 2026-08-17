@@ -168,6 +168,10 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		return nil, fmt.Errorf("failed to get selector agent %s in namespace %s: %w", agentName, t.Namespace, err)
 	}
 
+	if arka2a.IsNamedEngine(agentCRD.Spec.ExecutionEngine) && len(agentCRD.Spec.Tools) > 0 {
+		return nil, fmt.Errorf("selector agent %s in namespace %s has %d tools and runs on execution engine %s: an engine resolves an agent's tools from the cluster, so selection cannot withhold them - remove the tools or select with an agent that has no execution engine", agentName, t.Namespace, len(agentCRD.Spec.Tools), agentCRD.Spec.ExecutionEngine.Name)
+	}
+
 	agent, err := MakeAgent(ctx, t.Client, &agentCRD, t.telemetry, t.eventing)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
@@ -901,6 +902,27 @@ func TestLoadSelectorAgent_WithMock(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, agent)
 	assert.Equal(t, mockSelector, agent)
+}
+
+func TestLoadSelectorAgentRejectsEngineBackedAgentWithTools(t *testing.T) {
+	agentCRD := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "picker", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Prompt:          "pick one",
+			Tools:           []arkv1alpha1.AgentTool{{Type: "custom", Name: "delete-everything"}},
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		},
+	}
+	team := &Team{
+		Namespace: "default",
+		Client:    engineTestClient(t, agentCRD),
+		Selector:  &arkv1alpha1.TeamSelectorSpec{Agent: "picker"},
+	}
+
+	_, err := team.loadSelectorAgent(context.Background())
+
+	require.Error(t, err, "ClearTools is local, so a remote selector would keep tools it is told it does not have")
+	assert.Contains(t, err.Error(), "remove the tools")
 }
 
 func TestLoadSelectorAgent_RequiresSelectorSpec(t *testing.T) {

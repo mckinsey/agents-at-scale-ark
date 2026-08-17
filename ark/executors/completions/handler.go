@@ -118,13 +118,13 @@ func (h *Handler) ProcessMessage(
 	ctx, cancel := merge(ctx)
 	defer cancel()
 
-	query, target, err := h.resolveQueryAndTarget(ctx, message)
+	query, target, subTargetAgentName, err := h.resolveQueryAndTarget(ctx, message)
 	if err != nil {
 		return nil, err
 	}
 
-	if agentName := subTargetAgent(message); agentName != "" {
-		ctx = WithSubTargetAgent(ctx, agentName)
+	if subTargetAgentName != "" {
+		ctx = WithSubTargetAgent(ctx, subTargetAgentName)
 	}
 
 	var a2aContextId string
@@ -216,14 +216,14 @@ func (h *Handler) ProcessMessage(
 	return h.buildA2AResponse(ctx, state, responseMessages, execResult), nil
 }
 
-func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, error) {
+func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, string, error) {
 	ref, err := extractQueryRef(message)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to extract ark metadata: %w", err)
+		return nil, nil, "", fmt.Errorf("failed to extract ark metadata: %w", err)
 	}
 
 	if ref.Name == "" || ref.Namespace == "" {
-		return nil, nil, fmt.Errorf("query reference is required in ark metadata")
+		return nil, nil, "", fmt.Errorf("query reference is required in ark metadata")
 	}
 
 	var query arkv1alpha1.Query
@@ -231,14 +231,14 @@ func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Me
 		Name:      ref.Name,
 		Namespace: ref.Namespace,
 	}, &query); err != nil {
-		return nil, nil, fmt.Errorf("failed to get query %s/%s: %w", ref.Namespace, ref.Name, err)
+		return nil, nil, "", fmt.Errorf("failed to get query %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
 	declared := query.Spec.Target
 	if declared == nil && query.Spec.Selector != nil {
 		resolved, err := h.resolveSelector(ctx, &query)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to resolve selector for query %s/%s: %w", ref.Namespace, ref.Name, err)
+			return nil, nil, "", fmt.Errorf("failed to resolve selector for query %s/%s: %w", ref.Namespace, ref.Name, err)
 		}
 		declared = resolved
 	}
@@ -246,16 +246,16 @@ func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Me
 	if ref.Target != nil {
 		override := &arkv1alpha1.QueryTarget{Type: ref.Target.Type, Name: ref.Target.Name}
 		if err := h.validateTargetOverride(ctx, &query, declared, override); err != nil {
-			return nil, nil, err
+			return nil, nil, "", err
 		}
-		return &query, override, nil
+		return &query, override, override.Name, nil
 	}
 
 	if declared == nil {
-		return nil, nil, fmt.Errorf("query %s/%s has no target", ref.Namespace, ref.Name)
+		return nil, nil, "", fmt.Errorf("query %s/%s has no target", ref.Namespace, ref.Name)
 	}
 
-	return &query, declared, nil
+	return &query, declared, "", nil
 }
 
 func (h *Handler) validateTargetOverride(ctx context.Context, query *arkv1alpha1.Query, declared, override *arkv1alpha1.QueryTarget) error {
@@ -267,24 +267,19 @@ func (h *Handler) validateTargetOverride(ctx context.Context, query *arkv1alpha1
 		return fmt.Errorf("query %s/%s has no target, so agent %q cannot be authorised as a sub-target", query.Namespace, query.Name, override.Name)
 	}
 
-	switch declared.Type {
-	case ToolTypeAgent:
-		if declared.Name != override.Name {
-			return fmt.Errorf("query %s/%s targets agent %q, so agent %q cannot be executed as a sub-target", query.Namespace, query.Name, declared.Name, override.Name)
-		}
-		return nil
-	case ToolTypeTeam:
-		reachable, err := h.teamReachesAgent(ctx, query.Namespace, declared.Name, override.Name)
-		if err != nil {
-			return err
-		}
-		if !reachable {
-			return fmt.Errorf("agent %q is not a member or selector of team %q targeted by query %s/%s", override.Name, declared.Name, query.Namespace, query.Name)
-		}
-		return nil
-	default:
-		return fmt.Errorf("query %s/%s targets %s %q, which cannot delegate to agent %q", query.Namespace, query.Name, declared.Type, declared.Name, override.Name)
+	if declared.Type != ToolTypeTeam {
+		return fmt.Errorf("query %s/%s targets %s %q, so agent %q cannot be executed as a sub-target: only team targets may delegate", query.Namespace, query.Name, declared.Type, declared.Name, override.Name)
 	}
+
+	reachable, err := h.teamReachesAgent(ctx, query.Namespace, declared.Name, override.Name)
+	if err != nil {
+		return err
+	}
+	if !reachable {
+		return fmt.Errorf("agent %q is not a member or selector of team %q targeted by query %s/%s", override.Name, declared.Name, query.Namespace, query.Name)
+	}
+
+	return nil
 }
 
 func (h *Handler) teamReachesAgent(ctx context.Context, namespace, teamName, agentName string) (bool, error) {
@@ -735,14 +730,6 @@ func extractQueryRef(message protocol.Message) (*arka2a.QueryExtensionRef, error
 	}
 
 	return &ref, nil
-}
-
-func subTargetAgent(message protocol.Message) string {
-	ref, err := extractQueryRef(message)
-	if err != nil || ref.Target == nil || ref.Target.Type != ToolTypeAgent {
-		return ""
-	}
-	return ref.Target.Name
 }
 
 func extractAssistantText(messages []Message) string {

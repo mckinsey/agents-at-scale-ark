@@ -18,6 +18,15 @@ from ark_sdk.extensions.query import (
 )
 
 
+def _team(members=(), selector_agent=None):
+    return SimpleNamespace(
+        spec=SimpleNamespace(
+            members=[SimpleNamespace(type=t, name=n) for t, n in members],
+            selector=SimpleNamespace(agent=selector_agent) if selector_agent else None,
+        )
+    )
+
+
 class TestExtractQueryRef(unittest.TestCase):
     def test_extracts_valid_query_ref(self):
         message = SimpleNamespace(
@@ -258,6 +267,7 @@ class TestResolveQuery(unittest.IsolatedAsyncioTestCase):
 
         mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
         mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.teams.a_get = AsyncMock(return_value=_team(members=[("agent", "member-a")]))
 
         mock_ctx = AsyncMock()
         mock_ctx.__aenter__.return_value = mock_ark
@@ -299,6 +309,80 @@ class TestResolveQuery(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError) as ctx:
             await resolve_query(ref, "hello")
         self.assertIn("target override only supports agent targets", str(ctx.exception))
+
+
+class TestOverrideAuthorization(unittest.IsolatedAsyncioTestCase):
+    """A caller reaching this engine must not be able to run any agent in the namespace."""
+
+    def _query(self, target_type, target_name):
+        query = MagicMock()
+        query.metadata = {"name": "my-query"}
+        query.spec.target.type = target_type
+        query.spec.target.name = target_name
+        query.spec.parameters = None
+        return query
+
+    def _agent(self):
+        agent = MagicMock()
+        agent.metadata = {"name": "privileged-agent", "labels": {}}
+        agent.spec.prompt = "You are helpful"
+        agent.spec.description = ""
+        agent.spec.model_ref = None
+        agent.spec.parameters = None
+        agent.spec.tools = None
+        agent.spec.execution_engine = None
+        agent.spec.executionEngine = None
+        return agent
+
+    async def _resolve(self, query, teams, agent_name="privileged-agent"):
+        ark = AsyncMock()
+        ark.agents.a_get = AsyncMock(return_value=self._agent())
+        ark.teams.a_get = AsyncMock(side_effect=lambda name, ns: teams[name])
+        return await _resolve_from_query(
+            ark, query, "default", "hello",
+            target_override=QueryTargetRef(type="agent", name=agent_name),
+        )
+
+    async def test_rejects_agent_outside_the_declared_team(self):
+        with self.assertRaises(ValueError) as ctx:
+            await self._resolve(
+                self._query("team", "my-team"),
+                {"my-team": _team(members=[("agent", "member-a")])},
+            )
+        self.assertIn("is not a member or selector of team", str(ctx.exception))
+
+    async def test_allows_member_of_a_nested_team(self):
+        request = await self._resolve(
+            self._query("team", "outer-team"),
+            {
+                "outer-team": _team(members=[("team", "inner-team")]),
+                "inner-team": _team(members=[("agent", "privileged-agent")]),
+            },
+        )
+        self.assertEqual(request.agent.name, "privileged-agent")
+
+    async def test_allows_the_selector_agent(self):
+        request = await self._resolve(
+            self._query("team", "my-team"),
+            {"my-team": _team(selector_agent="privileged-agent")},
+        )
+        self.assertEqual(request.agent.name, "privileged-agent")
+
+    async def test_rejects_override_on_a_direct_agent_query(self):
+        with self.assertRaises(ValueError) as ctx:
+            await self._resolve(self._query("agent", "my-agent"), {})
+        self.assertIn("only team targets may delegate", str(ctx.exception))
+
+    async def test_a_team_cycle_terminates(self):
+        with self.assertRaises(ValueError) as ctx:
+            await self._resolve(
+                self._query("team", "cycle-a"),
+                {
+                    "cycle-a": _team(members=[("team", "cycle-b")]),
+                    "cycle-b": _team(members=[("team", "cycle-a")]),
+                },
+            )
+        self.assertIn("is not a member or selector of team", str(ctx.exception))
 
 
 class TestResolveValueSource(unittest.IsolatedAsyncioTestCase):

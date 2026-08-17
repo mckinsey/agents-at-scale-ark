@@ -174,26 +174,6 @@ func TestExtractQueryRefTarget(t *testing.T) {
 	})
 }
 
-func TestSubTargetAgent(t *testing.T) {
-	message := func(target any) protocol.Message {
-		ref := map[string]any{"name": "q-123", "namespace": "default"}
-		if target != nil {
-			ref["target"] = target
-		}
-		return protocol.Message{
-			Role:     protocol.MessageRoleUser,
-			Parts:    []protocol.Part{protocol.NewTextPart("hello")},
-			Metadata: map[string]any{arka2a.QueryExtensionMetadataKey: ref},
-		}
-	}
-
-	assert.Equal(t, "member-a", subTargetAgent(message(map[string]any{"type": "agent", "name": "member-a"})))
-	assert.Empty(t, subTargetAgent(message(nil)))
-	assert.Empty(t, subTargetAgent(message(map[string]any{"type": "team", "name": "my-team"})),
-		"only agent sub-targets pin local execution")
-	assert.Empty(t, subTargetAgent(protocol.Message{Role: protocol.MessageRoleUser}))
-}
-
 func TestSerializeResponseMessages(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -312,11 +292,19 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			},
 		}
 
-		q, target, err := h.resolveQueryAndTarget(context.Background(), msg)
+		q, target, subTarget, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.NoError(t, err)
 		assert.Equal(t, "test-query", q.Name)
 		assert.Equal(t, "agent", target.Type)
 		assert.Equal(t, "my-agent", target.Name)
+		assert.Empty(t, subTarget, "a declared target is the query itself, not an isolated sub-target")
+
+		msg.Metadata[arka2a.QueryExtensionMetadataKey] = map[string]any{
+			"name": "test-query", "namespace": "default",
+			"target": map[string]any{"type": "agent", "name": "my-agent"},
+		}
+		_, _, _, err = h.resolveQueryAndTarget(context.Background(), msg)
+		require.Error(t, err, "a direct-agent query has nothing to delegate, so an override only suppresses its memory, stream and status")
 	})
 
 	t.Run("metadata target overrides the query spec target", func(t *testing.T) {
@@ -340,11 +328,12 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			},
 		}
 
-		q, target, err := h.resolveQueryAndTarget(context.Background(), msg)
+		q, target, subTarget, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.NoError(t, err)
 		assert.Equal(t, "team-query", q.Name)
 		assert.Equal(t, "agent", target.Type)
 		assert.Equal(t, "member-a", target.Name)
+		assert.Equal(t, "member-a", subTarget)
 	})
 
 	t.Run("errors when query not found", func(t *testing.T) {
@@ -359,7 +348,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get query")
 	})
@@ -385,7 +374,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "has no target")
 	})
@@ -402,7 +391,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "query reference is required")
 	})
@@ -414,7 +403,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to extract ark metadata")
 	})
@@ -486,15 +475,16 @@ func TestValidateTargetOverride(t *testing.T) {
 			wantErr:  `agent "privileged-agent" is not a member or selector of team "outer-team"`,
 		},
 		{
-			name:     "the agent a query targets is allowed",
+			name:     "re-targeting the agent a query already targets is rejected",
 			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
 			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "only team targets may delegate",
 		},
 		{
 			name:     "a different agent than the query targets is rejected",
 			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
 			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "privileged-agent"},
-			wantErr:  "cannot be executed as a sub-target",
+			wantErr:  "only team targets may delegate",
 		},
 		{
 			name:     "a team override is rejected outright",
@@ -518,7 +508,7 @@ func TestValidateTargetOverride(t *testing.T) {
 			name:     "a model target cannot delegate",
 			declared: &arkv1alpha1.QueryTarget{Type: "model", Name: "gpt-4"},
 			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
-			wantErr:  "cannot delegate to agent",
+			wantErr:  "only team targets may delegate",
 		},
 		{
 			name:     "no declared target authorises nothing",
@@ -573,7 +563,7 @@ func TestResolveQueryAndTargetRejectsUnauthorisedOverride(t *testing.T) {
 		},
 	}
 
-	_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+	_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 	require.Error(t, err, "reaching the A2A port must not be enough to run any agent in the namespace")
 	assert.Contains(t, err.Error(), "privileged-agent")
 }
@@ -611,7 +601,7 @@ func TestResolveQueryAndTargetWithSelector(t *testing.T) {
 			},
 		}
 
-		q, target, err := h.resolveQueryAndTarget(context.Background(), msg)
+		q, target, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.NoError(t, err)
 		assert.Equal(t, "selector-query", q.Name)
 		assert.Equal(t, "agent", target.Type)
@@ -642,7 +632,7 @@ func TestResolveQueryAndTargetWithSelector(t *testing.T) {
 			},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no matching resources")
 	})
