@@ -18,6 +18,10 @@ from ark_sdk.extensions.query import (
 )
 
 
+def _expr(key, operator, values=None):
+    return SimpleNamespace(key=key, operator=operator, values=values)
+
+
 def _team(members=(), selector_agent=None):
     return SimpleNamespace(
         spec=SimpleNamespace(
@@ -372,6 +376,71 @@ class TestOverrideAuthorization(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError) as ctx:
             await self._resolve(self._query("agent", "my-agent"), {})
         self.assertIn("only team targets may delegate", str(ctx.exception))
+
+    def _selector_query(self, match_labels=None, match_expressions=None):
+        query = MagicMock()
+        query.metadata = {"name": "my-query"}
+        query.spec.target = None
+        query.spec.parameters = None
+        query.spec.selector.match_labels = match_labels
+        query.spec.selector.match_expressions = match_expressions
+        return query
+
+    def _named(self, name):
+        item = MagicMock()
+        item.metadata = {"name": name}
+        return item
+
+    async def _resolve_selector_query(self, query, agents, teams, team_graph):
+        ark = AsyncMock()
+        ark.agents.a_get = AsyncMock(return_value=self._agent())
+        ark.agents.a_list = AsyncMock(return_value=agents)
+        ark.teams.a_list = AsyncMock(return_value=teams)
+        ark.teams.a_get = AsyncMock(side_effect=lambda name, ns: team_graph[name])
+        request = await _resolve_from_query(
+            ark, query, "default", "hello",
+            target_override=QueryTargetRef(type="agent", name="privileged-agent"),
+        )
+        return ark, request
+
+    async def test_selector_query_resolving_to_a_team_authorizes_its_member(self):
+        ark, request = await self._resolve_selector_query(
+            self._selector_query(match_labels={"role": "analyst"}),
+            agents=[],
+            teams=[self._named("my-team")],
+            team_graph={"my-team": _team(members=[("agent", "privileged-agent")])},
+        )
+        self.assertEqual(request.agent.name, "privileged-agent")
+        ark.agents.a_list.assert_awaited_once_with("default", "role=analyst")
+
+    async def test_selector_query_with_match_expressions(self):
+        ark, request = await self._resolve_selector_query(
+            self._selector_query(match_expressions=[
+                _expr("env", "In", ["prod", "stage"]),
+                _expr("legacy", "DoesNotExist"),
+            ]),
+            agents=[],
+            teams=[self._named("my-team")],
+            team_graph={"my-team": _team(members=[("agent", "privileged-agent")])},
+        )
+        self.assertEqual(request.agent.name, "privileged-agent")
+        ark.teams.a_list.assert_awaited_once_with("default", "env in (prod,stage),!legacy")
+
+    async def test_selector_query_resolving_to_an_agent_rejects_the_override(self):
+        with self.assertRaises(ValueError) as ctx:
+            await self._resolve_selector_query(
+                self._selector_query(match_labels={"role": "analyst"}),
+                agents=[self._named("some-agent")], teams=[], team_graph={},
+            )
+        self.assertIn("only team targets may delegate", str(ctx.exception))
+
+    async def test_selector_matching_nothing_rejects_the_override(self):
+        with self.assertRaises(ValueError) as ctx:
+            await self._resolve_selector_query(
+                self._selector_query(match_labels={"role": "nobody"}),
+                agents=[], teams=[], team_graph={},
+            )
+        self.assertIn("cannot be authorised", str(ctx.exception))
 
     async def test_a_team_cycle_terminates(self):
         with self.assertRaises(ValueError) as ctx:

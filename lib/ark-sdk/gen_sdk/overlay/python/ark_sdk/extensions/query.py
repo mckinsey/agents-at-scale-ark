@@ -209,12 +209,59 @@ async def _resolve_from_query(
     )
 
 
+def _label_selector_to_string(selector: Any) -> str:
+    """Render a Kubernetes LabelSelector as metav1.LabelSelectorAsSelector does."""
+    terms = []
+
+    for key, value in (_get_attr_or_key(selector, "match_labels", "matchLabels") or {}).items():
+        terms.append(f"{key}={value}")
+
+    for expr in _get_attr_or_key(selector, "match_expressions", "matchExpressions") or []:
+        key = _get_attr_or_key(expr, "key")
+        operator = _get_attr_or_key(expr, "operator")
+        values = ",".join(_get_attr_or_key(expr, "values") or [])
+        if operator == "In":
+            terms.append(f"{key} in ({values})")
+        elif operator == "NotIn":
+            terms.append(f"{key} notin ({values})")
+        elif operator == "Exists":
+            terms.append(key)
+        elif operator == "DoesNotExist":
+            terms.append(f"!{key}")
+        else:
+            raise ValueError(f"Unsupported label selector operator '{operator}'")
+
+    return ",".join(terms)
+
+
+async def _resolve_selector(ark: Any, query: Any, namespace: str) -> Any:
+    """Resolve a Query's label selector to a target, agents before teams, as the Go receiver does."""
+    label_selector = _label_selector_to_string(query.spec.selector)
+
+    for target_type, collection in (("agent", ark.agents), ("team", ark.teams)):
+        items = await collection.a_list(namespace, label_selector)
+        if items:
+            return {"type": target_type, "name": items[0].metadata["name"]}
+
+    return None
+
+
 async def _authorize_override(ark: Any, query: Any, namespace: str, agent_name: str) -> None:
     """Reject an override naming an agent the Query's own target does not reach."""
-    declared = query.spec.target
-    declared_type = _get_attr_or_key(declared, "type") if declared else None
-    declared_name = _get_attr_or_key(declared, "name") if declared else None
     query_name = query.metadata["name"]
+
+    declared = query.spec.target
+    if declared is None and getattr(query.spec, "selector", None) is not None:
+        declared = await _resolve_selector(ark, query, namespace)
+
+    if declared is None:
+        raise ValueError(
+            f"Query '{query_name}' has no target, so agent '{agent_name}' "
+            "cannot be authorised as a sub-target"
+        )
+
+    declared_type = _get_attr_or_key(declared, "type")
+    declared_name = _get_attr_or_key(declared, "name")
 
     if declared_type != "team":
         raise ValueError(
