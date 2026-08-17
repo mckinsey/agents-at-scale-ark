@@ -3,7 +3,9 @@ import type {Db} from './db.js';
 
 export type Reaper = {
   start: () => void;
-  stop: () => void;
+  // Resolves once the run in flight has finished, so a caller can close the
+  // pool without a batch still racing it.
+  stop: () => Promise<void>;
   reapOnce: () => Promise<number>;
 };
 
@@ -17,12 +19,15 @@ export function createReaper(deps: {
   const {logger, db, tables, intervalSeconds, batchSize} = deps;
   let timer: ReturnType<typeof setInterval> | undefined;
   let running = false;
+  let stopped = false;
+  let inFlight: Promise<void> | undefined;
 
   const reapOnce = async (): Promise<number> => {
     let total = 0;
     for (const table of tables) {
       let deleted: number;
       do {
+        if (stopped) return total;
         const result = await db`
           DELETE FROM ${db(table)}
           WHERE ctid IN (
@@ -45,24 +50,28 @@ export function createReaper(deps: {
   const tick = (): void => {
     if (running) return;
     running = true;
-    reapOnce()
+    inFlight = reapOnce()
       .catch((err: unknown) => {
         logger.error({err}, 'reap failed');
       })
       .finally(() => {
         running = false;
-      });
+      })
+      .then(() => undefined);
   };
 
   return {
     start: (): void => {
+      stopped = false;
       tick();
       timer = setInterval(tick, intervalSeconds * 1000);
       timer.unref();
     },
-    stop: (): void => {
+    stop: async (): Promise<void> => {
+      stopped = true;
       if (timer) clearInterval(timer);
       timer = undefined;
+      await inFlight;
     },
     reapOnce,
   };

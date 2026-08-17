@@ -181,7 +181,7 @@ describe('createReaper', () => {
       try {
         await waitFor(async () => (await countRows(db(), 'messages')) === 0);
       } finally {
-        reaper.stop();
+        await reaper.stop();
       }
     });
 
@@ -194,7 +194,7 @@ describe('createReaper', () => {
         await insertMessage(db(), -10);
         await waitFor(async () => (await countRows(db(), 'messages')) === 0);
       } finally {
-        reaper.stop();
+        await reaper.stop();
       }
     });
 
@@ -202,11 +202,25 @@ describe('createReaper', () => {
       const reaper = makeReaper({intervalSeconds: 1});
 
       reaper.start();
-      reaper.stop();
+      // Awaiting stop drains the run start() kicked off; without that the
+      // insert below races it and the row is reaped by the stopped reaper.
+      await reaper.stop();
       await insertMessage(db(), -10);
       await new Promise((r) => setTimeout(r, 1500));
 
       expect(await countRows(db(), 'messages')).toBe(1);
+    });
+
+    it('abandons the remaining batches when stopped mid-drain', async () => {
+      for (let i = 0; i < 300; i++) {
+        await insertMessage(db(), -10);
+      }
+      const reaper = makeReaper({batchSize: 1});
+
+      reaper.start();
+      await reaper.stop();
+
+      expect(await countRows(db(), 'messages')).toBeGreaterThan(0);
     });
   });
 });

@@ -98,7 +98,7 @@ const main = async (): Promise<void> => {
 
   const gracefulShutdown = async (): Promise<void> => {
     logger.info('shutting down gracefully');
-    reaper?.stop();
+    await reaper?.stop();
     messageStream.close?.();
     chunkStream.close?.();
     eventStream.close?.();
