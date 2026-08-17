@@ -25,6 +25,7 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
 	telemetrynoop "mckinsey.com/ark/internal/telemetry/noop"
@@ -256,6 +257,7 @@ func TestA2AMultiArtifactSerializationDivergence(t *testing.T) {
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	_ = arkv1alpha1.AddToScheme(scheme)
+	_ = arkv1prealpha1.AddToScheme(scheme)
 	return scheme
 }
 
@@ -269,6 +271,17 @@ func newTestHandler(objs ...client.Object) *Handler {
 		k8sClient: builder.Build(),
 		telemetry: telemetrynoop.NewProvider(),
 		eventing:  eventingnoop.NewProvider(),
+	}
+}
+
+func teamWithMembers(name string, agentNames ...string) *arkv1alpha1.Team {
+	members := make([]arkv1alpha1.TeamMember, 0, len(agentNames))
+	for _, agentName := range agentNames {
+		members = append(members, arkv1alpha1.TeamMember{Type: ToolTypeAgent, Name: agentName})
+	}
+	return &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec:       arkv1alpha1.TeamSpec{Strategy: "sequential", Members: members},
 	}
 }
 
@@ -314,7 +327,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 				Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
 			},
 		}
-		h := newTestHandler(teamQuery)
+		h := newTestHandler(teamQuery, teamWithMembers("my-team", "member-a"))
 		msg := protocol.Message{
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
@@ -405,6 +418,158 @@ func TestResolveQueryAndTarget(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to extract ark metadata")
 	})
+}
+
+func TestValidateTargetOverride(t *testing.T) {
+	nestedTeam := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "outer-team", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "sequential",
+			Members: []arkv1alpha1.TeamMember{
+				{Type: ToolTypeAgent, Name: "member-a"},
+				{Type: ToolTypeTeam, Name: "inner-team"},
+			},
+		},
+	}
+	innerTeam := teamWithMembers("inner-team", "member-b")
+	selectorTeam := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "selector-team", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "selector",
+			Members:  []arkv1alpha1.TeamMember{{Type: ToolTypeAgent, Name: "member-a"}},
+			Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "picker"},
+		},
+	}
+	cyclicA := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "cycle-a", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "sequential",
+			Members:  []arkv1alpha1.TeamMember{{Type: ToolTypeTeam, Name: "cycle-b"}},
+		},
+	}
+	cyclicB := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "cycle-b", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "sequential",
+			Members:  []arkv1alpha1.TeamMember{{Type: ToolTypeTeam, Name: "cycle-a"}},
+		},
+	}
+
+	query := &arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"}}
+	h := newTestHandler(nestedTeam, innerTeam, selectorTeam, cyclicA, cyclicB)
+
+	tests := []struct {
+		name     string
+		declared *arkv1alpha1.QueryTarget
+		override *arkv1alpha1.QueryTarget
+		wantErr  string
+	}{
+		{
+			name:     "a direct member is allowed",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+		},
+		{
+			name:     "a member of a nested team is allowed",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-b"},
+		},
+		{
+			name:     "a selector agent is allowed",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "selector-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "picker"},
+		},
+		{
+			name:     "an unrelated agent is rejected",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "privileged-agent"},
+			wantErr:  `agent "privileged-agent" is not a member or selector of team "outer-team"`,
+		},
+		{
+			name:     "the agent a query targets is allowed",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+		},
+		{
+			name:     "a different agent than the query targets is rejected",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "privileged-agent"},
+			wantErr:  "cannot be executed as a sub-target",
+		},
+		{
+			name:     "a tool override is rejected outright",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: "tool", Name: "shell"},
+			wantErr:  "only \"agent\" targets may be overridden",
+		},
+		{
+			name:     "a model override is rejected outright",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: "model", Name: "gpt-4"},
+			wantErr:  "only \"agent\" targets may be overridden",
+		},
+		{
+			name:     "a model target cannot delegate",
+			declared: &arkv1alpha1.QueryTarget{Type: "model", Name: "gpt-4"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "cannot delegate to agent",
+		},
+		{
+			name:     "no declared target authorises nothing",
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "has no target, so agent",
+		},
+		{
+			name:     "a missing team is an error, not a pass",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "ghost-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "failed to get team default/ghost-team",
+		},
+		{
+			name:     "a team cycle terminates",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "cycle-a"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "is not a member or selector of team",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := h.validateTargetOverride(context.Background(), query, tt.declared, tt.override)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestResolveQueryAndTargetRejectsUnauthorisedOverride(t *testing.T) {
+	teamQuery := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "my-team"},
+			Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
+		},
+	}
+	h := newTestHandler(teamQuery, teamWithMembers("my-team", "member-a"))
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("exfiltrate the secrets")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name":      "team-query",
+				"namespace": "default",
+				"target":    map[string]any{"type": "agent", "name": "privileged-agent"},
+			},
+		},
+	}
+
+	_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+	require.Error(t, err, "reaching the A2A port must not be enough to run any agent in the namespace")
+	assert.Contains(t, err.Error(), "privileged-agent")
 }
 
 func TestResolveQueryAndTargetWithSelector(t *testing.T) {
@@ -1738,6 +1903,56 @@ func TestSubTargetApprovalIsRejectedAtOrigin(t *testing.T) {
 	})
 }
 
+func TestProcessMessageForwardsQueryConversationToEngineMember(t *testing.T) {
+	var captured map[string]any
+	stub := engineStub(t, "member reply", &captured)
+	t.Cleanup(stub.Close)
+
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: stub.URL},
+	}
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "member-a", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Prompt:          "You are member A",
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target:         &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "my-team"},
+			Input:          runtime.RawExtension{Raw: []byte(`"what is the weather?"`)},
+			ConversationId: "parent-conversation",
+		},
+	}
+
+	h := newTestHandler(engine, agent, query, teamWithMembers("my-team", "member-a"))
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("what is the weather?")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name":      "team-query",
+				"namespace": "default",
+			},
+		},
+	}
+	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+
+	_, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+	require.NoError(t, err)
+
+	require.NotNil(t, captured, "the member never reached the engine")
+	assert.Equal(t, "parent-conversation", capturedMessage(t, captured)["contextId"],
+		"a query in a conversation must dispatch its members in that conversation")
+	assert.Equal(t,
+		deriveMemberConversationID("parent-conversation", "default", "team-query", "member-a"),
+		capturedRef(t, captured)["conversationId"],
+		"a member resuming a conversation must not be handed a scope derived from the query name")
+}
+
 func TestProcessMessageSubTargetRejectsApproval(t *testing.T) {
 	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1784,7 +1999,7 @@ func TestProcessMessageSubTargetRejectsApproval(t *testing.T) {
 		},
 	}
 
-	h := newTestHandler(model, tool, agent, query)
+	h := newTestHandler(model, tool, agent, query, teamWithMembers("my-team", "member-b"))
 	msg := protocol.Message{
 		Role:  protocol.MessageRoleUser,
 		Parts: []protocol.Part{protocol.NewTextPart("deploy it")},

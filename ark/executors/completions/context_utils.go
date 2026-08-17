@@ -7,10 +7,11 @@ import (
 type contextKey string
 
 const (
-	queryIDKey      contextKey = "queryId"
-	sessionIDKey    contextKey = "sessionId"
-	queryNameKey    contextKey = "queryName"
-	a2aContextIDKey contextKey = "a2aContextId"
+	queryIDKey              contextKey = "queryId"
+	sessionIDKey            contextKey = "sessionId"
+	queryNameKey            contextKey = "queryName"
+	a2aContextIDKey         contextKey = "a2aContextId"
+	parentConversationIDKey contextKey = "parentConversationId"
 	// QueryContextKey is used to pass the Query resource through context to agents
 	QueryContextKey   contextKey = "queryContext"
 	subTargetAgentKey contextKey = "subTargetAgent"
@@ -105,6 +106,17 @@ func GetA2AContextID(ctx context.Context) string {
 		if contextID, ok := val.(string); ok {
 			return contextID
 		}
+	}
+	return ""
+}
+
+func WithParentConversationID(ctx context.Context, conversationID string) context.Context {
+	return context.WithValue(ctx, parentConversationIDKey, conversationID)
+}
+
+func GetParentConversationID(ctx context.Context) string {
+	if conversationID, ok := ctx.Value(parentConversationIDKey).(string); ok {
+		return conversationID
 	}
 	return ""
 }

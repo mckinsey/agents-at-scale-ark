@@ -148,12 +148,19 @@ func renderEngineHistory(messages []Message) string {
 	for _, msg := range messages {
 		switch {
 		case msg.OfSystem != nil:
-			rendered = append(rendered, fmt.Sprintf("# system:\n%s\n", msg.OfSystem.Content.OfString))
+			rendered = append(rendered, fmt.Sprintf("# system:\n%s\n", msg.OfSystem.Content.OfString.Value))
 		case msg.OfAssistant != nil:
-			rendered = append(rendered, fmt.Sprintf("# %s:\n%s\n", msg.OfAssistant.Name.Value, msg.OfAssistant.Content.OfString))
+			rendered = append(rendered, fmt.Sprintf("# %s:\n%s\n", assistantLabel(msg.OfAssistant.Name.Value), msg.OfAssistant.Content.OfString.Value))
 		case msg.OfUser != nil:
-			rendered = append(rendered, fmt.Sprintf("# user:\n%s\n", msg.OfUser.Content.OfString))
+			rendered = append(rendered, fmt.Sprintf("# user:\n%s\n", msg.OfUser.Content.OfString.Value))
 		}
 	}
 	return strings.Join(rendered, "\n")
+}
+
+func assistantLabel(name string) string {
+	if name == "" {
+		return "assistant"
+	}
+	return name
 }

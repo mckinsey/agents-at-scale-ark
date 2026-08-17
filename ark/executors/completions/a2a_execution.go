@@ -234,8 +234,6 @@ func withA2AExecutionTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2AS
 	return ctx, cancel, nil
 }
 
-// withDefaultExecutionTimeout bounds a call that has no A2AServer behind it, so
-// there is no configured timeout to parse and nothing that can fail.
 func withDefaultExecutionTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	if _, hasDeadline := ctx.Deadline(); hasDeadline {
 		return context.WithCancel(ctx)

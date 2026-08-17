@@ -372,6 +372,12 @@ func TestRenderEngineInput(t *testing.T) {
 			},
 			want: "# user:\nwhat is 2+2?\n\n# member-a:\n4\n\n\nsummarise",
 		},
+		{
+			name:      "an unnamed assistant turn keeps a speaker label",
+			userInput: NewUserMessage("and then?"),
+			history:   []Message{NewAssistantMessage("today is sunny")},
+			want:      "# assistant:\ntoday is sunny\n\n\nand then?",
+		},
 	}
 
 	for _, tt := range tests {
@@ -409,6 +415,35 @@ func TestExecuteAgentRouting(t *testing.T) {
 			"the engine path must name the member it is being asked to run")
 	})
 
+	t.Run("named engine forwards the parent conversation as the context id", func(t *testing.T) {
+		var captured map[string]any
+		stub := engineStub(t, "engine reply", &captured)
+		defer stub.Close()
+
+		engine := &arkv1prealpha1.ExecutionEngine{
+			ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+			Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: stub.URL},
+		}
+		agent := &Agent{
+			Name:            "member-a",
+			Namespace:       "default",
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+			client:          engineTestClient(t, engine),
+			eventing:        eventnoop.NewProvider(),
+		}
+
+		ctx := WithParentConversationID(engineQueryContext(t), "parent-conversation")
+		_, err := agent.executeAgent(ctx, NewUserMessage("hi"), nil, nil, &mockEventStream{}, ExecuteOptions{})
+		require.NoError(t, err)
+
+		assert.Equal(t, "parent-conversation", capturedMessage(t, captured)["contextId"],
+			"an engine that keys state off contextId cannot see a context the executor never sends")
+		assert.Equal(t,
+			deriveMemberConversationID("parent-conversation", "default", "my-query", "member-a"),
+			capturedRef(t, captured)["conversationId"],
+			"the member scope must follow the conversation, not the query name")
+	})
+
 	t.Run("a2a engine still takes the A2AServer path", func(t *testing.T) {
 		agent := &Agent{
 			Name:            "a2a-agent",
@@ -438,6 +473,37 @@ func TestExecuteAgentRouting(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "has no model configured")
 	})
+}
+
+func TestRenderEngineHistoryNeverRendersNull(t *testing.T) {
+	toolCallTurn := namedAssistantMessage("member-a", "")
+	toolCallTurn.OfAssistant.ToolCalls = []openai.ChatCompletionMessageToolCallParam{
+		{
+			ID:       "call-1",
+			Function: openai.ChatCompletionMessageToolCallFunctionParam{Name: "get_weather", Arguments: "{}"},
+		},
+	}
+
+	multimodalTurn := Message(openai.ChatCompletionMessageParamUnion{
+		OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+			Name: openai.String("member-a"),
+			Content: openai.ChatCompletionAssistantMessageParamContentUnion{
+				OfArrayOfContentParts: []openai.ChatCompletionAssistantMessageParamContentArrayOfContentPartUnion{
+					{OfText: &openai.ChatCompletionContentPartTextParam{Text: "described in parts"}},
+				},
+			},
+		},
+	})
+
+	for name, history := range map[string][]Message{
+		"tool call turn": {toolCallTurn},
+		"multimodal":     {multimodalTurn},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rendered := renderEngineHistory(history)
+			assert.NotContains(t, rendered, "null", "a turn without string content must not put a null token in the transcript")
+		})
+	}
 }
 
 func TestRenderEngineInputKeepsSystemMessages(t *testing.T) {

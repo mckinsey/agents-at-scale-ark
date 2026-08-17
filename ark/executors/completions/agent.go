@@ -144,7 +144,7 @@ func (a *Agent) executeWithNamedExecutionEngine(ctx context.Context, userInput M
 		AgentName:   a.Name,
 		Namespace:   a.Namespace,
 		EngineRef:   a.ExecutionEngine,
-		ContextID:   GetA2AContextID(ctx),
+		ContextID:   GetParentConversationID(ctx),
 		UserInput:   userInput,
 		History:     history,
 		EventStream: eventStream,
