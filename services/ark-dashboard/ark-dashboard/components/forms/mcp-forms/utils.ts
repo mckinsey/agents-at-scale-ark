@@ -6,21 +6,44 @@ import * as z from 'zod';
 import type {
   DirectHeader,
   MCPHeader,
+  MCPServerAddressSource,
+  MCPServerServiceRef,
   MCPServerSpec,
   SecretHeader,
 } from '@/lib/services/mcp-servers';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
-export const formSchema = z.object({
-  name: kubernetesNameSchema,
-  description: z.string().min(1, 'Description is required'),
-  baseUrl: z.string().min(1, 'URL is required'),
-  transport: z.enum(['http', 'sse'], {
-    message: 'Transport is required',
-  }),
-});
+export const CONFIGURATION_VALUE_KEY = 'value';
 
-export type FormValues = z.infer<typeof formSchema>;
+export type AddressMode =
+  | { kind: 'configuration' }
+  | { kind: 'service'; serviceRef: MCPServerServiceRef };
+
+export type UrlFieldState =
+  | { kind: 'create' }
+  | { kind: 'configuration'; configurationName: string }
+  | { kind: 'literal'; url: string }
+  | {
+      kind: 'service';
+      serviceRef: MCPServerServiceRef;
+      resolvedAddress: string;
+    };
+
+export function createFormSchema(addressMode: AddressMode) {
+  return z.object({
+    name: kubernetesNameSchema,
+    description: z.string().min(1, 'Description is required'),
+    configurationName:
+      addressMode.kind === 'service'
+        ? z.string()
+        : z.string().min(1, 'URL is required'),
+    transport: z.enum(['http', 'sse'], {
+      message: 'Transport is required',
+    }),
+  });
+}
+
+export type FormValues = z.infer<ReturnType<typeof createFormSchema>>;
 
 export type HeaderData = {
   key: string;
@@ -75,14 +98,53 @@ export function mapDetailHeaders(
   });
 }
 
+export function mapDetailAddress(
+  addressSource: MCPServerAddressSource | null | undefined,
+  resolvedAddress: string | null | undefined,
+): UrlFieldState {
+  const valueFrom = addressSource?.valueFrom;
+  if (valueFrom?.configMapKeyRef) {
+    return {
+      kind: 'configuration',
+      configurationName: valueFrom.configMapKeyRef.name,
+    };
+  }
+  if (valueFrom?.serviceRef) {
+    return {
+      kind: 'service',
+      serviceRef: valueFrom.serviceRef,
+      resolvedAddress: resolvedAddress ?? '',
+    };
+  }
+  return { kind: 'literal', url: addressSource?.value ?? resolvedAddress ?? '' };
+}
+
+export function buildAddress(
+  values: FormValues,
+  addressMode: AddressMode,
+): MCPServerSpec['address'] {
+  if (addressMode.kind === 'service') {
+    return { valueFrom: { serviceRef: addressMode.serviceRef } };
+  }
+  return {
+    valueFrom: {
+      configMapKeyRef: {
+        name: values.configurationName,
+        key: CONFIGURATION_VALUE_KEY,
+      },
+    },
+  };
+}
+
 export function buildSpec(
   values: FormValues,
   headers: HeaderData[],
+  addressMode: AddressMode,
 ): MCPServerSpec {
   return {
     description: values.description,
     transport: values.transport,
-    address: { value: values.baseUrl.trim() },
+    address: buildAddress(values, addressMode),
     headers: headers.map(buildHeader),
   };
 }
