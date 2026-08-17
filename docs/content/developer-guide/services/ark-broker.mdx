@@ -4,7 +4,7 @@ import { Callout } from 'nextra/components'
 
 In-memory storage service with Server-Sent Events (SSE) streaming support for Ark queries.
 
-- In-memory message storage by default, optionally persisted to disk / persistent volume, or backed by Postgres for the messages and operation events stores
+- In-memory message storage by default, optionally persisted to disk / persistent volume, or backed by Postgres for the messages, operation events, and sessions stores
 - Completion chunks held in memory by default, optionally backed by Redis Streams for live streaming across broker replicas
 - Implements the [Memory API](/reference/resources/memory#memory-http-api)
 - Supports [streaming queries](/developer-guide/queries/streaming)
@@ -51,7 +51,7 @@ The Helm chart can optionally configure a persistent volume for data storage by 
 
 ## Message backend (Postgres)
 
-By default the broker keeps all stores in memory. The **messages** store can opt in to Postgres so messages survive pod restarts. This section covers the messages store; operation events have their own Postgres opt-in (see [Event backend (Postgres)](#event-backend-postgres)) and completion chunks can opt in to Redis (see [Chunk backend (Redis)](#chunk-backend-redis)), while traces and sessions remain in memory (or file-based, as above).
+By default the broker keeps all stores in memory. The **messages** store can opt in to Postgres so messages survive pod restarts. This section covers the messages store; operation events and sessions have their own Postgres opt-ins (see [Event backend (Postgres)](#event-backend-postgres) and [Sessions backend (Postgres)](#sessions-backend-postgres)) and completion chunks can opt in to Redis (see [Chunk backend (Redis)](#chunk-backend-redis)), while traces remain in memory (or file-based, as above).
 
 This is separate from the controller's [PostgreSQL storage backend](/operations-guide/postgres-storage-backend), which stores Ark resources (CRDs) via the aggregated API server. The two use different databases and serve different purposes.
 
@@ -193,9 +193,53 @@ Events carry a TTL-based expiry: each event is written with an `expires_at` snap
 
 Events are also removed when their originating `Query` is deleted, through a path separate from messages: events aren't part of the [Memory API](/reference/resources/memory#memory-http-api), so the controller calls `DELETE /events/{queryId}` directly on the broker endpoint discovered via the `ark-config-broker` ConfigMap, rather than going through a `Memory` resource. Events are keyed by the Query's UID rather than its name, so `{queryId}` here is the UID. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
+## Sessions backend (Postgres)
+
+Sessions — the materialized index of participants, conversations, status, and per-query progress that backs the dashboard's session list and live session panel — are kept in memory by default. The **sessions** store can opt in to Postgres so it survives pod restarts and is shared by every broker replica.
+
+Unlike the messages and events stores, this backend cannot be enabled on its own: a session is materialized from both of those streams, so `backends.sessions: postgres` also requires `backends.message: postgres` and `backends.event: postgres`. The broker validates this at startup and exits with an explanatory error otherwise. The reason is sequence numbering: the watermarks that stop an out-of-order write from regressing a session are the sequence numbers of the messages and events themselves, and an in-memory stream numbers its items per process starting from 1 — two replicas would feed the same sequences into one shared watermark and each would discard the other's writes.
+
+The sessions backend shares the same `DATABASE_URL`, connection pool, and `migrate/migrate` init container as the [Message backend](#message-backend-postgres) and [Event backend](#event-backend-postgres). It adds two tables to that schema: `sessions`, one header row per session, and `session_queries`, one row per query, foreign-keyed to its session with `ON DELETE CASCADE`.
+
+Enable it in the Helm chart:
+
+```yaml
+backends:
+  message: postgres
+  event: postgres
+  sessions: postgres
+
+database:
+  url: "postgres://user:password@host:5432/ark_broker"
+```
+
+<Callout type="warning">
+  The same multi-tenant caveat as the messages and events stores applies: neither `sessions` nor `session_queries` has a `tenant_id` column or row-level security, and both live in the database the other two backends already share. Each broker release must use its own database (or schema). See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+</Callout>
+
+Key environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SESSIONS_BACKEND` | `memory` | Sessions storage backend: `memory` or `postgres`. `postgres` requires `MESSAGE_BACKEND=postgres` and `EVENT_BACKEND=postgres`. |
+| `DATABASE_URL` | — | Postgres connection string. Required when `SESSIONS_BACKEND=postgres`. Shared with the message and event backends. |
+| `SESSIONS_VISIBILITY_TTL_SECONDS` | `2592000` | Session TTL (30 days). Must be at least as long as `MESSAGE_VISIBILITY_TTL_SECONDS` and `EVENT_VISIBILITY_TTL_SECONDS`. |
+
+The other `DATABASE_*` variables are shared with the message and event backends — see the [Message backend](#message-backend-postgres) table. Securing the connection (TLS, `migrateUrl`, hiding the URL in a Secret) works identically; see [Securing the Postgres connection](#securing-the-postgres-connection).
+
+Session expiry is a **sliding** window rather than the write-time snapshot used for messages and events: every event or message on a session pushes `expires_at` out by `SESSIONS_VISIBILITY_TTL_SECONDS`, so a session stays visible for as long as it is in use, and the value does not track the originating query's `spec.ttl`. The minimum enforced at startup exists because a session is the index into its own messages and events — hiding it earlier than they expire would strand data that is still retained. Expiry hides a session from reads; it does not delete the row, and a later event or message on an expired session makes it visible again.
+
+Deleting a `Query` does **not** remove it from the sessions read model. Messages and events have per-query cleanup paths (see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup)); sessions do not, so the query's row stays in `session_queries` and its session keeps listing it. `DELETE /sessions` purges every session and its queries.
+
+### Cross-replica session updates
+
+`GET /sessions?watch=true` opens an SSE stream of session updates. With the in-memory store that stream only carries updates produced by the replica holding the connection, so a dashboard connected to one replica never sees a session updated through another.
+
+On Postgres the writing replica issues a `NOTIFY` once its transaction commits, and every replica holds a `LISTEN` on the same channel, so each one pushes the update to its own SSE clients regardless of where the write landed. This is for sessions what the [Chunk backend (Redis)](#chunk-backend-redis) is for streaming chunks.
+
 ## Chunk backend (Redis)
 
-By default the broker holds completion chunks in process memory, served from a single replica. The **chunks** store can opt in to Redis Streams so that chunks produced by one broker replica can be streamed live to a client whose SSE connection landed on another replica. Only the chunks store is affected — messages and operation events (unless on Postgres), traces, and sessions remain in memory (or file-based, as above).
+By default the broker holds completion chunks in process memory, served from a single replica. The **chunks** store can opt in to Redis Streams so that chunks produced by one broker replica can be streamed live to a client whose SSE connection landed on another replica. Only the chunks store is affected — messages, operation events, and sessions stay wherever their own backends put them, and traces remain in memory (or file-based, as above).
 
 Each query gets its own Redis Stream key (`{prefix}:chunks:{queryId}`), plus a capped global key (`{prefix}:chunks:all`) backing the paginated and watch endpoints. Live tail uses `XREAD BLOCK` so chunks arrive cross-replica.
 
@@ -285,4 +329,4 @@ The `/sessions` endpoint provides a live, event-sourced index of active sessions
 | GET | `/sessions?watch=true&session_id=X` | SSE stream filtered to one session |
 | DELETE | `/sessions` | Purge all session data |
 
-Set `SESSIONS_FILE_PATH` to enable persistence to disk.
+Set `SESSIONS_FILE_PATH` to enable persistence to disk, or enable the [Sessions backend (Postgres)](#sessions-backend-postgres) to persist sessions in Postgres and share them across broker replicas.

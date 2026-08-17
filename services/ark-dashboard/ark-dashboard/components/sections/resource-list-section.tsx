@@ -10,14 +10,15 @@ import {
 } from 'react';
 import { toast } from '@/components/ui/sonner';
 
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { NamespacedLink } from '@/components/namespaced-link';
 import {
+  LearnMoreButton,
   ResourceEmptyState,
   ResourceNoResults,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
-import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -188,33 +189,27 @@ export function ResourceListSection<T extends ResourceListItem>({
 
   return (
     <div className="flex h-full w-full content-shell flex-col">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <IconShell size="default" variant="primary">
-              {icon}
-            </IconShell>
-            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-              {showCount && items.length > 0 ? `${title} (${items.length})` : title}
-            </h1>
-          </div>
-          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-            {subtitle}
-          </p>
-        </div>
-        {!isEmpty && (
-          <div className="flex items-center gap-3">
-            {headerActions}
-            {readOnlyMode ? (
-              <Button disabled>{createLabel}</Button>
-            ) : (
-              <NamespacedLink href={createHref}>
-                <Button>{createLabel}</Button>
-              </NamespacedLink>
-            )}
-          </div>
-        )}
-      </div>
+      <ResourcePageHeader
+        icon={icon}
+        title={
+          showCount && items.length > 0 ? `${title} (${items.length})` : title
+        }
+        description={subtitle}
+        actions={
+          !isEmpty && (
+            <>
+              {headerActions}
+              {readOnlyMode ? (
+                <Button disabled>{createLabel}</Button>
+              ) : (
+                <NamespacedLink href={createHref}>
+                  <Button>{createLabel}</Button>
+                </NamespacedLink>
+              )}
+            </>
+          )
+        }
+      />
 
       {showLoading && (
         <div className="mt-5 flex flex-1 items-center justify-center">
@@ -235,9 +230,7 @@ export function ResourceListSection<T extends ResourceListItem>({
                   <Button>{createLabel}</Button>
                 </NamespacedLink>
               )}
-              <a href={learnMoreUrl} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline">Learn more</Button>
-              </a>
+              <LearnMoreButton href={learnMoreUrl} />
             </>
           }
         />

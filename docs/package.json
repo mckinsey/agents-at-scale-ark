@@ -1,6 +1,6 @@
 {
   "name": "y",
-  "version": "0.1.67",
+  "version": "0.1.68-rc",
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {
@@ -32,7 +32,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "http-server": "^14.1.1",
     "js-yaml": "^4.3.1",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "linkinator": "^7.6.1",
     "pagefind": "^1.5.2",
     "picomatch": "^4.0.4",
@@ -51,7 +51,7 @@
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
     "postcss": "^8.5.18",
-    "@xmldom/xmldom": "0.9.10",
+    "@xmldom/xmldom": "0.9.11",
     "speech-rule-engine": "4.1.4",
     "uuid": "^14.0.0",
     "lodash-es": "4.18.1",
