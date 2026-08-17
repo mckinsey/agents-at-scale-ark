@@ -369,8 +369,9 @@ func TestRenderEngineInput(t *testing.T) {
 			history: []Message{
 				NewUserMessage("what is 2+2?"),
 				namedAssistantMessage("member-a", "4"),
+				namedAssistantMessage("member-b", "agreed"),
 			},
-			want: "# user:\nwhat is 2+2?\n\n# member-a:\n4\n\n\nsummarise",
+			want: "# user:\nwhat is 2+2?\n\n# member-a:\n4\n\n# member-b:\nagreed\n\n\nsummarise",
 		},
 		{
 			name:      "an unnamed assistant turn keeps a speaker label",
