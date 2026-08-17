@@ -497,6 +497,12 @@ func TestValidateTargetOverride(t *testing.T) {
 			wantErr:  "cannot be executed as a sub-target",
 		},
 		{
+			name:     "a team override is rejected outright",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "inner-team"},
+			wantErr:  "only \"agent\" targets may be overridden",
+		},
+		{
 			name:     "a tool override is rejected outright",
 			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
 			override: &arkv1alpha1.QueryTarget{Type: "tool", Name: "shell"},
