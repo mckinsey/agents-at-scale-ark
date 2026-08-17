@@ -46,6 +46,7 @@ const main = async (): Promise<void> => {
   const reapTables = [
     ...(config.backends.message === 'postgres' ? ['messages'] : []),
     ...(config.backends.event === 'postgres' ? ['events'] : []),
+    ...(config.backends.sessions === 'postgres' ? ['sessions'] : []),
   ];
   const reaper =
     db && config.database.reapIntervalSeconds > 0

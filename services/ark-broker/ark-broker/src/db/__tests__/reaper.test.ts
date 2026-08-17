@@ -28,6 +28,28 @@ async function insertEvent(
   `;
 }
 
+async function insertSession(
+  db: Db,
+  sessionId: string,
+  expiresOffsetSeconds: number
+): Promise<void> {
+  await db`
+    INSERT INTO sessions (session_id, name, expires_at)
+    VALUES (${sessionId}, ${sessionId}, now() + make_interval(secs => ${expiresOffsetSeconds}))
+  `;
+}
+
+async function insertSessionQuery(
+  db: Db,
+  sessionId: string,
+  queryId: string
+): Promise<void> {
+  await db`
+    INSERT INTO session_queries (session_id, query_id, phase)
+    VALUES (${sessionId}, ${queryId}, 'done')
+  `;
+}
+
 async function countRows(db: Db, table: string): Promise<number> {
   const [{count}] = await db<[{count: string}]>`
     SELECT count(*)::text AS count FROM ${db(table)}
@@ -118,6 +140,26 @@ describe('createReaper', () => {
       }
       expect(await countRows(db(), 'messages')).toBe(1);
     }, 15_000);
+
+    it('deletes expired session rows', async () => {
+      await insertSession(db(), 's-expired', -10);
+      await insertSession(db(), 's-live', 3600);
+
+      await makeReaper({tables: ['sessions']}).reapOnce();
+
+      expect(await countRows(db(), 'sessions')).toBe(1);
+    });
+
+    it('cascades to the session_queries of a reaped session', async () => {
+      await insertSession(db(), 's-expired', -10);
+      await insertSessionQuery(db(), 's-expired', 'q1');
+      await insertSession(db(), 's-live', 3600);
+      await insertSessionQuery(db(), 's-live', 'q2');
+
+      await makeReaper({tables: ['sessions']}).reapOnce();
+
+      expect(await countRows(db(), 'session_queries')).toBe(1);
+    });
 
     it('only touches configured tables', async () => {
       await insertMessage(db(), -10);
