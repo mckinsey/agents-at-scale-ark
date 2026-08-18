@@ -721,9 +721,9 @@ jobs:
           cd tests
           mkdir -p /tmp/chainsaw-report
           if [ "${{ matrix.storage-backend }}" = "etcd" ]; then
-            chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql'
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql,!third-party-webhooks'
           else
-            chainsaw test --config .chainsaw.yaml --selector '!llm,!etcd-only'
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!etcd-only,!third-party-webhooks'
           fi
 
       - name: Collect cluster logs
@@ -741,6 +741,51 @@ jobs:
       - uses: ./.github/actions/collect-coverage-e2e
         with:
           artifact-name: coverage-reports-standard-${{ matrix.storage-backend }}
+
+  # Separate from e2e-tests-standard because it needs policy.thirdPartyWebhooks.enabled=true,
+  # which the standard postgresql leg deliberately leaves off so its tests exercise the
+  # shipped default. Enabling it there would put every write in that leg on the webhook
+  # admission path.
+  e2e-tests-third-party-webhooks:
+    name: E2E Third-Party Webhooks (postgresql)
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          storage-backend: postgresql
+          enable-third-party-webhooks: "true"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Install chainsaw
+        run: |
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/${{ env.CHAINSAW_VERSION }}/chainsaw_linux_amd64.tar.gz" | \
+            tar xz -C /tmp
+          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
+          sudo chmod +x /usr/local/bin/chainsaw
+
+      - name: Run third-party webhook E2E tests
+        run: |
+          cd tests
+          mkdir -p /tmp/chainsaw-report
+          chainsaw test --config .chainsaw.yaml --selector 'third-party-webhooks'
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-third-party-webhooks-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
 
   e2e-tests-llm:
     name: E2E LLM (${{ matrix.storage-backend }})
@@ -1386,6 +1431,7 @@ jobs:
         e2e-cli-tests,
         e2e-ark-cli,
         e2e-tests-llm,
+        e2e-tests-third-party-webhooks,
         jfrog-xray-scan,
         xray-container-scan,
         build-and-test-ark,

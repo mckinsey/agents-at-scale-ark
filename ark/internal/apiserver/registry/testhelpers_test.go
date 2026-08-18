@@ -54,7 +54,9 @@ func (m *mockBackend) Get(ctx context.Context, kind, namespace, name string) (ru
 	key := m.key(kind, namespace, name)
 	obj, ok := m.objects[key]
 	if !ok {
-		return nil, errors.New("not found")
+		// The sentinel, matching the PostgreSQL backend: callers distinguish a genuine
+		// miss from a storage failure, and a plain error would make them indistinguishable.
+		return nil, storage.ErrNotFound
 	}
 	return obj, nil
 }
