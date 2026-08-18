@@ -118,7 +118,7 @@ spec:
             name: mixed-team-query
           status:
             phase: done
-            (contains(response.content, 'REVIEW:')): true
+            (contains(response.content, 'transcript contained the engine member turn')): true
     catch:
     - events: {}
     - describe:

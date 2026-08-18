@@ -9,7 +9,8 @@ member on the built-in completions engine.
 - A Team member with `spec.executionEngine.name` is dispatched to the engine's resolved address over A2A, rather than being funnelled into the A2AServer path
 - The completions executor carries the Ark query extension on member calls
 - An engine-backed agent needs no `modelRef` — it never runs the local agentic loop
-- A mixed team is accepted at admission and both member kinds run in one query, with the local member seeing the engine member's turn in the shared transcript
+- A mixed team is accepted at admission and both member kinds run in one query
+- The engine member's turn reaches the local member through the shared transcript: the mock only returns the passing reply when the local member's request carries an assistant message named `engine-member-a`, which is the name stamped onto the engine member's reply. If propagation breaks, the mock returns `REVIEW-FAILED` and the assertion fails
 - Queries targeting either team reach `phase: done` with a non-empty response
 
 ## Resources created

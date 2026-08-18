@@ -87,7 +87,7 @@ kubectl wait --for=condition=Available team/sequential-team --timeout=60s
 kubectl get team sequential-team
 ```
 
-The controller validates that every member resolves, that the strategy's cross-field rules hold (more on those below), and that the team isn't "mixed" — i.e. you can't combine agents whose execution engines are external (Claude Agent SDK, LangChain, …) with built-in completion agents in one team.
+The controller validates that every member resolves and that the strategy's cross-field rules hold (more on those below).
 
 ## Strategy walkthroughs
 
@@ -276,7 +276,7 @@ spec:
 Every member sees the same transcript — each member's output is appended to the conversation and passed to the next one — but the two kinds receive it in different shapes:
 
 - An **internal member** gets its own system prompt plus the transcript as structured messages.
-- An **external member** gets the transcript folded into the prompt body with `# <member>:` speaker attribution, because the receiving engine assembles its own prompt. Tool-result messages don't survive that flattening, so if an internal member uses tools, an external member downstream sees the assistant turns but not the tool output.
+- An **external member** gets the transcript folded into the prompt body with `# <member>:` speaker attribution, because the receiving engine assembles its own prompt. Tool results are rendered as `# tool:` turns, but the tool call that produced them — its name and arguments — is not carried across.
 
 Conversation state is scoped differently too: internal members share the parent query's memory, while each external member gets its own derived `conversationId`, so an executor that keys state on it won't merge members.
 
@@ -357,7 +357,7 @@ kubectl delete teams team-a team-b
 kubectl delete teams --all
 ```
 
-The `Available` condition flips to `False` when the team is misconfigured — `kubectl describe` shows the underlying admission error (missing member, missing selector agent, missing `maxTurns`, mixed engines, etc.).
+The `Available` condition flips to `False` when the team is misconfigured — `kubectl describe` shows the underlying admission error (missing member, missing selector agent, missing `maxTurns`, etc.).
 
 ## Team as a tool
 

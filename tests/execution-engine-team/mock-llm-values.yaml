@@ -34,9 +34,22 @@ config:
       status: 200
       content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
 
-  # Local Reviewer Agent - the built-in member of the mixed team.
+  # Local Reviewer Agent - the built-in member of the mixed team. This rule is
+  # the failure case: the member ran, but its request carried no turn attributed
+  # to the engine member. Overridden by the rule below when the turn is present.
   - path: "/v1/chat/completions"
     match: "contains(body.messages[0].content || '', 'Local Reviewer Agent')"
     response:
       status: 200
-      content: '{"choices":[{"message":{"role":"assistant","content":"REVIEW: the engine member reply was received."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}'
+      content: '{"choices":[{"message":{"role":"assistant","content":"REVIEW-FAILED: no engine member turn in transcript"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}'
+
+  # Same member, but the request also carries an assistant message attributed to
+  # engine-member-a. addAgentNameToMessages stamps that name onto the engine
+  # member's reply before it is appended to the shared transcript, so matching on
+  # it proves the engine member's turn reached the local member. The query input
+  # cannot satisfy this match - only a propagated turn carries the name.
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Local Reviewer Agent') && contains(body.messages[*].name, 'engine-member-a')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"REVIEW: transcript contained the engine member turn"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}'
