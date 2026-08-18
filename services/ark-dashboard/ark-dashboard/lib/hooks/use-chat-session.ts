@@ -121,6 +121,7 @@ interface UseChatSessionReturn {
   sessionId: string;
   isProcessing: boolean;
   processingPhase?: string;
+  statusText?: string;
   isWaitingForApprovalResponse: boolean;
 
   error: string | null;
@@ -282,6 +283,7 @@ export function useChatSession({
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
+  const [statusText, setStatusText] = useState<string | undefined>();
   const [isWaitingForApprovalResponse, setIsWaitingForApprovalResponse] =
     useState(false);
 
@@ -505,6 +507,11 @@ export function useChatSession({
           continue;
         }
 
+        if ('type' in typedChunk && typedChunk.type === 'a2a_status') {
+          setStatusText(typedChunk.message || undefined);
+          continue;
+        }
+
         console.log(
           '[HITL Debug] Processing regular chunk (not approval request)',
         );
@@ -605,6 +612,7 @@ export function useChatSession({
           'choices' in typedChunk ? typedChunk?.choices?.[0]?.delta : undefined;
         if (delta?.content) {
           accumulatedContent += delta.content;
+          setStatusText(undefined);
         }
 
         if (delta?.tool_calls) {
@@ -1028,6 +1036,7 @@ export function useChatSession({
       } finally {
         setIsProcessing(false);
         setProcessingPhase(undefined);
+        setStatusText(undefined);
       }
     },
     [
@@ -1209,6 +1218,7 @@ export function useChatSession({
     isWaitingForApprovalResponse,
     isProcessing,
     processingPhase,
+    statusText,
     error,
     sendMessage,
     clearChat,

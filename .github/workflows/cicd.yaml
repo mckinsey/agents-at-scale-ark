@@ -196,7 +196,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -231,6 +231,120 @@ jobs:
           artifact-folder: ark/unit-tests
           artifact-suffix: ark-unit
 
+  integration-test-postgresql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.6"
+          cache: true
+          cache-dependency-path: ark/go.sum
+
+      - uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          mock-llm-enabled: false
+
+      - name: Deploy PostgreSQL (ark-storage-dev)
+        run: |
+          helm upgrade --install ark-storage-dev charts/ark-storage-dev \
+            --namespace ark-system --create-namespace \
+            --wait --timeout=120s
+          kubectl -n ark-system wait --for=condition=ready \
+            pod -l app=ark-storage-dev --timeout=120s
+          # Expose Postgres on the k3s node (which is the runner itself, so the
+          # NodePort is reachable at localhost). Let Kubernetes assign a free
+          # port to avoid a hardcoded value, then hand it to the test step.
+          kubectl -n ark-system patch svc ark-storage-dev --type=merge \
+            -p '{"spec":{"type":"NodePort"}}'
+          node_port=$(kubectl -n ark-system get svc ark-storage-dev \
+            -o jsonpath='{.spec.ports[0].nodePort}')
+          if [ -z "${node_port}" ]; then
+            echo "failed to read assigned NodePort"
+            exit 1
+          fi
+          echo "POSTGRES_PORT=${node_port}" >> "$GITHUB_ENV"
+
+      - name: Run PostgreSQL integration tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_USER: postgres
+          POSTGRES_DB: ark
+          POSTGRES_PASSWORD: arkdev123
+        run: |
+          ready=false
+          for i in $(seq 1 30); do
+            if pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -q; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "true" ]; then
+            echo "PostgreSQL did not become ready in time"
+            exit 1
+          fi
+          # Capture the -json stream to a file and read go's exit code directly.
+          # Piping into a formatter that ends in `|| true` resets PIPESTATUS to (0),
+          # so a compile failure or test failure would be reported as a green job -
+          # exactly the silent no-op this job exists to prevent.
+          status=0
+          (cd ark && go test -tags integration ./internal/storage/postgresql/... -timeout 20m \
+            -coverprofile=cover.out -covermode=atomic -json) \
+            > /tmp/gotest.json 2> /tmp/gotest.stderr || status=$?
+          # Build/compile errors and module downloads go to stderr, not the -json
+          # stream, so a "[build failed]" run otherwise shows no diagnostic in the
+          # log or the uploaded artifact. Keep stderr grouped (download noise), and
+          # point at it loudly when the run failed.
+          echo "::group::go test stderr"
+          cat /tmp/gotest.stderr
+          echo "::endgroup::"
+          if [ "$status" -ne 0 ] && [ -s /tmp/gotest.stderr ]; then
+            echo "::error::go test failed; see 'go test stderr' group above for build/compile diagnostics"
+          fi
+          jq -r 'select(.Action=="output") | .Output' /tmp/gotest.json | grep -v '^$' || true
+          echo "::group::Test runtimes (top 10 slowest)"
+          jq -r 'select((.Action=="pass" or .Action=="fail") and .Test) | "\(.Elapsed)s\t\(.Action | ascii_upcase)\t\(.Test)"' /tmp/gotest.json | sort -rn | head -10
+          echo "::endgroup::"
+          # This job provisions Postgres, so no test in this package should skip.
+          # A skip means the suite never really ran (unset/renamed env var,
+          # unreachable DB, build-tag mistake) and green would be a lie - fail loud.
+          skipped=$(jq -r 'select(.Action=="skip" and .Test) | .Test' /tmp/gotest.json)
+          if [ -n "$skipped" ]; then
+            echo "::error::Integration tests skipped despite Postgres being provisioned:"
+            echo "$skipped"
+            exit 1
+          fi
+          exit "$status"
+
+      - name: Install gcov2lcov
+        run: go install github.com/jandelgado/gcov2lcov@latest
+
+      - name: Generate LCOV from integration coverage
+        run: |
+          mkdir -p ark/integration-tests
+          cp ark/cover.out ark/integration-tests/
+          cd ark && gcov2lcov -infile integration-tests/cover.out -outfile integration-tests/lcov.info
+
+      - uses: ./.github/actions/collect-coverage
+        with:
+          source-path: ark/integration-tests/
+          artifact-folder: ark/integration-tests
+          artifact-suffix: ark-integration-postgres
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgresql-integration-gotest-json
+          path: |
+            /tmp/gotest.json
+            /tmp/gotest.stderr
+          if-no-files-found: warn
+
   build-and-test-services:
     runs-on: ubuntu-24.04
     steps:
@@ -238,7 +352,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -616,9 +730,9 @@ jobs:
           cd tests
           mkdir -p /tmp/chainsaw-report
           if [ "${{ matrix.storage-backend }}" = "etcd" ]; then
-            chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql'
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql,!third-party-webhooks'
           else
-            chainsaw test --config .chainsaw.yaml --selector '!llm,!etcd-only'
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!etcd-only,!third-party-webhooks'
           fi
 
       - name: Collect cluster logs
@@ -636,6 +750,51 @@ jobs:
       - uses: ./.github/actions/collect-coverage-e2e
         with:
           artifact-name: coverage-reports-standard-${{ matrix.storage-backend }}
+
+  # Separate from e2e-tests-standard because it needs policy.thirdPartyWebhooks.enabled=true,
+  # which the standard postgresql leg deliberately leaves off so its tests exercise the
+  # shipped default. Enabling it there would put every write in that leg on the webhook
+  # admission path.
+  e2e-tests-third-party-webhooks:
+    name: E2E Third-Party Webhooks (postgresql)
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          storage-backend: postgresql
+          enable-third-party-webhooks: "true"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Install chainsaw
+        run: |
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/${{ env.CHAINSAW_VERSION }}/chainsaw_linux_amd64.tar.gz" | \
+            tar xz -C /tmp
+          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
+          sudo chmod +x /usr/local/bin/chainsaw
+
+      - name: Run third-party webhook E2E tests
+        run: |
+          cd tests
+          mkdir -p /tmp/chainsaw-report
+          chainsaw test --config .chainsaw.yaml --selector 'third-party-webhooks'
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-third-party-webhooks-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
 
   e2e-tests-llm:
     name: E2E LLM (${{ matrix.storage-backend }})
@@ -1207,6 +1366,7 @@ jobs:
         e2e-cli-tests,
         build-and-test-ark,
         build-and-test-services,
+        integration-test-postgresql,
         build-charts,
         build-ark-cli,
       ]
@@ -1217,7 +1377,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           # Coverage tooling only; no project build, so module caching has no value here.
           cache: false
 
@@ -1280,10 +1440,12 @@ jobs:
         e2e-cli-tests,
         e2e-ark-cli,
         e2e-tests-llm,
+        e2e-tests-third-party-webhooks,
         jfrog-xray-scan,
         xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
+        integration-test-postgresql,
         build-charts,
         build-ark-cli,
       ]
@@ -1474,7 +1636,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.5'
+          go-version: "1.26.6"
           # goreleaser builds tools/fark; cache against its go.sum.
           cache-dependency-path: tools/fark/go.sum
 

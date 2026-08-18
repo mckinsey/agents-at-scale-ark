@@ -1,5 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -24,11 +25,11 @@ export type Team = TeamDetailResponse & { id: string };
 export const teamsService = {
   // Get all teams
   async getAll(): Promise<Team[]> {
-    const response = await apiClient.get<TeamListResponse>(`/api/v1/teams`);
+    const items = await fetchAllPages<TeamResponse>(`/api/v1/teams`);
 
     // Map the response items to include id for UI compatibility
     const teams = await Promise.all(
-      response.items.map(async item => {
+      items.map(async item => {
         // Fetch detailed info for each team to get full data
         const detailed = await teamsService.getByName(item.name);
         return detailed!;

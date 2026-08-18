@@ -3,10 +3,12 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -109,7 +111,7 @@ func TestNewMCPClient(t *testing.T) {
 					_ = mcpClient.Client.Close()
 				}
 
-				_ = mcpServerMock.Shutdown(t.Context())
+				_ = mcpServerMock.Shutdown(context.Background())
 			})
 
 			go func() {
@@ -186,10 +188,23 @@ func (m *mcpServerMock) ListenAndServe(t *testing.T) error {
 }
 
 func (m *mcpServerMock) Shutdown(ctx context.Context) error {
+	m.closeSessions()
 	if m.httpServer != nil {
 		return m.httpServer.Shutdown(ctx)
 	}
 	return nil
+}
+
+// closeSessions terminates any live server-side sessions. The go-sdk
+// streamable-HTTP handler keeps a per-session Read goroutine alive until the
+// session is closed, so tests must close sessions explicitly to satisfy goleak.
+func (m *mcpServerMock) closeSessions() {
+	if m.server == nil {
+		return
+	}
+	for session := range m.server.Sessions() {
+		_ = session.Close()
+	}
 }
 
 func (m *mcpServerMock) getServerFn() func(request *http.Request) *mcpsdk.Server {
@@ -245,6 +260,7 @@ func TestNewMCPClientSessionOutlivesConnectTimeout(t *testing.T) {
 
 			server := httptest.NewServer(handler)
 			t.Cleanup(server.Close)
+			t.Cleanup(mcpServerMock.closeSessions)
 
 			connectTimeout := 500 * time.Millisecond
 			client, err := NewMCPClient(t.Context(), server.URL, nil, transportType, connectTimeout, MCPSettings{})
@@ -256,6 +272,118 @@ func TestNewMCPClientSessionOutlivesConnectTimeout(t *testing.T) {
 
 			tools, err := client.ListTools(t.Context())
 			require.NoError(t, err, "session must survive expiry of the connection timeout")
+			require.Equal(t, "greet", tools[0].Name)
+		})
+	}
+}
+
+type legacySSEServerMock struct {
+	outbound                  chan string
+	kill                      chan struct{}
+	killOnce                  sync.Once
+	unknownMethodClosesStream bool
+}
+
+func newLegacySSEServerMock(t *testing.T, unknownMethodClosesStream bool) *httptest.Server {
+	t.Helper()
+
+	mock := &legacySSEServerMock{
+		outbound:                  make(chan string, 8),
+		kill:                      make(chan struct{}),
+		unknownMethodClosesStream: unknownMethodClosesStream,
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/sse", mock.serveStream)
+	mux.HandleFunc("/messages", mock.serveMessages)
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	t.Cleanup(mock.closeStream)
+
+	return server
+}
+
+func (m *legacySSEServerMock) closeStream() {
+	m.killOnce.Do(func() { close(m.kill) })
+}
+
+func (m *legacySSEServerMock) send(message string) {
+	select {
+	case m.outbound <- message:
+	case <-m.kill:
+	}
+}
+
+func (m *legacySSEServerMock) serveStream(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.WriteHeader(http.StatusOK)
+
+	controller := http.NewResponseController(w)
+	_, _ = fmt.Fprint(w, "event: endpoint\ndata: /messages\n\n")
+	_ = controller.Flush()
+
+	for {
+		select {
+		case message := <-m.outbound:
+			_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", message)
+			_ = controller.Flush()
+		case <-m.kill:
+			return
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+func (m *legacySSEServerMock) serveMessages(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	var request struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+	}
+	if err := json.Unmarshal(body, &request); err != nil {
+		http.Error(w, "malformed payload", http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+
+	switch request.Method {
+	case "initialize":
+		m.send(fmt.Sprintf(`{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2024-11-05","serverInfo":{"name":"legacy","version":"v0.0.1"},"capabilities":{"tools":{}}}}`, request.ID))
+	case "notifications/initialized":
+	case "tools/list":
+		m.send(fmt.Sprintf(`{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"greet","description":"say hi","inputSchema":{"type":"object"}}]}}`, request.ID))
+	default:
+		if m.unknownMethodClosesStream {
+			m.closeStream()
+			return
+		}
+		m.send(fmt.Sprintf(`{"jsonrpc":"2.0","id":%s,"error":{"code":-32601,"message":"Method not found"}}`, request.ID))
+	}
+}
+
+func TestNewMCPClientConnectsToLegacyProtocolServer(t *testing.T) {
+	for behaviour, unknownMethodClosesStream := range map[string]bool{
+		"unknown method returns method not found": false,
+		"unknown method kills the event stream":   true,
+	} {
+		t.Run(behaviour, func(t *testing.T) {
+			server := newLegacySSEServerMock(t, unknownMethodClosesStream)
+
+			client, err := NewMCPClient(t.Context(), server.URL+"/sse", nil, sseTransport, 5*time.Second, MCPSettings{})
+			require.NoError(t, err, "client must connect to a server that only speaks pre-2026-07-28 protocol versions")
+			require.NotNil(t, client)
+			t.Cleanup(func() { _ = client.Client.Close() })
+
+			tools, err := client.ListTools(t.Context())
+			require.NoError(t, err)
 			require.Equal(t, "greet", tools[0].Name)
 		})
 	}

@@ -19,7 +19,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "ark-broker.serviceAccountName" . }}
-      {{- if or (eq .Values.backends.message "postgres") (eq .Values.backends.event "postgres") }}
+      {{- if or (eq .Values.backends.message "postgres") (eq .Values.backends.event "postgres") (eq .Values.backends.sessions "postgres") }}
       initContainers:
         - name: migrate
           image: "{{ .Values.migrate.image.repository }}:{{ .Values.migrate.image.tag | default .Values.app.image.tag | default .Chart.AppVersion }}"
@@ -57,6 +57,10 @@ spec:
               containerPort: {{ .Values.memory.port }}
               protocol: TCP
           env:
+            {{- with (include "ark-broker.nodeOptions" .) }}
+            - name: NODE_OPTIONS
+              value: {{ . | quote }}
+            {{- end }}
             - name: PORT
               value: {{ .Values.memory.port | quote }}
             - name: REQUEST_TIMEOUT_MS
@@ -81,6 +85,8 @@ spec:
               value: {{ .Values.backends.message | quote }}
             - name: EVENT_BACKEND
               value: {{ .Values.backends.event | quote }}
+            - name: SESSIONS_BACKEND
+              value: {{ .Values.backends.sessions | quote }}
             - name: CHUNK_BACKEND
               value: {{ .Values.backends.chunk | quote }}
             {{- if eq .Values.backends.chunk "redis" }}
@@ -115,7 +121,7 @@ spec:
               value: {{ printf "%s/ca.crt" .Values.redis.tls.mountPath | quote }}
             {{- end }}
             {{- end }}
-            {{- if or (eq .Values.backends.message "postgres") (eq .Values.backends.event "postgres") }}
+            {{- if or (eq .Values.backends.message "postgres") (eq .Values.backends.event "postgres") (eq .Values.backends.sessions "postgres") }}
             - name: DATABASE_URL
               {{- if .Values.database.urlSecretRef.name }}
               valueFrom:
@@ -135,6 +141,8 @@ spec:
               value: {{ .Values.database.messageVisibilityTtlSeconds | int | quote }}
             - name: EVENT_VISIBILITY_TTL_SECONDS
               value: {{ .Values.database.eventVisibilityTtlSeconds | int | quote }}
+            - name: SESSIONS_VISIBILITY_TTL_SECONDS
+              value: {{ .Values.database.sessionsVisibilityTtlSeconds | int | quote }}
             {{- if .Values.database.debugQueries }}
             - name: DATABASE_DEBUG_QUERIES
               value: "true"
