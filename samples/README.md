@@ -157,6 +157,13 @@ Weather forecasting with tool chaining.
 
 ### 🔌 MCP Integration
 
+#### `mcp/machine-to-machine-oauth.yaml` - Machine-to-Machine OAuth
+MCP server where the controller obtains and renews the token itself, no browser involved.
+- **Secret**: EC private signing key
+- **MCPServer**: `clientCredentials` with `private_key_jwt` (RFC 7523)
+- **Prerequisite**: the authorization server must already have Ark registered as a client
+- **Use case**: Enterprise MCP servers inside your own trust domain
+
 #### `mcp/github-external-mcp-server-sample.yaml` - Remote MCP Server
 GitHub MCP server with authentication.
 - **Secret**: GitHub token
