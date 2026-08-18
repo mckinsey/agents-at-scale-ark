@@ -490,6 +490,9 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 		if errors.Is(err, storage.ErrInvalidRequest) {
 			return nil, apierrors.NewBadRequest(err.Error())
 		}
+		if errors.Is(err, storage.ErrResourceExpired) {
+			return nil, apierrors.NewResourceExpired(err.Error())
+		}
 		return nil, err
 	}
 	return watcher, nil

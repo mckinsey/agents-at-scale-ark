@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -186,7 +187,10 @@ type PostgreSQLBackend struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	cachedRV     atomic.Int64
-	walOnce      sync.Once
+	// cachedPurgeFloor mirrors the persisted watch_purge_floor so Watch() can
+	// reject too-old resume points without a DB round-trip. See #2680 item 4.
+	cachedPurgeFloor atomic.Int64
+	walOnce          sync.Once
 }
 
 var connValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
@@ -346,6 +350,11 @@ func (p *PostgreSQLBackend) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version);
 	CREATE INDEX IF NOT EXISTS idx_resources_deleted ON resources(deleted_at) WHERE deleted_at IS NOT NULL;
 
+	CREATE TABLE IF NOT EXISTS storage_metadata (
+		key TEXT PRIMARY KEY,
+		value BIGINT NOT NULL
+	);
+
 	DROP TRIGGER IF EXISTS resource_change_trigger ON resources;
 	DROP FUNCTION IF EXISTS notify_resource_change();
 
@@ -377,6 +386,7 @@ func (p *PostgreSQLBackend) refreshBookmarkLoop() {
 	defer ticker.Stop()
 
 	p.refreshCachedRV()
+	p.refreshPurgeFloor()
 
 	for {
 		select {
@@ -384,6 +394,7 @@ func (p *PostgreSQLBackend) refreshBookmarkLoop() {
 			return
 		case <-ticker.C:
 			p.refreshCachedRV()
+			p.refreshPurgeFloor()
 		}
 	}
 }
@@ -404,9 +415,56 @@ func (p *PostgreSQLBackend) cleanupLoop() {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			_, _ = p.db.ExecContext(p.ctx, `DELETE FROM resources WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '5 minutes'`)
+			p.purgeExpired()
 		}
 	}
+}
+
+// purgeExpired hard-deletes tombstones past the retention window and advances the
+// persisted watch_purge_floor to the highest purged resource_version. The floor is
+// stored (not in-memory) and merged with GREATEST because cleanupLoop runs in every
+// replica; a per-pod floor would diverge and reset on restart. A watch resuming from
+// an RV below the floor can no longer observe those tombstones, so Watch() rejects it
+// with a 410 (see #2680 item 4).
+func (p *PostgreSQLBackend) purgeExpired() {
+	const q = `
+	WITH purged AS (
+		DELETE FROM resources
+		WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '5 minutes'
+		RETURNING resource_version
+	), floor AS (
+		SELECT COALESCE(MAX(resource_version), 0) AS rv FROM purged
+	)
+	INSERT INTO storage_metadata (key, value)
+	SELECT 'watch_purge_floor', rv FROM floor WHERE rv > 0
+	ON CONFLICT (key) DO UPDATE SET value = GREATEST(storage_metadata.value, EXCLUDED.value)
+	RETURNING value`
+	var floor int64
+	err := p.db.QueryRowContext(p.ctx, q).Scan(&floor)
+	if errors.Is(err, sql.ErrNoRows) || err != nil {
+		return
+	}
+	p.storePurgeFloor(floor)
+}
+
+// storePurgeFloor advances the cached floor monotonically. Concurrent refreshers
+// (refreshBookmarkLoop and purgeExpired) may race, so never let the cache regress.
+func (p *PostgreSQLBackend) storePurgeFloor(floor int64) {
+	for {
+		cur := p.cachedPurgeFloor.Load()
+		if floor <= cur || p.cachedPurgeFloor.CompareAndSwap(cur, floor) {
+			return
+		}
+	}
+}
+
+func (p *PostgreSQLBackend) refreshPurgeFloor() {
+	var floor int64
+	err := p.db.QueryRowContext(p.ctx, `SELECT value FROM storage_metadata WHERE key = 'watch_purge_floor'`).Scan(&floor)
+	if errors.Is(err, sql.ErrNoRows) || err != nil {
+		return
+	}
+	p.storePurgeFloor(floor)
 }
 
 func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -882,6 +940,15 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 			return nil, fmt.Errorf("%w: invalid resourceVersion %q", storage.ErrInvalidRequest, opts.ResourceVersion)
 		}
 		startRV = int64(rv)
+	}
+
+	// Too-old resume points are rejected with a 410-equivalent: tombstones at or
+	// below the purge floor have been hard-deleted, so a watcher resuming from
+	// before the floor would silently miss those deletions. A concrete floor of N
+	// means everything through N may be gone; startRV == floor is still safe (the
+	// client already holds the object at floor). See #2680 item 4.
+	if floor := p.cachedPurgeFloor.Load(); startRV > 0 && startRV < floor {
+		return nil, fmt.Errorf("%w: resourceVersion %d is older than purge floor %d", storage.ErrResourceExpired, startRV, floor)
 	}
 
 	w := &postgresWatcher{

@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -1077,4 +1078,81 @@ func TestWatchResumeDoesNotDropOutOfOrderCommit_Integration(t *testing.T) {
 			t.Fatalf("timeout waiting for sentinel; sawLost=%v", sawLost)
 		}
 	}
+}
+
+func TestWatchTooOldResourceVersionExpired_Integration(t *testing.T) {
+	cfg := testConfig(t)
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+	backend.StartWALConsumer()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testNS := "integration-test"
+	testKind := "PurgeFloorTestResource"
+
+	// Isolate from prior runs: the purge floor is a single shared row bumped with
+	// GREATEST, so reset both the persisted value and the in-memory mirror.
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM storage_metadata WHERE key = 'watch_purge_floor'")
+	backend.cachedPurgeFloor.Store(0)
+	defer func() {
+		_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	}()
+
+	obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	obj.Metadata.Name = "purge-1"
+	obj.Metadata.Namespace = testNS
+	obj.Metadata.UID = "purge-uid-1"
+	obj.Spec = map[string]interface{}{"k": "v"}
+	if err := backend.Create(ctx, testKind, testNS, "purge-1", obj); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if err := backend.Delete(ctx, testKind, testNS, "purge-1"); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// The soft-delete leaves a tombstone at a bumped RV; that RV becomes the purge
+	// floor once the janitor hard-deletes it. Capture it before it is gone.
+	var tombstoneRV int64
+	if err := backend.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(resource_version), 0) FROM resources WHERE kind = $1 AND namespace = $2",
+		testKind, testNS).Scan(&tombstoneRV); err != nil {
+		t.Fatalf("read tombstone resourceVersion: %v", err)
+	}
+
+	// Age the tombstone past the retention window and run the janitor directly.
+	if _, err := backend.db.ExecContext(ctx,
+		"UPDATE resources SET deleted_at = NOW() - INTERVAL '10 minutes' WHERE kind = $1 AND namespace = $2",
+		testKind, testNS); err != nil {
+		t.Fatalf("age tombstone: %v", err)
+	}
+	backend.purgeExpired()
+
+	floor := backend.cachedPurgeFloor.Load()
+	if floor < tombstoneRV {
+		t.Fatalf("purge floor %d did not advance to tombstone RV %d", floor, tombstoneRV)
+	}
+
+	// Resuming from before the floor is a lost-tombstone hazard: expect 410-equivalent.
+	_, err = backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+		ResourceVersion: strconv.FormatInt(floor-1, 10),
+	})
+	if !errors.Is(err, storage.ErrResourceExpired) {
+		t.Fatalf("resume below floor: want ErrResourceExpired, got %v", err)
+	}
+
+	// Resuming exactly at the floor is still safe — the client holds the object at
+	// floor, so only later deltas are owed.
+	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+		ResourceVersion: strconv.FormatInt(floor, 10),
+	})
+	if err != nil {
+		t.Fatalf("resume at floor should be allowed, got %v", err)
+	}
+	w.Stop()
 }
