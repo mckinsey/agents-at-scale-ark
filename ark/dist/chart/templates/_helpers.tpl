@@ -86,6 +86,25 @@ false
 {{- end -}}
 {{- end -}}
 
+{{/*
+Determine if Ark's own admission webhook configurations should be installed.
+
+Only on the etcd backend. With the embedded apiserver, Ark resources are served by the
+aggregated apiserver rather than as CRDs, and the main kube-apiserver does not run its webhook
+chain on aggregated resources — so these configurations never fire and are dead weight. Worse,
+they become actively harmful once the aggregated apiserver runs the webhook plugins itself
+(chart-apiserver `policy.thirdPartyWebhooks`): it would call Ark's webhook for validation it
+already applies in-process, doubling the work and coupling every write to the controller's
+webhook uptime at failurePolicy=Fail.
+*/}}
+{{- define "chart.arkWebhooksEnabled" -}}
+{{- if and .Values.webhook.enable (eq .Values.storage.backend "etcd") -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}
+
 {{- define "ark.originAnnotations" -}}
 {{- if .Values.origin }}
 ark.mckinsey.com/origin: {{ dict "type" (.Values.origin.type | default "marketplace") "uri" .Values.origin.uri "version" .Chart.Version | toJson | quote }}
