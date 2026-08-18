@@ -277,6 +277,7 @@ Every member sees the same transcript — each member's output is appended to th
 
 - An **internal member** gets its own system prompt plus the transcript as structured messages.
 - An **external member** gets the transcript folded into the prompt body with `# <member>:` speaker attribution, because the receiving engine assembles its own prompt. Tool results are rendered as `# tool:` turns, but the tool call that produced them — its name and arguments — is not carried across.
+- A member on the built-in **`a2a`** engine is an exception: it receives only the query's original input, never the team transcript, so it cannot see earlier members' output. This applies to any team containing an `a2a` member, not just mixed ones. Tracked in [#3224](https://github.com/mckinsey/agents-at-scale-ark/issues/3224).
 
 Conversation state is scoped differently too: internal members share the parent query's memory, while each external member gets its own derived `conversationId`, so an executor that keys state on it won't merge members.
 
