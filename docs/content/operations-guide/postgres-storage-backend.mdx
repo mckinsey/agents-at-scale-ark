@@ -83,6 +83,20 @@ On first start, `ark-apiserver` creates:
 
 The slot is **persistent**: it survives apiserver restarts. It is dropped automatically on `helm uninstall` — see [Uninstall and cleanup](#uninstall-and-cleanup) below.
 
+### WAL retention
+
+`ark_cdc` publishes only the `resources` table, but WAL is cluster-wide: while the slot holds a position, Postgres keeps every segment from that point, including changes for unrelated tables and databases on the same instance. The consumer therefore acknowledges the server's reported WAL position on each keepalive, not just its own last write, so an idle Ark install does not pin WAL on a busy instance.
+
+Check that the slot is keeping up:
+
+```sql
+SELECT slot_name, active,
+       pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS retained
+FROM pg_replication_slots WHERE slot_name = 'ark_cdc';
+```
+
+`retained` should stay small. Sustained growth means no replica is consuming the slot — check that a pod holds the `ark-apiserver-leader` lease and that `active` is true. Setting `max_slot_wal_keep_size` caps the damage: Postgres invalidates the slot instead of filling the disk, and the apiserver recreates it on the next restart.
+
 ## Installing PostgreSQL mode
 
 ### 1. Prepare PostgreSQL
