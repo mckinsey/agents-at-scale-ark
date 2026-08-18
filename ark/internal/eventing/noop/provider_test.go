@@ -16,9 +16,9 @@ func TestNewProviderRecorders(t *testing.T) {
 	require.NotNil(t, p.ToolRecorder())
 	require.NotNil(t, p.MCPServerRecorder())
 	require.NotNil(t, p.QueryRecorder())
+	require.NotNil(t, p.A2aRecorder())
 
-	// A2a and Memory recorders are intentionally nil in the noop provider;
-	// call them to keep the accessors covered.
-	_ = p.A2aRecorder()
+	// The memory recorder is intentionally nil in the noop provider; call it
+	// to keep the accessor covered.
 	_ = p.MemoryRecorder()
 }
