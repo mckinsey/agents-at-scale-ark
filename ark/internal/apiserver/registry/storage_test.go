@@ -10,6 +10,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -515,6 +516,111 @@ func TestGenericStorage_Delete_WithFinalizers_SetsDeletionTimestamp(t *testing.T
 	}
 }
 
+// conflictingUpdateBackend rejects the first n Updates with a conflict, standing in for a
+// controller that reconciled the object between our read and our deletionTimestamp write.
+type conflictingUpdateBackend struct {
+	*mockBackend
+	failures int
+	updates  int
+}
+
+func (b *conflictingUpdateBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	b.updates++
+	if b.updates <= b.failures {
+		return storage.ErrConflict
+	}
+	return b.mockBackend.Update(ctx, kind, namespace, name, obj)
+}
+
+func newConflictingStorage(failures int) (*GenericStorage, *conflictingUpdateBackend) {
+	backend := &conflictingUpdateBackend{mockBackend: newMockBackend(), failures: failures}
+	config := ResourceConfig{
+		Kind:         "Agent",
+		Resource:     "agents",
+		SingularName: "agent",
+		NewFunc:      func() runtime.Object { return &arkv1alpha1.Agent{} },
+		NewListFunc:  func() runtime.Object { return &arkv1alpha1.AgentList{} },
+	}
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	backend.objects["Agent/default/test-agent"] = agent
+	return NewGenericStorage(backend, &mockConverter{}, config, nil), backend
+}
+
+// Admission now runs between the read and the deletionTimestamp write, so the window a
+// concurrent reconcile can land in is much wider than when the callback was a no-op. Delete has
+// no server-side conflict retry, so without this an actively reconciled resource surfaces a 409
+// the caller never used to see.
+func TestGenericStorage_Delete_RetriesDeletionTimestampOnConflict(t *testing.T) {
+	t.Parallel()
+	gs, backend := newConflictingStorage(1)
+	ctx := contextWithNamespace(testNS())
+
+	admissions := 0
+	validate := func(context.Context, runtime.Object) error {
+		admissions++
+		return nil
+	}
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, validate, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatalf("Delete() should have retried past the conflict, got %v", err)
+	}
+	if deleted {
+		t.Error("expected deleted to be false while finalizers are present")
+	}
+	if backend.updates != 2 {
+		t.Errorf("backend updates = %d, want 2 (one conflict, one success)", backend.updates)
+	}
+	// The object changed under us, so policy must evaluate the version actually being marked.
+	if admissions != 2 {
+		t.Errorf("admission ran %d times, want 2 (re-run against the refreshed object)", admissions)
+	}
+	if resultAgent, ok := result.(*arkv1alpha1.Agent); !ok || resultAgent.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be set on the returned object")
+	}
+	stored := backend.objects["Agent/default/test-agent"].(*arkv1alpha1.Agent)
+	if stored.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp to be persisted after the retry")
+	}
+}
+
+func TestGenericStorage_Delete_GivesUpAfterRepeatedConflicts(t *testing.T) {
+	t.Parallel()
+	gs, backend := newConflictingStorage(maxDeleteConflictAttempts + 1)
+	ctx := contextWithNamespace(testNS())
+
+	_, _, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{})
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected a Conflict once retries are exhausted, got %v", err)
+	}
+	if backend.updates != maxDeleteConflictAttempts {
+		t.Errorf("backend updates = %d, want %d", backend.updates, maxDeleteConflictAttempts)
+	}
+}
+
+// A caller that supplied preconditions asked to be told about the conflict rather than have it
+// resolved, so that path must not retry.
+func TestGenericStorage_Delete_PreconditionsSuppressConflictRetry(t *testing.T) {
+	t.Parallel()
+	gs, backend := newConflictingStorage(maxDeleteConflictAttempts + 1)
+	ctx := contextWithNamespace(testNS())
+
+	stored := backend.objects["Agent/default/test-agent"].(*arkv1alpha1.Agent)
+	uid := stored.UID
+	_, _, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{
+		Preconditions: &metav1.Preconditions{UID: &uid},
+	})
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected a Conflict, got %v", err)
+	}
+	if backend.updates != 1 {
+		t.Errorf("backend updates = %d, want 1 (no retry when preconditions are set)", backend.updates)
+	}
+}
+
 func TestGenericStorage_Delete_WithFinalizers_DeletionTimestampNotReset(t *testing.T) {
 	t.Parallel()
 	gs, backend := newTestStorage()
@@ -949,5 +1055,266 @@ func TestSetListItems_ResourceVersionIsNumericMax(t *testing.T) {
 				t.Errorf("list resourceVersion = %q, want %q", got, tt.expected)
 			}
 		})
+	}
+}
+
+// vanishingUpdateBackend conflicts on the first Update and removes the object at the same moment,
+// standing in for a racing caller that won and completed the delete outright.
+type vanishingUpdateBackend struct {
+	*mockBackend
+	updates int
+}
+
+func (b *vanishingUpdateBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	b.updates++
+	if b.updates == 1 {
+		delete(b.objects, b.key(kind, namespace, name))
+		return storage.ErrConflict
+	}
+	return b.mockBackend.Update(ctx, kind, namespace, name, obj)
+}
+
+// Losing the race to a caller that finished the delete is NotFound, not Conflict: the resource is
+// gone, which is what the client asked for, and retrying has nothing left to mark.
+func TestGenericStorage_Delete_RefreshAfterConflictReportsNotFound(t *testing.T) {
+	t.Parallel()
+
+	backend := &vanishingUpdateBackend{mockBackend: newMockBackend()}
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	backend.objects["Agent/default/test-agent"] = agent
+
+	config := ResourceConfig{
+		Kind: "Agent", Resource: "agents", SingularName: "agent",
+		NewFunc:     func() runtime.Object { return &arkv1alpha1.Agent{} },
+		NewListFunc: func() runtime.Object { return &arkv1alpha1.AgentList{} },
+	}
+	gs := NewGenericStorage(backend, &mockConverter{}, config, nil)
+
+	_, _, err := gs.Delete(contextWithNamespace(testNS()), testAgentName, nil, &metav1.DeleteOptions{})
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("expected NotFound after the race winner completed the delete, got %v", err)
+	}
+	if backend.updates != 1 {
+		t.Errorf("backend updates = %d, want 1 (no second attempt once the object is gone)", backend.updates)
+	}
+}
+
+// flakyRefreshBackend conflicts on the first Update, then fails the re-read with a transient
+// storage error rather than a genuine miss.
+type flakyRefreshBackend struct {
+	*mockBackend
+	updates int
+	gets    int
+}
+
+func (b *flakyRefreshBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	b.updates++
+	if b.updates == 1 {
+		return storage.ErrConflict
+	}
+	return b.mockBackend.Update(ctx, kind, namespace, name, obj)
+}
+
+func (b *flakyRefreshBackend) Get(ctx context.Context, kind, namespace, name string) (runtime.Object, error) {
+	b.gets++
+	if b.gets > 1 {
+		return nil, errors.New("connection reset by peer")
+	}
+	return b.mockBackend.Get(ctx, kind, namespace, name)
+}
+
+// A storage failure during the post-conflict re-read must not be reported as NotFound. For a
+// delete, 404 reads as success, so the client would believe an object that is still present —
+// finalizers set, no deletionTimestamp — had been removed.
+func TestGenericStorage_Delete_RefreshStorageFailureIsNotNotFound(t *testing.T) {
+	t.Parallel()
+
+	backend := &flakyRefreshBackend{mockBackend: newMockBackend()}
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	backend.objects["Agent/default/test-agent"] = agent
+
+	config := ResourceConfig{
+		Kind: "Agent", Resource: "agents", SingularName: "agent",
+		NewFunc:     func() runtime.Object { return &arkv1alpha1.Agent{} },
+		NewListFunc: func() runtime.Object { return &arkv1alpha1.AgentList{} },
+	}
+	gs := NewGenericStorage(backend, &mockConverter{}, config, nil)
+
+	_, deleted, err := gs.Delete(contextWithNamespace(testNS()), testAgentName, nil, &metav1.DeleteOptions{})
+	if err == nil {
+		t.Fatal("expected an error when the re-read fails, got nil")
+	}
+	if apierrors.IsNotFound(err) {
+		t.Fatalf("storage failure reported as NotFound, which reads as a successful delete: %v", err)
+	}
+	if deleted {
+		t.Error("deleted = true, want false")
+	}
+}
+
+// Admission is re-run against the refreshed object, so a policy that rejects the version we ended
+// up marking must block the delete rather than be overridden by the earlier pass.
+func TestGenericStorage_Delete_RefreshRejectedByAdmission(t *testing.T) {
+	t.Parallel()
+	gs, backend := newConflictingStorage(1)
+	ctx := contextWithNamespace(testNS())
+
+	denied := errors.New("denied by policy on the refreshed object")
+	admissions := 0
+	validate := func(context.Context, runtime.Object) error {
+		admissions++
+		if admissions == 1 {
+			return nil
+		}
+		return denied
+	}
+
+	_, _, err := gs.Delete(ctx, testAgentName, validate, &metav1.DeleteOptions{})
+	if !errors.Is(err, denied) {
+		t.Fatalf("expected the rejection on the refreshed object to surface, got %v", err)
+	}
+	if backend.updates != 1 {
+		t.Errorf("backend updates = %d, want 1 (the retry must not write after admission refused)", backend.updates)
+	}
+	stored := backend.objects["Agent/default/test-agent"].(*arkv1alpha1.Agent)
+	if stored.DeletionTimestamp != nil {
+		t.Error("expected no deletionTimestamp persisted after admission refused the refreshed object")
+	}
+}
+
+// collidingCreateBackend reports a name collision for the first n Creates. mockBackend's own
+// "already exists" is an opaque error, and only storage.ErrAlreadyExists is retryable.
+type collidingCreateBackend struct {
+	*mockBackend
+	collisions int
+	creates    int
+	fatalErr   error
+}
+
+func (b *collidingCreateBackend) Create(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	b.creates++
+	if b.fatalErr != nil {
+		return b.fatalErr
+	}
+	if b.creates <= b.collisions {
+		return storage.ErrAlreadyExists
+	}
+	return b.mockBackend.Create(ctx, kind, namespace, name, obj)
+}
+
+func newCollidingStorage(backend storage.Backend) *GenericStorage {
+	config := ResourceConfig{
+		Kind: "Agent", Resource: "agents", SingularName: "agent",
+		NewFunc:     func() runtime.Object { return &arkv1alpha1.Agent{} },
+		NewListFunc: func() runtime.Object { return &arkv1alpha1.AgentList{} },
+	}
+	return NewGenericStorage(backend, &mockConverter{}, config, nil)
+}
+
+func generateNameAgent() *arkv1alpha1.Agent {
+	agent := &arkv1alpha1.Agent{}
+	agent.GenerateName = "probe-"
+	return agent
+}
+
+// Only a collision is retryable. Any other backend failure must surface, or a broken backend
+// would be retried 100 times and then reported as a timeout.
+func TestGenericStorage_Create_GenerateNameSurfacesNonCollisionError(t *testing.T) {
+	t.Parallel()
+
+	fatal := errors.New("connection refused")
+	backend := &collidingCreateBackend{mockBackend: newMockBackend(), fatalErr: fatal}
+	gs := newCollidingStorage(backend)
+
+	_, err := gs.Create(contextWithNamespace(testNS()), generateNameAgent(), nil, &metav1.CreateOptions{})
+	if !errors.Is(err, fatal) {
+		t.Fatalf("expected the backend error to surface, got %v", err)
+	}
+	if backend.creates != 1 {
+		t.Errorf("backend creates = %d, want 1 (a non-collision error must not be retried)", backend.creates)
+	}
+}
+
+// Exhausting the attempts is a ServerTimeout, which tells the client to retry, rather than a
+// generic error or a silently unnamed object.
+func TestGenericStorage_Create_GenerateNameExhausted(t *testing.T) {
+	t.Parallel()
+
+	backend := &collidingCreateBackend{mockBackend: newMockBackend(), collisions: maxGenerateNameAttempts + 1}
+	gs := newCollidingStorage(backend)
+
+	_, err := gs.Create(contextWithNamespace(testNS()), generateNameAgent(), nil, &metav1.CreateOptions{})
+	if !apierrors.IsServerTimeout(err) {
+		t.Fatalf("expected a ServerTimeout once name generation is exhausted, got %v", err)
+	}
+	if backend.creates != maxGenerateNameAttempts {
+		t.Errorf("backend creates = %d, want %d", backend.creates, maxGenerateNameAttempts)
+	}
+}
+
+// Each attempt picks a fresh name and re-runs admission for it, because policy may key on the
+// name; admission judging only the first candidate would let a later name through unchecked.
+func TestGenericStorage_Create_GenerateNameReRunsAdmissionPerCandidate(t *testing.T) {
+	t.Parallel()
+
+	backend := &collidingCreateBackend{mockBackend: newMockBackend(), collisions: 2}
+	gs := newCollidingStorage(backend)
+
+	var seen []string
+	validate := func(_ context.Context, obj runtime.Object) error {
+		a, err := meta.Accessor(obj)
+		if err != nil {
+			return err
+		}
+		seen = append(seen, a.GetName())
+		return nil
+	}
+
+	if _, err := gs.Create(contextWithNamespace(testNS()), generateNameAgent(), validate, &metav1.CreateOptions{}); err != nil {
+		t.Fatalf("Create() should have retried past the collisions, got %v", err)
+	}
+	if len(seen) != 3 {
+		t.Fatalf("admission ran %d times, want 3 (once per candidate name)", len(seen))
+	}
+	for i, name := range seen {
+		if name == "" {
+			t.Errorf("admission saw an empty name on attempt %d; a naming-convention policy could never reject", i+1)
+		}
+		if i > 0 && name == seen[i-1] {
+			t.Errorf("attempt %d reused name %q; a collision must be retried with a fresh name", i+1, name)
+		}
+	}
+}
+
+// A rejection must stop name generation outright; retrying with a new name would let a caller
+// brute-force past a policy keyed on the name.
+func TestGenericStorage_Create_GenerateNameStopsWhenAdmissionRejects(t *testing.T) {
+	t.Parallel()
+
+	backend := &collidingCreateBackend{mockBackend: newMockBackend()}
+	gs := newCollidingStorage(backend)
+
+	denied := errors.New("denied by policy")
+	admissions := 0
+	validate := func(context.Context, runtime.Object) error {
+		admissions++
+		return denied
+	}
+
+	_, err := gs.Create(contextWithNamespace(testNS()), generateNameAgent(), validate, &metav1.CreateOptions{})
+	if !errors.Is(err, denied) {
+		t.Fatalf("expected the policy rejection to surface, got %v", err)
+	}
+	if admissions != 1 {
+		t.Errorf("admission ran %d times, want 1 (a rejection must not be retried with a fresh name)", admissions)
+	}
+	if backend.creates != 0 {
+		t.Errorf("backend creates = %d, want 0 (nothing may be persisted after a rejection)", backend.creates)
 	}
 }
