@@ -1,5 +1,8 @@
-## ADDED Requirements
+# execution-engine-team-members Specification
 
+## Purpose
+How the completions engine dispatches a team member to that member's own named execution engine: the sub-target contract, per-member conversation scope, engine-backed selectors, and the model requirements that follow.
+## Requirements
 ### Requirement: QueryRef carries an optional target override
 
 The QueryRef payload SHALL support an optional `target` object with required `type` and `name` fields. When present it names the resource the receiving engine executes, overriding the Query's own `spec.target`. When absent the engine SHALL fall back to `spec.target`.
@@ -9,6 +12,8 @@ The controller SHALL NOT send `target` on a top-level dispatch, where `spec.targ
 The QueryRef payload SHALL also support an optional `conversationId` string, sent only alongside `target`. It scopes the sub-request's conversation, and a receiving engine SHALL prefer it over the A2A `contextId` when keying per-conversation state. When absent the receiver SHALL fall back to `contextId`, which is what an engine built before the field does unconditionally.
 
 Each member of a team SHALL receive a distinct value, stable across turns of the same Query. An engine keying its own state on the conversation would otherwise treat every member as one conversation, so member B would inherit A's system prompt and, in the Claude executor, A's session directory. The A2A `contextId` SHALL be forwarded unchanged, so an engine keying sandbox lifecycle on it behaves exactly as before.
+
+The value SHALL also be scoped to the Query's namespace, including when an inbound `contextId` is present. A `contextId` is opaque to Ark — it originates from an external A2A caller or a prior engine response — so it carries no namespace of its own, and identically named members of identically named teams in two namespaces would otherwise resolve to the same engine-side state.
 
 The extension URI SHALL NOT change: both fields are purely additive, and a receiver that does not understand them ignores them.
 
@@ -45,6 +50,11 @@ The extension URI SHALL NOT change: both fields are purely additive, and a recei
 
 - **WHEN** the same member is dispatched more than once within a Query, or in a later turn of the same conversation
 - **THEN** every message carries the same `conversationId`
+
+#### Scenario: The same team in two namespaces keeps its members separate
+
+- **WHEN** identically named teams and members are dispatched in two namespaces, under the same inbound `contextId`
+- **THEN** each namespace's member receives a different `conversationId`
 
 #### Scenario: Engine predating the conversationId field
 
@@ -178,22 +188,3 @@ An agent the completions executor calls over A2A SHALL NOT be able to raise a hu
 - **WHEN** an agent the completions executor dispatched over A2A returns a task in state `input-required`
 - **THEN** the run fails with an error naming the task and stating that HITL approval is not supported on this hop
 
-## MODIFIED Requirements
-
-### Requirement: Python SDK resolves QueryRef transparently
-The Python SDK `executor_app.py` SHALL extract QueryRef from the A2A extension metadata and resolve the full execution context (agent config, tools, history) via the K8s API. The SDK SHALL derive the `ExecutionEngineRequest`'s `conversation_id` from the QueryRef's `conversationId` when that field is present, and from the A2A message's `context_id` otherwise. The SDK SHALL retrieve conversation history from the memory service using the resolved `conversation_id`, not from the Query spec input. The `BaseExecutor.execute_agent()` interface SHALL remain unchanged.
-
-Only a sub-target dispatch carries `conversationId`, so a top-level call resolves to `context_id` exactly as it did before this change.
-
-#### Scenario: Named engine receives A2A message with QueryRef and contextId
-- **WHEN** an A2A message with the query extension, `context_id: "conv-123"`, and no `conversationId` arrives at an engine built with the Python SDK
-- **THEN** the SDK extracts the QueryRef, fetches the Query CRD, derives agent config and tools, retrieves conversation history from the memory service using `"conv-123"`, sets `conversation_id` to `"conv-123"`, and calls `execute_agent()` with a fully populated `ExecutionEngineRequest`
-
-#### Scenario: Named engine receives A2A message with QueryRef but no contextId
-- **WHEN** the SDK is driven with neither `context_id` nor `conversationId`
-- **THEN** it resolves the query and calls `execute_agent()` with `conversation_id` set to empty string and no prior conversation history
-- **AND** this does not arise over A2A transport, where the server generates a `context_id` before the SDK sees the message
-
-#### Scenario: Named engine receives A2A message without QueryRef
-- **WHEN** an A2A message arrives without the query extension metadata
-- **THEN** the SDK raises an error indicating missing query context

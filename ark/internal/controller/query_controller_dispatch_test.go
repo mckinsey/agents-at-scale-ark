@@ -93,6 +93,27 @@ func TestResolveDispatchAddress(t *testing.T) {
 		assert.Equal(t, engineAddr, addr)
 	})
 
+	t.Run("named engine with explicit namespace returns engine address", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "engine-agent", Namespace: "default"},
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "my-engine", Namespace: "engines"},
+			},
+		}
+		engine := &arkv1prealpha1.ExecutionEngine{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-engine", Namespace: "engines"},
+			Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: engineAddr},
+		}
+		r := &QueryReconciler{
+			Client:          fake.NewClientBuilder().WithScheme(newTestScheme()).WithObjects(agent, engine).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "engine-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "default")
+		require.NoError(t, err)
+		assert.Equal(t, engineAddr, addr)
+	})
+
 	t.Run("named engine not found returns error", func(t *testing.T) {
 		agent := &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{Name: "orphan-agent", Namespace: "default"},
