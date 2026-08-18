@@ -9,7 +9,7 @@ from kubernetes.config.config_exception import ConfigException
 from kubernetes_asyncio import client, config as async_config
 from kubernetes_asyncio.client import Configuration
 import base64
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from kubernetes import client as sync_client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
@@ -20,7 +20,7 @@ from ark_sdk.labels import (
     CONFIGURATION_LABEL_SELECTOR,
     CONFIGURATION_RESOURCE_TYPE,
     labels_to_tags,
-    strip_ark_labels,
+    strip_tag_labels,
     tags_to_labels,
 )
 from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
@@ -361,15 +361,15 @@ class ConfigurationClient:
         }
 
     @staticmethod
-    def _build_metadata(
-        name: str,
+    def _build_labels_and_annotations(
         description: Optional[str],
         alias: Optional[str],
         labels: Optional[List[str]],
         existing_labels: Optional[Dict[str, str]] = None,
         existing_annotations: Optional[Dict[str, str]] = None,
-    ) -> 'client.V1ObjectMeta':
-        k8s_labels = strip_ark_labels(existing_labels)
+    ) -> Tuple[Dict[str, str], Dict[str, str]]:
+        """Build the labels and annotations this feature owns, preserving all others."""
+        k8s_labels = strip_tag_labels(existing_labels)
         k8s_labels[ARK_RESOURCE_TYPE_LABEL] = CONFIGURATION_RESOURCE_TYPE
         k8s_labels.update(tags_to_labels(labels))
 
@@ -383,7 +383,7 @@ class ConfigurationClient:
         if alias:
             annotations[ALIAS_ANNOTATION] = alias
 
-        return client.V1ObjectMeta(name=name, labels=k8s_labels, annotations=annotations)
+        return k8s_labels, annotations
 
     async def _read_configuration(self, v1, name: str):
         """Read a ConfigMap, refusing any that Ark does not own as a configuration."""
@@ -433,10 +433,15 @@ class ConfigurationClient:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
 
+            k8s_labels, annotations = self._build_labels_and_annotations(
+                description, alias, labels
+            )
             config_map = client.V1ConfigMap(
                 api_version="v1",
                 kind="ConfigMap",
-                metadata=self._build_metadata(name, description, alias, labels),
+                metadata=client.V1ObjectMeta(
+                    name=name, labels=k8s_labels, annotations=annotations
+                ),
                 data={CONFIGURATION_DATA_KEY: value}
             )
 
@@ -461,14 +466,15 @@ class ConfigurationClient:
             v1 = client.CoreV1Api(api)
 
             existing = await self._read_configuration(v1, name)
-            existing.metadata = self._build_metadata(
-                name,
+            k8s_labels, annotations = self._build_labels_and_annotations(
                 description,
                 alias,
                 labels,
                 existing_labels=existing.metadata.labels,
                 existing_annotations=existing.metadata.annotations,
             )
+            existing.metadata.labels = k8s_labels
+            existing.metadata.annotations = annotations
             existing.data = {**(existing.data or {}), CONFIGURATION_DATA_KEY: value}
 
             updated = await v1.replace_namespaced_config_map(
