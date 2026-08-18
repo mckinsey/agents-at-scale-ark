@@ -255,20 +255,29 @@ jobs:
             --wait --timeout=120s
           kubectl -n ark-system wait --for=condition=ready \
             pod -l app=ark-storage-dev --timeout=120s
+          # Expose Postgres on the k3s node (which is the runner itself, so the
+          # NodePort is reachable at localhost). Let Kubernetes assign a free
+          # port to avoid a hardcoded value, then hand it to the test step.
+          kubectl -n ark-system patch svc ark-storage-dev --type=merge \
+            -p '{"spec":{"type":"NodePort"}}'
+          node_port=$(kubectl -n ark-system get svc ark-storage-dev \
+            -o jsonpath='{.spec.ports[0].nodePort}')
+          if [ -z "${node_port}" ]; then
+            echo "failed to read assigned NodePort"
+            exit 1
+          fi
+          echo "POSTGRES_PORT=${node_port}" >> "$GITHUB_ENV"
 
       - name: Run PostgreSQL integration tests
         env:
           POSTGRES_HOST: localhost
-          POSTGRES_PORT: "5432"
           POSTGRES_USER: postgres
           POSTGRES_DB: ark
           POSTGRES_PASSWORD: arkdev123
         run: |
-          kubectl -n ark-system port-forward svc/ark-storage-dev 5432:5432 >/dev/null 2>&1 &
-          trap 'kill $! 2>/dev/null || true' EXIT
           ready=false
           for i in $(seq 1 30); do
-            if pg_isready -h localhost -p 5432 -q; then
+            if pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -q; then
               ready=true
               break
             fi
