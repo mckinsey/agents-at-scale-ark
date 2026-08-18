@@ -33,7 +33,9 @@ router = APIRouter(
 VERSION = "v1alpha1"
 
 
-def _build_authorization(status: dict) -> Optional[MCPServerAuthorization]:
+def _build_authorization(
+    status: dict, spec: dict
+) -> Optional[MCPServerAuthorization]:
     """Build the authorization block from status.authorization.
 
     Returns None when status.authorization is absent. Never includes token or
@@ -42,10 +44,12 @@ def _build_authorization(status: dict) -> Optional[MCPServerAuthorization]:
     authorization = status.get("authorization")
     if not authorization:
         return None
+    spec_authorization = (spec or {}).get("authorization") or {}
     return MCPServerAuthorization(
         state=authorization.get("state"),
         resourceName=authorization.get("resourceName"),
         expiresAt=authorization.get("expiresAt"),
+        machineManaged=bool(spec_authorization.get("clientCredentials")),
     )
 
 def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
@@ -73,7 +77,7 @@ def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
         transport=spec.get("transport"),
         available=availability,
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status),
+        authorization=_build_authorization(status, spec),
     )
 
 
@@ -98,7 +102,7 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
         address=status.get("resolvedAddress"),
         transport=spec.get("transport"),
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status),
+        authorization=_build_authorization(status, spec),
     )
 
 

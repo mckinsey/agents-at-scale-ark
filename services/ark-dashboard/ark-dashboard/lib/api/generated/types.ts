@@ -3568,6 +3568,11 @@ export interface components {
         MCPServerAuthorization: {
             /** Expiresat */
             expiresAt?: string | null;
+            /**
+             * Machinemanaged
+             * @default false
+             */
+            machineManaged: boolean;
             /** Resourcename */
             resourceName?: string | null;
             /** State */

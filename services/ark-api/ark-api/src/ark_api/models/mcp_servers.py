@@ -65,6 +65,10 @@ class MCPServerAuthorization(BaseModel):
     state: str
     resourceName: Optional[str] = None
     expiresAt: Optional[str] = None
+    # True when the controller mints this server's token itself via
+    # spec.authorization.clientCredentials. No interactive flow exists,
+    # so consumers must not offer an authenticate action.
+    machineManaged: bool = False
 
 
 class MCPServerResponse(BaseModel):

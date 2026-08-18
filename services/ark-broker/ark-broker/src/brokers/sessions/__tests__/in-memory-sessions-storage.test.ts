@@ -453,4 +453,63 @@ describe('InMemorySessionsStorage', () => {
       expect(received).toHaveLength(0);
     });
   });
+
+  describe('cache size accessors', () => {
+    test('starts empty', () => {
+      expect(storage.cachedItemCount()).toBe(0);
+      expect(storage.cachedQueryCount()).toBe(0);
+    });
+
+    test('counts sessions and queries independently', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q2'});
+      await storage.applyEvent({sessionId: 'sess-2', queryName: 'q3'});
+
+      expect(storage.cachedItemCount()).toBe(2);
+      expect(storage.cachedQueryCount()).toBe(3);
+    });
+
+    test('repeated events for a known query do not inflate the count', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'q1',
+        _reason: 'QueryExecutionComplete',
+      });
+
+      expect(storage.cachedQueryCount()).toBe(1);
+    });
+
+    test('counts the same query name reused across sessions', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'shared'});
+      await storage.applyEvent({sessionId: 'sess-2', queryName: 'shared'});
+
+      expect(storage.cachedItemCount()).toBe(2);
+      expect(storage.cachedQueryCount()).toBe(2);
+    });
+
+    test('resets on delete', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.delete();
+
+      expect(storage.cachedItemCount()).toBe(0);
+      expect(storage.cachedQueryCount()).toBe(0);
+    });
+
+    test('follows removals from the store', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q2'});
+      await storage.applyEvent({sessionId: 'sess-2', queryName: 'q3'});
+
+      const store = await storage.getAll();
+      delete store.sessions['sess-1'].queries['q2'];
+
+      expect(storage.cachedQueryCount()).toBe(2);
+
+      delete store.sessions['sess-1'];
+
+      expect(storage.cachedItemCount()).toBe(1);
+      expect(storage.cachedQueryCount()).toBe(1);
+    });
+  });
 });
