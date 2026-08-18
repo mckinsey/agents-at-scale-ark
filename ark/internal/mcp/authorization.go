@@ -26,6 +26,11 @@ import (
 type AuthorizationMaterial struct {
 	AccessToken string
 	ExpiresAt   *metav1.Time
+	// SecretMissing distinguishes "the Secret does not exist yet" from "it
+	// exists but carries no token". Both leave AccessToken empty and both fall
+	// through to the 401 path, but only the former is the expected cold-start
+	// state for a server whose token the controller mints itself.
+	SecretMissing bool
 }
 
 // ResolveAuthorizationMaterial reads spec.authorization.tokenSecretRef from the
@@ -51,6 +56,7 @@ func ResolveAuthorizationMaterial(ctx context.Context, reader client.Reader, mcp
 	if err := reader.Get(ctx, nn, secret); err != nil {
 		if errors.IsNotFound(err) {
 			msg := fmt.Sprintf("Secret %q not found in namespace %q — referenced by spec.authorization.tokenSecretRef.name", ref.Name, mcpServer.Namespace)
+			material.SecretMissing = true
 			return material, []string{msg}, nil
 		}
 		return nil, nil, fmt.Errorf("failed to read authorization secret %s: %w", ref.Name, err)
