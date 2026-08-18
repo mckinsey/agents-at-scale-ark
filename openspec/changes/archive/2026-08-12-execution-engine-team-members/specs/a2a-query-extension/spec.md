@@ -1,18 +1,4 @@
-# a2a-query-extension Specification
-
-## Purpose
-The QueryRef A2A extension contract between the controller, the completions engine, and engines built on the Python SDK.
-## Requirements
-### Requirement: Completions engine forwards QueryRef extension to named engines
-The completions engine SHALL forward the QueryRef extension when sending A2A messages to named execution engines. It SHALL NOT send the agent config, tools, or history as metadata. The engine SHALL NOT read a message array from the Query spec input — conversation history is retrieved from the memory service using the conversation ID.
-
-#### Scenario: Completions engine routes to named execution engine
-- **WHEN** an agent with an `ExecutionEngine` ref is executed
-- **THEN** the A2A message to the named engine contains only the QueryRef extension, not the full agent/tools/history blob
-
-#### Scenario: Named engine retrieves conversation history
-- **WHEN** a named engine receives a QueryRef and resolves the Query CR
-- **THEN** it retrieves conversation history from the memory service using the conversation ID, not from the Query spec input
+## MODIFIED Requirements
 
 ### Requirement: Python SDK resolves QueryRef transparently
 The Python SDK `executor_app.py` SHALL extract QueryRef from the A2A extension metadata and resolve the full execution context (agent config, tools, history) via the K8s API. The SDK SHALL derive the `ExecutionEngineRequest`'s `conversation_id` from the QueryRef's `conversationId` when that field is present, and from the A2A message's `context_id` otherwise. The SDK SHALL retrieve conversation history from the memory service using the resolved `conversation_id`, not from the Query spec input. The `BaseExecutor.execute_agent()` interface SHALL remain unchanged.
@@ -31,4 +17,3 @@ Only a sub-target dispatch carries `conversationId`, so a top-level call resolve
 #### Scenario: Named engine receives A2A message without QueryRef
 - **WHEN** an A2A message arrives without the query extension metadata
 - **THEN** the SDK raises an error indicating missing query context
-

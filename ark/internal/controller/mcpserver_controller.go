@@ -203,10 +203,6 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 	return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged, authMaterial)
 }
 
-// resolveAuthorizationMaterial delegates to the shared resolver and surfaces
-// each warning as an AuthorizationSecretUnresolvable event. The same resolver
-// backs the completions executor, so discovery and tool invocation cannot
-// diverge on which credential they use.
 func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (*arkmcp.AuthorizationMaterial, error) {
 	material, warnings, err := arkmcp.ResolveAuthorizationMaterial(ctx, r.APIReader, mcpServer)
 	if err != nil {

@@ -187,8 +187,6 @@ type TokenSecretReference struct {
 	ClientSecretKey string `json:"clientSecretKey,omitempty"`
 }
 
-// Default Secret keys for TokenSecretReference. These mirror the
-// +kubebuilder:default markers above, which cannot reference constants.
 const (
 	DefaultAccessTokenKey  = "access_token"
 	DefaultRefreshTokenKey = "refresh_token"
@@ -197,9 +195,6 @@ const (
 	DefaultClientSecretKey = "client_secret"
 )
 
-// ResolvedAccessTokenKey returns the Secret key holding the access token. The
-// empty-value fallback matters for clients that bypass CRD defaulting, such as
-// the fake client used in unit tests.
 func (r TokenSecretReference) ResolvedAccessTokenKey() string {
 	if r.AccessTokenKey == "" {
 		return DefaultAccessTokenKey
@@ -207,7 +202,6 @@ func (r TokenSecretReference) ResolvedAccessTokenKey() string {
 	return r.AccessTokenKey
 }
 
-// ResolvedExpiresAtKey returns the Secret key holding the token expiry.
 func (r TokenSecretReference) ResolvedExpiresAtKey() string {
 	if r.ExpiresAtKey == "" {
 		return DefaultExpiresAtKey
