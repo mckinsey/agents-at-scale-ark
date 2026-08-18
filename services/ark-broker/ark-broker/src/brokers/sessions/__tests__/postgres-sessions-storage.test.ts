@@ -807,6 +807,33 @@ describe('PostgresSessionsStorage', () => {
       expect(query.conversationId).toBe('conv-1');
     });
 
+    test('a higher-sequence non-terminal event should not suppress a later-applied done', async () => {
+      // Guard against the sessions-broker-postgres e2e flake. A non-terminal
+      // (running) event for the query is applied first carrying the higher
+      // sequence, so it sets the watermark to 2. The true QueryExecution
+      // Complete arrives with the lower sequence 1. Session must be set to
+      // Done even though it has the lower sequence.
+      await storage.applyEvent(
+        {
+          sessionId: 'sess-1',
+          queryName: 'query-1',
+          _reason: 'AgentExecutionStart',
+        },
+        2
+      );
+      await storage.applyEvent(
+        {
+          sessionId: 'sess-1',
+          queryName: 'query-1',
+          _reason: 'QueryExecutionComplete',
+        },
+        1
+      );
+
+      const query = (await storage.getSession('sess-1'))!.queries['query-1']!;
+      expect(query.phase).toBe('done');
+    });
+
     test('an out-of-order event still contributes fields the query is missing', async () => {
       // The completion event carries no agent or conversationId - only the
       // start event does, and it lost the race. Dropping it outright would
