@@ -114,18 +114,33 @@ export function mergeQueryMetadata(
   return filled;
 }
 
+/** A phase that closes the query: only these decide the final phase. */
+export function isTerminalPhase(phase: QueryPhase): boolean {
+  return (
+    phase === QueryPhases.Done ||
+    phase === QueryPhases.Error ||
+    phase === QueryPhases.Canceled
+  );
+}
+
 /**
  * The order-sensitive half. `done` clearing a prior `error` is the one rule that
- * is not monotonic, which is why an out-of-order event must not reach this -
- * an older `done` would erase a newer `error`.
+ * is not monotonic, which is why an out-of-order phase decision must not reach
+ * this - an older `done` would erase a newer `error`.
+ *
+ * `touchActivity` is false when a terminal event is applied out of metadata
+ * order (a reordered non-terminal event already advanced the activity
+ * watermark): its phase is still authoritative, but it must not re-elect this
+ * query as the session's latest activity.
  */
 export function applyQueryPhase(
   existing: QueryEntry,
   phase: QueryPhase,
   now: string,
-  errorMsg?: string
+  errorMsg?: string,
+  touchActivity = true
 ): void {
-  existing.lastActivity = now;
+  if (touchActivity) existing.lastActivity = now;
 
   if (phase === QueryPhases.Error) {
     existing.phase = QueryPhases.Error;
