@@ -244,6 +244,8 @@ func TestMakeTeam_EngineMemberNeedsNoModel(t *testing.T) {
 	assert.Equal(t, "engine-member", team.Members[0].GetName())
 }
 
+const engineMemberName = "engine-member"
+
 type mixedTeamHarness struct {
 	team           *Team
 	ctx            context.Context
@@ -400,6 +402,51 @@ func TestMixedTeam_A2AMemberReceivesTranscript(t *testing.T) {
 	assert.Contains(t, a2aInput, "hi")
 }
 
+func TestMixedTeam_EngineMemberTurnReachesA2AMember(t *testing.T) {
+	h := mixedTeamFixture(t, "engine-then-a2a-team", arkv1alpha1.TeamSpec{
+		Strategy: "sequential",
+		Members: []arkv1alpha1.TeamMember{
+			{Type: MemberTypeAgent, Name: "engine-member"},
+			{Type: MemberTypeAgent, Name: "a2a-member"},
+		},
+	})
+
+	_, err := h.team.Execute(h.ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
+	require.NoError(t, err)
+
+	a2aInput := engineInputText(t, *h.a2aCaptured)
+	assert.Contains(t, a2aInput, "engine reply", "a named-engine member's turn must reach the a2a member")
+	assert.Contains(t, a2aInput, "# engine-member:")
+}
+
+func TestMixedTeam_GraphEdgeRoutesEngineToA2AMember(t *testing.T) {
+	h := mixedTeamFixture(t, "graph-engine-to-a2a-team", arkv1alpha1.TeamSpec{
+		Strategy: "selector",
+		MaxTurns: intPtr(2),
+		Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "selector-agent"},
+		Graph: &arkv1alpha1.TeamGraphSpec{
+			Edges: []arkv1alpha1.TeamGraphEdge{{From: "engine-member", To: "a2a-member"}},
+		},
+		Members: []arkv1alpha1.TeamMember{
+			{Type: MemberTypeAgent, Name: "engine-member"},
+			{Type: MemberTypeAgent, Name: "a2a-member"},
+		},
+	})
+
+	selector := newMockSelectorAgent()
+	selector.returnName = engineMemberName
+	h.team.selectorAgent = selector
+
+	result, err := h.team.Execute(h.ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
+	require.NoError(t, err)
+	require.Len(t, result.Messages, 3)
+	assert.Equal(t, "a2a-member", result.Messages[1].OfAssistant.Name.Value)
+
+	a2aInput := engineInputText(t, *h.a2aCaptured)
+	assert.Contains(t, a2aInput, "engine reply", "the transcript must reach a selector-routed a2a member")
+	assert.Contains(t, a2aInput, "# engine-member:")
+}
+
 func TestA2AMember_StandaloneInputExcludesHistory(t *testing.T) {
 	h := mixedTeamFixture(t, "a2a-solo-team", arkv1alpha1.TeamSpec{
 		Strategy: "sequential",
@@ -427,7 +474,7 @@ func TestMixedTeam_SelectorDispatchesToEngineMember(t *testing.T) {
 	})
 
 	selector := newMockSelectorAgent()
-	selector.returnName = "engine-member"
+	selector.returnName = engineMemberName
 	h.team.selectorAgent = selector
 
 	result, err := h.team.Execute(h.ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
@@ -460,7 +507,7 @@ func TestMixedTeam_GraphEdgeRoutesEngineToLocal(t *testing.T) {
 	})
 
 	selector := newMockSelectorAgent()
-	selector.returnName = "engine-member"
+	selector.returnName = engineMemberName
 	h.team.selectorAgent = selector
 
 	result, err := h.team.Execute(h.ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})

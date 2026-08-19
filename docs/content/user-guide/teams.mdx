@@ -280,7 +280,7 @@ Every member sees the same transcript — each member's output is appended to th
 
 A query that targets an `a2a` agent directly still sends only that query's input, leaving the conversation to the remote server's own A2A context. Only team-member turns carry the transcript.
 
-Conversation state is scoped differently too: internal members share the parent query's memory, while each external member gets its own derived `conversationId`, so an executor that keys state on it won't merge members.
+Conversation state is scoped differently for each of the three: internal members share the parent query's memory; each **named-engine** member gets its own derived `conversationId`, so an executor that keys state on it won't merge members; an **`a2a`** member keeps the query's A2A `contextID`, so the remote server sees one conversation for the whole query.
 
 ## Query a team
 
