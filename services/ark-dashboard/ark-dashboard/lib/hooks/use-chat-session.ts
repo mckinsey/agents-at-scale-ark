@@ -23,6 +23,7 @@ import {
   type TeamAgentParameters,
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
+import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
 import type { ChatResponse } from '@/lib/services/chat';
 import type {
@@ -120,12 +121,15 @@ interface UseChatSessionReturn {
   sessionId: string;
   isProcessing: boolean;
   processingPhase?: string;
+  statusText?: string;
   isWaitingForApprovalResponse: boolean;
 
   error: string | null;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
+  handleScroll: () => void;
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
   cancelQuery: () => void;
@@ -279,6 +283,7 @@ export function useChatSession({
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
+  const [statusText, setStatusText] = useState<string | undefined>();
   const [isWaitingForApprovalResponse, setIsWaitingForApprovalResponse] =
     useState(false);
 
@@ -286,7 +291,13 @@ export function useChatSession({
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const {
+    scrollContainerRef,
+    messagesEndRef,
+    handleScroll,
+    scrollToBottom,
+    resumeAutoScroll,
+  } = useStickyScroll();
   const chatStreamAbortControllerRef = useRef(new AbortController());
 
   const {
@@ -305,10 +316,6 @@ export function useChatSession({
     toApiParameters,
   } = useAgentQueryParameters(name, type);
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
-
   useEffect(() => {
     return () => {
       if (stopPollingRef.current) {
@@ -318,7 +325,8 @@ export function useChatSession({
   }, []);
 
   useEffect(() => {
-    setTimeout(scrollToBottom, 100);
+    const id = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(id);
   }, [chatMessages, scrollToBottom]);
 
   const buildChatMessages = useCallback(
@@ -499,6 +507,11 @@ export function useChatSession({
           continue;
         }
 
+        if ('type' in typedChunk && typedChunk.type === 'a2a_status') {
+          setStatusText(typedChunk.message || undefined);
+          continue;
+        }
+
         console.log(
           '[HITL Debug] Processing regular chunk (not approval request)',
         );
@@ -599,6 +612,7 @@ export function useChatSession({
           'choices' in typedChunk ? typedChunk?.choices?.[0]?.delta : undefined;
         if (delta?.content) {
           accumulatedContent += delta.content;
+          setStatusText(undefined);
         }
 
         if (delta?.tool_calls) {
@@ -960,6 +974,7 @@ export function useChatSession({
   const sendMessage = useCallback(
     async (userMessage: string) => {
       setError(null);
+      resumeAutoScroll();
 
       if (missingParameters.length > 0) {
         return;
@@ -1021,6 +1036,7 @@ export function useChatSession({
       } finally {
         setIsProcessing(false);
         setProcessingPhase(undefined);
+        setStatusText(undefined);
       }
     },
     [
@@ -1030,6 +1046,7 @@ export function useChatSession({
       isChatStreamingEnabled,
       missingParameters,
       name,
+      resumeAutoScroll,
       toApiParameters,
       type,
       updateChatMessages,
@@ -1201,10 +1218,13 @@ export function useChatSession({
     isWaitingForApprovalResponse,
     isProcessing,
     processingPhase,
+    statusText,
     error,
     sendMessage,
     clearChat,
     messagesEndRef,
+    scrollContainerRef,
+    handleScroll,
     tokenUsage: chatSession.tokenUsage,
     messageTokenUsage: chatSession.messageTokenUsage,
     cancelQuery,

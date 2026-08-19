@@ -1,0 +1,27 @@
+# Mock LLM configuration for the engine-backed team test.
+# The echo A2A agent stands in for an execution engine: it accepts A2A
+# message/send and returns the text, which is all this test needs at the
+# transport level.
+terminationGracePeriodSeconds: 3
+ark:
+  a2a:
+    enabled: true
+    pollInterval: "3s"
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }

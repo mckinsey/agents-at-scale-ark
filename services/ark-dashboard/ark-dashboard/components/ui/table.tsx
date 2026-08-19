@@ -4,6 +4,15 @@ import type * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
+/**
+ * Row-wide hover overlay. Render as `<span aria-hidden />` inside the first
+ * TableCell of a `relative isolate` TableRow: it is positioned against the row,
+ * so it also covers the gutters created by `border-spacing-x-*`, which a
+ * background on the `<tr>` itself cannot paint.
+ */
+const rowHoverOverlayClass =
+  'pointer-events-none absolute inset-0 -z-10 transition-colors group-hover:bg-stateslayer-overlay-hover';
+
 function Table({ className, ...props }: React.ComponentProps<'table'>) {
   return (
     <div
@@ -135,4 +144,5 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  rowHoverOverlayClass,
 };

@@ -5,6 +5,7 @@ import { SmartToy } from '@/components/icons';
 import { AgentsTable } from '@/components/sections/agents-table';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { agentsService } from '@/lib/services';
 import { getOriginLabel } from '@/lib/utils/origin-icon';
 
@@ -16,7 +17,7 @@ export function AgentsSection() {
       subtitle="Create and manage agents to automate tasks"
       createHref="/agents/new"
       createLabel="Create agent"
-      learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/"
+      learnMoreUrl={DOCS_URLS.agents}
       entityLabel="Agent"
       entityPluralLabel="agents"
       emptyTitle="No agents yet"

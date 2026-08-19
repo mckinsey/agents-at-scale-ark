@@ -130,5 +130,131 @@ class TestGetImpersonationConfig(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class TestRequireApiKeyOwner(unittest.TestCase):
+
+    def test_impersonation_disabled_returns_none(self):
+        import os
+        from ark_api.auth.dependencies import require_api_key_owner
+
+        request = MagicMock()
+        request.state.user_identity = MagicMock(username="jane@acme.com", groups=["a"])
+
+        env = {"IMPERSONATION_ENABLED": "false", "AUTH_MODE": "hybrid"}
+        with patch.dict(os.environ, env, clear=False):
+            result = require_api_key_owner(request)
+        self.assertIsNone(result)
+
+    def test_basic_only_mode_returns_none(self):
+        import os
+        from ark_api.auth.dependencies import require_api_key_owner
+
+        request = MagicMock(spec=[])
+        request.state = MagicMock(spec=[])
+
+        env = {"IMPERSONATION_ENABLED": "true", "AUTH_MODE": "basic"}
+        with patch.dict(os.environ, env, clear=False):
+            result = require_api_key_owner(request)
+        self.assertIsNone(result)
+
+    def test_hybrid_with_identity_returns_identity(self):
+        import os
+        from ark_api.auth.dependencies import require_api_key_owner
+        from ark_api.models.auth import UserIdentity
+
+        request = MagicMock()
+        request.state.user_identity = UserIdentity(username="jane@acme.com", groups=["team-a"])
+
+        env = {"IMPERSONATION_ENABLED": "true", "AUTH_MODE": "hybrid"}
+        with patch.dict(os.environ, env, clear=False):
+            result = require_api_key_owner(request)
+        self.assertEqual(result.username, "jane@acme.com")
+
+    def test_sso_with_identity_returns_identity(self):
+        import os
+        from ark_api.auth.dependencies import require_api_key_owner
+        from ark_api.models.auth import UserIdentity
+
+        request = MagicMock()
+        request.state.user_identity = UserIdentity(username="jane@acme.com", groups=[])
+
+        env = {"IMPERSONATION_ENABLED": "true", "AUTH_MODE": "sso"}
+        with patch.dict(os.environ, env, clear=False):
+            result = require_api_key_owner(request)
+        self.assertEqual(result.username, "jane@acme.com")
+
+    def test_hybrid_without_identity_raises(self):
+        import os
+        from fastapi import HTTPException
+        from ark_api.auth.dependencies import require_api_key_owner
+
+        request = MagicMock(spec=[])
+        request.state = MagicMock(spec=[])
+
+        env = {"IMPERSONATION_ENABLED": "true", "AUTH_MODE": "hybrid"}
+        with patch.dict(os.environ, env, clear=False):
+            with self.assertRaises(HTTPException) as ctx:
+                require_api_key_owner(request)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_hybrid_with_blank_username_raises(self):
+        import os
+        from fastapi import HTTPException
+        from ark_api.auth.dependencies import require_api_key_owner
+        from ark_api.models.auth import UserIdentity
+
+        request = MagicMock()
+        request.state.user_identity = UserIdentity(username="", groups=[])
+
+        env = {"IMPERSONATION_ENABLED": "true", "AUTH_MODE": "hybrid"}
+        with patch.dict(os.environ, env, clear=False):
+            with self.assertRaises(HTTPException) as ctx:
+                require_api_key_owner(request)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_hybrid_with_whitespace_only_username_raises(self):
+        import os
+        from fastapi import HTTPException
+        from ark_api.auth.dependencies import require_api_key_owner
+        from ark_api.models.auth import UserIdentity
+
+        request = MagicMock()
+        request.state.user_identity = UserIdentity(username=" \t ", groups=[])
+
+        env = {"IMPERSONATION_ENABLED": "true", "AUTH_MODE": "hybrid"}
+        with patch.dict(os.environ, env, clear=False):
+            with self.assertRaises(HTTPException) as ctx:
+                require_api_key_owner(request)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_hybrid_with_non_string_username_raises(self):
+        import os
+        from fastapi import HTTPException
+        from ark_api.auth.dependencies import require_api_key_owner
+        from ark_api.models.auth import UserIdentity
+
+        request = MagicMock()
+        request.state.user_identity = UserIdentity(username=12345, groups=[])
+
+        env = {"IMPERSONATION_ENABLED": "true", "AUTH_MODE": "hybrid"}
+        with patch.dict(os.environ, env, clear=False):
+            with self.assertRaises(HTTPException) as ctx:
+                require_api_key_owner(request)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_hybrid_with_padded_username_is_normalized(self):
+        import os
+        from ark_api.auth.dependencies import require_api_key_owner
+        from ark_api.models.auth import UserIdentity
+
+        request = MagicMock()
+        request.state.user_identity = UserIdentity(username=" alice ", groups=["team-a"])
+
+        env = {"IMPERSONATION_ENABLED": "true", "AUTH_MODE": "hybrid"}
+        with patch.dict(os.environ, env, clear=False):
+            result = require_api_key_owner(request)
+        self.assertEqual(result.username, "alice")
+        self.assertEqual(result.groups, ["team-a"])
+
+
 if __name__ == "__main__":
     unittest.main()

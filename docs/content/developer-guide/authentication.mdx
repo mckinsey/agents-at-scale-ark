@@ -70,6 +70,7 @@ OIDC_ISSUER_URL="https://your-oidc-provider.com"     # Required: OIDC issuer URL
 OIDC_CLIENT_ID="your-client-id"                      # Required: OIDC client ID
 OIDC_CLIENT_SECRET="your-client-secret"              # Optional: OIDC client secret
 OIDC_PROVIDER_NAME="Your Provider"                   # Optional: Display name for the OIDC provider in UI
+OIDC_SCOPES="openid email profile"                   # Optional: Space-separated OAuth scopes (defaults to "openid email profile")
 
 # Authentication Mode
 AUTH_MODE="hybrid"                                    # Required: see Authentication Modes section below
@@ -110,10 +111,20 @@ https://your-domain.com/api/auth/callback/mid
 https://your-domain.com/signout
 ```
 
-#### Required Scopes
+#### Scopes
+
+By default the dashboard requests `openid email profile`:
 - `openid` - Core OIDC functionality
 - `profile` - User profile information
 - `email` - User email address
+
+Override the requested scopes with the `OIDC_SCOPES` environment variable (space-separated). This is useful when a provider requires additional scopes. For example, some providers (such as Dex) only issue refresh tokens when `offline_access` is requested, which is required to keep sessions alive:
+
+```bash
+OIDC_SCOPES="openid email profile offline_access"
+```
+
+If `OIDC_SCOPES` is unset or empty, it falls back to the default `openid email profile`.
 
 ## Components and Hooks
 
@@ -337,6 +348,10 @@ curl -X POST http://localhost:8000/v1/api-keys \
 
 **Note:** The API key will be stored in the current namespace only. You must authenticate against the ARK API instance in the same namespace where the API key was created.
 
+**Note:** When impersonation is enabled (`AUTH_MODE=hybrid` or `sso`), creating an API key requires the same permission your identity would need to create a Secret directly in the namespace. This is checked with a `SelfSubjectAccessReview` against the requesting user, the same mechanism used elsewhere in the API.
+
+> **Breaking change:** In `AUTH_MODE=hybrid` deployments with impersonation enabled, API keys created before this authorization check was introduced have no recorded creator and will no longer authenticate. Recreate any such key through the endpoint above so it is minted under an identity with permission to create Secrets in the namespace, and update the credentials wherever the old key was in use. Deployments that don't combine `hybrid` mode with impersonation are unaffected.
+
 ### Using API Keys
 
 API keys use HTTP Basic Authentication where:
@@ -389,6 +404,8 @@ GET /v1/api-keys
 
 The list response includes `last_used_at`. Ark updates this timestamp after successful API-key authentication, so operators can monitor for unexpected use of issued keys.
 
+When impersonation is enabled, listing and revoking API keys is scoped to the keys created by the requesting user.
+
 #### Create API Key
 ```bash
 # Create in current namespace
@@ -417,6 +434,8 @@ DELETE /v1/api-keys/{public_key}
 - **Expiration**: API keys can have optional expiration dates for enhanced security
 - **Usage Signal**: Successful API-key authentication updates `last_used_at` for monitoring and audit review
 - **Soft Delete**: Revoked API keys are marked inactive but retained for audit trails
+- **Creation Authorization**: With impersonation enabled, creating an API key requires the same permission as creating a Secret in the namespace, and listing/revoking keys is scoped to their creator
+- **Legacy Key Rejection**: In `hybrid` mode with impersonation enabled, keys with no recorded creator (minted before this authorization check existed) are rejected at authentication — see the breaking-change note above
 - **Per-Namespace Storage**: API keys are stored as Kubernetes secrets in their respective namespaces for true tenant isolation
 
 ## Security Features
@@ -622,6 +641,7 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8000/v1/agents
 #### Token Refresh Failures
 - Verify OIDC provider supports refresh tokens
 - Check `OIDC_CLIENT_SECRET` configuration
+- If the provider only issues refresh tokens for the `offline_access` scope (e.g. Dex), add it via `OIDC_SCOPES="openid email profile offline_access"`
 - Monitor browser console for refresh errors
 
 #### Federated Logout Issues

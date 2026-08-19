@@ -175,6 +175,18 @@ describe('MemoryBroker', () => {
       expect(allMessages).toHaveLength(1);
       expect(allMessages[0].data.queryId).toBe('query2');
     });
+
+    test('should leave the same query untouched in other conversations', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+      await broker.addMessage('conv2', 'query1', 'message2');
+
+      await broker.deleteQuery('conv1', 'query1');
+
+      const allMessages = await broker.all();
+      expect(allMessages).toHaveLength(1);
+      expect(allMessages[0].data.conversationId).toBe('conv2');
+      expect(allMessages[0].data.queryId).toBe('query1');
+    });
   });
 
   describe('deleteByQuery', () => {
