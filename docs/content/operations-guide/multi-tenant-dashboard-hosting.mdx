@@ -73,7 +73,7 @@ What this guarantees:
 What this does **not** guarantee on its own:
 
 - If every tenant trusts the same OIDC client, the JWT issued to a user authenticated for `/namespace-a` is structurally valid against `/namespace-b`'s ark-api too. A deliberate attacker who copies their `/namespace-a` cookie into a request against `/namespace-b/api/v1/...` will be accepted by ark-api, which then queries its own namespace with its own service account. RBAC on the *user* is not applied unless impersonation is enabled (see [Tenant isolation](#tenant-isolation)).
-- For full cross-tenant isolation, register a distinct OIDC client per tenant and set `OIDC_APPLICATION_ID` to that tenant's client ID on its ark-api. The JWT's `aud` claim is then checked per tenant and tokens from one tenant are rejected at another.
+- For full cross-tenant isolation, register a distinct OIDC client per tenant and set `OIDC_APPLICATION_ID` to that tenant's client ID on its ark-api. The JWT's `aud` claim is then checked per tenant and tokens from one tenant are rejected at another. `OIDC_APPLICATION_ID` also accepts a comma-separated list (e.g. `app-a,app-b`) when a single ark-api must trust more than one audience — a token passes if its `aud` matches any listed value.
 
 Configuration:
 
