@@ -83,6 +83,17 @@ const (
 	// goroutine died so it converges to a terminal phase instead of stranding.
 	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
 	queryRunningSafetyRequeue = 30 * time.Second
+
+	// Condition reasons for QueryCompleted when spec.timeout elapses.
+	// spec.timeout is a wall-clock budget from metadata.creationTimestamp; the
+	// reason records which side of the semaphore the deadline was hit on.
+	reasonTimedOutInQueue     = "TimedOutInQueue"
+	reasonTimedOutInExecution = "TimedOutInExecution"
+
+	// defaultQueryTimeout mirrors the CRD default on Query.spec.timeout so
+	// callers without an explicit value get the same budget the apiserver's
+	// mutating admission would compute.
+	defaultQueryTimeout = 5 * time.Minute
 )
 
 type QueryReconciler struct {
@@ -206,6 +217,15 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
+	// Enforces per-round pre-execution wall-SLO.
+	if isPreExecutionPhase(obj.Status.Phase) && remainingBudget(&obj) <= 0 {
+		r.cleanupExistingOperation(req.NamespacedName)
+		if err := r.failQueryOnTimeout(ctx, &obj, reasonTimedOutInQueue, preExecutionTimeoutMessage(obj.Status.Phase)); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
 	switch obj.Status.Phase {
 	case statusDone, statusError, statusCanceled:
 		remaining := ttlRemaining(&obj)
@@ -246,6 +266,40 @@ func ttlRemaining(obj *arkv1alpha1.Query) time.Duration {
 	return time.Until(anchor.Add(obj.Spec.TTL.Duration))
 }
 
+// remainingBudget is spec.timeout minus wall time since the current round's
+// anchor. The anchor is metadata.creationTimestamp for the initial round and
+// re-stamped via annotations.RoundAnchor on each HITL resumption, so a
+// resumed query gets a fresh budget for its pre-execution gap.
+func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
+	timeout := defaultQueryTimeout
+	if obj.Spec.Timeout != nil {
+		timeout = obj.Spec.Timeout.Duration
+	}
+	anchor := obj.CreationTimestamp.Time
+	if s, ok := obj.Annotations[annotations.RoundAnchor]; ok {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			anchor = t
+		}
+	}
+	return time.Until(anchor.Add(timeout))
+}
+
+func (r *QueryReconciler) stampRoundAnchor(ctx context.Context, obj *arkv1alpha1.Query) error {
+	patch := client.RawPatch(types.MergePatchType, []byte(fmt.Sprintf(
+		`{"metadata":{"annotations":{%q:%q}}}`,
+		annotations.RoundAnchor,
+		time.Now().UTC().Format(time.RFC3339Nano),
+	)))
+	return r.Patch(ctx, obj, patch)
+}
+
+func preExecutionTimeoutMessage(phase string) string {
+	if phase == statusQueued {
+		return "Query timed out waiting for controller capacity"
+	}
+	return "Query timed out before execution began"
+}
+
 func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -263,7 +317,14 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 				return ctrl.Result{}, err
 			}
 		}
-		return ctrl.Result{RequeueAfter: queryCapacityRequeueDelay}, nil
+		// Clamp the requeue to the spec.timeout deadline so a saturated
+		// queue can't stall past the SLO — the next reconcile then hits the
+		// pre-flight timeout check in handleQueryExecution.
+		requeue := queryCapacityRequeueDelay
+		if budget := remainingBudget(&obj); budget > 0 && budget < requeue {
+			requeue = budget
+		}
+		return ctrl.Result{RequeueAfter: requeue}, nil
 	}
 
 	if obj.Status.Phase != statusRunning {
@@ -333,6 +394,11 @@ func (r *QueryReconciler) handleApprovedTask(ctx context.Context, obj *arkv1alph
 	// flows aren't penalised by earlier denials in the chain.
 	if err := r.resetApprovalCascadeCount(ctx, obj); err != nil {
 		log.Error(err, "failed to reset approval cascade counter")
+	}
+
+	if err := r.stampRoundAnchor(ctx, obj); err != nil {
+		log.Error(err, "failed to stamp round anchor for resumed round")
+		return ctrl.Result{}, err
 	}
 
 	r.clearOperationCacheForResumption(ctx, obj, "task completed")
@@ -432,7 +498,13 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 
 	if err := r.handleQueryDispatch(opCtx, &obj, dispatchSpan, impersonatedClient); err != nil {
-		_ = r.updateStatus(opCtx, &obj, statusError)
+		// Executor-context deadline → TimedOutInExecution; anything else →
+		// generic QueryErrored via the normal error path.
+		if stderrors.Is(err, context.DeadlineExceeded) {
+			_ = r.failQueryOnTimeout(opCtx, &obj, reasonTimedOutInExecution, "Query timed out during execution")
+		} else {
+			_ = r.updateStatus(opCtx, &obj, statusError)
+		}
 	}
 }
 
@@ -505,30 +577,16 @@ func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target ark
 		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
-	if agentCRD.Spec.ExecutionEngine == nil {
+	if !arka2a.IsNamedEngine(agentCRD.Spec.ExecutionEngine) {
 		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
-	if agentCRD.Spec.ExecutionEngine.Name == arka2a.ExecutionEngineA2A {
-		return r.resolveDefaultEngineAddress(ctx, namespace), nil
+	address, _, err := arka2a.ResolveExecutionEngineAddress(ctx, r.Client, agentCRD.Spec.ExecutionEngine, namespace)
+	if err != nil {
+		return "", err
 	}
 
-	engineName := agentCRD.Spec.ExecutionEngine.Name
-	engineNamespace := agentCRD.Spec.ExecutionEngine.Namespace
-	if engineNamespace == "" {
-		engineNamespace = namespace
-	}
-
-	var engineCRD arkv1prealpha1.ExecutionEngine
-	if err := r.Get(ctx, types.NamespacedName{Name: engineName, Namespace: engineNamespace}, &engineCRD); err != nil {
-		return "", fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, engineNamespace, err)
-	}
-
-	if engineCRD.Status.LastResolvedAddress == "" {
-		return "", fmt.Errorf("execution engine %s address not yet resolved", engineName)
-	}
-
-	return engineCRD.Status.LastResolvedAddress, nil
+	return address, nil
 }
 
 // resolveDefaultEngineAddress returns the dispatch address for queries with no
@@ -555,56 +613,27 @@ func (r *QueryReconciler) resolveDefaultEngineAddress(ctx context.Context, names
 func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (*arkv1alpha1.Response, engineResponseMeta, error) {
 	log := logf.FromContext(ctx)
 
-	metadata := map[string]any{
-		arka2a.QueryExtensionMetadataKey: map[string]string{
-			"name":      query.Name,
-			"namespace": query.Namespace,
-		},
-	}
-
-	userText := extractUserInput(ctx, query, r.Client)
-	var message protocol.Message
 	// Use conversationId from spec (user-provided) or status (from previous execution/resumption)
 	// This ensures we maintain the same conversation across approvals and resumptions
 	conversationId := query.Spec.ConversationId
 	if conversationId == "" {
 		conversationId = query.Status.ConversationId
 	}
-	if conversationId != "" {
-		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(userText),
-		}, nil, &conversationId)
-	} else {
-		message = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(userText),
-		})
-	}
-	message.Metadata = metadata
-	message.Extensions = []string{arka2a.QueryExtensionURI}
 
-	timeout := 5 * time.Minute
+	message := arka2a.NewQueryExtensionMessage(
+		extractUserInput(ctx, query, r.Client),
+		conversationId,
+		arka2a.QueryExtensionRef{Name: query.Name, Namespace: query.Namespace},
+	)
+
+	timeout := defaultQueryTimeout
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
-
-	a2aClient, err := arka2a.CreateA2AClient(execCtx, r.Client, address, nil, query.Namespace, query.Name, nil)
-	if err != nil {
-		cancel()
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
-	}
 	defer cancel()
 
-	blocking := true
-	params := protocol.SendMessageParams{
-		RPCID:   protocol.GenerateRPCID(),
-		Message: message,
-		Configuration: &protocol.SendMessageConfiguration{
-			Blocking: &blocking,
-		},
-	}
-
-	result, err := a2aClient.SendMessage(execCtx, params)
+	result, err := arka2a.SendQueryExtensionMessage(execCtx, r.Client, address, nil, query.Namespace, query.Name, message, nil)
 	if err != nil {
 		return nil, engineResponseMeta{}, fmt.Errorf("query execution failed: %w", err)
 	}
@@ -908,6 +937,18 @@ func isTerminalPhase(phase string) bool {
 	return false
 }
 
+// isPreExecutionPhase reports whether a Query is still waiting for Ark to
+// dispatch work. spec.timeout is a wall-SLO on these phases; running is
+// bounded per-round by the executor context, and input-required by the
+// A2ATask approval timeout — neither counted here.
+func isPreExecutionPhase(phase string) bool {
+	switch phase {
+	case "", statusPending, statusProvisioning, statusQueued:
+		return true
+	}
+	return false
+}
+
 // queryCompletedAt returns the timestamp when the Query reached a terminal
 // phase, or nil if it has not. The QueryCompleted condition flips to
 // Status=True only on terminal phases (Done/Error/Canceled), and
@@ -1011,9 +1052,9 @@ func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
 }
 
 func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
-	if ctx.Err() != nil {
-		return nil
-	}
+	// This reconcile holds the freshest Response/TokenUsage/ConversationId in
+	// memory; the refetch inside mutateStatus would drop them, so re-apply the
+	// snapshot onto the refetched object before writing.
 	saved := savedQueryStatus{
 		response:       query.Status.Response,
 		tokenUsage:     query.Status.TokenUsage,
@@ -1022,7 +1063,71 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	// Do NOT clear A2A taskID when transitioning from input-required to running.
 	// The executor needs the taskID to detect this is a resumption after approval
 	// and clears it after processing (handler.go).
+	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
+		saved.restoreOnto(q)
+		q.Status.Phase = status
+		r.setConditionForPhase(q, status)
+		if duration != nil {
+			q.Status.Duration = duration
+		}
+		return true
+	}, "status="+status)
+}
 
+// failQueryOnTimeout transitions a Query to phase: error with a specific
+// TimedOutIn{Queue,Execution} condition reason, and mirrors the message
+// into Status.Response.Content so it renders in the same slot as executor
+// errors (chat UI, dashboard, kubectl describe). Idempotent on terminal.
+func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1alpha1.Query, reason, message string) error {
+	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
+		if isTerminalPhase(q.Status.Phase) {
+			// A completing executor won the race. Decline the write entirely so
+			// mutateStatus does not persist a snapshot that would regress the
+			// done query's Response/TokenUsage.
+			return false
+		}
+		q.Status.Phase = statusError
+		r.setConditionCompleted(q, metav1.ConditionTrue, reason, message)
+
+		// Overwrite Content/Phase with the timeout signal; preserve Target,
+		// Raw, and A2A metadata so the A2ATask correlation (taskID/contextID)
+		// and raw payload survive. Read from the refetched object: it holds the
+		// last persisted status, whereas the caller's Response may be an
+		// in-memory, unpersisted A2A-less error scratch value set by the
+		// dispatch error path that would drop the correlation.
+		target := arkv1alpha1.QueryTarget{}
+		var raw string
+		var a2a *arkv1alpha1.A2AMetadata
+		switch {
+		case q.Status.Response != nil:
+			target = q.Status.Response.Target
+			raw = q.Status.Response.Raw
+			a2a = q.Status.Response.A2A
+		case q.Spec.Target != nil:
+			target = *q.Spec.Target
+		}
+		q.Status.Response = &arkv1alpha1.Response{
+			Target:  target,
+			Content: message,
+			Raw:     raw,
+			Phase:   statusError,
+			A2A:     a2a,
+		}
+		return true
+	}, "timeout reason="+reason)
+}
+
+// mutateStatus is the shared retry-and-fetch shell used by updateStatus and
+// failQueryOnTimeout. It fetches the latest Query, runs the caller-supplied
+// mutator against the refetched object, then persists via Status().Update with
+// retry-on-conflict semantics. The mutator returns false to decline the write,
+// leaving the refetched object untouched (used to skip clobbering a query that
+// a concurrent writer already moved to a terminal phase). Callers own which
+// fields to preserve across the refetch. logCtx identifies the writer in logs.
+func (r *QueryReconciler) mutateStatus(ctx context.Context, query *arkv1alpha1.Query, mutate func(*arkv1alpha1.Query) bool, logCtx string) error {
+	if ctx.Err() != nil {
+		return nil
+	}
 	return retry.OnError(retry.DefaultBackoff, isRetriableStatusUpdateErr, func() error {
 		if ctx.Err() != nil {
 			return nil
@@ -1033,11 +1138,8 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 			}
 			return err
 		}
-		query.Status.Phase = status
-		saved.restoreOnto(query)
-		r.setConditionForPhase(query, status)
-		if duration != nil {
-			query.Status.Duration = duration
+		if !mutate(query) {
+			return nil
 		}
 		err := r.Status().Update(ctx, query)
 		if err != nil {
@@ -1045,7 +1147,7 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 				return nil
 			}
 			if !isRetriableStatusUpdateErr(err) {
-				logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+				logf.FromContext(ctx).Error(err, "failed to update query status", "context", logCtx)
 			}
 		}
 		return err
@@ -1268,6 +1370,11 @@ func (r *QueryReconciler) handleResumableDenial(ctx context.Context, obj *arkv1a
 	log.Info("A2ATask denied (resumable), resuming query execution for graceful handling", "taskId", taskID, "cascadeCount", count)
 	if err := r.incrementApprovalCascadeCount(ctx, obj, count); err != nil {
 		log.Error(err, "failed to increment approval cascade counter")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.stampRoundAnchor(ctx, obj); err != nil {
+		log.Error(err, "failed to stamp round anchor for resumed round")
 		return ctrl.Result{}, err
 	}
 
