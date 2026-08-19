@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/storage"
@@ -813,6 +814,38 @@ func TestGenericStorage_Watch_FieldSelectorReturnsBadRequest(t *testing.T) {
 	}
 	if !apierrors.IsBadRequest(err) {
 		t.Errorf("expected BadRequest, got %T: %v", err, err)
+	}
+}
+
+// expiredWatchBackend stands in for the PostgreSQL backend rejecting a resume from
+// below the purge floor, so the registry's error mapping can be tested in isolation.
+type expiredWatchBackend struct {
+	*mockBackend
+}
+
+func (b *expiredWatchBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
+	return nil, storage.ErrResourceExpired
+}
+
+func TestGenericStorage_Watch_TooOldResourceVersionReturnsExpired(t *testing.T) {
+	t.Parallel()
+	backend := &expiredWatchBackend{mockBackend: newMockBackend()}
+	config := ResourceConfig{
+		Kind:         "Agent",
+		Resource:     "agents",
+		SingularName: "agent",
+		NewFunc:      func() runtime.Object { return &arkv1alpha1.Agent{} },
+		NewListFunc:  func() runtime.Object { return &arkv1alpha1.AgentList{} },
+	}
+	gs := NewGenericStorage(backend, &mockConverter{}, config, nil)
+	ctx := contextWithNamespace(testNS())
+
+	_, err := gs.Watch(ctx, &metainternalversion.ListOptions{ResourceVersion: "5"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !apierrors.IsResourceExpired(err) {
+		t.Errorf("expected ResourceExpired (410), got %T: %v", err, err)
 	}
 }
 

@@ -188,7 +188,7 @@ type PostgreSQLBackend struct {
 	cancel       context.CancelFunc
 	cachedRV     atomic.Int64
 	// cachedPurgeFloor mirrors the persisted watch_purge_floor so Watch() can
-	// reject too-old resume points without a DB round-trip. See #2680 item 4.
+	// reject too-old resume points without a DB round-trip.
 	cachedPurgeFloor atomic.Int64
 	walOnce          sync.Once
 }
@@ -425,7 +425,7 @@ func (p *PostgreSQLBackend) cleanupLoop() {
 // stored (not in-memory) and merged with GREATEST because cleanupLoop runs in every
 // replica; a per-pod floor would diverge and reset on restart. A watch resuming from
 // an RV below the floor can no longer observe those tombstones, so Watch() rejects it
-// with a 410 (see #2680 item 4).
+// with a 410.
 func (p *PostgreSQLBackend) purgeExpired() {
 	const q = `
 	WITH purged AS (
@@ -465,6 +465,18 @@ func (p *PostgreSQLBackend) refreshPurgeFloor() {
 		return
 	}
 	p.storePurgeFloor(floor)
+}
+
+// checkResourceVersionNotExpired rejects a watch resume from below the purge floor
+// with a 410-equivalent: tombstones at or below the floor have been hard-deleted, so
+// resuming from before it would silently miss those deletions. A concrete floor of N
+// means everything through N may be gone; startRV == floor is still safe (the client
+// already holds the object at floor), so the comparison is strict.
+func (p *PostgreSQLBackend) checkResourceVersionNotExpired(startRV int64) error {
+	if floor := p.cachedPurgeFloor.Load(); startRV > 0 && startRV < floor {
+		return fmt.Errorf("%w: resourceVersion %d is older than purge floor %d", storage.ErrResourceExpired, startRV, floor)
+	}
+	return nil
 }
 
 func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -942,13 +954,8 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		startRV = int64(rv)
 	}
 
-	// Too-old resume points are rejected with a 410-equivalent: tombstones at or
-	// below the purge floor have been hard-deleted, so a watcher resuming from
-	// before the floor would silently miss those deletions. A concrete floor of N
-	// means everything through N may be gone; startRV == floor is still safe (the
-	// client already holds the object at floor). See #2680 item 4.
-	if floor := p.cachedPurgeFloor.Load(); startRV > 0 && startRV < floor {
-		return nil, fmt.Errorf("%w: resourceVersion %d is older than purge floor %d", storage.ErrResourceExpired, startRV, floor)
+	if err := p.checkResourceVersionNotExpired(startRV); err != nil {
+		return nil, err
 	}
 
 	w := &postgresWatcher{
