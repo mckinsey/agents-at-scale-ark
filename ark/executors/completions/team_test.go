@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -445,6 +447,23 @@ func TestMixedTeam_GraphEdgeRoutesEngineToA2AMember(t *testing.T) {
 	a2aInput := engineInputText(t, *h.a2aCaptured)
 	assert.Contains(t, a2aInput, "engine reply", "the transcript must reach a selector-routed a2a member")
 	assert.Contains(t, a2aInput, "# engine-member:")
+	assert.Equal(t, 1, strings.Count(a2aInput, "hi"),
+		"the selector transcript must not repeat the current input as a history turn")
+}
+
+func TestSelectorTranscriptKeepsInputOutOfMemberHistory(t *testing.T) {
+	history := []Message{namedAssistantMessage("earlier", "prior turn")}
+	userInput := NewUserMessage("current question")
+	accumulated := append(slices.Clone(history), namedAssistantMessage("member-a", "member turn"))
+
+	transcript := selectorTranscript(history, userInput, accumulated)
+
+	require.Len(t, transcript, 3)
+	assert.Equal(t, "prior turn", transcript[0].OfAssistant.Content.OfString.Value)
+	assert.Equal(t, "current question", transcript[1].OfUser.Content.OfString.Value,
+		"the selector sees the input in chronological order, before turns it caused")
+	assert.Equal(t, "member turn", transcript[2].OfAssistant.Content.OfString.Value)
+	assert.Len(t, accumulated, 2, "member history must not carry the current input")
 }
 
 func TestA2AMember_StandaloneInputExcludesHistory(t *testing.T) {
