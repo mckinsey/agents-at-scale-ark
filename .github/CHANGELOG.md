@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.1.68-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.68-rc.1...v0.1.68-rc.2) (2026-08-19)
+
+
+### Features
+
+* **auth:** support multiple JWT audiences per ark-api ([#3232](https://github.com/mckinsey/agents-at-scale-ark/issues/3232)) ([386b23d](https://github.com/mckinsey/agents-at-scale-ark/commit/386b23d49b98e4735e9ff897c164c55606b65e76))
+* **chart:** Enable the controller metrics ServiceMonitor by default  ([#3141](https://github.com/mckinsey/agents-at-scale-ark/issues/3141)) ([fc15b5f](https://github.com/mckinsey/agents-at-scale-ark/commit/fc15b5f31cf45e58643fae3e7976f139a73cd966))
+
+
+### Bug Fixes
+
+* **deps:** bump grpc to v1.83.1 to address XRAY-1057286 ([#3234](https://github.com/mckinsey/agents-at-scale-ark/issues/3234)) ([f8c0056](https://github.com/mckinsey/agents-at-scale-ark/commit/f8c0056cd370ad1bf1af8d438a492d57a3693398))
+
+## [0.1.68-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.68-rc...v0.1.68-rc.1) (2026-08-18)
+
+
+### Features
+
+* **controller:** fail Query on spec.timeout elapsed with TimedOut* reason ([#3027](https://github.com/mckinsey/agents-at-scale-ark/issues/3027)) ([b0acbef](https://github.com/mckinsey/agents-at-scale-ark/commit/b0acbef1abef2841e39d7c5a86d01674841081ab))
+* MCP token re-generation between agent and MCPServer ([#3126](https://github.com/mckinsey/agents-at-scale-ark/issues/3126)) ([20a439c](https://github.com/mckinsey/agents-at-scale-ark/commit/20a439c530bad20dfed6e81f57106c441b9bb092))
+
+
+### Bug Fixes
+
+* **apiserver:** ack the server WAL position so an idle publication cannot pin cluster WAL ([#3023](https://github.com/mckinsey/agents-at-scale-ark/issues/3023)) ([3dfc9ce](https://github.com/mckinsey/agents-at-scale-ark/commit/3dfc9ce2322bf16ecfa51a1d55aee4fbf04be9e0))
+* **ark-broker:** Add NODE_OPTIONS heap limit and expose cache metrics ([#3093](https://github.com/mckinsey/agents-at-scale-ark/issues/3093)) ([be4fdb3](https://github.com/mckinsey/agents-at-scale-ark/commit/be4fdb30e043faff42efeeace4df2035a8e661f4))
+* **ark-broker:** terminal query phase lost when a reordered non-terminal event raises the sequence watermark ([#3209](https://github.com/mckinsey/agents-at-scale-ark/issues/3209)) ([adef3a1](https://github.com/mckinsey/agents-at-scale-ark/commit/adef3a1ea6ef2713363169b4855ee0746f67b143))
+* auditing & admission policy gap in ARK's aggregated (PostgreSQL) apiserver ([#3053](https://github.com/mckinsey/agents-at-scale-ark/issues/3053)) ([9d47f49](https://github.com/mckinsey/agents-at-scale-ark/commit/9d47f49540dfea442be517c5e20add62432c5c1c))
+* **deps:** bump cryptography to 50.0.0 in ark-mcp ([#3192](https://github.com/mckinsey/agents-at-scale-ark/issues/3192)) ([44f56b2](https://github.com/mckinsey/agents-at-scale-ark/commit/44f56b29133878c431a23aefe46dd22be4d4e072))
+* **deps:** patch nanoid and postcss for remaining Dependabot CVEs ([#3191](https://github.com/mckinsey/agents-at-scale-ark/issues/3191)) ([46491eb](https://github.com/mckinsey/agents-at-scale-ark/commit/46491eb28cbcef138b965c44e34e343af07ed599))
+* **executor:** dispatch team members to named execution engines ([#3185](https://github.com/mckinsey/agents-at-scale-ark/issues/3185)) ([9ba64b0](https://github.com/mckinsey/agents-at-scale-ark/commit/9ba64b0f2c82f73bb1f1fca04b007df57f11f197))
+* **mcp:** revert go-sdk to v1.6.1 restoring pre-2026-07-28 MCP server support ([#3220](https://github.com/mckinsey/agents-at-scale-ark/issues/3220)) ([c638642](https://github.com/mckinsey/agents-at-scale-ark/commit/c638642660933b0356adab4de605586f1d1b757b))
+* **postgresql:** resume watch from client resourceVersion ([#3120](https://github.com/mckinsey/agents-at-scale-ark/issues/3120)) ([9f31269](https://github.com/mckinsey/agents-at-scale-ark/commit/9f31269a0f3fb4f68928be86cf56ed0ba0c80755))
+* **security:** bump golang.org/x/mod to 0.40.0 for CVE-2026-56864/56865 ([#3215](https://github.com/mckinsey/agents-at-scale-ark/issues/3215)) ([e9f092e](https://github.com/mckinsey/agents-at-scale-ark/commit/e9f092ea508858b1ca656470021551a340b70a78))
+* **security:** bump nanoid to 3.3.18 in docs to fix CVE-2026-67213 ([#3212](https://github.com/mckinsey/agents-at-scale-ark/issues/3212)) ([26d4d0b](https://github.com/mckinsey/agents-at-scale-ark/commit/26d4d0b1323ad08d76fa589212730c507ff8ad9e))
+* **security:** resolve Xray CVE violations (nanoid whitelist + Go 1.26.6 bump) ([#3206](https://github.com/mckinsey/agents-at-scale-ark/issues/3206)) ([2c77b35](https://github.com/mckinsey/agents-at-scale-ark/commit/2c77b358270815519575e187e7464633a9f72e05))
+
+
+### Documentation
+
+* Release process and authentication scopes ([#3029](https://github.com/mckinsey/agents-at-scale-ark/issues/3029)) ([fe78402](https://github.com/mckinsey/agents-at-scale-ark/commit/fe78402c2b8183a11e74d3575dc2a1a59dc229ac))
+
 ## [0.1.68-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.67...v0.1.68-rc) (2026-08-13)
 
 

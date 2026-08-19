@@ -175,6 +175,17 @@ export class InMemorySessionsStorage implements SessionsStorage {
     return this.store;
   }
 
+  cachedItemCount(): number {
+    return Object.keys(this.store.sessions).length;
+  }
+
+  cachedQueryCount(): number {
+    return Object.values(this.store.sessions).reduce(
+      (total, session) => total + Object.keys(session.queries).length,
+      0
+    );
+  }
+
   async getSession(sessionId: string): Promise<SessionEntry | undefined> {
     return this.store.sessions[sessionId];
   }

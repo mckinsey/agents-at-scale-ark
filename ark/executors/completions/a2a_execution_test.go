@@ -558,3 +558,27 @@ func TestConsumeA2AStreamEventsTaskArtifactsPreferredOverStatusMessage(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, []string{"artifact answer"}, result.A2AResponse.Messages, "artifacts win over the terminal status message on a Task snapshot")
 }
+
+func TestWithDefaultExecutionTimeout(t *testing.T) {
+	t.Run("bounds a caller with no deadline", func(t *testing.T) {
+		ctx, cancel := withDefaultExecutionTimeout(context.Background())
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok, "an unbounded caller must not leave the engine call unbounded")
+		assert.WithinDuration(t, time.Now().Add(defaultA2AExecutionTimeout), deadline, time.Minute)
+	})
+
+	t.Run("leaves a caller's own deadline alone", func(t *testing.T) {
+		callerCtx, callerCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer callerCancel()
+
+		ctx, cancel := withDefaultExecutionTimeout(callerCtx)
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		callerDeadline, _ := callerCtx.Deadline()
+		assert.Equal(t, callerDeadline, deadline, "the caller's deadline must not be extended to the default")
+	})
+}

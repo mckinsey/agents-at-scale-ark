@@ -3,11 +3,16 @@ package completions
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
 	telemetrynoop "mckinsey.com/ark/internal/telemetry/noop"
 )
@@ -179,4 +184,219 @@ func TestExecuteSequential_ContextCancelled(t *testing.T) {
 	_, err := team.Execute(ctx, NewUserMessage("hello"), nil, nil, nil, ExecuteOptions{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestExecuteSequential_ForwardsTranscriptToMembers(t *testing.T) {
+	var secondMemberHistory []Message
+
+	members := []TeamMember{
+		&execMockTeamMember{
+			name: "m1",
+			execFunc: func(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+				return &ExecutionResult{Messages: []Message{NewAssistantMessage("the capital is Paris")}}, nil
+			},
+		},
+		&execMockTeamMember{
+			name: "m2",
+			execFunc: func(_ context.Context, _ Message, history []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+				secondMemberHistory = history
+				return &ExecutionResult{Messages: []Message{NewAssistantMessage("population is 2.1m")}}, nil
+			},
+		},
+	}
+
+	team := newTestTeam(members, "sequential", false, nil)
+	_, err := team.Execute(context.Background(), NewUserMessage("tell me about France"), nil, nil, nil, ExecuteOptions{})
+	require.NoError(t, err)
+
+	rendered := renderEngineInput(NewUserMessage("tell me about France"), secondMemberHistory)
+	assert.Contains(t, rendered, "the capital is Paris", "the second member must see the first member's output")
+}
+
+func TestMakeTeam_EngineMemberNeedsNoModel(t *testing.T) {
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "engine-member", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Prompt:          "You are helpful",
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		},
+	}
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: "http://mock-engine:8080"},
+	}
+	teamCRD := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "engine-team", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "sequential",
+			Members:  []arkv1alpha1.TeamMember{{Type: MemberTypeAgent, Name: "engine-member"}},
+		},
+	}
+
+	k8sClient := engineTestClient(t, agent, engine)
+	ctx := engineQueryContext(t)
+
+	team, err := MakeTeam(ctx, k8sClient, teamCRD, telemetrynoop.NewProvider(), eventingnoop.NewProvider())
+	require.NoError(t, err)
+	require.Len(t, team.Members, 1)
+	assert.Equal(t, "engine-member", team.Members[0].GetName())
+}
+
+func mixedTeamFixture(t *testing.T, name string, spec arkv1alpha1.TeamSpec) (*Team, context.Context, *map[string]any) {
+	t.Helper()
+
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"local answer"},"finish_reason":"stop"}],"usage":{}}`))
+	}))
+	t.Cleanup(llm.Close)
+
+	captured := new(map[string]any)
+	engineServer := engineStub(t, "engine reply", captured)
+	t.Cleanup(engineServer.Close)
+
+	model := &arkv1alpha1.Model{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+		Spec: arkv1alpha1.ModelSpec{
+			Model:    arkv1alpha1.ValueSource{Value: "gpt-test"},
+			Provider: ProviderOpenAI,
+			Config: arkv1alpha1.ModelConfig{
+				OpenAI: &arkv1alpha1.OpenAIModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{Value: llm.URL},
+					APIKey:  arkv1alpha1.ValueSource{Value: "test"},
+				},
+			},
+		},
+	}
+	localAgent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "local-member", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Description: "Runs on the built-in completions engine",
+			Prompt:      "You are the local member",
+			ModelRef:    &arkv1alpha1.AgentModelRef{Name: "test-model"},
+		},
+	}
+	engineAgent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "engine-member", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Description:     "Runs on a named execution engine",
+			Prompt:          "You are the engine member",
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		},
+	}
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: engineServer.URL},
+	}
+
+	spec.Members = []arkv1alpha1.TeamMember{
+		{Type: MemberTypeAgent, Name: "local-member"},
+		{Type: MemberTypeAgent, Name: "engine-member"},
+	}
+	teamCRD := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec:       spec,
+	}
+
+	ctx := engineQueryContext(t)
+	team, err := MakeTeam(ctx, engineTestClient(t, model, localAgent, engineAgent, engine),
+		teamCRD, telemetrynoop.NewProvider(), eventingnoop.NewProvider())
+	require.NoError(t, err)
+	t.Cleanup(team.Close)
+
+	return team, ctx, captured
+}
+
+func engineInputText(t *testing.T, captured map[string]any) string {
+	t.Helper()
+	parts, ok := capturedMessage(t, captured)["parts"].([]any)
+	require.True(t, ok, "message has parts")
+	require.NotEmpty(t, parts)
+	text, ok := parts[0].(map[string]any)["text"].(string)
+	require.True(t, ok, "first part is text")
+	return text
+}
+
+func TestMakeTeam_MixedLocalAndEngineMembers(t *testing.T) {
+	team, ctx, captured := mixedTeamFixture(t, "mixed-team", arkv1alpha1.TeamSpec{Strategy: "sequential"})
+
+	require.Len(t, team.Members, 2)
+	assert.Equal(t, "local-member", team.Members[0].GetName())
+	assert.Equal(t, "engine-member", team.Members[1].GetName())
+
+	result, err := team.Execute(ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
+	require.NoError(t, err)
+	require.Len(t, result.Messages, 2)
+
+	assert.Equal(t, "local answer", result.Messages[0].OfAssistant.Content.OfString.Value)
+	assert.Equal(t, "local-member", result.Messages[0].OfAssistant.Name.Value)
+	assert.Equal(t, "engine reply", result.Messages[1].OfAssistant.Content.OfString.Value)
+	assert.Equal(t, "engine-member", result.Messages[1].OfAssistant.Name.Value)
+
+	require.NotNil(t, *captured, "the engine member must reach the execution engine")
+	assert.Equal(t, map[string]any{"type": "agent", "name": "engine-member"},
+		capturedRef(t, *captured)["target"])
+
+	engineInput := engineInputText(t, *captured)
+	assert.Contains(t, engineInput, "local answer", "the engine member must see the local member's turn")
+	assert.Contains(t, engineInput, "hi")
+}
+
+func TestMixedTeam_SelectorDispatchesToEngineMember(t *testing.T) {
+	team, ctx, captured := mixedTeamFixture(t, "mixed-selector-team", arkv1alpha1.TeamSpec{
+		Strategy: "selector",
+		MaxTurns: intPtr(1),
+		Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "selector-agent"},
+	})
+
+	selector := newMockSelectorAgent()
+	selector.returnName = "engine-member"
+	team.selectorAgent = selector
+
+	result, err := team.Execute(ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, selector.executeCalls)
+
+	require.Len(t, result.Messages, 2)
+	assert.Equal(t, "engine reply", result.Messages[0].OfAssistant.Content.OfString.Value)
+	assert.Equal(t, "engine-member", result.Messages[0].OfAssistant.Name.Value)
+	require.NotNil(t, result.Messages[1].OfSystem)
+	assert.Contains(t, result.Messages[1].OfSystem.Content.OfString.Value, "maximum turns")
+
+	require.NotNil(t, *captured)
+	assert.Equal(t, map[string]any{"type": "agent", "name": "engine-member"},
+		capturedRef(t, *captured)["target"])
+
+	prompt := selector.capturedHistory[0].OfSystem.Content.OfString.Value
+	assert.Contains(t, prompt, "local-member", "both member kinds must be offered as candidates")
+	assert.Contains(t, prompt, "engine-member")
+}
+
+func TestMixedTeam_GraphEdgeRoutesEngineToLocal(t *testing.T) {
+	team, ctx, captured := mixedTeamFixture(t, "mixed-graph-team", arkv1alpha1.TeamSpec{
+		Strategy: "selector",
+		MaxTurns: intPtr(2),
+		Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "selector-agent"},
+		Graph: &arkv1alpha1.TeamGraphSpec{
+			Edges: []arkv1alpha1.TeamGraphEdge{{From: "engine-member", To: "local-member"}},
+		},
+	})
+
+	selector := newMockSelectorAgent()
+	selector.returnName = "engine-member"
+	team.selectorAgent = selector
+
+	result, err := team.Execute(ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, selector.executeCalls, "the single legal transition must not consult the selector")
+
+	require.Len(t, result.Messages, 3)
+	assert.Equal(t, "engine-member", result.Messages[0].OfAssistant.Name.Value)
+	assert.Equal(t, "local answer", result.Messages[1].OfAssistant.Content.OfString.Value)
+	assert.Equal(t, "local-member", result.Messages[1].OfAssistant.Name.Value)
+	require.NotNil(t, result.Messages[2].OfSystem)
+
+	require.NotNil(t, *captured)
+	assert.Equal(t, map[string]any{"type": "agent", "name": "engine-member"},
+		capturedRef(t, *captured)["target"])
 }

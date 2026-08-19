@@ -19,6 +19,7 @@ import {
   applyQueryPhase,
   buildQueryEntry,
   deriveParticipants,
+  isTerminalPhase,
   mergeQueryMetadata,
   normalizeEventData,
   recalculateSessionConversations,
@@ -57,6 +58,7 @@ type SessionQueryRow = {
   last_activity: Date;
   last_applied_event_sequence: string;
   last_applied_message_sequence: string;
+  last_phase_event_sequence: string;
 };
 
 function rowToQueryEntry(row: SessionQueryRow): QueryEntry {
@@ -296,15 +298,25 @@ export class PostgresSessionsStorage implements SessionsStorage {
       `;
       const existingRow = existingRows[0];
 
-      // Out of order, so its phase must not be applied - but its identity
-      // fields still can be, because filling them is first-write-wins and
-      // order-independent. Dropping the whole event would lose the agent and
-      // conversationId that only the earlier event carries, and a query with
-      // no conversationId never joins its conversation at all.
+      // Two independent watermarks. `stale` (the all-events one) guards
+      // metadata order and which query wins the session-status election. A
+      // separate phase watermark, advanced only by terminal events, guards the
+      // phase: a reordered non-terminal event bumps `last_applied_event_sequence`
+      // but not the phase watermark, so the query's own `done` - applied after
+      // it with a lower sequence - is not mistaken for a replay and dropped.
       const stale =
         existingRow !== undefined &&
         sequence !== undefined &&
         sequence <= Number(existingRow.last_applied_event_sequence);
+      const phaseStale =
+        existingRow !== undefined &&
+        sequence !== undefined &&
+        sequence <= Number(existingRow.last_phase_event_sequence);
+      // Only terminal events decide the phase, so only they move its watermark;
+      // GREATEST keeps it from regressing and a 0 from a non-terminal event
+      // leaves it untouched.
+      const terminal = isTerminalPhase(queryPhase);
+      const phaseSequence = terminal ? (sequence ?? 0) : 0;
 
       const now = new Date().toISOString();
       const entry = existingRow
@@ -318,25 +330,32 @@ export class PostgresSessionsStorage implements SessionsStorage {
           );
       if (existingRow) {
         const filled = mergeQueryMetadata(entry, normalizedEventData);
-        if (stale && !filled) return false;
-        // Deliberately leaves lastActivity alone when stale: it elects which
-        // query decides the session's status, and an event we already know is
-        // out of order has no business winning that election.
-        if (!stale) applyQueryPhase(entry, queryPhase, now, errorMsg);
+        // Nothing left to do only when the metadata is stale, adds no field, and
+        // this event decides no phase newer than the last one - a non-terminal
+        // event never decides a phase, so it qualifies whenever it is stale.
+        if (stale && !filled && (!terminal || phaseStale)) return false;
+        if (!stale) {
+          applyQueryPhase(entry, queryPhase, now, errorMsg);
+        } else if (terminal && !phaseStale) {
+          // Metadata-stale but newer than the last phase decision: write the
+          // phase without re-electing this query as the session's latest
+          // activity (a higher-sequence event already holds that election).
+          applyQueryPhase(entry, queryPhase, now, errorMsg, false);
+        }
       }
 
       await sql`
         INSERT INTO session_queries (
           session_id, query_id, namespace, conversation_id, agent,
           team, tool, target_type, phase, error, created_at, completed_at,
-          last_activity, last_applied_event_sequence
+          last_activity, last_applied_event_sequence, last_phase_event_sequence
         ) VALUES (
           ${sessionId}, ${queryName}, ${entry.namespace ?? null},
           ${entry.conversationId ?? null}, ${entry.agent ?? null},
           ${entry.team ?? null}, ${entry.tool ?? null}, ${entry.targetType},
           ${entry.phase}, ${entry.error ?? null}, ${entry.createdAt},
           ${entry.completedAt ?? null}, ${entry.lastActivity},
-          ${sequence ?? 0}
+          ${sequence ?? 0}, ${phaseSequence}
         )
         ON CONFLICT (session_id, query_id) DO UPDATE SET
           namespace = EXCLUDED.namespace,
@@ -354,6 +373,10 @@ export class PostgresSessionsStorage implements SessionsStorage {
           last_applied_event_sequence = GREATEST(
             session_queries.last_applied_event_sequence,
             COALESCE(${sequence ?? null}::bigint, 0)
+          ),
+          last_phase_event_sequence = GREATEST(
+            session_queries.last_phase_event_sequence,
+            ${phaseSequence}::bigint
           )
       `;
 
