@@ -107,5 +107,5 @@
 - [ ] 10.4 Forward an `input-required` approval raised on one of the executor's outbound A2A hops back to the controller that owns the Query, so a sub-target or `executionEngine: a2a` agent can use the A2ATask flow the controller already has
 - [ ] 10.5 A2A `message/stream` on the engine path
 - [ ] 10.6 Record engine-declared extensions in `ExecutionEngine.status` for pre-flight capability checks
-- [ ] 10.7 Revisit `validateNoMixedTeam`
+- [x] 10.7 Revisit `validateNoMixedTeam`
 - [ ] 10.8 Have the completions chart inject the engine's own name, so a self-dispatching `executionEngine` can be caught at admission rather than at query time
