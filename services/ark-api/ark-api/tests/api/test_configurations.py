@@ -1,13 +1,15 @@
 """Tests for the configurations API and its reverse-reference lookup."""
 import inspect
+import json
 import os
+import re
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 os.environ["AUTH_MODE"] = "open"
 os.environ["READ_ONLY_MODE"] = "false"
 
-from ark_sdk import versions
+from ark_sdk import models, versions
 from fastapi.testclient import TestClient
 
 from ark_api.services.configuration_references import (
@@ -224,6 +226,36 @@ class TestReferringResourceVersions(unittest.TestCase):
                 source,
                 f"{kind} is declared as {version} but {version} has no '{attribute}'",
             )
+
+
+class TestReferringResourcesCompleteness(unittest.TestCase):
+    """Every kind whose spec accepts a configMapKeyRef must be reported."""
+
+    SPEC_MODEL = re.compile(r"^(?P<kind>.+?)(?P<version>V1[a-z0-9]+)Spec$")
+
+    def test_no_kind_that_reads_a_configuration_is_missing(self):
+        """Guards against a new CRD field silently reporting a configuration as unused.
+
+        The generated models come from the CRDs, so they are the source of truth
+        for which specs can carry a configMapKeyRef. A kind added there and not
+        here fails this test instead of shipping a wrong references list.
+        """
+        accepting = set()
+        for model_name in dir(models):
+            match = self.SPEC_MODEL.match(model_name)
+            if not match:
+                continue
+            schema = json.dumps(getattr(models, model_name).model_json_schema())
+            if "configMapKeyRef" in schema:
+                accepting.add((match.group("kind"), match.group("version").lower()))
+
+        declared = {(kind, version) for kind, _, version in REFERRING_RESOURCES}
+        self.assertEqual(
+            accepting,
+            declared,
+            f"missing from REFERRING_RESOURCES: {sorted(accepting - declared)}; "
+            f"declared but cannot read a configuration: {sorted(declared - accepting)}",
+        )
 
 
 if __name__ == '__main__':
