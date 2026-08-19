@@ -15,16 +15,43 @@ export const labelSchema = z
       "Use letters, digits, '-', '_' or '.', starting and ending with a letter or digit",
   });
 
-export const configurationFormSchema = z.object({
-  name: kubernetesNameSchema,
-  value: z.string().min(1, { message: 'Value is required' }),
-  description: z
-    .string()
-    .max(256, { message: 'Description must be 256 characters or less' })
-    .optional(),
-  alias: z.string().optional(),
-  labels: z.array(labelSchema),
-});
+export const validateLabelDraft = (
+  draft: string,
+  labels: string[],
+): string | null => {
+  const label = draft.trim();
+  if (!label) {
+    return null;
+  }
+  if (labels.includes(label)) {
+    return `"${label}" has already been added`;
+  }
+  const parsed = labelSchema.safeParse(label);
+  return parsed.success ? null : parsed.error.issues[0].message;
+};
+
+export const configurationFormSchema = z
+  .object({
+    name: kubernetesNameSchema,
+    value: z.string().min(1, { message: 'Value is required' }),
+    description: z
+      .string()
+      .max(256, { message: 'Description must be 256 characters or less' })
+      .optional(),
+    alias: z.string().optional(),
+    labels: z.array(labelSchema),
+    labelDraft: z.string(),
+  })
+  .superRefine((data, ctx) => {
+    const message = validateLabelDraft(data.labelDraft, data.labels);
+    if (message) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: ['labelDraft'],
+      });
+    }
+  });
 
 export type ConfigurationFormValues = z.infer<typeof configurationFormSchema>;
 

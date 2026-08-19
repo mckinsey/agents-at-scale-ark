@@ -213,10 +213,20 @@ export function ConfigurationForm({
               render={({ field }) => (
                 <FieldSet className="gap-2">
                   <FieldTitle>Labels</FieldTitle>
-                  <LabelsField
-                    value={field.value}
-                    onChange={field.onChange}
-                    disabled={isDisabled}
+                  <FormField
+                    control={form.control}
+                    name="labelDraft"
+                    render={({ field: draftField, fieldState }) => (
+                      <LabelsField
+                        value={field.value}
+                        onChange={field.onChange}
+                        draft={draftField.value}
+                        onDraftChange={draftField.onChange}
+                        onDraftTouched={draftField.onBlur}
+                        error={fieldState.error?.message}
+                        disabled={isDisabled}
+                      />
+                    )}
                   />
                 </FieldSet>
               )}

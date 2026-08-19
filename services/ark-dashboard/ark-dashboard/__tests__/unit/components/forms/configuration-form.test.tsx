@@ -133,6 +133,82 @@ describe('ConfigurationForm', () => {
     });
   });
 
+  it('refuses to create while a typed label is still invalid', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(NAME_FIELD), 'github-mcp-url');
+    await user.type(field(VALUE_FIELD), 'https://example.test/mcp/');
+    await user.type(field(LABEL_FIELD), 'mcp servers');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/starting and ending with a letter or digit/i),
+      ).toBeInTheDocument();
+    });
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled();
+    expect(field(LABEL_FIELD)).toHaveValue('mcp servers');
+  });
+
+  it('flags an invalid label on Enter, before the user reaches Create', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(LABEL_FIELD), 'mcp servers{Enter}');
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/starting and ending with a letter or digit/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('refuses to create while a typed label duplicates an existing one', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(NAME_FIELD), 'github-mcp-url');
+    await user.type(field(VALUE_FIELD), 'https://example.test/mcp/');
+    await user.type(field(LABEL_FIELD), 'mcp{Enter}');
+    await user.type(field(LABEL_FIELD), 'mcp');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/already been added/i)).toBeInTheDocument();
+    });
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('creates once the invalid label is corrected', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(NAME_FIELD), 'github-mcp-url');
+    await user.type(field(VALUE_FIELD), 'https://example.test/mcp/');
+    await user.type(field(LABEL_FIELD), 'mcp servers');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(
+        screen.getByText(/starting and ending with a letter or digit/i),
+      ).toBeInTheDocument();
+    });
+
+    await user.clear(field(LABEL_FIELD));
+    await user.type(field(LABEL_FIELD), 'mcp-servers');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(mockCreateMutateAsync).toHaveBeenCalledWith({
+        name: 'github-mcp-url',
+        value: 'https://example.test/mcp/',
+        description: null,
+        alias: null,
+        labels: ['mcp-servers'],
+      });
+    });
+  });
+
   it('locks the name field when editing an existing configuration', () => {
     mockUseGetConfiguration.mockReturnValue({
       data: {

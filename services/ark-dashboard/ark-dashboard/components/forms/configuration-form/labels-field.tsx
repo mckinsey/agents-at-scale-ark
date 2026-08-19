@@ -1,49 +1,47 @@
 'use client';
 
-import { useState, type KeyboardEvent } from 'react';
+import { type KeyboardEvent } from 'react';
 
 import { FieldDescription, FieldError } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Tag } from '@/components/ui/tag';
 
-import { labelSchema } from './types';
+import { validateLabelDraft } from './types';
 
 interface LabelsFieldProps {
   value: string[];
   onChange: (labels: string[]) => void;
+  draft: string;
+  onDraftChange: (draft: string) => void;
+  onDraftTouched?: () => void;
+  error?: string;
   disabled?: boolean;
 }
 
 export function LabelsField({
   value,
   onChange,
+  draft,
+  onDraftChange,
+  onDraftTouched,
+  error,
   disabled,
 }: Readonly<LabelsFieldProps>) {
-  const [draft, setDraft] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
   const addLabel = () => {
     const label = draft.trim();
     if (!label) {
       return;
     }
-    if (value.includes(label)) {
-      setError(`"${label}" has already been added`);
-      return;
-    }
-    const parsed = labelSchema.safeParse(label);
-    if (!parsed.success) {
-      setError(parsed.error.issues[0].message);
+    if (validateLabelDraft(draft, value)) {
+      onDraftTouched?.();
       return;
     }
     onChange([...value, label]);
-    setDraft('');
-    setError(null);
+    onDraftChange('');
   };
 
   const removeLabel = (label: string) => {
     onChange(value.filter(existing => existing !== label));
-    setError(null);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -79,12 +77,12 @@ export function LabelsField({
         value={draft}
         disabled={disabled}
         aria-invalid={!!error}
-        onChange={event => {
-          setDraft(event.target.value);
-          setError(null);
-        }}
+        onChange={event => onDraftChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        onBlur={addLabel}
+        onBlur={() => {
+          addLabel();
+          onDraftTouched?.();
+        }}
       />
       <FieldDescription>
         Labels group related configurations. Letters, digits, &apos;-&apos;,
