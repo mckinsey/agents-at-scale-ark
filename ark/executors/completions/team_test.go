@@ -13,6 +13,8 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
+	arkann "mckinsey.com/ark/internal/annotations"
 	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
 	telemetrynoop "mckinsey.com/ark/internal/telemetry/noop"
 )
@@ -242,7 +244,14 @@ func TestMakeTeam_EngineMemberNeedsNoModel(t *testing.T) {
 	assert.Equal(t, "engine-member", team.Members[0].GetName())
 }
 
-func mixedTeamFixture(t *testing.T, name string, spec arkv1alpha1.TeamSpec) (*Team, context.Context, *map[string]any) {
+type mixedTeamHarness struct {
+	team           *Team
+	ctx            context.Context
+	engineCaptured *map[string]any
+	a2aCaptured    *map[string]any
+}
+
+func mixedTeamFixture(t *testing.T, name string, spec arkv1alpha1.TeamSpec) *mixedTeamHarness {
 	t.Helper()
 
 	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -254,6 +263,10 @@ func mixedTeamFixture(t *testing.T, name string, spec arkv1alpha1.TeamSpec) (*Te
 	captured := new(map[string]any)
 	engineServer := engineStub(t, "engine reply", captured)
 	t.Cleanup(engineServer.Close)
+
+	a2aCaptured := new(map[string]any)
+	a2aStub := engineStub(t, "a2a reply", a2aCaptured)
+	t.Cleanup(a2aStub.Close)
 
 	model := &arkv1alpha1.Model{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
@@ -288,10 +301,30 @@ func mixedTeamFixture(t *testing.T, name string, spec arkv1alpha1.TeamSpec) (*Te
 		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
 		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: engineServer.URL},
 	}
+	a2aAgent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "a2a-member",
+			Namespace: "default",
+			Annotations: map[string]string{
+				arkann.A2AServerAddress: a2aStub.URL,
+				arkann.A2AServerName:    "mock-a2a",
+			},
+		},
+		Spec: arkv1alpha1.AgentSpec{
+			Description:     "Runs on the built-in a2a engine",
+			Prompt:          "You are the a2a member",
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: arka2a.ExecutionEngineA2A},
+		},
+	}
+	a2aServerCRD := &arkv1prealpha1.A2AServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-a2a", Namespace: "default"},
+	}
 
-	spec.Members = []arkv1alpha1.TeamMember{
-		{Type: MemberTypeAgent, Name: "local-member"},
-		{Type: MemberTypeAgent, Name: "engine-member"},
+	if len(spec.Members) == 0 {
+		spec.Members = []arkv1alpha1.TeamMember{
+			{Type: MemberTypeAgent, Name: "local-member"},
+			{Type: MemberTypeAgent, Name: "engine-member"},
+		}
 	}
 	teamCRD := &arkv1alpha1.Team{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
@@ -299,12 +332,12 @@ func mixedTeamFixture(t *testing.T, name string, spec arkv1alpha1.TeamSpec) (*Te
 	}
 
 	ctx := engineQueryContext(t)
-	team, err := MakeTeam(ctx, engineTestClient(t, model, localAgent, engineAgent, engine),
+	team, err := MakeTeam(ctx, engineTestClient(t, model, localAgent, engineAgent, engine, a2aAgent, a2aServerCRD),
 		teamCRD, telemetrynoop.NewProvider(), eventingnoop.NewProvider())
 	require.NoError(t, err)
 	t.Cleanup(team.Close)
 
-	return team, ctx, captured
+	return &mixedTeamHarness{team: team, ctx: ctx, engineCaptured: captured, a2aCaptured: a2aCaptured}
 }
 
 func engineInputText(t *testing.T, captured map[string]any) string {
@@ -318,13 +351,13 @@ func engineInputText(t *testing.T, captured map[string]any) string {
 }
 
 func TestMakeTeam_MixedLocalAndEngineMembers(t *testing.T) {
-	team, ctx, captured := mixedTeamFixture(t, "mixed-team", arkv1alpha1.TeamSpec{Strategy: "sequential"})
+	h := mixedTeamFixture(t, "mixed-team", arkv1alpha1.TeamSpec{Strategy: "sequential"})
 
-	require.Len(t, team.Members, 2)
-	assert.Equal(t, "local-member", team.Members[0].GetName())
-	assert.Equal(t, "engine-member", team.Members[1].GetName())
+	require.Len(t, h.team.Members, 2)
+	assert.Equal(t, "local-member", h.team.Members[0].GetName())
+	assert.Equal(t, "engine-member", h.team.Members[1].GetName())
 
-	result, err := team.Execute(ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
+	result, err := h.team.Execute(h.ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
 	require.NoError(t, err)
 	require.Len(t, result.Messages, 2)
 
@@ -333,17 +366,61 @@ func TestMakeTeam_MixedLocalAndEngineMembers(t *testing.T) {
 	assert.Equal(t, "engine reply", result.Messages[1].OfAssistant.Content.OfString.Value)
 	assert.Equal(t, "engine-member", result.Messages[1].OfAssistant.Name.Value)
 
-	require.NotNil(t, *captured, "the engine member must reach the execution engine")
+	captured := *h.engineCaptured
+	require.NotNil(t, captured, "the engine member must reach the execution engine")
 	assert.Equal(t, map[string]any{"type": "agent", "name": "engine-member"},
-		capturedRef(t, *captured)["target"])
+		capturedRef(t, captured)["target"])
 
-	engineInput := engineInputText(t, *captured)
+	engineInput := engineInputText(t, captured)
 	assert.Contains(t, engineInput, "local answer", "the engine member must see the local member's turn")
 	assert.Contains(t, engineInput, "hi")
 }
 
+func TestMixedTeam_A2AMemberReceivesTranscript(t *testing.T) {
+	h := mixedTeamFixture(t, "mixed-a2a-team", arkv1alpha1.TeamSpec{
+		Strategy: "sequential",
+		Members: []arkv1alpha1.TeamMember{
+			{Type: MemberTypeAgent, Name: "local-member"},
+			{Type: MemberTypeAgent, Name: "a2a-member"},
+		},
+	})
+
+	result, err := h.team.Execute(h.ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
+	require.NoError(t, err)
+	require.Len(t, result.Messages, 2)
+	assert.Equal(t, "a2a reply", result.Messages[1].OfAssistant.Content.OfString.Value)
+	assert.Equal(t, "a2a-member", result.Messages[1].OfAssistant.Name.Value)
+
+	captured := *h.a2aCaptured
+	require.NotNil(t, captured, "the a2a member must reach the A2A server")
+
+	a2aInput := engineInputText(t, captured)
+	assert.Contains(t, a2aInput, "local answer", "the a2a member must see the local member's turn")
+	assert.Contains(t, a2aInput, "# local-member:", "the transcript must attribute the turn to its member")
+	assert.Contains(t, a2aInput, "hi")
+}
+
+func TestA2AMember_StandaloneInputExcludesHistory(t *testing.T) {
+	h := mixedTeamFixture(t, "a2a-solo-team", arkv1alpha1.TeamSpec{
+		Strategy: "sequential",
+		Members:  []arkv1alpha1.TeamMember{{Type: MemberTypeAgent, Name: "a2a-member"}},
+	})
+
+	agent, ok := h.team.Members[0].(*Agent)
+	require.True(t, ok, "the a2a member is an agent")
+
+	history := []Message{NewAssistantMessage("an earlier conversation turn")}
+	_, err := agent.Execute(h.ctx, NewUserMessage("hi"), history, NewNoopMemory(), nil, ExecuteOptions{})
+	require.NoError(t, err)
+
+	captured := *h.a2aCaptured
+	require.NotNil(t, captured)
+	assert.Equal(t, "hi", engineInputText(t, captured),
+		"a standalone a2a request must carry only the current input, leaving history to the remote context")
+}
+
 func TestMixedTeam_SelectorDispatchesToEngineMember(t *testing.T) {
-	team, ctx, captured := mixedTeamFixture(t, "mixed-selector-team", arkv1alpha1.TeamSpec{
+	h := mixedTeamFixture(t, "mixed-selector-team", arkv1alpha1.TeamSpec{
 		Strategy: "selector",
 		MaxTurns: intPtr(1),
 		Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "selector-agent"},
@@ -351,9 +428,9 @@ func TestMixedTeam_SelectorDispatchesToEngineMember(t *testing.T) {
 
 	selector := newMockSelectorAgent()
 	selector.returnName = "engine-member"
-	team.selectorAgent = selector
+	h.team.selectorAgent = selector
 
-	result, err := team.Execute(ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
+	result, err := h.team.Execute(h.ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, selector.executeCalls)
 
@@ -363,9 +440,9 @@ func TestMixedTeam_SelectorDispatchesToEngineMember(t *testing.T) {
 	require.NotNil(t, result.Messages[1].OfSystem)
 	assert.Contains(t, result.Messages[1].OfSystem.Content.OfString.Value, "maximum turns")
 
-	require.NotNil(t, *captured)
+	require.NotNil(t, *h.engineCaptured)
 	assert.Equal(t, map[string]any{"type": "agent", "name": "engine-member"},
-		capturedRef(t, *captured)["target"])
+		capturedRef(t, *h.engineCaptured)["target"])
 
 	prompt := selector.capturedHistory[0].OfSystem.Content.OfString.Value
 	assert.Contains(t, prompt, "local-member", "both member kinds must be offered as candidates")
@@ -373,7 +450,7 @@ func TestMixedTeam_SelectorDispatchesToEngineMember(t *testing.T) {
 }
 
 func TestMixedTeam_GraphEdgeRoutesEngineToLocal(t *testing.T) {
-	team, ctx, captured := mixedTeamFixture(t, "mixed-graph-team", arkv1alpha1.TeamSpec{
+	h := mixedTeamFixture(t, "mixed-graph-team", arkv1alpha1.TeamSpec{
 		Strategy: "selector",
 		MaxTurns: intPtr(2),
 		Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "selector-agent"},
@@ -384,9 +461,9 @@ func TestMixedTeam_GraphEdgeRoutesEngineToLocal(t *testing.T) {
 
 	selector := newMockSelectorAgent()
 	selector.returnName = "engine-member"
-	team.selectorAgent = selector
+	h.team.selectorAgent = selector
 
-	result, err := team.Execute(ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
+	result, err := h.team.Execute(h.ctx, NewUserMessage("hi"), nil, NewNoopMemory(), nil, ExecuteOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, selector.executeCalls, "the single legal transition must not consult the selector")
 
@@ -396,7 +473,7 @@ func TestMixedTeam_GraphEdgeRoutesEngineToLocal(t *testing.T) {
 	assert.Equal(t, "local-member", result.Messages[1].OfAssistant.Name.Value)
 	require.NotNil(t, result.Messages[2].OfSystem)
 
-	require.NotNil(t, *captured)
+	require.NotNil(t, *h.engineCaptured)
 	assert.Equal(t, map[string]any{"type": "agent", "name": "engine-member"},
-		capturedRef(t, *captured)["target"])
+		capturedRef(t, *h.engineCaptured)["target"])
 }

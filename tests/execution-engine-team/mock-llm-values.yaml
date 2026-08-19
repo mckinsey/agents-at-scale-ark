@@ -43,6 +43,14 @@ config:
       status: 200
       content: '{"choices":[{"message":{"role":"assistant","content":"REVIEW-FAILED: no engine member turn in transcript"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}'
 
+  # Local member of the a2a team. Its reply is the marker that must reach the
+  # echo agent through the team transcript - the query input never carries it.
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'A2A Transcript Writer')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"A2A-TRANSCRIPT-MARKER"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}'
+
   # Same member, but the request also carries an assistant message attributed to
   # engine-member-a. addAgentNameToMessages stamps that name onto the engine
   # member's reply before it is appended to the shared transcript, so matching on
