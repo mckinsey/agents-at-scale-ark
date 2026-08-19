@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -185,7 +186,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
 	}
 
-	r.applyAuthorizationSuccess(&mcpServer, authMaterial)
+	authChanged := r.applyAuthorizationSuccess(&mcpServer, authMaterial)
 
 	toolsChanged, err := r.createTools(ctx, &mcpServer, mcpTools)
 	if err != nil {
@@ -198,9 +199,9 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 	if acqErr != nil {
 		// Do not schedule an early renewal retry against a failing
 		// authorization server; fall back to the ordinary poll.
-		return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged, nil)
+		return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged, authChanged, nil)
 	}
-	return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged, authMaterial)
+	return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged, authChanged, authMaterial)
 }
 
 func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (*arkmcp.AuthorizationMaterial, error) {
@@ -233,22 +234,24 @@ func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, 
 // spec.authorization is set and a non-empty access token drove the
 // connection, status is transitioned to Authorized with expiresAt
 // derived from the Secret.
-func (r *MCPServerReconciler) applyAuthorizationSuccess(mcpServer *arkv1alpha1.MCPServer, material *arkmcp.AuthorizationMaterial) {
+func (r *MCPServerReconciler) applyAuthorizationSuccess(mcpServer *arkv1alpha1.MCPServer, material *arkmcp.AuthorizationMaterial) bool {
 	if material == nil {
 		if mcpServer.Status.Authorization != nil {
 			mcpServer.Status.Authorization = nil
+			return true
 		}
-		return
+		return false
 	}
 
 	if material.AccessToken == "" {
 		// No token yet — the 401 path owns Required state. Leave any
 		// prior discovery status alone.
-		return
+		return false
 	}
 
 	now := metav1.Now()
-	auth := mcpServer.Status.Authorization
+	prev := mcpServer.Status.Authorization
+	auth := prev.DeepCopy()
 	if auth == nil {
 		auth = &arkv1alpha1.MCPServerAuthorizationStatus{}
 	}
@@ -257,6 +260,22 @@ func (r *MCPServerReconciler) applyAuthorizationSuccess(mcpServer *arkv1alpha1.M
 	auth.ExpiresAt = material.ExpiresAt
 	auth.LastDiscovered = &now
 	mcpServer.Status.Authorization = auth
+
+	return authorizationMeaningfullyChanged(prev, auth)
+}
+
+// authorizationMeaningfullyChanged reports whether two authorization blocks
+// differ in a field worth persisting. LastDiscovered is ignored so a routine
+// re-poll does not trigger a status write on every reconcile.
+func authorizationMeaningfullyChanged(a, b *arkv1alpha1.MCPServerAuthorizationStatus) bool {
+	if a == nil || b == nil {
+		return a != b
+	}
+	x := a.DeepCopy()
+	y := b.DeepCopy()
+	x.LastDiscovered = nil
+	y.LastDiscovered = nil
+	return !equality.Semantic.DeepEqual(x, y)
 }
 
 // reconcileCondition updates a condition on the MCPServer
@@ -489,7 +508,8 @@ func (r *MCPServerReconciler) reconcileConditionsAuthorizationDiscoveryFailed(ct
 }
 
 // reconcileConditionsReady updates conditions when MCPServer is ready
-func (r *MCPServerReconciler) reconcileConditionsReady(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, toolCount int, toolsChanged bool) error {
+func (r *MCPServerReconciler) reconcileConditionsReady(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, toolCount int, toolsChanged, authChanged bool) error {
+	toolCountChanged := mcpServer.Status.ToolCount != toolCount
 	mcpServer.Status.ToolCount = toolCount
 	availableReason := "ToolsDiscovered"
 	availableMessage := fmt.Sprintf("Successfully discovered %d tools", toolCount)
@@ -500,11 +520,9 @@ func (r *MCPServerReconciler) reconcileConditionsReady(ctx context.Context, mcpS
 	changed1 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, "DiscoveryComplete", "Tool discovery completed")
 	changed2 := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionTrue, availableReason, availableMessage)
 
-	if changed1 || changed2 || toolsChanged {
-		if changed1 || changed2 {
-			if err := r.updateStatus(ctx, mcpServer); err != nil {
-				return err
-			}
+	if changed1 || changed2 || authChanged || toolCountChanged || toolsChanged {
+		if err := r.updateStatus(ctx, mcpServer); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -565,8 +583,8 @@ func (r *MCPServerReconciler) resolveHeaders(ctx context.Context, mcpServer *ark
 	return headers, nil
 }
 
-func (r *MCPServerReconciler) finalizeMCPServerProcessing(ctx context.Context, mcpServer arkv1alpha1.MCPServer, toolCount int, toolsChanged bool, authMaterial *arkmcp.AuthorizationMaterial) (ctrl.Result, error) {
-	if err := r.reconcileConditionsReady(ctx, &mcpServer, toolCount, toolsChanged); err != nil {
+func (r *MCPServerReconciler) finalizeMCPServerProcessing(ctx context.Context, mcpServer arkv1alpha1.MCPServer, toolCount int, toolsChanged, authChanged bool, authMaterial *arkmcp.AuthorizationMaterial) (ctrl.Result, error) {
+	if err := r.reconcileConditionsReady(ctx, &mcpServer, toolCount, toolsChanged, authChanged); err != nil {
 		return ctrl.Result{}, err
 	}
 
