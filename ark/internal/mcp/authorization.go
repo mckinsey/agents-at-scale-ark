@@ -18,25 +18,16 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
-// AuthorizationMaterial captures the bearer token and expiry derived from
-// spec.authorization.tokenSecretRef. A nil value means spec.authorization was
-// not set; a non-nil value with an empty AccessToken means the referenced
-// Secret is missing or has no usable token, in which case callers fall through
-// to the unauthenticated path and the existing 401 flow.
 type AuthorizationMaterial struct {
 	AccessToken string
 	ExpiresAt   *metav1.Time
+	// SecretMissing distinguishes "the Secret does not exist yet" from "it
+	// exists but carries no token". Both leave AccessToken empty and both fall
+	// through to the 401 path, but only the former is the expected cold-start
+	// state for a server whose token the controller mints itself.
+	SecretMissing bool
 }
 
-// ResolveAuthorizationMaterial reads spec.authorization.tokenSecretRef from the
-// MCPServer's own namespace, so both the controller's discovery path and the
-// executor's tool-invocation path resolve the same credential.
-//
-// The returned warnings describe operator-actionable misconfigurations: a
-// missing Secret first, then one per overridden *Key absent from the Secret, in
-// field order. Callers surface them however they can - the controller as
-// AuthorizationSecretUnresolvable events, the executor as logs. An unparseable
-// expiry is logged here and is not a warning.
 func ResolveAuthorizationMaterial(ctx context.Context, reader client.Reader, mcpServer *arkv1alpha1.MCPServer) (*AuthorizationMaterial, []string, error) {
 	if mcpServer.Spec.Authorization == nil {
 		return nil, nil, nil
@@ -51,6 +42,7 @@ func ResolveAuthorizationMaterial(ctx context.Context, reader client.Reader, mcp
 	if err := reader.Get(ctx, nn, secret); err != nil {
 		if errors.IsNotFound(err) {
 			msg := fmt.Sprintf("Secret %q not found in namespace %q — referenced by spec.authorization.tokenSecretRef.name", ref.Name, mcpServer.Namespace)
+			material.SecretMissing = true
 			return material, []string{msg}, nil
 		}
 		return nil, nil, fmt.Errorf("failed to read authorization secret %s: %w", ref.Name, err)
@@ -76,10 +68,6 @@ func ResolveAuthorizationMaterial(ctx context.Context, reader client.Reader, mcp
 	return material, warnings, nil
 }
 
-// missingOverriddenKeyWarnings reports each `*Key` override on
-// TokenSecretReference whose configured value differs from the default AND is
-// absent from the Secret. Default key absence is silent — it matches the
-// expected shape of a freshly provisioned, unpopulated shell Secret.
 func missingOverriddenKeyWarnings(secret *corev1.Secret, ref arkv1alpha1.TokenSecretReference) []string {
 	overrides := []struct {
 		fieldName string
@@ -108,9 +96,6 @@ func missingOverriddenKeyWarnings(secret *corev1.Secret, ref arkv1alpha1.TokenSe
 	return warnings
 }
 
-// ApplyBearer sets the Authorization header from the resolved token,
-// overwriting any value supplied via spec.headers. It is a no-op when no token
-// was resolved.
 func (m *AuthorizationMaterial) ApplyBearer(headers map[string]string) {
 	if m == nil || m.AccessToken == "" {
 		return

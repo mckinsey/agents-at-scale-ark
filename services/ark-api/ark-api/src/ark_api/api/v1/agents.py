@@ -220,29 +220,16 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
         # Get the existing agent first
         existing_agent = await ark_client.agents.a_get(agent_name)
         existing_spec = existing_agent.to_dict()["spec"]
-        
-        # Update only the fields that are provided
-        if body.description is not None:
-            existing_spec["description"] = body.description
-        
-        if body.executionEngine is not None:
-            existing_spec["executionEngine"] = body.executionEngine.model_dump(exclude_none=True)
-        
-        if body.modelRef is not None:
-            existing_spec["modelRef"] = body.modelRef.model_dump(exclude_none=True)
-        
-        if body.parameters is not None:
-            existing_spec["parameters"] = [param.model_dump(exclude_none=True) for param in body.parameters]
-        
-        if body.prompt is not None:
-            existing_spec["prompt"] = body.prompt
-        
-        if body.tools is not None:
-            existing_spec["tools"] = [tool.model_dump(exclude_none=True) for tool in body.tools]
 
-        if body.overrides is not None:
-            existing_spec["overrides"] = [override.model_dump(exclude_none=True) for override in body.overrides]
-        
+        # exclude_unset keeps only the fields the client actually sent, so an
+        # omitted field is left as-is while one explicitly set to null is
+        # cleared. Conflating those two was the original bug.
+        for field, value in body.model_dump(exclude_unset=True).items():
+            if value is None:
+                existing_spec.pop(field, None)
+            else:
+                existing_spec[field] = value
+
         # Update the agent
         # Get the full existing agent object and update its spec
         existing_agent_dict = existing_agent.to_dict()

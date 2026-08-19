@@ -28,6 +28,8 @@ import {createTracesRouter} from './http/routes/traces/index.js';
 import {createEventsRouter} from './http/routes/events/index.js';
 import {createSessionsRouter} from './http/routes/sessions/index.js';
 import {createOTLPRouter} from './http/routes/otlp.js';
+import {createMetricsRouter} from './http/routes/metrics/index.js';
+import {createMetricsRegistry} from './metrics/registry.js';
 import {setupSwagger} from './http/swagger.js';
 
 export type Brokers = {
@@ -77,6 +79,15 @@ export function buildApp(deps: {
   const events = new EventBroker(eventStream);
   const sessions = new SessionsBroker(sessionsStorage);
 
+  const metricsRegistry = createMetricsRegistry({
+    messages: messageStream.cachedItemCount?.bind(messageStream),
+    chunks: chunkStream.cachedItemCount?.bind(chunkStream),
+    spans: traces.cachedItemCount.bind(traces),
+    events: eventStream.cachedItemCount?.bind(eventStream),
+    sessions: sessionsStorage.cachedItemCount?.bind(sessionsStorage),
+    sessionQueries: sessionsStorage.cachedQueryCount?.bind(sessionsStorage),
+  });
+
   logger.info('brokers initialized');
 
   app.use(cors());
@@ -101,6 +112,7 @@ export function buildApp(deps: {
     }
   });
 
+  app.use('/metrics', createMetricsRouter(metricsRegistry));
   app.use('/', createMemoryRouter(memory, sessions));
   app.use('/stream', createStreamRouter(chunks));
   app.use('/traces', createTracesRouter(traces));
