@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.68-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.68-rc.1...v0.1.68-rc.2) (2026-08-19)
+
+
+### Features
+
+* **auth:** support multiple JWT audiences per ark-api ([#3232](https://github.com/mckinsey/agents-at-scale-ark/issues/3232)) ([386b23d](https://github.com/mckinsey/agents-at-scale-ark/commit/386b23d49b98e4735e9ff897c164c55606b65e76))
+* **chart:** Enable the controller metrics ServiceMonitor by default  ([#3141](https://github.com/mckinsey/agents-at-scale-ark/issues/3141)) ([fc15b5f](https://github.com/mckinsey/agents-at-scale-ark/commit/fc15b5f31cf45e58643fae3e7976f139a73cd966))
+
+
+### Bug Fixes
+
+* **deps:** bump grpc to v1.83.1 to address XRAY-1057286 ([#3234](https://github.com/mckinsey/agents-at-scale-ark/issues/3234)) ([f8c0056](https://github.com/mckinsey/agents-at-scale-ark/commit/f8c0056cd370ad1bf1af8d438a492d57a3693398))
+
 ## [0.1.68-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.68-rc...v0.1.68-rc.1) (2026-08-18)
 
 
