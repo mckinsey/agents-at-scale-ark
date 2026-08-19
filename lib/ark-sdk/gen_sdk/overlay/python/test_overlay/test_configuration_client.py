@@ -342,10 +342,30 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(await self.client.delete_configuration("github-mcp-url"))
 
-        mock_api_instance.delete_namespaced_config_map.assert_called_once_with(
-            name="github-mcp-url",
-            namespace="test-namespace"
+        kwargs = mock_api_instance.delete_namespaced_config_map.call_args.kwargs
+        self.assertEqual(kwargs["name"], "github-mcp-url")
+        self.assertEqual(kwargs["namespace"], "test-namespace")
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_delete_is_pinned_to_the_uid_it_verified(self, mock_v1_api, mock_api_client):
+        """The delete must name the exact object whose marker label was checked.
+
+        Without a uid precondition the ConfigMap can be replaced between the read
+        and the delete, and the delete lands on an object Ark does not own.
+        """
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_config_map = AsyncMock(
+            return_value=_config_map(uid="uuid-verified")
         )
+        mock_api_instance.delete_namespaced_config_map = AsyncMock(return_value=None)
+
+        await self.client.delete_configuration("github-mcp-url")
+
+        body = mock_api_instance.delete_namespaced_config_map.call_args.kwargs["body"]
+        self.assertEqual(body.preconditions.uid, "uuid-verified")
 
 
 class TestConfigurationInitK8sOrdering(unittest.IsolatedAsyncioTestCase):

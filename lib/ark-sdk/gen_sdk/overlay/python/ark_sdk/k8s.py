@@ -459,7 +459,12 @@ class ConfigurationClient:
         alias: Optional[str] = None,
         labels: Optional[List[str]] = None,
     ):
-        """Update an existing configuration."""
+        """Replace an existing configuration.
+
+        This is a full replace, not a partial update. Omitting description,
+        alias or labels clears them on the stored configuration; callers must
+        send the complete desired state on every call.
+        """
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
@@ -490,9 +495,14 @@ class ConfigurationClient:
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
-            await self._read_configuration(v1, name)
+            existing = await self._read_configuration(v1, name)
             await v1.delete_namespaced_config_map(
                 name=name,
-                namespace=self.namespace
+                namespace=self.namespace,
+                body=client.V1DeleteOptions(
+                    preconditions=client.V1Preconditions(
+                        uid=existing.metadata.uid
+                    )
+                ),
             )
             return True

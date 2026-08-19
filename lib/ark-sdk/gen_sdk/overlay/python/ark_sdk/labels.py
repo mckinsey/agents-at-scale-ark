@@ -1,7 +1,9 @@
 import re
 from typing import Dict, List, Optional
 
-ARK_LABEL_PREFIX = "ark.mckinsey.com/"
+from ark_sdk.constants import ARK_DOMAIN
+
+ARK_LABEL_PREFIX = ARK_DOMAIN
 ARK_RESOURCE_TYPE_LABEL = f"{ARK_LABEL_PREFIX}resource-type"
 ARK_TAG_LABEL_PREFIX = f"{ARK_LABEL_PREFIX}label."
 

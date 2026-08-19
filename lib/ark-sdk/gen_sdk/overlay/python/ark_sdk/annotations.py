@@ -1,6 +1,8 @@
 from typing import Dict, Optional
 
-ARK_ANNOTATION_PREFIX = "ark.mckinsey.com/"
+from ark_sdk.constants import ARK_DOMAIN
+
+ARK_ANNOTATION_PREFIX = ARK_DOMAIN
 
 
 def filter_ark_annotations(annotations: Optional[Dict[str, str]]) -> Dict[str, str]:
