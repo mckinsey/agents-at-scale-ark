@@ -23,6 +23,29 @@ logger = logging.getLogger(__name__)
 JWKS_CACHE_TTL_SECONDS = int(os.getenv("OIDC_JWKS_CACHE_TTL_SECONDS", "300"))
 
 
+def _parse_audiences(value):
+    """Normalize a configured audience into the form ``jwt.decode`` expects.
+
+    ``OIDC_APPLICATION_ID`` (and ``ARK_AUDIENCE``) may list several
+    comma-separated audiences so a single ark-api can accept tokens minted for
+    any of them. PyJWT accepts ``audience`` as a str or a list and passes a
+    token whose ``aud`` matches any listed value.
+
+    Returns ``None`` when nothing is configured, a single ``str`` for one
+    audience (preserving prior behaviour), or a ``list[str]`` for several.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        parts = [str(v) for v in value]
+    else:
+        parts = str(value).split(",")
+    parts = [p.strip() for p in parts if p.strip()]
+    if not parts:
+        return None
+    return parts[0] if len(parts) == 1 else parts
+
+
 class TokenValidator:
     """Validates JWT tokens using JWKS."""
     
@@ -182,8 +205,10 @@ class TokenValidator:
             # Get the signing key
             signing_key = self._get_signing_key(token)
 
-            # Use issuer and audience from configuration
-            audience = self.config.audience
+            # Use issuer and audience from configuration. Audience may list
+            # several comma-separated values; PyJWT accepts a str or list and
+            # passes a token whose aud matches any of them.
+            audience = _parse_audiences(self.config.audience)
             issuer = self.config.issuer
 
             # Build options for validation
