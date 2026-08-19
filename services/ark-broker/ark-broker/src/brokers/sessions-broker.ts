@@ -161,6 +161,10 @@ export interface SessionsStorage {
   subscribe(
     callback: (data: {sessionId: string; queryName: string}) => void
   ): () => void;
+  /** Implemented only by backends that hold the index in the heap. */
+  cachedItemCount?(): number;
+  /** Implemented only by backends that hold the index in the heap. */
+  cachedQueryCount?(): number;
 }
 
 /**

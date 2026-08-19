@@ -103,3 +103,14 @@ This is the same boundary documented under [Log
 sanitization](/operations-guide/data-flow-and-encryption#log-sanitization) and [Data loss
 prevention](/operations-guide/data-flow-and-encryption#data-loss-prevention) — content-level
 DLP is a deployment responsibility, not something Ark performs.
+
+## Aggregated apiserver audit
+
+In **aggregated apiserver mode** (the opt-in PostgreSQL backend), Ark's aggregated apiserver
+emits its own **Kubernetes audit log** — separate from the payload/credential logging above.
+It is **on by default** and writes JSON audit records to stdout (collected like any other pod
+log), at `Metadata` level by default. Because the records are produced by the apiserver itself,
+they cover resource operations reaching it over the **direct service path**, which never transits
+the main kube-apiserver. Tune it via the `audit.*` values in the `chart-apiserver` chart
+(`enabled`, `level`, or a full custom `policy`). This audit trail records *that* an operation
+happened and its metadata; it is not a content-level DLP control.

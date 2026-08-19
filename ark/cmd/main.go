@@ -413,6 +413,22 @@ func runPostgresCleanup() {
 	setupLog.Info("postgres cleanup complete")
 }
 
+// envBool applies an optional boolean env var, leaving dst at its caller-set default when the
+// variable is unset. An unparseable value is an error rather than a silent fallback: these flags
+// decide whether admission enforcement runs at all.
+func envBool(name string, dst *bool) error {
+	v := os.Getenv(name)
+	if v == "" {
+		return nil
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		return fmt.Errorf("invalid %s %q: %w", name, v, err)
+	}
+	*dst = parsed
+	return nil
+}
+
 func apiserverConfigFromEnv() (apiserver.Config, error) {
 	cfg := apiserver.Config{}
 
@@ -445,6 +461,46 @@ func apiserverConfigFromEnv() (apiserver.Config, error) {
 	cfg.PostgresSSLRoot = os.Getenv("ARK_POSTGRES_SSL_ROOT_CERT")
 	cfg.PostgresSSLCert = os.Getenv("ARK_POSTGRES_SSL_CERT")
 	cfg.PostgresSSLKey = os.Getenv("ARK_POSTGRES_SSL_KEY")
+
+	// Audit defaults on; the chart wires the env explicitly. AuditLogPath "-" = stdout.
+	auditRequested := os.Getenv("ARK_APISERVER_AUDIT_ENABLED")
+	cfg.AuditEnabled = true
+	if auditRequested != "" {
+		enabled, err := strconv.ParseBool(auditRequested)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid ARK_APISERVER_AUDIT_ENABLED %q: %w", auditRequested, err)
+		}
+		cfg.AuditEnabled = enabled
+	}
+	cfg.AuditPolicyFile = os.Getenv("ARK_APISERVER_AUDIT_POLICY_FILE")
+	cfg.AuditLogPath = os.Getenv("ARK_APISERVER_AUDIT_LOG_PATH")
+	if cfg.AuditLogPath == "" {
+		cfg.AuditLogPath = "-"
+	}
+	// Audit records nothing without a policy file, so "on by default" only holds when one is
+	// configured. An explicit opt-in without one stays an error (see Server.applyAudit).
+	if auditRequested == "" && cfg.AuditPolicyFile == "" {
+		cfg.AuditEnabled = false
+	}
+
+	// Unset means enabled: CEL enforcement is the default, and only an explicit opt-out removes
+	// the cluster-wide policy watches.
+	celEnabled := true
+	if err := envBool("ARK_APISERVER_POLICY_CEL_ENABLED", &celEnabled); err != nil {
+		return cfg, err
+	}
+	cfg.CELDisabled = !celEnabled
+	if err := envBool("ARK_APISERVER_POLICY_CEL_REQUIRED", &cfg.CELRequired); err != nil {
+		return cfg, err
+	}
+
+	// Off unless asked for: enabling it puts a synchronous webhook call on every write.
+	if err := envBool("ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_ENABLED", &cfg.ThirdPartyWebhooks); err != nil {
+		return cfg, err
+	}
+	if err := envBool("ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED", &cfg.ThirdPartyWebhooksRequired); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 
@@ -461,6 +517,7 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 		os.Exit(1)
 	}
 	cfg.K8sClient = mgr.GetClient()
+	cfg.RestConfig = mgr.GetConfig()
 
 	server := apiserver.New(cfg)
 	if err := mgr.Add(server); err != nil {
