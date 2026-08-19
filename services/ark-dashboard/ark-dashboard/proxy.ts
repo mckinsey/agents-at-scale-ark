@@ -3,9 +3,11 @@ import { NextResponse } from 'next/server';
 import { type NextRequestWithAuth, auth } from './auth';
 import { SIGNIN_PATH } from './lib/constants/auth';
 
-// Auth-only edge gate. The proxy logic that used to live here now lives in
-// app/api/v1/[...proxy]/route.ts; this file restores the authentication gate
-// that was lost when the original middleware.ts was renamed (commit 001616dd9).
+// Auth-only edge gate. The request-forwarding logic that used to live here now
+// lives in app/api/v1/[...proxy]/route.ts; this file restores the authentication
+// gate that was lost when the original middleware.ts was renamed (commit
+// 001616dd9). Renamed middleware.ts -> proxy.ts for the Next.js 16 file
+// convention.
 //
 // In open mode, auth.ts's openauth wrapper injects a dummy session, so req.auth
 // is always truthy and nothing is redirected. In sso mode NextAuth populates
@@ -34,7 +36,7 @@ function stripTrailingSlashes(value?: string): string | undefined {
 }
 
 // Under a tenant prefix, Next.js does not reliably strip the configured
-// basePath from req.nextUrl.pathname in middleware, so the request arrives as
+// basePath from req.nextUrl.pathname in the proxy, so the request arrives as
 // e.g. /tenant-a/api/auth/signin. The public/sign-in allow-list below is
 // expressed with root-absolute paths, so we must normalise the pathname first
 // or /tenant-a/api/auth/signin fails startsWith('/api/auth') and !== SIGNIN_PATH,

@@ -99,7 +99,7 @@ export const useSecureCookies =
   process.env.AUTH_URL?.startsWith('https://') || false;
 const cookiePrefix = useSecureCookies ? '__Secure-' : '';
 
-// Resolved session cookie name. getToken() in middleware and federated
+// Resolved session cookie name. getToken() in the proxy and federated
 // signout MUST read by this exact name — Auth.js derives its decryption
 // salt from cookieName, so a bare-name read against a __Secure- cookie
 // returns null and every proxied call 401s. See issue #2318.

@@ -7,7 +7,7 @@
 import { APIClient } from './client';
 
 // Get backend service configuration from environment variables
-// These match the middleware configuration
+// These match the proxy configuration
 const getBackendUrl = () => {
   const host = process.env.ARK_API_SERVICE_HOST || 'localhost';
   const port = process.env.ARK_API_SERVICE_PORT || '8000';
