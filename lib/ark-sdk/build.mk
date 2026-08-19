@@ -17,6 +17,7 @@ ARK_SDK_OVERLAY_FILES := $(shell find $(ARK_SDK_LIB_DIR)/gen_sdk/overlay/python/
 # Pre-calculate all stamp paths
 ARK_SDK_STAMP_BUILD := $(ARK_SDK_OUT)/stamp-build
 ARK_SDK_STAMP_TEST := $(ARK_SDK_OUT)/stamp-test
+ARK_SDK_STAMP_NPM_INSTALL := $(ARK_SDK_OUT)/stamp-npm-install
 
 # Add library output directory to clean targets
 CLEAN_TARGETS += $(ARK_SDK_OUT)
@@ -42,10 +43,17 @@ $(ARK_SDK_OPENAPI): $(ARK_SDK_CRD_FILES) | $(OUT)
 	@mkdir -p $(dir $@)
 	cd $(ARK_SDK_LIB_DIR) && uv run python crd_to_openapi.py $(addprefix $(BUILD_ROOT)/,$(ARK_SDK_CRD_FILES)) > $@
 
+# Install the pinned openapi-generator-cli npm wrapper into a deterministic
+# node_modules path so its downloaded generator JAR can be cached by CI.
+$(ARK_SDK_STAMP_NPM_INSTALL): $(ARK_SDK_LIB_DIR)/package.json $(ARK_SDK_LIB_DIR)/package-lock.json | $(OUT)
+	@mkdir -p $(dir $@)
+	cd $(ARK_SDK_LIB_DIR) && npm ci
+	@touch $@
+
 # Build Python wheel in $(OUT) directory
-$(ARK_SDK_WHL): $(ARK_SDK_OPENAPI) $(ARK_SDK_LIB_DIR)/generate_ark_clients.py $(ARK_SDK_LIB_DIR)/pyproject.toml $(ARK_SDK_OVERLAY_FILES) | $(OUT)
+$(ARK_SDK_WHL): $(ARK_SDK_OPENAPI) $(ARK_SDK_LIB_DIR)/generate_ark_clients.py $(ARK_SDK_LIB_DIR)/pyproject.toml $(ARK_SDK_OVERLAY_FILES) $(ARK_SDK_STAMP_NPM_INSTALL) | $(OUT)
 	@mkdir -p $(ARK_SDK_OUT)/py-sdk
-	cd $(ARK_SDK_LIB_DIR) && PATH="$(BUILD_EXTRA_PATH)" npx --yes @openapitools/openapi-generator-cli generate -i $(ARK_SDK_OPENAPI) -g python -o $(ARK_SDK_OUT)/py-sdk --package-name ark_sdk
+	cd $(ARK_SDK_LIB_DIR) && PATH="$(BUILD_EXTRA_PATH)" ./retry.sh npx @openapitools/openapi-generator-cli generate -i $(ARK_SDK_OPENAPI) -g python -o $(ARK_SDK_OUT)/py-sdk --package-name ark_sdk
 	cd $(ARK_SDK_LIB_DIR) && tar -cf - -C gen_sdk/overlay/python . | tar -xf - -C $(ARK_SDK_OUT)/py-sdk
 	cd $(ARK_SDK_LIB_DIR) && uv run python generate_ark_clients.py -v $(ARK_SDK_OPENAPI) > $(ARK_SDK_OUT)/py-sdk/ark_sdk/versions.py
 	cd $(ARK_SDK_LIB_DIR) && uv run python generate_ark_clients.py -t $(ARK_SDK_OPENAPI) > $(ARK_SDK_OUT)/py-sdk/test/test_ark_client.py
