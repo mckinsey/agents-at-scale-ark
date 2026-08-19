@@ -47,19 +47,14 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  annotations:
-    {{- if .Values.crd.keep }}
-    "helm.sh/resource-policy": keep
-    {{- end }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   name: metrics-certs
   namespace: {{ .Release.Namespace }}
 spec:
   dnsNames:
-    - ark.{{ .Release.Namespace }}.svc
-    - ark.{{ .Release.Namespace }}.svc.cluster.local
-    - ark-metrics-service.{{ .Release.Namespace }}.svc
+    - ark-controller-manager-metrics-service.{{ .Release.Namespace }}.svc
+    - ark-controller-manager-metrics-service.{{ .Release.Namespace }}.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: selfsigned-issuer

@@ -57,6 +57,14 @@ const (
 	// listed tools using a Bearer token resolved from
 	// spec.authorization.tokenSecretRef.
 	MCPServerReasonAuthorized = "Authorized"
+
+	// MCPServerReasonTokenAcquisitionFailed indicates the controller
+	// could not mint a token via spec.authorization.clientCredentials —
+	// an unreadable signing key, an authorization server that does not
+	// advertise the required capabilities, or a rejected token request.
+	// Distinct from AuthorizationRequired: no browser flow can resolve
+	// this, so the dashboard must not offer one.
+	MCPServerReasonTokenAcquisitionFailed = "TokenAcquisitionFailed"
 )
 
 type MCPServerReconciler struct {
@@ -72,7 +80,7 @@ type MCPServerReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=mcpservers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools,verbs=get;list;watch;create;update;patch;delete;deletecollection
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 
@@ -146,6 +154,20 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		return ctrl.Result{}, err
 	}
 
+	authMaterial, acqErr := r.ensureToken(ctx, &mcpServer, authMaterial)
+	if acqErr != nil && !hasUsableToken(authMaterial) {
+		return r.reconcileConditionsTokenAcquisitionFailed(ctx, &mcpServer, acqErr)
+	}
+	if acqErr != nil {
+		// Renewal failed but the current token has not expired. Carry on
+		// with it and retry on the ordinary poll, per the requirement to
+		// retain a still-valid token across an acquisition failure.
+		logf.FromContext(ctx).Info("token renewal failed; continuing with the existing token",
+			"server", mcpServer.Name, "error", acqErr.Error())
+		r.Eventing.MCPServerRecorder().TokenAcquisitionFailed(ctx, &mcpServer,
+			fmt.Sprintf("renewal failed, continuing with the existing token: %v", acqErr))
+	}
+
 	mcpClient, err := r.createMCPClient(ctx, &mcpServer, authMaterial)
 	if err != nil {
 		return r.handleClientCreationError(ctx, &mcpServer, err)
@@ -174,13 +196,14 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
 	}
 
-	return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged)
+	if acqErr != nil {
+		// Do not schedule an early renewal retry against a failing
+		// authorization server; fall back to the ordinary poll.
+		return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged, nil)
+	}
+	return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged, authMaterial)
 }
 
-// resolveAuthorizationMaterial delegates to the shared resolver and surfaces
-// each warning as an AuthorizationSecretUnresolvable event. The same resolver
-// backs the completions executor, so discovery and tool invocation cannot
-// diverge on which credential they use.
 func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (*arkmcp.AuthorizationMaterial, error) {
 	material, warnings, err := arkmcp.ResolveAuthorizationMaterial(ctx, r.APIReader, mcpServer)
 	if err != nil {
@@ -188,9 +211,18 @@ func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, 
 	}
 
 	log := logf.FromContext(ctx)
+
+	// For a machine-managed server the controller creates this Secret itself
+	// moments later, so warning about its absence is noise on every cold
+	// start. Only the absence is suppressed — a Secret that exists with a
+	// mis-keyed override is still operator-actionable.
+	silent := material != nil && material.SecretMissing && isMachineManaged(mcpServer)
+
 	for _, warning := range warnings {
 		log.Info(warning)
-		r.Eventing.MCPServerRecorder().AuthorizationSecretUnresolvable(ctx, mcpServer, warning)
+		if !silent {
+			r.Eventing.MCPServerRecorder().AuthorizationSecretUnresolvable(ctx, mcpServer, warning)
+		}
 	}
 
 	return material, nil
@@ -391,6 +423,8 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 			authStatus.TokenEndpoint = as.TokenEndpoint
 			authStatus.RegistrationEndpoint = as.RegistrationEndpoint
 			authStatus.GrantTypesSupported = as.GrantTypesSupported
+			authStatus.TokenEndpointAuthMethodsSupported = as.TokenEndpointAuthMethodsSupported
+			authStatus.TokenEndpointAuthSigningAlgValuesSupported = as.TokenEndpointAuthSigningAlgValuesSupported
 			if len(as.ScopesSupported) > 0 {
 				authStatus.ScopesSupported = as.ScopesSupported
 			}
@@ -405,7 +439,14 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 	if displayName == "" {
 		displayName = authStatus.Resource
 	}
-	message := fmt.Sprintf("OAuth authorization required for %s. Run `ark mcp auth login %s` to authorize.", displayName, mcpServer.Name)
+	// A machine-managed server has no browser flow, so pointing the
+	// operator at the CLI would send them somewhere that cannot help.
+	var message string
+	if isMachineManaged(mcpServer) {
+		message = fmt.Sprintf("OAuth authorization required for %s. The controller will acquire a token via clientCredentials.", displayName)
+	} else {
+		message = fmt.Sprintf("OAuth authorization required for %s. Run `ark mcp auth login %s` to authorize.", displayName, mcpServer.Name)
+	}
 
 	r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, MCPServerReasonAuthorizationRequired, message)
 	r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, MCPServerReasonAuthorizationRequired, "Cannot attempt tool discovery until authorization is complete")
@@ -525,13 +566,14 @@ func (r *MCPServerReconciler) resolveHeaders(ctx context.Context, mcpServer *ark
 	return headers, nil
 }
 
-func (r *MCPServerReconciler) finalizeMCPServerProcessing(ctx context.Context, mcpServer arkv1alpha1.MCPServer, toolCount int, toolsChanged bool) (ctrl.Result, error) {
+func (r *MCPServerReconciler) finalizeMCPServerProcessing(ctx context.Context, mcpServer arkv1alpha1.MCPServer, toolCount int, toolsChanged bool, authMaterial *arkmcp.AuthorizationMaterial) (ctrl.Result, error) {
 	if err := r.reconcileConditionsReady(ctx, &mcpServer, toolCount, toolsChanged); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// fetch tools according to polling interval or default interval
-	return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
+	// fetch tools according to polling interval, waking earlier when a
+	// controller-managed token is due for renewal
+	return ctrl.Result{RequeueAfter: tokenRenewalRequeue(&mcpServer, authMaterial)}, nil
 }
 
 func (r *MCPServerReconciler) createTools(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, mcpTools []*mcp.Tool) (bool, error) {
@@ -674,7 +716,83 @@ func (r *MCPServerReconciler) convertInputSchemaToRawExtension(schema any) *runt
 	return &runtime.RawExtension{Raw: bytes}
 }
 
+// Field indexes mapping a Secret name back to the MCPServers that
+// reference it. Indexes rather than a List-and-filter so a Secret event
+// does not scan every MCPServer in the namespace.
+const (
+	indexTokenSecretRef = ".spec.authorization.tokenSecretRef.name"
+	indexSigningKeyRef  = ".spec.authorization.clientCredentials.clientAuthentication.privateKeyJWT.secretKeyRef.name"
+)
+
+func mcpServerTokenSecretIndexer(obj client.Object) []string {
+	mcpServer, ok := obj.(*arkv1alpha1.MCPServer)
+	if !ok || mcpServer.Spec.Authorization == nil {
+		return nil
+	}
+	if name := mcpServer.Spec.Authorization.TokenSecretRef.Name; name != "" {
+		return []string{name}
+	}
+	return nil
+}
+
+func mcpServerSigningKeyIndexer(obj client.Object) []string {
+	mcpServer, ok := obj.(*arkv1alpha1.MCPServer)
+	if !ok || mcpServer.Spec.Authorization == nil || mcpServer.Spec.Authorization.ClientCredentials == nil {
+		return nil
+	}
+	pkjwt := mcpServer.Spec.Authorization.ClientCredentials.ClientAuthentication.PrivateKeyJWT
+	if pkjwt == nil || pkjwt.SecretKeyRef.Name == "" {
+		return nil
+	}
+	return []string{pkjwt.SecretKeyRef.Name}
+}
+
+// findMCPServersForSecret enqueues every MCPServer that names this Secret
+// as either its token output or its signing-key input.
+//
+// This is the primary signal for Secret changes — a rotated signing key
+// or an out-of-band token edit is picked up immediately rather than at
+// the next poll. Expiry is not a Secret change and cannot arrive this
+// way, so the renewal requeue remains the mechanism for that.
+func (r *MCPServerReconciler) findMCPServersForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	seen := map[types.NamespacedName]struct{}{}
+	var requests []reconcile.Request
+
+	for _, index := range []string{indexTokenSecretRef, indexSigningKeyRef} {
+		var list arkv1alpha1.MCPServerList
+		if err := r.List(ctx, &list,
+			client.InNamespace(obj.GetNamespace()),
+			client.MatchingFields{index: obj.GetName()},
+		); err != nil {
+			logf.FromContext(ctx).Error(err, "mapping Secret to MCPServers",
+				"index", index, "secret", obj.GetName(), "namespace", obj.GetNamespace())
+			continue
+		}
+		for i := range list.Items {
+			nn := types.NamespacedName{Name: list.Items[i].Name, Namespace: list.Items[i].Namespace}
+			if _, dup := seen[nn]; dup {
+				continue
+			}
+			seen[nn] = struct{}{}
+			requests = append(requests, reconcile.Request{NamespacedName: nn})
+		}
+	}
+	return requests
+}
+
 func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	indexes := map[string]client.IndexerFunc{
+		indexTokenSecretRef: mcpServerTokenSecretIndexer,
+		indexSigningKeyRef:  mcpServerSigningKeyIndexer,
+	}
+	for field, indexer := range indexes {
+		if err := mgr.GetFieldIndexer().IndexField(
+			context.Background(), &arkv1alpha1.MCPServer{}, field, indexer,
+		); err != nil {
+			return err
+		}
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.MCPServer{}).
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToMCPServers), builder.WithPredicates(dataChangedPredicate())).
@@ -738,8 +856,15 @@ func mcpServerReferencesConfigMap(server arkv1alpha1.MCPServer, configMapName st
 }
 
 func mcpServerReferencesSecret(server arkv1alpha1.MCPServer, secretName string) bool {
-	if auth := server.Spec.Authorization; auth != nil && auth.TokenSecretRef.Name == secretName {
-		return true
+	if auth := server.Spec.Authorization; auth != nil {
+		if auth.TokenSecretRef.Name == secretName {
+			return true
+		}
+		if cc := auth.ClientCredentials; cc != nil {
+			if pkjwt := cc.ClientAuthentication.PrivateKeyJWT; pkjwt != nil && pkjwt.SecretKeyRef.Name == secretName {
+				return true
+			}
+		}
 	}
 	return mcpServerReferences(server,
 		func(vf *arkv1alpha1.ValueFromSource) bool {

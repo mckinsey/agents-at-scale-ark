@@ -3573,6 +3573,11 @@ export interface components {
             authorizedBy?: string | null;
             /** Expiresat */
             expiresAt?: string | null;
+            /**
+             * Machinemanaged
+             * @default false
+             */
+            machineManaged: boolean;
             /** Resourcename */
             resourceName?: string | null;
             /** State */

@@ -108,9 +108,12 @@ webhook:
   timeoutSeconds: 30
   failurePolicy: Fail
 
-# [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
+# [PROMETHEUS]: Create a ServiceMonitor so Prometheus scrapes controller
+# metrics. Enabled by default, but the ServiceMonitor only renders when the
+# Prometheus Operator CRDs (monitoring.coreos.com/v1) are present, so it is a
+# no-op on clusters without them. Set false to skip it entirely.
 prometheus:
-  enable: false
+  enable: true
 
 # [CERT-MANAGER]: To enable cert-manager injection to webhooks set true
 certmanager:

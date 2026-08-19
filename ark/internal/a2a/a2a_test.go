@@ -1,11 +1,18 @@
 package a2a
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
+
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 )
 
 func TestExtractTextFromTask(t *testing.T) {
@@ -489,5 +496,103 @@ func TestExtractApprovalTimeout(t *testing.T) {
 		d, ok := extractApprovalTimeout(map[string]any{"timeout": "1h30m"})
 		assert.True(t, ok)
 		assert.Equal(t, 90*time.Minute, d)
+	})
+}
+
+func TestExecuteA2AAgent(t *testing.T) {
+	var captured map[string]any
+	server := sendMessageStub(t, "server reply", &captured)
+
+	response, err := ExecuteA2AAgent(t.Context(), nil, server.URL, nil, "default", "hello", "my-agent", "my-query", "ctx-1", nil, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	assert.Equal(t, "server reply", response.Content)
+	assert.Equal(t, []string{"server reply"}, response.Messages)
+
+	params, ok := captured["params"].(map[string]any)
+	require.True(t, ok, "expected params on the request body")
+	sentMessage, ok := params["message"].(map[string]any)
+	require.True(t, ok, "expected a message on the request body")
+	assert.Equal(t, "ctx-1", sentMessage["contextId"])
+	assert.Nil(t, sentMessage["metadata"],
+		"the A2AServer path carries no query extension; only the execution engine path does")
+}
+
+func TestExecuteA2AAgentRecordsParseFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		var request map[string]any
+		require.NoError(t, json.Unmarshal(body, &request))
+
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result": map[string]any{
+				"kind":      "task",
+				"id":        "task-1",
+				"contextId": "ctx-1",
+				"status":    map[string]any{},
+			},
+		}))
+	}))
+	t.Cleanup(server.Close)
+
+	recorder := &recordingA2aRecorder{A2aRecorder: eventnoop.NewProvider().A2aRecorder()}
+
+	response, err := ExecuteA2AAgent(t.Context(), nil, server.URL, nil, "default", "hello", "my-agent", "my-query", "", recorder, nil)
+
+	require.Error(t, err)
+	assert.Nil(t, response)
+	require.Len(t, recorder.parseErrors, 1)
+	assert.Contains(t, recorder.parseErrors[0], "Failed to parse A2A response")
+}
+
+func TestExtractResponseFromMessageResult(t *testing.T) {
+	t.Run("nil result", func(t *testing.T) {
+		_, err := ExtractResponseFromMessageResult(t.Context(), nil, nil, "my-agent", "default", "my-query", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "result is nil")
+	})
+
+	t.Run("message result carries text and context", func(t *testing.T) {
+		contextID := "ctx-1"
+		result := &protocol.MessageResult{Result: &protocol.Message{
+			Role:      protocol.MessageRoleAgent,
+			Parts:     []protocol.Part{protocol.NewTextPart("agent said this")},
+			ContextID: &contextID,
+		}}
+
+		response, err := ExtractResponseFromMessageResult(t.Context(), nil, result, "my-agent", "default", "my-query", nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "agent said this", response.Content)
+		assert.Equal(t, []string{"agent said this"}, response.Messages)
+		assert.Equal(t, "ctx-1", response.ContextID)
+	})
+
+	t.Run("empty message result has no messages", func(t *testing.T) {
+		result := &protocol.MessageResult{Result: &protocol.Message{
+			Role:  protocol.MessageRoleAgent,
+			Parts: []protocol.Part{protocol.NewTextPart("")},
+		}}
+
+		response, err := ExtractResponseFromMessageResult(t.Context(), nil, result, "my-agent", "default", "my-query", nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, response.Content)
+		assert.Nil(t, response.Messages)
+	})
+
+	t.Run("unreadable task result", func(t *testing.T) {
+		result := &protocol.MessageResult{Result: &protocol.Task{ID: "task-1"}}
+
+		_, err := ExtractResponseFromMessageResult(t.Context(), nil, result, "my-agent", "default", "my-query", nil)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "task has no status state")
 	})
 }
