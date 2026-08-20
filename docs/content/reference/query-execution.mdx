@@ -83,7 +83,7 @@ The completions engine receives the message and sets up the run: it reads the `Q
 
 1. Applies the team's strategy — `sequential` or `selector` (optionally constrained by a `graph`). The deprecated `round-robin` and standalone `graph` strategies are migrated by the admission webhook (`round-robin` → `sequential` with loops; `graph` → `selector`).
 2. Coordinates execution across the members.
-3. Routes recursively — members with their own execution engine go back through A2A; the rest run locally.
+3. Routes recursively — members with their own execution engine go back through A2A; the rest run locally. A member call carries an explicit `target` in the query extension naming that member, because the query targets the team. Mixed teams — some members on a named engine, some not — are supported. Every member's output is appended to one transcript, delivered as structured messages to local members and as a `# <member>:`-attributed text transcript to named-engine members. A member on the built-in `a2a` engine contributes its output but receives only the query's original input, not the transcript — see [Mixed teams](/user-guide/teams#mixed-teams).
 
 ## 4. The response is written back
 

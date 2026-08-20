@@ -25,16 +25,17 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
 	telemetrynoop "mckinsey.com/ark/internal/telemetry/noop"
 )
 
-func TestExtractArkMetadata(t *testing.T) {
+func TestExtractQueryRef(t *testing.T) {
 	tests := []struct {
 		name      string
 		message   protocol.Message
-		wantQuery queryRef
+		wantQuery arka2a.QueryExtensionRef
 		wantErr   bool
 	}{
 		{
@@ -48,7 +49,7 @@ func TestExtractArkMetadata(t *testing.T) {
 					},
 				},
 			},
-			wantQuery: queryRef{Name: "q-123", Namespace: "default"},
+			wantQuery: arka2a.QueryExtensionRef{Name: "q-123", Namespace: "default"},
 		},
 		{
 			name: "missing metadata",
@@ -71,14 +72,14 @@ func TestExtractArkMetadata(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			meta, err := extractArkMetadata(tt.message)
+			ref, err := extractQueryRef(tt.message)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantQuery.Name, meta.Query.Name)
-			assert.Equal(t, tt.wantQuery.Namespace, meta.Query.Namespace)
+			assert.Equal(t, tt.wantQuery.Name, ref.Name)
+			assert.Equal(t, tt.wantQuery.Namespace, ref.Namespace)
 		})
 	}
 }
@@ -122,7 +123,7 @@ func TestExtractAssistantText(t *testing.T) {
 	}
 }
 
-func TestExtractArkMetadataQueryValidation(t *testing.T) {
+func TestExtractQueryRefValidation(t *testing.T) {
 	message := protocol.Message{
 		Role:  protocol.MessageRoleUser,
 		Parts: []protocol.Part{protocol.NewTextPart("hello")},
@@ -133,10 +134,44 @@ func TestExtractArkMetadataQueryValidation(t *testing.T) {
 		},
 	}
 
-	meta, err := extractArkMetadata(message)
+	ref, err := extractQueryRef(message)
 	require.NoError(t, err)
-	assert.Empty(t, meta.Query.Name)
-	assert.Empty(t, meta.Query.Namespace)
+	assert.Empty(t, ref.Name)
+	assert.Empty(t, ref.Namespace)
+}
+
+func TestExtractQueryRefTarget(t *testing.T) {
+	refWithTarget := func(target any) protocol.Message {
+		ref := map[string]any{"name": "q-123", "namespace": "default"}
+		if target != nil {
+			ref["target"] = target
+		}
+		return protocol.Message{
+			Role:     protocol.MessageRoleUser,
+			Parts:    []protocol.Part{protocol.NewTextPart("hello")},
+			Metadata: map[string]any{arka2a.QueryExtensionMetadataKey: ref},
+		}
+	}
+
+	t.Run("parses target", func(t *testing.T) {
+		ref, err := extractQueryRef(refWithTarget(map[string]any{"type": "agent", "name": "member-a"}))
+		require.NoError(t, err)
+		require.NotNil(t, ref.Target)
+		assert.Equal(t, "agent", ref.Target.Type)
+		assert.Equal(t, "member-a", ref.Target.Name)
+	})
+
+	t.Run("absent target is nil", func(t *testing.T) {
+		ref, err := extractQueryRef(refWithTarget(nil))
+		require.NoError(t, err)
+		assert.Nil(t, ref.Target)
+	})
+
+	t.Run("incomplete target is an error", func(t *testing.T) {
+		_, err := extractQueryRef(refWithTarget(map[string]any{"type": "agent"}))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "'type' and 'name'")
+	})
 }
 
 func TestSerializeResponseMessages(t *testing.T) {
@@ -183,9 +218,26 @@ func TestSerializeResponseMessages(t *testing.T) {
 	}
 }
 
+func TestA2AMultiArtifactSerializationDivergence(t *testing.T) {
+	resp := &arka2a.A2AResponse{
+		Content:  "first\nsecond",
+		Messages: []string{"first", "second"},
+	}
+	messages := buildMessagesFromA2AResponse(resp)
+	require.Len(t, messages, 2)
+
+	raw := serializeResponseMessages(messages)
+	var arr []json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(raw), &arr))
+	assert.Len(t, arr, 2, "raw carries one object per artifact message")
+
+	assert.Equal(t, "second", extractAssistantText(messages), "content collapses to the last assistant message")
+}
+
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	_ = arkv1alpha1.AddToScheme(scheme)
+	_ = arkv1prealpha1.AddToScheme(scheme)
 	return scheme
 }
 
@@ -199,6 +251,17 @@ func newTestHandler(objs ...client.Object) *Handler {
 		k8sClient: builder.Build(),
 		telemetry: telemetrynoop.NewProvider(),
 		eventing:  eventingnoop.NewProvider(),
+	}
+}
+
+func teamWithMembers(name string, agentNames ...string) *arkv1alpha1.Team {
+	members := make([]arkv1alpha1.TeamMember, 0, len(agentNames))
+	for _, agentName := range agentNames {
+		members = append(members, arkv1alpha1.TeamMember{Type: ToolTypeAgent, Name: agentName})
+	}
+	return &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec:       arkv1alpha1.TeamSpec{Strategy: "sequential", Members: members},
 	}
 }
 
@@ -229,11 +292,48 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			},
 		}
 
-		q, target, err := h.resolveQueryAndTarget(context.Background(), msg)
+		q, target, subTarget, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.NoError(t, err)
 		assert.Equal(t, "test-query", q.Name)
 		assert.Equal(t, "agent", target.Type)
 		assert.Equal(t, "my-agent", target.Name)
+		assert.Empty(t, subTarget, "a declared target is the query itself, not an isolated sub-target")
+
+		msg.Metadata[arka2a.QueryExtensionMetadataKey] = map[string]any{
+			"name": "test-query", "namespace": "default",
+			"target": map[string]any{"type": "agent", "name": "my-agent"},
+		}
+		_, _, _, err = h.resolveQueryAndTarget(context.Background(), msg)
+		require.Error(t, err, "a direct-agent query has nothing to delegate, so an override only suppresses its memory, stream and status")
+	})
+
+	t.Run("metadata target overrides the query spec target", func(t *testing.T) {
+		teamQuery := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: &arkv1alpha1.QueryTarget{Type: "team", Name: "my-team"},
+				Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
+			},
+		}
+		h := newTestHandler(teamQuery, teamWithMembers("my-team", "member-a"))
+		msg := protocol.Message{
+			Role:  protocol.MessageRoleUser,
+			Parts: []protocol.Part{protocol.NewTextPart("hello")},
+			Metadata: map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"name":      "team-query",
+					"namespace": "default",
+					"target":    map[string]any{"type": "agent", "name": "member-a"},
+				},
+			},
+		}
+
+		q, target, subTarget, err := h.resolveQueryAndTarget(context.Background(), msg)
+		require.NoError(t, err)
+		assert.Equal(t, "team-query", q.Name)
+		assert.Equal(t, "agent", target.Type)
+		assert.Equal(t, "member-a", target.Name)
+		assert.Equal(t, "member-a", subTarget)
 	})
 
 	t.Run("errors when query not found", func(t *testing.T) {
@@ -248,7 +348,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get query")
 	})
@@ -274,7 +374,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "has no target")
 	})
@@ -291,7 +391,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "query reference is required")
 	})
@@ -303,10 +403,169 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to extract ark metadata")
 	})
+}
+
+func TestValidateTargetOverride(t *testing.T) {
+	nestedTeam := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "outer-team", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "sequential",
+			Members: []arkv1alpha1.TeamMember{
+				{Type: ToolTypeAgent, Name: "member-a"},
+				{Type: ToolTypeTeam, Name: "inner-team"},
+			},
+		},
+	}
+	innerTeam := teamWithMembers("inner-team", "member-b")
+	selectorTeam := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "selector-team", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "selector",
+			Members:  []arkv1alpha1.TeamMember{{Type: ToolTypeAgent, Name: "member-a"}},
+			Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "picker"},
+		},
+	}
+	cyclicA := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "cycle-a", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "sequential",
+			Members:  []arkv1alpha1.TeamMember{{Type: ToolTypeTeam, Name: "cycle-b"}},
+		},
+	}
+	cyclicB := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{Name: "cycle-b", Namespace: "default"},
+		Spec: arkv1alpha1.TeamSpec{
+			Strategy: "sequential",
+			Members:  []arkv1alpha1.TeamMember{{Type: ToolTypeTeam, Name: "cycle-a"}},
+		},
+	}
+
+	query := &arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"}}
+	h := newTestHandler(nestedTeam, innerTeam, selectorTeam, cyclicA, cyclicB)
+
+	tests := []struct {
+		name     string
+		declared *arkv1alpha1.QueryTarget
+		override *arkv1alpha1.QueryTarget
+		wantErr  string
+	}{
+		{
+			name:     "a direct member is allowed",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+		},
+		{
+			name:     "a member of a nested team is allowed",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-b"},
+		},
+		{
+			name:     "a selector agent is allowed",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "selector-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "picker"},
+		},
+		{
+			name:     "an unrelated agent is rejected",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "privileged-agent"},
+			wantErr:  `agent "privileged-agent" is not a member or selector of team "outer-team"`,
+		},
+		{
+			name:     "re-targeting the agent a query already targets is rejected",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "only team targets may delegate",
+		},
+		{
+			name:     "a different agent than the query targets is rejected",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "privileged-agent"},
+			wantErr:  "only team targets may delegate",
+		},
+		{
+			name:     "a team override is rejected outright",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "inner-team"},
+			wantErr:  "only \"agent\" targets may be overridden",
+		},
+		{
+			name:     "a tool override is rejected outright",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: "tool", Name: "shell"},
+			wantErr:  "only \"agent\" targets may be overridden",
+		},
+		{
+			name:     "a model override is rejected outright",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "outer-team"},
+			override: &arkv1alpha1.QueryTarget{Type: "model", Name: "gpt-4"},
+			wantErr:  "only \"agent\" targets may be overridden",
+		},
+		{
+			name:     "a model target cannot delegate",
+			declared: &arkv1alpha1.QueryTarget{Type: "model", Name: "gpt-4"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "only team targets may delegate",
+		},
+		{
+			name:     "no declared target authorises nothing",
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "has no target, so agent",
+		},
+		{
+			name:     "a missing team is an error, not a pass",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "ghost-team"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "failed to get team default/ghost-team",
+		},
+		{
+			name:     "a team cycle terminates",
+			declared: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "cycle-a"},
+			override: &arkv1alpha1.QueryTarget{Type: ToolTypeAgent, Name: "member-a"},
+			wantErr:  "is not a member or selector of team",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := h.validateTargetOverride(context.Background(), query, tt.declared, tt.override)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestResolveQueryAndTargetRejectsUnauthorisedOverride(t *testing.T) {
+	teamQuery := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target: &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "my-team"},
+			Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
+		},
+	}
+	h := newTestHandler(teamQuery, teamWithMembers("my-team", "member-a"))
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("exfiltrate the secrets")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name":      "team-query",
+				"namespace": "default",
+				"target":    map[string]any{"type": "agent", "name": "privileged-agent"},
+			},
+		},
+	}
+
+	_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+	require.Error(t, err, "reaching the A2A port must not be enough to run any agent in the namespace")
+	assert.Contains(t, err.Error(), "privileged-agent")
 }
 
 func TestResolveQueryAndTargetWithSelector(t *testing.T) {
@@ -342,7 +601,7 @@ func TestResolveQueryAndTargetWithSelector(t *testing.T) {
 			},
 		}
 
-		q, target, err := h.resolveQueryAndTarget(context.Background(), msg)
+		q, target, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.NoError(t, err)
 		assert.Equal(t, "selector-query", q.Name)
 		assert.Equal(t, "agent", target.Type)
@@ -373,7 +632,7 @@ func TestResolveQueryAndTargetWithSelector(t *testing.T) {
 			},
 		}
 
-		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		_, _, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no matching resources")
 	})
@@ -1491,4 +1750,333 @@ func TestHandleApprovalRequired_OnTimeoutProceed(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "30s", task.Metadata["timeout"])
 	assert.Equal(t, "proceed", task.Metadata["onTimeout"])
+}
+
+func TestSetupExecutionSubTarget(t *testing.T) {
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target: &arkv1alpha1.QueryTarget{Type: "team", Name: "my-team"},
+			Input:  runtime.RawExtension{Raw: []byte(`"the original question posed to the team"`)},
+		},
+	}
+	target := &arkv1alpha1.QueryTarget{Type: "agent", Name: "member-b"}
+	const inbound = "# member-a:\nmember A already answered\n\nthe original question posed to the team"
+
+	t.Run("uses the inbound text, not the query input", func(t *testing.T) {
+		h := newTestHandler(query)
+		ctx := WithSubTargetAgent(context.Background(), "member-b")
+
+		_, state, err := h.setupExecution(ctx, query, target, "", inbound)
+		require.NoError(t, err)
+		defer state.querySpan.End()
+		defer state.targetSpan.End()
+
+		assert.True(t, state.isSubTarget)
+		require.Len(t, state.inputMessages, 1)
+		got := state.inputMessages[0].OfUser.Content.OfString.Value
+		assert.Equal(t, inbound, got)
+		assert.Contains(t, got, "member A already answered",
+			"losing this is how later members stop seeing earlier members' output")
+	})
+
+	t.Run("a normal invocation still uses the query input", func(t *testing.T) {
+		h := newTestHandler(query)
+
+		_, state, err := h.setupExecution(context.Background(), query, target, "", inbound)
+		require.NoError(t, err)
+		defer state.querySpan.End()
+		defer state.targetSpan.End()
+
+		assert.False(t, state.isSubTarget)
+		require.Len(t, state.inputMessages, 1)
+		assert.Equal(t, "the original question posed to the team", state.inputMessages[0].OfUser.Content.OfString.Value)
+	})
+}
+
+func TestSubTargetDoesNotWriteParentMemory(t *testing.T) {
+	h := newTestHandler()
+	memory := &recordingMemory{}
+
+	state := &executionState{
+		query:         arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"}},
+		memory:        memory,
+		inputMessages: []Message{NewUserMessage("in")},
+		isSubTarget:   true,
+	}
+	h.saveFinalMessagesToMemory(context.Background(), state, []Message{NewAssistantMessage("out")})
+	assert.Empty(t, memory.added, "the orchestrator writes the run to memory when it completes")
+
+	state.isSubTarget = false
+	h.saveFinalMessagesToMemory(context.Background(), state, []Message{NewAssistantMessage("out")})
+	assert.NotEmpty(t, memory.added, "a top-level run must still persist its messages")
+}
+
+func TestSetupExecutionSubTargetIsolation(t *testing.T) {
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target: &arkv1alpha1.QueryTarget{Type: "team", Name: "my-team"},
+			Input:  runtime.RawExtension{Raw: []byte(`"question"`)},
+		},
+	}
+	target := &arkv1alpha1.QueryTarget{Type: "agent", Name: "member-b"}
+
+	h := newTestHandler(query)
+	ctx := WithSubTargetAgent(context.Background(), "member-b")
+
+	_, state, err := h.setupExecution(ctx, query, target, "conv-1", "inbound text")
+	require.NoError(t, err)
+	defer state.querySpan.End()
+	defer state.targetSpan.End()
+
+	assert.Nil(t, state.eventStream, "publishing here would interleave with the caller's stream for the same query")
+
+	_, isNoop := state.memory.(*NoopMemory)
+	assert.True(t, isNoop, "every memory write path must be neutralised, not just the final save")
+
+	assert.False(t, state.memoryUnavailable, "the Noop memory is deliberate, not a degraded backend")
+
+	state.finalizeStream(context.Background(), []Message{NewAssistantMessage("out")}, arkv1alpha1.TokenUsage{})
+}
+
+type recordingMemory struct {
+	added []Message
+}
+
+func (m *recordingMemory) AddMessages(_ context.Context, _ string, messages []Message) error {
+	m.added = append(m.added, messages...)
+	return nil
+}
+func (m *recordingMemory) GetMessages(_ context.Context) ([]Message, error) { return nil, nil }
+func (m *recordingMemory) DeleteQuery(_ context.Context, _ string) error    { return nil }
+func (m *recordingMemory) Close() error                                     { return nil }
+
+func TestSubTargetSkipsResumption(t *testing.T) {
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Status: arkv1alpha1.QueryStatus{
+			Response: &arkv1alpha1.Response{
+				A2A: &arkv1alpha1.A2AMetadata{TaskID: "task-1"},
+			},
+		},
+	}
+	task := &arkv1alpha1.A2ATask{
+		ObjectMeta: metav1.ObjectMeta{Name: "a2a-task-task-1", Namespace: "default"},
+		Status:     arkv1alpha1.A2ATaskStatus{Phase: arka2a.PhaseCompleted},
+	}
+	h := newTestHandler(query, task)
+
+	t.Run("sub-target never resumes", func(t *testing.T) {
+		isResumption, _ := h.checkResumptionForState(context.Background(), &executionState{isSubTarget: true}, query)
+		assert.False(t, isResumption)
+	})
+
+	t.Run("a top-level call still resumes", func(t *testing.T) {
+		isResumption, _ := h.checkResumptionForState(context.Background(), &executionState{}, query)
+		assert.True(t, isResumption, "the orchestrator's own approval cycle must still work")
+	})
+}
+
+func TestSubTargetApprovalIsRejectedAtOrigin(t *testing.T) {
+	approvalErr := &ApprovalRequiredError{
+		ToolCalls: []ToolCall{{Function: openai.ChatCompletionMessageToolCallFunction{Name: "delete-database"}}},
+	}
+
+	assert.Equal(t, "tool delete-database", approvalToolNames(approvalErr))
+
+	t.Run("names the agent and the tool", func(t *testing.T) {
+		err := subTargetApprovalError("member-b", approvalErr)
+		assert.Contains(t, err.Error(), "member-b")
+		assert.Contains(t, err.Error(), "delete-database")
+		assert.Contains(t, err.Error(), "invoked as a sub-target")
+	})
+
+	t.Run("falls back to a count when no tool name is present", func(t *testing.T) {
+		assert.Equal(t, "2 tool call(s)", approvalToolNames(&ApprovalRequiredError{
+			ToolCalls: []ToolCall{{}, {}},
+		}))
+	})
+}
+
+func TestProcessMessageForwardsQueryConversationToEngineMember(t *testing.T) {
+	var captured map[string]any
+	stub := engineStub(t, "member reply", &captured)
+	t.Cleanup(stub.Close)
+
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: stub.URL},
+	}
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "member-a", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Prompt:          "You are member A",
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target:         &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "my-team"},
+			Input:          runtime.RawExtension{Raw: []byte(`"what is the weather?"`)},
+			ConversationId: "parent-conversation",
+		},
+	}
+
+	h := newTestHandler(engine, agent, query, teamWithMembers("my-team", "member-a"))
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("what is the weather?")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name":      "team-query",
+				"namespace": "default",
+			},
+		},
+	}
+	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+
+	_, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+	require.NoError(t, err)
+
+	require.NotNil(t, captured, "the member never reached the engine")
+	assert.Equal(t, "parent-conversation", capturedMessage(t, captured)["contextId"],
+		"a query in a conversation must dispatch its members in that conversation")
+	assert.Equal(t,
+		deriveMemberConversationID("parent-conversation", "default", "team-query", "member-a"),
+		capturedRef(t, captured)["conversationId"],
+		"a member resuming a conversation must not be handed a scope derived from the query name")
+}
+
+func TestProcessMessageSubTargetRejectsApproval(t *testing.T) {
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"","tool_calls":[{"id":"call-1","type":"function","function":{"name":"noop","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{}}`))
+	}))
+	t.Cleanup(llm.Close)
+
+	model := &arkv1alpha1.Model{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+		Spec: arkv1alpha1.ModelSpec{
+			Model:    arkv1alpha1.ValueSource{Value: "gpt-test"},
+			Provider: ProviderOpenAI,
+			Config: arkv1alpha1.ModelConfig{
+				OpenAI: &arkv1alpha1.OpenAIModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{Value: llm.URL},
+					APIKey:  arkv1alpha1.ValueSource{Value: "test"},
+				},
+			},
+		},
+	}
+	tool := &arkv1alpha1.Tool{
+		ObjectMeta: metav1.ObjectMeta{Name: "noop", Namespace: "default"},
+		Spec: arkv1alpha1.ToolSpec{
+			Type:        ToolTypeBuiltin,
+			Description: "does nothing",
+		},
+	}
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "member-b", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			ModelRef: &arkv1alpha1.AgentModelRef{Name: "test-model"},
+			Tools: []arkv1alpha1.AgentTool{{
+				Type:     "built-in",
+				Name:     "noop",
+				Approval: &arkv1alpha1.ToolApprovalConfig{Required: true},
+			}},
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target: &arkv1alpha1.QueryTarget{Type: "team", Name: "my-team"},
+			Input:  runtime.RawExtension{Raw: []byte(`"deploy it"`)},
+		},
+	}
+
+	h := newTestHandler(model, tool, agent, query, teamWithMembers("my-team", "member-b"))
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("deploy it")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name":      "team-query",
+				"namespace": "default",
+				"target":    map[string]any{"type": "agent", "name": "member-b"},
+			},
+		},
+	}
+	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+
+	result, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+
+	require.Error(t, err, "a sub-target cannot own an approval cycle")
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "member-b")
+	assert.Contains(t, err.Error(), "tool noop")
+	assert.Contains(t, err.Error(), "invoked as a sub-target")
+	assert.NotContains(t, err.Error(), "input-required",
+		"the caller must see a failure, not a task it has no way to resume")
+}
+
+func TestSetupExecutionFailures(t *testing.T) {
+	target := &arkv1alpha1.QueryTarget{Type: "agent", Name: "my-agent"}
+
+	t.Run("unreadable query input", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "bad-input-query", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: target,
+				Input:  runtime.RawExtension{Raw: []byte(`{"not":"a string"}`)},
+			},
+		}
+		h := newTestHandler(query)
+
+		_, state, err := h.setupExecution(context.Background(), query, target, "", "")
+
+		require.Error(t, err)
+		assert.Nil(t, state)
+		assert.Contains(t, err.Error(), "failed to get input messages")
+	})
+
+	t.Run("unreachable memory", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "bad-memory-query", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: target,
+				Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
+				Memory: &arkv1alpha1.MemoryRef{Name: "missing-memory"},
+			},
+		}
+		h := newTestHandler(query)
+
+		_, state, err := h.setupExecution(context.Background(), query, target, "", "")
+
+		require.Error(t, err)
+		assert.Nil(t, state)
+		assert.Contains(t, err.Error(), "failed to create memory client")
+	})
+
+	t.Run("a sub-target needs neither", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "sub-target-query", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: target,
+				Input:  runtime.RawExtension{Raw: []byte(`{"not":"a string"}`)},
+				Memory: &arkv1alpha1.MemoryRef{Name: "missing-memory"},
+			},
+		}
+		h := newTestHandler(query)
+		ctx := WithSubTargetAgent(context.Background(), "my-agent")
+
+		_, state, err := h.setupExecution(ctx, query, target, "", "inbound text")
+
+		require.NoError(t, err, "a sub-target reads its input from the message and writes no parent memory")
+		defer state.querySpan.End()
+		defer state.targetSpan.End()
+		require.Len(t, state.inputMessages, 1)
+		assert.Equal(t, "inbound text", state.inputMessages[0].OfUser.Content.OfString.Value)
+		assert.IsType(t, &NoopMemory{}, state.memory)
+	})
 }
