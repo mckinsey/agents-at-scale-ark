@@ -75,6 +75,10 @@ export class InMemoryChunkStream implements ChunkStream {
     return this.stream.all();
   }
 
+  cachedItemCount(): number {
+    return this.stream.cachedItemCount();
+  }
+
   async paginate(
     params: PaginationParams,
     queryId?: string

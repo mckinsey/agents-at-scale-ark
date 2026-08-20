@@ -46,12 +46,12 @@ max_wal_senders       >= 1
 
 ### Minimum version
 
-The watch stream decodes the WAL with the built-in `pgoutput` plugin and a `CREATE PUBLICATION`, both introduced in **PostgreSQL 10**, which is the hard minimum. Run a currently-supported major (**14 or newer**) in production.
+The watch stream decodes the WAL with the built-in `pgoutput` plugin and a `CREATE PUBLICATION`, introduced in PostgreSQL 10. The hard minimum is **PostgreSQL 13**: slot health checks read `pg_replication_slots.wal_status` and list pagination calls `pg_current_snapshot()`, neither of which exists in earlier majors. Run a currently-supported major (**14 or newer**) in production.
 
 A user/role with permission to:
 
 - `CREATE TABLE`, `CREATE INDEX`, `CREATE PUBLICATION` on the target database
-- `pg_replication_slots` access (typically the `REPLICATION` attribute or a member of `pg_create_logical_replication_slots`)
+- the **`REPLICATION`** attribute (`ALTER ROLE ark REPLICATION`). Postgres permits replication slots only to roles that hold this attribute, and no predefined role grants it. Managed services often withhold `ALTER ROLE` and expose an equivalent grant instead (for example `rds_replication` on AWS RDS) — check your provider's documentation.
 
 For managed services:
 
@@ -81,7 +81,21 @@ On first start, `ark-apiserver` creates:
 - Indexes on `(kind, namespace)`, `(kind, namespace, name)`, a GIN index on `labels`, and a unique partial index on active (non-deleted) rows.
 - A publication and a logical replication slot, both named `ark_cdc`. The slot is what powers `kubectl get -w` and controller informers.
 
-The slot is **persistent**: it survives apiserver restarts and is not removed by `helm uninstall`. See [Uninstall and cleanup](#uninstall-and-cleanup) below.
+The slot is **persistent**: it survives apiserver restarts. It is dropped automatically on `helm uninstall` — see [Uninstall and cleanup](#uninstall-and-cleanup) below.
+
+### WAL retention
+
+`ark_cdc` publishes only the `resources` table, but WAL is cluster-wide: while the slot holds a position, Postgres keeps every segment from that point, including changes for unrelated tables and databases on the same instance. The consumer therefore acknowledges the server's reported WAL position on each keepalive, not just its own last write, so an idle Ark install does not pin WAL on a busy instance.
+
+Check that the slot is keeping up:
+
+```sql
+SELECT slot_name, active,
+       pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS retained
+FROM pg_replication_slots WHERE slot_name = 'ark_cdc';
+```
+
+`retained` should stay small. Sustained growth means no replica is consuming the slot — check that a pod holds the `ark-apiserver-leader` lease and that `active` is true. Setting `max_slot_wal_keep_size` caps the damage: Postgres invalidates the slot instead of filling the disk, and the apiserver recreates it on the next restart.
 
 ## Installing PostgreSQL mode
 
@@ -221,6 +235,8 @@ The aggregated apiserver enforces the same access control as the rest of the clu
 - **Delegated authentication and authorization.** Every request is authenticated against the kube-apiserver (TokenReview and requestheader/front-proxy identity) and authorized via SubjectAccessReview, so Kubernetes RBAC on `ark.mckinsey.com` resources applies to direct service access as well as to the kubectl path. Health endpoints (`/healthz`, `/readyz`, `/livez`) stay unauthenticated. Set `ARK_APISERVER_AUTH_MODE=off` (for example via `extraEnv`) only for local development outside a cluster.
 - **Verified serving TLS.** With `certManager.enabled` (the default), cert-manager issues the serving certificate for the `ark-apiserver` service, mounts it into the pod, and injects the CA into both APIServices — the kube-apiserver verifies the aggregated apiserver's identity instead of `insecureSkipTLSVerify`. The certificate rotates through cert-manager and the server reloads it without a restart. Setting `certManager.enabled=false` restores the previous behavior (ephemeral self-signed certificate, unverified proxy channel) for clusters without cert-manager.
 - **Optional NetworkPolicy.** `networkPolicy.enabled=true` restricts ingress to the serving and health ports; use `networkPolicy.extraIngressFrom` to pin the allowed sources for the serving port (the origin of kube-apiserver traffic depends on your CNI, which is why this is off by default).
+- **Audit log.** `audit.enabled` (default `true`) makes the aggregated apiserver emit its own Kubernetes audit trail as JSON on stdout, at `Metadata` level by default. Because the records are produced in-process they cover the direct service path too. A policy file is mandatory when audit is enabled — without one the upstream backend records nothing, so the apiserver refuses to start rather than report audit as active while emitting nothing; the chart always mounts one. Tune with `audit.level` or supply a full `audit.policy`. Note that `Request`/`RequestResponse` levels put request and response bodies — including Query `.spec.input` — into your log pipeline.
+- **Policy enforcement.** The host kube-apiserver runs no webhook chain on aggregated resources, so this apiserver enforces policy itself, two independent ways. A native `ValidatingAdmissionPolicy` (CEL) is evaluated in-process (`policy.cel.enabled`, default `true`) and requires the **host cluster at k8s ≥1.30**. The webhook admission plugins can also be run here (`policy.thirdPartyWebhooks.enabled`, default `false`), which makes Kyverno/Gatekeeper webhook configurations fire on Ark resources; it is off by default because it puts a synchronous webhook call on every write. Each mechanism is best-effort by default: on an older host, if the startup discovery probe never succeeds, or if the ServiceAccount lacks the watch RBAC, the apiserver logs the reason and serves with that mechanism off (Ark's own in-process validation and audit still apply). Set `policy.cel.required=true` or `policy.thirdPartyWebhooks.required=true` to make that a startup failure instead. Policies that use `paramKind` need read access to the parameter resource via `policy.extraParamRules` unless the parameters live in ConfigMaps or Secrets, which are already granted.
 
 ## Availability and multi-replica behaviour
 
@@ -251,7 +267,14 @@ Treat the `resources` table like any other application table:
 
 `helm uninstall` runs a `post-delete` hook Job that drops the `ark_cdc` replication slot and publication. Without this cleanup, an orphaned slot would pin WAL retention and can fill the disk. The Job connects with the same credentials as the apiserver, so the password secret must still exist when you uninstall.
 
-If the hook Job could not run (for example the database was unreachable, or you removed the release with `--no-hooks`), drop the slot manually:
+Confirm in the database that the slot is gone rather than trusting the Job's log line — both queries should return no rows:
+
+```sql
+SELECT slot_name, active, wal_status FROM pg_replication_slots WHERE slot_name = 'ark_cdc';
+SELECT pubname FROM pg_publication WHERE pubname = 'ark_cdc';
+```
+
+If the hook Job could not run (for example the database was unreachable, you removed the release with `--no-hooks`, or the password secret was deleted first), drop the slot manually:
 
 ```sql
 SELECT pg_drop_replication_slot('ark_cdc');

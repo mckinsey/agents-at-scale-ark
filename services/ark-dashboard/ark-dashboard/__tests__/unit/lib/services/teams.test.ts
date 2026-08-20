@@ -43,7 +43,9 @@ describe('teamsService', () => {
 
       const result = await teamsService.getAll()
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`, {
+        params: { limit: 100 },
+      })
       expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team1`)
       expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team2`)
       

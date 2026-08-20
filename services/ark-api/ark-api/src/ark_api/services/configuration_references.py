@@ -10,6 +10,7 @@ REFERRING_RESOURCES = (
     ("Tool", "tools", "v1alpha1"),
     ("Memory", "memories", "v1alpha1"),
     ("MCPServer", "mcpservers", "v1alpha1"),
+    ("Query", "queries", "v1alpha1"),
     ("A2AServer", "a2aservers", "v1prealpha1"),
     ("ExecutionEngine", "executionengines", "v1prealpha1"),
 )

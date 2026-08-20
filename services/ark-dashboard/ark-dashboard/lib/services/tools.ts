@@ -1,5 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 
 // Tool interface for UI compatibility
 export interface Tool {
@@ -27,12 +28,6 @@ export interface ToolDetail {
     type: string;
   };
   status?: Record<string, unknown>;
-}
-
-// Tool list response
-interface ToolListResponse {
-  items: Tool[];
-  count: number;
 }
 
 // Fields shared by tool create and update used to build the tool spec
@@ -78,8 +73,8 @@ function buildToolSpec({
 export const toolsService = {
   // Get all tools in a namespace
   async getAll(): Promise<Tool[]> {
-    const response = await apiClient.get<ToolListResponse>(`/api/v1/tools`);
-    return response.items.map(item => ({ ...item, id: item.name }));
+    const items = await fetchAllPages<Omit<Tool, 'id'>>(`/api/v1/tools`);
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get detailed tool information including schema

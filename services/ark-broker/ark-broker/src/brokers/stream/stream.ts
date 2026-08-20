@@ -24,4 +24,5 @@ export interface Stream<T> {
   save(): Promise<void>;
   getCurrentSequence(): Promise<number>;
   subscribe(callback: (item: BrokerItem<T>) => void): () => void;
+  cachedItemCount?(): number;
 }
