@@ -119,10 +119,10 @@ type QueryReconciler struct {
 	sem        *semaphore.Weighted
 	operations sync.Map
 
-	// brokerEventsEndpoint resolves the broker endpoint for a namespace, used
-	// by deleteBrokerEvents. Defaults to routing.ResolveBrokerEndpoint when
-	// nil; tests override it to avoid depending on real cluster DNS.
-	brokerEventsEndpoint func(ctx context.Context, namespace string) (string, error)
+	// brokerEndpoint resolves the broker endpoint for a namespace, used by the
+	// finalizer's broker cleanups. Defaults to routing.ResolveBrokerEndpoint
+	// when nil; tests override it to avoid depending on real cluster DNS.
+	brokerEndpoint func(ctx context.Context, namespace string) (string, error)
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;create;update;patch;delete
@@ -1286,11 +1286,11 @@ func deleteBrokerResource(ctx context.Context, baseURL, path, resource, queryNam
 	return nil
 }
 
-// resolveBrokerEventsEndpoint resolves the broker endpoint for namespace,
-// returning "" when no broker is configured there.
-func (r *QueryReconciler) resolveBrokerEventsEndpoint(ctx context.Context, namespace string) (string, error) {
-	if r.brokerEventsEndpoint != nil {
-		return r.brokerEventsEndpoint(ctx, namespace)
+// resolveBrokerEndpoint resolves the broker endpoint for namespace, returning
+// "" when no broker is configured there.
+func (r *QueryReconciler) resolveBrokerEndpoint(ctx context.Context, namespace string) (string, error) {
+	if r.brokerEndpoint != nil {
+		return r.brokerEndpoint(ctx, namespace)
 	}
 	return routing.ResolveBrokerEndpoint(ctx, r.Client, namespace)
 }
@@ -1303,7 +1303,7 @@ func (r *QueryReconciler) resolveBrokerEventsEndpoint(ctx context.Context, names
 func (r *QueryReconciler) deleteBrokerEvents(ctx context.Context, query *arkv1alpha1.Query) error {
 	log := logf.FromContext(ctx)
 
-	endpoint, err := r.resolveBrokerEventsEndpoint(ctx, query.Namespace)
+	endpoint, err := r.resolveBrokerEndpoint(ctx, query.Namespace)
 	if err != nil {
 		return fmt.Errorf("failed to resolve broker endpoint: %w", err)
 	}

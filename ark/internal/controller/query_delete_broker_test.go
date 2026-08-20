@@ -251,7 +251,7 @@ func TestDeleteBrokerEvents_EndpointResolved(t *testing.T) {
 	srv, capturedMethod, capturedPath := makeBrokerServer(t, http.StatusOK)
 
 	r := &QueryReconciler{
-		brokerEventsEndpoint: func(_ context.Context, _ string) (string, error) {
+		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
 			return srv.URL, nil
 		},
 	}
@@ -274,7 +274,7 @@ func TestDeleteBrokerEvents_NoBrokerConfigured(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	r := &QueryReconciler{
-		brokerEventsEndpoint: func(_ context.Context, _ string) (string, error) {
+		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
 			return "", nil
 		},
 	}
@@ -291,7 +291,7 @@ func TestDeleteBrokerEvents_Broker500ReturnsError(t *testing.T) {
 	srv, _, _ := makeBrokerServer(t, http.StatusInternalServerError)
 
 	r := &QueryReconciler{
-		brokerEventsEndpoint: func(_ context.Context, _ string) (string, error) {
+		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
 			return srv.URL, nil
 		},
 	}
@@ -308,7 +308,7 @@ func TestDeleteBrokerEvents_Broker404IsSkipped(t *testing.T) {
 	srv, _, _ := makeBrokerServer(t, http.StatusNotFound)
 
 	r := &QueryReconciler{
-		brokerEventsEndpoint: func(_ context.Context, _ string) (string, error) {
+		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
 			return srv.URL, nil
 		},
 	}
@@ -320,14 +320,14 @@ func TestDeleteBrokerEvents_Broker404IsSkipped(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestResolveBrokerEventsEndpoint_DefaultUsesRoutingDiscovery(t *testing.T) {
+func TestResolveBrokerEndpoint_DefaultUsesRoutingDiscovery(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	fc := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	r := &QueryReconciler{Client: fc}
 
-	endpoint, err := r.resolveBrokerEventsEndpoint(context.Background(), "default")
+	endpoint, err := r.resolveBrokerEndpoint(context.Background(), "default")
 	require.NoError(t, err)
 	assert.Empty(t, endpoint, "no ark-config-broker ConfigMap exists, so no endpoint should resolve")
 }
