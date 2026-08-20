@@ -43,8 +43,15 @@ describe('DELETE /sessions/queries/:query_id', () => {
     expect(Object.keys(session!.queries)).toEqual(['query-2']);
   });
 
-  // A 404 here would be read by the controller's finalizer as "this broker does
-  // not implement the route" and skipped, hiding a genuine cleanup failure.
+  // Express does not match /queries/ against /queries/:query_id, so the handler
+  // never sees an empty id and needs no guard for one - this pins that.
+  test('an empty query id does not reach the handler at all', async () => {
+    await request(app).delete('/sessions/queries/').expect(404);
+  });
+
+  // A 404 for a *named* query would be read by the controller's finalizer as
+  // "this broker does not implement the route" and skipped, hiding a genuine
+  // cleanup failure.
   test('answers 200, not 404, for a query it has never seen', async () => {
     const res = await request(app)
       .delete('/sessions/queries/never-existed')
