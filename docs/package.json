@@ -39,7 +39,7 @@
     "vitest": "^4.0.17"
   },
   "optionalDependencies": {
-    "@napi-rs/simple-git-linux-arm64-gnu": "^0.1.19",
+    "@napi-rs/simple-git-linux-arm64-gnu": "^1.1.0",
     "@napi-rs/simple-git-linux-arm64-musl": "^0.1.19",
     "@napi-rs/simple-git-linux-x64-gnu": "^0.1.19",
     "@napi-rs/simple-git-linux-x64-musl": "^1.1.0"
