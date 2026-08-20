@@ -1,0 +1,106 @@
+---
+title: Configurations
+description: Parametrize Ark resources per environment with non-sensitive values
+---
+
+# Configurations
+
+A configuration holds a single non-sensitive value that Ark resources can reference instead of hardcoding it. The driving case is an MCP server address that differs per environment: the same `MCPServer` manifest applies unchanged in dev, staging, and production, with only the configuration behind it changing.
+
+Use a Secret for anything sensitive. Configuration values are stored unencrypted, returned in full by the Ark API, and displayed in the dashboard.
+
+## Create a configuration
+
+In the dashboard, open **Configurations** and select **Add configuration**. Each configuration has a name, a value, and optional description, alias, and labels.
+
+A configuration is a ConfigMap with an Ark marker label and a fixed `value` key, so it can also be created with `kubectl`:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: github-mcp-url
+  labels:
+    ark.mckinsey.com/resource-type: configuration
+    ark.mckinsey.com/label.mcp: "true"
+  annotations:
+    ark.mckinsey.com/description: GitHub remote MCP endpoint
+    ark.mckinsey.com/alias: github-mcp
+data:
+  value: https://api.githubcopilot.com/mcp/
+```
+
+| Field | Purpose |
+|---|---|
+| `data.value` | The value. The key is always `value` — one configuration holds one value. |
+| `ark.mckinsey.com/resource-type: configuration` | Marks the ConfigMap as a configuration. Without it, the Configurations page does not list it. |
+| `ark.mckinsey.com/label.<name>` | One label, always set to `"true"`. Labels are optional and a configuration may carry several. |
+| `ark.mckinsey.com/description` | Free text shown in the dashboard. |
+| `ark.mckinsey.com/alias` | An alternative name, for display only. See [Aliases do not resolve](#aliases-do-not-resolve). |
+
+Label names accept letters, digits, `-`, `_`, and `.`, must start and end with a letter or digit, and are limited to 57 characters. The API rejects anything else.
+
+A ConfigMap without the marker label stays invisible to the Configurations page, and Ark never adds the marker to a ConfigMap it did not create. Referencing such a ConfigMap from a resource still works — the marker only controls what the page manages.
+
+## Reference a configuration
+
+Any field that accepts `valueFrom` accepts `configMapKeyRef`:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: github
+spec:
+  transport: http
+  address:
+    valueFrom:
+      configMapKeyRef:
+        name: github-mcp-url
+        key: value
+```
+
+Fields that resolve this way include `MCPServer` `spec.address` and `spec.headers`, `Memory` `spec.address`, every `Model` credential and endpoint field including `properties`, and `Query` parameters, which can then be templated into the input.
+
+Three rules apply to every reference:
+
+- The ConfigMap must be in the same namespace as the resource that references it. There is no cross-namespace resolution.
+- `key` must name a key that exists. A missing ConfigMap or a missing key fails resolution and surfaces on the resource's status — it does not fall back to an empty value.
+- An inline `value` takes precedence over `valueFrom`. Set one or the other.
+
+## Updates reach consumers
+
+Most references resolve at request time, so a query issued after an update already uses the new value. Headers and overrides are resolved per query by the completions executor, and `Model` fields are resolved when the model is used.
+
+`MCPServer` is the exception, because it caches the resolved address and discovers tools against it. The controller watches ConfigMaps and reconciles every `MCPServer` whose `spec.address` or `spec.headers` names the changed one, so an update triggers re-resolution and tool rediscovery immediately rather than at the next poll.
+
+## Aliases do not resolve
+
+An alias is documentation. It is shown next to the name in the dashboard and stored as an annotation, and nothing resolves against it: `configMapKeyRef.name` always takes the configuration's name.
+
+Giving a configuration the alias `old-name` therefore does not make a manifest referencing `old-name` resolve. To deploy the same manifest in another namespace, create the configuration there under the name the manifest already uses.
+
+## Delete a configuration
+
+Deleting a configuration is allowed even when resources reference it. The dashboard first lists what would break: every `Agent`, `Model`, `Tool`, `Memory`, `MCPServer`, `A2AServer`, `ExecutionEngine`, and `Query` that names it, with the field that reads it. A resource whose reference no longer resolves reports the failure on its status.
+
+## Restrict what Ark can write
+
+Managing configurations requires `create`, `update`, and `delete` on ConfigMaps, so the Ark API's role grants them in the namespace it is installed in. RBAC cannot narrow this further: a rule has no label selector, and `resourceNames` cannot restrict `create` — the name does not exist yet. The Ark API checks the marker label before every write, but that check lives in the application.
+
+A ValidatingAdmissionPolicy enforces the same boundary at admission and ships enabled:
+
+```yaml
+configMapPolicy:
+  enabled: true
+```
+
+It denies every ConfigMap write by the Ark API service account except configurations, `ark-export-metadata`, and `marketplace-sources`. An update must also have been a configuration before the write, so the Ark API cannot adopt a ConfigMap it does not own by adding the marker to it. The policy matches on the service account rather than on a namespace, so it holds wherever that account is granted ConfigMap writes.
+
+It requires Kubernetes 1.30 or later. On older clusters the policy is skipped rather than failing the install, which leaves the Ark API's own marker check as the only boundary.
+
+## Related
+
+- [Creating Tools and MCP Servers](/user-guide/tools)
+- [Creating and Managing Models](/user-guide/models)
+- [Overrides](/user-guide/overrides)
