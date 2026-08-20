@@ -12,6 +12,13 @@ controllerManager:
   # objects. Set to 0 to use the controller-runtime default (1). See issue
   # #2609.
   maxConcurrentReconciles: 4
+  # Namespaces the controller watches and reconciles. Empty (default) watches all
+  # namespaces and binds the controller ServiceAccount cluster-wide. When set, the
+  # controller cache is confined to these namespaces and its access to core resources
+  # (Secrets, ConfigMaps, Services, Events) and Ark CRDs is granted through per-namespace
+  # RoleBindings instead of a cluster-wide ClusterRoleBinding. Include the release
+  # namespace so the controller can manage its own resources.
+  watchNamespaces: []
   container:
     image:
       repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-controller
