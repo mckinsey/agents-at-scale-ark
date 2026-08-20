@@ -1299,12 +1299,13 @@ func (r *QueryReconciler) resolveBrokerEndpoint(ctx context.Context, namespace s
 	return routing.ResolveBrokerEndpoint(ctx, r.Client, namespace)
 }
 
-// deleteBrokerEvents removes the broker's operation events for query. Unlike
-// deleteBrokerMessages, this does not go through the Memory contract: events
-// are emitted directly to the broker endpoint discovered via the
-// ark-config-broker ConfigMap (see internal/eventing/broker), keyed by the
-// Query's UID rather than its name (see operation_tracker.go).
-func (r *QueryReconciler) deleteBrokerEvents(ctx context.Context, query *arkv1alpha1.Query) error {
+// deleteBrokerQueryResource removes one query-scoped resource from the broker
+// serving query's namespace. Unlike deleteBrokerMessages this does not go
+// through the Memory contract: events and sessions are broker concerns, reached
+// at the endpoint discovered via the ark-config-broker ConfigMap (see
+// internal/eventing/broker). key is what the broker files the resource under,
+// and it is the one thing that differs between the callers.
+func (r *QueryReconciler) deleteBrokerQueryResource(ctx context.Context, query *arkv1alpha1.Query, pathFmt, resource, key string) error {
 	log := logf.FromContext(ctx)
 
 	endpoint, err := r.resolveBrokerEndpoint(ctx, query.Namespace)
@@ -1312,34 +1313,27 @@ func (r *QueryReconciler) deleteBrokerEvents(ctx context.Context, query *arkv1al
 		return fmt.Errorf("failed to resolve broker endpoint: %w", err)
 	}
 	if endpoint == "" {
-		log.Info("no broker configured for namespace, skipping broker event cleanup", "namespace", query.Namespace, "query", query.Name)
+		log.Info("no broker configured for namespace, skipping broker cleanup", "namespace", query.Namespace, "resource", resource, "query", query.Name)
 		return nil
 	}
 
-	path := fmt.Sprintf(common.QueryEventsEndpointFmt, url.PathEscape(string(query.UID)))
-	return deleteBrokerResource(ctx, endpoint, path, "events", query.Name)
+	path := fmt.Sprintf(pathFmt, url.PathEscape(key))
+	return deleteBrokerResource(ctx, endpoint, path, resource, query.Name)
+}
+
+// deleteBrokerEvents removes the broker's operation events for query, keyed by
+// the Query UID rather than its name (see operation_tracker.go).
+func (r *QueryReconciler) deleteBrokerEvents(ctx context.Context, query *arkv1alpha1.Query) error {
+	return r.deleteBrokerQueryResource(ctx, query, common.QueryEventsEndpointFmt, "events", string(query.UID))
 }
 
 // deleteBrokerSessionQuery removes query's row from the broker's sessions read
-// model. Like deleteBrokerEvents this talks to the broker endpoint rather than
-// the Memory contract, since sessions are not part of that contract - but the
-// key is the Query NAME, not the UID. session_queries.query_id is written from
-// the event's queryName field, and the sessions payload carries no UID at all,
-// so keying this on query.UID would match no rows and still get a 200 back.
+// model, keyed by the Query NAME and not the UID: session_queries.query_id is
+// written from the event's queryName field, and the sessions payload carries no
+// UID at all, so keying this on query.UID would match no rows and still get a
+// 200 back - the cleanup would silently do nothing.
 func (r *QueryReconciler) deleteBrokerSessionQuery(ctx context.Context, query *arkv1alpha1.Query) error {
-	log := logf.FromContext(ctx)
-
-	endpoint, err := r.resolveBrokerEndpoint(ctx, query.Namespace)
-	if err != nil {
-		return fmt.Errorf("failed to resolve broker endpoint: %w", err)
-	}
-	if endpoint == "" {
-		log.Info("no broker configured for namespace, skipping broker session cleanup", "namespace", query.Namespace, "query", query.Name)
-		return nil
-	}
-
-	path := fmt.Sprintf(common.QuerySessionsEndpointFmt, url.PathEscape(query.Name))
-	return deleteBrokerResource(ctx, endpoint, path, "session query", query.Name)
+	return r.deleteBrokerQueryResource(ctx, query, common.QuerySessionsEndpointFmt, "session query", query.Name)
 }
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
