@@ -1,9 +1,8 @@
-{{- if and .Values.serviceAccount.create .Values.configMapPolicy.enabled }}
-{{- if not (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy") }}
-{{- fail "configMapPolicy.enabled requires ValidatingAdmissionPolicy (Kubernetes 1.30+). Set configMapPolicy.enabled=false to install without it." }}
-{{- end }}
+{{- if and .Values.configMapPolicy.enabled (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy") }}
 # Limits ark-api to the configmaps it owns. RBAC cannot: rules have no label
 # selector, and resourceNames cannot restrict create.
+# Skipped where ValidatingAdmissionPolicy is absent (pre-1.30): the chart
+# declares no kubeVersion floor, so failing would add one.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -32,16 +31,32 @@ spec:
     - name: labels
       expression: >-
         has(variables.target.metadata.labels) ? variables.target.metadata.labels : {}
+    # oldObject is null on CREATE; only the UPDATE validation reads this.
+    - name: oldLabels
+      expression: >-
+        oldObject != null && has(oldObject.metadata.labels) ? oldObject.metadata.labels : {}
+    - name: unlabelled
+      expression: "['ark-export-metadata', 'marketplace-sources']"
   validations:
     # Marker matches ARK_RESOURCE_TYPE_LABEL in ark_sdk/labels.py.
     # Indexing an absent CEL key errors, so test with `in` first.
     - expression: >-
-        variables.target.metadata.name in ['ark-export-metadata', 'marketplace-sources'] ||
+        variables.target.metadata.name in variables.unlabelled ||
         ('ark.mckinsey.com/resource-type' in variables.labels &&
          variables.labels['ark.mckinsey.com/resource-type'] == 'configuration')
       messageExpression: >-
         'ark-api may only write configmaps labelled ark.mckinsey.com/resource-type=configuration, ' +
         'ark-export-metadata or marketplace-sources; got ' + variables.target.metadata.name
+    # Checking the post-image alone would let ark-api adopt any configmap by
+    # adding the marker to it, so an update must also be gated on the pre-image.
+    - expression: >-
+        request.operation != 'UPDATE' ||
+        oldObject.metadata.name in variables.unlabelled ||
+        ('ark.mckinsey.com/resource-type' in variables.oldLabels &&
+         variables.oldLabels['ark.mckinsey.com/resource-type'] == 'configuration')
+      messageExpression: >-
+        'ark-api may only update configmaps that are already Ark configurations; got ' +
+        oldObject.metadata.name
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -53,9 +68,6 @@ metadata:
     {{- end }}
 spec:
   policyName: {{ .Values.serviceAccount.name }}-configmap-policy-{{ .Release.Namespace }}
+  # Unscoped: ark-api's configmap writes are not confined to one namespace.
   validationActions: ["Deny"]
-  matchResources:
-    namespaceSelector:
-      matchLabels:
-        kubernetes.io/metadata.name: {{ .Release.Namespace }}
 {{- end }}

@@ -10,6 +10,7 @@ import os
 import functools
 import logging
 import asyncio
+from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, TypeVar, Generic, Type
 from kubernetes import client, config
 from ark_sdk.k8s import get_context, create_sync_api_client
@@ -17,6 +18,21 @@ import yaml
 import json
 
 T = TypeVar('T')
+
+
+@dataclass
+class ListResult(Generic[T]):
+    """Result of a paginated list call.
+
+    ``continue_token`` is the opaque Kubernetes continuation token for the next
+    page, or ``None`` when the current page is the last one. ``remaining_item_count``
+    is Kubernetes' best-effort estimate of items left after this page and may be
+    ``None`` when the API server does not provide it.
+    """
+
+    items: List[T]
+    continue_token: Optional[str] = None
+    remaining_item_count: Optional[int] = None
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -182,7 +198,60 @@ class ARKResourceClient(Generic[T]):
             return [self._dict_to_model(item) for item in items]
         finally:
             fresh_api_client.close()
-    
+
+    def list_page(
+        self,
+        namespace: Optional[str] = None,
+        label_selector: Optional[str] = None,
+        limit: Optional[int] = None,
+        continue_token: Optional[str] = None,
+    ) -> ListResult[T]:
+        """List a single page of resources using Kubernetes server-side pagination.
+
+        Unlike :meth:`list`, this passes ``limit`` and ``continue`` to the API
+        server so the client never materializes the entire collection. The
+        returned :class:`ListResult` carries the continuation token for the next
+        page (``None`` on the last page).
+
+        Raises:
+            kubernetes.client.rest.ApiException: On Kubernetes API errors.
+                Common status codes:
+                - 403: Permission denied (RBAC)
+                - 404: Namespace not found
+        """
+        ns = namespace or self.namespace
+
+        kwargs = {}
+        if label_selector:
+            kwargs['label_selector'] = label_selector
+        if limit is not None:
+            kwargs['limit'] = limit
+        if continue_token is not None:
+            kwargs['_continue'] = continue_token
+
+        # Create fresh client for LIST to avoid caching stale data
+        fresh_api_client = client.ApiClient()
+        fresh_custom_api = client.CustomObjectsApi(fresh_api_client)
+
+        try:
+            result = fresh_custom_api.list_namespaced_custom_object(
+                group=self.group,
+                version=self.version,
+                namespace=ns,
+                plural=self.plural,
+                **kwargs
+            )
+
+            metadata = result.get('metadata', {})
+            items = result.get('items', [])
+            return ListResult(
+                items=[self._dict_to_model(item) for item in items],
+                continue_token=metadata.get('continue') or None,
+                remaining_item_count=metadata.get('remainingItemCount'),
+            )
+        finally:
+            fresh_api_client.close()
+
     def update(self, resource: T, namespace: Optional[str] = None) -> T:
         """Update an existing resource
 
@@ -289,6 +358,19 @@ class ARKResourceClient(Generic[T]):
     async def a_list(self, namespace: Optional[str] = None, label_selector: Optional[str] = None) -> List[T]:
         """Async version of list - works in both sync and async contexts"""
         return await asyncio.to_thread(self.list, namespace, label_selector)
+
+    @async_compat
+    async def a_list_page(
+        self,
+        namespace: Optional[str] = None,
+        label_selector: Optional[str] = None,
+        limit: Optional[int] = None,
+        continue_token: Optional[str] = None,
+    ) -> ListResult[T]:
+        """Async version of list_page - works in both sync and async contexts"""
+        return await asyncio.to_thread(
+            self.list_page, namespace, label_selector, limit, continue_token
+        )
     
     @async_compat
     async def a_update(self, resource: T, namespace: Optional[str] = None) -> T:
