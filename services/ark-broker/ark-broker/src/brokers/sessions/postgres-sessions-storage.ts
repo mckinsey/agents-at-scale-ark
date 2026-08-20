@@ -257,6 +257,34 @@ export class PostgresSessionsStorage implements SessionsStorage {
     `;
   }
 
+  /**
+   * Recomputes the aggregates from the remaining query rows without touching
+   * last_activity or expires_at. refreshHeader cannot serve this: it moves both
+   * on every call, so a delete would register as activity and would revive an
+   * expired session back into the list.
+   */
+  private async refreshHeaderAggregates(
+    sql: postgres.TransactionSql,
+    header: SessionRow
+  ): Promise<void> {
+    const rows = await sql<SessionQueryRow[]>`
+      SELECT * FROM session_queries
+      WHERE session_id = ${header.session_id}
+      ORDER BY created_at, query_id
+    `;
+
+    const session = rowsToSessionEntry(header, rows);
+    recalculateSessionStatus(session);
+
+    await sql`
+      UPDATE sessions SET
+        error_count = ${session.errorCount ?? 0},
+        status = ${session.status ?? 'idle'},
+        conversations = ${sql.json((session.conversations ?? []) as unknown as postgres.JSONValue)}
+      WHERE session_id = ${header.session_id}
+    `;
+  }
+
   async applyEvent(
     eventData: Partial<SessionEventData>,
     sequence?: number
@@ -623,6 +651,70 @@ export class PostgresSessionsStorage implements SessionsStorage {
 
   async delete(): Promise<void> {
     await this.db`DELETE FROM sessions`;
+  }
+
+  async deleteQuery(queryId: string): Promise<number> {
+    // Unlocked probe. No expires_at filter: an expired-but-present row is
+    // exactly the durable leftover this exists to remove.
+    const owners = await this.db<{session_id: string}[]>`
+      SELECT DISTINCT session_id FROM session_queries
+      WHERE query_id = ${queryId}
+      ORDER BY session_id
+    `;
+
+    let removed = 0;
+    const survivors: string[] = [];
+
+    // One transaction per owning session, each locking a single header. A
+    // transaction spanning several would be the only thing here that could
+    // deadlock against the write paths, which lock one. Idempotent, so the
+    // finalizer's retry after a partial failure is safe.
+    for (const {session_id: sessionId} of owners) {
+      const outcome = await this.db.begin(async (sql) => {
+        // Header before the query row, the order both write paths take.
+        const header = await this.lockHeader(sql, sessionId);
+        if (!header) return undefined;
+
+        const deleted = await sql<{query_id: string}[]>`
+          DELETE FROM session_queries
+          WHERE session_id = ${sessionId} AND query_id = ${queryId}
+          RETURNING query_id
+        `;
+        if (deleted.length === 0) return undefined;
+
+        // In this transaction, so it sees this transaction's own DELETE: read on
+        // the pool it would still count the row just removed and the header
+        // would never be dropped. Concurrent inserts are not the concern here -
+        // the header lock above already excludes them.
+        const [remaining] = await sql<[{n: string}]>`
+          SELECT count(*)::text AS n FROM session_queries
+          WHERE session_id = ${sessionId}
+        `;
+        if (Number(remaining!.n) === 0) {
+          await sql`DELETE FROM sessions WHERE session_id = ${sessionId}`;
+          return {count: deleted.length, survived: false};
+        }
+
+        await this.refreshHeaderAggregates(sql, header);
+        return {count: deleted.length, survived: true};
+      });
+
+      if (!outcome) continue;
+      removed += outcome.count;
+      if (outcome.survived) survivors.push(sessionId);
+    }
+
+    // After commit, on the pool: notifying inside db.begin() deadlocks
+    // postgres.js's own pool. Only survivors, since a session that is gone
+    // yields no SSE frame anyway - the stream drops a getSession that misses.
+    for (const sessionId of survivors) {
+      await this.db.notify(
+        NOTIFY_CHANNEL,
+        JSON.stringify({sessionId, queryName: queryId})
+      );
+    }
+
+    return removed;
   }
 
   subscribe(
