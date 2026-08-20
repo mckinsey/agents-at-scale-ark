@@ -5,6 +5,7 @@ import {
   sendValidationError,
   sendPaginationError,
   sendInternalError,
+  sendMissingQueryIdError,
 } from '@ark-broker/http/routes/errors.js';
 import {PaginationError} from '@ark-broker/brokers/pagination.js';
 import {
@@ -102,6 +103,31 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       res.json({status: 'success', message: 'Sessions purged'});
     } catch (error) {
       req.log.error({err: error}, 'purge failed');
+      sendInternalError(res, req.id);
+    }
+  });
+
+  router.delete<{query_id: string}>('/queries/:query_id', async (req, res) => {
+    const {query_id: queryId} = req.params;
+
+    if (!queryId) {
+      sendMissingQueryIdError(res, req.id);
+      return;
+    }
+
+    try {
+      req.log.info({queryId}, 'deleting query from sessions');
+      const removed = await sessionsBroker.deleteQuery(queryId);
+      // 200 even when nothing matched: the controller reads 404 as "this broker
+      // does not implement the route" and skips, which would hide a real
+      // failure. A query that never emitted an event legitimately has no row.
+      res.json({
+        status: 'success',
+        message: `Query ${queryId} removed from ${removed} session(s)`,
+        removed,
+      });
+    } catch (error) {
+      req.log.error({err: error}, 'failed to delete query from sessions');
       sendInternalError(res, req.id);
     }
   });
