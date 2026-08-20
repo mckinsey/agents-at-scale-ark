@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch, Mock, AsyncMock, MagicMock
 import jwt
 from jwt.exceptions import InvalidTokenError as JWTInvalidTokenError, ExpiredSignatureError, InvalidAudienceError
-from ark_sdk.auth.validator import TokenValidator, _parse_audiences
+from ark_sdk.auth.validator import TokenValidator, _parse_audiences, _validate_audience_config
 from ark_sdk.auth.config import AuthConfig
 from ark_sdk.auth.exceptions import (
     TokenValidationError,
@@ -464,6 +464,40 @@ class TestParseAudiences(unittest.TestCase):
     def test_list_input_is_normalized(self):
         self.assertEqual(_parse_audiences(["app-a", " app-b "]), ["app-a", "app-b"])
         self.assertEqual(_parse_audiences(["app-a"]), "app-a")
+
+
+class TestValidateAudienceConfig(unittest.TestCase):
+    """Fail closed on a configured-but-unusable audience (e.g. join over []).
+
+    An all-separator value normalizes to None, which sets verify_aud=False and
+    would silently disable aud verification. Such a value has content but no
+    usable audience, so it must raise rather than fall through to no-check.
+    """
+
+    def test_unset_or_empty_is_allowed(self):
+        # None / empty / whitespace-only = intentionally unset (aud optional).
+        for raw in (None, "", "   ", "\t\n"):
+            _validate_audience_config(raw)  # must not raise
+
+    def test_separators_only_raises(self):
+        for raw in (",", ",,", " , ", " ,, "):
+            with self.assertRaises(TokenValidationError):
+                _validate_audience_config(raw)
+
+    def test_valid_audiences_are_allowed(self):
+        for raw in ("app-a", "app-a,app-b", "app-a,", ",app-a"):
+            _validate_audience_config(raw)  # must not raise
+
+    @patch.dict('os.environ', {'OIDC_APPLICATION_ID': ',,'}, clear=True)
+    def test_create_config_from_env_raises_on_separators_only(self):
+        with self.assertRaises(TokenValidationError):
+            TokenValidator()
+
+    @patch.dict('os.environ', {'OIDC_APPLICATION_ID': ''}, clear=True)
+    def test_create_config_from_env_allows_empty(self):
+        # Empty audience with no issuer: no aud/jwks config, no raise.
+        validator = TokenValidator()
+        self.assertIsNone(validator.config.audience)
 
 
 if __name__ == '__main__':
