@@ -16,8 +16,11 @@ controllerManager:
   # namespaces and binds the controller ServiceAccount cluster-wide. When set, the
   # controller cache is confined to these namespaces and its access to core resources
   # (Secrets, ConfigMaps, Services, Events) and Ark CRDs is granted through per-namespace
-  # RoleBindings instead of a cluster-wide ClusterRoleBinding. Include the release
-  # namespace so the controller can manage its own resources.
+  # RoleBindings instead of a cluster-wide ClusterRoleBinding. The admission webhooks are
+  # scoped to these namespaces and broker/telemetry discovery lists them instead of the
+  # cluster, so all access matches the granted RBAC. Ark resources in other namespaces are
+  # not validated or reconciled. Include the release namespace so the controller can manage
+  # its own resources.
   watchNamespaces: []
   container:
     image:
