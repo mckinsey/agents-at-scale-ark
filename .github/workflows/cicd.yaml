@@ -119,46 +119,27 @@ jobs:
           jfrog_password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD }}
           jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
         
-      - name: Get last vulnarability report from the main branch run
-        if: always()
-        shell: bash
-        run: |
-          GITHUB_REPOSITORY="${{ github.repository }}"
-          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/cicd.yaml/runs?branch=main&status=success&per_page=1" | jq -c '.workflow_runs[0].id')
-          
-          echo "Downloading artifacts from run ID: $LAST_RUN_ID"
-          gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
-          cp ./artifacts/**/xray-scan-agents-at-scale-*.json ./last-main-scan.json
-        env:
-          GH_TOKEN: ${{ github.token }}
       - name: Detect new violations
         if: always()
         shell: bash
         run: |
           WHITELIST=".github/actions/jfrog-xray-scan/tolerated_violations.txt"
 
-          echo "Comparing with last scan file: ./last-main-scan.json"
-
-          echo "New violations since last scan:"
-          jq -r '.[].violations[]?.issue_id' "./last-main-scan.json" > old.txt
-          jq -r '.[].violations[]?.issue_id' "$SCAN_JSON" > new.txt
-
-          NEW_VIOLATIONS=$(comm -13 <(sort old.txt) <(sort new.txt))
-          REMOVED_VIOLATIONS=$(comm -13 <(sort new.txt) <(sort old.txt))
+          NEW_VIOLATIONS=$(jq -r '.[].violations[]?.issue_id' "$SCAN_JSON" | sort -u)
 
           FAIL=0
 
           if [ -n "$NEW_VIOLATIONS" ]; then
-            echo "New violations found:"
+            echo "Violations found:"
             echo "$NEW_VIOLATIONS"
 
-            echo "Checking new violations against whitelist..."
+            echo "Checking violations against whitelist..."
             FILTERED_VIOLATIONS=""
             while read -r violation; do
               if grep -q "$violation" "$WHITELIST"; then
                 echo "Whitelisted violation (skipping): $violation"
               else
-                echo "New violation not whitelisted: $violation"
+                echo "Violation not whitelisted: $violation"
                 FILTERED_VIOLATIONS="${FILTERED_VIOLATIONS}${violation}"$'\n'
                 FAIL=1
               fi
@@ -173,13 +154,11 @@ jobs:
             fi
 
             if [ "$FAIL" -eq 1 ]; then
-              echo "❌ Failing due to unwhitelisted new violations."
+              echo "❌ Failing due to unwhitelisted violations."
               exit 1
             fi
-          elif [ -n "$REMOVED_VIOLATIONS" ]; then
-            echo "The following violations were eliminated: $REMOVED_VIOLATIONS."
           else
-            echo "No new violations found."
+            echo "No violations found."
           fi
 
       - name: Create GitHub issue for new CVE violations
