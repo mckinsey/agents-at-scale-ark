@@ -219,13 +219,6 @@ export class PostgresSessionsStorage implements SessionsStorage {
   }
 
   /**
-   * Recomputes the header's aggregates from the session's own query rows, via
-   * the same pure function the in-memory backend uses, so the two backends
-   * cannot drift apart and a wrong aggregate repairs itself on the next write.
-   * Runs after the session_queries write, with the header already locked, so
-   * it sees this transaction's own row and no concurrent writer's half-state.
-   */
-  /**
    * Ordered by created_at because conversation startTime and duration come from
    * the first and last query of each conversation, and because the tie-break in
    * the status election depends on this order.
@@ -242,6 +235,13 @@ export class PostgresSessionsStorage implements SessionsStorage {
     return rowsToSessionEntry(header, rows);
   }
 
+  /**
+   * Recomputes the header's aggregates from the session's own query rows, via
+   * the same pure function the in-memory backend uses, so the two backends
+   * cannot drift apart and a wrong aggregate repairs itself on the next write.
+   * Runs after the session_queries write, with the header already locked, so
+   * it sees this transaction's own row and no concurrent writer's half-state.
+   */
   private async refreshHeader(
     sql: postgres.TransactionSql,
     header: SessionRow,
