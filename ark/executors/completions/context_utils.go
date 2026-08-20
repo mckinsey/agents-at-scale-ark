@@ -97,6 +97,11 @@ func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
 	return metadata
 }
 
+func isTeamMemberExecution(ctx context.Context) bool {
+	name, ok := ctx.Value(teamKey).(string)
+	return ok && name != ""
+}
+
 func WithA2AContextID(ctx context.Context, contextID string) context.Context {
 	return context.WithValue(ctx, a2aContextIDKey, contextID)
 }
