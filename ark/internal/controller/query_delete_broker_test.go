@@ -44,6 +44,31 @@ func makeBrokerServer(t *testing.T, status int) (*httptest.Server, *string, *str
 	return srv, &capturedMethod, &capturedPath
 }
 
+// brokerAt builds the endpoint resolver the finalizer's broker cleanups use, so
+// a test states which broker answers and nothing else.
+func brokerAt(url string) func(context.Context, string) (string, error) {
+	return func(context.Context, string) (string, error) { return url, nil }
+}
+
+// recordingBrokerServer answers 200 and reports whether it was called at all,
+// which is the assertion for "no broker configured means no request".
+func recordingBrokerServer(t *testing.T) *bool {
+	t.Helper()
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	return &called
+}
+
+func testQuery() *arkv1alpha1.Query {
+	return &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default", UID: "query-uid-123"},
+	}
+}
+
 func TestDeleteBrokerMessages_ExplicitMemory(t *testing.T) {
 	srv, capturedMethod, capturedPath := makeBrokerServer(t, http.StatusOK)
 
@@ -89,12 +114,7 @@ func TestDeleteBrokerMessages_DefaultMemoryFallback(t *testing.T) {
 }
 
 func TestDeleteBrokerMessages_NoMemory(t *testing.T) {
-	called := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
+	called := recordingBrokerServer(t)
 
 	fc := fake.NewClientBuilder().
 		WithScheme(func() *runtime.Scheme { s := runtime.NewScheme(); _ = arkv1alpha1.AddToScheme(s); return s }()).
@@ -108,16 +128,11 @@ func TestDeleteBrokerMessages_NoMemory(t *testing.T) {
 
 	err := r.deleteBrokerMessages(context.Background(), query)
 	require.NoError(t, err)
-	assert.False(t, called, "should not call broker when no memory exists")
+	assert.False(t, *called, "should not call broker when no memory exists")
 }
 
 func TestDeleteBrokerMessages_MemoryNotFound(t *testing.T) {
-	called := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
+	called := recordingBrokerServer(t)
 
 	fc := fake.NewClientBuilder().
 		WithScheme(func() *runtime.Scheme { s := runtime.NewScheme(); _ = arkv1alpha1.AddToScheme(s); return s }()).
@@ -133,7 +148,7 @@ func TestDeleteBrokerMessages_MemoryNotFound(t *testing.T) {
 
 	err := r.deleteBrokerMessages(context.Background(), query)
 	require.NoError(t, err)
-	assert.False(t, called, "should not call broker when referenced memory is not found")
+	assert.False(t, *called, "should not call broker when referenced memory is not found")
 }
 
 func TestDeleteBrokerMessages_Broker500ReturnsError(t *testing.T) {
@@ -251,13 +266,9 @@ func TestDeleteBrokerEvents_EndpointResolved(t *testing.T) {
 	srv, capturedMethod, capturedPath := makeBrokerServer(t, http.StatusOK)
 
 	r := &QueryReconciler{
-		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
-			return srv.URL, nil
-		},
+		brokerEndpoint: brokerAt(srv.URL),
 	}
-	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default", UID: "query-uid-123"},
-	}
+	query := testQuery()
 
 	err := r.deleteBrokerEvents(context.Background(), query)
 	require.NoError(t, err)
@@ -266,38 +277,25 @@ func TestDeleteBrokerEvents_EndpointResolved(t *testing.T) {
 }
 
 func TestDeleteBrokerEvents_NoBrokerConfigured(t *testing.T) {
-	called := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
+	called := recordingBrokerServer(t)
 
 	r := &QueryReconciler{
-		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
-			return "", nil
-		},
+		brokerEndpoint: brokerAt(""),
 	}
-	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default", UID: "query-uid-123"},
-	}
+	query := testQuery()
 
 	err := r.deleteBrokerEvents(context.Background(), query)
 	require.NoError(t, err)
-	assert.False(t, called, "should not call broker when no broker is configured for the namespace")
+	assert.False(t, *called, "should not call broker when no broker is configured for the namespace")
 }
 
 func TestDeleteBrokerEvents_Broker500ReturnsError(t *testing.T) {
 	srv, _, _ := makeBrokerServer(t, http.StatusInternalServerError)
 
 	r := &QueryReconciler{
-		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
-			return srv.URL, nil
-		},
+		brokerEndpoint: brokerAt(srv.URL),
 	}
-	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default", UID: "query-uid-123"},
-	}
+	query := testQuery()
 
 	err := r.deleteBrokerEvents(context.Background(), query)
 	require.Error(t, err)
@@ -308,13 +306,9 @@ func TestDeleteBrokerEvents_Broker404IsSkipped(t *testing.T) {
 	srv, _, _ := makeBrokerServer(t, http.StatusNotFound)
 
 	r := &QueryReconciler{
-		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
-			return srv.URL, nil
-		},
+		brokerEndpoint: brokerAt(srv.URL),
 	}
-	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default", UID: "query-uid-123"},
-	}
+	query := testQuery()
 
 	err := r.deleteBrokerEvents(context.Background(), query)
 	require.NoError(t, err)
@@ -324,13 +318,9 @@ func TestDeleteBrokerSessionQuery_KeyedOnQueryName(t *testing.T) {
 	srv, capturedMethod, capturedPath := makeBrokerServer(t, http.StatusOK)
 
 	r := &QueryReconciler{
-		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
-			return srv.URL, nil
-		},
+		brokerEndpoint: brokerAt(srv.URL),
 	}
-	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default", UID: "query-uid-123"},
-	}
+	query := testQuery()
 
 	err := r.deleteBrokerSessionQuery(context.Background(), query)
 	require.NoError(t, err)
@@ -341,38 +331,25 @@ func TestDeleteBrokerSessionQuery_KeyedOnQueryName(t *testing.T) {
 }
 
 func TestDeleteBrokerSessionQuery_NoBrokerConfigured(t *testing.T) {
-	called := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
+	called := recordingBrokerServer(t)
 
 	r := &QueryReconciler{
-		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
-			return "", nil
-		},
+		brokerEndpoint: brokerAt(""),
 	}
-	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default"},
-	}
+	query := testQuery()
 
 	err := r.deleteBrokerSessionQuery(context.Background(), query)
 	require.NoError(t, err)
-	assert.False(t, called, "should not call broker when no broker is configured for the namespace")
+	assert.False(t, *called, "should not call broker when no broker is configured for the namespace")
 }
 
 func TestDeleteBrokerSessionQuery_Broker500ReturnsError(t *testing.T) {
 	srv, _, _ := makeBrokerServer(t, http.StatusInternalServerError)
 
 	r := &QueryReconciler{
-		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
-			return srv.URL, nil
-		},
+		brokerEndpoint: brokerAt(srv.URL),
 	}
-	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default"},
-	}
+	query := testQuery()
 
 	err := r.deleteBrokerSessionQuery(context.Background(), query)
 	require.Error(t, err)
@@ -383,13 +360,9 @@ func TestDeleteBrokerSessionQuery_Broker404IsSkipped(t *testing.T) {
 	srv, _, _ := makeBrokerServer(t, http.StatusNotFound)
 
 	r := &QueryReconciler{
-		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
-			return srv.URL, nil
-		},
+		brokerEndpoint: brokerAt(srv.URL),
 	}
-	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default"},
-	}
+	query := testQuery()
 
 	err := r.deleteBrokerSessionQuery(context.Background(), query)
 	require.NoError(t, err)
@@ -416,14 +389,10 @@ func TestFinalize_RunsEverySessionCleanupDespiteAFailure(t *testing.T) {
 	fc := fake.NewClientBuilder().WithScheme(scheme).WithObjects(memory).Build()
 
 	r := &QueryReconciler{
-		Client: fc,
-		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
-			return broker.URL, nil
-		},
+		Client:         fc,
+		brokerEndpoint: brokerAt(broker.URL),
 	}
-	query := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default", UID: "query-uid-123"},
-	}
+	query := testQuery()
 
 	err := r.finalize(context.Background(), query)
 	require.Error(t, err, "the failing memory cleanup should surface")

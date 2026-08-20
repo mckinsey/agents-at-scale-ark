@@ -225,8 +225,6 @@ spec:
           echo "conversation names after delete: ${CONV_NAMES}"
           [ "${CONV_NAMES}" = "sessions-postgres-agent-a" ] || { echo "expected 'sessions-postgres-agent-a', got '${CONV_NAMES}'"; exit 1; }
         env:
-        - name: NAMESPACE
-          value: ($namespace)
         - name: SESSION_ID
           value: ($namespace)
     catch:
