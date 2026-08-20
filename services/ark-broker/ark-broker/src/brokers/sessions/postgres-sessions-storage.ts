@@ -224,22 +224,31 @@ export class PostgresSessionsStorage implements SessionsStorage {
    * cannot drift apart and a wrong aggregate repairs itself on the next write.
    * Runs after the session_queries write, with the header already locked, so
    * it sees this transaction's own row and no concurrent writer's half-state.
-   * Ordered by created_at because conversation startTime and duration are
-   * taken from the first and last query of each conversation.
    */
+  /**
+   * Ordered by created_at because conversation startTime and duration come from
+   * the first and last query of each conversation, and because the tie-break in
+   * the status election depends on this order.
+   */
+  private async readSession(
+    sql: postgres.TransactionSql,
+    header: SessionRow
+  ): Promise<SessionEntry> {
+    const rows = await sql<SessionQueryRow[]>`
+      SELECT * FROM session_queries
+      WHERE session_id = ${header.session_id}
+      ORDER BY created_at, query_id
+    `;
+    return rowsToSessionEntry(header, rows);
+  }
+
   private async refreshHeader(
     sql: postgres.TransactionSql,
     header: SessionRow,
     now: string,
     conversationsOnly = false
   ): Promise<void> {
-    const rows = await sql<SessionQueryRow[]>`
-      SELECT * FROM session_queries
-      WHERE session_id = ${header.session_id}
-      ORDER BY created_at, query_id
-    `;
-
-    const session = rowsToSessionEntry(header, rows);
+    const session = await this.readSession(sql, header);
     if (conversationsOnly) {
       recalculateSessionConversations(session);
     } else {
@@ -267,13 +276,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
     sql: postgres.TransactionSql,
     header: SessionRow
   ): Promise<void> {
-    const rows = await sql<SessionQueryRow[]>`
-      SELECT * FROM session_queries
-      WHERE session_id = ${header.session_id}
-      ORDER BY created_at, query_id
-    `;
-
-    const session = rowsToSessionEntry(header, rows);
+    const session = await this.readSession(sql, header);
     recalculateSessionStatus(session);
 
     await sql`
