@@ -1208,7 +1208,11 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 		log.Info("cancelled running operation for query", "name", query.Name, "namespace", query.Namespace)
 	}
 
-	return stderrors.Join(r.deleteBrokerMessages(ctx, query), r.deleteBrokerEvents(ctx, query))
+	return stderrors.Join(
+		r.deleteBrokerMessages(ctx, query),
+		r.deleteBrokerEvents(ctx, query),
+		r.deleteBrokerSessionQuery(ctx, query),
+	)
 }
 
 func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1alpha1.Query) error {
@@ -1314,6 +1318,28 @@ func (r *QueryReconciler) deleteBrokerEvents(ctx context.Context, query *arkv1al
 
 	path := fmt.Sprintf(common.QueryEventsEndpointFmt, url.PathEscape(string(query.UID)))
 	return deleteBrokerResource(ctx, endpoint, path, "events", query.Name)
+}
+
+// deleteBrokerSessionQuery removes query's row from the broker's sessions read
+// model. Like deleteBrokerEvents this talks to the broker endpoint rather than
+// the Memory contract, since sessions are not part of that contract - but the
+// key is the Query NAME, not the UID. session_queries.query_id is written from
+// the event's queryName field, and the sessions payload carries no UID at all,
+// so keying this on query.UID would match no rows and still get a 200 back.
+func (r *QueryReconciler) deleteBrokerSessionQuery(ctx context.Context, query *arkv1alpha1.Query) error {
+	log := logf.FromContext(ctx)
+
+	endpoint, err := r.resolveBrokerEndpoint(ctx, query.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to resolve broker endpoint: %w", err)
+	}
+	if endpoint == "" {
+		log.Info("no broker configured for namespace, skipping broker session cleanup", "namespace", query.Namespace, "query", query.Name)
+		return nil
+	}
+
+	path := fmt.Sprintf(common.QuerySessionsEndpointFmt, url.PathEscape(query.Name))
+	return deleteBrokerResource(ctx, endpoint, path, "session query", query.Name)
 }
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {

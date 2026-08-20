@@ -320,6 +320,122 @@ func TestDeleteBrokerEvents_Broker404IsSkipped(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDeleteBrokerSessionQuery_KeyedOnQueryName(t *testing.T) {
+	srv, capturedMethod, capturedPath := makeBrokerServer(t, http.StatusOK)
+
+	r := &QueryReconciler{
+		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
+			return srv.URL, nil
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default", UID: "query-uid-123"},
+	}
+
+	err := r.deleteBrokerSessionQuery(context.Background(), query)
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodDelete, *capturedMethod)
+	// The name, not the UID: session_queries.query_id holds the Query name, so
+	// the UID would match no rows and the broker would still answer 200.
+	assert.Equal(t, "/sessions/queries/my-query", *capturedPath)
+}
+
+func TestDeleteBrokerSessionQuery_NoBrokerConfigured(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	r := &QueryReconciler{
+		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
+			return "", nil
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default"},
+	}
+
+	err := r.deleteBrokerSessionQuery(context.Background(), query)
+	require.NoError(t, err)
+	assert.False(t, called, "should not call broker when no broker is configured for the namespace")
+}
+
+func TestDeleteBrokerSessionQuery_Broker500ReturnsError(t *testing.T) {
+	srv, _, _ := makeBrokerServer(t, http.StatusInternalServerError)
+
+	r := &QueryReconciler{
+		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
+			return srv.URL, nil
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default"},
+	}
+
+	err := r.deleteBrokerSessionQuery(context.Background(), query)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "500")
+}
+
+func TestDeleteBrokerSessionQuery_Broker404IsSkipped(t *testing.T) {
+	srv, _, _ := makeBrokerServer(t, http.StatusNotFound)
+
+	r := &QueryReconciler{
+		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
+			return srv.URL, nil
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default"},
+	}
+
+	err := r.deleteBrokerSessionQuery(context.Background(), query)
+	require.NoError(t, err)
+}
+
+// A failing cleanup must not stop the others: finalize joins all three so one
+// broker being unreachable cannot leave the other two leftovers behind.
+func TestFinalize_RunsEverySessionCleanupDespiteAFailure(t *testing.T) {
+	brokerPaths := make(chan string, 4)
+	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		brokerPaths <- r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(broker.Close)
+
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(failing.Close)
+
+	memory := memoryWithAddress("default", failing.URL)
+	scheme := runtime.NewScheme()
+	_ = arkv1alpha1.AddToScheme(scheme)
+	fc := fake.NewClientBuilder().WithScheme(scheme).WithObjects(memory).Build()
+
+	r := &QueryReconciler{
+		Client: fc,
+		brokerEndpoint: func(_ context.Context, _ string) (string, error) {
+			return broker.URL, nil
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-query", Namespace: "default", UID: "query-uid-123"},
+	}
+
+	err := r.finalize(context.Background(), query)
+	require.Error(t, err, "the failing memory cleanup should surface")
+
+	close(brokerPaths)
+	paths := make([]string, 0, len(brokerPaths))
+	for p := range brokerPaths {
+		paths = append(paths, p)
+	}
+	assert.ElementsMatch(t, []string{"/events/query-uid-123", "/sessions/queries/my-query"}, paths)
+}
+
 func TestResolveBrokerEndpoint_DefaultUsesRoutingDiscovery(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
