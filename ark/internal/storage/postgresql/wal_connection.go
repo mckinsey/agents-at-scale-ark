@@ -52,7 +52,7 @@ func (p *PostgreSQLBackend) runWALConsumer(slotName string) error {
 	}
 	defer func() { _ = conn.Close(p.ctx) }()
 
-	startLSN, err := p.ensureReplicationSlot(conn, slotName)
+	startLSN, resumeLSN, err := p.ensureReplicationSlot(conn, slotName)
 	if err != nil {
 		return fmt.Errorf("ensure slot: %w", err)
 	}
@@ -70,14 +70,11 @@ func (p *PostgreSQLBackend) runWALConsumer(slotName string) error {
 	klog.Infof("WAL consumer started from LSN %s", startLSN)
 	p.nudgeAllWatchers()
 
-	return p.streamWAL(conn)
+	return p.streamWAL(conn, resumeLSN)
 }
 
-func (p *PostgreSQLBackend) streamWAL(conn *pgconn.PgConn) error {
-	state := &walStreamState{
-		relations:        make(map[uint32]*pglogrepl.RelationMessage),
-		lastStatusUpdate: time.Now(),
-	}
+func (p *PostgreSQLBackend) streamWAL(conn *pgconn.PgConn, resumeLSN pglogrepl.LSN) error {
+	state := newWALStreamState(resumeLSN)
 
 	for {
 		if p.ctx.Err() != nil {
@@ -97,7 +94,7 @@ func (p *PostgreSQLBackend) streamWAL(conn *pgconn.PgConn) error {
 		}
 
 		if time.Since(state.lastStatusUpdate) > walKeepaliveInterval {
-			if err := p.sendStandbyStatus(conn, state.lastWriteLSN); err != nil {
+			if err := p.sendStandbyStatus(conn, state.ackLSN()); err != nil {
 				return fmt.Errorf("periodic standby status: %w", err)
 			}
 			state.lastStatusUpdate = time.Now()
@@ -118,7 +115,7 @@ func (p *PostgreSQLBackend) receiveWALMessage(conn *pgconn.PgConn, state *walStr
 		return nil, nil
 	}
 	if pgconn.Timeout(err) {
-		if err := p.sendStandbyStatus(conn, state.lastWriteLSN); err != nil {
+		if err := p.sendStandbyStatus(conn, state.ackLSN()); err != nil {
 			return nil, fmt.Errorf("standby status: %w", err)
 		}
 		state.lastStatusUpdate = time.Now()
@@ -128,29 +125,31 @@ func (p *PostgreSQLBackend) receiveWALMessage(conn *pgconn.PgConn, state *walStr
 }
 
 // ensureReplicationSlot guarantees a persistent logical replication slot named slotName
-// exists and returns the LSN to start replication from.
+// exists and returns the LSN to start replication from plus the slot's resume point,
+// which seeds the position the consumer acknowledges.
 //
 //   - If the slot doesn't exist: create it (Temporary: false) and return its consistent point.
 //   - If the slot exists and is invalidated (e.g. WAL was truncated past it): drop and recreate.
-//   - If the slot exists and is healthy: return LSN(0), which signals the server to resume
-//     from the slot's confirmed_flush_lsn. This is what makes restarts lossless — every
-//     INSERT/UPDATE that committed while the consumer was down stays in the WAL until the
-//     slot's confirmed position advances past it.
+//   - If the slot exists and is healthy: return LSN(0) as the start position, which signals
+//     the server to resume from the slot's confirmed_flush_lsn. This is what makes restarts
+//     lossless — every INSERT/UPDATE that committed while the consumer was down stays in the
+//     WAL until the slot's confirmed position advances past it.
 //
 // If the slot is currently active (held by another session), we return an error so the
 // caller's backoff loop retries; the active holder will eventually drop the connection.
-func (p *PostgreSQLBackend) ensureReplicationSlot(conn *pgconn.PgConn, slotName string) (pglogrepl.LSN, error) {
+func (p *PostgreSQLBackend) ensureReplicationSlot(conn *pgconn.PgConn, slotName string) (pglogrepl.LSN, pglogrepl.LSN, error) {
 	var (
-		exists    bool
-		active    bool
-		walStatus string
+		exists         bool
+		active         bool
+		walStatus      string
+		confirmedFlush string
 	)
 	err := p.db.QueryRowContext(p.ctx, `
-		SELECT true, active, COALESCE(wal_status, '')
+		SELECT true, active, COALESCE(wal_status, ''), COALESCE(confirmed_flush_lsn::text, '0/0')
 		FROM pg_replication_slots
-		WHERE slot_name = $1`, slotName).Scan(&exists, &active, &walStatus)
+		WHERE slot_name = $1`, slotName).Scan(&exists, &active, &walStatus, &confirmedFlush)
 	if err != nil && err.Error() != "sql: no rows in result set" {
-		return 0, fmt.Errorf("inspect replication slot: %w", err)
+		return 0, 0, fmt.Errorf("inspect replication slot: %w", err)
 	}
 
 	// PG <17 reports invalidation via wal_status='lost'. PG17+ adds invalidation_reason
@@ -158,30 +157,34 @@ func (p *PostgreSQLBackend) ensureReplicationSlot(conn *pgconn.PgConn, slotName 
 	if exists && walStatus == "lost" {
 		klog.Warningf("Replication slot %s invalidated (wal_status=lost); dropping and recreating", slotName)
 		if _, dropErr := p.db.ExecContext(p.ctx, `SELECT pg_drop_replication_slot($1)`, slotName); dropErr != nil {
-			return 0, fmt.Errorf("drop invalidated slot: %w", dropErr)
+			return 0, 0, fmt.Errorf("drop invalidated slot: %w", dropErr)
 		}
 		exists = false
 	}
 
 	if exists {
 		if active {
-			return 0, fmt.Errorf("replication slot %s is currently active in another session", slotName)
+			return 0, 0, fmt.Errorf("replication slot %s is currently active in another session", slotName)
 		}
-		klog.Infof("Reusing existing replication slot %s; resuming from confirmed_flush_lsn", slotName)
-		return pglogrepl.LSN(0), nil
+		resumeLSN, err := pglogrepl.ParseLSN(confirmedFlush)
+		if err != nil {
+			return 0, 0, fmt.Errorf("parse confirmed_flush_lsn %q: %w", confirmedFlush, err)
+		}
+		klog.Infof("Reusing existing replication slot %s; resuming from confirmed_flush_lsn %s", slotName, resumeLSN)
+		return pglogrepl.LSN(0), resumeLSN, nil
 	}
 
 	res, err := pglogrepl.CreateReplicationSlot(p.ctx, conn, slotName, "pgoutput",
 		pglogrepl.CreateReplicationSlotOptions{Temporary: false})
 	if err != nil {
-		return 0, fmt.Errorf("create replication slot: %w", err)
+		return 0, 0, fmt.Errorf("create replication slot: %w", err)
 	}
 	klog.Infof("Created persistent replication slot %s at %s", slotName, res.ConsistentPoint)
 	lsn, err := pglogrepl.ParseLSN(res.ConsistentPoint)
 	if err != nil {
-		return 0, fmt.Errorf("parse LSN: %w", err)
+		return 0, 0, fmt.Errorf("parse LSN: %w", err)
 	}
-	return lsn, nil
+	return lsn, lsn, nil
 }
 
 func (p *PostgreSQLBackend) sendStandbyStatus(conn *pgconn.PgConn, lsn pglogrepl.LSN) error {
