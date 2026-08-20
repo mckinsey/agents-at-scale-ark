@@ -20,11 +20,14 @@ type ServiceAccountAuthorizer struct {
 	Client client.Client
 }
 
-// AuthorizeQueryServiceAccount rejects a Query whose requester is not allowed
-// to impersonate the service account named in spec.serviceAccount. It is a
-// no-op when no service account is requested, or when there is no admission
-// request in context (e.g. the apiserver storage validation path, where the
-// admission webhook is the enforcement point).
+// AuthorizeQueryServiceAccount rejects a Query naming a service account it
+// cannot run as. It enforces two conditions: the controller must itself be
+// permitted to impersonate the account (impersonation enabled and, if scoped,
+// the account listed in allowedServiceAccounts), and the requester must be
+// authorized to impersonate it (the same RBAC that governs `kubectl --as`).
+// It is a no-op when no service account is requested, or when there is no
+// admission request in context (e.g. the apiserver storage validation path,
+// where the admission webhook is the enforcement point).
 func (a *ServiceAccountAuthorizer) AuthorizeQueryServiceAccount(ctx context.Context, query *arkv1alpha1.Query) error {
 	if query.Spec.ServiceAccount == "" {
 		return nil
@@ -33,6 +36,30 @@ func (a *ServiceAccountAuthorizer) AuthorizeQueryServiceAccount(ctx context.Cont
 	req, err := admission.RequestFromContext(ctx)
 	if err != nil {
 		return nil
+	}
+
+	// Precondition: the controller must itself be able to impersonate the
+	// requested account. When impersonation is disabled (no grant) or the
+	// account is outside allowedServiceAccounts, reject at admission with a
+	// clear message rather than admitting a Query that fails at reconcile with
+	// a 403. SelfSubjectAccessReview needs no extra RBAC (system:basic-user
+	// grants it to every authenticated identity) and reflects the grant's
+	// resourceNames scoping.
+	ssar := &authzv1.SelfSubjectAccessReview{
+		Spec: authzv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authzv1.ResourceAttributes{
+				Namespace: query.Namespace,
+				Verb:      "impersonate",
+				Resource:  "serviceaccounts",
+				Name:      query.Spec.ServiceAccount,
+			},
+		},
+	}
+	if err := a.Client.Create(ctx, ssar); err != nil {
+		return fmt.Errorf("failed to check impersonation capability for service account %q in namespace %q: %w", query.Spec.ServiceAccount, query.Namespace, err)
+	}
+	if !ssar.Status.Allowed {
+		return fmt.Errorf("cannot run query as service account %q in namespace %q: controller impersonation is not enabled for it; set rbac.impersonation.enabled=true (and include it in allowedServiceAccounts if scoped)", query.Spec.ServiceAccount, query.Namespace)
 	}
 
 	user := req.UserInfo

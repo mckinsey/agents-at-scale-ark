@@ -17,26 +17,38 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
-func sarClient(t *testing.T, allow bool) (client.Client, *int) {
+type reviewCounts struct {
+	ssar int // controller-capability SelfSubjectAccessReviews
+	sar  int // requester SubjectAccessReviews
+}
+
+// sarClient returns a fake client whose access reviews resolve to fixed
+// decisions: capabilityAllow for the controller SelfSubjectAccessReview and
+// requesterAllow for the requester SubjectAccessReview.
+func sarClient(t *testing.T, capabilityAllow, requesterAllow bool) (client.Client, *reviewCounts) {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	if err := authzv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add authz scheme: %v", err)
 	}
-	created := 0
+	counts := &reviewCounts{}
 	c := fake.NewClientBuilder().WithScheme(scheme).
 		WithInterceptorFuncs(interceptor.Funcs{
 			Create: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.CreateOption) error {
-				sar, ok := obj.(*authzv1.SubjectAccessReview)
-				if !ok {
-					t.Fatalf("expected SubjectAccessReview, got %T", obj)
+				switch o := obj.(type) {
+				case *authzv1.SelfSubjectAccessReview:
+					counts.ssar++
+					o.Status.Allowed = capabilityAllow
+				case *authzv1.SubjectAccessReview:
+					counts.sar++
+					o.Status.Allowed = requesterAllow
+				default:
+					t.Fatalf("expected an access review, got %T", obj)
 				}
-				created++
-				sar.Status.Allowed = allow
 				return nil
 			},
 		}).Build()
-	return c, &created
+	return c, counts
 }
 
 func ctxWithUser(user string) context.Context {
@@ -55,44 +67,62 @@ func queryWithSA(sa string) *arkv1alpha1.Query {
 
 func TestAuthorizeQueryServiceAccount(t *testing.T) {
 	t.Run("empty service account skips authorization", func(t *testing.T) {
-		c, created := sarClient(t, false)
+		c, counts := sarClient(t, true, true)
 		a := &ServiceAccountAuthorizer{Client: c}
 		if err := a.AuthorizeQueryServiceAccount(ctxWithUser("alice"), queryWithSA("")); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if *created != 0 {
-			t.Fatalf("expected no SubjectAccessReview, got %d", *created)
+		if counts.ssar != 0 || counts.sar != 0 {
+			t.Fatalf("expected no reviews, got ssar=%d sar=%d", counts.ssar, counts.sar)
 		}
 	})
 
 	t.Run("no admission request skips authorization", func(t *testing.T) {
-		c, created := sarClient(t, false)
+		c, counts := sarClient(t, true, true)
 		a := &ServiceAccountAuthorizer{Client: c}
 		if err := a.AuthorizeQueryServiceAccount(context.Background(), queryWithSA("runner")); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if *created != 0 {
-			t.Fatalf("expected no SubjectAccessReview, got %d", *created)
+		if counts.ssar != 0 || counts.sar != 0 {
+			t.Fatalf("expected no reviews, got ssar=%d sar=%d", counts.ssar, counts.sar)
 		}
 	})
 
-	t.Run("authorized requester is accepted", func(t *testing.T) {
-		c, created := sarClient(t, true)
+	t.Run("impersonation disabled for the account is rejected before requester check", func(t *testing.T) {
+		c, counts := sarClient(t, false, true)
+		a := &ServiceAccountAuthorizer{Client: c}
+		err := a.AuthorizeQueryServiceAccount(ctxWithUser("alice"), queryWithSA("runner"))
+		if err == nil {
+			t.Fatal("expected capability error")
+		}
+		if counts.ssar != 1 {
+			t.Fatalf("expected 1 SelfSubjectAccessReview, got %d", counts.ssar)
+		}
+		if counts.sar != 0 {
+			t.Fatalf("requester check must not run when capability is denied, got sar=%d", counts.sar)
+		}
+	})
+
+	t.Run("authorized requester with capability is accepted", func(t *testing.T) {
+		c, counts := sarClient(t, true, true)
 		a := &ServiceAccountAuthorizer{Client: c}
 		if err := a.AuthorizeQueryServiceAccount(ctxWithUser("alice"), queryWithSA("runner")); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if *created != 1 {
-			t.Fatalf("expected 1 SubjectAccessReview, got %d", *created)
+		if counts.ssar != 1 || counts.sar != 1 {
+			t.Fatalf("expected ssar=1 sar=1, got ssar=%d sar=%d", counts.ssar, counts.sar)
 		}
 	})
 
-	t.Run("unauthorized requester is rejected", func(t *testing.T) {
-		c, _ := sarClient(t, false)
+	t.Run("unauthorized requester with capability is rejected", func(t *testing.T) {
+		c, counts := sarClient(t, true, false)
 		a := &ServiceAccountAuthorizer{Client: c}
 		err := a.AuthorizeQueryServiceAccount(ctxWithUser("mallory"), queryWithSA("runner"))
 		if err == nil {
 			t.Fatal("expected authorization error")
+		}
+		if counts.ssar != 1 || counts.sar != 1 {
+			t.Fatalf("expected ssar=1 sar=1, got ssar=%d sar=%d", counts.ssar, counts.sar)
 		}
 	})
 }
