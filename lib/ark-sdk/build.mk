@@ -25,6 +25,7 @@ CLEAN_TARGETS += $(ARK_SDK_OUT)
 CLEAN_TARGETS += $(ARK_SDK_LIB_DIR)/__pycache__
 CLEAN_TARGETS += $(ARK_SDK_LIB_DIR)/.pytest_cache
 CLEAN_TARGETS += $(ARK_SDK_LIB_DIR)/node_modules
+CLEAN_TARGETS += $(ARK_SDK_LIB_DIR)/.openapi-generator-cli
 CLEAN_TARGETS += $(ARK_SDK_LIB_DIR)/out
 
 # Define phony targets

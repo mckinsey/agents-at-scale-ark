@@ -377,8 +377,8 @@ jobs:
       - name: Cache openapi-generator JAR
         uses: actions/cache@v4
         with:
-          path: lib/ark-sdk/node_modules/@openapitools/openapi-generator-cli/versions
-          key: openapi-generator-jar-${{ hashFiles('lib/ark-sdk/openapitools.json', 'lib/ark-sdk/package-lock.json') }}
+          path: lib/ark-sdk/.openapi-generator-cli
+          key: openapi-generator-jar-${{ hashFiles('lib/ark-sdk/openapitools.json') }}
 
       - run: make -j24 services-build-all
 
@@ -529,8 +529,8 @@ jobs:
       - name: Cache openapi-generator JAR
         uses: actions/cache@v4
         with:
-          path: lib/ark-sdk/node_modules/@openapitools/openapi-generator-cli/versions
-          key: openapi-generator-jar-${{ hashFiles('lib/ark-sdk/openapitools.json', 'lib/ark-sdk/package-lock.json') }}
+          path: lib/ark-sdk/.openapi-generator-cli
+          key: openapi-generator-jar-${{ hashFiles('lib/ark-sdk/openapitools.json') }}
 
       - name: Build libraries
         run: make libs-build-all
