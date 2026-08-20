@@ -116,6 +116,27 @@ spec:
 
 Without this annotation, streaming requests are handled transparently — clients still receive a valid SSE response, just without incremental chunks.
 
+### Streaming text and tool calls
+
+`BaseExecutor` provides two methods for pushing activity to the stream as it happens:
+
+```python
+async def execute_agent(self, request):
+    await self.stream_chunk("Looking that up...")
+
+    await self.stream_tool_call(
+        name="Bash",
+        arguments={"command": "ls /tmp"},   # dict or pre-serialized JSON string
+        tool_call_id="toolu_1",             # optional, from your framework
+    )
+```
+
+`stream_chunk()` emits a text delta. `stream_tool_call()` emits an OpenAI-format `delta.tool_calls` chunk, the same shape the built-in completions engine produces, so the dashboard and CLI render engine tool activity without any client changes. Call it as each tool is invoked — an agent running a long tool loop otherwise appears idle until it produces text.
+
+Both are no-ops when the broker is unavailable or the call is a team-member sub-request, so they are always safe to call.
+
+Tool *results* are not streamed. They can be large and may contain secrets, and the built-in engine does not stream them either. Return them in your `execute_agent()` messages instead, where they reach the UI with the completed query.
+
 ## Team Membership
 
 An engine-backed Agent can be a member of a `Team`. Teams are orchestrated by the completions executor, which calls your engine once per member turn.

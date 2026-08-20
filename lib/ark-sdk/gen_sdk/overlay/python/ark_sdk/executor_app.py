@@ -230,6 +230,7 @@ class A2AExecutorAdapter(AgentExecutor):
         self.executor._broker_client = broker
         self.executor._query_status_updater = None if sub_target else QueryStatusUpdater(query_ref)
         self.executor._streamed = False
+        self.executor._tool_call_index = 0
 
         try:
             response_messages = await self.executor.execute_agent(request)
@@ -278,6 +279,7 @@ class A2AExecutorAdapter(AgentExecutor):
             self.executor._broker_client = None
             self.executor._query_status_updater = None
             self.executor._streamed = False
+            self.executor._tool_call_index = 0
 
     async def cancel(self, context: Any, event_queue: EventQueue) -> None:
         pass

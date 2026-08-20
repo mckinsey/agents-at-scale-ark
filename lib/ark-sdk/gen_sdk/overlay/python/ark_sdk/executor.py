@@ -1,5 +1,6 @@
 """Execution engine utilities and types for ARK SDK."""
 
+import json
 import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Optional
@@ -82,12 +83,43 @@ class BaseExecutor(ABC):
         self._broker_client: Optional["BrokerClient"] = None
         self._query_status_updater: Optional["QueryStatusUpdater"] = None
         self._streamed: bool = False
+        self._tool_call_index: int = 0
         logger.info(f"{engine_name} executor initialized")
 
     async def stream_chunk(self, chunk: str) -> None:
         if self._broker_client:
             self._streamed = True
             await self._broker_client.send_chunk(chunk)
+
+    async def stream_tool_call(
+        self,
+        name: str,
+        arguments: dict[str, Any] | str = "",
+        tool_call_id: str = "",
+        index: Optional[int] = None,
+    ) -> None:
+        """Stream a tool invocation to the broker as an OpenAI delta.tool_calls chunk."""
+        if not self._broker_client:
+            return
+
+        if index is None:
+            index = self._tool_call_index
+            self._tool_call_index += 1
+
+        serialized = arguments if isinstance(arguments, str) else json.dumps(arguments)
+
+        await self._broker_client.send_chunk(
+            "",
+            tool_calls=[{
+                "index": index,
+                "id": tool_call_id,
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": serialized,
+                },
+            }],
+        )
 
     async def update_query_phase(
         self, phase: str, reason: str, message: str = ""

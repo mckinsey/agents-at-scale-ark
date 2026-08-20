@@ -1,0 +1,230 @@
+"""Tests for streaming tool invocations from an executor to the broker."""
+
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+import pytest
+
+from ark_sdk.broker import BrokerClient
+from ark_sdk.executor import (
+    AgentConfig,
+    BaseExecutor,
+    ExecutionEngineRequest,
+    Message,
+    Model,
+)
+from ark_sdk.executor_app import A2AExecutorAdapter
+from ark_sdk.extensions.query import QueryRef
+
+
+def _make_request(conversation_id: str = "conv-1") -> ExecutionEngineRequest:
+    return ExecutionEngineRequest(
+        agent=AgentConfig(
+            name="test-agent",
+            namespace="default",
+            prompt="You are helpful.",
+            model=Model(name="claude", type="anthropic"),
+        ),
+        userInput=Message(role="user", content="list the files"),
+        conversationId=conversation_id,
+    )
+
+
+class ToolCallingExecutor(BaseExecutor):
+    async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
+        await self.stream_tool_call(
+            name="Bash",
+            arguments={"command": "ls"},
+            tool_call_id="toolu_1",
+        )
+        await self.stream_tool_call(
+            name="Read",
+            arguments={"path": "/tmp/out.txt"},
+            tool_call_id="toolu_2",
+        )
+        return [Message(role="assistant", content="done")]
+
+
+_REAL_ASYNC_CLIENT = httpx.AsyncClient
+
+
+def _capturing_transport(captured: list):
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append((str(request.url), request.content))
+        return httpx.Response(200)
+
+    def factory(*args, **kwargs):
+        return _REAL_ASYNC_CLIENT(transport=httpx.MockTransport(handler))
+
+    return factory
+
+
+def _stream_chunks(captured: list) -> list[dict]:
+    chunks = []
+    for url, body in captured:
+        if "/stream/" not in url or url.endswith("/complete"):
+            continue
+        for line in body.decode().splitlines():
+            if line.strip():
+                chunks.append(json.loads(line))
+    return chunks
+
+
+async def _run_executor(executor: BaseExecutor, captured: list) -> None:
+    adapter = A2AExecutorAdapter(executor)
+
+    context = MagicMock()
+    context.get_user_input.return_value = "list the files"
+    context.message.context_id = "conv-1"
+    context.message.message_id = "msg-1"
+
+    with patch(
+        "ark_sdk.executor_app.extract_query_ref",
+        return_value=QueryRef(name="q", namespace="ns"),
+    ), patch(
+        "ark_sdk.executor_app.resolve_query",
+        new=AsyncMock(return_value=_make_request()),
+    ), patch(
+        "ark_sdk.executor_app.discover_broker_url",
+        new=AsyncMock(return_value="http://broker"),
+    ), patch(
+        "ark_sdk.executor_app.QueryStatusUpdater",
+        return_value=MagicMock(),
+    ), patch(
+        "ark_sdk.broker.httpx.AsyncClient",
+        _capturing_transport(captured),
+    ):
+        await adapter._do_execute(context, AsyncMock())
+
+
+class TestToolCallsOnTheWire:
+    @pytest.mark.anyio
+    async def test_tool_calls_reach_the_broker(self):
+        captured: list = []
+        await _run_executor(ToolCallingExecutor("test"), captured)
+
+        tool_chunks = [
+            c for c in _stream_chunks(captured)
+            if c["choices"][0]["delta"].get("tool_calls")
+        ]
+        assert len(tool_chunks) == 2
+
+        first = tool_chunks[0]["choices"][0]["delta"]["tool_calls"][0]
+        assert first["id"] == "toolu_1"
+        assert first["type"] == "function"
+        assert first["function"]["name"] == "Bash"
+        assert json.loads(first["function"]["arguments"]) == {"command": "ls"}
+
+        second = tool_chunks[1]["choices"][0]["delta"]["tool_calls"][0]
+        assert second["id"] == "toolu_2"
+        assert second["function"]["name"] == "Read"
+
+    @pytest.mark.anyio
+    async def test_tool_call_indices_are_distinct(self):
+        captured: list = []
+        await _run_executor(ToolCallingExecutor("test"), captured)
+
+        indices = [
+            c["choices"][0]["delta"]["tool_calls"][0]["index"]
+            for c in _stream_chunks(captured)
+            if c["choices"][0]["delta"].get("tool_calls")
+        ]
+        assert indices == [0, 1]
+
+    @pytest.mark.anyio
+    async def test_text_fallback_still_sent_when_only_tool_calls_streamed(self):
+        captured: list = []
+        await _run_executor(ToolCallingExecutor("test"), captured)
+
+        text_chunks = [
+            c for c in _stream_chunks(captured)
+            if c["choices"][0]["delta"].get("content")
+        ]
+        assert len(text_chunks) == 1
+        assert text_chunks[0]["choices"][0]["delta"]["content"] == "done"
+        assert text_chunks[0]["choices"][0]["finish_reason"] == "stop"
+
+    @pytest.mark.anyio
+    async def test_final_chunk_and_complete_still_sent(self):
+        captured: list = []
+        await _run_executor(ToolCallingExecutor("test"), captured)
+
+        final = [c for c in _stream_chunks(captured) if c["id"] == "chatcmpl-final"]
+        assert len(final) == 1
+        assert final[0]["ark"]["completedQuery"]["status"]["phase"] == "done"
+
+        assert any(url.endswith("/complete") for url, _ in captured)
+
+    @pytest.mark.anyio
+    async def test_index_resets_between_executions(self):
+        executor = ToolCallingExecutor("test")
+
+        first: list = []
+        await _run_executor(executor, first)
+        second: list = []
+        await _run_executor(executor, second)
+
+        indices = [
+            c["choices"][0]["delta"]["tool_calls"][0]["index"]
+            for c in _stream_chunks(second)
+            if c["choices"][0]["delta"].get("tool_calls")
+        ]
+        assert indices == [0, 1]
+
+
+class TestStreamToolCall:
+    @pytest.mark.anyio
+    async def test_noop_without_broker_client(self):
+        executor = ToolCallingExecutor("test")
+        executor._broker_client = None
+
+        await executor.stream_tool_call(name="Bash", arguments={"command": "ls"})
+
+    @pytest.mark.anyio
+    async def test_string_arguments_passed_through_unchanged(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await executor.stream_tool_call(name="Bash", arguments='{"command":"ls"}')
+
+        tool_calls = broker.send_chunk.await_args.kwargs["tool_calls"]
+        assert tool_calls[0]["function"]["arguments"] == '{"command":"ls"}'
+
+    @pytest.mark.anyio
+    async def test_explicit_index_overrides_counter(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await executor.stream_tool_call(name="Bash", index=7)
+
+        tool_calls = broker.send_chunk.await_args.kwargs["tool_calls"]
+        assert tool_calls[0]["index"] == 7
+
+    @pytest.mark.anyio
+    async def test_does_not_set_streamed_flag(self):
+        executor = ToolCallingExecutor("test")
+        executor._broker_client = AsyncMock()
+
+        await executor.stream_tool_call(name="Bash")
+
+        assert executor._streamed is False
+
+
+class TestBuildChunkBackwardCompatibility:
+    def test_text_chunk_delta_has_no_tool_calls_key(self):
+        client = BrokerClient("http://broker", "q", "sess", "agent")
+        chunk = json.loads(client._build_chunk("hello").decode())
+
+        assert chunk["choices"][0]["delta"] == {
+            "role": "assistant",
+            "content": "hello",
+        }
+
+    def test_empty_tool_calls_omitted(self):
+        client = BrokerClient("http://broker", "q", "sess", "agent")
+        chunk = json.loads(client._build_chunk("hello", tool_calls=[]).decode())
+
+        assert "tool_calls" not in chunk["choices"][0]["delta"]
