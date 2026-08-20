@@ -1,3 +1,6 @@
+import {mkdtempSync, readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import request from 'supertest';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
@@ -48,5 +51,41 @@ describe('DELETE /sessions/queries/:query_id', () => {
       .expect(200);
 
     expect(res.body.removed).toBe(0);
+  });
+});
+
+// The flush matters only when the in-memory backend is persisting: without it
+// the route leaves the removal in a 2s debounce, and a kill inside that window
+// reloads a query the cluster has already deleted.
+describe('DELETE /sessions/queries/:query_id with persistence enabled', () => {
+  test('the removal is on disk before the response returns', async () => {
+    const path = join(
+      mkdtempSync(join(tmpdir(), 'ark-sessions-')),
+      'store.json'
+    );
+    const persistedConfig = loadConfig({SESSIONS_FILE_PATH: path});
+    const {app: persistedApp} = buildApp({
+      config: persistedConfig,
+      logger,
+      version: 'test',
+      messageStream: createMessageStream(persistedConfig, logger),
+      chunkStream: createChunkStream(persistedConfig, logger),
+      eventStream: createEventStream(persistedConfig, logger),
+      sessionsStorage: createSessionsStorage(persistedConfig, logger),
+    });
+
+    await request(persistedApp)
+      .post('/sessions')
+      .send({sessionId: 'sess-1', queryName: 'query-1'})
+      .expect(201);
+    await request(persistedApp)
+      .post('/sessions')
+      .send({sessionId: 'sess-1', queryName: 'query-2'})
+      .expect(201);
+
+    await request(persistedApp).delete('/sessions/queries/query-1').expect(200);
+
+    const onDisk = JSON.parse(readFileSync(path, 'utf-8'));
+    expect(Object.keys(onDisk.sessions['sess-1'].queries)).toEqual(['query-2']);
   });
 });

@@ -118,6 +118,10 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
     try {
       req.log.info({queryId}, 'deleting query from sessions');
       const removed = await sessionsBroker.deleteQuery(queryId);
+      // The in-memory backend only arms a debounced write; every other mutating
+      // route on this router flushes, and without it a kill inside that window
+      // reloads the query this call removed.
+      await sessionsBroker.save();
       // 200 even when nothing matched: the controller reads 404 as "this broker
       // does not implement the route" and skips, which would hide a real
       // failure. A query that never emitted an event legitimately has no row.

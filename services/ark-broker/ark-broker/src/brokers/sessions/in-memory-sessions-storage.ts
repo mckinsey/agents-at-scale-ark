@@ -334,12 +334,7 @@ export class InMemorySessionsStorage implements SessionsStorage {
       delete session.queries[queryId];
       removed++;
 
-      // The index is keyed by name alone, so with the same name under two
-      // sessions it points at only one. Clearing it unconditionally would break
-      // applyMessage for the session that still holds that name.
-      if (this.queryToSession.get(queryId) === sessionId) {
-        this.queryToSession.delete(queryId);
-      }
+      this.queryToSession.delete(queryId);
 
       if (Object.keys(session.queries).length === 0) {
         delete this.store.sessions[sessionId];

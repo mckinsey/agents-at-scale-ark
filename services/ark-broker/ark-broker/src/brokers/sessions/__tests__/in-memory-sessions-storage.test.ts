@@ -442,7 +442,7 @@ describe('InMemorySessionsStorage', () => {
       expect(session.lastActivity).toBe(before);
     });
 
-    test('does not orphan the index when the same name lives under two sessions', async () => {
+    test('clears the index for the deleted name only, across every session', async () => {
       await storage.applyEvent({sessionId: 's1', queryName: 'shared'});
       await storage.applyEvent({sessionId: 's1', queryName: 'keeper'});
       await storage.applyEvent({sessionId: 's2', queryName: 'shared'});
@@ -451,9 +451,12 @@ describe('InMemorySessionsStorage', () => {
       expect(await storage.deleteQuery('shared')).toBe(2);
 
       expect(indexOf().has('shared')).toBe(false);
-      // The surviving queries still route, so the index was not over-pruned.
-      await storage.applyMessage('conv-1', 'keeper');
+      // Fails if the delete reaches for the whole index rather than one key.
       expect(indexOf().get('keeper')).toBe('s2');
+      await storage.applyMessage('conv-1', 'keeper');
+      expect(
+        (await storage.getSession('s2'))!.queries['keeper']!.conversationId
+      ).toBe('conv-1');
     });
 
     test('drops the session once its last query goes', async () => {

@@ -1410,10 +1410,12 @@ describe('PostgresSessionsStorage', () => {
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
       await storage.deleteQuery('q1');
 
-      // Characterises the window, it does not endorse it: the finalizer cancels
-      // the in-flight operation before deleting, so this only covers events the
-      // broker had already accepted. Closing it needs a tombstone table, which
-      // trades a bounded orphan for an unbounded one (#2622 has no reaper).
+      // Characterises the window, it does not endorse it. Cancelling the query
+      // does not narrow this: the finalizer's cancel makes the executor emit
+      // QueryExecutionCanceled, and the emitter dispatches it under
+      // context.WithoutCancel, so deleting a running query is the case most
+      // likely to hit it. Closing it needs a tombstone table, which trades a
+      // bounded orphan for an unbounded one (#2622 has no reaper).
       await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
 
       const session = (await storage.getSession('sess-1'))!;
