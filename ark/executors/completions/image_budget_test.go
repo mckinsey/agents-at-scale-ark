@@ -121,9 +121,9 @@ func TestExecuteToolCallsAppliesTurnBudgetAcrossToolCalls(t *testing.T) {
 
 	require.Len(t, agentMessages, 3, "two tool messages plus one image message")
 	assert.Equal(t, agentMessages, newMessages)
-	assert.Equal(t, 1, imagePartCount(t, agentMessages[1]), "the first tool call fits the budget")
+	assert.Equal(t, 1, imagePartCount(t, agentMessages[2]), "the first tool call fits the budget")
 
-	secondToolText := toolMessageText(t, agentMessages[2])
+	secondToolText := toolMessageText(t, agentMessages[1])
 	assert.Contains(t, secondToolText, "the 100 byte image budget for this turn is exhausted")
 	assert.Contains(t, secondToolText, "done", "the tool text is kept alongside the note")
 }

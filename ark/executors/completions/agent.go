@@ -194,11 +194,6 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 	return assistantMessage
 }
 
-func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
-	toolMessage, _, err := a.executeToolCallWithImages(ctx, toolCall, newImageTurnBudget())
-	return toolMessage, err
-}
-
 func (a *Agent) executeToolCallWithImages(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall, budget *imageTurnBudget) (Message, []ToolResultImage, error) {
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
 
@@ -258,26 +253,27 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 
 	// No approval needed, execute normally
 	budget := newImageTurnBudget()
+	outcomes := make([]toolOutcome, 0, len(toolCalls))
 	for _, tc := range toolCalls {
 		if ctx.Err() != nil {
+			appendToolOutcomes(agentMessages, newMessages, outcomes)
 			return ctx.Err()
 		}
 
 		toolMessage, images, err := a.executeToolCallWithImages(ctx, tc, budget)
-		*agentMessages = append(*agentMessages, toolMessage)
-		*newMessages = append(*newMessages, toolMessage)
-
-		if len(images) > 0 {
-			imageMessage := NewUserImageMessage(
-				fmt.Sprintf("Image returned by the %s tool call.", tc.Function.Name), images)
-			*agentMessages = append(*agentMessages, imageMessage)
-			*newMessages = append(*newMessages, imageMessage)
-		}
+		outcomes = append(outcomes, toolOutcome{
+			toolName: tc.Function.Name,
+			message:  toolMessage,
+			images:   images,
+		})
 
 		if err != nil {
+			appendToolOutcomes(agentMessages, newMessages, outcomes)
 			return err
 		}
 	}
+
+	appendToolOutcomes(agentMessages, newMessages, outcomes)
 	return nil
 }
 
@@ -561,23 +557,25 @@ func (a *Agent) reconstructMessagesForResumption(
 	assistantMsgConverted := Message(assistantMsg.ToParam())
 	agentMessages = append(agentMessages, assistantMsgConverted)
 
-	// Append tool results as tool messages
-	toolResultMessages := []Message{}
+	// Append tool results as tool messages, followed by any images they returned
+	outcomes := make([]toolOutcome, 0, len(approvedResults))
 	for _, result := range approvedResults {
 		content := result.Content
 		if result.Error != "" {
 			content = result.Error
 		}
-		toolMsg := ToolMessage(content, result.ID)
-		agentMessages = append(agentMessages, toolMsg)
-		toolResultMessages = append(toolResultMessages, toolMsg)
+		outcomes = append(outcomes, toolOutcome{
+			toolName: result.Name,
+			message:  ToolMessage(content, result.ID),
+			images:   result.Images,
+		})
 	}
-
-	log.Info("Reconstructed conversation for resumption", "totalMessages", len(agentMessages), "toolResults", len(approvedResults))
 
 	// newMessages should contain the reconstructed messages so they get saved to memory
 	newMessages := []Message{assistantMsgConverted}
-	newMessages = append(newMessages, toolResultMessages...)
+	appendToolOutcomes(&agentMessages, &newMessages, outcomes)
+
+	log.Info("Reconstructed conversation for resumption", "totalMessages", len(agentMessages), "toolResults", len(approvedResults))
 	log.Info("Starting resumption with reconstructed messages in newMessages", "count", len(newMessages))
 
 	return agentMessages, newMessages, nil
