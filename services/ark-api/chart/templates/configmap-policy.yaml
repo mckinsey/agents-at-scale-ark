@@ -35,11 +35,9 @@ spec:
     - name: oldLabels
       expression: >-
         oldObject != null && has(oldObject.metadata.labels) ? oldObject.metadata.labels : {}
-    # The configmaps ark-api writes that are not configurations, so carry no
-    # marker. Adding a feature that writes another one without adding it here
-    # denies the write at admission: a 403 in a live cluster, with nothing
-    # failing in CI. TestPolicyAllowsTheConfigmapsArkApiOwns only checks that
-    # the two names below still match their Python constants.
+    # List here every configmap ark-api writes that is not a configuration.
+    # Anything left out is denied at admission: a 403 in the cluster, with no
+    # failing test to warn you.
     - name: unlabelled
       expression: "['ark-export-metadata', 'marketplace-sources']"
   validations:
