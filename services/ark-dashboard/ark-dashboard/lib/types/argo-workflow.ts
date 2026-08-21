@@ -31,6 +31,7 @@ export interface ArgoNodeStatus {
     | 'Steps'
     | 'StepGroup'
     | 'DAG'
+    | 'Retry'
     | 'Container'
     | 'Script'
     | 'Suspend';

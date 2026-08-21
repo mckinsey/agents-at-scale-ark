@@ -54,7 +54,13 @@ import { cn } from '@/lib/utils';
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
 type SessionType = 'workflow' | 'team' | 'agent';
 type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
-type WorkflowStepType = 'dag' | 'steps' | 'container' | 'script' | 'suspend';
+type WorkflowStepType =
+  | 'dag'
+  | 'steps'
+  | 'retry'
+  | 'container'
+  | 'script'
+  | 'suspend';
 type SortOrder = 'newest' | 'oldest';
 type TeamStepType =
   | 'orchestrator'
@@ -171,6 +177,8 @@ function getWorkflowTypeIcon(type: WorkflowStepType) {
       return <GitBranch className="h-4 w-4" />;
     case 'steps':
       return <Play className="h-4 w-4" />;
+    case 'retry':
+      return <RefreshCw className="h-4 w-4" />;
     case 'container':
       return <Container className="h-4 w-4" />;
     case 'script':
@@ -579,7 +587,9 @@ function WorkflowStepNode({
   }
 
   const isParallelNode =
-    step.type === 'dag' || (hasChildren && step.children!.length > 1);
+    step.type === 'dag' ||
+    step.type === 'retry' ||
+    (hasChildren && step.children!.length > 1);
 
   const childDepth = isParallelNode ? depth + 1 : depth;
 
