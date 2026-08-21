@@ -3,6 +3,7 @@ package broker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -288,6 +289,43 @@ func TestSendEvent_IncrementsDroppedCounterOnHTTPError(t *testing.T) {
 	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonHTTPError, "http-err-ns"))
 	e.sendEvent(context.Background(), "http-err-ns", Event{Reason: "QueryExecutionStart"})
 	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonHTTPError, "http-err-ns"))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnEndpointError(t *testing.T) {
+	e := &BrokerEventEmitter{
+		httpClient: &http.Client{},
+		sem:        semaphore.NewWeighted(64),
+		resolveEndpoint: func(_ context.Context, _ string) (string, error) {
+			return "", errors.New("resolve failed")
+		},
+	}
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonEndpointError, "endpoint-err-ns"))
+	e.sendEvent(context.Background(), "endpoint-err-ns", Event{Reason: "QueryExecutionStart"})
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonEndpointError, "endpoint-err-ns"))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnMarshalError(t *testing.T) {
+	e := newTestEmitter(map[string]string{"marshal-err-ns": "http://broker.local"})
+	badEvent := Event{Reason: "QueryExecutionStart", Data: map[string]interface{}{"bad": make(chan int)}}
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonMarshalError, "marshal-err-ns"))
+	e.sendEvent(context.Background(), "marshal-err-ns", badEvent)
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonMarshalError, "marshal-err-ns"))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnRequestError(t *testing.T) {
+	e := newTestEmitter(map[string]string{"request-err-ns": "http://\x7f"})
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonRequestError, "request-err-ns"))
+	e.sendEvent(context.Background(), "request-err-ns", Event{Reason: "QueryExecutionStart"})
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonRequestError, "request-err-ns"))
 
 	assert.Equal(t, float64(1), after-before)
 }
