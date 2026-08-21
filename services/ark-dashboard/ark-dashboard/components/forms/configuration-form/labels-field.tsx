@@ -50,8 +50,9 @@ export function LabelsField({
       addLabel();
       return;
     }
-    if (event.key === 'Backspace' && !draft && value.length > 0) {
-      removeLabel(value[value.length - 1]);
+    const last = value.at(-1);
+    if (event.key === 'Backspace' && !draft && last !== undefined) {
+      removeLabel(last);
     }
   };
 

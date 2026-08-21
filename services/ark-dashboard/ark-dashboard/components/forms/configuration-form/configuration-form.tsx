@@ -27,6 +27,8 @@ import { LabelsField } from './labels-field';
 import { type ConfigurationFormProps } from './types';
 import { useConfigurationForm } from './use-configuration-form';
 
+const SKELETON_FIELDS = ['name', 'value', 'description', 'alias'];
+
 const RequiredMarker = () => (
   <span aria-hidden="true" className="text-fg-secondary">
     *
@@ -55,8 +57,8 @@ export function ConfigurationForm({
       <div
         aria-hidden
         className="flex w-full content-shell flex-1 flex-col gap-6 pt-16">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="flex w-[576px] flex-col gap-2">
+        {SKELETON_FIELDS.map((field) => (
+          <div key={field} className="flex w-[576px] flex-col gap-2">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-9 w-full" />
           </div>

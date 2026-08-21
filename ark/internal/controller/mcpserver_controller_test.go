@@ -169,6 +169,30 @@ var _ = Describe("MCPServer Controller", func() {
 				},
 			},
 		}
+		// A rotated signing key is the case a poll-only design notices late.
+		// The token ref points elsewhere so the match can only come from the key.
+		bySigningKey := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "mcp-ref-secret-signing-key", Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: "http://localhost:8080"},
+				Transport: "http",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: "some-other-secret"},
+					ClientCredentials: &arkv1alpha1.ClientCredentialsSpec{
+						ClientID: "ark-client",
+						ClientAuthentication: arkv1alpha1.ClientAuthenticationSpec{
+							PrivateKeyJWT: &arkv1alpha1.PrivateKeyJWTSpec{
+								SecretKeyRef: arkv1alpha1.SigningKeySecretKeyRef{
+									Name: secretName,
+									Key:  "private.pem",
+								},
+								Algorithm: "ES256",
+							},
+						},
+					},
+				},
+			},
+		}
 		unrelated := &arkv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "mcp-ref-secret-unrelated", Namespace: "default"},
 			Spec: arkv1alpha1.MCPServerSpec{
@@ -179,10 +203,25 @@ var _ = Describe("MCPServer Controller", func() {
 				},
 			},
 		}
+		// Same name, different namespace: a Secret must never enqueue across one.
+		elsewhereNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-secret-other-ns"}}
+		elsewhere := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "mcp-ref-secret-elsewhere", Namespace: elsewhereNamespace.Name},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: "http://localhost:8080"},
+				Transport: "http",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
+				},
+			},
+		}
 		Expect(k8sClient.Create(ctx, byAddress)).To(Succeed())
 		Expect(k8sClient.Create(ctx, byHeader)).To(Succeed())
 		Expect(k8sClient.Create(ctx, byAuthorization)).To(Succeed())
+		Expect(k8sClient.Create(ctx, bySigningKey)).To(Succeed())
 		Expect(k8sClient.Create(ctx, unrelated)).To(Succeed())
+		Expect(k8sClient.Create(ctx, elsewhereNamespace)).To(Succeed())
+		Expect(k8sClient.Create(ctx, elsewhere)).To(Succeed())
 
 		controllerReconciler := &MCPServerReconciler{
 			Client:   k8sClient,
@@ -199,6 +238,7 @@ var _ = Describe("MCPServer Controller", func() {
 			reconcile.Request{NamespacedName: types.NamespacedName{Name: "mcp-ref-secret-address", Namespace: "default"}},
 			reconcile.Request{NamespacedName: types.NamespacedName{Name: "mcp-ref-secret-header", Namespace: "default"}},
 			reconcile.Request{NamespacedName: types.NamespacedName{Name: "mcp-ref-secret-authorization", Namespace: "default"}},
+			reconcile.Request{NamespacedName: types.NamespacedName{Name: "mcp-ref-secret-signing-key", Namespace: "default"}},
 		))
 	})
 
