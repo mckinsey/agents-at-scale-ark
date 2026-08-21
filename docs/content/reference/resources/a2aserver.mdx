@@ -74,6 +74,12 @@ spec:
     name: a2a                                 # no modelRef — the remote A2A server owns the model
 ```
 
+## Conversation context
+
+Ark does not hydrate conversation history into the message it sends a discovered agent: a query targeting one sends only that query's current input, even when memory is active. Threading is opt-in — set the `ark.mckinsey.com/a2a-context-id` annotation on the query and Ark forwards that value as the A2A `contextId`, so a server that keys state on it links successive calls. Without the annotation Ark sends no `contextId` and each call stands alone. `spec.conversationId` threads the completions executor and named execution engines; it does not reach A2AServer agents. See [A2A Queries → Stateful Messages](/developer-guide/queries/a2a-queries#stateful-messages) for a worked example.
+
+An agent running as a [Team](/reference/resources/team) member is the exception: Ark renders the accumulated team transcript into the message, so the member sees earlier members' turns without depending on server-side retention.
+
 ## Status
 
 ```yaml

@@ -276,10 +276,11 @@ spec:
 Every member sees the same transcript — each member's output is appended to the conversation and passed to the next one — but the two kinds receive it in different shapes:
 
 - An **internal member** gets its own system prompt plus the transcript as structured messages.
-- An **external member** gets the transcript folded into the prompt body with `# <member>:` speaker attribution, because the receiving engine assembles its own prompt. Tool results are rendered as `# tool:` turns, but the tool call that produced them — its name and arguments — is not carried across.
-- A member on the built-in **`a2a`** engine is an exception: it receives only the query's original input, never the team transcript, so it cannot see earlier members' output. This applies to any team containing an `a2a` member, not just mixed ones. Tracked in [#3224](https://github.com/mckinsey/agents-at-scale-ark/issues/3224).
+- An **external member** — on a named engine or on the built-in **`a2a`** engine — gets the transcript folded into the prompt body with `# <member>:` speaker attribution, because the receiving engine assembles its own prompt. Tool results are rendered as `# tool:` turns, but the tool call that produced them — its name and arguments — is not carried across.
 
-Conversation state is scoped differently too: internal members share the parent query's memory, while each external member gets its own derived `conversationId`, so an executor that keys state on it won't merge members.
+A query that targets an `a2a` agent directly still sends only that query's input, leaving the conversation to the remote server — see [A2AServer → Conversation context](/reference/resources/a2aserver#conversation-context). Only team-member turns carry the transcript.
+
+Conversation state is scoped differently for each of the three: internal members share the parent query's memory; each **named-engine** member gets its own derived `conversationId`, so an executor that keys state on it won't merge members; an **`a2a`** member keeps the query's A2A `contextID`, so the remote server sees one conversation for the whole query.
 
 ## Query a team
 
