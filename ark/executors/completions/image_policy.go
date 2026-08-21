@@ -34,6 +34,10 @@ func (p *imagePolicy) NewTurnBudget() *imageTurnBudget {
 	return newImageTurnBudget(p.limits.MaxBytesPerTurn)
 }
 
+func (p *imagePolicy) ApplyRequestBudget(messages []Message) []Message {
+	return applyImageRequestBudget(messages, p.limits.MaxBytesPerRequest)
+}
+
 func (p *imagePolicy) NewToolResultAdmitter() *toolImageAdmitter {
 	return &toolImageAdmitter{policy: p}
 }
