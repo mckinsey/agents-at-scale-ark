@@ -1,8 +1,9 @@
 # Execution Engine Team Test
 
-Tests sequential Teams with members on a named `ExecutionEngine`: one team where every
-member is engine-backed, and one mixed team pairing an engine-backed member with a local
-member on the built-in completions engine.
+Tests sequential Teams with engine-backed members: one team where every member is on a
+named `ExecutionEngine`, one mixed team pairing an engine-backed member with a local
+member on the built-in completions engine, and one team pairing a local member with a
+member on the built-in `a2a` engine.
 
 ## What it tests
 
@@ -11,15 +12,16 @@ member on the built-in completions engine.
 - An engine-backed agent needs no `modelRef` — it never runs the local agentic loop
 - A mixed team is accepted at admission and both member kinds run in one query
 - The engine member's turn reaches the local member through the shared transcript: the mock only returns the passing reply when the local member's request carries an assistant message named `engine-member-a`, which is the name stamped onto the engine member's reply. If propagation breaks, the mock returns `REVIEW-FAILED` and the assertion fails
-- Queries targeting either team reach `phase: done` with a non-empty response
+- A member on the built-in `a2a` engine also receives the transcript: the echo agent returns whatever text it is sent, so `a2a-team-query`'s response is the input that reached it. Asserting it contains the local member's `A2A-TRANSCRIPT-MARKER` and the `# a2a-writer:` attribution proves the transcript was forwarded — the query input carries neither (issue #3224)
+- Queries targeting any of the three teams reach `phase: done` with a non-empty response
 
 ## Resources created
 
 - `mock-engine` ExecutionEngine, pointed at the `mock-llm-echo` A2AServer address
 - `engine-member-a` / `engine-member-b` Agents on `mock-engine`, with no `modelRef`
-- `local-reviewer` Agent on the built-in engine, with `modelRef: test-model-mock`
-- `engine-team` sequential Team (all engine-backed) and `mixed-team` sequential Team (`engine-member-a` then `local-reviewer`)
-- `engine-team-query` / `mixed-team-query` Queries targeting each team
+- `local-reviewer` and `a2a-writer` Agents on the built-in engine, with `modelRef: test-model-mock`
+- `engine-team` sequential Team (all engine-backed), `mixed-team` sequential Team (`engine-member-a` then `local-reviewer`), and `a2a-team` sequential Team (`a2a-writer` then `echo-agent`, the Agent the `mock-llm-echo` A2AServer creates)
+- `engine-team-query` / `mixed-team-query` / `a2a-team-query` Queries targeting each team
 
 ## Not covered
 

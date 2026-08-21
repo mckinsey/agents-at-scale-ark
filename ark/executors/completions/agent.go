@@ -119,7 +119,7 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 		if arka2a.IsNamedEngine(a.ExecutionEngine) {
 			return a.executeWithNamedExecutionEngine(ctx, userInput, history, eventStream)
 		}
-		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
+		return a.executeWithA2AExecutionEngine(ctx, userInput, history, eventStream)
 	}
 
 	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream, opts)
@@ -132,10 +132,14 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 	return &ExecutionResult{Messages: messages}, nil
 }
 
-func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)
-	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, eventStream)
+	input := userInput
+	if isTeamMemberExecution(ctx) {
+		input = NewUserMessage(renderEngineInput(userInput, history))
+	}
+	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, input, eventStream)
 }
 
 func (a *Agent) executeWithNamedExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
