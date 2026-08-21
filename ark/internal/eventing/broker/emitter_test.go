@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
@@ -252,6 +253,43 @@ func TestEmitStructured_DropsEventWhenSemaphoreFull(t *testing.T) {
 	e.EmitStructured(context.Background(), query, corev1.EventTypeNormal, "QueryExecutionStart", "msg", nil)
 
 	assert.False(t, called, "event should be dropped when semaphore is full")
+}
+
+func TestEmitStructured_IncrementsDroppedCounterWhenSemaphoreFull(t *testing.T) {
+	e := newTestEmitter(map[string]string{"sem-full-ns": "http://unused"})
+	e.sem = semaphore.NewWeighted(0)
+	query := newTestQuery("sem-full-ns")
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonSemaphoreFull, "sem-full-ns"))
+	e.EmitStructured(context.Background(), query, corev1.EventTypeNormal, "QueryExecutionStart", "msg", nil)
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonSemaphoreFull, "sem-full-ns"))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnBadStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	e := newTestEmitter(map[string]string{"bad-status-ns": srv.URL})
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonBadStatus, "bad-status-ns"))
+	e.sendEvent(context.Background(), "bad-status-ns", Event{Reason: "QueryExecutionStart"})
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonBadStatus, "bad-status-ns"))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnHTTPError(t *testing.T) {
+	e := newTestEmitter(map[string]string{"http-err-ns": "http://127.0.0.1:1"})
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonHTTPError, "http-err-ns"))
+	e.sendEvent(context.Background(), "http-err-ns", Event{Reason: "QueryExecutionStart"})
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonHTTPError, "http-err-ns"))
+
+	assert.Equal(t, float64(1), after-before)
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
