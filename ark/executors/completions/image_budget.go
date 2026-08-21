@@ -12,9 +12,8 @@ type imageTurnBudget struct {
 	remaining int
 }
 
-func newImageTurnBudget() *imageTurnBudget {
-	total := toolImageLimitsFromEnv().MaxBytesPerTurn
-	return &imageTurnBudget{total: total, remaining: total}
+func newImageTurnBudget(maxBytes int) *imageTurnBudget {
+	return &imageTurnBudget{total: maxBytes, remaining: maxBytes}
 }
 
 func (b *imageTurnBudget) admit(ctx context.Context, toolName string, images []ToolResultImage) ([]ToolResultImage, string) {
@@ -28,7 +27,8 @@ func (b *imageTurnBudget) admit(ctx context.Context, toolName string, images []T
 	for _, image := range images {
 		if len(image.Data) > b.remaining {
 			log.Info("dropping tool image beyond the per turn budget", "tool", toolName, "mediaType", image.MediaType, "bytes", len(image.Data), "remainingBytes", b.remaining, "maxBytesPerTurn", b.total)
-			note += fmt.Sprintf("[image returned: %s, %d bytes - the %d byte image budget for this turn is exhausted, not shown to the model]", image.MediaType, len(image.Data), b.total)
+			note += imageDroppedNote(image.MediaType, len(image.Data),
+				fmt.Sprintf("the %d byte image budget for this turn is exhausted", b.total))
 			continue
 		}
 		b.remaining -= len(image.Data)

@@ -35,6 +35,7 @@ type Agent struct {
 	ExecutionEngine       *arkv1alpha1.ExecutionEngineRef
 	Annotations           map[string]string
 	OutputSchema          *runtime.RawExtension
+	ImagePolicy           *imagePolicy
 	client                client.Client
 	approvalRequiredTools map[string]*arkv1alpha1.ToolApprovalConfig
 }
@@ -194,6 +195,13 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 	return assistantMessage
 }
 
+func (a *Agent) imagePolicy() *imagePolicy {
+	if a.ImagePolicy != nil {
+		return a.ImagePolicy
+	}
+	return defaultImagePolicy()
+}
+
 func (a *Agent) executeToolCallWithImages(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall, budget *imageTurnBudget) (Message, []ToolResultImage, error) {
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
 
@@ -252,7 +260,7 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 	}
 
 	// No approval needed, execute normally
-	budget := newImageTurnBudget()
+	budget := a.imagePolicy().NewTurnBudget()
 	outcomes := make([]toolOutcome, 0, len(toolCalls))
 	for _, tc := range toolCalls {
 		if ctx.Err() != nil {

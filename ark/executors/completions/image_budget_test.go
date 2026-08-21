@@ -57,10 +57,8 @@ func imagePartCount(t *testing.T, msg Message) int {
 }
 
 func TestImageTurnBudgetAdmit(t *testing.T) {
-	t.Setenv(toolImageMaxBytesPerTurnEnv, "100")
-
 	t.Run("images within the budget are all admitted", func(t *testing.T) {
-		budget := newImageTurnBudget()
+		budget := newImageTurnBudget(100)
 		kept, note := budget.admit(context.Background(), "read",
 			[]ToolResultImage{imageOfSize(t, 40), imageOfSize(t, 40)})
 
@@ -70,7 +68,7 @@ func TestImageTurnBudgetAdmit(t *testing.T) {
 	})
 
 	t.Run("an image that would exceed the budget is dropped", func(t *testing.T) {
-		budget := newImageTurnBudget()
+		budget := newImageTurnBudget(100)
 		kept, note := budget.admit(context.Background(), "read",
 			[]ToolResultImage{imageOfSize(t, 80), imageOfSize(t, 80)})
 
@@ -81,7 +79,7 @@ func TestImageTurnBudgetAdmit(t *testing.T) {
 	})
 
 	t.Run("a smaller image still fits after a larger one is dropped", func(t *testing.T) {
-		budget := newImageTurnBudget()
+		budget := newImageTurnBudget(100)
 		kept, _ := budget.admit(context.Background(), "read",
 			[]ToolResultImage{imageOfSize(t, 90), imageOfSize(t, 80), imageOfSize(t, 10)})
 
@@ -91,7 +89,7 @@ func TestImageTurnBudgetAdmit(t *testing.T) {
 	})
 
 	t.Run("no images means no note", func(t *testing.T) {
-		budget := newImageTurnBudget()
+		budget := newImageTurnBudget(100)
 		kept, note := budget.admit(context.Background(), "read", nil)
 
 		assert.Empty(t, kept)
@@ -100,8 +98,6 @@ func TestImageTurnBudgetAdmit(t *testing.T) {
 }
 
 func TestExecuteToolCallsAppliesTurnBudgetAcrossToolCalls(t *testing.T) {
-	t.Setenv(toolImageMaxBytesPerTurnEnv, "100")
-
 	registry := newTestRegistry()
 	registry.RegisterTool(ToolDefinition{Name: "first"}, &stubImageExecutor{
 		images: []ToolResultImage{imageOfSize(t, 80)},
@@ -110,7 +106,14 @@ func TestExecuteToolCallsAppliesTurnBudgetAcrossToolCalls(t *testing.T) {
 		images: []ToolResultImage{imageOfSize(t, 80)},
 	})
 
-	agent := &Agent{Name: "test-agent", Namespace: "default", Tools: registry}
+	agent := &Agent{
+		Name: "test-agent", Namespace: "default", Tools: registry,
+		ImagePolicy: testImagePolicy(toolImageLimits{
+			MaxBytes:        defaultToolImageMaxBytes,
+			MaxPerToolCall:  defaultToolImageMaxPerToolCall,
+			MaxBytesPerTurn: 100,
+		}),
+	}
 
 	var agentMessages []Message
 	var newMessages []Message

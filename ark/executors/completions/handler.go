@@ -945,7 +945,7 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 	// Convert parsed tool calls to openai format
 	toolCalls := make([]openai.ChatCompletionMessageToolCall, len(toolCallsData))
 	approvedResults := []ToolResult{}
-	imageBudget := newImageTurnBudget()
+	imageBudget := agent.imagePolicy().NewTurnBudget()
 
 	for i, tcData := range toolCallsData {
 		tc := openai.ChatCompletionMessageToolCall{

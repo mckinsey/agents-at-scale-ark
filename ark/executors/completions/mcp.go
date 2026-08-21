@@ -13,8 +13,16 @@ import (
 )
 
 type MCPExecutor struct {
-	MCPClient *arkmcp.MCPClient
-	ToolName  string
+	MCPClient   *arkmcp.MCPClient
+	ToolName    string
+	ImagePolicy *imagePolicy
+}
+
+func (m *MCPExecutor) imagePolicy() *imagePolicy {
+	if m.ImagePolicy != nil {
+		return m.ImagePolicy
+	}
+	return defaultImagePolicy()
 }
 
 func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
@@ -55,8 +63,7 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, e
 }
 
 func (m *MCPExecutor) collectContent(ctx context.Context, contents []mcpsdk.Content) (string, []ToolResultImage) {
-	log := logf.FromContext(ctx)
-	limits := toolImageLimitsFromEnv()
+	admitter := m.imagePolicy().NewToolResultAdmitter()
 	var result strings.Builder
 	var images []ToolResultImage
 	for _, content := range contents {
@@ -64,24 +71,13 @@ func (m *MCPExecutor) collectContent(ctx context.Context, contents []mcpsdk.Cont
 		case *mcpsdk.TextContent:
 			result.WriteString(typed.Text)
 		case *mcpsdk.ImageContent:
-			mediaType, ok := normalizeImageMediaType(typed.MIMEType)
+			image, note, ok := admitter.Admit(ctx, m.ToolName, typed.MIMEType, typed.Data)
 			if !ok {
-				log.Info("dropping tool image with unsupported media type", "tool", m.ToolName, "mediaType", typed.MIMEType)
-				result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes - unsupported media type, not shown to the model]", typed.MIMEType, len(typed.Data)))
+				result.WriteString(note)
 				continue
 			}
-			if len(typed.Data) > limits.MaxBytes {
-				log.Info("dropping oversized tool image", "tool", m.ToolName, "mediaType", mediaType, "bytes", len(typed.Data), "maxBytes", limits.MaxBytes)
-				result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes - exceeds the %d byte limit, not shown to the model]", mediaType, len(typed.Data), limits.MaxBytes))
-				continue
-			}
-			if len(images) >= limits.MaxPerToolCall {
-				log.Info("dropping tool image beyond the per tool call limit", "tool", m.ToolName, "mediaType", mediaType, "bytes", len(typed.Data), "maxPerToolCall", limits.MaxPerToolCall)
-				result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes - image limit of %d per tool call reached, not shown to the model]", mediaType, len(typed.Data), limits.MaxPerToolCall))
-				continue
-			}
-			images = append(images, ToolResultImage{MediaType: mediaType, Data: typed.Data})
-			result.WriteString(fmt.Sprintf("[image returned: %s, %d bytes]", mediaType, len(typed.Data)))
+			images = append(images, image)
+			result.WriteString(imageReturnedNote(image.MediaType, len(image.Data)))
 		default:
 			jsonBytes, _ := json.MarshalIndent(content, "", "  ")
 			result.WriteString(string(jsonBytes))

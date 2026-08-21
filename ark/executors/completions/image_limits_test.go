@@ -48,8 +48,10 @@ func TestToolImageLimitsFromEnv(t *testing.T) {
 }
 
 func TestCollectContentDropsOversizedImage(t *testing.T) {
-	t.Setenv(toolImageMaxBytesEnv, "10")
-	executor := &MCPExecutor{ToolName: "read"}
+	executor := &MCPExecutor{ToolName: "read", ImagePolicy: testImagePolicy(toolImageLimits{
+		MaxBytes:       10,
+		MaxPerToolCall: defaultToolImageMaxPerToolCall,
+	})}
 
 	t.Run("an image over the limit is dropped with a breadcrumb", func(t *testing.T) {
 		oversized := make([]byte, 11)
@@ -75,8 +77,10 @@ func TestCollectContentDropsOversizedImage(t *testing.T) {
 }
 
 func TestCollectContentCapsImagesPerToolCall(t *testing.T) {
-	t.Setenv(toolImageMaxPerToolCallEnv, "4")
-	executor := &MCPExecutor{ToolName: "read"}
+	executor := &MCPExecutor{ToolName: "read", ImagePolicy: testImagePolicy(toolImageLimits{
+		MaxBytes:       defaultToolImageMaxBytes,
+		MaxPerToolCall: 4,
+	})}
 
 	want := make([][]byte, 0, 5)
 	contents := make([]mcpsdk.Content, 0, 5)
@@ -96,8 +100,10 @@ func TestCollectContentCapsImagesPerToolCall(t *testing.T) {
 }
 
 func TestCollectContentLimitsAreConfigurable(t *testing.T) {
-	t.Setenv(toolImageMaxPerToolCallEnv, "1")
-	executor := &MCPExecutor{ToolName: "read"}
+	executor := &MCPExecutor{ToolName: "read", ImagePolicy: testImagePolicy(toolImageLimits{
+		MaxBytes:       defaultToolImageMaxBytes,
+		MaxPerToolCall: 1,
+	})}
 
 	text, images := executor.collectContent(context.Background(), []mcpsdk.Content{
 		&mcpsdk.ImageContent{MIMEType: "image/png", Data: pngBytes},
@@ -106,4 +112,11 @@ func TestCollectContentLimitsAreConfigurable(t *testing.T) {
 
 	require.Len(t, images, 1)
 	assert.Contains(t, text, fmt.Sprintf("image limit of %d per tool call reached", 1))
+}
+
+func testImagePolicy(limits toolImageLimits) *imagePolicy {
+	if limits.MaxBytesPerTurn == 0 {
+		limits.MaxBytesPerTurn = defaultToolImageMaxBytesPerTurn
+	}
+	return newImagePolicy(limits)
 }

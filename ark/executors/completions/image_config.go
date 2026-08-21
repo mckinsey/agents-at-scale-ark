@@ -1,10 +1,5 @@
 package completions
 
-import (
-	"os"
-	"strconv"
-)
-
 const (
 	toolImageMaxBytesEnv        = "ARK_TOOL_IMAGE_MAX_BYTES"
 	toolImageMaxPerToolCallEnv  = "ARK_TOOL_IMAGE_MAX_PER_TOOL_CALL"
@@ -22,19 +17,9 @@ type toolImageLimits struct {
 }
 
 func toolImageLimitsFromEnv() toolImageLimits {
-	limits := toolImageLimits{
-		MaxBytes:        defaultToolImageMaxBytes,
-		MaxPerToolCall:  defaultToolImageMaxPerToolCall,
-		MaxBytesPerTurn: defaultToolImageMaxBytesPerTurn,
+	return toolImageLimits{
+		MaxBytes:        envInt(toolImageMaxBytesEnv, defaultToolImageMaxBytes),
+		MaxPerToolCall:  envInt(toolImageMaxPerToolCallEnv, defaultToolImageMaxPerToolCall),
+		MaxBytesPerTurn: envInt(toolImageMaxBytesPerTurnEnv, defaultToolImageMaxBytesPerTurn),
 	}
-	if v, err := strconv.Atoi(os.Getenv(toolImageMaxBytesEnv)); err == nil && v > 0 {
-		limits.MaxBytes = v
-	}
-	if v, err := strconv.Atoi(os.Getenv(toolImageMaxPerToolCallEnv)); err == nil && v > 0 {
-		limits.MaxPerToolCall = v
-	}
-	if v, err := strconv.Atoi(os.Getenv(toolImageMaxBytesPerTurnEnv)); err == nil && v > 0 {
-		limits.MaxBytesPerTurn = v
-	}
-	return limits
 }

@@ -1,6 +1,9 @@
 package completions
 
-import "strings"
+import (
+	"mime"
+	"strings"
+)
 
 var supportedImageMediaTypes = map[string]bool{
 	"image/jpeg": true,
@@ -10,8 +13,11 @@ var supportedImageMediaTypes = map[string]bool{
 }
 
 func normalizeImageMediaType(mediaType string) (string, bool) {
-	base, _, _ := strings.Cut(mediaType, ";")
-	base = strings.ToLower(strings.TrimSpace(base))
+	base, _, err := mime.ParseMediaType(mediaType)
+	if err != nil {
+		base, _, _ = strings.Cut(mediaType, ";")
+		base = strings.ToLower(strings.TrimSpace(base))
+	}
 	if base == "image/jpg" {
 		base = "image/jpeg"
 	}
