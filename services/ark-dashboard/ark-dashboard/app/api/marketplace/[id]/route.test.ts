@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET } from './route';
+import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
 
 vi.mock('@/lib/services/marketplace-server', () => ({
   getMarketplaceItemById: vi.fn(),
@@ -12,7 +13,7 @@ function createRequest(url: string) {
   return new NextRequest(new URL(url, 'http://localhost'));
 }
 
-const mockItem = {
+const mockItem: MarketplaceItem = {
   id: 'phoenix',
   name: 'Phoenix',
   description: 'Observability platform for LLMs',

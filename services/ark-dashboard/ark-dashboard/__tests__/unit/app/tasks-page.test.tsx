@@ -1,12 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { Provider as JotaiProvider } from 'jotai';
-import {
-  AppRouterContext,
-  type AppRouterInstance,
-} from 'next/dist/shared/lib/app-router-context.shared-runtime';
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { describe, expect, it, vi } from 'vitest';
 
+import { mockAppRouter } from '@/__tests__/helpers/app-router';
 import TasksPage from '@/app/(dashboard)/tasks/page';
 import { SidebarProvider } from '@/components/ui/sidebar';
 
@@ -26,14 +24,7 @@ vi.mock('@/lib/services/a2a-tasks-hooks', () => ({
 }));
 
 const MockRouter = ({ children }: { children: React.ReactNode }) => {
-  const mockRouter: AppRouterInstance = {
-    back: vi.fn(),
-    forward: vi.fn(),
-    push: vi.fn(),
-    replace: vi.fn(),
-    refresh: vi.fn(),
-    prefetch: vi.fn(),
-  };
+  const mockRouter = mockAppRouter();
 
   return (
     <AppRouterContext.Provider value={mockRouter}>

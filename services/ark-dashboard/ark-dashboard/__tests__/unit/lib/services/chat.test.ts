@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  queryDetail,
+  queryList,
+  queryResponse,
+} from '@/__tests__/helpers/query-fixtures';
 import { apiClient } from '@/lib/api/client';
+import type { QueryCreateRequest } from '@/lib/services/chat';
 import { chatService } from '@/lib/services/chat';
-import type {
-  QueryDetailResponse,
-  QueryListResponse,
-} from '@/lib/services/chat';
 
 // Mock the API client
 vi.mock('@/lib/api/client', () => ({
@@ -42,19 +44,20 @@ describe('chatService', () => {
 
   describe('createQuery', () => {
     it('should create query with normalized target types', async () => {
-      const mockResponse: QueryDetailResponse = {
+      const mockResponse = queryDetail({
         name: 'test-query',
         input: 'Test input',
         target: { type: 'agent', name: 'agent1' },
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
-      const queryRequest = {
+      const queryRequest: QueryCreateRequest = {
         name: 'test-query',
         input: 'Test input',
         target: { type: 'AGENT', name: 'agent1' },
+        type: 'user',
       };
 
       const result = await chatService.createQuery(queryRequest);
@@ -69,11 +72,11 @@ describe('chatService', () => {
 
   describe('getQuery', () => {
     it('should fetch query by name', async () => {
-      const mockQuery: QueryDetailResponse = {
+      const mockQuery = queryDetail({
         name: 'test-query',
         input: 'Test',
         status: { phase: 'done' },
-      };
+      });
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
 
@@ -96,12 +99,12 @@ describe('chatService', () => {
 
   describe('submitChatQuery', () => {
     it('should create chat query with string input', async () => {
-      const mockResponse: QueryDetailResponse = {
+      const mockResponse = queryDetail({
         name: 'chat-query-mock-uuid',
         input: 'Hello',
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
@@ -126,12 +129,12 @@ describe('chatService', () => {
     });
 
     it('should add streaming annotation when enableStreaming is true', async () => {
-      const mockResponse: QueryDetailResponse = {
+      const mockResponse = queryDetail({
         name: 'chat-query-mock-uuid',
         input: 'Hello',
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
@@ -160,12 +163,12 @@ describe('chatService', () => {
     });
 
     it('should not add streaming annotation when enableStreaming is false or undefined', async () => {
-      const mockResponse: QueryDetailResponse = {
+      const mockResponse = queryDetail({
         name: 'chat-query-mock-uuid',
         input: 'Hello',
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
@@ -185,12 +188,12 @@ describe('chatService', () => {
     });
 
     it('should forward parameters when provided', async () => {
-      const mockResponse: QueryDetailResponse = {
+      const mockResponse = queryDetail({
         name: 'chat-query-mock-uuid',
         input: 'Hello',
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
@@ -214,12 +217,12 @@ describe('chatService', () => {
     });
 
     it('should omit parameters when none are provided', async () => {
-      const mockResponse: QueryDetailResponse = {
+      const mockResponse = queryDetail({
         name: 'chat-query-mock-uuid',
         input: 'Hello',
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
@@ -235,14 +238,14 @@ describe('chatService', () => {
 
   describe('getQueryResult', () => {
     it('should return terminal status for completed query', async () => {
-      const mockQuery: QueryDetailResponse = {
+      const mockQuery = queryDetail({
         name: 'test-query',
         input: 'Test',
         status: {
           phase: 'done',
           response: { content: 'Query completed successfully' },
         },
-      };
+      });
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
 
@@ -256,13 +259,13 @@ describe('chatService', () => {
     });
 
     it('should return non-terminal status for running query', async () => {
-      const mockQuery: QueryDetailResponse = {
+      const mockQuery = queryDetail({
         name: 'test-query',
         input: 'Test',
         status: {
           phase: 'running',
         },
-      };
+      });
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
 
@@ -276,13 +279,13 @@ describe('chatService', () => {
     });
 
     it('should return non-terminal status for queued query', async () => {
-      const mockQuery: QueryDetailResponse = {
+      const mockQuery = queryDetail({
         name: 'test-query',
         input: 'Test',
         status: {
           phase: 'queued',
         },
-      };
+      });
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
 
@@ -296,13 +299,13 @@ describe('chatService', () => {
     });
 
     it('should handle unknown phase', async () => {
-      const mockQuery: QueryDetailResponse = {
+      const mockQuery = queryDetail({
         name: 'test-query',
         input: 'Test',
         status: {
           phase: 'invalid-phase',
         },
-      };
+      });
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
 
@@ -341,11 +344,11 @@ describe('chatService', () => {
 
       let callCount = 0;
       vi.mocked(apiClient.get).mockImplementation(() => {
-        const query: QueryDetailResponse = {
+        const query = queryDetail({
           name: 'test-query',
           input: 'Test',
           status: mockStatuses[callCount++],
-        };
+        });
         return Promise.resolve(query);
       });
 
@@ -403,11 +406,13 @@ describe('chatService', () => {
       let callCount = 0;
       vi.mocked(apiClient.get).mockImplementation(() => {
         callCount++;
-        return Promise.resolve({
-          name: 'test-query',
-          input: 'Test',
-          status: { phase: 'running' },
-        } as QueryDetailResponse);
+        return Promise.resolve(
+          queryDetail({
+            name: 'test-query',
+            input: 'Test',
+            status: { phase: 'running' },
+          }),
+        );
       });
 
       const onUpdate = vi.fn();
@@ -431,14 +436,12 @@ describe('chatService', () => {
 
   describe('getChatHistory', () => {
     it('should filter and sort chat queries', async () => {
-      const mockListResponse: QueryListResponse = {
-        items: [
-          { name: 'other-query', input: 'Other', status: {} },
-          { name: 'chat-query-1000', input: 'First', status: {} },
-          { name: 'chat-query-2000', input: 'Second', status: {} },
-          { name: 'chat-query-1500', input: 'Middle', status: {} },
-        ],
-      };
+      const mockListResponse = queryList([
+        queryResponse({ name: 'other-query', input: 'Other', status: {} }),
+        queryResponse({ name: 'chat-query-1000', input: 'First', status: {} }),
+        queryResponse({ name: 'chat-query-2000', input: 'Second', status: {} }),
+        queryResponse({ name: 'chat-query-1500', input: 'Middle', status: {} }),
+      ]);
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockListResponse);
 
@@ -456,12 +459,10 @@ describe('chatService', () => {
 
   describe('listQueries', () => {
     it('should list all queries', async () => {
-      const mockResponse: QueryListResponse = {
-        items: [
-          { name: 'query1', input: 'Test 1', status: {} },
-          { name: 'query2', input: 'Test 2', status: {} },
-        ],
-      };
+      const mockResponse = queryList([
+        queryResponse({ name: 'query1', input: 'Test 1', status: {} }),
+        queryResponse({ name: 'query2', input: 'Test 2', status: {} }),
+      ]);
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
 
@@ -474,11 +475,11 @@ describe('chatService', () => {
 
   describe('updateQuery', () => {
     it('should update query', async () => {
-      const mockResponse: QueryDetailResponse = {
+      const mockResponse = queryDetail({
         name: 'test-query',
         input: 'Updated input',
         status: { phase: 'done' },
-      };
+      });
 
       vi.mocked(apiClient.put).mockResolvedValueOnce(mockResponse);
 
@@ -572,13 +573,13 @@ describe('chatService', () => {
 
   describe('streamChatResponse', () => {
     it('should yield parsed chunks from SSE stream', async () => {
-      const messages = [{ role: 'user' as const, content: 'Hello' }];
-      const mockQueryResponse = {
+      const input = 'Hello';
+      const mockQueryResponse = queryDetail({
         name: 'chat-query-mock-uuid',
-        input: messages,
+        input,
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-      } as unknown as QueryDetailResponse;
+      });
 
       // Mock the query creation
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
@@ -608,7 +609,7 @@ describe('chatService', () => {
 
       const chunks = [];
       for await (const chunk of chatService.streamChatResponse(
-        messages,
+        input,
         'agent',
         'test-agent',
         'session-123',
@@ -628,13 +629,13 @@ describe('chatService', () => {
     });
 
     it('should throw error when fetch fails', async () => {
-      const messages = [{ role: 'user' as const, content: 'Hello' }];
-      const mockQueryResponse: QueryDetailResponse = {
+      const input = 'Hello';
+      const mockQueryResponse = queryDetail({
         name: 'chat-query-mock-uuid',
-        input: messages,
+        input,
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
 
@@ -644,7 +645,7 @@ describe('chatService', () => {
       });
 
       const generator = chatService.streamChatResponse(
-        messages,
+        input,
         'agent',
         'test-agent',
         'session-123',
@@ -656,13 +657,13 @@ describe('chatService', () => {
     });
 
     it('should throw error when response has no body', async () => {
-      const messages = [{ role: 'user' as const, content: 'Hello' }];
-      const mockQueryResponse: QueryDetailResponse = {
+      const input = 'Hello';
+      const mockQueryResponse = queryDetail({
         name: 'chat-query-mock-uuid',
-        input: messages,
+        input,
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-      };
+      });
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
 
@@ -672,7 +673,7 @@ describe('chatService', () => {
       });
 
       const generator = chatService.streamChatResponse(
-        messages,
+        input,
         'agent',
         'test-agent',
         'session-123',
@@ -684,13 +685,13 @@ describe('chatService', () => {
     });
 
     it('prefixes the chunk stream URL with the tenant base path', async () => {
-      const messages = [{ role: 'user' as const, content: 'Hello' }];
-      const mockQueryResponse = {
+      const input = 'Hello';
+      const mockQueryResponse = queryDetail({
         name: 'chat-query-mock-uuid',
-        input: messages,
+        input,
         target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
-      } as unknown as QueryDetailResponse;
+      });
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
 
@@ -706,7 +707,7 @@ describe('chatService', () => {
       global.fetch = fetchMock;
 
       const generator = chatService.streamChatResponse(
-        messages,
+        input,
         'agent',
         'test-agent',
         'session-123',

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NextRequestWithAuth } from '@/auth';
-import middleware from '@/middleware';
+import proxy from '@/proxy';
 
 // Mock NextResponse's static helpers so we can assert on redirect/next.
 vi.mock('next/server', () => {
@@ -50,7 +50,7 @@ const createMockRequest = (pathname: string): NextRequestWithAuth => {
   } as unknown as NextRequestWithAuth;
 };
 
-describe('middleware (auth gate)', () => {
+describe('proxy (auth gate)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.BASE_URL = BASE_URL;
@@ -64,14 +64,14 @@ describe('middleware (auth gate)', () => {
 
   describe('unauthenticated requests redirect to the local sign-in (no AUTH_HUB_URL)', () => {
     // Regression guard: the proxied API must be gated, not just UI pages.
-    // Before the middleware was restored, GET /api/v1/* returned 200 + data
+    // Before the auth gate was restored, GET /api/v1/* returned 200 + data
     // to anonymous callers.
     it('redirects the proxied API route /api/v1/context', async () => {
       const request = createMockRequest('/api/v1/context');
       request.auth = null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middleware as any)(request);
+      await (proxy as any)(request);
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
         new URL(
@@ -87,7 +87,7 @@ describe('middleware (auth gate)', () => {
       request.auth = null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middleware as any)(request);
+      await (proxy as any)(request);
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
         new URL(
@@ -106,7 +106,7 @@ describe('middleware (auth gate)', () => {
       request.auth = null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middleware as any)(request);
+      await (proxy as any)(request);
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
         'https://example.com/tenant-a/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Ftenant-a%2Fdashboard',
@@ -125,7 +125,7 @@ describe('middleware (auth gate)', () => {
       request.auth = null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middleware as any)(request);
+      await (proxy as any)(request);
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
         `${HUB_URL}/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Ftenant-a`,
@@ -139,7 +139,7 @@ describe('middleware (auth gate)', () => {
       request.auth = null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middleware as any)(request);
+      await (proxy as any)(request);
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
         `${HUB_URL}/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Ftenant-b`,
@@ -157,7 +157,7 @@ describe('middleware (auth gate)', () => {
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middleware as any)(request);
+      await (proxy as any)(request);
 
       expect(NextResponse.next).toHaveBeenCalled();
       expect(NextResponse.redirect).not.toHaveBeenCalled();
@@ -182,7 +182,7 @@ describe('middleware (auth gate)', () => {
       request.auth = null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middleware as any)(request);
+      await (proxy as any)(request);
 
       expect(NextResponse.redirect).not.toHaveBeenCalled();
       expect(NextResponse.next).toHaveBeenCalled();
@@ -191,7 +191,7 @@ describe('middleware (auth gate)', () => {
 
   describe('base-path prefix is normalised before matching the allow-list', () => {
     // Regression: Next.js delivers the pathname WITH the tenant prefix to
-    // middleware (e.g. /nstenant/api/auth/signin), so the auth routes must still be
+    // the proxy (e.g. /nstenant/api/auth/signin), so the auth routes must still be
     // recognised as public or the sign-in page redirects to itself forever.
     beforeEach(() => {
       process.env.NEXT_PUBLIC_BASE_PATH = '/nstenant';
@@ -209,7 +209,7 @@ describe('middleware (auth gate)', () => {
       request.auth = null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middleware as any)(request);
+      await (proxy as any)(request);
 
       expect(NextResponse.redirect).not.toHaveBeenCalled();
       expect(NextResponse.next).toHaveBeenCalled();
@@ -221,7 +221,7 @@ describe('middleware (auth gate)', () => {
       request.auth = null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middleware as any)(request);
+      await (proxy as any)(request);
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
         'https://example.com/nstenant/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Fnstenant%2Fdashboard',

@@ -16,6 +16,8 @@ const schema = z.object({
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),
+  enableTerminateTool: z.boolean().optional(),
+  terminatePrompt: z.string().optional(),
 });
 
 function Wrapper({
@@ -40,7 +42,12 @@ function Wrapper({
 
   return (
     <Form {...form}>
-      <StrategySection form={form} selectedMembers={[]} disabled={disabled} />
+      <StrategySection
+        form={form}
+        agents={[]}
+        selectedMembers={[]}
+        disabled={disabled}
+      />
     </Form>
   );
 }

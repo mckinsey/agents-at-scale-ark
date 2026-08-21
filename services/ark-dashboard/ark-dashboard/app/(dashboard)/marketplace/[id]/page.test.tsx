@@ -4,12 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { useRouter, useParams } from 'next/navigation';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+import { mockAppRouter } from '@/__tests__/helpers/app-router';
+import type { MarketplaceItemDetail } from '@/lib/api/generated/marketplace-types';
 import {
   useGetMarketplaceItemById,
   useInstallMarketplaceItem,
   useUninstallMarketplaceItem,
 } from '@/lib/services/marketplace-hooks';
-import type { MarketplaceItemDetail } from '@/lib/api/generated/marketplace-types';
 
 import MarketplaceDetailPage from './page';
 
@@ -85,14 +86,7 @@ function setupMocks(overrides?: {
     name: 'Test Item',
   });
 
-  vi.mocked(useRouter).mockReturnValue({
-    push: mockPush,
-    replace: vi.fn(),
-    prefetch: vi.fn(),
-    back: vi.fn(),
-    forward: vi.fn(),
-    refresh: vi.fn(),
-  });
+  vi.mocked(useRouter).mockReturnValue(mockAppRouter({ push: mockPush }));
 
   const itemData = overrides?.item === null ? undefined : (overrides?.item ?? baseItem);
 

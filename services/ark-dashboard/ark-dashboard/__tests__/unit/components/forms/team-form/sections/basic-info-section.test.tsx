@@ -12,9 +12,12 @@ const schema = z.object({
   name: z.string(),
   description: z.string().optional(),
   strategy: z.string(),
+  loops: z.boolean(),
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),
+  enableTerminateTool: z.boolean().optional(),
+  terminatePrompt: z.string().optional(),
 });
 
 function Wrapper({
@@ -30,6 +33,7 @@ function Wrapper({
       name: '',
       description: '',
       strategy: 'round-robin',
+      loops: false,
       maxTurns: '',
       selectorAgent: '',
       selectorPrompt: '',

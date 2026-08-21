@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
+import {
+  lastListSessionsDateFrom,
+  lastListSessionsParams,
+} from '@/__tests__/helpers/list-sessions-params';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import type { PaginatedSessions } from '@/lib/services/broker-sessions';
 
@@ -79,8 +83,7 @@ describe('Filter Combination Scenarios', () => {
       await user.click(screen.getByText('Active'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
+        const lastCall = lastListSessionsParams();
         expect(lastCall.status).toBe('active');
       });
     });
@@ -102,8 +105,7 @@ describe('Filter Combination Scenarios', () => {
       await user.click(screen.getByText('Error'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
+        const lastCall = lastListSessionsParams();
         expect(lastCall.status).toBe('error');
       });
     });
@@ -143,9 +145,7 @@ describe('Filter Combination Scenarios', () => {
       await user.click(screen.getByText('Last 24h'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
-        const dateFrom = new Date(lastCall.dateFrom).getTime();
+        const dateFrom = lastListSessionsDateFrom();
         const expected = now - 24 * 60 * 60 * 1000;
 
         // Allow 1 second tolerance for test execution time
@@ -171,9 +171,7 @@ describe('Filter Combination Scenarios', () => {
       await user.click(screen.getByText('Last 7 days'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
-        const dateFrom = new Date(lastCall.dateFrom).getTime();
+        const dateFrom = lastListSessionsDateFrom();
         const expected = now - 7 * 24 * 60 * 60 * 1000;
 
         expect(Math.abs(dateFrom - expected)).toBeLessThan(1000);
@@ -198,9 +196,7 @@ describe('Filter Combination Scenarios', () => {
       await user.click(screen.getByText('Last 30 days'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
-        const dateFrom = new Date(lastCall.dateFrom).getTime();
+        const dateFrom = lastListSessionsDateFrom();
         const expected = now - 30 * 24 * 60 * 60 * 1000;
 
         expect(Math.abs(dateFrom - expected)).toBeLessThan(1000);
@@ -257,16 +253,14 @@ describe('Filter Combination Scenarios', () => {
 
       // Wait for status filter to apply
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        expect(calls[calls.length - 1][0].status).toBe('idle');
+        expect(lastListSessionsParams().status).toBe('idle');
       });
 
       // Apply sort
       await user.click(screen.getByText('Name'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
+        const lastCall = lastListSessionsParams();
 
         expect(lastCall.status).toBe('idle');
         expect(lastCall.sort).toBe('name');
@@ -298,8 +292,7 @@ describe('Filter Combination Scenarios', () => {
       await user.click(screen.getByText('Name'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
+        const lastCall = lastListSessionsParams();
         expect(lastCall.sort).toBe('name');
         expect(lastCall.order).toBe('desc');
       });
@@ -319,24 +312,21 @@ describe('Filter Combination Scenarios', () => {
       await user.click(screen.getByText('Name'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        expect(calls[calls.length - 1][0].order).toBe('desc');
+        expect(lastListSessionsParams().order).toBe('desc');
       });
 
       // Click Name again (asc)
       await user.click(screen.getByText('Name'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        expect(calls[calls.length - 1][0].order).toBe('asc');
+        expect(lastListSessionsParams().order).toBe('asc');
       });
 
       // Click Name again (desc)
       await user.click(screen.getByText('Name'));
 
       await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        expect(calls[calls.length - 1][0].order).toBe('desc');
+        expect(lastListSessionsParams().order).toBe('desc');
       });
     });
   });

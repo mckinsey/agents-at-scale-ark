@@ -18,18 +18,28 @@ describe('TimeInput', () => {
     expect(segments.length).toBeGreaterThan(0);
   });
 
-  it('should handle value prop', () => {
-    render(<TimeInput value="12:30" />);
+  it('should render the hour and minute it is given', () => {
+    const { container } = render(<TimeInput hour={12} minute={30} />);
 
-    const root = screen.getByRole('group');
-    expect(root).toBeInTheDocument();
+    const segments = container.querySelectorAll<HTMLInputElement>(
+      '[data-slot="time-segment"]',
+    );
+    expect(segments[0]).toHaveValue('12');
+    expect(segments[1]).toHaveValue('30');
   });
 
-  it('should handle onChange callback', () => {
-    const handleChange = vi.fn();
-    render(<TimeInput onChange={handleChange} />);
+  it('should report hour changes', async () => {
+    const handleHourChange = vi.fn();
+    const { container } = render(
+      <TimeInput onHourChange={handleHourChange} />,
+    );
 
-    expect(screen.getByRole('group')).toBeInTheDocument();
+    const hourSegment = container.querySelector<HTMLInputElement>(
+      '[data-slot="time-segment"]',
+    );
+    await userEvent.type(hourSegment!, '9');
+
+    expect(handleHourChange).toHaveBeenCalledWith(9);
   });
 
   it('should handle disabled state', () => {
@@ -62,15 +72,29 @@ describe('TimeInput', () => {
     expect(root).toHaveAttribute('data-validation', 'error');
   });
 
-  it('should support 12-hour format', () => {
-    render(<TimeInput hourCycle={12} />);
+  it('should clamp the hour to the bounds derived from min and max', async () => {
+    const handleHourChange = vi.fn();
+    const { container } = render(
+      <TimeInput min="08:00" max="17:00" onHourChange={handleHourChange} />,
+    );
 
-    expect(screen.getByRole('group')).toBeInTheDocument();
+    const hourSegment = container.querySelector<HTMLInputElement>(
+      '[data-slot="time-segment"]',
+    );
+    await userEvent.type(hourSegment!, '2');
+
+    expect(handleHourChange).toHaveBeenCalledWith(8);
   });
 
-  it('should support 24-hour format', () => {
-    render(<TimeInput hourCycle={24} />);
+  it('should render custom placeholders', () => {
+    const { container } = render(
+      <TimeInput placeholderHour="HH" placeholderMinute="MM" />,
+    );
 
-    expect(screen.getByRole('group')).toBeInTheDocument();
+    const segments = container.querySelectorAll<HTMLInputElement>(
+      '[data-slot="time-segment"]',
+    );
+    expect(segments[0]).toHaveAttribute('placeholder', 'HH');
+    expect(segments[1]).toHaveAttribute('placeholder', 'MM');
   });
 });

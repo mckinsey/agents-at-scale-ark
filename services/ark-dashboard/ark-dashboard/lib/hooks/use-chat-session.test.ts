@@ -3,6 +3,8 @@ import { Provider } from 'jotai';
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { asyncGeneratorFrom } from '@/__tests__/helpers/async-generator';
+import { queryDetail } from '@/__tests__/helpers/query-fixtures';
 import { agentsService, chatService } from '@/lib/services';
 
 import { useChatSession } from './use-chat-session';
@@ -61,7 +63,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-123',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: asyncGeneratorFrom(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -104,7 +106,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-456',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: asyncGeneratorFrom(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -141,7 +143,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-789',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: asyncGeneratorFrom(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -184,7 +186,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-poll',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: asyncGeneratorFrom(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -241,7 +243,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-complete',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: asyncGeneratorFrom(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -304,7 +306,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-error',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: asyncGeneratorFrom(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -377,7 +379,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-stop',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: asyncGeneratorFrom(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -444,12 +446,12 @@ describe('useChatSession - Conversation ID Continuity', () => {
   it('fetches conversationId via getQuery when the final stream chunk is missing', async () => {
     vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
       queryName: 'test-query-missing-final',
-      chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+      chunks: asyncGeneratorFrom(contentChunkWithoutConversationId()),
     });
     vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
-    vi.mocked(chatService.getQuery).mockResolvedValueOnce({
-      status: { conversationId: 'conv-fallback' },
-    } as Awaited<ReturnType<typeof chatService.getQuery>>);
+    vi.mocked(chatService.getQuery).mockResolvedValueOnce(
+      queryDetail({ status: { conversationId: 'conv-fallback' } }),
+    );
 
     const { result } = renderHook(
       () => useChatSession({ name: 'test-agent', type: 'agent' }),
@@ -471,16 +473,16 @@ describe('useChatSession - Conversation ID Continuity', () => {
     vi.mocked(chatService.startStreamChatResponse)
       .mockResolvedValueOnce({
         queryName: 'test-query-first',
-        chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+        chunks: asyncGeneratorFrom(contentChunkWithoutConversationId()),
       })
       .mockResolvedValueOnce({
         queryName: 'test-query-second',
-        chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+        chunks: asyncGeneratorFrom(contentChunkWithoutConversationId()),
       });
     vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
-    vi.mocked(chatService.getQuery).mockResolvedValue({
-      status: { conversationId: 'conv-fallback' },
-    } as Awaited<ReturnType<typeof chatService.getQuery>>);
+    vi.mocked(chatService.getQuery).mockResolvedValue(
+      queryDetail({ status: { conversationId: 'conv-fallback' } }),
+    );
 
     const { result } = renderHook(
       () => useChatSession({ name: 'test-agent', type: 'agent' }),
@@ -511,9 +513,9 @@ describe('useChatSession - Conversation ID Continuity', () => {
   it('does not call getQuery when the stream already provides a conversationId', async () => {
     vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
       queryName: 'test-query-has-final',
-      chunks: finalChunkWithConversationId(
-        'conv-from-stream',
-      ) as AsyncIterable<unknown>,
+      chunks: asyncGeneratorFrom(
+        finalChunkWithConversationId('conv-from-stream'),
+      ),
     });
     vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
 
@@ -536,7 +538,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
   it('recovers gracefully when the getQuery fallback throws', async () => {
     vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
       queryName: 'test-query-throws',
-      chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+      chunks: asyncGeneratorFrom(contentChunkWithoutConversationId()),
     });
     vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
     vi.mocked(chatService.getQuery).mockRejectedValueOnce(
@@ -577,7 +579,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
         const stopPhasePolling = vi.fn();
         vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
           queryName: 'test-query-metadata',
-          chunks: mockChunks as AsyncIterable<unknown>,
+          chunks: asyncGeneratorFrom(mockChunks),
         });
         vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
           stopPhasePolling,
@@ -638,7 +640,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
         const stopPhasePolling = vi.fn();
         vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
           queryName: 'test-query-tools',
-          chunks: mockChunks as AsyncIterable<unknown>,
+          chunks: asyncGeneratorFrom(mockChunks),
         });
         vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
           stopPhasePolling,

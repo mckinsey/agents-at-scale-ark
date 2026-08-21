@@ -7,7 +7,7 @@ import type { Agent } from '@/lib/services';
 
 const mockPush = vi.fn();
 const mockToggleFloatingChat = vi.fn();
-const mockIsOpen = vi.fn(() => false);
+const mockIsOpen = vi.fn<(name: string) => boolean>(() => false);
 
 vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
   useNamespacedNavigation: () => ({ push: mockPush }),

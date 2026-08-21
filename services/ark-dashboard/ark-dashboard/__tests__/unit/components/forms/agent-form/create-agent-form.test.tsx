@@ -91,7 +91,7 @@ function buildHook(overrides: Record<string, unknown> = {}) {
       setParameters: vi.fn(),
       handleToolToggle: vi.fn(),
       handleDeleteTool: vi.fn(),
-      isToolSelected: vi.fn(() => false),
+      isToolSelected: vi.fn<(toolName: string) => boolean>(() => false),
       onSubmit: vi.fn(),
     },
   };

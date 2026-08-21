@@ -4,6 +4,8 @@ import { useSearchParams } from 'next/navigation';
 import type { PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ContextResponse } from '@/lib/services/namespaces';
+
 const mockPush = vi.fn();
 
 vi.mock('next/navigation', () => ({
@@ -14,7 +16,13 @@ vi.mock('next/navigation', () => ({
   ),
 }));
 
-const mockUseGetContext = vi.fn(() => ({
+type GetContextResult = {
+  data: ContextResponse | null;
+  isPending: boolean;
+  error: unknown;
+};
+
+const mockUseGetContext = vi.fn<() => GetContextResult>(() => ({
   data: { namespace: 'test-ns', read_only_mode: false, cluster: null },
   isPending: false,
   error: null,

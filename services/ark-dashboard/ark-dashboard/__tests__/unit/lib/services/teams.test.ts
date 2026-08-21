@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { teamsService } from '@/lib/services/teams'
 import { apiClient } from '@/lib/api/client'
-import type { TeamDetailResponse, TeamListResponse } from '@/lib/services/teams'
+import type {
+  TeamCreateRequest,
+  TeamDetailResponse,
+  TeamListResponse,
+} from '@/lib/services/teams'
 
 // Mock the API client
 vi.mock('@/lib/api/client', () => ({
@@ -16,8 +20,10 @@ vi.mock('@/lib/api/client', () => ({
 describe('teamsService', () => {
   const mockTeam: TeamDetailResponse = {
     name: 'test-team',
-    displayName: 'Test Team',
+    namespace: 'default',
     description: 'A test team',
+    loops: false,
+    strategy: 'sequential',
     members: [
       { type: 'agent', name: 'agent1' },
       { type: 'agent', name: 'agent2' },
@@ -31,9 +37,10 @@ describe('teamsService', () => {
   describe('getAll', () => {
     it('should fetch all teams and add id field', async () => {
       const mockListResponse: TeamListResponse = {
+        count: 2,
         items: [
-          { name: 'team1', displayName: 'Team 1' },
-          { name: 'team2', displayName: 'Team 2' },
+          { name: 'team1', namespace: 'default' },
+          { name: 'team2', namespace: 'default' },
         ],
       }
 
@@ -115,10 +122,12 @@ describe('teamsService', () => {
 
   describe('create', () => {
     it('should create team and add id field', async () => {
-      const createRequest = {
+      const createRequest: TeamCreateRequest = {
         name: 'new-team',
-        displayName: 'New Team',
-        members: [{ type: 'agent' as const, name: 'agent1' }],
+        description: 'New Team',
+        loops: false,
+        strategy: 'sequential',
+        members: [{ type: 'agent', name: 'agent1' }],
       }
 
       vi.mocked(apiClient.post).mockResolvedValueOnce({
@@ -141,11 +150,11 @@ describe('teamsService', () => {
 
   describe('update', () => {
     it('should update team and return with id field', async () => {
-      const updates = { displayName: 'Updated Team' }
+      const updates = { description: 'Updated Team' }
       
       vi.mocked(apiClient.put).mockResolvedValueOnce({
         ...mockTeam,
-        displayName: 'Updated Team',
+        description: 'Updated Team',
       })
 
       const result = await teamsService.update('test-team', updates)
@@ -156,7 +165,7 @@ describe('teamsService', () => {
       )
       expect(result).toMatchObject({
         id: 'test-team',
-        displayName: 'Updated Team',
+        description: 'Updated Team',
       })
     })
 
@@ -173,7 +182,7 @@ describe('teamsService', () => {
 
   describe('updateById', () => {
     it('should convert ID to string and call update', async () => {
-      const updates = { displayName: 'Updated' }
+      const updates = { description: 'Updated' }
       vi.mocked(apiClient.put).mockResolvedValueOnce(mockTeam)
 
       await teamsService.updateById(123, updates)
