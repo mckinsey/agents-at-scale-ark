@@ -3,7 +3,6 @@
 package postgresql
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -15,12 +14,6 @@ import (
 // kind only: receivers relist from the resources table, so a lost notification
 // costs latency (bounded by the broadcaster's periodic relist), never data.
 const notifyChannel = "ark_resource_change"
-
-func (p *PostgreSQLBackend) notifyResourceChange(ctx context.Context, kind string) {
-	if _, err := p.db.ExecContext(ctx, `SELECT pg_notify($1, $2)`, notifyChannel, kind); err != nil {
-		klog.Warningf("pg_notify %s for kind %s failed; watchers fall back to periodic relist: %v", notifyChannel, kind, err)
-	}
-}
 
 // StartNotifyListener starts the LISTEN loop that turns cross-replica write
 // notifications into broadcaster nudges. Unlike the WAL consumer it is not
@@ -49,6 +42,7 @@ func (p *PostgreSQLBackend) startNotifyListener() {
 		}
 
 		klog.Errorf("notify listener disconnected, retrying in %v: %v", backoff, err)
+		notifyListenerReconnectsTotal.Inc()
 		select {
 		case <-p.ctx.Done():
 			return
@@ -77,6 +71,9 @@ func (p *PostgreSQLBackend) runNotifyListener() error {
 		return fmt.Errorf("listen: %w", err)
 	}
 
+	notifyListenerConnected.Set(1)
+	defer notifyListenerConnected.Set(0)
+
 	klog.Infof("notify listener started on channel %s", notifyChannel)
 	p.nudgeAllWatchers()
 
@@ -91,5 +88,6 @@ func (p *PostgreSQLBackend) handleNotification(kind string) {
 	if kind == "" {
 		return
 	}
+	notifyReceivedTotal.WithLabelValues(kind).Inc()
 	p.nudgeKind(kind)
 }

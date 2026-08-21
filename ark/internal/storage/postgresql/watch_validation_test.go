@@ -713,3 +713,65 @@ drained3:
 		}
 	}
 }
+
+// TestNotifyListener_ReconnectRecovers kills the LISTEN backend, writes while
+// the listener is reconnecting, and asserts the write still reaches the watcher
+// quickly. The listener nudges all watchers on reconnect (notify_listener.go),
+// so a write that landed during the LISTEN gap is picked up by the post-reconnect
+// relist rather than waiting for the production ticker.
+func TestNotifyListener_ReconnectRecovers(t *testing.T) {
+	replicaA := newTestBackend(t)
+	defer replicaA.Close()
+	replicaB := newTestBackend(t)
+	defer replicaB.Close()
+	replicaB.StartNotifyListener()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kind := "NotifyReconnectTest"
+	ns := "notify-reconnect-test"
+
+	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+
+	w, err := replicaB.Watch(ctx, kind, ns, storage.WatchOptions{})
+	if err != nil {
+		t.Fatalf("Watch on replica B failed: %v", err)
+	}
+	defer w.Stop()
+
+	var pid int64
+	pidDeadline := time.After(10 * time.Second)
+	for {
+		row := replicaA.db.QueryRowContext(ctx, "SELECT pid FROM pg_stat_activity WHERE query = 'LISTEN "+notifyChannel+"'")
+		if err := row.Scan(&pid); err == nil {
+			break
+		}
+		select {
+		case <-pidDeadline:
+			t.Fatal("notify listener never opened a LISTEN session")
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+
+	if _, err := replicaA.db.ExecContext(ctx, "SELECT pg_terminate_backend($1)", pid); err != nil {
+		t.Fatalf("pg_terminate_backend failed: %v", err)
+	}
+
+	createTestResource(t, replicaA, kind, ns, "reconnect-probe")
+
+	start := time.Now()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case ev := <-w.ResultChan():
+			if ev.Type == watch.Added {
+				t.Logf("Replica B recovered the write %v after the LISTEN backend was killed", time.Since(start))
+				replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+				return
+			}
+		case <-deadline:
+			t.Fatal("Replica B did not recover the write within 5s of the LISTEN backend being killed")
+		}
+	}
+}
