@@ -55,3 +55,35 @@
 - [x] 8.4 Confirm an oversized upload trips the per-image limit end to end rather than erroring the request
 - [x] 8.5 Not required — the s3-mode media type is `image/png`, identical to posix mode, so `http.DetectContentType` sniffing is unnecessary
 
+
+## 9. One Owner For The Tool-Turn Message Sequence
+
+- [x] 9.1 Add `tool_turn.go` with `toolOutcome` and `appendToolOutcomes`, appending every tool message before any image message so the tool messages for one `tool_calls` block stay contiguous
+- [x] 9.2 Collect outcomes in `executeToolCalls` and append them through the helper, flushing on the context-cancelled and tool-error returns
+- [x] 9.3 Carry images through the approval path — `executeToolCallWithImages` in `handler.go`, `Images` and `Name` on the rebuilt `ToolResult`, one `imageTurnBudget` across the loop
+- [x] 9.4 Build the resumed sequence in `reconstructMessagesForResumption` through the same helper, and delete the now-unused `executeToolCall`
+- [x] 9.5 Test the sequence invariants through both entry points from one table
+
+## 10. One Owner For Image Admission
+
+- [x] 10.1 Add `image_policy.go` with `imagePolicy`, `defaultImagePolicy` caching the limits behind a `sync.Once`, and `toolImageAdmitter` holding the per-image and per-tool-call decisions
+- [x] 10.2 Add `imageDroppedNote` and `imageReturnedNote`, replacing the four hand-written breadcrumbs
+- [x] 10.3 Add `envInt` and use it in `image_config.go` and `mcp_config.go`
+- [x] 10.4 Parse the media type with `mime.ParseMediaType`, keeping the `image/jpg` alias and the allowlist
+- [x] 10.5 Take the policy from an optional field on `MCPExecutor`, `Agent` and `Model`, defaulting to the cached one; inject limits in tests instead of setting environment variables
+
+## 11. Encode Once
+
+- [x] 11.1 `ToolResultImage` carries `B64` and `Bytes`; `newToolResultImage` encodes at the MCP boundary
+- [x] 11.2 Move the data URL grammar to `image_data_url.go`, shared by `DataURL` and `imageFromDataURL`
+- [x] 11.3 Derive the decoded length by arithmetic after a non-allocating validity scan, so the request path never decodes
+- [x] 11.4 Emit `image.B64` directly from `renderAnthropicContent`
+- [x] 11.5 Guard with an allocation assertion and a benchmark
+
+## 12. Per-Request Image Budget
+
+- [x] 12.1 Add `ARK_TOOL_IMAGE_MAX_BYTES_PER_REQUEST` (15 MiB) to `image_config.go` and the chart values
+- [x] 12.2 Add `applyImageRequestBudget` — newest-first retention, omitted images replaced by the breadcrumb, input never mutated
+- [x] 12.3 Apply it in `Model.ChatCompletion` so every provider and both the streaming and non-streaming paths are covered once
+- [x] 12.4 Tests — a history within budget, a history over it, the breadcrumb, the untouched input, and the budget seen by a provider
+- [x] 12.5 Document the four limits and their enforcement points in `docs/content/user-guide/files.mdx`

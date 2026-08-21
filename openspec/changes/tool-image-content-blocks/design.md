@@ -37,16 +37,30 @@ The Anthropic base64 image source cannot carry a remote URL. Emitting the URL as
 **Three limits, enforced at two points.**
 `ARK_TOOL_IMAGE_MAX_BYTES` (5 MiB) and `ARK_TOOL_IMAGE_MAX_PER_TOOL_CALL` (4) are enforced in `collectContent`, where the decoded bytes first arrive. `ARK_TOOL_IMAGE_MAX_BYTES_PER_TURN` (15 MiB) is a cumulative budget held across every tool call in one turn, enforced in `executeToolCalls` where the loop already sits. The per-image default is set against the binding provider constraint — Anthropic accepts roughly 5 MB per image, OpenAI roughly 20 MB — and file-gateway, the tool that motivated this feature, caps its own uploads at 1 MB, so the default is generous for legitimate traffic while keeping a single image from failing the request.
 
-Alternative — one total byte limit — cannot distinguish "one absurd image" from "forty reasonable ones", and the two failure modes want different messages to the model. Alternative — capping across the whole agentic loop rather than per turn — needs an eviction policy for images already in the history and is deferred.
+Alternative — one total byte limit — cannot distinguish "one absurd image" from "forty reasonable ones", and the two failure modes want different messages to the model.
+
+A fourth limit, `ARK_TOOL_IMAGE_MAX_BYTES_PER_REQUEST` (15 MiB), bounds the assembled request. The three ingress limits bound what one turn admits; only this one bounds what the model receives, because the image user message is replayed from history on every later turn. Its eviction policy is newest-first retention, with an omitted image replaced by the breadcrumb text.
+
+**Each concern has one owner.**
+Review of the first implementation found six defects that shared a cause: the feature was written as point edits at each site the bytes pass through, so image policy, message ordering and the image representation were each decided at whichever call site noticed them first. Four owners replace those call sites. `imagePolicy` resolves the limits once and makes every admission decision, including the wording of a drop. `appendToolOutcomes` owns the message sequence a tool run produces and is used by both the agent loop and the approval resume path. `ToolResultImage` holds one encoding. `applyImageRequestBudget` owns the per-request ceiling. Alternative — fixing each finding where it was reported — leaves the same six call sites free to drift apart again.
+
+**Tool messages for one `tool_calls` block stay contiguous.**
+OpenAI rejects a request in which another role interrupts the tool messages answering one assistant `tool_calls` block, and parallel tool calls are the default. Image messages are therefore buffered and appended after the whole tool run rather than after the tool message they came from. Alternative — attaching the image to the tool message's own content parts — is not available: OpenAI does not accept an image part in a `tool` role message.
+
+**An image is encoded once, where its bytes arrive.**
+`ToolResultImage` carries the base64 payload and the decoded length, not the raw bytes. Both wire formats that consume it want base64, so nothing on the request path decodes. The earlier shape encoded on the way in, decoded in `imageFromDataURL`, and re-encoded when rendering, costing roughly two extra copies of every image on every turn. The decoded length is derived by arithmetic after a non-allocating validity scan.
+
+**The per-request budget is enforced where the request is assembled.**
+`Model.ChatCompletion` is the one point every provider and both the streaming and non-streaming paths pass through, so the ceiling is applied once rather than in each encoder. Newest images are kept: the image the model is being asked about is the one it needs. The stored conversation is untouched — only the outbound copy is trimmed — so a later turn under a raised budget still has the image.
 
 **A dropped image is reported, not hidden.**
 Every drop reuses the breadcrumb path already built for an unsupported media type: a line in the tool message text naming the size, the limit, and that the image was not shown. A silently missing image makes the model assert things about an image it never saw. Budget drops write their note into the tool message the image came from rather than a separate message, so the reason sits next to the result that produced it.
 
 ## Risks / Trade-offs
 
-- **Context cost.** An image is still large. It is now spent on something the model can use, the base64 no longer appears twice, and the per-turn budget puts a ceiling on it. Images accumulated across many turns are still unbounded — see Open Questions.
+- **Context cost.** An image is still large. It is now spent on something the model can use, the base64 no longer appears twice, and the per-turn and per-request budgets put a ceiling on it.
 - **Extra base64 round-trip** per image on the Anthropic path → bounded by one encode and one decode per image per request; negligible next to the API call.
-- **The HITL approval path drops images** → out of scope and called out in the proposal; behaviour there is unchanged, not newly broken.
+- **A long conversation loses its older images** to the per-request budget → the alternative is a request the provider rejects; the omission is stated in the text the model reads, and the stored conversation keeps the image.
 - **A provider that rejects image blocks** would now receive them where before it received text → only the shared Anthropic format encoder emits blocks, and both providers on it (Anthropic, Bedrock) accept image blocks in the Messages API.
 
 ## Migration Plan
@@ -56,4 +70,4 @@ No CRD or API change. The three image limits are optional executor environment v
 ## Open Questions
 
 - Should a tool be able to opt out of image pass-through (for example a tool returning a thumbnail purely as an artefact)? Not needed by any current tool.
-- Should the byte budget span the whole agentic loop rather than a single turn? A long loop can still accumulate images across turns. Doing so needs a policy for evicting images already in the history, which the per-turn budget does not.
+- Should an image omitted by the per-request budget be summarised by the model before it is dropped, rather than reduced to a breadcrumb? That needs a model call per eviction and is not obviously worth it.

@@ -18,16 +18,36 @@ The completions executor SHALL carry an image returned by an MCP tool as image b
 - **THEN** the executor SHALL serialise it into the tool message text as before
 
 ### Requirement: Images returned by a tool are shown to the model
-The completions executor SHALL append a user message carrying the images to the conversation after the tool message they came from, because the `tool` role cannot hold an image content part.
+The completions executor SHALL append a user message carrying the images to the conversation after the tool messages for the turn, because the `tool` role cannot hold an image content part. Every tool message answering one assistant `tool_calls` block SHALL be contiguous, because the OpenAI API rejects a request in which another role interrupts them.
 
-#### Scenario: Image message follows the tool message
+#### Scenario: Image message follows the tool messages
 - **WHEN** a tool call returns one or more images
-- **THEN** the executor SHALL append the tool message followed by a user message holding one image content part per image and a caption naming the tool
+- **THEN** the executor SHALL append a user message holding one image content part per image and a caption naming the tool
 - **AND** both messages SHALL be added to the conversation history
+
+#### Scenario: A non-final tool call returns an image
+- **WHEN** an assistant turn emits two tool calls and only the first returns an image
+- **THEN** both tool messages SHALL be appended before the image message
+- **AND** no message of another role SHALL sit between them
+
+#### Scenario: Several tool calls return images
+- **WHEN** more than one tool call in a turn returns an image
+- **THEN** the image messages SHALL follow the tool messages in tool-call order
 
 #### Scenario: Tool returns no image
 - **WHEN** a tool call returns no image
 - **THEN** the executor SHALL append only the tool message, unchanged from previous behaviour
+
+### Requirement: Images survive the human approval path
+A tool that returns an image SHALL show it to the model whether or not the tool required human approval, because the same tool producing the same output must not behave differently depending on whether approval was configured.
+
+#### Scenario: Approved tool call returns an image
+- **WHEN** a tool call held for human approval is approved and returns an image
+- **THEN** the resumed conversation SHALL carry the same tool message and image user message an unapproved call would produce
+
+#### Scenario: Approved tool calls share one turn budget
+- **WHEN** several approved tool calls in one resumption return images
+- **THEN** the per-turn budget SHALL apply across them, as it does for an unapproved turn
 
 ### Requirement: Anthropic requests carry images as image blocks
 The Anthropic request format SHALL express a message's content as either a JSON string or an array of content blocks, and SHALL emit an `image` block for each image the message carries.
@@ -88,7 +108,16 @@ An image SHALL be carried only when its normalised media type is one of `image/j
 - **THEN** no image block SHALL be emitted for it
 
 ### Requirement: Tool images are bounded in size and count
-The completions executor SHALL bound the images a tool can put in front of the model, because an unbounded image is either rejected by the provider or silently consumes the context window. Three limits apply, each configurable and each defaulting to a value inside every supported provider's documented ceiling: decoded bytes per image (`ARK_TOOL_IMAGE_MAX_BYTES`, default 5 MiB), images per tool result (`ARK_TOOL_IMAGE_MAX_PER_TOOL_CALL`, default 4), and cumulative decoded bytes across all tool calls in one turn (`ARK_TOOL_IMAGE_MAX_BYTES_PER_TURN`, default 15 MiB).
+The completions executor SHALL bound the images a tool can put in front of the model, because an unbounded image is either rejected by the provider or silently consumes the context window. Four limits apply, each configurable, each defaulting to a value inside every supported provider's documented ceiling, and each enforced at a named point:
+
+| Limit | Enforced on | Variable | Default |
+| --- | --- | --- | --- |
+| Decoded bytes per image | one image in a tool result | `ARK_TOOL_IMAGE_MAX_BYTES` | 5 MiB |
+| Images per tool result | one tool result | `ARK_TOOL_IMAGE_MAX_PER_TOOL_CALL` | 4 |
+| Cumulative bytes per turn | every tool call in one turn | `ARK_TOOL_IMAGE_MAX_BYTES_PER_TURN` | 15 MiB |
+| Cumulative bytes per request | every image in one outbound request | `ARK_TOOL_IMAGE_MAX_BYTES_PER_REQUEST` | 15 MiB |
+
+The first three bound what one turn may admit. Only the per-request limit bounds what the model receives, because images admitted in earlier turns are replayed from the conversation history.
 
 #### Scenario: Image exceeds the per-image limit
 - **WHEN** an MCP tool returns an image whose decoded size exceeds the per-image limit
@@ -114,6 +143,23 @@ The completions executor SHALL bound the images a tool can put in front of the m
 - **WHEN** a limit's environment variable holds a positive integer
 - **THEN** that value SHALL be used in place of the default
 - **AND** an absent, non-numeric or non-positive value SHALL leave the default in force
+
+### Requirement: Total image bytes per request are bounded
+The completions executor SHALL bound the image bytes in an outbound request, counting images replayed from the conversation history as well as images admitted this turn, because the image user message is persisted and re-sent on every subsequent turn and would otherwise accumulate without limit. The bound SHALL be applied once, where the request is assembled, so it holds for every provider.
+
+#### Scenario: History fits the request budget
+- **WHEN** the images across a conversation total no more than the per-request budget
+- **THEN** every image SHALL be sent, and a request carrying no image SHALL be unchanged
+
+#### Scenario: History exceeds the request budget
+- **WHEN** the images across a conversation exceed the per-request budget
+- **THEN** the executor SHALL keep the newest images that fit and omit the older ones
+- **AND** each omitted image SHALL be replaced by text stating its media type, its size, the budget, and that it was not shown to the model
+- **AND** the text of the message that carried it SHALL be preserved
+
+#### Scenario: The stored conversation is not altered
+- **WHEN** the executor omits an image from a request
+- **THEN** the conversation history retained for later turns SHALL still carry that image unmodified
 
 ### Requirement: Images reach OpenAI-compatible providers unchanged
 The user message carrying the images SHALL be an OpenAI-format message holding one `image_url` content part per image, whose URL is a base64 data URL, so that the OpenAI and Azure providers pass the images through without provider-specific encoding.

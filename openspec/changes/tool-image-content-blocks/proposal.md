@@ -7,6 +7,7 @@ An MCP tool that returns an image reaches the model as text. The completions exe
 - Carry image bytes from an MCP tool result through `ToolResult.Images` instead of flattening them into the tool message text
 - Append a user message holding those images after the tool message, so the model is shown the image on the next turn
 - Emit Anthropic `image` content blocks for messages that carry images; message content becomes a JSON string *or* a block array
+- Bound the image bytes in an outbound request, so a conversation replaying its history does not accumulate images without limit
 - Text-only requests keep their existing wire format, byte for byte
 
 ## Capabilities
@@ -21,4 +22,4 @@ An MCP tool that returns an image reaches the model as text. The completions exe
 - **Go executor** (`ark/executors/completions/`): `mcp.go` (image content parts), `types.go` (`ToolResult.Images`, `ToolResultImage`, `NewUserImageMessage`), `agent.go` (image message after a tool call), `anthropic_format.go` (image blocks, part extraction)
 - **Providers**: Anthropic and Bedrock share `anthropic_format.go` and both gain image blocks. OpenAI/Azure carry the OpenAI-native image content part with no provider change.
 - **No CRD, API, Dashboard, or CLI change.** No new dependencies.
-- **Not covered**: the human-in-the-loop approval resume path in `handler.go` rebuilds a `ToolResult` from the tool message and drops images; tools other than MCP (HTTP, built-in) return no images.
+- **Not covered**: tools other than MCP (HTTP, built-in) return no images.
