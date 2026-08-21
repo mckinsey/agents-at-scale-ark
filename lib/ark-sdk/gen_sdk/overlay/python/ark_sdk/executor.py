@@ -2,7 +2,9 @@
 
 import json
 import logging
+import uuid
 from abc import ABC, abstractmethod
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Optional
 from pydantic import BaseModel
 
@@ -12,6 +14,15 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+_broker_client_var: ContextVar[Optional["BrokerClient"]] = ContextVar(
+    "ark_broker_client", default=None
+)
+_query_status_updater_var: ContextVar[Optional["QueryStatusUpdater"]] = ContextVar(
+    "ark_query_status_updater", default=None
+)
+_streamed_var: ContextVar[bool] = ContextVar("ark_streamed", default=False)
+_tool_call_index_var: ContextVar[int] = ContextVar("ark_tool_call_index", default=0)
 
 
 class Parameter(BaseModel):
@@ -80,11 +91,39 @@ class BaseExecutor(ABC):
 
     def __init__(self, engine_name: str):
         self.engine_name = engine_name
-        self._broker_client: Optional["BrokerClient"] = None
-        self._query_status_updater: Optional["QueryStatusUpdater"] = None
-        self._streamed: bool = False
-        self._tool_call_index: int = 0
         logger.info(f"{engine_name} executor initialized")
+
+    @property
+    def _broker_client(self) -> Optional["BrokerClient"]:
+        return _broker_client_var.get()
+
+    @_broker_client.setter
+    def _broker_client(self, value: Optional["BrokerClient"]) -> None:
+        _broker_client_var.set(value)
+
+    @property
+    def _query_status_updater(self) -> Optional["QueryStatusUpdater"]:
+        return _query_status_updater_var.get()
+
+    @_query_status_updater.setter
+    def _query_status_updater(self, value: Optional["QueryStatusUpdater"]) -> None:
+        _query_status_updater_var.set(value)
+
+    @property
+    def _streamed(self) -> bool:
+        return _streamed_var.get()
+
+    @_streamed.setter
+    def _streamed(self, value: bool) -> None:
+        _streamed_var.set(value)
+
+    @property
+    def _tool_call_index(self) -> int:
+        return _tool_call_index_var.get()
+
+    @_tool_call_index.setter
+    def _tool_call_index(self, value: int) -> None:
+        _tool_call_index_var.set(value)
 
     async def stream_chunk(self, chunk: str) -> None:
         if self._broker_client:
@@ -104,7 +143,7 @@ class BaseExecutor(ABC):
 
         if index is None:
             index = self._tool_call_index
-            self._tool_call_index += 1
+        self._tool_call_index = max(self._tool_call_index, index + 1)
 
         serialized = arguments if isinstance(arguments, str) else json.dumps(arguments)
 
@@ -112,7 +151,7 @@ class BaseExecutor(ABC):
             "",
             tool_calls=[{
                 "index": index,
-                "id": tool_call_id,
+                "id": tool_call_id or f"call_{uuid.uuid4().hex[:24]}",
                 "type": "function",
                 "function": {
                     "name": name,

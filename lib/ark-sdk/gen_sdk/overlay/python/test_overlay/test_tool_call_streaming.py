@@ -1,5 +1,6 @@
 """Tests for streaming tool invocations from an executor to the broker."""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,10 +19,12 @@ from ark_sdk.executor_app import A2AExecutorAdapter
 from ark_sdk.extensions.query import QueryRef
 
 
-def _make_request(conversation_id: str = "conv-1") -> ExecutionEngineRequest:
+def _make_request(
+    conversation_id: str = "conv-1", agent_name: str = "test-agent"
+) -> ExecutionEngineRequest:
     return ExecutionEngineRequest(
         agent=AgentConfig(
-            name="test-agent",
+            name=agent_name,
             namespace="default",
             prompt="You are helpful.",
             model=Model(name="claude", type="anthropic"),
@@ -173,6 +176,93 @@ class TestToolCallsOnTheWire:
         assert indices == [0, 1]
 
 
+class InterleavingExecutor(BaseExecutor):
+    async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
+        agent = request.agent.name
+        await self.stream_tool_call(name=f"first-{agent}")
+        await asyncio.sleep(0.05)
+        await self.stream_tool_call(name=f"second-{agent}")
+        return [Message(role="assistant", content="done")]
+
+
+async def _run_concurrently(executor: BaseExecutor, query_names: list[str]) -> list:
+    captured: list = []
+
+    def extract(message):
+        return QueryRef(name=message.query_name, namespace="ns")
+
+    async def resolve(query_ref, user_text, conversation_id=""):
+        return _make_request(agent_name=f"agent-{query_ref.name}")
+
+    async def one(query_name: str) -> None:
+        context = MagicMock()
+        context.get_user_input.return_value = "go"
+        context.message.context_id = "conv-1"
+        context.message.message_id = "msg-1"
+        context.message.query_name = query_name
+        await A2AExecutorAdapter(executor)._do_execute(context, AsyncMock())
+
+    with patch(
+        "ark_sdk.executor_app.extract_query_ref", side_effect=extract
+    ), patch(
+        "ark_sdk.executor_app.resolve_query", side_effect=resolve
+    ), patch(
+        "ark_sdk.executor_app.discover_broker_url",
+        new=AsyncMock(return_value="http://broker"),
+    ), patch(
+        "ark_sdk.executor_app.QueryStatusUpdater", return_value=MagicMock()
+    ), patch(
+        "ark_sdk.broker.httpx.AsyncClient", _capturing_transport(captured)
+    ):
+        await asyncio.gather(*(one(q) for q in query_names))
+
+    return captured
+
+
+def _tool_calls_on_stream(captured: list, query_name: str) -> list[dict]:
+    calls = []
+    for url, body in captured:
+        if not url.endswith(f"/stream/{query_name}"):
+            continue
+        for line in body.decode().splitlines():
+            if not line.strip():
+                continue
+            delta = json.loads(line)["choices"][0]["delta"]
+            if delta.get("tool_calls"):
+                calls.append(delta["tool_calls"][0])
+    return calls
+
+
+class TestConcurrentRequests:
+    @pytest.mark.anyio
+    async def test_tool_calls_do_not_cross_query_streams(self):
+        captured = await _run_concurrently(
+            InterleavingExecutor("test"), ["query-a", "query-b"]
+        )
+
+        for query_name in ("query-a", "query-b"):
+            names = [
+                c["function"]["name"]
+                for c in _tool_calls_on_stream(captured, query_name)
+            ]
+            assert names == [
+                f"first-agent-{query_name}",
+                f"second-agent-{query_name}",
+            ]
+
+    @pytest.mark.anyio
+    async def test_indices_are_independent_per_request(self):
+        captured = await _run_concurrently(
+            InterleavingExecutor("test"), ["query-a", "query-b"]
+        )
+
+        for query_name in ("query-a", "query-b"):
+            indices = [
+                c["index"] for c in _tool_calls_on_stream(captured, query_name)
+            ]
+            assert indices == [0, 1]
+
+
 class TestStreamToolCall:
     @pytest.mark.anyio
     async def test_noop_without_broker_client(self):
@@ -202,6 +292,48 @@ class TestStreamToolCall:
 
         tool_calls = broker.send_chunk.await_args.kwargs["tool_calls"]
         assert tool_calls[0]["index"] == 7
+
+    @pytest.mark.anyio
+    async def test_explicit_index_advances_the_counter(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await executor.stream_tool_call(name="Bash", index=0)
+        await executor.stream_tool_call(name="Read")
+
+        indices = [
+            call.kwargs["tool_calls"][0]["index"]
+            for call in broker.send_chunk.await_args_list
+        ]
+        assert indices == [0, 1]
+
+    @pytest.mark.anyio
+    async def test_id_generated_when_omitted(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await executor.stream_tool_call(name="Bash")
+        await executor.stream_tool_call(name="Read")
+
+        ids = [
+            call.kwargs["tool_calls"][0]["id"]
+            for call in broker.send_chunk.await_args_list
+        ]
+        assert all(i.startswith("call_") for i in ids)
+        assert ids[0] != ids[1]
+
+    @pytest.mark.anyio
+    async def test_supplied_id_is_preserved(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await executor.stream_tool_call(name="Bash", tool_call_id="toolu_9")
+
+        tool_calls = broker.send_chunk.await_args.kwargs["tool_calls"]
+        assert tool_calls[0]["id"] == "toolu_9"
 
     @pytest.mark.anyio
     async def test_does_not_set_streamed_flag(self):
