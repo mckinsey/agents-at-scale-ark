@@ -8,7 +8,17 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"k8s.io/apimachinery/pkg/runtime"
+	"mckinsey.com/ark/internal/storage"
 )
+
+type stubConverter struct{ encoded string }
+
+func (c stubConverter) NewObject(string) runtime.Object               { return nil }
+func (c stubConverter) NewListObject(string) runtime.Object           { return nil }
+func (c stubConverter) Encode(runtime.Object) ([]byte, error)         { return []byte(c.encoded), nil }
+func (c stubConverter) Decode(string, []byte) (runtime.Object, error) { return nil, nil }
+func (c stubConverter) APIVersion(string) string                      { return "" }
 
 func TestStartNotifyListener_ConsumesOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -92,49 +102,95 @@ func TestStartNotifyListener_RetriesThenStopsOnCancel(t *testing.T) {
 	}
 }
 
-func TestNotifyResourceChange_Emits(t *testing.T) {
+func TestCreate_EmitsNotifyInWriteStatement(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
 
-	mock.ExpectExec("SELECT pg_notify").WithArgs(notifyChannel, "Agent").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("INSERT INTO resources.*pg_notify").WithArgs(
+		"Agent", "ns", "a1", "u1", "{}", "{}", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), notifyChannel,
+	).WillReturnRows(sqlmock.NewRows([]string{"resource_version", "generation", "created_at", "pg_notify"}).AddRow(int64(1), int64(1), time.Now(), ""))
 
-	p := &PostgreSQLBackend{db: db}
-	p.notifyResourceChange(context.Background(), "Agent")
-
+	p := &PostgreSQLBackend{db: db, converter: stubConverter{encoded: `{"metadata":{"uid":"u1"},"spec":{},"status":{}}`}}
+	if err := p.Create(context.Background(), "Agent", "ns", "a1", nil); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestNotifyResourceChange_ErrorIsNonFatal(t *testing.T) {
+func TestUpdate_EmitsNotifyInWriteStatement(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
 
-	mock.ExpectExec("SELECT pg_notify").WithArgs(notifyChannel, "Agent").WillReturnError(context.DeadlineExceeded)
+	mock.ExpectQuery("UPDATE resources.*pg_notify").WillReturnRows(
+		sqlmock.NewRows([]string{"resource_version", "generation", "uid", "created_at", "updated", "pg_notify"}).
+			AddRow(int64(2), int64(1), "u1", time.Now(), true, ""))
 
-	p := &PostgreSQLBackend{db: db}
-	p.notifyResourceChange(context.Background(), "Agent")
-
+	p := &PostgreSQLBackend{db: db, converter: stubConverter{encoded: `{"metadata":{"resourceVersion":"1"},"spec":{},"status":{}}`}}
+	if err := p.Update(context.Background(), "Agent", "ns", "a1", nil); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestDelete_EmitsNotifyOnSuccess(t *testing.T) {
+func TestUpdate_ConflictExecutesNoNotify(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
 
-	mock.ExpectExec("UPDATE resources").WithArgs("Agent", "ns", "a1").WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec("SELECT pg_notify").WithArgs(notifyChannel, "Agent").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("UPDATE resources.*pg_notify").WillReturnRows(
+		sqlmock.NewRows([]string{"resource_version", "generation", "uid", "created_at", "updated", "pg_notify"}).
+			AddRow(int64(0), int64(0), "", time.Now(), false, nil))
+	mock.ExpectQuery("SELECT COUNT").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+
+	p := &PostgreSQLBackend{db: db, converter: stubConverter{encoded: `{"metadata":{"resourceVersion":"1"},"spec":{},"status":{}}`}}
+	if err := p.Update(context.Background(), "Agent", "ns", "a1", nil); err != storage.ErrConflict {
+		t.Fatalf("expected ErrConflict, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestUpdateStatus_EmitsNotifyInWriteStatement(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery("UPDATE resources.*pg_notify").WillReturnRows(
+		sqlmock.NewRows([]string{"resource_version", "updated", "pg_notify"}).AddRow(int64(2), true, ""))
+
+	p := &PostgreSQLBackend{db: db, converter: stubConverter{encoded: `{"metadata":{"resourceVersion":"1"},"status":{}}`}}
+	if err := p.UpdateStatus(context.Background(), "Agent", "ns", "a1", nil); err != nil {
+		t.Fatalf("UpdateStatus: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestDelete_EmitsNotifyInWriteStatement(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery("UPDATE resources.*pg_notify").WithArgs("Agent", "ns", "a1", notifyChannel).
+		WillReturnRows(sqlmock.NewRows([]string{"pg_notify"}).AddRow(""))
 
 	p := &PostgreSQLBackend{db: db}
 	if err := p.Delete(context.Background(), "Agent", "ns", "a1"); err != nil {
@@ -145,18 +201,19 @@ func TestDelete_EmitsNotifyOnSuccess(t *testing.T) {
 	}
 }
 
-func TestDelete_NotFoundSkipsNotify(t *testing.T) {
+func TestDelete_NotFoundExecutesNoNotify(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
 
-	mock.ExpectExec("UPDATE resources").WithArgs("Agent", "ns", "gone").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("UPDATE resources.*pg_notify").WithArgs("Agent", "ns", "gone", notifyChannel).
+		WillReturnRows(sqlmock.NewRows([]string{"pg_notify"}))
 
 	p := &PostgreSQLBackend{db: db}
-	if err := p.Delete(context.Background(), "Agent", "ns", "gone"); err == nil {
-		t.Fatal("expected ErrNotFound")
+	if err := p.Delete(context.Background(), "Agent", "ns", "gone"); err != storage.ErrNotFound {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)

@@ -89,6 +89,28 @@ var (
 			Help: "WAL bytes between pg_current_wal_lsn() and the ark_cdc slot's confirmed_flush_lsn; NaN on replicas not running the WAL consumer",
 		},
 	)
+
+	notifyReceivedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ark_apiserver_notify_received_total",
+			Help: "Number of cross-replica change notifications received by the LISTEN loop",
+		},
+		[]string{"kind"},
+	)
+
+	notifyListenerConnected = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "ark_apiserver_notify_listener_connected",
+			Help: "1 while the cross-replica notify listener holds an active LISTEN connection, 0 otherwise",
+		},
+	)
+
+	notifyListenerReconnectsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "ark_apiserver_notify_listener_reconnects_total",
+			Help: "Number of times the notify listener lost its connection and retried",
+		},
+	)
 )
 
 const slotLagSampleInterval = 30 * time.Second
@@ -204,6 +226,9 @@ func init() {
 		walConsumerActive,
 		walLastMessageTimestamp,
 		replicationSlotLagBytes,
+		notifyReceivedTotal,
+		notifyListenerConnected,
+		notifyListenerReconnectsTotal,
 		dbPoolCollector{},
 	)
 }
