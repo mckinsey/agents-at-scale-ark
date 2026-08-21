@@ -68,6 +68,10 @@ Three rules apply to every reference:
 - `key` must name a key that exists. A missing ConfigMap or a missing key fails resolution and surfaces on the resource's status — it does not fall back to an empty value.
 - An inline `value` takes precedence over `valueFrom`. Set one or the other.
 
+## Edit a configuration
+
+An update replaces the whole configuration rather than patching it. A `description` or `alias` left out of a `PUT /api/v1/configurations/{name}` request, or of the SDK's `update_configuration`, is cleared rather than kept, so send the complete desired state every time. The dashboard form already does this — it loads the stored configuration and submits every field.
+
 ## Updates reach consumers
 
 Most references resolve at request time, so a query issued after an update already uses the new value. Headers and overrides are resolved per query by the completions executor, and `Model` fields are resolved when the model is used.
@@ -98,6 +102,18 @@ configMapPolicy:
 It denies every ConfigMap write by the Ark API service account except configurations, `ark-export-metadata`, and `marketplace-sources`. An update must also have been a configuration before the write, so the Ark API cannot adopt a ConfigMap it does not own by adding the marker to it. The policy matches on the service account rather than on a namespace, so it holds wherever that account is granted ConfigMap writes.
 
 It requires Kubernetes 1.30 or later. On older clusters the policy is skipped rather than failing the install, which leaves the Ark API's own marker check as the only boundary.
+
+## Grant a user access to configurations
+
+With impersonation enabled, the Ark API acts as the logged-in user, so that user needs the ConfigMap permissions themselves. The chart creates a ClusterRole for this, suffixed with the namespace Ark is installed in, and leaves it unbound. Bind it where the configurations live:
+
+```bash
+kubectl create rolebinding ark-configurations \
+  --clusterrole=ark-configmap-editor-role-<ark-namespace> \
+  --user=<user> -n <namespace>
+```
+
+The role grants every ConfigMap in the namespace it is bound in, not only configurations — the same RBAC limitation described above. The admission policy does not narrow it either: the policy matches the Ark API service account, and an impersonated request carries the user's identity instead. Bind it to administrators only.
 
 ## Related
 
