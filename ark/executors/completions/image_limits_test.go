@@ -2,6 +2,7 @@ package completions
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"testing"
 
@@ -72,7 +73,7 @@ func TestCollectContentDropsOversizedImage(t *testing.T) {
 		})
 
 		require.Len(t, images, 1)
-		assert.Equal(t, exact, images[0].Data)
+		assert.Equal(t, len(exact), images[0].Bytes)
 	})
 }
 
@@ -94,7 +95,7 @@ func TestCollectContentCapsImagesPerToolCall(t *testing.T) {
 
 	require.Len(t, images, 4, "the fifth image must be dropped")
 	for i := range images {
-		assert.Equal(t, want[i], images[i].Data)
+		assert.Equal(t, base64.StdEncoding.EncodeToString(want[i]), images[i].B64)
 	}
 	assert.Contains(t, text, "image limit of 4 per tool call reached")
 }

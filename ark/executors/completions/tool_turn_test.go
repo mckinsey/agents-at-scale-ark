@@ -78,7 +78,7 @@ func TestToolTurnSequenceThroughTheAgentLoop(t *testing.T) {
 			for i, tool := range tc.tools {
 				stub := &stubImageExecutor{}
 				if tool.image != "" {
-					stub.images = []ToolResultImage{{MediaType: tool.image, Data: pngBytes}}
+					stub.images = []ToolResultImage{newToolResultImage(tool.image, pngBytes)}
 				}
 				registry.RegisterTool(ToolDefinition{Name: tool.name}, stub)
 				calls = append(calls, toolCall(toolCallID(i), tool.name))
@@ -105,7 +105,7 @@ func TestToolTurnSequenceThroughTheApprovalResumePath(t *testing.T) {
 				calls = append(calls, toolCall(toolCallID(i), tool.name))
 				result := ToolResult{ID: toolCallID(i), Name: tool.name, Content: "done"}
 				if tool.image != "" {
-					result.Images = []ToolResultImage{{MediaType: tool.image, Data: pngBytes}}
+					result.Images = []ToolResultImage{newToolResultImage(tool.image, pngBytes)}
 				}
 				results = append(results, result)
 			}
@@ -146,12 +146,12 @@ func TestToolTurnImageMessagesKeepToolCallOrder(t *testing.T) {
 	firstText, firstImages, _ := extractMessageParts(agentMessages[2])
 	assert.Contains(t, firstText, "first")
 	require.Len(t, firstImages, 1)
-	assert.Len(t, firstImages[0].Data, 10)
+	assert.Equal(t, 10, firstImages[0].Bytes)
 
 	secondText, secondImages, _ := extractMessageParts(agentMessages[3])
 	assert.Contains(t, secondText, "second")
 	require.Len(t, secondImages, 1)
-	assert.Len(t, secondImages[0].Data, 20)
+	assert.Equal(t, 20, secondImages[0].Bytes)
 }
 
 func toolCallID(i int) string {

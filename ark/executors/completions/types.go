@@ -61,17 +61,29 @@ type ToolResult struct {
 	Error   string            `json:"error,omitempty"`
 }
 
+// ToolResultImage holds an image already base64-encoded. Both wire formats that carry it
+// want base64 - an OpenAI data URL and an Anthropic image block - so it is encoded once,
+// where the bytes arrive, and never decoded again on the request path.
 type ToolResultImage struct {
 	MediaType string `json:"mediaType"`
-	Data      []byte `json:"data"`
+	B64       string `json:"b64"`
+	Bytes     int    `json:"bytes"`
+}
+
+func newToolResultImage(mediaType string, data []byte) ToolResultImage {
+	return ToolResultImage{
+		MediaType: mediaType,
+		B64:       base64.StdEncoding.EncodeToString(data),
+		Bytes:     len(data),
+	}
 }
 
 func (i ToolResultImage) DataURL() string {
-	return "data:" + i.MediaType + ";base64," + base64.StdEncoding.EncodeToString(i.Data)
+	return dataURLPrefix + i.MediaType + base64Marker + i.B64
 }
 
 func (i ToolResultImage) Base64() string {
-	return base64.StdEncoding.EncodeToString(i.Data)
+	return i.B64
 }
 
 type ToolExecutor interface {

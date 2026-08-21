@@ -58,7 +58,7 @@ func TestImageFromDataURLNormalizesMediaType(t *testing.T) {
 		image, ok := imageFromDataURL("data:image/png;charset=utf-8;base64," + encoded)
 		require.True(t, ok)
 		assert.Equal(t, "image/png", image.MediaType)
-		assert.Equal(t, pngBytes, image.Data)
+		assert.Equal(t, base64.StdEncoding.EncodeToString(pngBytes), image.B64)
 	})
 
 	t.Run("the informal jpeg spelling is normalized", func(t *testing.T) {
@@ -85,7 +85,7 @@ func TestCollectContentCarriesSupportedImages(t *testing.T) {
 
 	require.Len(t, images, 1)
 	assert.Equal(t, "image/png", images[0].MediaType)
-	assert.Equal(t, pngBytes, images[0].Data)
+	assert.Equal(t, base64.StdEncoding.EncodeToString(pngBytes), images[0].B64)
 	assert.Contains(t, text, "here is the page")
 	assert.NotContains(t, text, base64.StdEncoding.EncodeToString(pngBytes))
 }
@@ -104,7 +104,7 @@ func TestCollectContentDropsUnsupportedImage(t *testing.T) {
 
 func TestImageMessageWireShapeForOpenAIProviders(t *testing.T) {
 	msg := NewUserImageMessage("Image returned by the read tool.",
-		[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}})
+		[]ToolResultImage{newToolResultImage("image/png", pngBytes)})
 
 	raw, err := json.Marshal(openai.ChatCompletionMessageParamUnion(msg))
 	require.NoError(t, err)

@@ -1,9 +1,7 @@
 package completions
 
 import (
-	"encoding/base64"
 	"encoding/json"
-	"strings"
 
 	"github.com/openai/openai-go"
 )
@@ -36,27 +34,6 @@ func extractMessageParts(msg Message) (string, []ToolResultImage, string) {
 
 	text, role := extractMessageString(msg)
 	return text, nil, role
-}
-
-func imageFromDataURL(url string) (ToolResultImage, bool) {
-	const prefix = "data:"
-	const marker = ";base64,"
-	if !strings.HasPrefix(url, prefix) {
-		return ToolResultImage{}, false
-	}
-	markerAt := strings.Index(url, marker)
-	if markerAt < 0 {
-		return ToolResultImage{}, false
-	}
-	mediaType, ok := normalizeImageMediaType(url[len(prefix):markerAt])
-	if !ok {
-		return ToolResultImage{}, false
-	}
-	data, err := base64.StdEncoding.DecodeString(url[markerAt+len(marker):])
-	if err != nil || len(data) == 0 {
-		return ToolResultImage{}, false
-	}
-	return ToolResultImage{MediaType: mediaType, Data: data}, true
 }
 
 func extractMessageString(msg Message) (string, string) {
@@ -218,7 +195,7 @@ func renderAnthropicContent(text string, images []ToolResultImage, cached bool) 
 			Source: &anthropicImageSource{
 				Type:      "base64",
 				MediaType: image.MediaType,
-				Data:      image.Base64(),
+				Data:      image.B64,
 			},
 		})
 	}

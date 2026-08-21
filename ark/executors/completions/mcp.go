@@ -77,7 +77,7 @@ func (m *MCPExecutor) collectContent(ctx context.Context, contents []mcpsdk.Cont
 				continue
 			}
 			images = append(images, image)
-			result.WriteString(imageReturnedNote(image.MediaType, len(image.Data)))
+			result.WriteString(imageReturnedNote(image.MediaType, image.Bytes))
 		default:
 			jsonBytes, _ := json.MarshalIndent(content, "", "  ")
 			result.WriteString(string(jsonBytes))

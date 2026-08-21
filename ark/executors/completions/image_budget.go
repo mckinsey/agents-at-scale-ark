@@ -25,13 +25,13 @@ func (b *imageTurnBudget) admit(ctx context.Context, toolName string, images []T
 	kept := make([]ToolResultImage, 0, len(images))
 	var note string
 	for _, image := range images {
-		if len(image.Data) > b.remaining {
-			log.Info("dropping tool image beyond the per turn budget", "tool", toolName, "mediaType", image.MediaType, "bytes", len(image.Data), "remainingBytes", b.remaining, "maxBytesPerTurn", b.total)
-			note += imageDroppedNote(image.MediaType, len(image.Data),
+		if image.Bytes > b.remaining {
+			log.Info("dropping tool image beyond the per turn budget", "tool", toolName, "mediaType", image.MediaType, "bytes", image.Bytes, "remainingBytes", b.remaining, "maxBytesPerTurn", b.total)
+			note += imageDroppedNote(image.MediaType, image.Bytes,
 				fmt.Sprintf("the %d byte image budget for this turn is exhausted", b.total))
 			continue
 		}
-		b.remaining -= len(image.Data)
+		b.remaining -= image.Bytes
 		kept = append(kept, image)
 	}
 	return kept, note

@@ -14,7 +14,7 @@ import (
 var pngBytes = []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe}
 
 func TestToolResultImageEncoding(t *testing.T) {
-	image := ToolResultImage{MediaType: "image/png", Data: pngBytes}
+	image := newToolResultImage("image/png", pngBytes)
 
 	t.Run("base64 is of the raw bytes", func(t *testing.T) {
 		assert.Equal(t, base64.StdEncoding.EncodeToString(pngBytes), image.Base64())
@@ -28,7 +28,8 @@ func TestToolResultImageEncoding(t *testing.T) {
 		back, ok := imageFromDataURL(image.DataURL())
 		require.True(t, ok)
 		assert.Equal(t, "image/png", back.MediaType)
-		assert.Equal(t, pngBytes, back.Data)
+		assert.Equal(t, base64.StdEncoding.EncodeToString(pngBytes), back.B64)
+		assert.Equal(t, len(pngBytes), back.Bytes)
 	})
 
 	t.Run("a non-data url is rejected rather than sent as text", func(t *testing.T) {
@@ -54,21 +55,21 @@ func TestMCPImageContentIsNotFlattened(t *testing.T) {
 	text, images := executor.collectContent(context.Background(), content)
 
 	require.Len(t, images, 1)
-	assert.Equal(t, pngBytes, images[0].Data)
+	assert.Equal(t, base64.StdEncoding.EncodeToString(pngBytes), images[0].B64)
 	assert.Contains(t, text, "here is the page")
 	assert.NotContains(t, text, base64.StdEncoding.EncodeToString(pngBytes))
 }
 
 func TestNewUserImageMessageCarriesImageParts(t *testing.T) {
 	msg := NewUserImageMessage("Image returned by the read tool.",
-		[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}})
+		[]ToolResultImage{newToolResultImage("image/png", pngBytes)})
 
 	text, images, role := extractMessageParts(msg)
 	assert.Equal(t, RoleUser, role)
 	assert.Equal(t, "Image returned by the read tool.", text)
 	require.Len(t, images, 1)
 	assert.Equal(t, "image/png", images[0].MediaType)
-	assert.Equal(t, pngBytes, images[0].Data)
+	assert.Equal(t, base64.StdEncoding.EncodeToString(pngBytes), images[0].B64)
 }
 
 func TestRenderAnthropicContent(t *testing.T) {
@@ -79,7 +80,7 @@ func TestRenderAnthropicContent(t *testing.T) {
 
 	t.Run("an image becomes an image block, not base64 text", func(t *testing.T) {
 		raw := renderAnthropicContent("what does this say?",
-			[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}}, false)
+			[]ToolResultImage{newToolResultImage("image/png", pngBytes)}, false)
 
 		var blocks []map[string]any
 		require.NoError(t, json.Unmarshal(raw, &blocks))
@@ -99,7 +100,7 @@ func TestRenderAnthropicContent(t *testing.T) {
 
 	t.Run("an image with no caption is a lone image block", func(t *testing.T) {
 		raw := renderAnthropicContent("",
-			[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}}, false)
+			[]ToolResultImage{newToolResultImage("image/png", pngBytes)}, false)
 
 		var blocks []map[string]any
 		require.NoError(t, json.Unmarshal(raw, &blocks))
@@ -109,7 +110,7 @@ func TestRenderAnthropicContent(t *testing.T) {
 
 	t.Run("a cached image message keeps its cache breakpoint", func(t *testing.T) {
 		raw := renderAnthropicContent("what does this say?",
-			[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}}, true)
+			[]ToolResultImage{newToolResultImage("image/png", pngBytes)}, true)
 
 		var blocks []anthropicContentBlock
 		require.NoError(t, json.Unmarshal(raw, &blocks))
@@ -124,7 +125,7 @@ func TestConvertMessagesToAnthropicKeepsImages(t *testing.T) {
 	messages := []Message{
 		NewUserMessage("read receipt.png"),
 		NewUserImageMessage("Image returned by the read tool.",
-			[]ToolResultImage{{MediaType: "image/png", Data: pngBytes}}),
+			[]ToolResultImage{newToolResultImage("image/png", pngBytes)}),
 		NewUserMessage("what does it say?"),
 	}
 

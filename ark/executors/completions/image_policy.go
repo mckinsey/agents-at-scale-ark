@@ -70,7 +70,7 @@ func (a *toolImageAdmitter) Admit(ctx context.Context, toolName, mediaType strin
 	}
 
 	a.admitted++
-	return ToolResultImage{MediaType: normalized, Data: data}, "", true
+	return newToolResultImage(normalized, data), "", true
 }
 
 func imageReturnedNote(mediaType string, bytes int) string {

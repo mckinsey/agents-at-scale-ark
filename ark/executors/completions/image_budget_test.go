@@ -25,7 +25,7 @@ func (s *stubImageExecutor) Execute(_ context.Context, call ToolCall) (ToolResul
 
 func imageOfSize(t *testing.T, size int) ToolResultImage {
 	t.Helper()
-	return ToolResultImage{MediaType: "image/png", Data: make([]byte, size)}
+	return newToolResultImage("image/png", make([]byte, size))
 }
 
 func toolCall(id, name string) openai.ChatCompletionMessageToolCall {
@@ -84,8 +84,8 @@ func TestImageTurnBudgetAdmit(t *testing.T) {
 			[]ToolResultImage{imageOfSize(t, 90), imageOfSize(t, 80), imageOfSize(t, 10)})
 
 		require.Len(t, kept, 2)
-		assert.Len(t, kept[0].Data, 90)
-		assert.Len(t, kept[1].Data, 10)
+		assert.Equal(t, 90, kept[0].Bytes)
+		assert.Equal(t, 10, kept[1].Bytes)
 	})
 
 	t.Run("no images means no note", func(t *testing.T) {
