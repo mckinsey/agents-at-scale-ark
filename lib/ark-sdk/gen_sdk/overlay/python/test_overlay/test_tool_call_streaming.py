@@ -350,7 +350,7 @@ class TestChildTaskPropagation:
         assert indices == [0, 1, 2]
 
     @pytest.mark.anyio
-    async def test_state_visible_via_asyncio_to_thread(self):
+    async def test_state_readable_from_worker_thread(self):
         executor = ToolCallingExecutor("test")
         broker = AsyncMock()
         executor._broker_client = broker
@@ -358,6 +358,22 @@ class TestChildTaskPropagation:
         seen = await asyncio.to_thread(lambda: executor._broker_client)
 
         assert seen is broker
+
+    @pytest.mark.anyio
+    async def test_streaming_from_worker_thread_sends_nothing(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        text_coro = await asyncio.to_thread(executor.stream_chunk, "hi")
+        tool_coro = await asyncio.to_thread(executor.stream_tool_call, "Bash")
+
+        assert asyncio.iscoroutine(text_coro)
+        assert asyncio.iscoroutine(tool_coro)
+        assert broker.send_chunk.await_count == 0
+
+        text_coro.close()
+        tool_coro.close()
 
     @pytest.mark.anyio
     async def test_no_fallback_resend_when_child_task_streamed_text(self):

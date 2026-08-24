@@ -135,7 +135,9 @@ async def execute_agent(self, request):
 
 Both are no-ops when the broker is unavailable or the call is a team-member sub-request, so they are always safe to call.
 
-Streaming state is scoped to the request, so concurrent queries handled by the same executor never share it. Child tasks inherit that state, so calling either method from `asyncio.gather()`, `create_task()` or `asyncio.to_thread()` works as expected. A raw `threading.Thread` starts with an empty context and will silently drop chunks — wrap the work with `contextvars.copy_context().run(...)`, or use `asyncio.to_thread()`.
+Streaming state is scoped to the request, so concurrent queries handled by the same executor never share it. Child tasks inherit that state, so calling either method from `asyncio.gather()` or `asyncio.create_task()` works — including the streamed-text flag, which is visible to the caller afterwards.
+
+Both methods are coroutines and must be awaited on the event loop. Do not call them from a worker thread: `asyncio.to_thread()` and a raw `threading.Thread` each produce an un-awaited coroutine, so nothing is sent and nothing is raised. If your engine does work in a thread, return the result and stream it from the async side.
 
 Tool *results* are not streamed. They can be large and may contain secrets, and the built-in engine does not stream them either. Return them in your `execute_agent()` messages instead, where they reach the UI with the completed query.
 
