@@ -135,6 +135,8 @@ async def execute_agent(self, request):
 
 Both are no-ops when the broker is unavailable or the call is a team-member sub-request, so they are always safe to call.
 
+Streaming state is scoped to the request, so concurrent queries handled by the same executor never share it. Child tasks inherit that state, so calling either method from `asyncio.gather()`, `create_task()` or `asyncio.to_thread()` works as expected. A raw `threading.Thread` starts with an empty context and will silently drop chunks — wrap the work with `contextvars.copy_context().run(...)`, or use `asyncio.to_thread()`.
+
 Tool *results* are not streamed. They can be large and may contain secrets, and the built-in engine does not stream them either. Return them in your `execute_agent()` messages instead, where they reach the UI with the completed query.
 
 ## Team Membership

@@ -15,14 +15,34 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_broker_client_var: ContextVar[Optional["BrokerClient"]] = ContextVar(
-    "ark_broker_client", default=None
-)
-_query_status_updater_var: ContextVar[Optional["QueryStatusUpdater"]] = ContextVar(
-    "ark_query_status_updater", default=None
-)
-_streamed_var: ContextVar[bool] = ContextVar("ark_streamed", default=False)
-_tool_call_index_var: ContextVar[int] = ContextVar("ark_tool_call_index", default=0)
+class _RequestState:
+    """Per-request streaming state, shared by reference with child tasks."""
+
+    __slots__ = ("broker_client", "query_status_updater", "streamed", "tool_call_index")
+
+    def __init__(self) -> None:
+        self.broker_client: Optional["BrokerClient"] = None
+        self.query_status_updater: Optional["QueryStatusUpdater"] = None
+        self.streamed: bool = False
+        self.tool_call_index: int = 0
+
+
+_request_state_var: ContextVar[_RequestState] = ContextVar("ark_request_state")
+
+
+def _request_state() -> _RequestState:
+    state = _request_state_var.get(None)
+    if state is None:
+        state = _RequestState()
+        _request_state_var.set(state)
+    return state
+
+
+def begin_request_state() -> _RequestState:
+    """Install a fresh state object for the current request context."""
+    state = _RequestState()
+    _request_state_var.set(state)
+    return state
 
 
 class Parameter(BaseModel):
@@ -95,35 +115,35 @@ class BaseExecutor(ABC):
 
     @property
     def _broker_client(self) -> Optional["BrokerClient"]:
-        return _broker_client_var.get()
+        return _request_state().broker_client
 
     @_broker_client.setter
     def _broker_client(self, value: Optional["BrokerClient"]) -> None:
-        _broker_client_var.set(value)
+        _request_state().broker_client = value
 
     @property
     def _query_status_updater(self) -> Optional["QueryStatusUpdater"]:
-        return _query_status_updater_var.get()
+        return _request_state().query_status_updater
 
     @_query_status_updater.setter
     def _query_status_updater(self, value: Optional["QueryStatusUpdater"]) -> None:
-        _query_status_updater_var.set(value)
+        _request_state().query_status_updater = value
 
     @property
     def _streamed(self) -> bool:
-        return _streamed_var.get()
+        return _request_state().streamed
 
     @_streamed.setter
     def _streamed(self, value: bool) -> None:
-        _streamed_var.set(value)
+        _request_state().streamed = value
 
     @property
     def _tool_call_index(self) -> int:
-        return _tool_call_index_var.get()
+        return _request_state().tool_call_index
 
     @_tool_call_index.setter
     def _tool_call_index(self, value: int) -> None:
-        _tool_call_index_var.set(value)
+        _request_state().tool_call_index = value
 
     async def stream_chunk(self, chunk: str) -> None:
         if self._broker_client:
@@ -145,7 +165,14 @@ class BaseExecutor(ABC):
             index = self._tool_call_index
         self._tool_call_index = max(self._tool_call_index, index + 1)
 
-        serialized = arguments if isinstance(arguments, str) else json.dumps(arguments)
+        if isinstance(arguments, str):
+            serialized = arguments
+        else:
+            try:
+                serialized = json.dumps(arguments, default=str)
+            except Exception as e:
+                logger.warning(f"Failed to serialize arguments for tool call '{name}': {e}")
+                serialized = "{}"
 
         await self._broker_client.send_chunk(
             "",

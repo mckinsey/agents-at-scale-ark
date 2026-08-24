@@ -1,7 +1,9 @@
 """Tests for streaming tool invocations from an executor to the broker."""
 
 import asyncio
+import datetime
 import json
+import pathlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -263,6 +265,118 @@ class TestConcurrentRequests:
             assert indices == [0, 1]
 
 
+class TestChildTaskPropagation:
+    @pytest.mark.anyio
+    async def test_streamed_flag_set_in_gathered_task_is_visible(self):
+        executor = ToolCallingExecutor("test")
+        executor._broker_client = AsyncMock()
+        executor._streamed = False
+
+        await asyncio.gather(executor.stream_chunk("hi"))
+
+        assert executor._streamed is True
+
+    @pytest.mark.anyio
+    async def test_streamed_flag_set_in_created_task_is_visible(self):
+        executor = ToolCallingExecutor("test")
+        executor._broker_client = AsyncMock()
+        executor._streamed = False
+
+        await asyncio.create_task(executor.stream_chunk("hi"))
+
+        assert executor._streamed is True
+
+    @pytest.mark.anyio
+    async def test_broker_client_visible_in_child_task(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await asyncio.gather(executor.stream_tool_call(name="Bash"))
+
+        broker.send_chunk.assert_awaited_once()
+
+    @pytest.mark.anyio
+    async def test_tool_call_index_advances_across_child_tasks(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await asyncio.gather(executor.stream_tool_call(name="one"))
+        await asyncio.gather(executor.stream_tool_call(name="two"))
+
+        indices = [
+            call.kwargs["tool_calls"][0]["index"]
+            for call in broker.send_chunk.await_args_list
+        ]
+        assert indices == [0, 1]
+
+    @pytest.mark.anyio
+    async def test_concurrent_tool_calls_in_one_gather_get_distinct_indices(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await asyncio.gather(
+            executor.stream_tool_call(name="a", arguments={"x": 1}),
+            executor.stream_tool_call(name="b", arguments={"y": 2}),
+            executor.stream_tool_call(name="c", arguments={"z": 3}),
+        )
+
+        indices = sorted(
+            call.kwargs["tool_calls"][0]["index"]
+            for call in broker.send_chunk.await_args_list
+        )
+        assert indices == [0, 1, 2]
+
+    @pytest.mark.anyio
+    async def test_interleaved_tool_calls_get_distinct_indices(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        async def delayed(name: str, delay: float) -> None:
+            await asyncio.sleep(delay)
+            await executor.stream_tool_call(name=name)
+
+        await asyncio.gather(
+            delayed("a", 0.03), delayed("b", 0.01), delayed("c", 0.02)
+        )
+
+        indices = sorted(
+            call.kwargs["tool_calls"][0]["index"]
+            for call in broker.send_chunk.await_args_list
+        )
+        assert indices == [0, 1, 2]
+
+    @pytest.mark.anyio
+    async def test_state_visible_via_asyncio_to_thread(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        seen = await asyncio.to_thread(lambda: executor._broker_client)
+
+        assert seen is broker
+
+    @pytest.mark.anyio
+    async def test_no_fallback_resend_when_child_task_streamed_text(self):
+        class ChildTaskExecutor(BaseExecutor):
+            async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
+                await asyncio.gather(self.stream_chunk("streamed text"))
+                return [Message(role="assistant", content="streamed text")]
+
+        captured: list = []
+        await _run_executor(ChildTaskExecutor("test"), captured)
+
+        texts = [
+            c["choices"][0]["delta"]["content"]
+            for c in _stream_chunks(captured)
+            if c["choices"][0]["delta"].get("content")
+        ]
+        assert texts == ["streamed text"]
+
+
 class TestStreamToolCall:
     @pytest.mark.anyio
     async def test_noop_without_broker_client(self):
@@ -334,6 +448,41 @@ class TestStreamToolCall:
 
         tool_calls = broker.send_chunk.await_args.kwargs["tool_calls"]
         assert tool_calls[0]["id"] == "toolu_9"
+
+    @pytest.mark.anyio
+    async def test_non_json_arguments_are_coerced(self):
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await executor.stream_tool_call(
+            name="Write",
+            arguments={
+                "when": datetime.datetime(2026, 1, 1),
+                "path": pathlib.Path("/tmp/x"),
+                "blob": b"raw",
+            },
+        )
+
+        sent = json.loads(broker.send_chunk.await_args.kwargs["tool_calls"][0]["function"]["arguments"])
+        assert sent["when"] == "2026-01-01 00:00:00"
+        assert sent["path"] == "/tmp/x"
+
+    @pytest.mark.anyio
+    async def test_unserializable_arguments_do_not_raise(self):
+        class Exploding:
+            def __str__(self):
+                raise RuntimeError("boom")
+
+        executor = ToolCallingExecutor("test")
+        broker = AsyncMock()
+        executor._broker_client = broker
+
+        await executor.stream_tool_call(name="Write", arguments={"bad": Exploding()})
+
+        tool_calls = broker.send_chunk.await_args.kwargs["tool_calls"]
+        assert tool_calls[0]["function"]["arguments"] == "{}"
+        assert tool_calls[0]["function"]["name"] == "Write"
 
     @pytest.mark.anyio
     async def test_does_not_set_streamed_flag(self):
