@@ -202,13 +202,8 @@ export const eventsService = {
 
   // Helper to fetch events for filter population
   async _getEventsForFilters(): Promise<Event[]> {
-    try {
-      const result = await this.getAll({ limit: 200 });
-      return result.items;
-    } catch (error) {
-      console.error('Failed to fetch events for filters:', error);
-      return [];
-    }
+    const result = await this.getAll({ limit: 200 });
+    return result.items;
   },
 
   // Get all filter options
