@@ -1038,9 +1038,11 @@ func (p *PostgreSQLBackend) nudgeAllWatchers() {
 	}
 }
 
+const maxResourceVersionQuery = `SELECT MAX(resource_version) FROM resources`
+
 func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 	var rv sql.NullInt64
-	err := p.db.QueryRowContext(p.ctx, `SELECT MAX(resource_version) FROM resources`).Scan(&rv)
+	err := p.db.QueryRowContext(p.ctx, maxResourceVersionQuery).Scan(&rv)
 	if err != nil {
 		return 0, err
 	}

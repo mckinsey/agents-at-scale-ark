@@ -84,8 +84,13 @@ func TestRelistReadsRowsInOrderFromAnIndex_Integration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			plan := explainRelistQuery(ctx, t, backend, tc.query, tc.args...)
-			if strings.Contains(plan, "Sort Key: resource_version") {
-				t.Errorf("relist sorts its rows instead of reading them in order from an index:\n%s", plan)
+			// Both indexes stream rows in resource-version order; the planner
+			// picks between them on selectivity. Anything else (seq scan,
+			// bitmap scan, a differently-ordered index) needs a Sort node and
+			// fails here.
+			if !strings.Contains(plan, "Index Scan using idx_resources_kind_rv") &&
+				!strings.Contains(plan, "Index Scan using idx_resources_rv") {
+				t.Errorf("relist does not read its rows in resource-version order from an rv index:\n%s", plan)
 			}
 		})
 	}
@@ -98,7 +103,7 @@ func TestBookmarkRefreshDoesNotScanTheTable_Integration(t *testing.T) {
 	ctx := context.Background()
 	seedRelistIndexProbe(ctx, t, backend)
 
-	plan := explainRelistQuery(ctx, t, backend, "SELECT MAX(resource_version) FROM resources")
+	plan := explainRelistQuery(ctx, t, backend, maxResourceVersionQuery)
 	if !strings.Contains(plan, "Index Only Scan Backward using idx_resources_rv") {
 		t.Errorf("bookmark refresh does not read the highest resource version straight off an index:\n%s", plan)
 	}
