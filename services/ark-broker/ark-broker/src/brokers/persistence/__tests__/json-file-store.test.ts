@@ -1,4 +1,4 @@
-import {mkdtempSync, rmSync, readFileSync, existsSync} from 'fs';
+import {mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync} from 'fs';
 import {tmpdir} from 'os';
 import {join} from 'path';
 import {JsonFileStore} from '@ark-broker/brokers/persistence/json-file-store.js';
@@ -90,6 +90,22 @@ describe('JsonFileStore', () => {
     const store = new JsonFileStore<Item>(logger, 'Test', path);
     await store.save([{id: 1}], 2);
     expect(existsSync(`${path}.tmp`)).toBe(false);
+  });
+
+  it('fails safe on a write error without corrupting the last good file', async () => {
+    const store = new JsonFileStore<Item>(logger, 'Test', path);
+    await store.save([{id: 1}], 2);
+
+    // Sabotage the next write: occupy the temp path with a directory so
+    // writeFile(`${path}.tmp`) fails (EISDIR).
+    mkdirSync(`${path}.tmp`);
+
+    // The failed write must resolve (swallowed, not thrown) ...
+    await expect(store.save([{id: 1}, {id: 2}], 3)).resolves.toBeUndefined();
+
+    // ... and the previous good snapshot must survive intact.
+    const loaded = new JsonFileStore<Item>(logger, 'Test', path).load();
+    expect(loaded).toEqual({items: [{id: 1}], nextSequence: 2});
   });
 
   it('applies maxItems, keeping the most recent', async () => {
