@@ -153,6 +153,26 @@ class TestAddressSource(unittest.TestCase):
         self.assertEqual(service_ref.path, "/mcp")
         self.assertEqual(service_ref.namespace, "ark")
 
+    def test_query_parameter_ref_address_is_preserved(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp({"valueFrom": {"queryParameterRef": {"name": "endpoint"}}})
+        )
+        self.assertEqual(
+            resp.address_source.valueFrom.queryParameterRef.name, "endpoint"
+        )
+        self.assertIsNone(resp.address_source.value)
+
+    def test_secret_key_ref_address_is_preserved(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp(
+                {"valueFrom": {"secretKeyRef": {"name": "mcp-url", "key": "address"}}}
+            )
+        )
+        secret_ref = resp.address_source.valueFrom.secretKeyRef
+        self.assertEqual(secret_ref.name, "mcp-url")
+        self.assertEqual(secret_ref.key, "address")
+        self.assertIsNone(resp.address_source.value)
+
     def test_missing_address_yields_none(self):
         resp = mcp_server_to_detail_response(self._mcp(None))
         self.assertIsNone(resp.address_source)

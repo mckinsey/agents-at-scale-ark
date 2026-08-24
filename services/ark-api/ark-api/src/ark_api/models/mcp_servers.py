@@ -53,6 +53,11 @@ class MCPServerValueSource(BaseModel):
 
 
 class MCPServerAddressSource(BaseModel):
+    """Read model for spec.address: reports both fields as stored.
+
+    MCPServerValueSource is the write model and its serializer collapses to
+    whichever of value/valueFrom is set, which would hide the origin here.
+    """
     value: Optional[str] = None
     valueFrom: Optional[MCPServerValueFrom] = None
 
