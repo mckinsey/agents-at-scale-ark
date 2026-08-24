@@ -17,9 +17,11 @@ const (
 	dropReasonBadStatus     = "bad_status"
 )
 
-// Registered on controller-runtime's metrics.Registry, not the default
-// prometheus registry — the controller's metrics endpoint only serves the
-// former.
+// The broker emitter runs in both the controller and the completions
+// executor. The controller's metrics endpoint serves controller-runtime's
+// metrics.Registry, while the executor serves the default prometheus registry
+// via promhttp.Handler(). Register on both so drops surface regardless of the
+// hosting process.
 var (
 	emitDroppedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -41,4 +43,5 @@ var (
 
 func init() {
 	ctrlmetrics.Registry.MustRegister(emitDroppedTotal, emitLatencySeconds)
+	prometheus.MustRegister(emitDroppedTotal, emitLatencySeconds)
 }
