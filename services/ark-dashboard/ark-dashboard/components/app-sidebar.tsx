@@ -34,6 +34,7 @@ import {
   Shield,
   SmartToy,
   Storefront,
+  Tune,
   UnfoldMore,
   VpnKey,
 } from '@/components/icons';
@@ -457,6 +458,16 @@ export function AppSidebar() {
                   tooltip="Secrets">
                   <Shield />
                   <span>Secrets</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('configurations')}
+                  isActive={getCurrentSection() === 'configurations'}
+                  tooltip="Configurations">
+                  <Tune />
+                  <span>Configurations</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
