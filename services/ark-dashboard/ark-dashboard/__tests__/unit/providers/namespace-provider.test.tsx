@@ -486,4 +486,176 @@ describe('NamespaceProvider - Namespace Resolution Logic', () => {
       expect(window.location.pathname).toBe('/tenant-a/agents');
     });
   });
+
+  describe('Namespace state across the write-back', () => {
+    it('falls back to the default namespace when the response names none', async () => {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('namespace=tenant-a') as never,
+      );
+      mockUseGetContext.mockReturnValue({
+        data: { namespace: '', read_only_mode: false, cluster: null },
+        isPending: false,
+        error: null,
+      });
+
+      const { result } = renderHook(() => useNamespace(), { wrapper });
+
+      // A response that names no namespace is still an answer — it must not
+      // leave the dashboard parked behind its loading gate.
+      await waitFor(() => {
+        expect(result.current.isNamespaceResolved).toBe(true);
+      });
+      expect(result.current.namespace).toBe('default');
+    });
+
+    const unreachable = {
+      data: null,
+      isPending: false,
+      error: {
+        message: "Namespace 'invalid-ns' not found",
+        data: { detail: { default_namespace: 'tenant-a' } },
+      },
+    };
+
+    const loading = { data: null, isPending: true, error: null };
+
+    it('stays resolved while the corrected namespace is being loaded', async () => {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('namespace=invalid-ns') as never,
+      );
+      mockUseGetContext.mockReturnValue(unreachable);
+
+      const { result, rerender } = renderHook(() => useNamespace(), {
+        wrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.namespace).toBe('tenant-a');
+      });
+
+      // The correction moved the URL to tenant-a, whose key has no cached
+      // response to seed — the substitute came from the error body.
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('namespace=tenant-a') as never,
+      );
+      mockUseGetContext.mockReturnValue(loading);
+      rerender();
+
+      expect(result.current.isNamespaceResolved).toBe(true);
+      expect(result.current.namespace).toBe('tenant-a');
+      // Held from the fallback, which is read-only until the real context lands.
+      expect(result.current.readOnlyMode).toBe(true);
+
+      mockUseGetContext.mockReturnValue({
+        data: { namespace: 'tenant-a', read_only_mode: false, cluster: null },
+        isPending: false,
+        error: null,
+      });
+      rerender();
+
+      expect(result.current.readOnlyMode).toBe(false);
+    });
+
+    it('announces the substitution once', async () => {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('namespace=invalid-ns') as never,
+      );
+      mockUseGetContext.mockReturnValue(unreachable);
+
+      const { result, rerender } = renderHook(() => useNamespace(), {
+        wrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.namespace).toBe('tenant-a');
+      });
+
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('namespace=tenant-a') as never,
+      );
+      mockUseGetContext.mockReturnValue(loading);
+      rerender();
+
+      expect(
+        vi
+          .mocked(toast.error)
+          .mock.calls.filter(([title]) =>
+            String(title).includes('not accessible'),
+          ),
+      ).toHaveLength(1);
+    });
+
+    it('re-arms the loading gate for a genuine namespace change', async () => {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('namespace=tenant-a') as never,
+      );
+      mockUseGetContext.mockReturnValue({
+        data: { namespace: 'tenant-a', read_only_mode: false, cluster: null },
+        isPending: false,
+        error: null,
+      });
+
+      const { result, rerender } = renderHook(() => useNamespace(), {
+        wrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.isNamespaceResolved).toBe(true);
+      });
+
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('namespace=tenant-b') as never,
+      );
+      mockUseGetContext.mockReturnValue(loading);
+      rerender();
+
+      expect(result.current.isNamespaceResolved).toBe(false);
+    });
+
+    it('does not write the previous namespace over a newly requested one', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        'http://localhost:3000/agents?namespace=tenant-a',
+      );
+      replaceStateSpy.mockClear();
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('namespace=tenant-a') as never,
+      );
+      mockUseGetContext.mockReturnValue({
+        data: { namespace: 'tenant-a', read_only_mode: false, cluster: null },
+        isPending: false,
+        error: null,
+      });
+
+      const { result, rerender } = renderHook(() => useNamespace(), {
+        wrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.isNamespaceResolved).toBe(true);
+      });
+
+      // A cached answer for tenant-a is still what the query layer holds while
+      // tenant-b loads. It must not be mistaken for the resolved namespace.
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('namespace=tenant-b') as never,
+      );
+      rerender();
+
+      expect(result.current.isNamespaceResolved).toBe(false);
+      expect(replaceStateSpy).not.toHaveBeenCalled();
+      expect(window.location.search).toBe('?namespace=tenant-a');
+
+      mockUseGetContext.mockReturnValue({
+        data: { namespace: 'tenant-b', read_only_mode: false, cluster: null },
+        isPending: false,
+        error: null,
+      });
+      rerender();
+
+      expect(result.current.namespace).toBe('tenant-b');
+      expect(replaceStateSpy).not.toHaveBeenCalled();
+    });
+  });
 });
