@@ -1169,15 +1169,7 @@ func (w *postgresWatcher) forwardRow(row *changeRow) bool {
 	if w.markSeen(row.uid, row.rv) {
 		return true
 	}
-	var eventType watch.EventType
-	switch {
-	case row.deleted:
-		eventType = watch.Deleted
-	case uidNew:
-		eventType = watch.Added
-	default:
-		eventType = watch.Modified
-	}
+	eventType := w.resumeEventType(row.rv, row.deleted, uidNew)
 	w.advanceRV(row.rv)
 	select {
 	case w.outCh <- watch.Event{Type: eventType, Object: row.obj.DeepCopyObject()}:
@@ -1243,6 +1235,24 @@ func (w *postgresWatcher) hasSeenUID(uid string) bool {
 	defer w.seenMu.Unlock()
 	_, ok := w.seenRVs[uid]
 	return ok
+}
+
+// resumeEventType picks the event type for a forwarded row. Rows in the resume
+// overlap (rv <= startRV) are emitted as Modified, not Added, so a resuming client
+// resyncs state it already holds instead of seeing phantom creations; a genuinely
+// missed row here is still delivered (an informer applies Modified as an add), so
+// nothing is lost. startRV is 0 when replaying all state. See #3246.
+func (w *postgresWatcher) resumeEventType(rv int64, deleted, uidNew bool) watch.EventType {
+	switch {
+	case deleted:
+		return watch.Deleted
+	case rv <= w.startRV:
+		return watch.Modified
+	case uidNew:
+		return watch.Added
+	default:
+		return watch.Modified
+	}
 }
 
 // resumeFloor is the lowest resource_version this watcher will (re-)emit: a full
@@ -1317,15 +1327,7 @@ func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, sp
 	if err != nil {
 		return true
 	}
-	var eventType watch.EventType
-	switch {
-	case deletedAt.Valid:
-		eventType = watch.Deleted
-	case uidNew:
-		eventType = watch.Added
-	default:
-		eventType = watch.Modified
-	}
+	eventType := w.resumeEventType(rv, deletedAt.Valid, uidNew)
 	w.advanceRV(rv)
 	select {
 	case w.outCh <- watch.Event{Type: eventType, Object: obj}:
