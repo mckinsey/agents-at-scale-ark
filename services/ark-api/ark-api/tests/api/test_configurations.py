@@ -1,15 +1,20 @@
 """Tests for the configurations API and its reverse-reference lookup."""
 import inspect
+import json
 import os
+import pathlib
+import re
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 os.environ["AUTH_MODE"] = "open"
 os.environ["READ_ONLY_MODE"] = "false"
 
-from ark_sdk import versions
+from ark_sdk import models, versions
 from fastapi.testclient import TestClient
 
+from ark_api.api.v1.export import EXPORT_CONFIGMAP_NAME
+from ark_api.api.v1.marketplace_sources import CONFIGMAP_NAME as MARKETPLACE_CONFIGMAP_NAME
 from ark_api.services.configuration_references import (
     REFERRING_RESOURCES,
     find_config_map_references
@@ -223,6 +228,66 @@ class TestReferringResourceVersions(unittest.TestCase):
                 f"self.{attribute} = ",
                 source,
                 f"{kind} is declared as {version} but {version} has no '{attribute}'",
+            )
+
+
+class TestReferringResourcesCompleteness(unittest.TestCase):
+    """Every kind whose spec accepts a configMapKeyRef must be reported."""
+
+    SPEC_MODEL = re.compile(r"^(?P<kind>.+?)(?P<version>V1[a-z0-9]+)Spec$")
+
+    def test_no_kind_that_reads_a_configuration_is_missing(self):
+        """Guards against a new CRD field silently reporting a configuration as unused.
+
+        The generated models come from the CRDs, so they are the source of truth
+        for which specs can carry a configMapKeyRef. A kind added there and not
+        here fails this test instead of shipping a wrong references list.
+        """
+        accepting = set()
+        for model_name in dir(models):
+            match = self.SPEC_MODEL.match(model_name)
+            if not match:
+                continue
+            schema = json.dumps(getattr(models, model_name).model_json_schema())
+            if "configMapKeyRef" in schema:
+                accepting.add((match.group("kind"), match.group("version").lower()))
+
+        declared = {(kind, version) for kind, _, version in REFERRING_RESOURCES}
+        self.assertEqual(
+            accepting,
+            declared,
+            f"missing from REFERRING_RESOURCES: {sorted(accepting - declared)}; "
+            f"declared but cannot read a configuration: {sorted(declared - accepting)}",
+        )
+
+
+class TestPolicyAllowsTheConfigmapsArkApiOwns(unittest.TestCase):
+    """The unlabelled configmaps ark-api writes must be exempt in the policy."""
+
+    POLICY = (
+        pathlib.Path(__file__).parents[3] / "chart" / "templates" / "configmap-policy.yaml"
+    )
+    UNLABELLED = re.compile(r"- name: unlabelled\n\s+expression: \"(?P<list>\[[^\]]*\])\"")
+
+    def test_exempt_names_match_the_python_constants(self):
+        """Guards a rename in Python that leaves the CEL list behind.
+
+        Both names live twice, once here and once in the policy, with nothing
+        linking them. Renaming one alone denies the write at admission, which
+        surfaces as a 403 in a live cluster rather than a failing test.
+        """
+        match = self.UNLABELLED.search(self.POLICY.read_text())
+        self.assertIsNotNone(match, f"no unlabelled variable in {self.POLICY}")
+
+        exempt = match.group("list")
+        for constant, name in (
+            ("EXPORT_CONFIGMAP_NAME", EXPORT_CONFIGMAP_NAME),
+            ("marketplace_sources.CONFIGMAP_NAME", MARKETPLACE_CONFIGMAP_NAME),
+        ):
+            self.assertIn(
+                f"'{name}'",
+                exempt,
+                f"{constant} is '{name}' but the policy exempts {exempt}",
             )
 
 

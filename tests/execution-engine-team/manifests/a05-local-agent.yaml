@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: local-reviewer
+spec:
+  description: Local member running on the built-in completions engine
+  prompt: You are the Local Reviewer Agent. Review what the previous member said.
+  modelRef:
+    name: test-model-mock

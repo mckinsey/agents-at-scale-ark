@@ -138,3 +138,4 @@ kubectl get query count-messages-10 -o jsonpath='{.status.response.content}'
 # 11 message(s) recieved
 ```
 
+Team members are the exception to the "conversation history is not hydrated" rule above. When an A2A agent runs as a member of a [Team](/user-guide/teams), Ark renders the accumulated team transcript into the message it sends, so the member sees earlier members' turns without relying on server-side retention. Member calls carry whatever `contextId` the query carries — none, unless the query sets `ark.mckinsey.com/a2a-context-id` — so if you do thread a context and the server retains history, those turns arrive both in the message and in the server's own state.

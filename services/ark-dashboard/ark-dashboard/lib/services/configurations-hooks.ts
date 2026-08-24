@@ -138,7 +138,13 @@ export const useDeleteConfiguration = (
   return useMutation({
     mutationKey: [DELETE_CONFIGURATION_MUTATION_KEY],
     mutationFn: (name: string) => configurationsService.delete(name),
-    onSuccess: () => {
+    onSuccess: (_data, name) => {
+      queryClient.removeQueries({
+        queryKey: [GET_CONFIGURATION_QUERY_KEY, name],
+      });
+      queryClient.removeQueries({
+        queryKey: [GET_CONFIGURATION_REFERENCES_QUERY_KEY, name],
+      });
       toast.success('Configuration deleted successfully');
       props?.onSuccess?.();
     },

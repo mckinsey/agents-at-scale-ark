@@ -23,6 +23,7 @@ const EMPTY_VALUES: ConfigurationFormValues = {
   description: '',
   alias: '',
   labels: [],
+  labelDraft: '',
 };
 
 export function useConfigurationForm({
@@ -53,6 +54,7 @@ export function useConfigurationForm({
       description: configuration.description ?? '',
       alias: configuration.alias ?? '',
       labels: configuration.labels,
+      labelDraft: '',
     });
   }, [configuration, reset]);
 

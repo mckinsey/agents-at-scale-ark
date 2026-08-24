@@ -73,95 +73,7 @@ spec:
             name: ModelAvailable
             value: 'True'
 
-  - name: agent-target-success
-    try:
-    - apply:
-        file: manifests/wf-agent.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-agent
-        timeout: 4m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-agent -o json > /tmp/wf-agent.json
-
-          PHASE=$(jq -r '.status.phase' /tmp/wf-agent.json)
-          echo "workflow phase: $PHASE"
-          [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
-
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-agent.json | head -1)
-          QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-agent.json | head -1)
-          CONVERSATION_ID=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="conversation-id") | .value' /tmp/wf-agent.json | head -1)
-          QUERY_JSON=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value' /tmp/wf-agent.json | head -1)
-          SESSION_ID=$(echo "$QUERY_JSON" | jq -r '.spec.sessionId')
-
-          echo "response: $RESPONSE"
-          echo "query phase: $QUERY_PHASE"
-          echo "conversation-id: $CONVERSATION_ID"
-          echo "sessionId: $SESSION_ID"
-
-          [ "$QUERY_PHASE" = "done" ] || { echo "expected query phase done"; exit 1; }
-          echo "$RESPONSE" | grep -q "WEATHER:" || { echo "missing WEATHER: in response"; exit 1; }
-          [ "$SESSION_ID" = "wf-ark-query-agent" ] || { echo "expected sessionId wf-ark-query-agent"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-agent
-
-  - name: team-target-success
-    try:
-    - apply:
-        file: manifests/wf-team.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-team
-        timeout: 4m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-team -o json > /tmp/wf-team.json
-
-          PHASE=$(jq -r '.status.phase' /tmp/wf-team.json)
-          echo "workflow phase: $PHASE"
-          [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
-
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-team.json | head -1)
-          QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-team.json | head -1)
-
-          echo "response: $RESPONSE"
-          echo "query phase: $QUERY_PHASE"
-
-          [ "$QUERY_PHASE" = "done" ] || { echo "expected query phase done"; exit 1; }
-          echo "$RESPONSE" | grep -q "FINAL:" || { echo "missing final assistant message"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-team
-
-  - name: tool-target-success
+  - name: success-cases
     try:
     - apply:
         file: ../shared/mock-geocoding-api.yaml
@@ -222,312 +134,43 @@ spec:
           metadata:
             name: geocoder
     - apply:
+        file: manifests/wf-agent.yaml
+    - apply:
+        file: manifests/wf-team.yaml
+    - apply:
         file: manifests/wf-tool.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-tool
-        timeout: 4m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-tool -o json > /tmp/wf-tool.json
-
-          PHASE=$(jq -r '.status.phase' /tmp/wf-tool.json)
-          echo "workflow phase: $PHASE"
-          [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
-
-          RESPONSE=$(jq -r 'first(.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value)' /tmp/wf-tool.json)
-          QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-tool.json | head -1)
-          TARGET_TYPE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value | fromjson | .spec.target.type' /tmp/wf-tool.json | head -1)
-
-          echo "response: $RESPONSE"
-          echo "query phase: $QUERY_PHASE"
-          echo "target type: $TARGET_TYPE"
-
-          [ "$QUERY_PHASE" = "done" ] || { echo "expected query phase done"; exit 1; }
-          [ "$TARGET_TYPE" = "tool" ] || { echo "expected target type tool"; exit 1; }
-          echo "$RESPONSE" | grep -q "New York" || { echo "missing tool response content"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-tool
-
-  - name: error-target-node-failed
-    try:
-    - apply:
-        file: manifests/wf-error.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-error
-        timeout: 4m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-error -o json > /tmp/wf-error.json
-
-          NODE_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .phase' /tmp/wf-error.json | head -1)
-          echo "ark-query node phase: $NODE_PHASE"
-          [ "$NODE_PHASE" = "Failed" ] || { echo "expected node Failed"; exit 1; }
-
-          QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-error.json | head -1)
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-error.json | head -1)
-          QUERY_JSON=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value' /tmp/wf-error.json | head -1)
-
-          echo "query phase output: $QUERY_PHASE"
-          echo "response output: $RESPONSE"
-
-          [ "$QUERY_PHASE" = "error" ] || { echo "expected query phase output error"; exit 1; }
-          [ -n "$QUERY_JSON" ] || { echo "expected query-json output to be readable"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-error
-
-  - name: bad-target-noslash
-    try:
-    - apply:
-        file: manifests/wf-bad-target-noslash.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-target-noslash
-        timeout: 2m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-bad-target-noslash -o json > /tmp/wf-bad-target-noslash.json
-
-          NODE_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .phase' /tmp/wf-bad-target-noslash.json | head -1)
-          echo "ark-query node phase: $NODE_PHASE"
-          [ "$NODE_PHASE" = "Failed" ] || { echo "expected node Failed"; exit 1; }
-
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-bad-target-noslash.json | head -1)
-          echo "response output: $RESPONSE"
-          echo "$RESPONSE" | grep -q "expected type/name" || { echo "missing target-format error"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-target-noslash
-
-  - name: bad-target-type
-    try:
-    - apply:
-        file: manifests/wf-bad-target-type.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-target-type
-        timeout: 2m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-bad-target-type -o json > /tmp/wf-bad-target-type.json
-
-          NODE_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .phase' /tmp/wf-bad-target-type.json | head -1)
-          echo "ark-query node phase: $NODE_PHASE"
-          [ "$NODE_PHASE" = "Failed" ] || { echo "expected node Failed"; exit 1; }
-
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-bad-target-type.json | head -1)
-          echo "response output: $RESPONSE"
-          echo "$RESPONSE" | grep -q "invalid target type" || { echo "missing target-type error"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-target-type
-
-  - name: bad-target-empty
-    try:
-    - apply:
-        file: manifests/wf-bad-target-empty.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-target-empty
-        timeout: 2m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-bad-target-empty -o json > /tmp/wf-bad-target-empty.json
-
-          NODE_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .phase' /tmp/wf-bad-target-empty.json | head -1)
-          echo "ark-query node phase: $NODE_PHASE"
-          [ "$NODE_PHASE" = "Failed" ] || { echo "expected node Failed"; exit 1; }
-
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-bad-target-empty.json | head -1)
-          echo "response output: $RESPONSE"
-          echo "$RESPONSE" | grep -q "name is empty" || { echo "missing empty-name error"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-target-empty
-
-  - name: bad-params-nonjson
-    try:
-    - apply:
-        file: manifests/wf-bad-params-nonjson.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-params-nonjson
-        timeout: 2m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-bad-params-nonjson -o json > /tmp/wf-bad-params-nonjson.json
-
-          NODE_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .phase' /tmp/wf-bad-params-nonjson.json | head -1)
-          echo "ark-query node phase: $NODE_PHASE"
-          [ "$NODE_PHASE" = "Failed" ] || { echo "expected node Failed"; exit 1; }
-
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-bad-params-nonjson.json | head -1)
-          echo "response output: $RESPONSE"
-          echo "$RESPONSE" | grep -q "invalid parameters" || { echo "missing parameters error"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-params-nonjson
-
-  - name: bad-params-nonlist
-    try:
-    - apply:
-        file: manifests/wf-bad-params-nonlist.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-params-nonlist
-        timeout: 2m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-bad-params-nonlist -o json > /tmp/wf-bad-params-nonlist.json
-
-          NODE_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .phase' /tmp/wf-bad-params-nonlist.json | head -1)
-          echo "ark-query node phase: $NODE_PHASE"
-          [ "$NODE_PHASE" = "Failed" ] || { echo "expected node Failed"; exit 1; }
-
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-bad-params-nonlist.json | head -1)
-          echo "response output: $RESPONSE"
-          echo "$RESPONSE" | grep -q "invalid parameters" || { echo "missing parameters error"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-bad-params-nonlist
-
-  - name: apply-fail-missing-target
-    try:
-    - apply:
-        file: manifests/wf-apply-fail.yaml
-    - wait:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-apply-fail
-        timeout: 2m
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-apply-fail -o json > /tmp/wf-apply-fail.json
-
-          NODE_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .phase' /tmp/wf-apply-fail.json | head -1)
-          echo "ark-query node phase: $NODE_PHASE"
-          [ "$NODE_PHASE" = "Failed" ] || { echo "expected node Failed"; exit 1; }
-
-          RESPONSE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="response") | .value' /tmp/wf-apply-fail.json | head -1)
-          echo "response output: $RESPONSE"
-          echo "$RESPONSE" | grep -q "failed to create Query" || { echo "missing apply-failure error"; exit 1; }
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: argoproj.io/v1alpha1
-        kind: Workflow
-        name: ark-query-apply-fail
-
-  - name: optional-spec-success
-    try:
     - apply:
         file: manifests/wf-optional-spec.yaml
     - wait:
         apiVersion: argoproj.io/v1alpha1
         kind: Workflow
+        name: ark-query-agent
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-team
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-tool
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
         name: ark-query-optional-spec
         timeout: 4m
         for:
@@ -535,34 +178,218 @@ spec:
             name: Completed
             value: 'True'
     - script:
-        timeout: 30s
+        timeout: 60s
         content: |
-          set -e
-          kubectl -n "$NAMESPACE" get workflow ark-query-optional-spec -o json > /tmp/wf-optional-spec.json
+          set -u
+          failed=0
 
-          PHASE=$(jq -r '.status.phase' /tmp/wf-optional-spec.json)
-          echo "workflow phase: $PHASE"
-          [ "$PHASE" = "Succeeded" ] || { echo "expected Succeeded"; exit 1; }
+          fetch() {
+            kubectl -n "$NAMESPACE" get workflow "$1" -o json > "/tmp/$1.json"
+          }
+          jp() {
+            jq -r "first(.status.nodes[] | select(.type==\"Pod\") | .outputs.parameters[]? | select(.name==\"$2\") | .value)" "/tmp/$1.json"
+          }
+          qj() {
+            jq -r "first(.status.nodes[] | select(.type==\"Pod\") | .outputs.parameters[]? | select(.name==\"query-json\") | .value | fromjson | $2)" "/tmp/$1.json"
+          }
+          wf_phase() {
+            jq -r '.status.phase' "/tmp/$1.json"
+          }
 
-          QUERY_PHASE=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="phase") | .value' /tmp/wf-optional-spec.json | head -1)
-          [ "$QUERY_PHASE" = "done" ] || { echo "expected query phase done"; exit 1; }
+          check_success_response() {
+            local wf=$1 needle=$2
+            fetch "$wf"
+            local phase query_phase response
+            phase=$(wf_phase "$wf")
+            query_phase=$(jp "$wf" phase)
+            response=$(jp "$wf" response)
+            echo "[$wf] wf_phase=$phase query_phase=$query_phase"
+            echo "[$wf] response=$response"
+            [ "$phase" = "Succeeded" ] || { echo "  FAIL: expected wf Succeeded"; failed=1; }
+            [ "$query_phase" = "done" ] || { echo "  FAIL: expected query phase done"; failed=1; }
+            echo "$response" | grep -q "$needle" || { echo "  FAIL: response missing \"$needle\""; failed=1; }
+          }
 
-          QUERY_JSON=$(jq -r '.status.nodes[] | select(.type=="Pod") | .outputs.parameters[]? | select(.name=="query-json") | .value' /tmp/wf-optional-spec.json | head -1)
-          echo "query-json output: $QUERY_JSON"
+          check_success_response ark-query-agent WEATHER:
+          check_success_response ark-query-team  FINAL:
+          check_success_response ark-query-tool  "New York"
 
-          NAME=$(echo "$QUERY_JSON" | jq -r '.metadata.name')
-          TTL=$(echo "$QUERY_JSON" | jq -r '.spec.ttl')
-          SESSION_ID=$(echo "$QUERY_JSON" | jq -r '.spec.sessionId')
-          echo "query name: $NAME, ttl: $TTL, sessionId: $SESSION_ID"
-          [ "$NAME" = "ark-query-custom-name" ] || { echo "expected custom query name"; exit 1; }
-          [ "$TTL" = "1m0s" ] || { echo "expected ttl 1m0s"; exit 1; }
-          [ "$SESSION_ID" = "argo-ark-query-session" ] || { echo "expected sessionId argo-ark-query-session"; exit 1; }
+          # agent: default sessionId is wf-<workflow-name> when none supplied.
+          agent_sid=$(qj ark-query-agent '.spec.sessionId')
+          echo "[ark-query-agent] sessionId=$agent_sid"
+          [ "$agent_sid" = "wf-ark-query-agent" ] || { echo "  FAIL: expected sessionId wf-ark-query-agent, got $agent_sid"; failed=1; }
+
+          # tool: verify the query targeted a tool.
+          tool_target_type=$(qj ark-query-tool '.spec.target.type')
+          echo "[ark-query-tool] target_type=$tool_target_type"
+          [ "$tool_target_type" = "tool" ] || { echo "  FAIL: expected target type tool, got $tool_target_type"; failed=1; }
+
+          # optional-spec: verify custom query metadata was applied.
+          fetch ark-query-optional-spec
+          phase=$(wf_phase ark-query-optional-spec)
+          query_phase=$(jp ark-query-optional-spec phase)
+          echo "[ark-query-optional-spec] wf_phase=$phase query_phase=$query_phase"
+          [ "$phase" = "Succeeded" ] || { echo "  FAIL: expected wf Succeeded"; failed=1; }
+          [ "$query_phase" = "done" ] || { echo "  FAIL: expected query phase done"; failed=1; }
+          name=$(qj ark-query-optional-spec '.metadata.name')
+          ttl=$(qj ark-query-optional-spec '.spec.ttl')
+          sid=$(qj ark-query-optional-spec '.spec.sessionId')
+          [ "$name" = "ark-query-custom-name" ]      || { echo "  FAIL: expected custom query name, got $name"; failed=1; }
+          [ "$ttl"  = "1m0s" ]                        || { echo "  FAIL: expected ttl 1m0s, got $ttl"; failed=1; }
+          [ "$sid"  = "argo-ark-query-session" ]      || { echo "  FAIL: expected sessionId argo-ark-query-session, got $sid"; failed=1; }
+
+          exit $failed
         env:
         - name: NAMESPACE
           value: ($namespace)
     catch:
     - events: {}
-    - describe:
+    - script:
+        content: |
+          for wf in ark-query-agent ark-query-team ark-query-tool ark-query-optional-spec; do
+            echo "=== $wf ==="; kubectl -n "$NAMESPACE" describe workflow "$wf" || true
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: failure-cases
+    try:
+    - apply:
+        file: manifests/wf-error.yaml
+    - apply:
+        file: manifests/wf-bad-target-noslash.yaml
+    - apply:
+        file: manifests/wf-bad-target-type.yaml
+    - apply:
+        file: manifests/wf-bad-target-empty.yaml
+    - apply:
+        file: manifests/wf-bad-params-nonjson.yaml
+    - apply:
+        file: manifests/wf-bad-params-nonlist.yaml
+    - apply:
+        file: manifests/wf-apply-fail.yaml
+    - wait:
         apiVersion: argoproj.io/v1alpha1
         kind: Workflow
-        name: ark-query-optional-spec
+        name: ark-query-error
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-target-noslash
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-target-type
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-target-empty
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-params-nonjson
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-params-nonlist
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-apply-fail
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - script:
+        timeout: 60s
+        content: |
+          set -u
+          failed=0
+
+          fetch() {
+            kubectl -n "$NAMESPACE" get workflow "$1" -o json > "/tmp/$1.json"
+          }
+          jp() {
+            jq -r "first(.status.nodes[] | select(.type==\"Pod\") | .outputs.parameters[]? | select(.name==\"$2\") | .value)" "/tmp/$1.json"
+          }
+          node_phase() {
+            jq -r '.status.nodes[] | select(.type=="Pod") | .phase' "/tmp/$1.json" | head -1
+          }
+
+          # error-target-node-failed: Query itself errors; Argo node fails but outputs are readable.
+          fetch ark-query-error
+          np=$(node_phase ark-query-error)
+          qp=$(jp ark-query-error phase)
+          qj=$(jp ark-query-error query-json)
+          echo "[ark-query-error] node_phase=$np query_phase=$qp"
+          [ "$np" = "Failed" ] || { echo "  FAIL: expected node Failed"; failed=1; }
+          [ "$qp" = "error" ] || { echo "  FAIL: expected query phase error"; failed=1; }
+          [ -n "$qj" ]        || { echo "  FAIL: expected query-json to be readable"; failed=1; }
+
+          # bad-* / apply-fail: ark-query.py exits non-zero; check response mentions the expected error.
+          check_response() {
+            local wf=$1 needle=$2
+            fetch "$wf"
+            local np resp
+            np=$(node_phase "$wf")
+            resp=$(jp "$wf" response)
+            echo "[$wf] node_phase=$np response=$resp"
+            [ "$np" = "Failed" ] || { echo "  FAIL: expected node Failed"; failed=1; }
+            echo "$resp" | grep -q "$needle" || { echo "  FAIL: response missing \"$needle\""; failed=1; }
+          }
+
+          check_response ark-query-bad-target-noslash "expected type/name"
+          check_response ark-query-bad-target-type    "invalid target type"
+          check_response ark-query-bad-target-empty   "name is empty"
+          check_response ark-query-bad-params-nonjson "invalid parameters"
+          check_response ark-query-bad-params-nonlist "invalid parameters"
+          check_response ark-query-apply-fail         "failed to create Query"
+
+          exit $failed
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          for wf in ark-query-error ark-query-bad-target-noslash ark-query-bad-target-type \
+                    ark-query-bad-target-empty ark-query-bad-params-nonjson \
+                    ark-query-bad-params-nonlist ark-query-apply-fail; do
+            echo "=== $wf ==="; kubectl -n "$NAMESPACE" describe workflow "$wf" || true
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -1,0 +1,183 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: configmap-policy
+spec:
+  description: >
+    ark-api's ValidatingAdmissionPolicy must let through the configmaps ark-api
+    owns - Ark configurations, plus ark-export-metadata and marketplace-sources -
+    and deny everything else, including adopting a configmap it did not create by
+    adding the marker to it. The policy matches on the service account username,
+    so the writes here are impersonated rather than issued through ark-api. It is
+    rendered from the chart into this namespace, so the CEL under test is the one
+    that ships. Requires host k8s >=1.30 (ValidatingAdmissionPolicy GA).
+
+  steps:
+    - name: install-policy
+      try:
+        # helm template reports only the built-in API versions, and the policy is
+        # guarded on ValidatingAdmissionPolicy being present, so without
+        # --api-versions it renders to nothing.
+        - script:
+            content: |
+              set -eu
+              helm template ark-api ../../services/ark-api/chart \
+                --namespace "$NAMESPACE" \
+                --api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy \
+                --show-only templates/configmap-policy.yaml \
+                | kubectl apply -f -
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+        - apply:
+            resource:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: Role
+              metadata:
+                name: configmap-writer
+              rules:
+                - apiGroups: [""]
+                  resources: ["configmaps"]
+                  verbs: ["create", "update", "patch", "delete", "get", "list"]
+        - apply:
+            resource:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: configmap-writer
+              subjects:
+                - kind: ServiceAccount
+                  name: ark-api-sa
+                  namespace: ($namespace)
+              roleRef:
+                kind: Role
+                name: configmap-writer
+                apiGroup: rbac.authorization.k8s.io
+      catch:
+        - events: {}
+      cleanup:
+        - script:
+            content: |
+              kubectl delete validatingadmissionpolicybinding \
+                "ark-api-sa-configmap-policy-$NAMESPACE" --ignore-not-found
+              kubectl delete validatingadmissionpolicy \
+                "ark-api-sa-configmap-policy-$NAMESPACE" --ignore-not-found
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+
+    - name: deny-a-configmap-ark-api-does-not-own
+      try:
+        # Poll: the policy has to reach the apiserver's informers before it
+        # enforces, so an early create is accepted rather than denied.
+        - script:
+            timeout: 120s
+            content: |
+              set -eu
+              for i in $(seq 1 45); do
+                if OUTPUT=$(kubectl create configmap not-ours \
+                  --from-literal=value=x \
+                  --namespace "$NAMESPACE" \
+                  --as "system:serviceaccount:$NAMESPACE:ark-api-sa" 2>&1); then
+                  kubectl delete configmap not-ours --namespace "$NAMESPACE" --ignore-not-found >/dev/null
+                  sleep 2
+                  continue
+                fi
+                if echo "$OUTPUT" | grep -q "ark-api may only write configmaps"; then
+                  echo "PASS: denied a configmap without the marker"
+                  exit 0
+                fi
+                echo "rejected, but not by the policy yet: $OUTPUT"
+                sleep 2
+              done
+              echo "FAIL: the policy never began enforcing"
+              exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      catch:
+        - events: {}
+
+    - name: allow-the-configmaps-ark-api-owns
+      try:
+        - script:
+            content: |
+              set -eu
+              apply_as_ark_api() {
+                kubectl apply --namespace "$NAMESPACE" \
+                  --as "system:serviceaccount:$NAMESPACE:ark-api-sa" -f -
+              }
+
+              # Exempt by name: written by the export and marketplace endpoints,
+              # which carry no marker.
+              for NAME in ark-export-metadata marketplace-sources; do
+                apply_as_ark_api <<EOF
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: $NAME
+              data:
+                value: "[]"
+              EOF
+              done
+
+              # A configuration, allowed by the marker.
+              apply_as_ark_api <<EOF
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: mcp-address
+                labels:
+                  ark.mckinsey.com/resource-type: configuration
+              data:
+                value: "https://example.test/mcp/"
+              EOF
+
+              # Updating one is a separate validation, gated on the pre-image.
+              apply_as_ark_api <<EOF
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: mcp-address
+                labels:
+                  ark.mckinsey.com/resource-type: configuration
+              data:
+                value: "https://other.test/mcp/"
+              EOF
+              echo "PASS: ark-api can write and update the configmaps it owns"
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      catch:
+        - events: {}
+
+    - name: deny-adopting-a-configmap-by-marking-it
+      try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: someone-elses
+              data:
+                value: "not ark-api's"
+        - script:
+            content: |
+              set -eu
+              if OUTPUT=$(kubectl label configmap someone-elses \
+                ark.mckinsey.com/resource-type=configuration \
+                --namespace "$NAMESPACE" \
+                --as "system:serviceaccount:$NAMESPACE:ark-api-sa" 2>&1); then
+                echo "FAIL: ark-api adopted a configmap it does not own"
+                exit 1
+              fi
+              if ! echo "$OUTPUT" | grep -q "already Ark configurations"; then
+                echo "FAIL: rejected, but not by the policy: $OUTPUT"
+                exit 1
+              fi
+              echo "PASS: the marker alone does not adopt an existing configmap"
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      catch:
+        - events: {}

@@ -44,6 +44,8 @@ Also review the version-specific sections below for manual migration steps that 
 
 To move resources to a new cluster, use `ark export` on the source and `ark import` on the destination. This flow assumes the destination has a fresh Ark install with no overlapping resources.
 
+To move resources between storage backends within one cluster (etcd to PostgreSQL or back), see [Migrating between storage backends](/operations-guide/postgres-storage-backend#migrating-between-storage-backends), which covers the export/import ordering around the destructive backend switch.
+
 #### 1. Export from the source cluster
 
 ```bash
@@ -86,6 +88,23 @@ ark import ark-export.yaml --upsert
 </Callout>
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
+
+## v0.1.67
+
+### Aggregated Apiserver Audit Logging On By Default
+
+This only affects deployments running the opt-in **PostgreSQL backend** (aggregated apiserver mode). CRD/etcd deployments are unchanged.
+
+Ark's aggregated apiserver now emits its own Kubernetes audit log as JSON on stdout, enabled by default. After upgrading, expect **one `Metadata`-level record per Ark API request, reads included** — the default policy excludes health, metrics and discovery traffic, but not resource reads. On a busy cluster this is a noticeable increase in pod log volume, and it lands in whatever log pipeline already collects the apiserver's stdout.
+
+**If that volume is a problem, pick one:**
+
+- Reads by the controller ServiceAccount are already dropped via `audit.excludeReadsByUsers` (defaults to `system:serviceaccount:ark-system:ark-controller`); add any other polling identities to that list.
+- `audit.level=None` keeps the backend wired but records nothing at the catch-all rule.
+- `audit.enabled=false` turns it off entirely.
+- `audit.policy` supplies a complete `audit.k8s.io/v1` policy and overrides both `audit.level` and the default exclusions.
+
+Note that `audit.level` values of `Request` or `RequestResponse` include request and response bodies, which for Ark means Query `.spec.input` and model output reach your log pipeline. Treat that as a data classification decision.
 
 ## v0.1.63
 

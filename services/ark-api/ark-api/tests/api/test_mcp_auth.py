@@ -17,6 +17,23 @@ REDIRECT_URI = "https://ark.example.com/v1/mcp/auth/callback"
 SECRET_NAME = "notion-mcp-tokens"
 
 
+def _spec_authorization(token_secret_ref_name, machine_managed):
+    if not token_secret_ref_name:
+        return {}
+    auth = {"tokenSecretRef": {"name": token_secret_ref_name}}
+    if machine_managed:
+        auth["clientCredentials"] = {
+            "clientID": "ark-client",
+            "clientAuthentication": {
+                "privateKeyJWT": {
+                    "secretKeyRef": {"name": "signing-key", "key": "private.pem"},
+                    "algorithm": "ES256",
+                }
+            },
+        }
+    return auth
+
+
 def _build_typed_mcp(
     *,
     name: str = "notion-mcp",
@@ -29,6 +46,7 @@ def _build_typed_mcp(
     scopes_supported: list[str] | None = None,
     token_secret_ref_name: str | None = SECRET_NAME,
     conditions: list | None = None,
+    machine_managed: bool = False,
 ):
     auth_status = MagicMock()
     auth_status.state = state
@@ -61,7 +79,7 @@ def _build_typed_mcp(
     mcp.spec = spec
     mcp.to_dict.return_value = {
         "metadata": {"name": name, "namespace": namespace},
-        "spec": {"authorization": {"tokenSecretRef": {"name": token_secret_ref_name}} if token_secret_ref_name else {}},
+        "spec": {"authorization": _spec_authorization(token_secret_ref_name, machine_managed)},
         "status": {
             "authorization": {
                 "state": state,
@@ -1055,3 +1073,45 @@ class TestEnsureTokenSecretRef(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MachineManagedGuardTests(_AuthBase):
+    """A machine-managed MCPServer has no interactive flow to start or end.
+
+    logout with delete_secret would remove the Secret the controller owns;
+    until the next reconcile, discovery 401s and every Tool for the server
+    is deleted. Both endpoints must refuse before doing anything.
+    """
+
+    def test_start_rejects_machine_managed(self):
+        patcher, _ = _patch_ark_client(_build_typed_mcp(machine_managed=True))
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                json={},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("clientCredentials", response.json()["detail"])
+
+    def test_logout_rejects_machine_managed(self):
+        patcher, _ = _patch_ark_client(_build_typed_mcp(machine_managed=True))
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/logout",
+                json={},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 409, response.text)
+
+    @patch("ark_api.api.v1.mcp_auth.delete_token_secret", new_callable=AsyncMock)
+    def test_logout_delete_secret_never_touches_a_controller_owned_secret(self, mock_delete):
+        patcher, _ = _patch_ark_client(_build_typed_mcp(machine_managed=True))
+        with patcher:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/logout",
+                json={"delete_secret": True},
+                params={"namespace": "default"},
+            )
+        self.assertEqual(response.status_code, 409, response.text)
+        mock_delete.assert_not_awaited()

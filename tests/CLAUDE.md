@@ -1026,3 +1026,24 @@ Use the shared `psql-query.sh` script to run SQL against `ark-storage-dev`:
 ```
 
 The script reads the password from the `ark-storage-dev-password` secret in `ark-system` and execs psql on the `ark-storage-dev` deployment.
+
+### Polling for async writes: use `psql-poll.sh`, not a shell retry loop
+
+Broker writes land asynchronously, so verify steps must poll until the rows appear. Do not loop over `psql-query.sh`: each call is three `kubectl` round-trips (namespace lookup, secret decode, exec), so an N-iteration loop pays that N times and, under CI Postgres contention, exceeds the step timeout and is killed. `signal: killed` in a chainsaw script means the step timeout was hit, not that an assertion failed.
+
+Use `psql-poll.sh`, which resolves the connection once and runs the whole retry loop inside a single `kubectl exec` against local psql. It polls `<sql>` until the trimmed result equals `<expected>`, then prints it; non-zero exit if it never matched:
+
+```yaml
+- script:
+    timeout: 60s
+    content: |
+      COUNT=$(bash ../shared/psql-poll.sh \
+        "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}' AND phase='done';" \
+        "2" 80 0.5) || { echo "expected 2, got '${COUNT}'"; exit 1; }
+```
+
+Arguments are `"<sql>" "<expected>" [attempts] [sleep_seconds]` (defaults 80 and 0.5, a 40s budget). Use `psql-query.sh` only for single reads once the poll has confirmed the data is present.
+
+### Derive per-run identifiers from `($namespace)`
+
+Hardcoded `sessionId`s (and similar identifiers) accumulate rows across runs on a persistent Postgres. CI is fresh each run, but local re-runs and any shared DB are not, so a fixed id breaks exact-count assertions on the second run. Set the id from `($namespace)` (unique per run) in the query manifests and reference the same value in verify steps, then delete the run's own rows in a `cleanup` step.

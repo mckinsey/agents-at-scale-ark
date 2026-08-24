@@ -1,6 +1,7 @@
 """Tests for ConfigurationClient, the ConfigMap-backed Ark configuration store."""
 import unittest
 from unittest.mock import Mock, AsyncMock, patch, call
+from kubernetes_asyncio import client
 from kubernetes_asyncio.client.rest import ApiException
 
 from ark_sdk.k8s import ConfigurationClient
@@ -8,21 +9,35 @@ from ark_sdk.labels import (
     ARK_RESOURCE_TYPE_LABEL,
     CONFIGURATION_LABEL_SELECTOR,
     labels_to_tags,
-    strip_ark_labels,
+    strip_tag_labels,
     tags_to_labels,
     validate_tag,
 )
 
 MARKER_LABELS = {ARK_RESOURCE_TYPE_LABEL: "configuration"}
 
+OWNER_REFERENCE = client.V1OwnerReference(
+    api_version="ark.mckinsey.com/v1alpha1",
+    kind="MCPServer",
+    name="github-mcp",
+    uid="owner-uuid",
+)
+
 
 def _config_map(name="github-mcp-url", uid="uuid-1234", value="https://example.test/mcp/",
-                labels=None, annotations=None):
+                labels=None, annotations=None, resource_version="4242",
+                owner_references=None, finalizers=None):
     config_map = Mock()
-    config_map.metadata.name = name
-    config_map.metadata.uid = uid
-    config_map.metadata.labels = {**MARKER_LABELS, **(labels or {})}
-    config_map.metadata.annotations = annotations or {}
+    config_map.metadata = client.V1ObjectMeta(
+        name=name,
+        namespace="test-namespace",
+        uid=uid,
+        resource_version=resource_version,
+        labels={**MARKER_LABELS, **(labels or {})},
+        annotations=annotations or {},
+        owner_references=owner_references,
+        finalizers=finalizers,
+    )
     config_map.data = {"value": value} if value is not None else {}
     return config_map
 
@@ -46,9 +61,18 @@ class TestLabelHelpers(unittest.TestCase):
         }
         self.assertEqual(labels_to_tags(labels), ["mcp"])
 
-    def test_strip_ark_labels_keeps_foreign_labels(self):
-        labels = {**MARKER_LABELS, "app.kubernetes.io/managed-by": "Helm"}
-        self.assertEqual(strip_ark_labels(labels), {"app.kubernetes.io/managed-by": "Helm"})
+    def test_strip_tag_labels_keeps_every_label_it_does_not_own(self):
+        labels = {
+            **MARKER_LABELS,
+            "ark.mckinsey.com/label.mcp": "true",
+            "ark.mckinsey.com/managed-by": "ark-api",
+            "app.kubernetes.io/managed-by": "Helm",
+        }
+        self.assertEqual(strip_tag_labels(labels), {
+            **MARKER_LABELS,
+            "ark.mckinsey.com/managed-by": "ark-api",
+            "app.kubernetes.io/managed-by": "Helm",
+        })
 
     def test_validate_tag_rejects_spaces(self):
         with self.assertRaises(ValueError) as context:
@@ -223,6 +247,56 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_preserves_server_owned_metadata(self, mock_v1_api, mock_api_client):
+        """resourceVersion guards against lost updates and ownerReferences against orphaning."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+
+        existing = _config_map(
+            resource_version="4242",
+            owner_references=[OWNER_REFERENCE],
+            finalizers=["ark.mckinsey.com/cleanup"],
+        )
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_config_map = AsyncMock(return_value=existing)
+        mock_api_instance.replace_namespaced_config_map = AsyncMock(return_value=_config_map())
+
+        await self.client.update_configuration(name="github-mcp-url", value="v")
+
+        body = mock_api_instance.replace_namespaced_config_map.call_args.kwargs["body"]
+        self.assertEqual(body.metadata.resource_version, "4242")
+        self.assertEqual(body.metadata.owner_references, [OWNER_REFERENCE])
+        self.assertEqual(body.metadata.finalizers, ["ark.mckinsey.com/cleanup"])
+        self.assertEqual(body.metadata.uid, "uuid-1234")
+        self.assertEqual(body.metadata.namespace, "test-namespace")
+        self.assertEqual(body.metadata.name, "github-mcp-url")
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_keeps_ark_labels_it_does_not_own(self, mock_v1_api, mock_api_client):
+        """Only the tag labels are Ark-owned here; other ark.mckinsey.com labels survive."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+
+        existing = _config_map(labels={
+            "ark.mckinsey.com/label.stale": "true",
+            "ark.mckinsey.com/managed-by": "ark-api",
+        })
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_config_map = AsyncMock(return_value=existing)
+        mock_api_instance.replace_namespaced_config_map = AsyncMock(return_value=_config_map())
+
+        await self.client.update_configuration(name="github-mcp-url", value="v", labels=["mcp"])
+
+        body = mock_api_instance.replace_namespaced_config_map.call_args.kwargs["body"]
+        self.assertEqual(body.metadata.labels, {
+            ARK_RESOURCE_TYPE_LABEL: "configuration",
+            "ark.mckinsey.com/label.mcp": "true",
+            "ark.mckinsey.com/managed-by": "ark-api",
+        })
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
     async def test_update_clears_alias_when_omitted(self, mock_v1_api, mock_api_client):
         """An alias the user cleared must not linger as a stale annotation."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
@@ -268,10 +342,30 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(await self.client.delete_configuration("github-mcp-url"))
 
-        mock_api_instance.delete_namespaced_config_map.assert_called_once_with(
-            name="github-mcp-url",
-            namespace="test-namespace"
+        kwargs = mock_api_instance.delete_namespaced_config_map.call_args.kwargs
+        self.assertEqual(kwargs["name"], "github-mcp-url")
+        self.assertEqual(kwargs["namespace"], "test-namespace")
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_delete_is_pinned_to_the_uid_it_verified(self, mock_v1_api, mock_api_client):
+        """The delete must name the exact object whose marker label was checked.
+
+        Without a uid precondition the ConfigMap can be replaced between the read
+        and the delete, and the delete lands on an object Ark does not own.
+        """
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_config_map = AsyncMock(
+            return_value=_config_map(uid="uuid-verified")
         )
+        mock_api_instance.delete_namespaced_config_map = AsyncMock(return_value=None)
+
+        await self.client.delete_configuration("github-mcp-url")
+
+        body = mock_api_instance.delete_namespaced_config_map.call_args.kwargs["body"]
+        self.assertEqual(body.preconditions.uid, "uuid-verified")
 
 
 class TestConfigurationInitK8sOrdering(unittest.IsolatedAsyncioTestCase):

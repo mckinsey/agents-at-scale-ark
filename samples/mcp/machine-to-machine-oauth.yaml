@@ -1,0 +1,85 @@
+# Machine-to-machine OAuth for an MCP server.
+#
+# The controller mints and renews the access token itself using
+# client_credentials with private_key_jwt (RFC 7523). No browser, no
+# human, no `ark mcp auth login`.
+#
+# Implements the MCP OAuth Client Credentials Extension at
+# modelcontextprotocol/ext-auth@ce15435. That extension is a draft, so
+# the revision is pinned; behaviour may differ from later revisions.
+#
+# PREREQUISITE — the authorization server MUST already have Ark
+# registered as a client. There is no dynamic registration in this flow.
+# Out of band, an administrator on the counterparty's side must:
+#   1. create a client and give you its clientID
+#   2. store the public half of your signing key against that client
+#   3. grant the client the scopes and resource named below
+#
+# Generate the keypair. Some authorization servers (Keycloak among them)
+# want an X.509 certificate rather than a bare public key, so produce
+# both:
+#
+#   openssl ecparam -genkey -name prime256v1 -noout -out private.pem
+#   openssl req -new -x509 -key private.pem -out public.crt \
+#     -days 365 -subj "/CN=ark-client"
+#
+# public.crt is what the administrator needs; private.pem stays with you.
+#
+# Create the Secret from the file rather than embedding the key in a
+# manifest, so it never lands in version control:
+#
+#   kubectl create secret generic example-mcp-signing-key \
+#     --from-file=private.pem=private.pem
+#
+# Then apply this file.
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: example-machine-mcp
+  namespace: default
+spec:
+  address:
+    value: https://mcp.example.com/mcp
+  transport: http
+  pollInterval: 1m
+  authorization:
+    # Where the token lands. The controller creates this Secret if it is
+    # absent and rewrites access_token / expires_at on every renewal.
+    # The name never changes, so anything holding a reference keeps
+    # working across renewals.
+    tokenSecretRef:
+      name: example-machine-mcp-token
+
+    # How the token is obtained.
+    clientCredentials:
+      clientID: ark-client
+      scopes:
+        - mcp:tools
+
+      # resource and tokenEndpoint are normally discovered via RFC 9728
+      # and RFC 8414. Set them only as interoperability overrides, when
+      # the discovered values are wrong or absent. Discovery still runs
+      # either way — it is driven by the server's 401, not by this block.
+      # resource: https://mcp.example.com/mcp
+      # tokenEndpoint: https://auth.example.com/oauth/token
+
+      clientAuthentication:
+        privateKeyJWT:
+          # Sensitive input. The controller reads it to sign assertions
+          # and never copies it into the token Secret, status, events,
+          # or logs. Anyone who can read this Secret can obtain tokens
+          # as clientID.
+          secretKeyRef:
+            name: example-mcp-signing-key
+            key: private.pem
+
+          # Must appear in the authorization server's
+          # token_endpoint_auth_signing_alg_values_supported, or the
+          # controller refuses to mint rather than attempting it.
+          algorithm: ES256
+
+          # Only needed when the authorization server holds several
+          # public keys for this client and needs the `kid` header to
+          # pick one.
+          # keyID: example-key-1
