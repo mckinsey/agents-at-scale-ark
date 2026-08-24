@@ -26,9 +26,9 @@ var (
 	emitDroppedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "ark_broker_emit_dropped_total",
-			Help: "Structured events dropped by the broker event emitter before delivery, by drop reason and namespace.",
+			Help: "Structured events dropped by the broker event emitter before delivery, by drop reason.",
 		},
-		[]string{"reason", "namespace"},
+		[]string{"reason"},
 	)
 
 	emitLatencySeconds = prometheus.NewHistogramVec(

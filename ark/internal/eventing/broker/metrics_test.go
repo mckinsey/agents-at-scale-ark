@@ -28,7 +28,7 @@ func gatheredMetricNames(t *testing.T, g prometheus.Gatherer) map[string]bool {
 func TestEmitMetricsRegisteredOnBothRegistries(t *testing.T) {
 	// Materialize a child so the vec collectors emit their metric family; an
 	// untouched vec gathers nothing and the family name would be absent.
-	emitDroppedTotal.WithLabelValues("registration_probe", "registration-probe-ns").Inc()
+	emitDroppedTotal.WithLabelValues("registration_probe").Inc()
 	emitLatencySeconds.WithLabelValues("registration_probe").Observe(0)
 
 	for _, tc := range []struct {

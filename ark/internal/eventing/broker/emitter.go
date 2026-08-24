@@ -99,7 +99,7 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 			e.sendEvent(context.WithoutCancel(ctx), query.Namespace, event)
 		}()
 	} else {
-		emitDroppedTotal.WithLabelValues(dropReasonSemaphoreFull, query.Namespace).Inc()
+		emitDroppedTotal.WithLabelValues(dropReasonSemaphoreFull).Inc()
 		log.V(1).Info("semaphore full, dropping event", "namespace", query.Namespace, "reason", reason)
 	}
 }
@@ -114,7 +114,7 @@ func (e *BrokerEventEmitter) getEndpointForNamespace(ctx context.Context, namesp
 func (e *BrokerEventEmitter) sendEvent(ctx context.Context, namespace string, event Event) {
 	baseURL, err := e.getEndpointForNamespace(ctx, namespace)
 	if err != nil {
-		emitDroppedTotal.WithLabelValues(dropReasonEndpointError, namespace).Inc()
+		emitDroppedTotal.WithLabelValues(dropReasonEndpointError).Inc()
 		log.Error(err, "failed to resolve broker endpoint", "namespace", namespace, "reason", event.Reason)
 		return
 	}
@@ -126,14 +126,14 @@ func (e *BrokerEventEmitter) sendEvent(ctx context.Context, namespace string, ev
 
 	body, err := json.Marshal(event)
 	if err != nil {
-		emitDroppedTotal.WithLabelValues(dropReasonMarshalError, namespace).Inc()
+		emitDroppedTotal.WithLabelValues(dropReasonMarshalError).Inc()
 		log.Error(err, "failed to marshal event")
 		return
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		emitDroppedTotal.WithLabelValues(dropReasonRequestError, namespace).Inc()
+		emitDroppedTotal.WithLabelValues(dropReasonRequestError).Inc()
 		log.Error(err, "failed to create request", "endpoint", endpoint)
 		return
 	}
@@ -149,7 +149,7 @@ func (e *BrokerEventEmitter) sendEvent(ctx context.Context, namespace string, ev
 			reason = dropReasonTimeout
 		}
 		emitLatencySeconds.WithLabelValues(reason).Observe(time.Since(start).Seconds())
-		emitDroppedTotal.WithLabelValues(reason, namespace).Inc()
+		emitDroppedTotal.WithLabelValues(reason).Inc()
 		log.Error(err, "failed to send event to broker", "endpoint", endpoint)
 		return
 	}
@@ -161,7 +161,7 @@ func (e *BrokerEventEmitter) sendEvent(ctx context.Context, namespace string, ev
 
 	if resp.StatusCode != http.StatusCreated {
 		emitLatencySeconds.WithLabelValues(dropReasonBadStatus).Observe(time.Since(start).Seconds())
-		emitDroppedTotal.WithLabelValues(dropReasonBadStatus, namespace).Inc()
+		emitDroppedTotal.WithLabelValues(dropReasonBadStatus).Inc()
 		log.Error(fmt.Errorf("unexpected status code: %d", resp.StatusCode), "failed to send event to broker", "endpoint", endpoint)
 		return
 	}
