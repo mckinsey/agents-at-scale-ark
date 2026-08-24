@@ -54,6 +54,11 @@ export class JsonFileStore<T> {
 
   private async flush(): Promise<void> {
     try {
+      // The final `while` check and the `finally` reset run with no await
+      // between them, so a save() cannot slot in between "loop sees no pending"
+      // and "flush marked done": it either set pending before the check (drained
+      // by another pass) or runs after the reset (starts a fresh flush). Do not
+      // introduce an await in that window — it would let a coalesced save be lost.
       while (this.pending) {
         const {items, nextSequence} = this.pending;
         this.pending = null;

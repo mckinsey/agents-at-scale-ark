@@ -60,6 +60,32 @@ describe('JsonFileStore', () => {
     expect(loaded?.nextSequence).toBe(101);
   });
 
+  it('folds a save issued mid-flush into the trailing write (not lost)', async () => {
+    const store = new JsonFileStore<Item>(logger, 'Test', path);
+
+    // The first save() launches flush(), which runs synchronously up to its
+    // writeFile await, so the second save() below provably lands while the flush
+    // is in flight. It must be persisted by the trailing pass, not dropped.
+    const first = store.save([{id: 1}], 2);
+    const second = store.save([{id: 1}, {id: 2}], 3);
+    await Promise.all([first, second]);
+
+    const loaded = new JsonFileStore<Item>(logger, 'Test', path).load();
+    expect(loaded).toEqual({items: [{id: 1}, {id: 2}], nextSequence: 3});
+  });
+
+  it('starts a fresh flush after the previous one has drained', async () => {
+    const store = new JsonFileStore<Item>(logger, 'Test', path);
+
+    // The second save happens after the first fully resolves, so it depends on
+    // `flushing` being reset — a stuck reset would leave the file at the first.
+    await store.save([{id: 1}], 2);
+    await store.save([{id: 1}, {id: 2}], 3);
+
+    const loaded = new JsonFileStore<Item>(logger, 'Test', path).load();
+    expect(loaded).toEqual({items: [{id: 1}, {id: 2}], nextSequence: 3});
+  });
+
   it('leaves no temp file behind after writing', async () => {
     const store = new JsonFileStore<Item>(logger, 'Test', path);
     await store.save([{id: 1}], 2);
