@@ -5,6 +5,7 @@ package postgresql
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,16 +13,22 @@ import (
 )
 
 func TestCheckServerVersion(t *testing.T) {
+	floorMajor := minServerVersionNum / 10000
+	rejection := func(version string) string {
+		return fmt.Sprintf("PostgreSQL %s is not supported: the storage backend requires PostgreSQL %d or newer",
+			version, floorMajor)
+	}
+
 	tests := []struct {
 		name       string
 		versionNum int
 		version    string
 		wantErr    string
 	}{
-		{"at floor", 150000, "15.0", ""},
-		{"above floor", 180001, "18.1", ""},
-		{"below floor", 140012, "14.12", "PostgreSQL 14.12 is not supported: the storage backend requires PostgreSQL 15 or newer"},
-		{"far below floor", 100023, "10.23", "PostgreSQL 10.23 is not supported: the storage backend requires PostgreSQL 15 or newer"},
+		{"at floor", minServerVersionNum, fmt.Sprintf("%d.0", floorMajor), ""},
+		{"above floor", minServerVersionNum + 30001, fmt.Sprintf("%d.1", floorMajor+3), ""},
+		{"below floor", minServerVersionNum - 1, fmt.Sprintf("%d.12", floorMajor-1), rejection(fmt.Sprintf("%d.12", floorMajor-1))},
+		{"far below floor", 100023, "10.23", rejection("10.23")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
