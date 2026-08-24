@@ -1,6 +1,6 @@
-import {existsSync, readFileSync, mkdirSync} from 'fs';
-import {writeFile, rename} from 'fs/promises';
-import {dirname} from 'path';
+import {existsSync, readFileSync, mkdirSync} from 'node:fs';
+import {writeFile, rename} from 'node:fs/promises';
+import {dirname} from 'node:path';
 import type {Logger} from '@ark-broker/logging/logger.js';
 
 export class JsonFileStore<T> {

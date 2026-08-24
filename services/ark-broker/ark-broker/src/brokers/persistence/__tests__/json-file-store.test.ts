@@ -1,6 +1,12 @@
-import {mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync} from 'fs';
-import {tmpdir} from 'os';
-import {join} from 'path';
+import {
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  readFileSync,
+  existsSync,
+} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {JsonFileStore} from '@ark-broker/brokers/persistence/json-file-store.js';
 import {createLogger} from '@ark-broker/logging/logger.js';
 
