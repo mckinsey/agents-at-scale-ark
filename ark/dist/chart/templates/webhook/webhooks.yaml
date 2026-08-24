@@ -1,4 +1,4 @@
-{{- if .Values.webhook.enable }}
+{{- if eq (include "chart.arkWebhooksEnabled" .) "true" }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
@@ -201,7 +201,7 @@ webhooks:
         apiVersions:
           - v1alpha1
         resources:
-          - mcpserver
+          - mcpservers
   - name: vmodel-v1.kb.io
     matchConditions:
     - name: not-being-deleted

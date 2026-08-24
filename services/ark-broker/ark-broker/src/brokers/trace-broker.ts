@@ -1,6 +1,5 @@
 import {BrokerItem} from './stream/broker-item.js';
 import {InMemoryStream} from './stream/in-memory-stream.js';
-import type {Stream} from './stream/stream.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import {PaginatedList, PaginationParams, DEFAULT_LIMIT} from './pagination.js';
 
@@ -40,7 +39,7 @@ export interface OTELSpan {
 }
 
 export class TraceBroker {
-  private readonly stream: Stream<OTELSpan>;
+  private readonly stream: InMemoryStream<OTELSpan>;
 
   constructor(logger: Logger, path?: string, maxItems?: number) {
     this.stream = new InMemoryStream<OTELSpan>(logger, 'Trace', path, maxItems);
@@ -83,6 +82,10 @@ export class TraceBroker {
 
   all(): Promise<BrokerItem<OTELSpan>[]> {
     return this.stream.all();
+  }
+
+  cachedItemCount(): number {
+    return this.stream.cachedItemCount();
   }
 
   save(): Promise<void> {
