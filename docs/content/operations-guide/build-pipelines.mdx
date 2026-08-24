@@ -42,7 +42,7 @@ For the complete release process including RC and stable release cycles, artifac
    - Release Please runs after all CI checks pass (the `release-please` step inside the `check-release` job in `.github/workflows/cicd.yaml`)
    - Analyzes all commits since the last release using conventional commit format
    - Determines version bump based on commit types and current version:
-     - For versions < 1.0.0 (current: 0.1.67): {/* x-release-please-version */}
+     - For versions < 0.1.68 (current: 0.1.67): {/* x-release-please-version */}
        - `feat:` → Patch version bump (e.g. `0.1.x` → `0.1.(x+1)`) due to `bump-patch-for-minor-pre-major: true`
        - `fix:` → Patch version bump
        - `feat!:` or `BREAKING CHANGE:` → Minor version bump (e.g. `0.1.x` → `0.2.0`)
@@ -59,16 +59,22 @@ For the complete release process including RC and stable release cycles, artifac
      - Version updates in version files across the monorepo (defined in `.github/release-please-config.json`)
      - Consistent version synchronization across all packages, charts, and services
 
-3. **Release Activation** (When Release PR is merged)
-   - The CI/CD pipeline re-runs fully and creates a GitHub release with the new version tag
+3. **RC Release Activation** (When an RC Release PR is merged)
+   - The CI/CD pipeline re-runs fully and creates a GitHub release with the new RC version tag
    - Changelog is automatically attached to the GitHub release
    - Sets `release_created` output to trigger downstream jobs (in `.github/workflows/cicd.yaml`):
       - **release-libs**: Attaches the Python wheel files to the GitHub release
       - **release-charts**: Attaches the Helm chart packages to the GitHub release
       - **release-ark-cli**: Attaches the ARK CLI npm package to the GitHub release
       - **release-fark**: Builds the `fark` CLI with GoReleaser and attaches its binaries to the GitHub release
-      - **run-deploy-workflow**: Triggers the Deploy workflow (`deploy.yml`), which publishes the distribution channels — documentation to GitHub Pages, multi-arch containers, the Helm chart, the npm CLI, and the PyPI SDK
-   - On stable releases only, **verify-ark-installation** smoke-tests the published install and **bootstrap-next-rc-cycle** opens the next release-candidate cycle
+      - **run-deploy-workflow**: Triggers the Deploy workflow (`deploy.yml`), which on an RC publishes multi-arch containers to GHCR and Helm charts to the OCI registry
+   - RC releases do not update the container `latest` tag or publish the npm CLI, PyPI SDK, or docs to GitHub Pages — those are stable-only
+
+4. **Stable Promotion** (Custom flow, not Release Please)
+   - Unlike the automated RC flow above, an operator manually triggers the "Prepare Release" workflow (`prepare-release.yaml`) via `workflow_dispatch`, optionally passing the `rc_tag` to promote (blank uses the latest RC)
+   - The workflow strips `-rc` across every version file, bumps the release-please manifest, records the promoted RC in `.releasing`, and opens a reviewed `release: vX.Y.Z` PR
+   - Merging that PR runs `release-on-merge.yaml`, which tags the stable version, rebuilds artifacts **from the tested RC commit**, and triggers the Deploy workflow (`deploy.yml`) to publish containers, Helm charts, npm CLI, PyPI SDK, and docs to GitHub Pages, then runs installation verification
+   - See [Release Process → Stable Release Cycle](/reference/release-process#stable-release-cycle) for the full flow. The older `promote-to-stable.yaml` + Release Please promotion path is retained as a fallback.
 
 ### Version Synchronization
 

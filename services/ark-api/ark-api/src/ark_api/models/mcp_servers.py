@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, model_serializer
 
-from .common import AvailabilityStatus
+from .common import AvailabilityStatus, PaginatedListResponse
 
 
 class MCPServerConfigMapKeyRef(BaseModel):
@@ -68,6 +68,10 @@ class MCPServerAuthorization(BaseModel):
     authorizedBy: Optional[str] = None
     authorizedAt: Optional[str] = None
     expiresAt: Optional[str] = None
+    # True when the controller mints this server's token itself via
+    # spec.authorization.clientCredentials. No interactive flow exists,
+    # so consumers must not offer an authenticate action.
+    machineManaged: bool = False
 
 
 class MCPServerResponse(BaseModel):
@@ -82,9 +86,8 @@ class MCPServerResponse(BaseModel):
     authorization: Optional[MCPServerAuthorization] = None
 
 
-class MCPServerListResponse(BaseModel):
+class MCPServerListResponse(PaginatedListResponse):
     items: List[MCPServerResponse]
-    total: int
 
 
 class MCPServerDetailResponse(BaseModel):

@@ -81,13 +81,14 @@ export interface paths {
         };
         /**
          * List A2A Servers
-         * @description List all A2AServer CRs in a namespace.
+         * @description List a page of A2AServer CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list A2A servers from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         A2AServerListResponse: List of all A2A servers in the namespace
+         *         A2AServerListResponse: One page of A2A servers plus the continuation token
          */
         get: operations["list_a2a_servers_v1_a2a_servers_get"];
         put?: never;
@@ -142,13 +143,14 @@ export interface paths {
         };
         /**
          * List A2A Tasks
-         * @description List all A2ATask CRs in a namespace.
+         * @description List a page of A2ATask CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list A2A tasks from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         A2ATaskListResponse: List of all A2A tasks in the namespace
+         *         A2ATaskListResponse: One page of A2A tasks plus the continuation token
          */
         get: operations["list_a2a_tasks_v1_a2a_tasks_get"];
         put?: never;
@@ -227,13 +229,14 @@ export interface paths {
         };
         /**
          * List Agents
-         * @description List all Agent CRs in a namespace.
+         * @description List a page of Agent CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list agents from (defaults to current context)
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         AgentListResponse: List of all agents in the namespace
+         *         AgentListResponse: One page of agents plus the continuation token
          */
         get: operations["list_agents_v1_agents_get"];
         put?: never;
@@ -654,6 +657,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/configurations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Configurations
+         * @description List all configurations in namespace using ark-sdk.
+         */
+        get: operations["list_configurations_v1_configurations_get"];
+        put?: never;
+        /**
+         * Create Configuration
+         * @description Create a new configuration using ark-sdk.
+         */
+        post: operations["create_configuration_v1_configurations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/configurations/{configuration_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Configuration
+         * @description Get a specific configuration using ark-sdk.
+         */
+        get: operations["get_configuration_v1_configurations__configuration_name__get"];
+        /**
+         * Update Configuration
+         * @description Update a configuration using ark-sdk.
+         */
+        put: operations["update_configuration_v1_configurations__configuration_name__put"];
+        post?: never;
+        /**
+         * Delete Configuration
+         * @description Delete a configuration using ark-sdk.
+         */
+        delete: operations["delete_configuration_v1_configurations__configuration_name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/configurations/{configuration_name}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Configuration References
+         * @description List the Ark resources that read this configuration.
+         */
+        get: operations["list_configuration_references_v1_configurations__configuration_name__references_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/context": {
         parameters: {
             query?: never;
@@ -902,13 +977,14 @@ export interface paths {
         };
         /**
          * List Mcp Servers
-         * @description List all MCPServer CRs in a namespace.
+         * @description List a page of MCPServer CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list MCP servers from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         MCPServerListResponse: List of all MCP servers in the namespace
+         *         MCPServerListResponse: One page of MCP servers plus the continuation token
          */
         get: operations["list_mcp_servers_v1_mcp_servers_get"];
         put?: never;
@@ -1042,7 +1118,7 @@ export interface paths {
         };
         /**
          * List Memories
-         * @description List all memories in a namespace.
+         * @description List a page of memories in a namespace.
          */
         get: operations["list_memories_v1_memories_get"];
         put?: never;
@@ -1134,13 +1210,14 @@ export interface paths {
         };
         /**
          * List Models
-         * @description List all Model CRs in a namespace.
+         * @description List a page of Model CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list models from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         ModelListResponse: List of all models in the namespace
+         *         ModelListResponse: One page of models plus the continuation token
          */
         get: operations["list_models_v1_models_get"];
         put?: never;
@@ -1978,13 +2055,14 @@ export interface paths {
         };
         /**
          * List Teams
-         * @description List all Team CRs in a namespace.
+         * @description List a page of Team CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list teams from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         TeamListResponse: List of all teams in the namespace
+         *         TeamListResponse: One page of teams plus the continuation token
          */
         get: operations["list_teams_v1_teams_get"];
         put?: never;
@@ -2067,13 +2145,14 @@ export interface paths {
         };
         /**
          * List Tools
-         * @description List all Tool CRs in a namespace.
+         * @description List a page of Tool CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list tools from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         ToolListResponse: List of all tools in the namespace
+         *         ToolListResponse: One page of tools plus the continuation token
          */
         get: operations["list_tools_v1_tools_get"];
         put?: never;
@@ -2150,10 +2229,14 @@ export interface components {
         };
         /** A2AServerListResponse */
         A2AServerListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["A2AServerResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * A2AServerRef
@@ -2249,10 +2332,14 @@ export interface components {
          * @description List of A2ATasks response model.
          */
         A2ATaskListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["A2ATaskResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * A2ATaskMessage
@@ -2614,10 +2701,14 @@ export interface components {
          * @description List of agents response model.
          */
         AgentListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["AgentResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * AgentOverride
@@ -3207,6 +3298,95 @@ export interface components {
              */
             role: "user";
         };
+        /**
+         * ConfigurationCreateRequest
+         * @description Request model for creating a configuration.
+         */
+        ConfigurationCreateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ConfigurationListResponse
+         * @description List of configurations response model.
+         */
+        ConfigurationListResponse: {
+            /** Count */
+            count: number;
+            /** Items */
+            items: components["schemas"]["ConfigurationResponse"][];
+        };
+        /**
+         * ConfigurationReference
+         * @description A resource that reads a configuration.
+         */
+        ConfigurationReference: {
+            /** Field */
+            field: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * ConfigurationReferenceListResponse
+         * @description Resources that read a configuration.
+         */
+        ConfigurationReferenceListResponse: {
+            /** Count */
+            count: number;
+            /** Items */
+            items: components["schemas"]["ConfigurationReference"][];
+        };
+        /**
+         * ConfigurationResponse
+         * @description Configuration response model.
+         */
+        ConfigurationResponse: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Name */
+            name: string;
+            /** Value */
+            value?: string | null;
+        };
+        /**
+         * ConfigurationUpdateRequest
+         * @description Request model for updating a configuration.
+         */
+        ConfigurationUpdateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Value */
+            value: string;
+        };
         /** ContextResponse */
         ContextResponse: {
             /** Cluster */
@@ -3554,6 +3734,11 @@ export interface components {
             authorizedBy?: string | null;
             /** Expiresat */
             expiresAt?: string | null;
+            /**
+             * Machinemanaged
+             * @default false
+             */
+            machineManaged: boolean;
             /** Resourcename */
             resourceName?: string | null;
             /** State */
@@ -3625,10 +3810,14 @@ export interface components {
         };
         /** MCPServerListResponse */
         MCPServerListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["MCPServerResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /** MCPServerQueryParameterRef */
         MCPServerQueryParameterRef: {
@@ -3859,8 +4048,14 @@ export interface components {
          * @description Response model for memory list.
          */
         MemoryListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["MemoryResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * MemoryMessageListResponse
@@ -3987,10 +4182,14 @@ export interface components {
          * @description List of models response model.
          */
         ModelListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["ModelResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * ModelRef
@@ -4585,10 +4784,14 @@ export interface components {
          * @description List of teams response model.
          */
         TeamListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["TeamResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * TeamMember
@@ -4665,10 +4868,14 @@ export interface components {
         };
         /** ToolListResponse */
         ToolListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["ToolResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /** ToolResponse */
         ToolResponse: {
@@ -4787,6 +4994,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -4885,6 +5096,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -5021,6 +5236,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -5929,6 +6148,214 @@ export interface operations {
             };
         };
     };
+    list_configurations_v1_configurations_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_configuration_v1_configurations_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_configuration_v1_configurations__configuration_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_configuration_v1_configurations__configuration_name__put: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_configuration_v1_configurations__configuration_name__delete: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configuration_references_v1_configurations__configuration_name__references_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationReferenceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_context_endpoint_v1_context_get: {
         parameters: {
             query?: {
@@ -6289,6 +6716,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -6569,6 +7000,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -6820,6 +7255,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -8526,6 +8965,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -8698,6 +9141,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
