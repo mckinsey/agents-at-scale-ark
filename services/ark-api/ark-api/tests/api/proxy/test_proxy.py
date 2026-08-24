@@ -480,7 +480,8 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_response.content = b'{"files": [{"name": "test.txt"}]}'
         mock_request.return_value = mock_response
 
-        response = self.client.get("/v1/proxy/services/file-gateway/files")
+        with self._mock_service_lookup():
+            response = self.client.get("/v1/proxy/services/file-gateway/files")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -503,10 +504,11 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_response.content = b'{"id": "123", "name": "uploaded.txt"}'
         mock_request.return_value = mock_response
 
-        response = self.client.post(
-            "/v1/proxy/services/file-gateway/files",
-            json={"name": "test.txt", "content": "test content"}
-        )
+        with self._mock_service_lookup():
+            response = self.client.post(
+                "/v1/proxy/services/file-gateway/files",
+                json={"name": "test.txt", "content": "test content"}
+            )
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
@@ -521,7 +523,8 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_response.content = b'{"files": []}'
         mock_request.return_value = mock_response
 
-        response = self.client.get("/v1/proxy/services/file-gateway/files?prefix=test&max_keys=10")
+        with self._mock_service_lookup():
+            response = self.client.get("/v1/proxy/services/file-gateway/files?prefix=test&max_keys=10")
 
         self.assertEqual(response.status_code, 200)
         mock_request.assert_called_once()
@@ -534,7 +537,8 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         from httpx import ConnectError
         mock_request.side_effect = ConnectError("Connection refused")
 
-        response = self.client.get("/v1/proxy/services/file-gateway/files")
+        with self._mock_service_lookup():
+            response = self.client.get("/v1/proxy/services/file-gateway/files")
 
         self.assertEqual(response.status_code, 502)
         data = response.json()
@@ -558,7 +562,8 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_response.content = b"fake file content"
         mock_request.return_value = mock_response
 
-        response = self.client.get("/v1/proxy/services/file-gateway-api/files/test.jpg/download")
+        with self._mock_service_lookup():
+            response = self.client.get("/v1/proxy/services/file-gateway-api/files/test.jpg/download")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"fake file content")
@@ -627,11 +632,38 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
         mock_client_instance.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('ark_api.api.v1.client_utils.create_api_client', return_value=mock_client_instance), \
+        # Pin the env this test assumes: with IMPERSONATION_ENABLED+FALLBACK the
+        # decorator retries as the service account and the mock's 403 becomes a 500.
+        with patch.dict(os.environ, {"IMPERSONATION_ENABLED": "false", "IMPERSONATION_FALLBACK": "false"}), \
+             patch('ark_api.api.v1.client_utils.create_api_client', return_value=mock_client_instance), \
              patch('ark_api.api.v1.proxy.proxy.client.CoreV1Api', return_value=mock_v1):
             response = self.client.delete("/v1/proxy/services/file-gateway/files/test.txt?namespace=default")
 
         self.assertEqual(response.status_code, 403)
+        mock_request.assert_not_called()
+
+    @patch('httpx.AsyncClient.request')
+    def test_proxy_get_and_post_return_403_when_service_read_forbidden(self, mock_request):
+        """GET/POST forwards must be gated by the same impersonated service read as DELETE/PATCH/HEAD."""
+        from kubernetes_asyncio.client.rest import ApiException
+
+        mock_v1 = MagicMock()
+        mock_v1.read_namespaced_service = AsyncMock(side_effect=ApiException(status=403, reason="Forbidden"))
+
+        mock_client_instance = MagicMock()
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.dict(os.environ, {"IMPERSONATION_ENABLED": "false", "IMPERSONATION_FALLBACK": "false"}), \
+             patch('ark_api.api.v1.client_utils.create_api_client', return_value=mock_client_instance), \
+             patch('ark_api.api.v1.proxy.proxy.client.CoreV1Api', return_value=mock_v1):
+            get_response = self.client.get("/v1/proxy/services/file-gateway/files/test.txt?namespace=default")
+            post_response = self.client.post("/v1/proxy/services/file-gateway/files?namespace=default", json={})
+            no_path_response = self.client.get("/v1/proxy/services/file-gateway?namespace=default")
+
+        self.assertEqual(get_response.status_code, 403)
+        self.assertEqual(post_response.status_code, 403)
+        self.assertEqual(no_path_response.status_code, 403)
         mock_request.assert_not_called()
 
     @patch('httpx.AsyncClient.request')
@@ -739,7 +771,8 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_http_client.request = AsyncMock(return_value=mock_response)
         mock_httpx_client.return_value = mock_http_client
 
-        response = self.client.get("/v1/proxy/services/file-gateway")
+        with self._mock_service_lookup():
+            response = self.client.get("/v1/proxy/services/file-gateway")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -764,7 +797,8 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_http_client.request = AsyncMock(return_value=mock_response)
         mock_httpx_client.return_value = mock_http_client
 
-        response = self.client.get("/v1/proxy/services/file-gateway-api/files?namespace=kyc-onboarding-demo")
+        with self._mock_service_lookup():
+            response = self.client.get("/v1/proxy/services/file-gateway-api/files?namespace=kyc-onboarding-demo")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -913,7 +947,8 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_http_client.request = AsyncMock(return_value=mock_response)
         mock_httpx_client.return_value = mock_http_client
 
-        response = self.client.get("/v1/proxy/services/my-service")
+        with self._mock_service_lookup():
+            response = self.client.get("/v1/proxy/services/my-service")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -940,7 +975,8 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_http_client.request = AsyncMock(return_value=mock_response)
         mock_httpx_client.return_value = mock_http_client
 
-        response = self.client.get("/v1/proxy/services/my-service/api/v1/data")
+        with self._mock_service_lookup():
+            response = self.client.get("/v1/proxy/services/my-service/api/v1/data")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()

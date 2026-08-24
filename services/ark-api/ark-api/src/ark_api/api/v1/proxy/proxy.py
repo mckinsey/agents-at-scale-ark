@@ -177,9 +177,17 @@ async def list_services(
         service_names = [svc.metadata.name for svc in services.items]
         return ServiceListResponse(services=service_names)
 
+async def _check_service_access(service_name: str, namespace: str, impersonation: Optional[ImpersonationConfig]) -> None:
+    """Gate the plain-service proxy on the user's RBAC, same as proxy_services."""
+    async with get_impersonating_api_client(impersonation) as api_client:
+        v1 = client.CoreV1Api(api_client)
+        await v1.read_namespaced_service(name=service_name, namespace=namespace)
+
+
 @router.options("/{resource}/{server_name}")
 @router.post("/{resource}/{server_name}")
 @router.get("/{resource}/{server_name}")
+@handle_k8s_errors(operation="get", resource_type="service")
 async def proxy_server(
     resource: Resource,
     server_name: str,
@@ -208,6 +216,7 @@ async def proxy_server(
     else:
         if namespace is None:
             namespace = get_context()["namespace"]
+        await _check_service_access(server_name, namespace, impersonation)
         resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"  # NOSONAR - in-cluster traffic
         additional_headers = {}
 
@@ -218,6 +227,7 @@ async def proxy_server(
 @router.options("/{resource}/{server_name}/{path:path}")
 @router.get("/{resource}/{server_name}/{path:path}")
 @router.post("/{resource}/{server_name}/{path:path}")
+@handle_k8s_errors(operation="get", resource_type="service")
 async def proxy_server_path(resource: Resource,
     server_name: str,
     request: Request,
@@ -232,6 +242,7 @@ async def proxy_server_path(resource: Resource,
     else:
         if namespace is None:
             namespace = get_context()["namespace"]
+        await _check_service_access(server_name, namespace, impersonation)
         resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"  # NOSONAR - in-cluster traffic
         additional_headers = {}
 
@@ -256,9 +267,7 @@ async def proxy_services(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with get_impersonating_api_client(impersonation) as api_client:
-        v1 = client.CoreV1Api(api_client)
-        await v1.read_namespaced_service(name=service_name, namespace=namespace)
+    await _check_service_access(service_name, namespace, impersonation)
 
     resource_url = f"http://{service_name}.{namespace}.svc.cluster.local/{api_path}"  # NOSONAR - in-cluster traffic
     return await _proxy_request(resource_url, request)

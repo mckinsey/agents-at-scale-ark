@@ -19,7 +19,8 @@ async def check_streaming_support(
     target_type: str,
     target_name: str,
     namespace: str,
-    impersonation: Optional[ImpersonationConfig] = None,
+    *,
+    impersonation: Optional[ImpersonationConfig],
 ) -> bool:
     """Check if the target can produce streaming chunks to the broker.
 

@@ -39,6 +39,9 @@ async def list_agents(
     # the root-relative path (single-tenant / root hosting).
     headers = {key.lower(): value for key, value in request.headers.items()}
     forwarded_base = external_forwarded_base_from_headers(headers)
+    # This listing is RBAC-filtered per user. DynamicManager's routing table is
+    # deliberately not: it is a process-wide cache shared by every user, so it
+    # syncs as the service account and may route agents a given user cannot list.
     agents = await AgentRegistry(get_namespace(), impersonation).list_agents()
     return [
         {
