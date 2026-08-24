@@ -40,6 +40,7 @@ import { DOCS_URLS } from '@/lib/constants/docs';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Event, eventsService } from '@/lib/services/events';
 import { cn } from '@/lib/utils';
+import { formatAge } from '@/lib/utils/time';
 
 const COL = {
   added: 'w-[100px]',
@@ -302,25 +303,6 @@ export function EventsSection({
     });
   };
 
-  // Helper functions
-  const formatAge = (timestamp: string | undefined) => {
-    if (!timestamp) return '-';
-
-    const now = new Date();
-    const eventTime = new Date(timestamp);
-    const diffMs = now.getTime() - eventTime.getTime();
-    const diffSecs = Math.floor(diffMs / 1000);
-    const diffMins = Math.floor(diffSecs / 60);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffDays > 0) return `${diffDays}d ago`;
-    if (diffHours > 0) return `${diffHours}h ago`;
-    if (diffMins > 0) return `${diffMins}m ago`;
-    if (diffSecs > 0) return `${diffSecs}s ago`;
-    return 'just now';
-  };
-
   const handleRowClick = (event: Event, target: EventTarget | null) => {
     // Let the row's own link handle its clicks, and never navigate out from
     // under someone who is selecting message text.
@@ -356,7 +338,7 @@ export function EventsSection({
       icon={<Poll />}
       title={totalCount === undefined ? 'Events' : `Events (${totalCount})`}
       description="Track platform operational activity across the ecosystem"
-      actions={!isEmpty && refreshButton}
+      actions={refreshButton}
     />
   );
 
@@ -481,7 +463,7 @@ export function EventsSection({
                   const source = event.sourceHost
                     ? `${event.sourceComponent} (${event.sourceHost})`
                     : event.sourceComponent;
-                  const age = formatAge(event.lastTimestamp);
+                  const age = formatAge(event.creationTimestamp);
                   return (
                     <TableRow
                       key={event.name}
@@ -491,12 +473,14 @@ export function EventsSection({
                       className="relative isolate cursor-pointer transition-colors">
                       <TableCell size="small" className={COL.added}>
                         <span aria-hidden className={rowHoverOverlayClass} />
-                        <NamespacedLink
-                          href={`/event/${encodeURIComponent(event.name)}`}
-                          aria-label={`${age} — ${event.reason} on ${object}`}
-                          className="text-fg-primary block w-full truncate">
-                          {age}
-                        </NamespacedLink>
+                        <TruncatedTooltip label={age}>
+                          <NamespacedLink
+                            href={`/event/${encodeURIComponent(event.name)}`}
+                            aria-label={`${age} — ${event.reason} on ${object}`}
+                            className="text-fg-primary block w-full truncate">
+                            {age}
+                          </NamespacedLink>
+                        </TruncatedTooltip>
                       </TableCell>
                       <TableCell size="small" className={COL.type}>
                         <EventTypeIndicator type={event.type} />

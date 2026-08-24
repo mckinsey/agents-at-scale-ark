@@ -52,7 +52,9 @@ export function DetailRow({
       )}>
       {tooltip ? (
         <Tooltip>
-          <TooltipTrigger className={cn(labelClassName, 'cursor-help text-left')}>
+          <TooltipTrigger
+            tabIndex={-1}
+            className={cn(labelClassName, 'cursor-help text-left')}>
             {label}
           </TooltipTrigger>
           <TooltipContent>{tooltip}</TooltipContent>
