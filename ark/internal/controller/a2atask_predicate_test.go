@@ -9,6 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,7 +34,7 @@ func (r *recordingReconciler) count() int64 {
 }
 
 var _ = Describe("A2ATask Controller event filter", func() {
-	It("skips annotation-only updates but reconciles create and generation changes", func() {
+	It("skips annotation-only updates but reconciles create, status and generation changes", func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -84,9 +85,25 @@ var _ = Describe("A2ATask Controller event filter", func() {
 		Consistently(rec.count, time.Second, 50*time.Millisecond).Should(Equal(int64(1)),
 			"annotation-only update must not trigger a reconcile")
 
+		// The reconciler drives its TaskNotStarted/approval handshakes through its
+		// own status writes with no RequeueAfter, so status-only updates must pass
+		// the filter or fresh tasks stall on the first pass.
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(task), task)).To(Succeed())
+		meta.SetStatusCondition(&task.Status.Conditions, metav1.Condition{
+			Type:   "Completed",
+			Status: metav1.ConditionFalse,
+			Reason: "TaskNotStarted",
+		})
+		Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(task), task)).To(Succeed())
+		Expect(task.Generation).To(Equal(generationBefore), "status update must not bump generation")
+
+		Eventually(rec.count, 5*time.Second).Should(Equal(int64(2)), "status-only update should trigger a reconcile")
+
 		task.Spec.Input = "updated input"
 		Expect(k8sClient.Update(ctx, task)).To(Succeed())
 
-		Eventually(rec.count, 5*time.Second).Should(Equal(int64(2)), "generation change should trigger a reconcile")
+		Eventually(rec.count, 5*time.Second).Should(Equal(int64(3)), "generation change should trigger a reconcile")
 	})
 })
