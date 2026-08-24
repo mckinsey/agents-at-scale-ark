@@ -324,6 +324,66 @@ jobs:
             /tmp/gotest.stderr
           if-no-files-found: warn
 
+  # integration-test-postgresql above only ever runs against the current major,
+  # so nothing enforced the minimum version the docs promise and unsupported
+  # constructs reached main unnoticed. This job pins the floor: bump the image
+  # here in lockstep with minServerVersionNum and the documented minimum.
+  integration-test-postgresql-min-version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.6"
+          cache: true
+          cache-dependency-path: ark/go.sum
+
+      # Plain docker rather than a service container because the server needs
+      # command-line flags, and services: cannot pass a command.
+      - name: Start minimum-supported PostgreSQL
+        run: |
+          docker run -d --name ark-pg-min \
+            -e POSTGRES_PASSWORD=arkdev123 -e POSTGRES_DB=ark \
+            -p 5432:5432 postgres:15 \
+            -c wal_level=logical -c max_replication_slots=10 -c max_wal_senders=10
+          for i in $(seq 1 60); do
+            docker exec ark-pg-min psql -U postgres -tAc 'select 1' >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          echo "::error::minimum-version PostgreSQL did not become ready"
+          docker logs ark-pg-min
+          exit 1
+
+      - name: Run PostgreSQL integration tests against the minimum version
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: postgres
+          POSTGRES_DB: ark
+          POSTGRES_PASSWORD: arkdev123
+        run: |
+          status=0
+          (cd ark && go test -tags integration ./internal/storage/postgresql/... \
+            -timeout 20m -count=1 -json) > /tmp/gotest-min.json || status=$?
+          jq -r 'select(.Action=="output") | .Output' /tmp/gotest-min.json | grep -v '^$' || true
+          # Postgres is provisioned here, so a skip means the suite never ran.
+          skipped=$(jq -r 'select(.Action=="skip" and .Test) | .Test' /tmp/gotest-min.json)
+          if [ -n "$skipped" ]; then
+            echo "::error::Integration tests skipped despite Postgres being provisioned:"
+            echo "$skipped"
+            exit 1
+          fi
+          exit "$status"
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgresql-min-version-gotest-json
+          path: /tmp/gotest-min.json
+          if-no-files-found: warn
+
   build-and-test-services:
     runs-on: ubuntu-24.04
     steps:
