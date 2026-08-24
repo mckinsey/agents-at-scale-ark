@@ -5,7 +5,7 @@ metadata:
   labels:
     postgresql: "true"
 spec:
-  description: Two queries sharing a sessionId land as two rows in the Postgres session_queries table under one sessions header row, with conversations and errorCount aggregated on it; GET /sessions/:id returns the same shape over HTTP, participants included
+  description: Two queries sharing a sessionId land as two rows in the Postgres session_queries table under one sessions header row, with conversations and errorCount aggregated on it; GET /sessions/:id returns the same shape over HTTP, participants included; deleting one Query removes its row and leaves the header aggregated over what remains
   steps:
   - name: setup-mock-llm
     try:
@@ -176,6 +176,55 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+        - name: SESSION_ID
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          bash ../shared/dump-broker-logs.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: delete-query-cascades-to-sessions
+    try:
+    # This blocks until the object is gone, and the finalizer only completes if
+    # every broker cleanup returned - so reaching the next step is already an
+    # assertion that the sessions delete did not fail.
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: sessions-postgres-query-2
+    - script:
+        timeout: 120s
+        content: |
+          ROWS=$(bash ../shared/psql-poll.sh \
+            "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}';" \
+            "1" 120 0.5) || { echo "expected 1 remaining session_queries row, got '${ROWS}'"; exit 1; }
+          echo "session_queries rows after delete: ${ROWS}"
+
+          GONE=$(bash ../shared/psql-query.sh \
+            "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}' AND query_id='sessions-postgres-query-2';" \
+            | tr -d ' \n')
+          echo "rows for the deleted query: ${GONE}"
+          [ "${GONE}" = "0" ] || { echo "expected 0, got '${GONE}'"; exit 1; }
+
+          HEADER=$(bash ../shared/psql-query.sh \
+            "SELECT status || ',' || error_count || ',' || jsonb_array_length(conversations) FROM sessions WHERE session_id='${SESSION_ID}';" \
+            | tr -d ' \n')
+          echo "sessions header after delete (status,error_count,conversations): ${HEADER}"
+          [ "${HEADER}" = "idle,0,1" ] || { echo "expected 'idle,0,1', got '${HEADER}'"; exit 1; }
+
+          # The count alone would pass on a regression that kept the wrong
+          # conversation, so the surviving name is what pins agent-a.
+          CONV_NAMES=$(bash ../shared/psql-query.sh \
+            "SELECT string_agg(c->>'name', ',' ORDER BY c->>'name') FROM sessions s, jsonb_array_elements(s.conversations) c WHERE s.session_id='${SESSION_ID}';" \
+            | tr -d ' \n')
+          echo "conversation names after delete: ${CONV_NAMES}"
+          [ "${CONV_NAMES}" = "sessions-postgres-agent-a" ] || { echo "expected 'sessions-postgres-agent-a', got '${CONV_NAMES}'"; exit 1; }
+        env:
         - name: SESSION_ID
           value: ($namespace)
     catch:
