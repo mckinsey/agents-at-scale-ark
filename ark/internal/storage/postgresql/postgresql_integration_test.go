@@ -11,7 +11,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -72,19 +71,7 @@ func (m *integrationMockConverter) APIVersion(kind string) string {
 }
 
 func TestOptimisticConcurrency_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -183,19 +170,7 @@ func TestOptimisticConcurrency_Integration(t *testing.T) {
 }
 
 func TestOptimisticConcurrency_Status_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -283,19 +258,7 @@ func TestOptimisticConcurrency_Status_Integration(t *testing.T) {
 }
 
 func TestCreateAlreadyExists_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -343,19 +306,7 @@ func TestCreateAlreadyExists_Integration(t *testing.T) {
 }
 
 func TestWatchAddedForFirstSeenUID_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -456,19 +407,7 @@ func (t *gracefulDeleteTestObject) DeepCopyObject() runtime.Object {
 }
 
 func TestGracefulDeletion_DeletionTimestampPersistence_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -567,19 +506,7 @@ func TestGracefulDeletion_DeletionTimestampPersistence_Integration(t *testing.T)
 // commit-order race by holding an INSERT in-flight across page 1 and asserting
 // its row does not leak below the cursor once it commits.
 func TestList_PaginationSnapshotConsistency_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -731,19 +658,7 @@ func decodeCursorForTest(token string) (int64, error) {
 }
 
 func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     5432,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
@@ -884,5 +799,282 @@ func TestGenerationOnlyBumpsOnSpecChange_Integration(t *testing.T) {
 	}
 	if g := generation(); g != 3 {
 		t.Errorf("after re-sending existing DT: generation = %d, want 3 (no bump)", g)
+	}
+}
+
+// TestWatchResumeFromResourceVersion_Integration asserts item 1 of #2680: a watch
+// opened with a concrete resourceVersion does not re-list the whole table on
+// (re)connect. Resume re-emits at most a lookback window below the resume point (so
+// out-of-order commits self-heal); objects older than that window are never
+// replayed. The pre-existing objects here are pushed well below the window to prove
+// that guarantee.
+func TestWatchResumeFromResourceVersion_Integration(t *testing.T) {
+	cfg := testConfig(t)
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+	backend.StartWALConsumer()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testNS := "integration-test"
+	testKind := "ResumeTestResource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+
+	mkObj := func(name, uid string) *integrationTestObject {
+		obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+		obj.Metadata.Name = name
+		obj.Metadata.Namespace = testNS
+		obj.Metadata.UID = uid
+		obj.Spec = map[string]interface{}{"k": "v"}
+		return obj
+	}
+
+	// Old state: three objects created BEFORE the watch is opened.
+	preexisting := []string{"resume-1", "resume-2", "resume-3"}
+	for i, name := range preexisting {
+		if err := backend.Create(ctx, testKind, testNS, name, mkObj(name, fmt.Sprintf("uid-%d", i+1))); err != nil {
+			t.Fatalf("Create %s failed: %v", name, err)
+		}
+	}
+
+	// Advance the global rv sequence past a full lookback window, then create an
+	// anchor. The pre-existing objects now sit more than relistLookbackRVs below the
+	// anchor's rv, so resuming from the anchor must not reach back to them.
+	if _, err := backend.db.ExecContext(ctx,
+		"SELECT nextval('resources_resource_version_seq') FROM generate_series(1, $1)",
+		relistLookbackRVs+100); err != nil {
+		t.Fatalf("advance rv sequence: %v", err)
+	}
+	if err := backend.Create(ctx, testKind, testNS, "resume-anchor", mkObj("resume-anchor", "uid-anchor")); err != nil {
+		t.Fatalf("Create anchor failed: %v", err)
+	}
+
+	var baselineRV int64
+	if err := backend.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(resource_version), 0) FROM resources WHERE kind = $1 AND namespace = $2",
+		testKind, testNS).Scan(&baselineRV); err != nil {
+		t.Fatalf("read baseline resourceVersion: %v", err)
+	}
+
+	// Resume from the anchor: the three older pre-existing objects must NOT be replayed.
+	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+		ResourceVersion: strconv.FormatInt(baselineRV, 10),
+	})
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(500 * time.Millisecond)
+
+	// A single change after the resume point — the only event we expect to see.
+	const deltaName = "resume-4"
+	if err := backend.Create(ctx, testKind, testNS, deltaName, mkObj(deltaName, "uid-4")); err != nil {
+		t.Fatalf("Create %s failed: %v", deltaName, err)
+	}
+
+	// Relist emits in resource_version ASC order, so any replay of the pre-existing
+	// objects would arrive before the delta. Collecting until the delta lands is
+	// therefore sufficient to prove they were (not) replayed.
+	deadline := time.After(10 * time.Second)
+	seen := map[string]bool{}
+	gotDelta := false
+	for !gotDelta {
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				t.Fatal("watch channel closed before delta arrived")
+			}
+			if ev.Type == watch.Bookmark {
+				continue
+			}
+			obj, _ := ev.Object.(*integrationTestObject)
+			if obj == nil {
+				continue
+			}
+			seen[obj.Metadata.Name] = true
+			if obj.Metadata.Name == deltaName {
+				gotDelta = true
+			}
+		case <-deadline:
+			t.Fatal("timeout waiting for delta event after resume")
+		}
+	}
+
+	for _, name := range preexisting {
+		if seen[name] {
+			t.Errorf("resume from resourceVersion=%d replayed object %q that is older than the lookback window; expected only recent rows + deltas", baselineRV, name)
+		}
+	}
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+}
+
+// TestWatchResumeDoesNotDropOutOfOrderCommit_Integration guards the resume boundary
+// against the out-of-order-commit race that the relist() lookback exists to defend
+// against. BIGSERIAL assigns resource_version at INSERT statement time but a row is
+// only visible at commit time, so a lower rv can commit AFTER a higher one.
+//
+// Timeline the test forces deterministically:
+//  1. txLost inserts "lost-row", taking the lower rv, and stays open (uncommitted).
+//  2. txSeen inserts "seen-row", taking the higher rv, and commits.
+//  3. A client that Listed here would see only seen-row and resume watch from its rv
+//     (setListItems computes the list rv as the max over rows returned).
+//  4. txLost commits: lost-row becomes visible with an rv BELOW the resume point.
+//
+// The broadcaster's lookback re-reads lost-row and fans it to the watcher, so the
+// resume boundary must not silently discard it. A regression drops it at forwardRow
+// (rv <= startRV) and it never self-heals — only a fresh List recovers it.
+func TestWatchResumeDoesNotDropOutOfOrderCommit_Integration(t *testing.T) {
+	withFastRelist(t, 500*time.Millisecond)
+
+	cfg := testConfig(t)
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+	backend.StartWALConsumer()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testNS := "integration-test"
+	testKind := "ResumeRaceResource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	defer func() {
+		_, _ = backend.db.ExecContext(context.Background(), "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	}()
+
+	// insertTx inserts one row within tx and returns the rv the sequence assigned at
+	// statement time. Defaults cover the remaining NOT NULL / JSONB columns.
+	insertTx := func(tx *sql.Tx, name, uid string) int64 {
+		t.Helper()
+		var rv int64
+		if err := tx.QueryRowContext(ctx,
+			`INSERT INTO resources (kind, namespace, name, uid) VALUES ($1, $2, $3, $4) RETURNING resource_version`,
+			testKind, testNS, name, uid).Scan(&rv); err != nil {
+			t.Fatalf("insert %s: %v", name, err)
+		}
+		return rv
+	}
+
+	// Step 1: lost-row takes the lower rv but is held uncommitted.
+	txLost, err := backend.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin txLost: %v", err)
+	}
+	lostCommitted := false
+	defer func() {
+		if !lostCommitted {
+			_ = txLost.Rollback()
+		}
+	}()
+	const lostName = "lost-row"
+	rvLost := insertTx(txLost, lostName, "uid-lost")
+
+	// Step 2: seen-row takes the higher rv and commits first.
+	txSeen, err := backend.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin txSeen: %v", err)
+	}
+	rvSeen := insertTx(txSeen, "seen-row", "uid-seen")
+	if err := txSeen.Commit(); err != nil {
+		t.Fatalf("commit txSeen: %v", err)
+	}
+	if rvLost >= rvSeen {
+		t.Fatalf("expected rvLost < rvSeen to model the race, got rvLost=%d rvSeen=%d", rvLost, rvSeen)
+	}
+
+	// Step 3: resume from seen-row's rv, exactly as a client that Listed here would.
+	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+		ResourceVersion: strconv.FormatInt(rvSeen, 10),
+	})
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+	defer w.Stop()
+
+	// Block until the watcher's initial relist finishes, proven by the Bookmark it
+	// emits immediately afterwards. This makes lost-row's invisibility during the
+	// initial relist a guarantee (its txn is still open here) rather than a timing
+	// bet: only after this do we commit it. The initial relist may replay seen-row
+	// (it sits inside the lookback window); lost-row cannot appear here since it is
+	// still uncommitted, so we simply drain until the bookmark.
+	bookmarkDeadline := time.After(10 * time.Second)
+	for {
+		gotBookmark := false
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				t.Fatal("watch channel closed before initial bookmark")
+			}
+			if ev.Type == watch.Bookmark {
+				gotBookmark = true
+			} else if obj, _ := ev.Object.(*integrationTestObject); obj != nil && obj.Metadata.Name == lostName {
+				t.Fatalf("lost-row emitted before its txn committed (rv=%d) — impossible unless a dirty read occurred", rvLost)
+			}
+		case <-bookmarkDeadline:
+			t.Fatal("timeout waiting for initial relist bookmark")
+		}
+		if gotBookmark {
+			break
+		}
+	}
+
+	// Step 4: lost-row commits with an rv below the resume point.
+	if err := txLost.Commit(); err != nil {
+		t.Fatalf("commit txLost: %v", err)
+	}
+	lostCommitted = true
+
+	// Sentinel is created after the race resolves; its rv is above the resume point,
+	// so it always streams through. Relist emits ascending by rv, so if lost-row is
+	// going to be delivered at all it arrives no later than the sentinel — making the
+	// sentinel a sound, deterministic stop condition.
+	const sentinelName = "sentinel-row"
+	sentinel := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	sentinel.Metadata.Name = sentinelName
+	sentinel.Metadata.Namespace = testNS
+	sentinel.Metadata.UID = "uid-sentinel"
+	sentinel.Spec = map[string]interface{}{"k": "v"}
+	if err := backend.Create(ctx, testKind, testNS, sentinelName, sentinel); err != nil {
+		t.Fatalf("Create sentinel failed: %v", err)
+	}
+
+	deadline := time.After(15 * time.Second)
+	sawLost := false
+	for {
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				t.Fatal("watch channel closed before sentinel arrived")
+			}
+			if ev.Type == watch.Bookmark {
+				continue
+			}
+			obj, _ := ev.Object.(*integrationTestObject)
+			if obj == nil {
+				continue
+			}
+			switch obj.Metadata.Name {
+			case lostName:
+				sawLost = true
+			case sentinelName:
+				if !sawLost {
+					t.Fatalf("resume from resourceVersion=%d silently dropped out-of-order commit %q (rv=%d, below resume point); "+
+						"the lookback window must floor at startRV-relistLookbackRVs, not at startRV", rvSeen, lostName, rvLost)
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatalf("timeout waiting for sentinel; sawLost=%v", sawLost)
+		}
 	}
 }

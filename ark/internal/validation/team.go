@@ -59,8 +59,7 @@ func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.T
 			return fmt.Errorf("team member %d: failed to load agent '%s': %v", i, member.Name, err)
 		}
 		agent := obj.(*arkv1alpha1.Agent)
-		isExternal := agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name != "" && agent.Spec.ExecutionEngine.Name != arka2a.ExecutionEngineA2A
-		if isExternal {
+		if arka2a.IsNamedEngine(agent.Spec.ExecutionEngine) {
 			hasExternalAgents = true
 		} else {
 			hasInternalAgents = true

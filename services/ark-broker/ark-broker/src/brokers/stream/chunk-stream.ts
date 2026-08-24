@@ -34,4 +34,5 @@ export interface ChunkStream {
   getCurrentSequence(): Promise<number>;
   delete(queryId?: string): Promise<void>;
   save(): Promise<void>;
+  cachedItemCount?(): number;
 }

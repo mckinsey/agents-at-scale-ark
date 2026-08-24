@@ -35,6 +35,7 @@ const (
 	defaultTaskTimeout         = 12 * time.Hour
 	defaultTaskTTL             = 720 * time.Hour
 	maxPollBackoff             = 5 * time.Minute
+	pollRequestTimeout         = 30 * time.Second
 	rateLimitBackoffFloor      = 30 * time.Second
 	maxBackoffExponent         = 16
 )
@@ -235,6 +236,9 @@ func (r *A2ATaskReconciler) handlePollFailure(ctx context.Context, a2aTask *arkv
 
 // fetchA2ATaskStatus queries the A2A server for the current task status and updates the A2ATask
 func (r *A2ATaskReconciler) fetchA2ATaskStatus(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) error {
+	ctx, cancel := context.WithTimeout(ctx, pollRequestTimeout)
+	defer cancel()
+
 	a2aClient, err := r.createA2AClient(ctx, a2aTask)
 	if err != nil {
 		return err

@@ -17,6 +17,43 @@ The extension metadata carries a `QueryRef` — a reference to an Ark Query reso
 
 See [schema.json](./schema.json) for the formal JSON Schema definition.
 
+### Target override
+
+`target` is optional. It names the resource the engine should execute, overriding the Query's own `spec.target`:
+
+```json
+{
+  "name": "my-query",
+  "namespace": "default",
+  "target": { "type": "agent", "name": "researcher" }
+}
+```
+
+The completions engine sends it when dispatching one member of a team, because the Query targets the team rather than the member. The controller never sends it for a top-level dispatch, where `spec.target` is authoritative.
+
+An engine that does not understand `target` ignores it and reads `spec.target`, so a top-level dispatch is unaffected. Resolving a team member requires an ark-sdk release that supports the field.
+
+A `target` invocation is a sub-request: the calling engine owns the Query's status, memory and broker stream, so the receiving engine must not write to any of them.
+
+### Conversation scope
+
+`conversationId` is optional and sent only alongside `target`. It scopes the sub-request's conversation, and the engine should prefer it over the message's `contextId`:
+
+```json
+{
+  "name": "my-query",
+  "namespace": "default",
+  "target": { "type": "agent", "name": "researcher" },
+  "conversationId": "9f2c4e1a7b8d3f5061c2a4b6d8e0f123"
+}
+```
+
+Team members share their conversation through the message body, which carries the accumulated transcript with speaker attribution — not through this field. Each member gets its own `conversationId` so that an engine keying per-conversation state on it (a history store, a session directory) does not place every member in one bucket, which would apply the first member's system prompt to the rest.
+
+The value is derived per Query and agent, so it is stable across turns for the same member and different between members. It is opaque, and safe to use as a path segment or store key.
+
+An engine that does not understand the field falls back to `contextId` and behaves as before.
+
 ## Metadata Key
 
 ```
@@ -41,17 +78,20 @@ Engines that support this extension declare it in their agent card:
 
 ## Wire Format
 
-Request:
+Request. Activation is signalled by `message.extensions`; Ark does not currently send the `X-A2A-Extensions` request header:
 
 ```http
 POST /message HTTP/1.1
-X-A2A-Extensions: https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1
 
 {
   "jsonrpc": "2.0",
   "method": "message/send",
   "params": {
-    "message": { "role": "user", "parts": [...] },
+    "message": {
+      "role": "user",
+      "parts": [...],
+      "extensions": ["https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1"]
+    },
     "metadata": {
       "https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1/ref": {
         "name": "my-query",

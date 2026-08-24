@@ -120,7 +120,7 @@ const Toast = memo(function Toast({ id, message, type, options }: ToastProps) {
   return (
     <div
       className={cn(
-        'bg-fill-onsurface-ui-3 shadow-elevation-2 flex h-[44px] items-center gap-2 border-l-4 py-2 pr-3 pl-4',
+        'bg-fill-onsurface-ui-3 shadow-elevation-2 flex min-h-[44px] items-center gap-2 border-l-4 py-2 pr-3 pl-4',
         config.borderClass,
         className,
       )}
@@ -128,7 +128,7 @@ const Toast = memo(function Toast({ id, message, type, options }: ToastProps) {
       <div className="flex items-center gap-2">
         <div className="flex shrink-0 items-center">{displayIcon}</div>
 
-        <div className="flex flex-1 items-center">
+        <div className="flex flex-1 flex-col items-start gap-1">
           <p className="paragraph-regular-primary text-fg-secondary">
             {message}
           </p>

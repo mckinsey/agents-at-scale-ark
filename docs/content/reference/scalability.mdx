@@ -32,9 +32,9 @@ The API and dashboard are stateless and can be scaled horizontally by increasing
 
 ### Broker
 
-The broker stores messages, streaming chunks, traces, events, and sessions in memory. It is not stateless — each replica maintains its own state, so it runs as a single replica by default. If scaling beyond a single replica is needed, consider enabling file-based persistence or a sticky session strategy.
+The broker stores messages, streaming chunks, traces, events, and sessions in memory by default. It is not stateless — each replica maintains its own state, so it runs as a single replica by default. If scaling beyond a single replica is needed, consider enabling file-based persistence or a sticky session strategy.
 
-The **messages** store can opt in to a Postgres backend (`backends.message: postgres`) so messages survive pod restarts. This adds durability for the messages store; it does not by itself make the broker horizontally scalable, since the other stores remain in-memory per replica.
+The **messages**, **operation events**, and **sessions** stores can each opt in to a Postgres backend (`backends.message: postgres`, `backends.event: postgres`, and `backends.sessions: postgres`, sharing one database) so that data survives pod restarts, and the **chunks** store can opt in to Redis (`backends.chunk: redis`). Sessions on Postgres require the message and event backends to be on Postgres too, and they also fan `?watch=true` updates out across replicas through `LISTEN`/`NOTIFY`, as chunks on Redis do for live streaming. These add durability; they do not by themselves make the broker horizontally scalable, since traces still remain in-memory per replica.
 
 ### Storage backend
 
