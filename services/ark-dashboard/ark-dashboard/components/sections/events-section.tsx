@@ -395,6 +395,13 @@ export function EventsSection({
       <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
         <div className="flex flex-none items-end gap-3">
           <EventsFilter
+            label="Names"
+            value={name || ALL}
+            allLabel="All"
+            options={availableNames}
+            onChange={value => handleFilterChange('name', value)}
+          />
+          <EventsFilter
             label="Types"
             value={type || ALL}
             allLabel="All"
@@ -407,13 +414,6 @@ export function EventsSection({
             allLabel="All"
             options={availableKinds}
             onChange={value => handleFilterChange('kind', value)}
-          />
-          <EventsFilter
-            label="Names"
-            value={name || ALL}
-            allLabel="All"
-            options={availableNames}
-            onChange={value => handleFilterChange('name', value)}
           />
           <Button variant="ghost" onClick={clearFilters} disabled={!hasFilters}>
             Clear filters
