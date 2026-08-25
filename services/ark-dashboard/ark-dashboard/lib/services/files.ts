@@ -60,7 +60,13 @@ export const filesService = {
 
   download(key: string): void {
     const url = filesApiClient.buildUrl(`files/${encodeURIComponent(key)}/download`);
-    window.open(url, '_blank');
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = key.split('/').pop() || 'download';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   },
 
   async deleteDirectory(prefix: string): Promise<DeleteDirectoryResponse> {

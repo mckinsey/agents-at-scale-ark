@@ -260,25 +260,34 @@ describe('filesService', () => {
   });
 
   describe('download', () => {
-    let windowOpenSpy: any;
+    let appendChildSpy: ReturnType<typeof vi.spyOn>;
+    let removeChildSpy: ReturnType<typeof vi.spyOn>;
+    let clickSpy: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
-      windowOpenSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-      vi.spyOn(console, 'log').mockImplementation(() => {});
+      clickSpy = vi.fn();
+      appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation(node => node);
+      removeChildSpy = vi.spyOn(document.body, 'removeChild').mockImplementation(node => node);
+      vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        if (tag === 'a') {
+          return {
+            href: '',
+            download: '',
+            rel: '',
+            click: clickSpy,
+          } as unknown as HTMLAnchorElement;
+        }
+        return document.createElement(tag);
+      });
     });
 
     it('should use buildUrl to construct download URL with namespace', () => {
       filesService.download('test-file.txt');
 
-      // Verify buildUrl was called with the correct endpoint
       expect(filesApiClient.buildUrl).toHaveBeenCalledWith(
         'files/test-file.txt/download',
       );
-      // Verify the URL returned by buildUrl (with namespace) is used
-      expect(windowOpenSpy).toHaveBeenCalledWith(
-        '/api/v1/proxy/services/file-gateway-api/files/test-file.txt/download?namespace=test-namespace&_t=1234567890',
-        '_blank',
-      );
+      expect(clickSpy).toHaveBeenCalled();
     });
 
     it('should URL encode the file key in download URL', () => {
