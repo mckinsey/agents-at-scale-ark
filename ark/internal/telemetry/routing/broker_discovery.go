@@ -115,19 +115,8 @@ func GetBrokerConfig(ctx context.Context, k8sClient client.Client, namespace str
 		return nil, nil
 	}
 
-	cm := &corev1.ConfigMap{}
-	err := k8sClient.Get(ctx, types.NamespacedName{
-		Name:      brokerConfigName,
-		Namespace: namespace,
-	}, cm)
-	if err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get ConfigMap %s/%s: %w", namespace, brokerConfigName, err)
-	}
-
-	return parseBrokerConfig(cm)
+	_, config, err := getBrokerConfigMap(ctx, k8sClient, namespace, brokerConfigName)
+	return config, err
 }
 
 // IsBrokerPresenceConfigMapName reports whether name is one of the ConfigMap
@@ -139,37 +128,52 @@ func IsBrokerPresenceConfigMapName(name string) bool {
 	return name == brokerConfigName || name == streamingConfigName
 }
 
-// BrokerServiceRefFor returns the parsed serviceRef and the name of the
-// enabled ConfigMap it came from, for the first of ark-config-broker or
-// ark-config-streaming found enabled in namespace. It returns ("", nil, nil)
+// BrokerServiceRefFor returns the parsed serviceRef and the enabled
+// ConfigMap it came from, for the first of ark-config-broker or
+// ark-config-streaming found enabled in namespace. It returns (nil, nil, nil)
 // when neither ConfigMap is present or enabled — the same presence signal
 // DiscoverBrokerEndpoints uses for events/traces routing, exposed per
 // namespace for callers (the default Memory backstop) that don't need a
-// cluster-wide list.
-func BrokerServiceRefFor(ctx context.Context, k8sClient client.Client, namespace string) (string, *ServiceRef, error) {
+// cluster-wide list. The returned ConfigMap is the one already fetched to
+// resolve the signal, so callers that also need the object (e.g. to set it
+// as an owner reference) don't have to fetch it a second time.
+func BrokerServiceRefFor(ctx context.Context, k8sClient client.Client, namespace string) (*corev1.ConfigMap, *ServiceRef, error) {
 	for _, name := range []string{brokerConfigName, streamingConfigName} {
-		cm := &corev1.ConfigMap{}
-		err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cm)
+		cm, config, err := getBrokerConfigMap(ctx, k8sClient, namespace, name)
 		if err != nil {
-			if client.IgnoreNotFound(err) == nil {
-				continue
-			}
-			return "", nil, fmt.Errorf("failed to get ConfigMap %s/%s: %w", namespace, name, err)
+			return nil, nil, err
 		}
-
-		config, err := parseBrokerConfig(cm)
-		if err != nil {
-			return "", nil, fmt.Errorf("failed to parse ConfigMap %s/%s: %w", namespace, name, err)
-		}
-
-		if config.Enabled != "true" {
+		if cm == nil || config.Enabled != "true" {
 			continue
 		}
 
-		return name, &config.ServiceRef, nil
+		return cm, &config.ServiceRef, nil
 	}
 
-	return "", nil, nil
+	return nil, nil, nil
+}
+
+// getBrokerConfigMap fetches the ConfigMap named name in namespace and parses
+// it as a BrokerConfig. It returns (nil, nil, nil) when the ConfigMap does
+// not exist, so callers loop over candidate names without special-casing
+// not-found. This is the single Get+parse path shared by GetBrokerConfig and
+// BrokerServiceRefFor.
+func getBrokerConfigMap(ctx context.Context, k8sClient client.Client, namespace, name string) (*corev1.ConfigMap, *BrokerConfig, error) {
+	cm := &corev1.ConfigMap{}
+	err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cm)
+	if err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("failed to get ConfigMap %s/%s: %w", namespace, name, err)
+	}
+
+	config, err := parseBrokerConfig(cm)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse ConfigMap %s/%s: %w", namespace, name, err)
+	}
+
+	return cm, config, nil
 }
 
 func parseBrokerConfig(cm *corev1.ConfigMap) (*BrokerConfig, error) {
