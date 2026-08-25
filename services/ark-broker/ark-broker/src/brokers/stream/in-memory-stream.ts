@@ -75,7 +75,7 @@ export class InMemoryStream<T> implements Stream<T> {
   }
 
   async save(): Promise<void> {
-    this.fileStore.save(this.items, this.nextSequence);
+    await this.fileStore.save(this.items, this.nextSequence);
   }
 
   async delete(predicate?: Predicate<T>): Promise<void> {
