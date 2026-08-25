@@ -21,10 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 
-import {
-  BROKER_FEATURE_KEY,
-  FILES_BROWSER_FEATURE_KEY,
-} from '@/atoms/experimental-features';
+import { FILES_BROWSER_FEATURE_KEY } from '@/atoms/experimental-features';
 
 export interface DashboardSection {
   key: string;
@@ -104,7 +101,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     title: 'Broker',
     icon: Activity,
     group: 'monitoring',
-    enablerFeature: BROKER_FEATURE_KEY,
   },
   events: {
     key: 'events',
