@@ -65,7 +65,7 @@ Secrets never leave the cluster over A2A — they are resolved locally within yo
 
 ## Extension Spec
 
-The query extension contract is defined at [`ark/api/extensions/query/v1/`](https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1). The schema is minimal: just `name` and `namespace` fields identifying the Query resource.
+The query extension contract is defined at [`ark/api/extensions/query/v1/`](https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1). The schema is minimal: `name` and `namespace` identifying the Query resource, plus an optional `target` (see below).
 
 ## Deploying to Kubernetes
 
@@ -115,6 +115,45 @@ spec:
 ```
 
 Without this annotation, streaming requests are handled transparently — clients still receive a valid SSE response, just without incremental chunks.
+
+### Streaming text and tool calls
+
+`BaseExecutor` provides two methods for pushing activity to the stream as it happens:
+
+```python
+async def execute_agent(self, request):
+    await self.stream_chunk("Looking that up...")
+
+    await self.stream_tool_call(
+        name="Bash",
+        arguments={"command": "ls /tmp"},   # dict or pre-serialized JSON string
+        tool_call_id="toolu_1",             # optional, from your framework
+    )
+```
+
+`stream_chunk()` emits a text delta. `stream_tool_call()` emits an OpenAI-format `delta.tool_calls` chunk, the same shape the built-in completions engine produces, so the dashboard and CLI render engine tool activity without any client changes. Call it as each tool is invoked — an agent running a long tool loop otherwise appears idle until it produces text.
+
+Both are no-ops when the broker is unavailable or the call is a team-member sub-request, so they are always safe to call.
+
+Streaming state is scoped to the request, so concurrent queries handled by the same executor never share it. Child tasks inherit that state, so calling either method from `asyncio.gather()` or `asyncio.create_task()` works — including the streamed-text flag, which is visible to the caller afterwards.
+
+Both methods are coroutines and must be awaited on the event loop. Do not call them from a worker thread: `asyncio.to_thread()` and a raw `threading.Thread` each produce an un-awaited coroutine, so nothing is sent and nothing is raised. If your engine does work in a thread, return the result and stream it from the async side.
+
+Tool *results* are not streamed. They can be large and may contain secrets, and the built-in engine does not stream them either. Return them in your `execute_agent()` messages instead, where they reach the UI with the completed query.
+
+## Team Membership
+
+An engine-backed Agent can be a member of a `Team`. Teams are orchestrated by the completions executor, which calls your engine once per member turn.
+
+A member call differs from a top-level dispatch in three ways:
+
+- **The extension carries an explicit `target`.** The Query targets the team, not the member, so the caller sends `target: {type: agent, name: <member>}` alongside the QueryRef. It overrides `query.spec.target`. The SDK resolves it for you, and `execute_agent()` receives the member's `ExecutionEngineRequest` as usual.
+- **Your engine must not write to the query's stream, memory or status.** The calling completions engine owns all three for the whole team run; a second writer double-writes memory and churns `status.phase`. The SDK enforces this by disabling the broker client and the status updater whenever `target` is present — but if your engine writes query status independently of the SDK, gate it on `target` being absent.
+- **`streaming-supported` is ignored.** Member calls use blocking `message/send`, because broker chunks are keyed by query name and would interleave across members.
+
+The preceding team transcript is folded into `userInput` as text, so a sequential member sees what the members before it said. There is no separate history field on `ExecutionEngineRequest`.
+
+Resolving `target` requires an ark-sdk release that supports it — any version from the release that introduced team members onwards. An older engine ignores the field, sees `spec.target.type: team`, and rejects the call, naming the ark-sdk version it is running. Top-level dispatches are unaffected, since they never carry a `target`.
 
 ## Per-tenant built-in completions
 

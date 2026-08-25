@@ -657,6 +657,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/configurations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Configurations
+         * @description List all configurations in namespace using ark-sdk.
+         */
+        get: operations["list_configurations_v1_configurations_get"];
+        put?: never;
+        /**
+         * Create Configuration
+         * @description Create a new configuration using ark-sdk.
+         */
+        post: operations["create_configuration_v1_configurations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/configurations/{configuration_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Configuration
+         * @description Get a specific configuration using ark-sdk.
+         */
+        get: operations["get_configuration_v1_configurations__configuration_name__get"];
+        /**
+         * Update Configuration
+         * @description Update a configuration using ark-sdk.
+         */
+        put: operations["update_configuration_v1_configurations__configuration_name__put"];
+        post?: never;
+        /**
+         * Delete Configuration
+         * @description Delete a configuration using ark-sdk.
+         */
+        delete: operations["delete_configuration_v1_configurations__configuration_name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/configurations/{configuration_name}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Configuration References
+         * @description List the Ark resources that read this configuration.
+         */
+        get: operations["list_configuration_references_v1_configurations__configuration_name__references_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/context": {
         parameters: {
             query?: never;
@@ -3226,6 +3298,95 @@ export interface components {
              */
             role: "user";
         };
+        /**
+         * ConfigurationCreateRequest
+         * @description Request model for creating a configuration.
+         */
+        ConfigurationCreateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ConfigurationListResponse
+         * @description List of configurations response model.
+         */
+        ConfigurationListResponse: {
+            /** Count */
+            count: number;
+            /** Items */
+            items: components["schemas"]["ConfigurationResponse"][];
+        };
+        /**
+         * ConfigurationReference
+         * @description A resource that reads a configuration.
+         */
+        ConfigurationReference: {
+            /** Field */
+            field: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * ConfigurationReferenceListResponse
+         * @description Resources that read a configuration.
+         */
+        ConfigurationReferenceListResponse: {
+            /** Count */
+            count: number;
+            /** Items */
+            items: components["schemas"]["ConfigurationReference"][];
+        };
+        /**
+         * ConfigurationResponse
+         * @description Configuration response model.
+         */
+        ConfigurationResponse: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Name */
+            name: string;
+            /** Value */
+            value?: string | null;
+        };
+        /**
+         * ConfigurationUpdateRequest
+         * @description Request model for updating a configuration.
+         */
+        ConfigurationUpdateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Value */
+            value: string;
+        };
         /** ContextResponse */
         ContextResponse: {
             /** Cluster */
@@ -3573,6 +3734,11 @@ export interface components {
             authorizedBy?: string | null;
             /** Expiresat */
             expiresAt?: string | null;
+            /**
+             * Machinemanaged
+             * @default false
+             */
+            machineManaged: boolean;
             /** Resourcename */
             resourceName?: string | null;
             /** State */
@@ -5969,6 +6135,214 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configurations_v1_configurations_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_configuration_v1_configurations_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_configuration_v1_configurations__configuration_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_configuration_v1_configurations__configuration_name__put: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_configuration_v1_configurations__configuration_name__delete: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configuration_references_v1_configurations__configuration_name__references_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationReferenceListResponse"];
                 };
             };
             /** @description Validation Error */

@@ -28,12 +28,6 @@ const (
 	authTestToken      = "tok-good"
 )
 
-// newAuthGatedTestMCPServer serves a real MCP streamable HTTP handler exposing
-// a single `greet` tool, but only when the request carries
-// `Authorization: Bearer <expectedToken>`. Anything else gets an RFC 9728
-// challenge and a 401, which is what an OAuth-protected MCP server does to an
-// unauthenticated session initialize. Pass an empty expectedToken to serve
-// unauthenticated. The returned func reports every inbound Authorization value.
 func newAuthGatedTestMCPServer(t *testing.T, expectedToken string) (string, func() []string) {
 	t.Helper()
 
@@ -149,11 +143,6 @@ func bearerHeadersSeen(seen []string) []string {
 	return out
 }
 
-// The regression this whole change exists for: the executor must send the
-// bearer from spec.authorization.tokenSecretRef. The connection is established
-// eagerly inside GetOrCreateClient, so a missing bearer fails at session
-// initialize - before any tool call - which is why discovery-only coverage
-// never caught it.
 func TestCreateMCPExecutorInjectsBearerFromTokenSecretRef(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -219,9 +208,6 @@ func TestCreateMCPExecutorWithoutAuthorizationSendsNoBearer(t *testing.T) {
 	assert.Empty(t, bearerHeadersSeen(seenAuth()))
 }
 
-// A referenced-but-absent Secret, and a Secret with no usable token, are both
-// the expected pre-authorization state. Neither may harden into a registration
-// failure - the server is left to answer with 401 as it does today.
 func TestCreateMCPExecutorFallsThroughWhenNoTokenAvailable(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -259,9 +245,6 @@ func TestCreateMCPExecutorFallsThroughWhenNoTokenAvailable(t *testing.T) {
 	}
 }
 
-// The token Secret belongs to the MCPServer's namespace, not the caller's. The
-// decoy proves it: if the caller namespace were used, the wrong token would be
-// sent and the gated server would reject the session.
 func TestCreateMCPExecutorResolvesTokenSecretInMCPServerNamespace(t *testing.T) {
 	url, seenAuth := newAuthGatedTestMCPServer(t, authTestToken)
 	ref := arkv1alpha1.TokenSecretReference{Name: authTestSecretName}
@@ -291,8 +274,6 @@ func TestCreateMCPExecutorResolvesTokenSecretInMCPServerNamespace(t *testing.T) 
 	}
 }
 
-// spec.headers secrets follow the same rule as the token Secret, matching what
-// the controller already does during discovery.
 func TestCreateMCPExecutorResolvesSpecHeadersInMCPServerNamespace(t *testing.T) {
 	url, _ := newAuthGatedTestMCPServer(t, "")
 	headers := []arkv1alpha1.Header{{
@@ -319,9 +300,6 @@ func TestCreateMCPExecutorResolvesSpecHeadersInMCPServerNamespace(t *testing.T) 
 	require.NoError(t, err, "the header secret lives in the MCPServer namespace, not the caller's")
 }
 
-// Precedence: spec.headers < spec.authorization bearer < agent/query overrides.
-// NewMCPClient copies the override headers last, so an explicit per-run
-// Authorization must still win over the shared token.
 func TestCreateMCPExecutorQueryOverrideBeatsTokenSecretRefBearer(t *testing.T) {
 	const overrideToken = "tok-override"
 

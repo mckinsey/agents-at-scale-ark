@@ -14,7 +14,11 @@ import {
   postSessionEventBodySchema,
   PostSessionEventBody,
 } from './schemas.js';
-import {handleStreamingSessions, handlePaginatedSessions} from './handlers.js';
+import {
+  handleStreamingSessions,
+  handlePaginatedSessions,
+  handleDeleteSessionQuery,
+} from './handlers.js';
 
 export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
   const router = Router();
@@ -105,6 +109,10 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       sendInternalError(res, req.id);
     }
   });
+
+  router.delete<{query_id: string}>('/queries/:query_id', async (req, res) =>
+    handleDeleteSessionQuery(req, res, sessionsBroker)
+  );
 
   return router;
 }
