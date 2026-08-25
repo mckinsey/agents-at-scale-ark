@@ -13,7 +13,15 @@ import (
 
 var log = logf.Log.WithName("telemetry.routing")
 
-const brokerConfigName = "ark-config-broker"
+const (
+	brokerConfigName = "ark-config-broker"
+	// streamingConfigName is the ConfigMap the broker chart publishes for
+	// chunk routing. It carries the same serviceRef shape as brokerConfigName
+	// (both point at the same broker Service), so a namespace with streaming
+	// enabled but tracing disabled — or vice versa — still surfaces a broker
+	// presence signal.
+	streamingConfigName = "ark-config-streaming"
+)
 
 type BrokerEndpoint struct {
 	Namespace string
@@ -120,6 +128,48 @@ func GetBrokerConfig(ctx context.Context, k8sClient client.Client, namespace str
 	}
 
 	return parseBrokerConfig(cm)
+}
+
+// IsBrokerPresenceConfigMapName reports whether name is one of the ConfigMap
+// names the broker chart publishes to announce itself in a namespace.
+// Callers that only care about presence (not the events/traces routing
+// GetBrokerConfig serves) watch for either name rather than importing the
+// unexported constants directly.
+func IsBrokerPresenceConfigMapName(name string) bool {
+	return name == brokerConfigName || name == streamingConfigName
+}
+
+// BrokerServiceRefFor returns the parsed serviceRef and the name of the
+// enabled ConfigMap it came from, for the first of ark-config-broker or
+// ark-config-streaming found enabled in namespace. It returns ("", nil, nil)
+// when neither ConfigMap is present or enabled — the same presence signal
+// DiscoverBrokerEndpoints uses for events/traces routing, exposed per
+// namespace for callers (the default Memory backstop) that don't need a
+// cluster-wide list.
+func BrokerServiceRefFor(ctx context.Context, k8sClient client.Client, namespace string) (string, *ServiceRef, error) {
+	for _, name := range []string{brokerConfigName, streamingConfigName} {
+		cm := &corev1.ConfigMap{}
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cm)
+		if err != nil {
+			if client.IgnoreNotFound(err) == nil {
+				continue
+			}
+			return "", nil, fmt.Errorf("failed to get ConfigMap %s/%s: %w", namespace, name, err)
+		}
+
+		config, err := parseBrokerConfig(cm)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to parse ConfigMap %s/%s: %w", namespace, name, err)
+		}
+
+		if config.Enabled != "true" {
+			continue
+		}
+
+		return name, &config.ServiceRef, nil
+	}
+
+	return "", nil, nil
 }
 
 func parseBrokerConfig(cm *corev1.ConfigMap) (*BrokerConfig, error) {
