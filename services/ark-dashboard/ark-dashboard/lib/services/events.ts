@@ -158,38 +158,33 @@ export const eventsService = {
   async getAll(
     filters?: EventFilters,
   ): Promise<{ items: Event[]; total: number }> {
-    try {
-      const effectiveFilters = filters || {};
-      const params = buildEventApiParams(effectiveFilters);
+    const effectiveFilters = filters || {};
+    const params = buildEventApiParams(effectiveFilters);
 
-      const queryString = params.toString();
-      const url = `/api/v1/events${queryString ? `?${queryString}` : ''}`;
+    const queryString = params.toString();
+    const url = `/api/v1/events${queryString ? `?${queryString}` : ''}`;
 
-      logApiRequest(effectiveFilters, params, url);
+    logApiRequest(effectiveFilters, params, url);
 
-      const response = await apiClient.get<EventListResponse>(url);
+    const response = await apiClient.get<EventListResponse>(url);
 
-      logApiResponse(url, response);
+    logApiResponse(url, response);
 
-      if (!response?.items) {
-        return { items: [], total: 0 };
-      }
-
-      const items = response.items.map(mapEventApiResponseToEvent);
-      const totalCount = calculateTotalCount(
-        response,
-        effectiveFilters,
-        items.length,
-      );
-
-      return {
-        items,
-        total: totalCount,
-      };
-    } catch (error) {
-      console.error('Failed to fetch events:', error);
+    if (!response?.items) {
       return { items: [], total: 0 };
     }
+
+    const items = response.items.map(mapEventApiResponseToEvent);
+    const totalCount = calculateTotalCount(
+      response,
+      effectiveFilters,
+      items.length,
+    );
+
+    return {
+      items,
+      total: totalCount,
+    };
   },
 
   // Get a single event by name
@@ -207,13 +202,8 @@ export const eventsService = {
 
   // Helper to fetch events for filter population
   async _getEventsForFilters(): Promise<Event[]> {
-    try {
-      const result = await this.getAll({ limit: 200 });
-      return result.items;
-    } catch (error) {
-      console.error('Failed to fetch events for filters:', error);
-      return [];
-    }
+    const result = await this.getAll({ limit: 200 });
+    return result.items;
   },
 
   // Get all filter options

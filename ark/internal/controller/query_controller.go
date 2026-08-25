@@ -1035,10 +1035,30 @@ func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status 
 	}
 }
 
+// memoryConditionTypes are set on the in-memory Query by the dispatch path and
+// must survive the refetch inside mutateStatus. They are the only conditions
+// this reconcile knows more about than the API server does; every other
+// condition is authored inside the mutator against the refetched object.
+var memoryConditionTypes = []arkv1alpha1.QueryConditionType{
+	arkv1alpha1.QueryMemoryUnavailable,
+	arkv1alpha1.QueryMemoryDegraded,
+}
+
+func memoryConditionsFrom(query *arkv1alpha1.Query) []metav1.Condition {
+	var conditions []metav1.Condition
+	for _, condType := range memoryConditionTypes {
+		if cond := meta.FindStatusCondition(query.Status.Conditions, string(condType)); cond != nil {
+			conditions = append(conditions, *cond)
+		}
+	}
+	return conditions
+}
+
 type savedQueryStatus struct {
-	response       *arkv1alpha1.Response
-	tokenUsage     arkv1alpha1.TokenUsage
-	conversationId string
+	response         *arkv1alpha1.Response
+	tokenUsage       arkv1alpha1.TokenUsage
+	conversationId   string
+	memoryConditions []metav1.Condition
 }
 
 func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
@@ -1049,16 +1069,20 @@ func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
 	if s.conversationId != "" {
 		query.Status.ConversationId = s.conversationId
 	}
+	for _, cond := range s.memoryConditions {
+		meta.SetStatusCondition(&query.Status.Conditions, cond)
+	}
 }
 
 func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
-	// This reconcile holds the freshest Response/TokenUsage/ConversationId in
-	// memory; the refetch inside mutateStatus would drop them, so re-apply the
-	// snapshot onto the refetched object before writing.
+	// This reconcile holds the freshest Response/TokenUsage/ConversationId and
+	// memory conditions in memory; the refetch inside mutateStatus would drop
+	// them, so re-apply the snapshot onto the refetched object before writing.
 	saved := savedQueryStatus{
-		response:       query.Status.Response,
-		tokenUsage:     query.Status.TokenUsage,
-		conversationId: query.Status.ConversationId,
+		response:         query.Status.Response,
+		tokenUsage:       query.Status.TokenUsage,
+		conversationId:   query.Status.ConversationId,
+		memoryConditions: memoryConditionsFrom(query),
 	}
 	// Do NOT clear A2A taskID when transitioning from input-required to running.
 	// The executor needs the taskID to detect this is a resumption after approval
