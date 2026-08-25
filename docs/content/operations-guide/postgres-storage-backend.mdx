@@ -46,7 +46,7 @@ max_wal_senders       >= 1
 
 ### Minimum version
 
-The watch stream decodes the WAL with the built-in `pgoutput` plugin and a `CREATE PUBLICATION`, introduced in PostgreSQL 10. The hard minimum is **PostgreSQL 13**: slot health checks read `pg_replication_slots.wal_status` and list pagination calls `pg_current_snapshot()`, neither of which exists in earlier majors. Run a currently-supported major (**14 or newer**) in production.
+The hard minimum is **PostgreSQL 15** — the apiserver checks `server_version_num` at startup and refuses to run against anything older. The floor tracks community support: 13 is already end-of-life, 14 follows in November 2026, and 15 is supported until November 2027. The storage integration suite runs against PostgreSQL 15 in CI to keep the floor honest; bump it together with the startup check when raising the minimum.
 
 A user/role with permission to:
 
@@ -79,6 +79,7 @@ On first start, `ark-apiserver` creates:
 
 - A single table, `resources`, with one row per Ark resource (Agent, Model, Query, Team, …). Columns include `kind`, `namespace`, `name`, `uid`, `resource_version`, JSONB columns for `spec`, `status`, `labels`, `annotations`, `finalizers`, `owner_references`, plus timestamps and a soft-delete flag (`deleted_at`).
 - Indexes on `(kind, namespace)`, `(kind, namespace, name)`, a GIN index on `labels`, and a unique partial index on active (non-deleted) rows.
+- Indexes on `(kind, resource_version)` and `(resource_version)`, which serve the watch path: watches read changes as a resource-version range within a kind, and the bookmark refresh reads the highest resource version in the table.
 - A publication and a logical replication slot, both named `ark_cdc`. The slot is what powers `kubectl get -w` and controller informers.
 
 The slot is **persistent**: it survives apiserver restarts. It is dropped automatically on `helm uninstall` — see [Uninstall and cleanup](#uninstall-and-cleanup) below.
@@ -96,6 +97,8 @@ FROM pg_replication_slots WHERE slot_name = 'ark_cdc';
 ```
 
 `retained` should stay small. Sustained growth means no replica is consuming the slot — check that a pod holds the `ark-apiserver-leader` lease and that `active` is true. Setting `max_slot_wal_keep_size` caps the damage: Postgres invalidates the slot instead of filling the disk, and the apiserver recreates it on the next restart.
+
+Upgrading an existing deployment creates any index the schema is missing on the next apiserver start. Each build holds a write lock on `resources` until it completes — under half a second for a table of 100k rows, proportionally longer for a larger one.
 
 ## Installing PostgreSQL mode
 

@@ -18,12 +18,9 @@ vi.mock('next/image', () => ({
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: vi.fn(() => ({
-    availableNamespaces: [{ name: 'default' }],
-    createNamespace: vi.fn(),
     isPending: false,
     namespace: 'default',
     isNamespaceResolved: true,
-    setNamespace: vi.fn(),
     readOnlyMode: false,
   })),
 }));
@@ -104,23 +101,21 @@ const renderSidebar = () => {
 };
 
 describe('AppSidebar - Navigation', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    Object.defineProperty(window, 'location', {
-      value: { search: '' },
-      writable: true,
-    });
+    const { useSearchParams } = await import('next/navigation');
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as never,
+    );
   });
 
-  it('should preserve query parameters when navigating', async () => {
+  it('should preserve the namespace and drop page-local params when navigating', async () => {
     const mockPush = vi.fn();
-    const { useRouter } = await import('next/navigation');
+    const { useRouter, useSearchParams } = await import('next/navigation');
     vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
-
-    Object.defineProperty(window, 'location', {
-      value: { search: '?namespace=test-ns&foo=bar' },
-      writable: true,
-    });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams('namespace=test-ns&foo=bar') as never,
+    );
 
     const user = userEvent.setup();
 
@@ -129,18 +124,13 @@ describe('AppSidebar - Navigation', () => {
     const modelsButton = await screen.findByRole('button', { name: /models/i });
     await user.click(modelsButton);
 
-    expect(mockPush).toHaveBeenCalledWith('/models?namespace=test-ns&foo=bar');
+    expect(mockPush).toHaveBeenCalledWith('/models?namespace=test-ns');
   });
 
   it('should navigate without query string when no params exist', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
     vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
-
-    Object.defineProperty(window, 'location', {
-      value: { search: '' },
-      writable: true,
-    });
 
     const user = userEvent.setup();
 
@@ -245,12 +235,9 @@ describe('AppSidebar - Files Section', () => {
   it('should display namespace name when available', async () => {
     const { useNamespace } = await import('@/providers/NamespaceProvider');
     vi.mocked(useNamespace).mockReturnValue({
-      availableNamespaces: [{ name: 'test-namespace' }],
-      createNamespace: vi.fn(),
       isPending: false,
       namespace: 'test-namespace',
       isNamespaceResolved: true,
-      setNamespace: vi.fn(),
       readOnlyMode: false,
     });
 

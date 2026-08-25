@@ -32,7 +32,7 @@ None. No existing spec in `openspec/specs/` covers URL parameter handling.
 ## Impact
 
 - **Scope**: `services/ark-dashboard/` only. No API, CRD, SDK, or controller changes.
-- **Files**: `lib/hooks/use-namespaced-navigation.ts`, `components/namespaced-link.tsx`, `components/app-sidebar.tsx`, `providers/NamespaceProvider.tsx`, `app/(dashboard)/sessions/[session_id]/page.tsx`, plus provider tests
+- **Files**: `lib/utils/param-scope.ts` (new), `lib/hooks/use-namespaced-navigation.ts`, `components/namespaced-link.tsx`, `components/app-sidebar.tsx`, `providers/NamespaceProvider.tsx`, `lib/services/namespaces-hooks.ts`, `app/(dashboard)/sessions/[session_id]/page.tsx`, plus provider tests. Documentation: `services/ark-dashboard/CLAUDE.md`, `docs/content/operations-guide/tenant-namespace-management.mdx`
 - **Closes**: #2955, #2868. Reduces #2594 — removing the `useState('default')` seed eliminates the synchronous wrong-namespace request, but fully closing it needs the query-gating that belongs with the follow-up change.
 - **Does not address**: 60 of 66 react-query keys omit the namespace, which is carried instead by the mutable `apiClient.defaultParams` singleton. That causes cache bleed across namespace switches and is deferred to a follow-up change (`dashboard-explicit-namespace`, PR #3125).
 - **Migration risk**: low. Exactly one `NamespacedLink` in the app passes its own query string (`/models/new?name=default`), and three `push('/query/new?target_tool=...')` call sites do the same. All name their params explicitly in the href, so the allowlist preserves them. Nothing in the app relies on inherited params.
