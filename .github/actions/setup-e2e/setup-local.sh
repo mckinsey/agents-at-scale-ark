@@ -259,7 +259,6 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
     POSTGRES_PASSWORD=$(kubectl -n ark-system get secret ark-storage-dev-password \
       -o jsonpath='{.data.password}' | base64 -d)
     BROKER_HELM_ARGS+=(
-      --set memory.createMemoryCRD=false
       --set backends.message=postgres
       --set backends.event=postgres
       --set backends.sessions=postgres
@@ -271,6 +270,12 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
       --set migrate.image.repository="${REGISTRY}/ark-broker-migrate"
       --set migrate.image.tag="${ARK_IMAGE_TAG}"
     )
+    # The chart's Memory template does a `lookup` against ark.mckinsey.com/v1alpha1,
+    # which on this backend is served by the aggregated ark-apiserver rather than a
+    # native CRD. Its Deployment rollout finishing (waited on above) doesn't guarantee
+    # the aggregation layer has already marked the APIService Available, so wait for
+    # that explicitly before the chart renders.
+    kubectl wait --for=condition=Available apiservice v1alpha1.ark.mckinsey.com --timeout=120s
   fi
   helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
     "${BROKER_HELM_ARGS[@]}" &
