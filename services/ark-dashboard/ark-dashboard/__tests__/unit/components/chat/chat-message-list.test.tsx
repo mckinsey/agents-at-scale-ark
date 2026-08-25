@@ -6,6 +6,7 @@ import { ChatMessageList } from '@/components/chat/chat-message-list';
 import type { ExtendedChatMessage } from '@/lib/types/chat-message';
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useRouter: () => ({
     push: vi.fn(),
   }),

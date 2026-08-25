@@ -158,6 +158,14 @@ export interface SessionsStorage {
   ): Promise<(QueryEntry & {sessionId: string}) | undefined>;
   save(): Promise<void>;
   delete(): Promise<void>;
+  /**
+   * Removes a query from every session holding it, returning how many rows went.
+   * `queryId` is the Query resource NAME: applyEvent writes the event's
+   * queryName into session_queries.query_id and applyMessage looks it up by the
+   * messages payload's query_id, both of which carry query.Name. The UID
+   * matches nothing.
+   */
+  deleteQuery(queryId: string): Promise<number>;
   subscribe(
     callback: (data: {sessionId: string; queryName: string}) => void
   ): () => void;
@@ -218,6 +226,10 @@ export class SessionsBroker {
 
   async delete(): Promise<void> {
     return this.storage.delete();
+  }
+
+  async deleteQuery(queryId: string): Promise<number> {
+    return this.storage.deleteQuery(queryId);
   }
 
   subscribe(
