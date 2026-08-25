@@ -430,15 +430,17 @@ func TestIsBrokerPresenceConfigMapName(t *testing.T) {
 	}
 }
 
+type brokerServiceRefCase struct {
+	name        string
+	namespace   string
+	configMaps  []client.Object
+	wantCM      string
+	wantNilRef  bool
+	wantRefName string
+}
+
 func TestBrokerServiceRefFor(t *testing.T) {
-	tests := []struct {
-		name        string
-		namespace   string
-		configMaps  []client.Object
-		wantCM      string
-		wantNilRef  bool
-		wantRefName string
-	}{
+	tests := []brokerServiceRefCase{
 		{
 			name:       "neither configmap present",
 			namespace:  "tenant-a",
@@ -511,27 +513,39 @@ func TestBrokerServiceRefFor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			k8sClient := fake.NewClientBuilder().WithObjects(tt.configMaps...).Build()
 
-			cmName, ref, err := BrokerServiceRefFor(context.Background(), k8sClient, tt.namespace)
+			cm, ref, err := BrokerServiceRefFor(context.Background(), k8sClient, tt.namespace)
 			if err != nil {
 				t.Fatalf("BrokerServiceRefFor() error = %v", err)
 			}
 
-			if tt.wantNilRef {
-				if ref != nil {
-					t.Errorf("expected nil ServiceRef, got %+v", ref)
-				}
-				return
-			}
-
-			if cmName != tt.wantCM {
-				t.Errorf("configmap name = %s, want %s", cmName, tt.wantCM)
-			}
-			if ref == nil {
-				t.Fatal("expected non-nil ServiceRef")
-			}
-			if ref.Name != tt.wantRefName {
-				t.Errorf("ref.Name = %s, want %s", ref.Name, tt.wantRefName)
-			}
+			assertBrokerServiceRef(t, tt, cm, ref)
 		})
+	}
+}
+
+// assertBrokerServiceRef checks a BrokerServiceRefFor result against tt,
+// split out of TestBrokerServiceRefFor's loop body to keep that function's
+// branching within the project's cognitive-complexity budget.
+func assertBrokerServiceRef(t *testing.T, tt brokerServiceRefCase, cm *corev1.ConfigMap, ref *ServiceRef) {
+	t.Helper()
+
+	if tt.wantNilRef {
+		if ref != nil {
+			t.Errorf("expected nil ServiceRef, got %+v", ref)
+		}
+		return
+	}
+
+	if cm == nil {
+		t.Fatal("expected non-nil ConfigMap")
+	}
+	if cm.Name != tt.wantCM {
+		t.Errorf("configmap name = %s, want %s", cm.Name, tt.wantCM)
+	}
+	if ref == nil {
+		t.Fatal("expected non-nil ServiceRef")
+	}
+	if ref.Name != tt.wantRefName {
+		t.Errorf("ref.Name = %s, want %s", ref.Name, tt.wantRefName)
 	}
 }

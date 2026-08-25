@@ -73,7 +73,7 @@ func (r *DefaultMemoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	cmName, serviceRef, err := routing.BrokerServiceRefFor(ctx, r.Client, req.Namespace)
+	cm, serviceRef, err := routing.BrokerServiceRefFor(ctx, r.Client, req.Namespace)
 	if err != nil {
 		log.Error(err, "failed to resolve broker presence", "namespace", req.Namespace)
 		return ctrl.Result{}, err
@@ -96,13 +96,6 @@ func (r *DefaultMemoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	if !apierrors.IsNotFound(getErr) {
 		return ctrl.Result{}, getErr
-	}
-
-	var cm corev1.ConfigMap
-	if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: req.Namespace}, &cm); err != nil {
-		// The ConfigMap that gave us the signal disappeared between the two
-		// Gets; the next reconcile (triggered by that deletion) resolves.
-		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	serviceNamespace := req.Namespace
@@ -134,7 +127,7 @@ func (r *DefaultMemoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Owning the ConfigMap removes the need for cleanup code: a
 	// `helm uninstall` deletes it, and Kubernetes garbage-collects the
 	// Memory this controller created alongside it.
-	if err := controllerutil.SetControllerReference(&cm, memory, r.Scheme); err != nil {
+	if err := controllerutil.SetControllerReference(cm, memory, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -146,7 +139,7 @@ func (r *DefaultMemoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	log.Info("created default Memory backstop", "namespace", req.Namespace, "configMap", cmName)
+	log.Info("created default Memory backstop", "namespace", req.Namespace, "configMap", cm.Name)
 	return ctrl.Result{}, nil
 }
 
@@ -157,7 +150,7 @@ func (r *DefaultMemoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	})
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.ConfigMap{}, builder.WithPredicates(brokerPresenceConfigMap)).
+		For(&corev1.ConfigMap{}, builder.WithPredicates(predicate.And(brokerPresenceConfigMap, dataChangedPredicate()))).
 		Owns(&arkv1alpha1.Memory{}).
 		Named("defaultmemory").
 		Complete(r)
