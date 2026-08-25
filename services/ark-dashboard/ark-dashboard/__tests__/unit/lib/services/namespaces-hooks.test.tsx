@@ -145,8 +145,6 @@ describe('useGetContext', () => {
 
     rerender({ namespace: 'tenant-b' });
 
-    // keepPreviousData would hand tenant-a's context back here, which is what
-    // let the provider write tenant-a over a newly requested tenant-b.
     expect(result.current.data).toBeUndefined();
   });
 });
