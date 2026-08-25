@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -23,12 +24,11 @@ export type Memory = MemoryDetailResponse & { id: string };
 export const memoriesService = {
   // Get all memories
   async getAll(): Promise<Memory[]> {
-    const response =
-      await apiClient.get<MemoryListResponse>(`/api/v1/memories`);
+    const items = await fetchAllPages<MemoryResponse>(`/api/v1/memories`);
 
     // Map the response items to include id for UI compatibility
     const memories = await Promise.all(
-      response.items.map(async item => {
+      items.map(async item => {
         // Fetch detailed info for each memory to get full data
         const detailed = await memoriesService.getByName(item.name);
         return detailed!;

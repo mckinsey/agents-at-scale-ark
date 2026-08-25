@@ -57,6 +57,10 @@ spec:
               containerPort: {{ .Values.memory.port }}
               protocol: TCP
           env:
+            {{- with (include "ark-broker.nodeOptions" .) }}
+            - name: NODE_OPTIONS
+              value: {{ . | quote }}
+            {{- end }}
             - name: PORT
               value: {{ .Values.memory.port | quote }}
             - name: REQUEST_TIMEOUT_MS

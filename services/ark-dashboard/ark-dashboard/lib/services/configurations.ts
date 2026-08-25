@@ -38,6 +38,11 @@ export const configurationsService = {
     return response;
   },
 
+  /**
+   * Replaces a configuration. This is a full replace, not a partial update:
+   * omitting `description` or `alias` clears them on the stored configuration,
+   * so callers must send the complete desired state on every call.
+   */
   async update(
     name: string,
     request: ConfigurationUpdateRequest,

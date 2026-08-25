@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: a2a-team
+spec:
+  description: Sequential team pairing a local member with a member on the built-in a2a engine
+  strategy: sequential
+  members:
+  - name: a2a-writer
+    type: agent
+  - name: echo-agent
+    type: agent

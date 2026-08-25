@@ -87,7 +87,7 @@ function ValueCell({ value }: Readonly<{ value: string }>) {
       label={clampForTooltip(trimmed)}
       contentClassName="max-w-[360px] text-left font-mono break-all whitespace-pre-wrap">
       <span className="text-fg-secondary block truncate font-mono">
-        {trimmed.replace(/\s+/g, ' ')}
+        {trimmed.replaceAll(/\s+/g, ' ')}
       </span>
     </TruncatedTooltip>
   );

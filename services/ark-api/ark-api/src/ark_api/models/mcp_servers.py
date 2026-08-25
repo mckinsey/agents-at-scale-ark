@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, model_serializer
 
-from .common import AvailabilityStatus
+from .common import AvailabilityStatus, PaginatedListResponse
 
 
 class MCPServerConfigMapKeyRef(BaseModel):
@@ -53,6 +53,11 @@ class MCPServerValueSource(BaseModel):
 
 
 class MCPServerAddressSource(BaseModel):
+    """Read model for spec.address: reports both fields as stored.
+
+    MCPServerValueSource is the write model and its serializer collapses to
+    whichever of value/valueFrom is set, which would hide the origin here.
+    """
     value: Optional[str] = None
     valueFrom: Optional[MCPServerValueFrom] = None
 
@@ -73,6 +78,10 @@ class MCPServerAuthorization(BaseModel):
     authorizedBy: Optional[str] = None
     authorizedAt: Optional[str] = None
     expiresAt: Optional[str] = None
+    # True when the controller mints this server's token itself via
+    # spec.authorization.clientCredentials. No interactive flow exists,
+    # so consumers must not offer an authenticate action.
+    machineManaged: bool = False
 
 
 class MCPServerResponse(BaseModel):
@@ -87,9 +96,8 @@ class MCPServerResponse(BaseModel):
     authorization: Optional[MCPServerAuthorization] = None
 
 
-class MCPServerListResponse(BaseModel):
+class MCPServerListResponse(PaginatedListResponse):
     items: List[MCPServerResponse]
-    total: int
 
 
 class MCPServerDetailResponse(BaseModel):

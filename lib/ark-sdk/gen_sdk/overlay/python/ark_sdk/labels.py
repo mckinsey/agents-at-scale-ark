@@ -1,7 +1,9 @@
 import re
 from typing import Dict, List, Optional
 
-ARK_LABEL_PREFIX = "ark.mckinsey.com/"
+from ark_sdk.constants import ARK_DOMAIN
+
+ARK_LABEL_PREFIX = ARK_DOMAIN
 ARK_RESOURCE_TYPE_LABEL = f"{ARK_LABEL_PREFIX}resource-type"
 ARK_TAG_LABEL_PREFIX = f"{ARK_LABEL_PREFIX}label."
 
@@ -46,12 +48,12 @@ def labels_to_tags(labels: Optional[Dict[str, str]]) -> List[str]:
     )
 
 
-def strip_ark_labels(labels: Optional[Dict[str, str]]) -> Dict[str, str]:
-    """Drop Ark-owned labels, keeping labels set by anything else."""
+def strip_tag_labels(labels: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """Drop the tag labels this feature owns, keeping every other label."""
     if not labels:
         return {}
     return {
         key: value
         for key, value in labels.items()
-        if not key.startswith(ARK_LABEL_PREFIX)
+        if not key.startswith(ARK_TAG_LABEL_PREFIX)
     }
