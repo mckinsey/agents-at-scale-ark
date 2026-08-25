@@ -62,11 +62,8 @@ vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: vi.fn(() => ({
     namespace: 'default',
     readOnlyMode: false,
-    availableNamespaces: [],
-    createNamespace: vi.fn(),
     isPending: false,
     isNamespaceResolved: true,
-    setNamespace: vi.fn(),
   })),
 }));
 
