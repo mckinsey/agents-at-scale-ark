@@ -24,6 +24,8 @@ import {
 } from '@/lib/services/configurations-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
+const SKELETON_ROWS = ['first', 'second', 'third', 'fourth', 'fifth'];
+
 function ConfigurationsSkeleton() {
   return (
     <div
@@ -31,8 +33,8 @@ function ConfigurationsSkeleton() {
       className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
       <Skeleton className="h-9 w-[280px]" />
       <div className="flex flex-col gap-4 pt-4">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="flex items-center gap-4">
+        {SKELETON_ROWS.map((row) => (
+          <div key={row} className="flex items-center gap-4">
             <Skeleton className="h-5 w-[280px]" />
             <Skeleton className="h-5 flex-1" />
             <Skeleton className="h-5 w-[240px]" />

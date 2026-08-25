@@ -24,9 +24,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/configurations", tags=["configurations"])
 
+NAMESPACE_QUERY_DESCRIPTION = "Namespace for this request (defaults to current context)"
+
 @router.get("", response_model=ConfigurationListResponse)
 @handle_k8s_errors(operation="list", resource_type="configuration")
-async def list_configurations(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationListResponse:
+async def list_configurations(namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationListResponse:
     """List all configurations in namespace using ark-sdk."""
     client = ConfigurationClient(namespace=namespace, impersonation=impersonation)
     result = await client.list_configurations()
@@ -34,7 +36,7 @@ async def list_configurations(namespace: Optional[str] = Query(None, description
 
 @router.post("", response_model=ConfigurationResponse)
 @handle_k8s_errors(operation="create", resource_type="configuration")
-async def create_configuration(body: ConfigurationCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationResponse:
+async def create_configuration(body: ConfigurationCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationResponse:
     """Create a new configuration using ark-sdk."""
     client = ConfigurationClient(namespace=namespace, impersonation=impersonation)
     result = await client.create_configuration(
@@ -48,7 +50,7 @@ async def create_configuration(body: ConfigurationCreateRequest, namespace: Opti
 
 @router.get("/{configuration_name}", response_model=ConfigurationResponse)
 @handle_k8s_errors(operation="get", resource_type="configuration")
-async def get_configuration(configuration_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationResponse:
+async def get_configuration(configuration_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationResponse:
     """Get a specific configuration using ark-sdk."""
     client = ConfigurationClient(namespace=namespace, impersonation=impersonation)
     result = await client.get_configuration(configuration_name)
@@ -56,7 +58,7 @@ async def get_configuration(configuration_name: str, namespace: Optional[str] = 
 
 @router.put("/{configuration_name}", response_model=ConfigurationResponse)
 @handle_k8s_errors(operation="update", resource_type="configuration")
-async def update_configuration(configuration_name: str, body: ConfigurationUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationResponse:
+async def update_configuration(configuration_name: str, body: ConfigurationUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationResponse:
     """Update a configuration using ark-sdk."""
     client = ConfigurationClient(namespace=namespace, impersonation=impersonation)
     result = await client.update_configuration(
@@ -70,7 +72,7 @@ async def update_configuration(configuration_name: str, body: ConfigurationUpdat
 
 @router.delete("/{configuration_name}")
 @handle_k8s_errors(operation="delete", resource_type="configuration")
-async def delete_configuration(configuration_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)):
+async def delete_configuration(configuration_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)):
     """Delete a configuration using ark-sdk."""
     client = ConfigurationClient(namespace=namespace, impersonation=impersonation)
     await client.delete_configuration(configuration_name)
@@ -78,7 +80,7 @@ async def delete_configuration(configuration_name: str, namespace: Optional[str]
 
 @router.get("/{configuration_name}/references", response_model=ConfigurationReferenceListResponse)
 @handle_k8s_errors(operation="list references for", resource_type="configuration")
-async def list_configuration_references(configuration_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationReferenceListResponse:
+async def list_configuration_references(configuration_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationReferenceListResponse:
     """List the Ark resources that read this configuration."""
     client = ConfigurationClient(namespace=namespace, impersonation=impersonation)
     await client.get_configuration(configuration_name)

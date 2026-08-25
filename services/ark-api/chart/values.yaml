@@ -46,6 +46,8 @@ app:
     # Authentication environment variables
     - name: OIDC_ISSUER_URL
       value: ""
+    # Expected JWT audience. Accepts a single value or a comma-separated list
+    # (e.g. "app-a,app-b"); a token passes if its aud matches any of them.
     - name: OIDC_APPLICATION_ID
       value: ""
     # AUTH_MODE options:
@@ -178,9 +180,9 @@ impersonation:
   prefix: ""
 
 # Restricts ark-api's configmap writes to the ones it owns - RBAC cannot.
-# Requires Kubernetes 1.30+. Off by default: denies writes permitted today.
+# Needs ValidatingAdmissionPolicy (Kubernetes 1.30+); skipped where absent.
 configMapPolicy:
-  enabled: false
+  enabled: true
 
 # Network policy configuration
 networkPolicy:

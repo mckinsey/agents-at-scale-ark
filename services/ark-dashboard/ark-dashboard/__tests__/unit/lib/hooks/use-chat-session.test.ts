@@ -96,6 +96,10 @@ function createStopChunk() {
   };
 }
 
+function createA2AStatusChunk(message: string) {
+  return { type: 'a2a_status', taskId: 'task-1', state: 'working', message };
+}
+
 async function* asyncIterableFrom<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) {
     yield item;
@@ -899,6 +903,107 @@ describe('useChatSession', () => {
       expect(lastCall?.at(-1)).toEqual([
         { name: 'muting', value: 'BANANAPHONE' },
       ]);
+    });
+  });
+
+  describe('A2A status and multi-artifact rendering', () => {
+    it('does not treat intermediate a2a_status as reply content', async () => {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createA2AStatusChunk('Working on it'),
+          createContentChunk('Here is the answer', 'a2a-agent'),
+          createStopChunk(),
+        ]),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'a2a-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('question');
+      });
+
+      await waitFor(() => {
+        const assistantMessages = result.current.messages.filter(
+          m => m.role === 'assistant',
+        );
+        const last = assistantMessages[assistantMessages.length - 1];
+        expect(last.content).toBe('Here is the answer');
+      });
+
+      const combined = result.current.messages
+        .filter(m => m.role === 'assistant')
+        .map(m => m.content)
+        .join('');
+      expect(combined).not.toContain('Working on it');
+      expect(result.current.statusText).toBeUndefined();
+    });
+
+    it('exposes a2a_status text transiently while streaming', async () => {
+      let releaseGate: (() => void) | undefined;
+      const gate = new Promise<void>(resolve => {
+        releaseGate = resolve;
+      });
+
+      async function* gatedChunks() {
+        yield createA2AStatusChunk('Analyzing your request');
+        await gate;
+        yield createContentChunk('The final answer', 'a2a-agent');
+        yield createStopChunk();
+      }
+      mockStreamChatResponse.mockReturnValue(gatedChunks());
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'a2a-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      let sendPromise: Promise<void> | undefined;
+      act(() => {
+        sendPromise = result.current.sendMessage('question');
+      });
+
+      await waitFor(() => {
+        expect(result.current.statusText).toBe('Analyzing your request');
+      });
+
+      await act(async () => {
+        releaseGate?.();
+        await sendPromise;
+      });
+
+      expect(result.current.statusText).toBeUndefined();
+    });
+
+    it('renders multiple text artifacts as separate assistant messages', async () => {
+      const raw = JSON.stringify([
+        { role: 'assistant', content: 'First artifact' },
+        { role: 'assistant', content: 'Second artifact' },
+      ]);
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([createArkFinalChunk({ raw })]),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'a2a-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('question');
+      });
+
+      await waitFor(() => {
+        const assistantMessages = result.current.messages.filter(
+          m => m.role === 'assistant',
+        );
+        expect(assistantMessages.map(m => m.content)).toEqual([
+          'First artifact',
+          'Second artifact',
+        ]);
+      });
     });
   });
 });

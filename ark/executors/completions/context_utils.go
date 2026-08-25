@@ -7,12 +7,14 @@ import (
 type contextKey string
 
 const (
-	queryIDKey      contextKey = "queryId"
-	sessionIDKey    contextKey = "sessionId"
-	queryNameKey    contextKey = "queryName"
-	a2aContextIDKey contextKey = "a2aContextId"
+	queryIDKey              contextKey = "queryId"
+	sessionIDKey            contextKey = "sessionId"
+	queryNameKey            contextKey = "queryName"
+	a2aContextIDKey         contextKey = "a2aContextId"
+	parentConversationIDKey contextKey = "parentConversationId"
 	// QueryContextKey is used to pass the Query resource through context to agents
-	QueryContextKey contextKey = "queryContext"
+	QueryContextKey   contextKey = "queryContext"
+	subTargetAgentKey contextKey = "subTargetAgent"
 	// Execution metadata keys for streaming
 	// These values are sent back with streaming chunks in the 'ark' metadata field,
 	// allowing callers to differentiate the source of chunks (e.g., specific agents in a team query)
@@ -95,6 +97,11 @@ func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
 	return metadata
 }
 
+func isTeamMemberExecution(ctx context.Context) bool {
+	name, ok := ctx.Value(teamKey).(string)
+	return ok && name != ""
+}
+
 func WithA2AContextID(ctx context.Context, contextID string) context.Context {
 	return context.WithValue(ctx, a2aContextIDKey, contextID)
 }
@@ -104,6 +111,28 @@ func GetA2AContextID(ctx context.Context) string {
 		if contextID, ok := val.(string); ok {
 			return contextID
 		}
+	}
+	return ""
+}
+
+func WithParentConversationID(ctx context.Context, conversationID string) context.Context {
+	return context.WithValue(ctx, parentConversationIDKey, conversationID)
+}
+
+func GetParentConversationID(ctx context.Context) string {
+	if conversationID, ok := ctx.Value(parentConversationIDKey).(string); ok {
+		return conversationID
+	}
+	return ""
+}
+
+func WithSubTargetAgent(ctx context.Context, agentName string) context.Context {
+	return context.WithValue(ctx, subTargetAgentKey, agentName)
+}
+
+func GetSubTargetAgent(ctx context.Context) string {
+	if agentName, ok := ctx.Value(subTargetAgentKey).(string); ok {
+		return agentName
 	}
 	return ""
 }
