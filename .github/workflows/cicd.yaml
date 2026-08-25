@@ -308,20 +308,21 @@ jobs:
           fi
           exit "$status"
 
-      # Coverage is identical across matrix legs; collect it once.
+      # Coverage is identical across matrix legs; collect it once, from the
+      # first leg — no tag literal to keep in sync with the matrix.
       - name: Install gcov2lcov
-        if: matrix.postgres-tag == '16-alpine'
+        if: strategy.job-index == 0
         run: go install github.com/jandelgado/gcov2lcov@latest
 
       - name: Generate LCOV from integration coverage
-        if: matrix.postgres-tag == '16-alpine'
+        if: strategy.job-index == 0
         run: |
           mkdir -p ark/integration-tests
           cp ark/cover.out ark/integration-tests/
           cd ark && gcov2lcov -infile integration-tests/cover.out -outfile integration-tests/lcov.info
 
       - uses: ./.github/actions/collect-coverage
-        if: matrix.postgres-tag == '16-alpine'
+        if: strategy.job-index == 0
         with:
           source-path: ark/integration-tests/
           artifact-folder: ark/integration-tests
