@@ -5,7 +5,6 @@ package registry
 import (
 	"context"
 	"errors"
-	"strconv"
 	"testing"
 	"time"
 
@@ -1018,7 +1017,7 @@ func TestSetListItems(t *testing.T) {
 		&arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a2", ResourceVersion: "2"}},
 	}
 
-	err := setListItems(list, objects, "next-token")
+	err := setListItems(list, objects, "next-token", 2)
 	if err != nil {
 		t.Fatalf("setListItems() error = %v", err)
 	}
@@ -1031,41 +1030,26 @@ func TestSetListItems(t *testing.T) {
 	}
 }
 
-func TestSetListItems_ResourceVersionIsNumericMax(t *testing.T) {
+func TestSetListItems_StampsBackendListRV(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
-		rvs      []string
+		listRV   int64
 		expected string
 	}{
 		{
-			name:     "digit-count boundary 9 vs 10",
-			rvs:      []string{"9", "10"},
-			expected: "10",
-		},
-		{
-			name:     "digit-count boundary 9 vs 100",
-			rvs:      []string{"9", "100"},
+			name:     "stamps the backend-supplied head revision",
+			listRV:   100,
 			expected: "100",
 		},
 		{
-			name:     "mixed order",
-			rvs:      []string{"3", "20", "100", "5"},
-			expected: "100",
+			name:     "head above every item RV (lifted to purge floor)",
+			listRV:   500,
+			expected: "500",
 		},
 		{
-			name:     "empty and invalid rvs are skipped",
-			rvs:      []string{"", "not-a-number", "42"},
-			expected: "42",
-		},
-		{
-			name:     "no valid rvs leaves list rv unset",
-			rvs:      []string{"", "abc"},
-			expected: "",
-		},
-		{
-			name:     "empty list leaves rv unset",
-			rvs:      nil,
+			name:     "zero (empty store) leaves rv unset",
+			listRV:   0,
 			expected: "",
 		},
 	}
@@ -1073,14 +1057,14 @@ func TestSetListItems_ResourceVersionIsNumericMax(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			list := &arkv1alpha1.AgentList{}
-			objects := make([]runtime.Object, 0, len(tt.rvs))
-			for i, rv := range tt.rvs {
-				objects = append(objects, &arkv1alpha1.Agent{
-					ObjectMeta: metav1.ObjectMeta{Name: "a" + strconv.Itoa(i), ResourceVersion: rv},
-				})
+			// Item RVs are deliberately far below listRV: setListItems must use the
+			// backend head, not the item max, so a resume never lands below the floor.
+			objects := []runtime.Object{
+				&arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a1", ResourceVersion: "3"}},
+				&arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a2", ResourceVersion: "7"}},
 			}
 
-			if err := setListItems(list, objects, ""); err != nil {
+			if err := setListItems(list, objects, "", tt.listRV); err != nil {
 				t.Fatalf("setListItems() error = %v", err)
 			}
 

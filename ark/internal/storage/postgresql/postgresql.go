@@ -441,7 +441,13 @@ func (p *PostgreSQLBackend) purgeExpired() {
 	RETURNING value`
 	var floor int64
 	err := p.db.QueryRowContext(p.ctx, q).Scan(&floor)
-	if errors.Is(err, sql.ErrNoRows) || err != nil {
+	if err != nil {
+		// ErrNoRows is the normal "nothing aged out this run" case; anything else
+		// means the floor was not persisted and watchers may keep accepting a
+		// too-old resume until a later run succeeds — worth a log line.
+		if !errors.Is(err, sql.ErrNoRows) {
+			klog.Warningf("purgeExpired: failed to persist watch_purge_floor: %v", err)
+		}
 		return
 	}
 	p.storePurgeFloor(floor)
@@ -458,10 +464,19 @@ func (p *PostgreSQLBackend) storePurgeFloor(floor int64) {
 	}
 }
 
+// refreshPurgeFloor pulls the persisted floor into the in-memory mirror. It runs
+// on the 10s bookmark tick, so a replica that did not perform the purge itself
+// picks up a floor raised elsewhere within that window; until it does, it may
+// still accept a resume just below the new floor. That is the pre-existing
+// behavior for those 10s and is safe — the tombstones are not yet gone locally.
 func (p *PostgreSQLBackend) refreshPurgeFloor() {
 	var floor int64
 	err := p.db.QueryRowContext(p.ctx, `SELECT value FROM storage_metadata WHERE key = 'watch_purge_floor'`).Scan(&floor)
-	if errors.Is(err, sql.ErrNoRows) || err != nil {
+	if err != nil {
+		// ErrNoRows simply means no purge has happened yet; leave the mirror as is.
+		if !errors.Is(err, sql.ErrNoRows) {
+			klog.Warningf("refreshPurgeFloor: failed to read watch_purge_floor: %v", err)
+		}
 		return
 	}
 	p.storePurgeFloor(floor)
@@ -569,6 +584,9 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 type listContinueToken struct {
 	Snapshot string `json:"s"`
 	Cursor   int64  `json:"c"`
+	// HeadRV pins the list resourceVersion (store head at page 1) so every page
+	// of a paginated list reports the same RV. Omitted on legacy tokens.
+	HeadRV int64 `json:"h,omitempty"`
 }
 
 func encodeListContinueToken(tok listContinueToken) string {
@@ -601,40 +619,51 @@ func decodeListContinueToken(s string) (listContinueToken, error) {
 // pg_current_snapshot() and the continue token carries it forward so later
 // pages filter to rows visible in that snapshot, keeping the paginated view
 // consistent under concurrent inserts.
-func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
+func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, int64, error) {
 	var contTok listContinueToken
 	if opts.Continue != "" {
 		var err error
 		contTok, err = decodeListContinueToken(opts.Continue)
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
 	}
 
 	query, args, err := p.buildListQuery(kind, namespace, opts, contTok)
 	if err != nil {
-		return nil, "", err
+		return nil, "", 0, err
 	}
 
 	rows, err := p.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to query resources: %w", err)
+		return nil, "", 0, fmt.Errorf("failed to query resources: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	firstPage := contTok.Snapshot == ""
 	objects, resourceVersions, pageSnapshot, err := p.scanListRows(rows, kind, firstPage)
 	if err != nil {
-		return nil, "", err
+		return nil, "", 0, err
 	}
 
 	if firstPage && pageSnapshot == "" {
 		if err := p.db.QueryRowContext(ctx, "SELECT pg_current_snapshot()::text").Scan(&pageSnapshot); err != nil {
-			return nil, "", fmt.Errorf("failed to capture pg_current_snapshot: %w", err)
+			return nil, "", 0, fmt.Errorf("failed to capture pg_current_snapshot: %w", err)
 		}
 	}
 	if !firstPage {
 		pageSnapshot = contTok.Snapshot
+	}
+
+	// Pin the list resourceVersion to the store head at page 1 and carry it
+	// forward, so every page reports the same RV and a resuming watch is never
+	// below the purge floor. Legacy tokens (HeadRV == 0) recompute here.
+	listRV := contTok.HeadRV
+	if listRV == 0 {
+		listRV, err = p.headResourceVersion(ctx, pageSnapshot)
+		if err != nil {
+			return nil, "", 0, err
+		}
 	}
 
 	var continueToken string
@@ -644,10 +673,32 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		continueToken = encodeListContinueToken(listContinueToken{
 			Snapshot: pageSnapshot,
 			Cursor:   resourceVersions[len(resourceVersions)-1],
+			HeadRV:   listRV,
 		})
 	}
 
-	return objects, continueToken, nil
+	return objects, continueToken, listRV, nil
+}
+
+// headResourceVersion returns the store head revision as of snapshot: the max
+// resource_version committed in that snapshot, lifted to the purge floor. The
+// floor term recovers the head when the highest-RV row has itself been purged
+// (e.g. the newest object was deleted and its tombstone hard-deleted), where a
+// plain MAX over surviving rows would fall back below the floor and 410 every
+// resume. GREATEST stays within [floor, true head], so a watch resuming from it
+// is at or above the floor yet never skips a committed change.
+func (p *PostgreSQLBackend) headResourceVersion(ctx context.Context, snapshot string) (int64, error) {
+	var maxRV int64
+	err := p.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(resource_version), 0) FROM resources
+		 WHERE pg_visible_in_snapshot(xmin::text::xid8, $1::pg_snapshot)`, snapshot).Scan(&maxRV)
+	if err != nil {
+		return 0, fmt.Errorf("failed to compute list resourceVersion: %w", err)
+	}
+	if floor := p.cachedPurgeFloor.Load(); floor > maxRV {
+		return floor, nil
+	}
+	return maxRV, nil
 }
 
 func (p *PostgreSQLBackend) buildListQuery(kind, namespace string, opts storage.ListOptions, contTok listContinueToken) (string, []interface{}, error) {
