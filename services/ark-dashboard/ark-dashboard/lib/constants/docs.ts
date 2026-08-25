@@ -5,6 +5,7 @@ export const DOCS_URLS = {
   root: `${ARK_DOCS}/`,
   agents: `${ARK_DOCS}/user-guide/agents/`,
   configurations: `${ARK_DOCS}/user-guide/configurations/`,
+  events: `${ARK_DOCS}/developer-guide/logging-and-events/`,
   fileGateway: `${MARKETPLACE_DOCS}/services/file-gateway/`,
   fileGatewaySizeLimits: `${MARKETPLACE_DOCS}/services/file-gateway/#file-size-limitations`,
   memory: `${ARK_DOCS}/reference/resources/memory/`,

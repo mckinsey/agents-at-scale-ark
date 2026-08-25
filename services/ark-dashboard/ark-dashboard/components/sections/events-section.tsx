@@ -1,31 +1,59 @@
 'use client';
 
-import { AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Badge } from '@/components/ui/badge';
+import { EventTypeIndicator } from '@/components/common/event-type-indicator';
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
+import { Autorenew, Poll, Warning } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
+import {
+  LearnMoreButton,
+  ResourceEmptyState,
+  ResourceNoResults,
+} from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Pagination } from '@/components/ui/pagination';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  rowHoverOverlayClass,
+} from '@/components/ui/table';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Event, eventsService } from '@/lib/services/events';
+import { cn } from '@/lib/utils';
+import { formatAge } from '@/lib/utils/time';
 
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '../ui/empty';
+const COL = {
+  added: 'w-[100px]',
+  type: 'w-[110px]',
+  reason: 'w-[170px]',
+  object: 'w-[220px]',
+  subobject: 'w-[130px]',
+  source: 'w-[150px]',
+  message: 'w-auto',
+  count: 'w-[80px]',
+};
+
+const ALL = 'all';
 
 interface EventsSectionProps {
   readonly page: number;
@@ -33,6 +61,74 @@ interface EventsSectionProps {
   readonly type?: string;
   readonly kind?: string;
   readonly name?: string;
+  readonly totalCount?: number;
+}
+
+interface EventsFilterProps {
+  readonly label: string;
+  readonly value: string;
+  readonly allLabel: string;
+  readonly options: string[];
+  readonly onChange: (value: string) => void;
+  readonly className?: string;
+}
+
+function EventsFilter({
+  label,
+  value,
+  allLabel,
+  options,
+  onChange,
+  className,
+}: Readonly<EventsFilterProps>) {
+  const items = [
+    { value: ALL, label: allLabel },
+    ...options.map(option => ({ value: option, label: option })),
+  ];
+
+  return (
+    <div className={cn('flex w-48 flex-col gap-2', className)}>
+      <span className="label-regular-primary text-fg-secondary">{label}</span>
+      <Select
+        items={items}
+        value={value}
+        onValueChange={next => onChange(String(next))}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder={allLabel} />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map(item => (
+            <SelectItem key={item.value} value={item.value}>
+              <SelectItemText>{item.label}</SelectItemText>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+const SKELETON_ROWS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+function EventsTableSkeleton() {
+  return (
+    <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+      <div className="flex flex-none items-end gap-3">
+        <Skeleton className="h-9 w-64" />
+        <Skeleton className="h-9 w-48" />
+        <Skeleton className="h-9 w-48" />
+        <Skeleton className="h-9 w-48" />
+      </div>
+      <div
+        className="flex flex-col gap-1 pt-2"
+        aria-busy="true"
+        aria-label="Loading events">
+        {SKELETON_ROWS.map(row => (
+          <Skeleton key={row} className="h-10 w-full" />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function EventsSection({
@@ -41,6 +137,7 @@ export function EventsSection({
   type,
   kind,
   name,
+  totalCount,
 }: EventsSectionProps) {
   const router = useRouter();
   const { push: namespacedPush } = useNamespacedNavigation();
@@ -55,6 +152,7 @@ export function EventsSection({
   const [availableKinds, setAvailableKinds] = useState<string[]>([]);
   const [availableNames, setAvailableNames] = useState<string[]>([]);
   const [totalEvents, setTotalEvents] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Track last loaded filters to prevent double loading
   const lastLoadedFilters = useRef<string>('');
@@ -63,6 +161,7 @@ export function EventsSection({
   const loadEvents = useCallback(
     async (showRefreshing = false) => {
       if (showRefreshing) setRefreshing(true);
+      setLoadError(null);
 
       try {
         // Build filters from current URL params
@@ -106,12 +205,12 @@ export function EventsSection({
         }
       } catch (error) {
         console.error('Failed to load events:', error);
-        toast.error('Failed to Load Events', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
+        const description =
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred';
+        setLoadError(description);
+        toast.error('Failed to Load Events', { description });
       } finally {
         setLoading(false);
         if (showRefreshing) setRefreshing(false);
@@ -153,7 +252,7 @@ export function EventsSection({
 
   // User interaction handlers
   const handleFilterChange = (key: string, value: string | undefined) => {
-    const effectiveValue = value === 'all' ? undefined : value;
+    const effectiveValue = value === ALL ? undefined : value;
 
     // Only update the changed filter and reset page
     const params: Record<string, string | undefined> = {
@@ -204,254 +303,252 @@ export function EventsSection({
     });
   };
 
-  const handleEventClick = (event: Event) => {
-    namespacedPush(`/event/${event.name}`);
-  };
-
-  // Helper functions
-  const formatAge = (timestamp: string | undefined) => {
-    if (!timestamp) return '-';
-
-    const now = new Date();
-    const eventTime = new Date(timestamp);
-    const diffMs = now.getTime() - eventTime.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffDays > 0) return `${diffDays}d`;
-    if (diffHours > 0) return `${diffHours}h`;
-    if (diffMins > 0) return `${diffMins}m`;
-    return 'now';
-  };
-
-  const getEventTypeIcon = (eventType: string) => {
-    switch (eventType) {
-      case 'Warning':
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
-      case 'Normal':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      default:
-        return <CheckCircle className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  const getEventTypeBadge = (eventType: string) => {
-    switch (eventType) {
-      case 'Warning':
-        return <Badge variant="error">{eventType}</Badge>;
-      case 'Normal':
-        return <Badge variant="alternative">{eventType}</Badge>;
-      default:
-        return <Badge outline>{eventType}</Badge>;
-    }
+  const handleRowClick = (event: Event, target: EventTarget | null) => {
+    // Let the row's own link handle its clicks, and never navigate out from
+    // under someone who is selecting message text.
+    if (target instanceof HTMLElement && target.closest('a')) return;
+    if (globalThis.getSelection()?.toString()) return;
+    namespacedPush(`/event/${encodeURIComponent(event.name)}`);
   };
 
   const totalPages = Math.max(1, Math.ceil(totalEvents / limit));
+  const hasFilters = Boolean(type || kind || name);
+  const showSkeleton = loading || (refreshing && events.length === 0);
+  const isEmpty =
+    !showSkeleton &&
+    !loadError &&
+    events.length === 0 &&
+    totalEvents === 0 &&
+    !hasFilters;
 
-  if (loading) {
+  const refreshButton = (
+    <Button
+      variant="outline"
+      onClick={() => loadEvents(true)}
+      disabled={refreshing}>
+      <IconShell size="sm">
+        <Autorenew className={cn(refreshing && 'animate-spin')} />
+      </IconShell>
+      Refresh
+    </Button>
+  );
+
+  const header = (
+    <ResourcePageHeader
+      icon={<Poll />}
+      title={totalCount === undefined ? 'Events' : `Events (${totalCount})`}
+      description="Track platform operational activity across the ecosystem"
+      actions={refreshButton}
+    />
+  );
+
+  if (showSkeleton) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="mx-auto mb-4 h-8 w-8 animate-spin text-gray-400" />
-          <p className="text-gray-500">Loading events...</p>
-        </div>
+      <div className="content-shell flex h-full w-full flex-col">
+        {header}
+        <EventsTableSkeleton />
+      </div>
+    );
+  }
+
+  if (isEmpty) {
+    return (
+      <div className="content-shell flex h-full w-full flex-col">
+        {header}
+        <ResourceEmptyState
+          icon={<Poll />}
+          title="No events yet"
+          description={
+            <>
+              <p className="mb-2">You haven&apos;t added any event yet.</p>
+              <p>Get started to see events.</p>
+            </>
+          }
+          actions={<LearnMoreButton href={DOCS_URLS.events} />}
+        />
       </div>
     );
   }
 
   return (
-    <div className="mt-4">
-      <div className="flex flex-wrap items-center gap-2 border-b pb-4">
-        <Select
-          value={type || 'all'}
-          onValueChange={value => handleFilterChange('type', value as string)}>
-          <SelectTrigger className="w-32">
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {availableTypes.map(t => (
-              <SelectItem key={t} value={t}>
-                {t}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <div className="content-shell flex h-full w-full flex-col">
+      {header}
 
-        <Select
-          value={kind || 'all'}
-          onValueChange={value => handleFilterChange('kind', value as string)}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Object Kind" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Kinds</SelectItem>
-            {availableKinds.map(k => (
-              <SelectItem key={k} value={k}>
-                {k}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={name || 'all'}
-          onValueChange={value => handleFilterChange('name', value as string)}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Resource Name" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Names</SelectItem>
-            {availableNames.map(n => (
-              <SelectItem key={n} value={n}>
-                {n}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={clearFilters}
-          disabled={!(type || kind || name)}>
-          Clear Filters
-        </Button>
-
-        <div className="ml-auto">
-          <Button
-            size="sm"
-            onClick={() => loadEvents(true)}
-            disabled={refreshing}>
-            <RefreshCw
-              className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`}
-            />
-            Refresh
+      <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+        <div className="flex flex-none items-end gap-3">
+          <EventsFilter
+            label="Names"
+            value={name || ALL}
+            allLabel="All"
+            options={availableNames}
+            onChange={value => handleFilterChange('name', value)}
+          />
+          <EventsFilter
+            label="Types"
+            value={type || ALL}
+            allLabel="All"
+            options={availableTypes}
+            onChange={value => handleFilterChange('type', value)}
+          />
+          <EventsFilter
+            label="Kinds"
+            value={kind || ALL}
+            allLabel="All"
+            options={availableKinds}
+            onChange={value => handleFilterChange('kind', value)}
+          />
+          <Button variant="ghost" onClick={clearFilters} disabled={!hasFilters}>
+            Clear filters
           </Button>
         </div>
-      </div>
 
-      {/* Events Table */}
-      <div className="overflow-hidden rounded-lg border">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px]">
-            <thead className="bg-gray-50 dark:bg-gray-900/50">
-              <tr>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Age
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Type
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Reason
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Object
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Subobject
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Source
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Message
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Count
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-gray-900">
-              {events.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
-                    <Empty>
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <DASHBOARD_SECTIONS.events.icon />
-                        </EmptyMedia>
-                        <EmptyTitle>No Events Yet</EmptyTitle>
-                      </EmptyHeader>
-                    </Empty>
-                  </td>
-                </tr>
-              ) : (
-                events.map(event => (
-                  <tr
-                    key={event.name}
-                    onClick={() => handleEventClick(event)}
-                    className="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-500 dark:text-gray-400">
-                      {formatAge(event.lastTimestamp)}
-                    </td>
-                    <td className="px-3 py-3 text-sm whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {getEventTypeIcon(event.type)}
-                        {getEventTypeBadge(event.type)}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-900 dark:text-gray-100">
-                      {event.reason}
-                    </td>
-                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-900 dark:text-gray-100">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help">
-                              {event.involvedObjectKind}/
-                              {event.involvedObjectName}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <div className="text-xs">
-                              <div>Kind: {event.involvedObjectKind}</div>
-                              <div>Name: {event.involvedObjectName}</div>
-                              {event.involvedObjectNamespace && (
-                                <div>
-                                  Namespace: {event.involvedObjectNamespace}
-                                </div>
-                              )}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </td>
-                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-500 dark:text-gray-400">
-                      -
-                    </td>
-                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-500 dark:text-gray-400">
-                      {event.sourceComponent}
-                      {event.sourceHost && ` (${event.sourceHost})`}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                      <div className="max-w-md truncate" title={event.message}>
-                        {event.message}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-center text-sm whitespace-nowrap text-gray-500 dark:text-gray-400">
-                      {event.count}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {loadError && (
+          <div
+            role="alert"
+            className="border-status-error/30 bg-status-error/10 flex flex-none items-start gap-2 border px-3 py-2">
+            <IconShell size="sm" className="text-fg-error mt-0.5 shrink-0">
+              <Warning />
+            </IconShell>
+            <p className="label-regular-primary text-fg-error">
+              Couldn&apos;t refresh events: {loadError}
+            </p>
+          </div>
+        )}
 
-      {/* Pagination */}
-      <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        itemsPerPage={limit}
-        onPageChange={handlePageChange}
-        onItemsPerPageChange={handleItemsPerPageChange}
-      />
+        {events.length === 0 ? (
+          !loadError && (
+            <ResourceNoResults
+              icon={<Poll />}
+              message={
+                hasFilters
+                  ? 'No events match your filters.'
+                  : 'No events on this page.'
+              }
+            />
+          )
+        ) : (
+          <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+            <Table className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+              <TableHeader>
+                <TableRow>
+                  <TableHead size="small" className={COL.added}>
+                    Added
+                  </TableHead>
+                  <TableHead size="small" className={COL.type}>
+                    Type
+                  </TableHead>
+                  <TableHead size="small" className={COL.reason}>
+                    Reason
+                  </TableHead>
+                  <TableHead size="small" className={COL.object}>
+                    Object
+                  </TableHead>
+                  <TableHead size="small" className={COL.subobject}>
+                    Subobject
+                  </TableHead>
+                  <TableHead size="small" className={COL.source}>
+                    Source
+                  </TableHead>
+                  <TableHead size="small" className={COL.message}>
+                    Message
+                  </TableHead>
+                  <TableHead size="small" className={cn(COL.count, 'text-right')}>
+                    Count
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.map(event => {
+                  const object = `${event.involvedObjectKind}/${event.involvedObjectName}`;
+                  const source = event.sourceHost
+                    ? `${event.sourceComponent} (${event.sourceHost})`
+                    : event.sourceComponent;
+                  const age = formatAge(event.creationTimestamp);
+                  return (
+                    <TableRow
+                      key={event.name}
+                      onClick={clickEvent =>
+                        handleRowClick(event, clickEvent.target)
+                      }
+                      className="relative isolate cursor-pointer transition-colors">
+                      <TableCell size="small" className={COL.added}>
+                        <span aria-hidden className={rowHoverOverlayClass} />
+                        <TruncatedTooltip label={age}>
+                          <NamespacedLink
+                            href={`/event/${encodeURIComponent(event.name)}`}
+                            aria-label={`${age} — ${event.reason} on ${object}`}
+                            className="text-fg-primary block w-full truncate">
+                            {age}
+                          </NamespacedLink>
+                        </TruncatedTooltip>
+                      </TableCell>
+                      <TableCell size="small" className={COL.type}>
+                        <EventTypeIndicator type={event.type} />
+                      </TableCell>
+                      <TableCell size="small" className={COL.reason}>
+                        <TruncatedTooltip label={event.reason}>
+                          <span className="text-fg-primary block w-full truncate">
+                            {event.reason}
+                          </span>
+                        </TruncatedTooltip>
+                      </TableCell>
+                      <TableCell
+                        size="small"
+                        className={COL.object}>
+                        <TruncatedTooltip label={object}>
+                          <span className="text-fg-primary block w-full truncate">
+                            {object}
+                          </span>
+                        </TruncatedTooltip>
+                      </TableCell>
+                      <TableCell size="small" className={COL.subobject}>
+                        <span className="text-fg-primary block truncate">-</span>
+                      </TableCell>
+                      <TableCell
+                        size="small"
+                        className={COL.source}>
+                        <TruncatedTooltip label={source}>
+                          <span className="text-fg-primary block w-full truncate">
+                            {source}
+                          </span>
+                        </TruncatedTooltip>
+                      </TableCell>
+                      <TableCell
+                        size="small"
+                        className={COL.message}>
+                        <TruncatedTooltip
+                          label={event.message}
+                          contentClassName="max-w-[420px] break-all">
+                          <span className="text-fg-primary block w-full truncate">
+                            {event.message}
+                          </span>
+                        </TruncatedTooltip>
+                      </TableCell>
+                      <TableCell
+                        size="small"
+                        className={cn(COL.count, 'text-right')}>
+                        <span className="text-fg-primary block truncate">
+                          {event.count}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        )}
+
+        {totalEvents > 0 && (
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            itemsPerPage={limit}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
+        )}
+      </div>
     </div>
   );
 }
