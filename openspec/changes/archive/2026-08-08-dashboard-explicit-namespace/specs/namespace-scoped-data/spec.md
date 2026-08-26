@@ -23,6 +23,11 @@ The dashboard SHALL display only resources belonging to the namespace currently 
 - **WHEN** the active namespace changes to one that contains no resources of the displayed type
 - **THEN** the screen shows an empty state rather than the previous namespace's resources
 
+#### Scenario: A list retrieved across several pages
+
+- **WHEN** a resource list is large enough that the dashboard retrieves it in more than one page
+- **THEN** every page is retrieved for the active namespace, so no page of the list belongs to another namespace
+
 ### Requirement: Requests are deferred until the active namespace is resolved
 
 The dashboard SHALL NOT request namespaced resources before the active namespace is known. No request SHALL be issued for a placeholder or assumed namespace.

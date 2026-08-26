@@ -34,6 +34,11 @@ import {
   transformFormParametersToApi,
 } from './utils';
 
+const EXISTING_AGENT_MODES: AgentFormMode[] = [
+  AgentFormMode.EDIT,
+  AgentFormMode.VIEW,
+];
+
 interface UseAgentFormOptions {
   mode: AgentFormMode;
   agentName?: string;
@@ -84,20 +89,21 @@ export function useAgentForm({
   });
 
   useEffect(() => {
+    const isExistingAgent = EXISTING_AGENT_MODES.includes(mode);
+
     const loadData = async () => {
       try {
-        if (
-          (mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW) &&
-          agentName
-        ) {
+        const enginesPromise = isExperimentalExecutionEngineEnabled
+          ? executionEnginesService.getAll(namespace)
+          : Promise.resolve([]);
+
+        if (isExistingAgent && agentName) {
           const [agentData, modelsData, toolsData, enginesData] =
             await Promise.all([
               agentsService.getByName(namespace, agentName),
               modelsService.getAll(namespace),
               toolsService.getAll(namespace),
-              isExperimentalExecutionEngineEnabled
-                ? executionEnginesService.getAll(namespace)
-                : Promise.resolve([]),
+              enginesPromise,
             ]);
 
           if (!agentData) {
@@ -135,25 +141,20 @@ export function useAgentForm({
           const [modelsData, toolsData, enginesData] = await Promise.all([
             modelsService.getAll(namespace),
             toolsService.getAll(namespace),
-            isExperimentalExecutionEngineEnabled
-              ? executionEnginesService.getAll(namespace)
-              : Promise.resolve([]),
+            enginesPromise,
           ]);
           setModels(modelsData);
           setAvailableTools(toolsData);
           setExecutionEngines(enginesData);
         }
       } catch (error) {
-        toast.error(
-          `Failed to load ${mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW ? 'agent' : 'data'}`,
-          {
-            description:
-              error instanceof Error
-                ? error.message
-                : 'An unexpected error occurred',
-          },
-        );
-        if (mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW) {
+        toast.error(`Failed to load ${isExistingAgent ? 'agent' : 'data'}`, {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
+        });
+        if (isExistingAgent) {
           onSuccessRef.current?.();
         }
       } finally {
