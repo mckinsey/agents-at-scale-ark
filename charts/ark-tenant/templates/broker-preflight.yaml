@@ -1,0 +1,20 @@
+{{/*
+Refuse a fresh install with no broker Service in the namespace: a Memory
+created for a broker that does not exist makes queries fail rather than
+degrade (ark/executors/completions/memory_http.go). Only .Release.IsInstall
+is checked, so an upgrade of an already-provisioned tenant is never blocked.
+
+`lookup` cannot reach the API server during `helm install --dry-run` (client-
+side) or `helm template`, and returns empty for every call in that mode. The
+kube-system Namespace always exists on a real cluster, so an empty result for
+it means lookups are not live here — skip the check rather than fail on a
+false negative.
+*/}}
+{{- if and .Release.IsInstall .Values.memory.requireBroker }}
+{{- if lookup "v1" "Namespace" "" "kube-system" }}
+{{- $broker := lookup "v1" "Service" .Release.Namespace .Values.memory.brokerService }}
+{{- if not $broker }}
+{{- fail (printf "no broker Service %q found in namespace %q: install it first with 'ark install ark-broker' (or 'helm install ark-broker'), or pass --set memory.requireBroker=false to provision this tenant without one" .Values.memory.brokerService .Release.Namespace) }}
+{{- end }}
+{{- end }}
+{{- end }}

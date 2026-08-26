@@ -14,6 +14,7 @@ export interface ArkService {
   chartPath?: string;
   installArgs?: string[];
   prerequisiteUninstalls?: PrerequisiteUninstall[];
+  requires?: string[];
   k8sServiceName?: string;
   k8sServicePort?: number;
   k8sPortForwardLocalPort?: number;
