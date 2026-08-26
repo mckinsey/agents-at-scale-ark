@@ -15,6 +15,8 @@ export const envSchema = z
     MAX_CHUNKS: z.coerce.number().int().nonnegative().default(0),
     MAX_SPANS: z.coerce.number().int().nonnegative().default(0),
     MAX_EVENTS: z.coerce.number().int().nonnegative().default(0),
+    STREAM_MAX_BYTES: z.coerce.number().int().positive().default(67108864),
+    CHUNK_TTL_SECONDS: z.coerce.number().int().positive().optional(),
     MEMORY_FILE_PATH: z.string().min(1).optional(),
     STREAM_FILE_PATH: z.string().min(1).optional(),
     TRACE_FILE_PATH: z.string().min(1).optional(),

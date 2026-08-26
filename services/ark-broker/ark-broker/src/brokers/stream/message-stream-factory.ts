@@ -17,10 +17,9 @@ export function createMessageStream(
       config.backends.messageVisibilityTtlSeconds
     );
   }
-  return new InMemoryMessageStream(
-    logger.child({broker: 'memory'}),
-    'Memory',
-    config.persistence.memoryFilePath,
-    config.limits.maxMessages
-  );
+  return new InMemoryMessageStream(logger.child({broker: 'memory'}), 'Memory', {
+    path: config.persistence.memoryFilePath,
+    maxItems: config.limits.maxMessages,
+    maxBytes: config.limits.streamMaxBytes,
+  });
 }

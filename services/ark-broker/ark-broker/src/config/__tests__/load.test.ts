@@ -13,6 +13,8 @@ describe('loadConfig', () => {
     expect(cfg.limits.maxChunks).toBe(0);
     expect(cfg.limits.maxSpans).toBe(0);
     expect(cfg.limits.maxEvents).toBe(0);
+    expect(cfg.limits.streamMaxBytes).toBe(67108864);
+    expect(cfg.limits.chunkTtlSeconds).toBe(3600);
     expect(cfg.persistence.memoryFilePath).toBeUndefined();
     expect(cfg.persistence.streamFilePath).toBeUndefined();
     expect(cfg.persistence.traceFilePath).toBeUndefined();
@@ -310,6 +312,22 @@ describe('loadConfig', () => {
       expect(
         loadConfig({DATABASE_DEBUG_QUERIES: '1'}).database.debugQueries
       ).toBe(false);
+    });
+  });
+
+  describe('chunk TTL', () => {
+    it('CHUNK_TTL_SECONDS overrides the deprecated REDIS_STREAM_TTL_SECONDS alias', () => {
+      const cfg = loadConfig({
+        CHUNK_TTL_SECONDS: '900',
+        REDIS_STREAM_TTL_SECONDS: '7200',
+      });
+      expect(cfg.limits.chunkTtlSeconds).toBe(900);
+      expect(cfg.redis.streamTtlSeconds).toBe(900);
+    });
+
+    it('falls back to REDIS_STREAM_TTL_SECONDS when CHUNK_TTL_SECONDS is unset', () => {
+      const cfg = loadConfig({REDIS_STREAM_TTL_SECONDS: '7200'});
+      expect(cfg.limits.chunkTtlSeconds).toBe(7200);
     });
   });
 });

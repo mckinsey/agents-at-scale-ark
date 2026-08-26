@@ -18,9 +18,10 @@ export function createChunkStream(
       config.redis.streamTtlSeconds
     );
   }
-  return new InMemoryChunkStream(
-    logger.child({broker: 'chunks'}),
-    config.persistence.streamFilePath,
-    config.limits.maxChunks
-  );
+  return new InMemoryChunkStream(logger.child({broker: 'chunks'}), {
+    path: config.persistence.streamFilePath,
+    maxItems: config.limits.maxChunks,
+    maxBytes: config.limits.streamMaxBytes,
+    ttlSeconds: config.limits.chunkTtlSeconds,
+  });
 }

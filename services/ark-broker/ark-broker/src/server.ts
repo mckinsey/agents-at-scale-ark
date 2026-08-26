@@ -71,11 +71,11 @@ export function buildApp(deps: {
 
   const memory = new MemoryBroker(messageStream);
   const chunks = new CompletionChunkBroker(chunkStream);
-  const traces = new TraceBroker(
-    logger.child({broker: 'traces'}),
-    config.persistence.traceFilePath,
-    config.limits.maxSpans
-  );
+  const traces = new TraceBroker(logger.child({broker: 'traces'}), {
+    path: config.persistence.traceFilePath,
+    maxItems: config.limits.maxSpans,
+    maxBytes: config.limits.streamMaxBytes,
+  });
   const events = new EventBroker(eventStream);
   const sessions = new SessionsBroker(sessionsStorage);
 

@@ -20,6 +20,8 @@ export type LimitsConfig = Readonly<{
   maxChunks: number;
   maxSpans: number;
   maxEvents: number;
+  streamMaxBytes: number;
+  chunkTtlSeconds: number;
 }>;
 
 export type PersistenceConfig = Readonly<{

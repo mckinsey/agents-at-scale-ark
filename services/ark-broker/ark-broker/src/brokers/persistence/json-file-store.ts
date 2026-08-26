@@ -1,7 +1,17 @@
-import {existsSync, readFileSync, mkdirSync} from 'node:fs';
+import {createReadStream, existsSync, readFileSync, mkdirSync} from 'node:fs';
 import {writeFile, rename} from 'node:fs/promises';
 import {dirname} from 'node:path';
+// stream-json ships CommonJS; under native ESM only the default export binds,
+// so reach the lowercase factories through it rather than via named imports.
+import parser from 'stream-json';
+import PickFilter from 'stream-json/filters/Pick.js';
+import StreamArrayStreamer from 'stream-json/streamers/StreamArray.js';
+import StreamValuesStreamer from 'stream-json/streamers/StreamValues.js';
 import type {Logger} from '@ark-broker/logging/logger.js';
+
+const {pick} = PickFilter;
+const {streamArray} = StreamArrayStreamer;
+const {streamValues} = StreamValuesStreamer;
 
 export class JsonFileStore<T> {
   private flushing: Promise<void> | null = null;
@@ -36,6 +46,114 @@ export class JsonFileStore<T> {
       this.logger.error({err}, 'failed to load');
     }
     return null;
+  }
+
+  // Streaming load that never materializes the whole file: parses items one at
+  // a time and retains only the most recent tail within a byte budget (and an
+  // optional item-count cap), so an oversized file loads in memory bounded by
+  // `maxBytes` — not by item count, which does not bound bytes. A torn trailing
+  // record (crash mid-write) keeps the valid prefix rather than discarding all.
+  async loadBounded(limits: {
+    maxBytes?: number;
+    maxItems?: number;
+  }): Promise<{items: T[]; nextSequence: number} | null> {
+    if (!this.path) return null;
+    if (!existsSync(this.path)) {
+      this.logger.info('no existing data');
+      return null;
+    }
+    try {
+      const items = await this.streamItems(limits);
+      const persisted = await this.readNextSequence();
+      const derived = this.deriveNextSequence(items);
+      this.logger.info({count: items.length}, 'loaded records (streamed)');
+      return {items, nextSequence: Math.max(persisted ?? 0, derived)};
+    } catch (err) {
+      this.logger.error({err}, 'failed to load (streamed)');
+      return null;
+    }
+  }
+
+  private streamItems(limits: {
+    maxBytes?: number;
+    maxItems?: number;
+  }): Promise<T[]> {
+    const {maxBytes, maxItems} = limits;
+    return new Promise((resolve) => {
+      const buf: T[] = [];
+      const sizes: number[] = [];
+      let bytes = 0;
+      let settled = false;
+      const evictOldestWhileOver = (): void => {
+        while (
+          buf.length > 1 &&
+          ((maxBytes !== undefined && bytes > maxBytes) ||
+            (maxItems !== undefined && maxItems > 0 && buf.length > maxItems))
+        ) {
+          bytes -= sizes.shift()!;
+          buf.shift();
+        }
+      };
+      // .pipe() does not tear down the source when a downstream stage errors,
+      // so destroy it explicitly to avoid leaking the fd on the torn-tail path.
+      const source = createReadStream(this.path!);
+      const finish = (err?: unknown): void => {
+        if (settled) return;
+        settled = true;
+        source.destroy();
+        if (err) {
+          this.logger.warn({err}, 'parse error on load; keeping valid prefix');
+        }
+        resolve(buf);
+      };
+      const items = source
+        .on('error', finish)
+        .pipe(parser())
+        .on('error', finish)
+        .pipe(pick({filter: 'items'}))
+        .on('error', finish)
+        .pipe(streamArray())
+        .on('error', finish);
+      items.on('data', ({value}: {value: T}) => {
+        const size = Buffer.byteLength(JSON.stringify(value));
+        buf.push(value);
+        sizes.push(size);
+        bytes += size;
+        evictOldestWhileOver();
+      });
+      items.on('end', () => finish());
+    });
+  }
+
+  private readNextSequence(): Promise<number | undefined> {
+    return new Promise((resolve) => {
+      let result: number | undefined;
+      let settled = false;
+      const source = createReadStream(this.path!);
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        source.destroy();
+        resolve(result);
+      };
+      const values = source
+        .on('error', finish)
+        .pipe(parser())
+        .on('error', finish)
+        .pipe(pick({filter: 'nextSequence'}))
+        .on('error', finish)
+        .pipe(streamValues())
+        .on('error', finish);
+      values.on('data', ({value}: {value: unknown}) => {
+        if (typeof value === 'number') result = value;
+      });
+      values.on('end', () => finish());
+    });
+  }
+
+  private deriveNextSequence(items: T[]): number {
+    const last = items.at(-1) as {sequenceNumber?: number} | undefined;
+    return last?.sequenceNumber !== undefined ? last.sequenceNumber + 1 : 1;
   }
 
   // Coalesced, non-blocking snapshot. The caller records the latest state and
