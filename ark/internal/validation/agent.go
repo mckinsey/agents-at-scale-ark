@@ -61,7 +61,7 @@ func (v *Validator) engineToolWarning(ctx context.Context, agent *arkv1alpha1.Ag
 }
 
 func (v *Validator) resolveAgentToolType(ctx context.Context, namespace string, tool arkv1alpha1.AgentTool) string {
-	if tool.Type != toolTypeCustom && tool.Type != AgentToolTypeBuiltIn {
+	if tool.Type != toolTypeCustom && tool.Type != toolTypeBuiltIn {
 		return tool.Type
 	}
 
@@ -80,7 +80,7 @@ func validateAgentTool(index int, tool arkv1alpha1.AgentTool) error {
 	hasName := tool.Name != ""
 
 	switch tool.Type {
-	case AgentToolTypeBuiltIn:
+	case toolTypeBuiltIn:
 		if !hasName {
 			return fmt.Errorf("tool[%d]: built-in tools must specify a name", index)
 		}

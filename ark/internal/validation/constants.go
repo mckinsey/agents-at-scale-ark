@@ -23,8 +23,6 @@ const (
 	ToolTypeBuiltin = "builtin"
 )
 
-const AgentToolTypeBuiltIn = "built-in"
-
 const (
 	BuiltinToolNoop      = "noop"
 	BuiltinToolTerminate = "terminate"

@@ -251,14 +251,14 @@ func TestValidateAgentEngineToolWarning(t *testing.T) {
 		{
 			name:        "engine with built-in tool warns with the Tool CRD type",
 			engine:      engine("mock-engine"),
-			tools:       []arkv1alpha1.AgentTool{{Type: AgentToolTypeBuiltIn, Name: "terminate"}},
+			tools:       []arkv1alpha1.AgentTool{{Type: toolTypeBuiltIn, Name: "terminate"}},
 			wantWarning: true,
 			wantContain: []string{"terminate (builtin)"},
 		},
 		{
 			name:   "engine with unresolvable built-in tool does not warn",
 			engine: engine("mock-engine"),
-			tools:  []arkv1alpha1.AgentTool{{Type: AgentToolTypeBuiltIn, Name: "noop"}},
+			tools:  []arkv1alpha1.AgentTool{{Type: toolTypeBuiltIn, Name: "noop"}},
 		},
 		{
 			name:        "engine with deprecated custom tool resolves the real type from the Tool CRD",
