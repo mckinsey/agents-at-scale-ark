@@ -297,3 +297,41 @@ describe('AppSidebar - General Group', () => {
     expect(mockPush).toHaveBeenCalledWith('/marketplace');
   });
 });
+
+describe('AppSidebar - Nested item highlighting', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should highlight the nested item matching the current route', async () => {
+    const { usePathname } = await import('next/navigation');
+    vi.mocked(usePathname).mockReturnValue('/agents');
+
+    renderSidebar();
+
+    const agentsButton = await screen.findByRole('button', { name: 'Agents' });
+    expect(agentsButton).toHaveAttribute('data-active', 'true');
+  });
+
+  it('should not highlight sibling nested items', async () => {
+    const { usePathname } = await import('next/navigation');
+    vi.mocked(usePathname).mockReturnValue('/agents');
+
+    renderSidebar();
+
+    const teamsButton = await screen.findByRole('button', { name: 'Teams' });
+    expect(teamsButton).toHaveAttribute('data-active', 'false');
+  });
+
+  it('should highlight nested monitoring items', async () => {
+    const { usePathname } = await import('next/navigation');
+    vi.mocked(usePathname).mockReturnValue('/queries');
+
+    renderSidebar();
+
+    const queriesButton = await screen.findByRole('button', {
+      name: 'Query Logs',
+    });
+    expect(queriesButton).toHaveAttribute('data-active', 'true');
+  });
+});
