@@ -41,6 +41,16 @@ describe('arkServices', () => {
     );
   });
 
+  it('requires ark-broker for ark-tenant and passes the memory override when it is skipped', () => {
+    const service = originalArkServices['ark-tenant'];
+
+    expect(service.requires).toEqual(['ark-broker']);
+    expect(service.dependencyOverrideArgs).toEqual([
+      '--set',
+      'memory.requireBroker=false',
+    ]);
+  });
+
   it('exposes kubernetes-mcp-server as a marketplace-backed optional service', () => {
     const service = originalArkServices['kubernetes-mcp-server'];
 

@@ -15,6 +15,9 @@ export interface ArkService {
   installArgs?: string[];
   prerequisiteUninstalls?: PrerequisiteUninstall[];
   requires?: string[];
+  // Extra helm args applied only when --no-deps skips installing `requires`,
+  // so a chart-level guard for the missing dependency doesn't block install.
+  dependencyOverrideArgs?: string[];
   k8sServiceName?: string;
   k8sServicePort?: number;
   k8sPortForwardLocalPort?: number;

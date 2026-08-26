@@ -142,10 +142,23 @@ function exitIfServicesSkipped(skipped: {name: string; version: string}[]): void
   process.exit(1);
 }
 
+function findService(
+  services: ServiceCollection,
+  name: string
+): ArkService | undefined {
+  return Object.values(services).find(
+    (s) => s.name === name || s.helmReleaseName === name
+  );
+}
+
 /**
  * Expand requested service names to include their transitive `requires`,
  * dependencies first. A visited set both de-duplicates and guards against
  * a cycle in `requires` (a node already being visited is never re-entered).
+ * A dependency that does not resolve to an installable service (disabled,
+ * or excluded for the current backend) is skipped with a warning rather
+ * than pushed through to a confusing "service not found" error for a name
+ * the caller never typed.
  */
 function resolveServiceOrder(
   requestedNames: string[],
@@ -159,9 +172,15 @@ function resolveServiceOrder(
     if (visited.has(name)) return;
     visited.add(name);
     if (!skipDeps) {
-      const service = Object.values(services).find((s) => s.name === name);
+      const service = findService(services, name);
       for (const dep of service?.requires || []) {
-        visit(dep);
+        if (findService(services, dep)) {
+          visit(dep);
+        } else {
+          output.warning(
+            `${name} requires ${dep}, but it is not installable in this configuration — skipping it`
+          );
+        }
       }
     }
     resolved.push(name);
@@ -364,9 +383,16 @@ export async function installArk(
     );
 
     if (skipDeps) {
-      output.warning(
-        '--no-deps: service dependencies (e.g. ark-broker for ark-tenant) will not be installed automatically; a tenant without a broker loses conversation history'
-      );
+      const skippedDeps = resolveServiceOrder(
+        serviceNames,
+        installableServices,
+        false
+      ).filter((name) => !serviceNames.includes(name));
+      if (skippedDeps.length > 0) {
+        output.warning(
+          `--no-deps: not installing ${skippedDeps.join(', ')} automatically; a tenant without a broker loses conversation history`
+        );
+      }
     } else {
       for (const name of resolvedServiceNames) {
         if (!serviceNames.includes(name)) {
@@ -428,9 +454,7 @@ export async function installArk(
       }
 
       // Core ARK service
-      const service = Object.values(installableServices).find(
-        (s) => s.name === serviceName
-      );
+      const service = findService(installableServices, serviceName);
 
       if (!service) {
         output.error(`service '${serviceName}' not found`);
@@ -448,7 +472,10 @@ export async function installArk(
           options.verbose,
           options.arkVersion,
           options.marketplaceVersion,
-          backendInstallArgs(service, backend, postgresValues)
+          [
+            ...backendInstallArgs(service, backend, postgresValues),
+            ...(skipDeps ? service.dependencyOverrideArgs || [] : []),
+          ]
         );
         output.success(`${service.name} installed successfully`);
 
@@ -639,8 +666,16 @@ export async function installArk(
       }
     }
 
-    // Install selected services
-    for (const serviceName of selectedComponents) {
+    // Install selected services, dependencies first: `mandatory` only forces
+    // a service into `selectedComponents`, it says nothing about install
+    // order, so a `requires` dependency (e.g. ark-broker for ark-tenant) must
+    // still be resolved here even though every mandatory name is present.
+    const orderedComponents = resolveServiceOrder(
+      selectedComponents,
+      arkServices,
+      false
+    );
+    for (const serviceName of orderedComponents) {
       const service = Object.values(arkServices).find(
         (s) => s.helmReleaseName === serviceName
       );
@@ -710,7 +745,9 @@ export async function installArk(
       }
     }
 
-    // Install all services
+    // Install all services. Every service is selected here, so alphabetical
+    // order happens to put ark-broker before ark-tenant today — resolve
+    // `requires` explicitly anyway rather than depend on that coincidence.
     const services = getInstallableServices(backend);
     const sortedServices = Object.values(services).sort((a, b) => {
       // Ensure ark-controller is always first
@@ -718,7 +755,15 @@ export async function installArk(
       if (b.name === 'ark-controller') return 1;
       return a.name.localeCompare(b.name);
     });
-    for (const service of sortedServices) {
+    const orderedNames = resolveServiceOrder(
+      sortedServices.map((s) => s.name),
+      services,
+      false
+    );
+    const orderedServices = orderedNames
+      .map((name) => findService(services, name))
+      .filter((s): s is ArkService => Boolean(s));
+    for (const service of orderedServices) {
       output.info(`installing ${service.name}...`);
 
       try {
