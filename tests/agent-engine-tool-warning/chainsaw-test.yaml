@@ -1,0 +1,143 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-engine-tool-warning
+spec:
+  description: Test that attaching a non-MCP tool to an agent that runs on a named ExecutionEngine generates a warning, since the engine only ever receives mcp tools
+  steps:
+  - name: create-http-tool
+    try:
+    - apply:
+        file: manifests/a01-weather-tool.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: get-coordinates
+
+  - name: engine-agent-with-http-tool-warns
+    try:
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: engine-agent-http-tool
+          spec:
+            prompt: "You are a test agent"
+            executionEngine:
+              name: mock-engine
+            tools:
+            - type: http
+              name: get-coordinates
+          EOF
+          )
+          echo "$OUTPUT"
+
+          for EXPECTED in "engine-agent-http-tool" "mock-engine" "get-coordinates (http)" "only mcp tools"; do
+            if echo "$OUTPUT" | grep -qF "$EXPECTED"; then
+              echo "✓ Warning contains '$EXPECTED'"
+            else
+              echo "✗ Warning missing '$EXPECTED'"
+              exit 1
+            fi
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: engine-agent-http-tool
+
+  - name: engine-agent-with-deprecated-custom-tool-warns
+    try:
+    # Every tool the dashboard attaches is written as type 'custom', which does
+    # not say what the tool is - the Tool CRD decides. This is the path a
+    # dashboard-created agent actually takes.
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: engine-agent-custom-tool
+          spec:
+            prompt: "You are a test agent"
+            executionEngine:
+              name: mock-engine
+            tools:
+            - type: custom
+              name: get-coordinates
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -qF "get-coordinates (http)"; then
+            echo "✓ Warning resolved the real type behind 'custom'"
+          else
+            echo "✗ Warning did not resolve the real type behind 'custom'"
+            exit 1
+          fi
+
+  - name: engine-agent-with-mcp-tool-does-not-warn
+    try:
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: engine-agent-mcp-tool
+          spec:
+            prompt: "You are a test agent"
+            executionEngine:
+              name: mock-engine
+            tools:
+            - type: mcp
+              name: some-mcp-tool
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -qF "only mcp tools"; then
+            echo "✗ Unexpected warning for an mcp tool on an engine-backed agent"
+            exit 1
+          fi
+          echo "✓ No warning for an mcp tool"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: agent-without-engine-does-not-warn
+    try:
+    # No executionEngine means the default completions executor, which does
+    # invoke http tools - there is nothing to warn about.
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: local-agent-http-tool
+          spec:
+            prompt: "You are a test agent"
+            tools:
+            - type: http
+              name: get-coordinates
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -qF "only mcp tools"; then
+            echo "✗ Unexpected warning for an agent with no execution engine"
+            exit 1
+          fi
+          echo "✓ No warning without an execution engine"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
