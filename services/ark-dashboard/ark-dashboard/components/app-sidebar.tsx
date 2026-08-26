@@ -89,6 +89,7 @@ interface CollapsibleSectionProps {
   icon: React.ReactNode;
   label: string;
   isActive: boolean;
+  activeKey: string;
   sidebarState: 'expanded' | 'collapsed';
   onExpand: () => void;
   onNavigate: (key: string) => void;
@@ -103,6 +104,7 @@ function CollapsibleSection({
   icon,
   label,
   isActive,
+  activeKey,
   sidebarState,
   onExpand,
   onNavigate,
@@ -144,6 +146,7 @@ function CollapsibleSection({
           <SidebarMenuItem key={item.key}>
             <SidebarMenuButton
               onClick={() => isNamespaceResolved && onNavigate(item.key)}
+              isActive={item.key === activeKey}
               disabled={!isNamespaceResolved || loading}>
               <span>{item.title}</span>
             </SidebarMenuButton>
@@ -325,6 +328,7 @@ export function AppSidebar() {
                 icon={<SmartToy />}
                 label="Agent builder"
                 isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
+                activeKey={getCurrentSection()}
                 sidebarState={sidebarState}
                 onExpand={() => {
                   setSidebarOpen(true);
@@ -392,6 +396,7 @@ export function AppSidebar() {
                 icon={<Earthquake />}
                 label="Monitoring"
                 isActive={isAnySectionActive(MONITORING_SECTIONS)}
+                activeKey={getCurrentSection()}
                 sidebarState={sidebarState}
                 onExpand={() => {
                   setSidebarOpen(true);

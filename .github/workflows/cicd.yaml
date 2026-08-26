@@ -213,6 +213,14 @@ jobs:
   integration-test-postgresql:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # 16-alpine is the chart default; 15-alpine is the documented minimum —
+        # keep it in lockstep with minServerVersionNum in internal/storage/postgresql.
+        # Nothing else enforces the floor: testing only the current major is how
+        # unsupported constructs reached main unnoticed.
+        postgres-tag: [16-alpine, 15-alpine]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
@@ -231,6 +239,7 @@ jobs:
         run: |
           helm upgrade --install ark-storage-dev charts/ark-storage-dev \
             --namespace ark-system --create-namespace \
+            --set image.tag=${{ matrix.postgres-tag }} \
             --wait --timeout=120s
           kubectl -n ark-system wait --for=condition=ready \
             pod -l app=ark-storage-dev --timeout=120s
@@ -299,16 +308,21 @@ jobs:
           fi
           exit "$status"
 
+      # Coverage is identical across matrix legs; collect it once, from the
+      # first leg — no tag literal to keep in sync with the matrix.
       - name: Install gcov2lcov
+        if: strategy.job-index == 0
         run: go install github.com/jandelgado/gcov2lcov@latest
 
       - name: Generate LCOV from integration coverage
+        if: strategy.job-index == 0
         run: |
           mkdir -p ark/integration-tests
           cp ark/cover.out ark/integration-tests/
           cd ark && gcov2lcov -infile integration-tests/cover.out -outfile integration-tests/lcov.info
 
       - uses: ./.github/actions/collect-coverage
+        if: strategy.job-index == 0
         with:
           source-path: ark/integration-tests/
           artifact-folder: ark/integration-tests
@@ -318,7 +332,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: postgresql-integration-gotest-json
+          name: postgresql-integration-gotest-json-${{ matrix.postgres-tag }}
           path: |
             /tmp/gotest.json
             /tmp/gotest.stderr

@@ -146,25 +146,36 @@ async def init_k8s():
         async_config.load_incluster_config()
 
 
+def apply_impersonation_headers(api: ApiClient, impersonation: Optional['ImpersonationConfig']) -> ApiClient:
+    """Set the Impersonate-* default headers on an API client.
+
+    set_default_header stores headers in a plain dict, so groups must be
+    comma-joined here. impersonation_patch splits this back into one
+    Impersonate-Group header per group at the transport layer.
+    """
+    if impersonation:
+        api.set_default_header("Impersonate-User", impersonation.username)
+        if impersonation.groups:
+            api.set_default_header("Impersonate-Group", ",".join(impersonation.groups))
+    return api
+
+
 class SecretClient:
     """Kubernetes Secret management client."""
 
-    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None):
+    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None, default_headers: Optional[Dict[str, str]] = None):
         if namespace is None:
             namespace = get_context()["namespace"]
         self.namespace = namespace
         self.impersonation = impersonation
+        self.default_headers = default_headers
 
     def _get_api_client(self, api: ApiClient) -> ApiClient:
         """Configure API client with impersonation headers if needed."""
-        if self.impersonation:
-            api.set_default_header("Impersonate-User", self.impersonation.username)
-            if self.impersonation.groups:
-                # set_default_header stores headers in a plain dict, so groups must
-                # be comma-joined here. impersonation_patch splits this back into
-                # one Impersonate-Group header per group at the transport layer.
-                api.set_default_header("Impersonate-Group", ",".join(self.impersonation.groups))
-        return api
+        if self.default_headers:
+            for header_name, header_value in self.default_headers.items():
+                api.set_default_header(header_name, header_value)
+        return apply_impersonation_headers(api, self.impersonation)
 
     def validate_and_encode_token(self, string_data: dict) -> dict:
         """Validate token field. Kubernetes will handle base64 encoding via string_data."""
@@ -342,11 +353,7 @@ class ConfigurationClient:
 
     def _get_api_client(self, api: ApiClient) -> ApiClient:
         """Configure API client with impersonation headers if needed."""
-        if self.impersonation:
-            api.set_default_header("Impersonate-User", self.impersonation.username)
-            if self.impersonation.groups:
-                api.set_default_header("Impersonate-Group", ",".join(self.impersonation.groups))
-        return api
+        return apply_impersonation_headers(api, self.impersonation)
 
     @staticmethod
     def _to_configuration(config_map) -> Dict:
