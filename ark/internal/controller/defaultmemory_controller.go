@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,6 +27,20 @@ import (
 // backstop looks for. NewMemoryForQuery (executors/completions/memory.go)
 // hardcodes the same name when a Query has no spec.memory.
 const defaultMemoryName = "default"
+
+// brokerSettleDelay is how long a broker-presence ConfigMap must exist
+// before this backstop will create a Memory for it. The broker chart's own
+// memory.yaml renders a `Memory/default` manifest in the SAME helm install
+// that creates ark-config-broker/ark-config-streaming, applied a few
+// resources later in Helm's kind-sorted apply order; a Kubernetes Create is
+// exclusive, so reacting to the ConfigMap the instant it appears races that
+// install and — confirmed empirically against the Helm version this repo's
+// CI pins — reliably wins, which makes Helm's own Create fail with
+// "already exists" and the whole `helm install ark-broker` fails. Waiting
+// out a window far longer than any realistic helm install for this chart
+// lets that install finish and create its own Memory first; this backstop
+// then finds it already there and does nothing, exactly as intended.
+const brokerSettleDelay = 30 * time.Second
 
 // DefaultMemoryReconciler is the controller-side backstop for the #2731
 // invariant: every namespace with a broker has a `default` Memory pointing
@@ -96,6 +111,10 @@ func (r *DefaultMemoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	if !apierrors.IsNotFound(getErr) {
 		return ctrl.Result{}, getErr
+	}
+
+	if age := time.Since(cm.CreationTimestamp.Time); age < brokerSettleDelay {
+		return ctrl.Result{RequeueAfter: brokerSettleDelay - age}, nil
 	}
 
 	serviceNamespace := req.Namespace
