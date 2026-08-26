@@ -93,17 +93,27 @@ export const exportService = {
   async fetchAllResources(namespace: string): Promise<ResourceExportData> {
     const params = { namespace };
     const results = await Promise.allSettled([
-      fetchAllPages<AgentResponse>('/api/v1/agents').then(items => ({ items })),
-      fetchAllPages<TeamResponse>('/api/v1/teams').then(items => ({ items })),
-      fetchAllPages<ModelResponse>('/api/v1/models').then(items => ({ items })),
-      apiClient.get<QueryListResponse>('/api/v1/queries'),
-      fetchAllPages<A2AServerResponse>('/api/v1/a2a-servers').then(items => ({
+      fetchAllPages<AgentResponse>('/api/v1/agents', params).then(items => ({
         items,
       })),
-      fetchAllPages<MCPServerResponse>('/api/v1/mcp-servers').then(items => ({
+      fetchAllPages<TeamResponse>('/api/v1/teams', params).then(items => ({
         items,
       })),
-      workflowTemplatesService.list(),
+      fetchAllPages<ModelResponse>('/api/v1/models', params).then(items => ({
+        items,
+      })),
+      apiClient.get<QueryListResponse>('/api/v1/queries', { params }),
+      fetchAllPages<A2AServerResponse>('/api/v1/a2a-servers', params).then(
+        items => ({
+          items,
+        }),
+      ),
+      fetchAllPages<MCPServerResponse>('/api/v1/mcp-servers', params).then(
+        items => ({
+          items,
+        }),
+      ),
+      workflowTemplatesService.list(namespace),
     ]);
 
     return processResourceResponses(results, true);

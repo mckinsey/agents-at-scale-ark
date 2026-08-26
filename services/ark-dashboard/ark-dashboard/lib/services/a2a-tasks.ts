@@ -24,10 +24,11 @@ export type A2ATask = A2ATaskDetailResponse & {
 };
 
 export const a2aTasksService = {
-  async getAll(): Promise<A2ATask[]> {
+  async getAll(namespace: string): Promise<A2ATask[]> {
     const items =
       await fetchAllPages<A2ATaskListResponse['items'][number]>(
         '/api/v1/a2a-tasks',
+        { namespace },
       );
 
     return items.map(item => ({

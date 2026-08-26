@@ -72,8 +72,10 @@ function buildToolSpec({
 // Service for tool operations
 export const toolsService = {
   // Get all tools in a namespace
-  async getAll(): Promise<Tool[]> {
-    const items = await fetchAllPages<Omit<Tool, 'id'>>(`/api/v1/tools`);
+  async getAll(namespace: string): Promise<Tool[]> {
+    const items = await fetchAllPages<Omit<Tool, 'id'>>(`/api/v1/tools`, {
+      namespace,
+    });
     return items.map(item => ({ ...item, id: item.name }));
   },
 

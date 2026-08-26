@@ -23,8 +23,10 @@ export type Model = ModelDetailResponse & { id: string };
 // CRUD Operations
 export const modelsService = {
   // Get all models
-  async getAll(): Promise<Model[]> {
-    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`);
+  async getAll(namespace: string): Promise<Model[]> {
+    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`, {
+      namespace,
+    });
 
     // Map the response items to include id for UI compatibility
     const models = await Promise.all(

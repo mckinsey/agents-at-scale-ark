@@ -43,8 +43,10 @@ export type Agent = AgentDetailResponseWithA2A & { id: string };
 // CRUD Operations
 export const agentsService = {
   // Get all agents
-  async getAll(): Promise<Agent[]> {
-    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`);
+  async getAll(namespace: string): Promise<Agent[]> {
+    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`, {
+      namespace,
+    });
 
     // Map the response items to include id for UI compatibility
     const agents = await Promise.all(

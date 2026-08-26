@@ -56,9 +56,10 @@ export interface A2AServerConfiguration {
 // Service for A2A server operations
 export const A2AServersService = {
   // Get all A2A servers in a namespace
-  async getAll(): Promise<A2AServer[]> {
+  async getAll(namespace: string): Promise<A2AServer[]> {
     const items = await fetchAllPages<Omit<A2AServer, 'id'>>(
       `/api/v1/a2a-servers`,
+      { namespace },
     );
     return items.map(item => ({
       ...item,

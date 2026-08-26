@@ -60,8 +60,11 @@ export type ValueFrom = {
 // Service for MCP server operations
 export const mcpServersService = {
   // Get all MCP servers in a namespace
-  async getAll(): Promise<MCPServer[]> {
-    const items = await fetchAllPages<MCPServerResponse>(`/api/v1/mcp-servers`);
+  async getAll(namespace: string): Promise<MCPServer[]> {
+    const items = await fetchAllPages<MCPServerResponse>(
+      `/api/v1/mcp-servers`,
+      { namespace },
+    );
 
     const mcpservers = await Promise.all(
       items.map(async item => {

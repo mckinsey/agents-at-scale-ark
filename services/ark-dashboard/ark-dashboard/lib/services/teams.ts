@@ -24,8 +24,10 @@ export type Team = TeamDetailResponse & { id: string };
 // CRUD Operations
 export const teamsService = {
   // Get all teams
-  async getAll(): Promise<Team[]> {
-    const items = await fetchAllPages<TeamResponse>(`/api/v1/teams`);
+  async getAll(namespace: string): Promise<Team[]> {
+    const items = await fetchAllPages<TeamResponse>(`/api/v1/teams`, {
+      namespace,
+    });
 
     // Map the response items to include id for UI compatibility
     const teams = await Promise.all(

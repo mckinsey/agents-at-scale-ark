@@ -41,6 +41,7 @@ import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Event, eventsService } from '@/lib/services/events';
 import { cn } from '@/lib/utils';
 import { formatAge } from '@/lib/utils/time';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 const COL = {
   added: 'w-[100px]',

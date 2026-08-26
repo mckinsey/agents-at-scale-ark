@@ -5,8 +5,6 @@ import type { PropsWithChildren } from 'react';
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient } from '@/lib/api/client';
-import { filesApiClient } from '@/lib/api/files-client';
 import { useGetContext } from '@/lib/services/namespaces-hooks';
 
 interface NamespaceContext {
@@ -117,49 +115,6 @@ function NamespaceProvider({ children }: PropsWithChildren) {
         // real context loads would toast twice for one event.
         { ...lastResolved, fallbackReason: null };
 
-  const resolution = useMemo<NamespaceResolution>(() => {
-    if (data) {
-      return {
-        namespace: data.namespace || FALLBACK_NAMESPACE,
-        isNamespaceResolved: true,
-        readOnlyMode: data.read_only_mode ?? false,
-        fallbackReason: null,
-      };
-    }
-
-    if (error) {
-      const fallbackNamespace = readFallbackNamespace(error);
-      return {
-        namespace: fallbackNamespace || FALLBACK_NAMESPACE,
-        isNamespaceResolved: true,
-        readOnlyMode: true,
-        fallbackReason: fallbackNamespace ? 'unreachable' : 'unavailable',
-      };
-    }
-
-    return {
-      namespace: '',
-      isNamespaceResolved: false,
-      readOnlyMode: true,
-      fallbackReason: null,
-    };
-  }, [data, error]);
-
-  const { namespace, isNamespaceResolved, readOnlyMode, fallbackReason } =
-    resolution;
-
-  // Keep the URL agreeing with the namespace actually in use, so a refresh, a
-  // bookmark, or a shared link resolves to the same namespace.
-  //
-  // The replacement URL is query-only and relative on purpose. globalThis.history
-  // is the native History API, so it does not apply the configured base path
-  // the way next/link and the router do, and usePathname() returns the
-  // base-path-stripped value. Building `${pathname}?${params}` would therefore
-  // drop the prefix under ARK_DASHBOARD_BASE_PATH. A bare `?...` is resolved by
-  // the browser against the current URL, keeping the prefix intact.
-  //
-  // Server Components do not observe replaceState updates, so nothing rendered
-  // on the server may read `namespace` from searchParams.
   useEffect(() => {
     if (fromContextQuery.isNamespaceResolved) {
       lastResolvedRef.current = fromContextQuery;
@@ -168,14 +123,6 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   const { namespace, isNamespaceResolved, readOnlyMode, fallbackReason } =
     namespaceState;
-
-  useEffect(() => {
-    if (!isNamespaceResolved) {
-      return;
-    }
-    apiClient.setDefaultParam('namespace', namespace);
-    filesApiClient.setDefaultParam('namespace', namespace);
-  }, [isNamespaceResolved, namespace]);
 
   // Keep the URL agreeing with the namespace actually in use, so a refresh, a
   // bookmark, or a shared link resolves to the same namespace.

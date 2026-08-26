@@ -56,7 +56,9 @@ export const memoryService = {
   // Get all memory resources in a namespace
   async getMemoryResources(namespace: string): Promise<MemoryResource[]> {
     try {
-      return await fetchAllPages<MemoryResource>(`/api/v1/memories`);
+      return await fetchAllPages<MemoryResource>(`/api/v1/memories`, {
+        namespace,
+      });
     } catch (error) {
       console.error('Failed to fetch memory resources:', error);
       return [];

@@ -43,15 +43,17 @@ describe('eventsService', () => {
     it('defaults to page 1 when called without filters', async () => {
       const get = mockGet({ items: [], total: 0 });
 
-      await eventsService.getAll();
+      await eventsService.getAll('default');
 
-      expect(get).toHaveBeenCalledWith('/api/v1/events?page=1');
+      expect(get).toHaveBeenCalledWith('/api/v1/events?page=1', {
+        params: { namespace: 'default' },
+      });
     });
 
     it('builds the query string from all supported filters', async () => {
       const get = mockGet({ items: [], total: 0 });
 
-      await eventsService.getAll({
+      await eventsService.getAll('default', {
         type: 'Warning',
         kind: 'Agent',
         name: 'sample-agent',
@@ -61,13 +63,14 @@ describe('eventsService', () => {
 
       expect(get).toHaveBeenCalledWith(
         '/api/v1/events?type=Warning&kind=Agent&name=sample-agent&limit=25&page=2',
+        { params: { namespace: 'default' } },
       );
     });
 
     it('maps the snake_case API response onto the Event interface', async () => {
       mockGet({ items: [apiEvent], total: 1 });
 
-      const result = await eventsService.getAll();
+      const result = await eventsService.getAll('default');
 
       expect(result).toEqual({
         items: [
@@ -98,7 +101,7 @@ describe('eventsService', () => {
     it('falls back to defaults for missing optional fields', async () => {
       mockGet({ items: [{ name: 'partial' }], total: 1 });
 
-      const [event] = (await eventsService.getAll()).items;
+      const [event] = (await eventsService.getAll('default')).items;
 
       expect(event).toMatchObject({
         id: 'partial',
@@ -114,7 +117,7 @@ describe('eventsService', () => {
     it('returns an empty result when the response has no items', async () => {
       mockGet(null);
 
-      await expect(eventsService.getAll()).resolves.toEqual({
+      await expect(eventsService.getAll('default')).resolves.toEqual({
         items: [],
         total: 0,
       });
@@ -123,7 +126,7 @@ describe('eventsService', () => {
     it('derives the total from the page size when the API omits it', async () => {
       mockGet({ items: [apiEvent, apiEvent] });
 
-      const result = await eventsService.getAll({ limit: 2, page: 3 });
+      const result = await eventsService.getAll('default', { limit: 2, page: 3 });
 
       expect(result.total).toBe(6);
     });
@@ -131,7 +134,7 @@ describe('eventsService', () => {
     it('falls back to the item count when there is no pagination context', async () => {
       mockGet({ items: [apiEvent] });
 
-      const result = await eventsService.getAll({ limit: 10 });
+      const result = await eventsService.getAll('default', { limit: 10 });
 
       expect(result.total).toBe(1);
     });
@@ -139,7 +142,7 @@ describe('eventsService', () => {
     it('propagates API failures instead of swallowing them', async () => {
       vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Network down'));
 
-      await expect(eventsService.getAll()).rejects.toThrow('Network down');
+      await expect(eventsService.getAll('default')).rejects.toThrow('Network down');
     });
   });
 
@@ -147,16 +150,18 @@ describe('eventsService', () => {
     it('fetches a single event by name and maps it', async () => {
       const get = mockGet(apiEvent);
 
-      const result = await eventsService.get('agent-created');
+      const result = await eventsService.get('default', 'agent-created');
 
-      expect(get).toHaveBeenCalledWith('/api/v1/events/agent-created');
+      expect(get).toHaveBeenCalledWith('/api/v1/events/agent-created', {
+        params: { namespace: 'default' },
+      });
       expect(result.involvedObjectName).toBe('sample-agent');
     });
 
     it('rethrows when the request fails', async () => {
       vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Not found'));
 
-      await expect(eventsService.get('missing')).rejects.toThrow('Not found');
+      await expect(eventsService.get('default', 'missing')).rejects.toThrow('Not found');
     });
   });
 
@@ -176,7 +181,7 @@ describe('eventsService', () => {
         total: 3,
       });
 
-      await expect(eventsService.getAllFilterOptions()).resolves.toEqual({
+      await expect(eventsService.getAllFilterOptions('default')).resolves.toEqual({
         types: ['Normal', 'Warning'],
         kinds: ['Agent', 'Query'],
         names: ['a-query', 'sample-agent'],
@@ -186,15 +191,17 @@ describe('eventsService', () => {
     it('requests a large page so filters cover more events', async () => {
       const get = mockGet({ items: [], total: 0 });
 
-      await eventsService.getAllFilterOptions();
+      await eventsService.getAllFilterOptions('default');
 
-      expect(get).toHaveBeenCalledWith('/api/v1/events?limit=200&page=1');
+      expect(get).toHaveBeenCalledWith('/api/v1/events?limit=200&page=1', {
+        params: { namespace: 'default' },
+      });
     });
 
     it('returns empty options when the underlying fetch fails', async () => {
       vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Network down'));
 
-      await expect(eventsService.getAllFilterOptions()).resolves.toEqual({
+      await expect(eventsService.getAllFilterOptions('default')).resolves.toEqual({
         types: [],
         kinds: [],
         names: [],

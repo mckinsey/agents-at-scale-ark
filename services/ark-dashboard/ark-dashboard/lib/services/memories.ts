@@ -23,8 +23,10 @@ export type Memory = MemoryDetailResponse & { id: string };
 // CRUD Operations
 export const memoriesService = {
   // Get all memories
-  async getAll(): Promise<Memory[]> {
-    const items = await fetchAllPages<MemoryResponse>(`/api/v1/memories`);
+  async getAll(namespace: string): Promise<Memory[]> {
+    const items = await fetchAllPages<MemoryResponse>(`/api/v1/memories`, {
+      namespace,
+    });
 
     // Map the response items to include id for UI compatibility
     const memories = await Promise.all(

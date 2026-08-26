@@ -167,7 +167,9 @@ export const eventsService = {
 
     logApiRequest(effectiveFilters, params, url);
 
-    const response = await apiClient.get<EventListResponse>(url);
+    const response = await apiClient.get<EventListResponse>(url, {
+      params: { namespace },
+    });
 
     logApiResponse(url, response);
 
@@ -204,8 +206,8 @@ export const eventsService = {
   },
 
   // Helper to fetch events for filter population
-  async _getEventsForFilters(): Promise<Event[]> {
-    const result = await this.getAll({ limit: 200 });
+  async _getEventsForFilters(namespace: string): Promise<Event[]> {
+    const result = await this.getAll(namespace, { limit: 200 });
     return result.items;
   },
 

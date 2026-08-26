@@ -225,7 +225,11 @@ export function useAgentForm({
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
           };
 
-          const updated = await agentsService.update(agent.name, updateData);
+          const updated = await agentsService.update(
+            namespace,
+            agent.name,
+            updateData,
+          );
           if (!updated) {
             toast.error('Unable to update agent', {
               description: 'Agent not found',
