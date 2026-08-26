@@ -135,6 +135,7 @@ const defaultArkServices: ServiceCollection = {
     installArgs: [],
     // Without a broker, a tenant loses conversation history (issue #2642).
     requires: ['ark-broker'],
+    dependencyOverrideArgs: ['--set', 'memory.requireBroker=false'],
   },
 
   'ark-api': {

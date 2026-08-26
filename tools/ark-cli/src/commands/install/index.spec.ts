@@ -1673,6 +1673,176 @@ describe('install command', () => {
       );
       expect(helmInstallCalls).toHaveLength(2);
     });
+
+    it('does not warn on --no-deps when the requested service has no dependency to skip', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-broker', '--no-deps']);
+
+      expect(mockOutput.warning).not.toHaveBeenCalled();
+    });
+
+    it('passes the dependency override args to helm when --no-deps skips a requires', async () => {
+      const tenantWithOverride = {
+        ...tenantService,
+        dependencyOverrideArgs: ['--set', 'memory.requireBroker=false'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantWithOverride,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-tenant', '--no-deps']);
+
+      const tenantInstallCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('ark-tenant')
+      );
+      expect(tenantInstallCall).toBeDefined();
+      expect(tenantInstallCall![1]).toEqual(
+        expect.arrayContaining(['--set', 'memory.requireBroker=false'])
+      );
+    });
+
+    it('skips (with a warning) a dependency that is not installable, without failing the install', async () => {
+      const tenantWithMissingDep = {
+        ...tenantService,
+        requires: ['missing-dep'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-tenant': tenantWithMissingDep,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-tenant']);
+
+      expect(mockOutput.warning).toHaveBeenCalledWith(
+        expect.stringContaining('missing-dep')
+      );
+      expect(mockOutput.error).not.toHaveBeenCalledWith(
+        "service 'missing-dep' not found"
+      );
+      expect(mockOutput.success).toHaveBeenCalledWith(
+        'ark-tenant installed successfully'
+      );
+    });
+  });
+
+  describe('requires ordering outside the named-service path', () => {
+    it('installs a required dependency before the mandatory service that needs it in interactive mode', async () => {
+      Object.assign(mockArkServices, {
+        'ark-broker': {
+          name: 'ark-broker',
+          helmReleaseName: 'ark-broker',
+          chartPath: './charts/ark-broker',
+          category: 'service',
+          description: 'Broker',
+          enabled: true,
+          mandatory: true,
+        },
+        'ark-tenant': {
+          name: 'ark-tenant',
+          helmReleaseName: 'ark-tenant',
+          chartPath: './charts/ark-tenant',
+          category: 'core',
+          description: 'Tenant',
+          enabled: true,
+          mandatory: true,
+          requires: ['ark-broker'],
+        },
+      });
+      Object.assign(mockArkDependencies, {
+        'cert-manager-repo': {
+          name: 'cert-manager-repo',
+          command: 'helm',
+          args: ['repo', 'add', 'jetstack', 'https://charts.jetstack.io'],
+          description: 'Add Jetstack Helm repository',
+        },
+        'helm-repo-update': {
+          name: 'helm-repo-update',
+          command: 'helm',
+          args: ['repo', 'update'],
+          description: 'Update Helm repositories',
+        },
+        'cert-manager': {
+          name: 'cert-manager',
+          command: 'helm',
+          args: ['upgrade', '--install', 'cert-manager', 'jetstack/cert-manager'],
+          description: 'Certificate management',
+        },
+        'gateway-api-crds': {
+          name: 'gateway-api-crds',
+          command: 'kubectl',
+          args: ['apply', '-f', 'https://example.com/gateway-api.yaml'],
+          description: 'Gateway API CRDs',
+        },
+      });
+      mockGetInstallableServices.mockReturnValue(mockArkServices);
+      mockPrompt.mockResolvedValue({components: []});
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+      const brokerIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('ark-broker')
+      );
+      const tenantIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('ark-tenant')
+      );
+      expect(brokerIndex).toBeGreaterThanOrEqual(0);
+      expect(tenantIndex).toBeGreaterThan(brokerIndex);
+    });
+
+    it('installs a required dependency before its dependent in -y mode even against alphabetical order', async () => {
+      // 'graph-a' requires 'graph-z' — alphabetical order alone would install
+      // the dependent first, which is exactly the bug this test guards against.
+      const mockServices = {
+        'graph-a': {
+          name: 'graph-a',
+          helmReleaseName: 'graph-a',
+          chartPath: './charts/graph-a',
+          category: 'service',
+          requires: ['graph-z'],
+        },
+        'graph-z': {
+          name: 'graph-z',
+          helmReleaseName: 'graph-z',
+          chartPath: './charts/graph-z',
+          category: 'service',
+        },
+      };
+      mockGetInstallableServices.mockReturnValue(mockServices);
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', '-y']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+      const zIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('graph-z')
+      );
+      const aIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('graph-a')
+      );
+      expect(zIndex).toBeGreaterThanOrEqual(0);
+      expect(aIndex).toBeGreaterThan(zIndex);
+    });
   });
 
   describe('version validation', () => {
