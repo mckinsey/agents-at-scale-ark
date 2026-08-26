@@ -344,3 +344,26 @@ describe('InMemoryStream — compact-on-load', () => {
     expect(statSync(path).size).toBeLessThan(bigSize);
   });
 });
+
+describe('InMemoryStream — close stops the sweep timer', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('stops age-based eviction after close()', async () => {
+    jest.useFakeTimers();
+    const stream = new InMemoryStream<string>(silentLogger, 'test', {
+      ttlSeconds: 1,
+    });
+    await stream.init();
+
+    await stream.append('a');
+    jest.advanceTimersByTime(1500);
+    expect(stream.cachedItemCount()).toBe(0);
+
+    await stream.append('b');
+    stream.close();
+    jest.advanceTimersByTime(5000);
+    expect(stream.cachedItemCount()).toBe(1);
+  });
+});
