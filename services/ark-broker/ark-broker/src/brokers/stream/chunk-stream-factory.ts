@@ -20,8 +20,7 @@ export function createChunkStream(
   }
   return new InMemoryChunkStream(logger.child({broker: 'chunks'}), {
     path: config.persistence.streamFilePath,
-    maxItems: config.limits.maxChunks,
-    maxBytes: config.limits.streamMaxBytes,
+    maxBytes: config.limits.chunkMaxBytes,
     ttlSeconds: config.limits.chunkTtlSeconds,
   });
 }

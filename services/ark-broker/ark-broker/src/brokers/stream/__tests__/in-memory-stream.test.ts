@@ -237,38 +237,6 @@ describe('InMemoryStream — persistence', () => {
   });
 });
 
-describe('InMemoryStream — maxItems eviction', () => {
-  it('retains only the most recent maxItems items', async () => {
-    const stream = new InMemoryStream<string>(silentLogger, 'test', {
-      maxItems: 3,
-    });
-
-    await stream.append('a');
-    await stream.append('b');
-    await stream.append('c');
-    await stream.append('d');
-
-    const all = await stream.all();
-    expect(all).toHaveLength(3);
-    expect(all.map((i) => i.data)).toEqual(['b', 'c', 'd']);
-  });
-
-  it('subscriber still fires for items that get evicted', async () => {
-    const stream = new InMemoryStream<string>(silentLogger, 'test', {
-      maxItems: 2,
-    });
-    const received: string[] = [];
-    stream.subscribe((item) => received.push(item.data as string));
-
-    await stream.append('a');
-    await stream.append('b');
-    await stream.append('c');
-
-    expect(received).toEqual(['a', 'b', 'c']);
-    expect((await stream.all()).map((i) => i.data)).toEqual(['b', 'c']);
-  });
-});
-
 describe('InMemoryStream — TTL eviction', () => {
   it('evicts items past their ttl on maintain, regardless of completion', async () => {
     const stream = new InMemoryStream<string>(silentLogger, 'test', {

@@ -73,8 +73,7 @@ export function buildApp(deps: {
   const chunks = new CompletionChunkBroker(chunkStream);
   const traces = new TraceBroker(logger.child({broker: 'traces'}), {
     path: config.persistence.traceFilePath,
-    maxItems: config.limits.maxSpans,
-    maxBytes: config.limits.streamMaxBytes,
+    maxBytes: config.limits.traceMaxBytes,
   });
   const events = new EventBroker(eventStream);
   const sessions = new SessionsBroker(sessionsStorage);

@@ -22,8 +22,7 @@ export function createEventStream(
     'Event',
     {
       path: config.persistence.eventFilePath,
-      maxItems: config.limits.maxEvents,
-      maxBytes: config.limits.streamMaxBytes,
+      maxBytes: config.limits.eventMaxBytes,
     }
   );
 }

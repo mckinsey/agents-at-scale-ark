@@ -19,7 +19,6 @@ export function createMessageStream(
   }
   return new InMemoryMessageStream(logger.child({broker: 'memory'}), 'Memory', {
     path: config.persistence.memoryFilePath,
-    maxItems: config.limits.maxMessages,
-    maxBytes: config.limits.streamMaxBytes,
+    maxBytes: config.limits.messageMaxBytes,
   });
 }

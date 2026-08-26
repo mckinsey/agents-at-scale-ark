@@ -14,11 +14,10 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       requestTimeoutMs: parsed.REQUEST_TIMEOUT_MS,
     }),
     limits: Object.freeze({
-      maxMessages: parsed.MAX_MESSAGES,
-      maxChunks: parsed.MAX_CHUNKS,
-      maxSpans: parsed.MAX_SPANS,
-      maxEvents: parsed.MAX_EVENTS,
-      streamMaxBytes: parsed.STREAM_MAX_BYTES,
+      messageMaxBytes: parsed.MESSAGE_MAX_BYTES,
+      eventMaxBytes: parsed.EVENT_MAX_BYTES,
+      chunkMaxBytes: parsed.CHUNK_MAX_BYTES,
+      traceMaxBytes: parsed.TRACE_MAX_BYTES,
       chunkTtlSeconds,
     }),
     persistence: Object.freeze({

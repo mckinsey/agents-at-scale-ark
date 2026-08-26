@@ -11,13 +11,11 @@ import type {Stream, Predicate} from './stream.js';
 
 const MAX_SWEEP_INTERVAL_MS = 60_000;
 
-// The store is bounded primarily by bytes and by age (TTL); an item-count cap
-// is optional and secondary, since a count cap does not bound byte size.
+// The store is bounded by bytes and by age (TTL).
 export interface InMemoryStreamOptions {
   path?: string;
   maxBytes?: number;
   ttlSeconds?: number;
-  maxItems?: number;
 }
 
 export class InMemoryStream<T> implements Stream<T> {
@@ -25,7 +23,6 @@ export class InMemoryStream<T> implements Stream<T> {
   private nextSequence = 1;
   private readonly maxBytes?: number;
   private readonly ttlMs?: number;
-  private readonly maxItems?: number;
   private readonly sizes = new Map<number, number>();
   private sweepTimer?: ReturnType<typeof setInterval>;
   private fileStore: JsonFileStore<BrokerItem<T>>;
@@ -37,17 +34,11 @@ export class InMemoryStream<T> implements Stream<T> {
     opts: InMemoryStreamOptions = {}
   ) {
     this.maxBytes = opts.maxBytes;
-    this.maxItems = opts.maxItems;
     this.ttlMs =
       opts.ttlSeconds && opts.ttlSeconds > 0
         ? opts.ttlSeconds * 1000
         : undefined;
-    this.fileStore = new JsonFileStore<BrokerItem<T>>(
-      logger,
-      name,
-      opts.path,
-      opts.maxItems
-    );
+    this.fileStore = new JsonFileStore<BrokerItem<T>>(logger, name, opts.path);
   }
 
   // Load persisted items in memory bounded by maxBytes, then re-compact the
@@ -55,10 +46,7 @@ export class InMemoryStream<T> implements Stream<T> {
   // (not in the constructor) keeps it async so an oversized file streams
   // instead of being read whole. Idempotent.
   async init(): Promise<void> {
-    const loaded = await this.fileStore.loadBounded({
-      maxBytes: this.maxBytes,
-      maxItems: this.maxItems,
-    });
+    const loaded = await this.fileStore.loadBounded({maxBytes: this.maxBytes});
     if (loaded) {
       for (const raw of loaded.items) {
         if (typeof raw?.sequenceNumber !== 'number') continue;
@@ -87,9 +75,9 @@ export class InMemoryStream<T> implements Stream<T> {
     }
   }
 
-  // Hot path: no serialization. Stamp expiry, push, enforce only the cheap
-  // count cap. Byte enforcement is deferred to maintain() so the POST /events
-  // path (which holds the controller emitter's semaphore) stays serialize-free.
+  // Hot path: no serialization and no eviction. Stamp expiry and push; byte and
+  // age enforcement are deferred to maintain() so the POST /events path (which
+  // holds the controller emitter's semaphore) stays serialize-free.
   async append(data: T, ttlSeconds?: number): Promise<BrokerItem<T>> {
     const ttlMs = ttlSeconds && ttlSeconds > 0 ? ttlSeconds * 1000 : this.ttlMs;
     const item: BrokerItem<T> = {
@@ -99,7 +87,6 @@ export class InMemoryStream<T> implements Stream<T> {
       data,
     };
     this.items.push(item);
-    this.enforceCountCap();
     this.eventEmitter.emit('item', item);
     return item;
   }
@@ -193,16 +180,6 @@ export class InMemoryStream<T> implements Stream<T> {
 
   private isExpired(item: BrokerItem<T>, now: number): boolean {
     return item.expiresAt !== undefined && item.expiresAt <= now;
-  }
-
-  private enforceCountCap(): void {
-    while (
-      this.maxItems !== undefined &&
-      this.maxItems > 0 &&
-      this.items.length > this.maxItems
-    ) {
-      this.sizes.delete(this.items.shift()!.sequenceNumber);
-    }
   }
 
   private evictExpired(now: number): void {
