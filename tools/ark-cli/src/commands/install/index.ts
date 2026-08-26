@@ -390,7 +390,7 @@ export async function installArk(
       ).filter((name) => !serviceNames.includes(name));
       if (skippedDeps.length > 0) {
         output.warning(
-          `--no-deps: not installing ${skippedDeps.join(', ')} automatically; a tenant without a broker loses conversation history`
+          `--no-deps: not installing ${skippedDeps.join(', ')} automatically; the requested service(s) may not behave as expected without them`
         );
       }
     } else {
@@ -465,6 +465,17 @@ export async function installArk(
         process.exit(1);
       }
 
+      // Apply the override only for a service actually missing one of its
+      // `requires` from this install — whether because --no-deps skipped it
+      // globally, or because a specific dependency wasn't installable (e.g.
+      // disabled in .arkrc.yaml) — not just because --no-deps was passed at
+      // all, which would wrongly override a service whose dependency IS
+      // being installed alongside it (e.g. `ark install ark-broker
+      // ark-tenant --no-deps`).
+      const missingRequires = (service.requires || []).some(
+        (dep) => !resolvedServiceNames.includes(dep)
+      );
+
       output.info(`installing ${service.name}...`);
       try {
         await installService(
@@ -474,7 +485,7 @@ export async function installArk(
           options.marketplaceVersion,
           [
             ...backendInstallArgs(service, backend, postgresValues),
-            ...(skipDeps ? service.dependencyOverrideArgs || [] : []),
+            ...(missingRequires ? service.dependencyOverrideArgs || [] : []),
           ]
         );
         output.success(`${service.name} installed successfully`);
@@ -676,9 +687,7 @@ export async function installArk(
       false
     );
     for (const serviceName of orderedComponents) {
-      const service = Object.values(arkServices).find(
-        (s) => s.helmReleaseName === serviceName
-      );
+      const service = findService(arkServices, serviceName);
       if (!service || !service.chartPath) {
         continue;
       }
