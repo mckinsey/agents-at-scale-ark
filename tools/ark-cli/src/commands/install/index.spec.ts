@@ -1843,6 +1843,38 @@ describe('install command', () => {
       expect(zIndex).toBeGreaterThanOrEqual(0);
       expect(aIndex).toBeGreaterThan(zIndex);
     });
+
+    it('applies the dependency override in -y mode when a requires is not installable', async () => {
+      // Mirrors a dependency disabled via .arkrc.yaml: getInstallableServices
+      // never returns it, so resolveServiceOrder drops it with a warning
+      // rather than installing it — the dependent still needs the override.
+      const mockServices = {
+        'graph-a': {
+          name: 'graph-a',
+          helmReleaseName: 'graph-a',
+          chartPath: './charts/graph-a',
+          category: 'service',
+          requires: ['graph-z'],
+          dependencyOverrideArgs: ['--set', 'requireGraphZ=false'],
+        },
+      };
+      mockGetInstallableServices.mockReturnValue(mockServices);
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', '-y']);
+
+      const aInstallCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('graph-a')
+      );
+      expect(aInstallCall).toBeDefined();
+      expect(aInstallCall![1]).toEqual(
+        expect.arrayContaining(['--set', 'requireGraphZ=false'])
+      );
+    });
   });
 
   describe('version validation', () => {

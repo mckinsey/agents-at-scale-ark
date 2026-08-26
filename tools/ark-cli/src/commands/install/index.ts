@@ -775,13 +775,24 @@ export async function installArk(
     for (const service of orderedServices) {
       output.info(`installing ${service.name}...`);
 
+      // A `requires` dependency disabled in .arkrc.yaml gets dropped (with a
+      // warning) by resolveServiceOrder above rather than installed — apply
+      // the same override as the named-service path so the dependent isn't
+      // then refused by its own chart-level guard.
+      const missingRequires = (service.requires || []).some(
+        (dep) => !orderedNames.includes(dep)
+      );
+
       try {
         await installService(
           service,
           options.verbose,
           options.arkVersion,
           options.marketplaceVersion,
-          backendInstallArgs(service, backend, postgresValues)
+          [
+            ...backendInstallArgs(service, backend, postgresValues),
+            ...(missingRequires ? service.dependencyOverrideArgs || [] : []),
+          ]
         );
         console.log(); // Add blank line after command output
       } catch (error) {
