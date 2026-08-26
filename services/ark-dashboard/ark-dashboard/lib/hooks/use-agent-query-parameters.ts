@@ -10,19 +10,9 @@ export type ApiQueryParameter = components['schemas']['QueryParameter'];
 
 type AgentDetail = components['schemas']['AgentDetailResponse'];
 
-// The built-in engine name, which the controller handles itself rather than
-// dispatching to an ExecutionEngine. Mirrors ExecutionEngineA2A in
-// ark/internal/a2a/a2a_types.go.
 const BUILT_IN_A2A_ENGINE = 'a2a';
 
-// The deprecated tool type that does not say what the tool is - the Tool CRD
-// decides. Every tool the agent form attaches is written as 'custom', so this
-// is the common case rather than a legacy edge.
-const DEPRECATED_TOOL_TYPE = 'custom';
-
-// Has no Tool CRD and no meaning outside the completions loop the engine
-// replaces. Mirrors resolveAgentToolType in ark/internal/validation/agent.go.
-const BUILT_IN_TOOL_TYPE = 'built-in';
+const UNRESOLVED_TOOL_TYPES = ['custom', 'built-in'];
 
 export interface ParameterRow {
   id: string;
@@ -57,14 +47,6 @@ function stripPrefix(name: string): string {
   return name.includes('/') ? name.split('/').pop() || name : name;
 }
 
-/**
- * An agent running on a named ExecutionEngine is handed MCP connection details
- * only — every other tool type is dropped when the engine request is built, so
- * the agent runs without them and answers that the tool does not exist. The
- * controller warns at admission time; this surfaces the same thing to anyone
- * who never sees a kubectl apply. Mirrors engineToolWarning in
- * ark/internal/validation/agent.go.
- */
 async function deriveEngineToolWarning(
   agent: AgentDetail | null,
 ): Promise<string | null> {
@@ -74,9 +56,8 @@ async function deriveEngineToolWarning(
   const tools = agent?.tools || [];
   if (tools.length === 0) return null;
 
-  // Only pay for the tool list when a 'custom' tool hides its real type.
   const needsToolTypes = tools.some(
-    tool => tool.type === DEPRECATED_TOOL_TYPE && tool.name,
+    tool => UNRESOLVED_TOOL_TYPES.includes(tool.type) && tool.name,
   );
   const toolTypesByName = new Map<string, string>();
   if (needsToolTypes) {
@@ -88,12 +69,9 @@ async function deriveEngineToolWarning(
 
   const dropped = tools
     .map(tool => {
-      if (tool.type === BUILT_IN_TOOL_TYPE) return null;
-      // A tool that cannot be resolved is left alone rather than guessed at.
-      const type =
-        tool.type === DEPRECATED_TOOL_TYPE
-          ? toolTypesByName.get(tool.name || '')
-          : tool.type;
+      const type = UNRESOLVED_TOOL_TYPES.includes(tool.type)
+        ? toolTypesByName.get(tool.name || '')
+        : tool.type;
       return type && type !== 'mcp' ? `${tool.name} (${type})` : null;
     })
     .filter((entry): entry is string => entry !== null);

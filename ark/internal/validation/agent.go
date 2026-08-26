@@ -34,11 +34,6 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 	return warnings, nil
 }
 
-// engineToolWarning reports the tools an ExecutionEngine will never receive. An
-// engine is handed MCP connection details only - every other tool type is
-// dropped when the request is built, so the agent runs without them and answers
-// that the tool does not exist. Warn rather than reject: the drop is
-// intentional and existing agents must keep applying.
 func (v *Validator) engineToolWarning(ctx context.Context, agent *arkv1alpha1.Agent) string {
 	if !arka2a.IsNamedEngine(agent.Spec.ExecutionEngine) {
 		return ""
@@ -65,18 +60,8 @@ func (v *Validator) engineToolWarning(ctx context.Context, agent *arkv1alpha1.Ag
 	)
 }
 
-// resolveAgentToolType returns the tool's real type, or "" for tools that are
-// exempt or cannot be resolved. The deprecated 'custom' type does not say what
-// the tool is, so the Tool CRD decides - and every tool the dashboard attaches
-// is written as 'custom', which is exactly the case worth warning about. A tool
-// that cannot be read is left alone: the agent controller already reports it as
-// ToolNotFound, and admission must not depend on apply order. 'built-in' has no
-// Tool CRD and no meaning outside the completions loop the engine replaces.
 func (v *Validator) resolveAgentToolType(ctx context.Context, namespace string, tool arkv1alpha1.AgentTool) string {
-	if tool.Type == AgentToolTypeBuiltIn {
-		return ""
-	}
-	if tool.Type != toolTypeCustom {
+	if tool.Type != toolTypeCustom && tool.Type != AgentToolTypeBuiltIn {
 		return tool.Type
 	}
 

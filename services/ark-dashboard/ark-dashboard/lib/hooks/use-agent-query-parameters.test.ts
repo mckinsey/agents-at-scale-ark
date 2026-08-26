@@ -28,9 +28,6 @@ function mockAgent(agent: AgentStub) {
   );
 }
 
-// The warning is derived in an async continuation, so a bare
-// `expect(...).toBeNull()` would pass on the initial state before the derive
-// lands. Drain the microtask queue so the negative cases mean something.
 async function warningFor(agent: AgentStub) {
   mockAgent(agent);
   const { result } = renderHook(() =>
@@ -77,8 +74,6 @@ describe('useAgentQueryParameters - engineToolWarning', () => {
   });
 
   it('resolves the deprecated custom type from the tool list', async () => {
-    // Every tool the agent form attaches is written as type 'custom', so this
-    // is the path a dashboard-created agent actually takes.
     mockToolTypes([
       { name: 'get-coordinates', type: 'http' },
       { name: 'echo', type: 'mcp' },
@@ -98,6 +93,17 @@ describe('useAgentQueryParameters - engineToolWarning', () => {
     expect(warning).not.toContain('echo');
   });
 
+  it('resolves a built-in tool through its Tool CRD type', async () => {
+    mockToolTypes([{ name: 'terminate', type: 'builtin' }]);
+
+    const result = await warningFor({
+      executionEngine: { name: 'mock-engine' },
+      tools: [{ type: 'built-in', name: 'terminate' }],
+    });
+
+    expect(result.current.engineToolWarning).toContain('terminate (builtin)');
+  });
+
   it('stays quiet when a custom tool cannot be resolved', async () => {
     mockToolTypes([]);
 
@@ -109,7 +115,7 @@ describe('useAgentQueryParameters - engineToolWarning', () => {
     expect(result.current.engineToolWarning).toBeNull();
   });
 
-  it('does not fetch the tool list when no tool type is custom', async () => {
+  it('does not fetch the tool list when every declared type names the tool', async () => {
     await warningFor({
       executionEngine: { name: 'mock-engine' },
       tools: [{ type: 'http', name: 'get-coordinates' }],
@@ -127,7 +133,7 @@ describe('useAgentQueryParameters - engineToolWarning', () => {
       },
     ],
     [
-      'the tool is built-in',
+      'a built-in tool cannot be resolved',
       {
         executionEngine: { name: 'mock-engine' },
         tools: [{ type: 'built-in', name: 'terminate' }],

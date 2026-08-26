@@ -56,9 +56,6 @@ spec:
 
   - name: engine-agent-with-deprecated-custom-tool-warns
     try:
-    # Every tool the dashboard attaches is written as type 'custom', which does
-    # not say what the tool is - the Tool CRD decides. This is the path a
-    # dashboard-created agent actually takes.
     - script:
         content: |
           OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
@@ -83,6 +80,41 @@ spec:
             echo "✗ Warning did not resolve the real type behind 'custom'"
             exit 1
           fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: engine-agent-with-built-in-tool-warns
+    try:
+    - apply:
+        file: manifests/a02-builtin-tool.yaml
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: engine-agent-builtin-tool
+          spec:
+            prompt: "You are a test agent"
+            executionEngine:
+              name: mock-engine
+            tools:
+            - type: built-in
+              name: terminate
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -qF "terminate (builtin)"; then
+            echo "✓ Warning resolved the real type behind 'built-in'"
+          else
+            echo "✗ Warning did not resolve the real type behind 'built-in'"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
   - name: engine-agent-with-mcp-tool-does-not-warn
     try:
@@ -115,8 +147,6 @@ spec:
 
   - name: agent-without-engine-does-not-warn
     try:
-    # No executionEngine means the default completions executor, which does
-    # invoke http tools - there is nothing to warn about.
     - script:
         content: |
           OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF

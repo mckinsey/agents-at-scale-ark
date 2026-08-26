@@ -211,6 +211,10 @@ func TestValidateAgentEngineToolWarning(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "mcp-tool", Namespace: "default"},
 		Spec:       arkv1alpha1.ToolSpec{Type: "mcp"},
 	})
+	lookup.addResource("Tool", "default", "terminate", &arkv1alpha1.Tool{
+		ObjectMeta: metav1.ObjectMeta{Name: "terminate", Namespace: "default"},
+		Spec:       arkv1alpha1.ToolSpec{Type: "builtin"},
+	})
 	v := NewValidator(lookup)
 	ctx := context.Background()
 
@@ -245,9 +249,16 @@ func TestValidateAgentEngineToolWarning(t *testing.T) {
 			tools:  []arkv1alpha1.AgentTool{{Type: "mcp", Name: "echo"}},
 		},
 		{
-			name:   "engine with built-in tool does not warn",
+			name:        "engine with built-in tool warns with the Tool CRD type",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: AgentToolTypeBuiltIn, Name: "terminate"}},
+			wantWarning: true,
+			wantContain: []string{"terminate (builtin)"},
+		},
+		{
+			name:   "engine with unresolvable built-in tool does not warn",
 			engine: engine("mock-engine"),
-			tools:  []arkv1alpha1.AgentTool{{Type: "built-in", Name: "terminate"}},
+			tools:  []arkv1alpha1.AgentTool{{Type: AgentToolTypeBuiltIn, Name: "noop"}},
 		},
 		{
 			name:        "engine with deprecated custom tool resolves the real type from the Tool CRD",

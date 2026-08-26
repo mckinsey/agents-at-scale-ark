@@ -9,10 +9,6 @@ interface ChatNoticeProps {
   readonly children: ReactNode;
 }
 
-/**
- * Non-blocking pill notice shown above the chat message list. Nothing modal and
- * nothing to dismiss - it states a fact about the target and gets out of the way.
- */
 export function ChatNotice({
   icon,
   iconClassName,

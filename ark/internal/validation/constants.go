@@ -23,8 +23,6 @@ const (
 	ToolTypeBuiltin = "builtin"
 )
 
-// AgentToolTypeBuiltIn is the agent-tool type for tools with no Tool CRD
-// (noop, terminate). Distinct from ToolTypeBuiltin, which is a Tool CRD type.
 const AgentToolTypeBuiltIn = "built-in"
 
 const (
