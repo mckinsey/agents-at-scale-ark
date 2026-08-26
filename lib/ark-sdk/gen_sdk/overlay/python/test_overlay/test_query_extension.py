@@ -15,9 +15,7 @@ from ark_sdk.extensions.query import (
     _resolve_value_source,
     _parse_go_duration_to_seconds,
     _resolve_from_query,
-    _build_mcp_servers,
 )
-from ark_sdk.extensions.query import logger as query_logger
 
 
 def _team(members=(), selector_agent=None):
@@ -882,11 +880,56 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         mock_with_client.return_value = mock_ctx
 
         ref = QueryRef(name="q1", namespace="default")
-        request = await resolve_query(ref, "hi")
+        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+            request = await resolve_query(ref, "hi")
 
         self.assertEqual(len(request.mcpServers), 1)
         self.assertEqual(request.mcpServers[0].name, "github-mcp")
         self.assertEqual(request.mcpServers[0].tools, ["search"])
+
+        # The dropped http tool must not disappear silently - the agent would
+        # otherwise just answer that the tool does not exist.
+        message = "\n".join(log.output)
+        self.assertIn("a1", message)
+        self.assertIn("weather-api (http)", message)
+        self.assertIn("only mcp tools", message)
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_no_drop_warning_when_all_tools_are_mcp(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [self._make_agent_tool("github-mcp-search")]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(return_value=self._make_tool_crd("mcp", "github-mcp", "search"))
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=self._make_mcp_server_crd("http://github:8080/mcp"))
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        with self.assertNoLogs("ark_sdk.extensions.query", level="WARNING"):
+            request = await resolve_query(ref, "hi")
+
+        self.assertEqual(len(request.mcpServers), 1)
 
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")
@@ -1051,63 +1094,6 @@ class TestResolveTtlFromQuery(unittest.IsolatedAsyncioTestCase):
         mock_ark, mock_query = self._make_mock_objects(None)
         request = await _resolve_from_query(mock_ark, mock_query, "default", "hello")
         self.assertIsNone(request.message_ttl_seconds)
-
-
-def _tool(tool_type, mcp=None):
-    return SimpleNamespace(spec=SimpleNamespace(type=tool_type, mcp=mcp))
-
-
-def _mcp_tool(server_name, tool_name):
-    return _tool(
-        "mcp",
-        SimpleNamespace(
-            mcp_server_ref=SimpleNamespace(name=server_name),
-            tool_name=tool_name,
-        ),
-    )
-
-
-class TestBuildMcpServersDropWarning(unittest.IsolatedAsyncioTestCase):
-    """Engines receive only mcp tools - the skip must not be silent."""
-
-    def _agent(self, *tool_names):
-        return SimpleNamespace(
-            metadata=SimpleNamespace(name="toolagent"),
-            spec=SimpleNamespace(tools=[SimpleNamespace(name=n) for n in tool_names]),
-        )
-
-    def _ark(self, tools):
-        ark = MagicMock()
-        ark.tools.a_get = AsyncMock(side_effect=lambda name, _ns: tools[name])
-        return ark
-
-    async def test_warns_naming_each_dropped_tool(self):
-        ark = self._ark({
-            "get-coordinates": _tool("http"),
-            "delegate": _tool("agent"),
-        })
-
-        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as logs:
-            servers = await _build_mcp_servers(ark, self._agent("get-coordinates", "delegate"), "default")
-
-        self.assertEqual(servers, [])
-        message = "\n".join(logs.output)
-        self.assertIn("toolagent", message)
-        self.assertIn("get-coordinates (http)", message)
-        self.assertIn("delegate (agent)", message)
-        self.assertIn("only mcp tools", message)
-
-    async def test_does_not_warn_when_every_tool_is_mcp(self):
-        ark = self._ark({"echo": _mcp_tool("mock-mcp", "echo")})
-
-        with patch(
-            "ark_sdk.extensions.query._resolve_mcp_server",
-            AsyncMock(return_value=None),
-        ):
-            with patch.object(query_logger, "warning") as warn:
-                await _build_mcp_servers(ark, self._agent("echo"), "default")
-
-        warn.assert_not_called()
 
 
 if __name__ == "__main__":

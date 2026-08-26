@@ -531,8 +531,9 @@ async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPSe
             logger.warning(f"Failed to resolve tool '{tool_name}': {e}")
 
     if dropped:
+        agent_name = agent.metadata.get("name", "unknown") if agent.metadata else "unknown"
         logger.warning(
-            f"Agent '{getattr(agent.metadata, 'name', '?')}' runs on an execution engine, which receives "
+            f"Agent '{agent_name}' runs on an execution engine, which receives "
             f"only mcp tools; these tools will not be available to the agent: {', '.join(dropped)}"
         )
 
