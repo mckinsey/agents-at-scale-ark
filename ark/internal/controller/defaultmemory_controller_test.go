@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,6 +74,35 @@ func TestDefaultMemoryReconciler_CreatesWhenAbsent(t *testing.T) {
 	assert.Equal(t, "ConfigMap", owner.Kind)
 	require.NotNil(t, owner.Controller)
 	assert.True(t, *owner.Controller)
+}
+
+func TestDefaultMemoryReconciler_DelaysCreationForFreshConfigMap(t *testing.T) {
+	cm := brokerConfigMap("ark-config-broker", "tenant-a", true)
+	cm.CreationTimestamp = metav1.Now()
+	c := fake.NewClientBuilder().WithScheme(defaultMemorySchemeWithCore()).WithObjects(cm).Build()
+	r := &DefaultMemoryReconciler{Client: c, Scheme: c.Scheme(), AutoProvision: true}
+
+	result, err := r.Reconcile(context.Background(), reconcileRequest("ark-config-broker", "tenant-a"))
+	require.NoError(t, err)
+	assert.Greater(t, result.RequeueAfter, time.Duration(0))
+	assert.LessOrEqual(t, result.RequeueAfter, brokerSettleDelay)
+
+	var list arkv1alpha1.MemoryList
+	require.NoError(t, c.List(context.Background(), &list))
+	assert.Empty(t, list.Items, "must not create while helm's own install could still be in flight")
+}
+
+func TestDefaultMemoryReconciler_CreatesOnceConfigMapHasSettled(t *testing.T) {
+	cm := brokerConfigMap("ark-config-broker", "tenant-a", true)
+	cm.CreationTimestamp = metav1.NewTime(time.Now().Add(-brokerSettleDelay - time.Minute))
+	c := fake.NewClientBuilder().WithScheme(defaultMemorySchemeWithCore()).WithObjects(cm).Build()
+	r := &DefaultMemoryReconciler{Client: c, Scheme: c.Scheme(), AutoProvision: true}
+
+	_, err := r.Reconcile(context.Background(), reconcileRequest("ark-config-broker", "tenant-a"))
+	require.NoError(t, err)
+
+	var mem arkv1alpha1.Memory
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: defaultMemoryName, Namespace: "tenant-a"}, &mem))
 }
 
 func TestDefaultMemoryReconciler_UsesStreamingConfigMapWhenBrokerAbsent(t *testing.T) {
