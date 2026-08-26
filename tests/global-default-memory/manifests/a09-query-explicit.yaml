@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-explicit-memory
+spec:
+  input: "an explicit memory must survive the webhook"
+  memory:
+    name: chosen-by-hand
+  target:
+    type: agent
+    name: placeholder-agent

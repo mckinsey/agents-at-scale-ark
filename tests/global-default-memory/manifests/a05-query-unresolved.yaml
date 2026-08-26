@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-unresolved-memory
+spec:
+  input: "the memory exists but never resolved an address"
+  target:
+    type: agent
+    name: placeholder-agent
