@@ -77,6 +77,18 @@ graph LR
 
 Without the RoleBinding, the API returns a 403 error when attempting to access another tenant's resources.
 
+## Namespace in the dashboard URL
+
+The dashboard keeps the active namespace in the URL. Open it without `?namespace=`, and the namespace it resolved to is added to the address bar once the page loads. The URL therefore always names the namespace on screen.
+
+This has three consequences:
+
+- **Refreshing and bookmarking keep the namespace.** Before, a reload fell back to the pod's namespace.
+- **Copying the URL shares the namespace.** Another user with the same access sees the same resources.
+- **An unreachable namespace is corrected.** Open a URL naming a namespace you cannot access and the dashboard reports it, switches to the namespace it can use, and replaces the value in the URL to match. A bookmark naming a namespace you have lost access to rewrites itself, so read the notification rather than the address bar to learn what changed.
+
+The namespace is added with a history replacement, so it creates no extra browser history entry and the back button is unaffected. Deployments served under a base path keep their prefix — see [Multi-tenant dashboard hosting](/operations-guide/multi-tenant-dashboard-hosting).
+
 ## Broker storage isolation
 
 The cross-tenant isolation above applies to Kubernetes resources and is enforced by RBAC. The broker's message storage is a separate concern. The broker is a per-tenant component — each tenant namespace runs its own broker — while only the controller is a cluster-wide singleton.
