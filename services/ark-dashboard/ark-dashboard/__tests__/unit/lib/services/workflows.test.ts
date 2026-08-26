@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   workflowsService,
   calculateDuration,
+  expandCompressedNodes,
   getRootNodeId,
   getAllNodesFlat,
   buildNodeHierarchy,
@@ -437,3 +438,142 @@ describe('workflow utility functions', () => {
   });
 });
 
+describe('expandCompressedNodes', () => {
+  async function gzipBase64(value: string): Promise<string> {
+    const bytes = new TextEncoder().encode(value);
+    const compressed = new ReadableStream<BufferSource>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    }).pipeThrough(new CompressionStream('gzip'));
+
+    const buffer = new Uint8Array(await new Response(compressed).arrayBuffer());
+    let binary = '';
+    for (const byte of buffer) {
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+  }
+
+  const nodes: Record<string, ArgoNodeStatus> = {
+    'wf-1': {
+      id: 'wf-1',
+      name: 'wf-1',
+      displayName: 'wf-1',
+      type: 'Steps',
+      phase: 'Succeeded',
+    } as ArgoNodeStatus,
+  };
+
+  it('should restore nodes from compressedNodes when nodes is absent', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: {
+        phase: 'Succeeded',
+        compressedNodes: await gzipBase64(JSON.stringify(nodes)),
+      },
+    } as unknown as ArgoWorkflow;
+
+    const result = await expandCompressedNodes(workflow);
+
+    expect(result.status?.nodes).toEqual(nodes);
+  });
+
+  it('should not mutate the original workflow', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: {
+        phase: 'Succeeded',
+        compressedNodes: await gzipBase64(JSON.stringify(nodes)),
+      },
+    } as unknown as ArgoWorkflow;
+
+    await expandCompressedNodes(workflow);
+
+    expect(workflow.status?.nodes).toBeUndefined();
+  });
+
+  it('should return the workflow unchanged when nodes are already present', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: { phase: 'Succeeded', nodes },
+    } as unknown as ArgoWorkflow;
+
+    const result = await expandCompressedNodes(workflow);
+
+    expect(result).toBe(workflow);
+  });
+
+  it('should return the workflow unchanged when there is nothing to decompress', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: { phase: 'Running' },
+    } as unknown as ArgoWorkflow;
+
+    const result = await expandCompressedNodes(workflow);
+
+    expect(result).toBe(workflow);
+  });
+
+  it('should return the workflow unchanged when compressedNodes is invalid', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: { phase: 'Succeeded', compressedNodes: 'not-gzip' },
+    } as unknown as ArgoWorkflow;
+
+    const result = await expandCompressedNodes(workflow);
+
+    expect(result).toBe(workflow);
+    expect(result.status?.nodes).toBeUndefined();
+    expect(consoleError).toHaveBeenCalled();
+
+    consoleError.mockRestore();
+  });
+
+  it('should decompress nodes returned by get', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: {
+        phase: 'Succeeded',
+        compressedNodes: await gzipBase64(JSON.stringify(nodes)),
+      },
+    } as unknown as ArgoWorkflow;
+
+    vi.mocked(apiClient.get).mockResolvedValue(workflow);
+
+    const result = await workflowsService.get('wf-1', 'default');
+
+    expect(result.status?.nodes).toEqual(nodes);
+  });
+
+  it('should decompress nodes for every workflow returned by list', async () => {
+    const compressedNodes = await gzipBase64(JSON.stringify(nodes));
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: { phase: 'Succeeded', compressedNodes },
+    } as unknown as ArgoWorkflow;
+
+    vi.mocked(apiClient.get).mockResolvedValue({
+      items: [workflow, workflow],
+    } as ArgoWorkflowList);
+
+    const result = await workflowsService.list('default');
+
+    expect(result).toHaveLength(2);
+    for (const item of result) {
+      expect(item.status?.nodes).toEqual(nodes);
+    }
+  });
+});

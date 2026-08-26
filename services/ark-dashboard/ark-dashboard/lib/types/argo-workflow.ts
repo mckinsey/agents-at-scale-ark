@@ -70,6 +70,7 @@ export interface ArgoWorkflowStatus {
   progress?: string;
   message?: string;
   nodes?: Record<string, ArgoNodeStatus>;
+  compressedNodes?: string;
   artifactRepositoryRef?: {
     configMap: string;
     key: string;
