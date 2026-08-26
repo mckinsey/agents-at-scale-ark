@@ -10,6 +10,7 @@ import {
   arkDependencies,
   arkServices,
   type ArkService,
+  type ServiceCollection,
 } from '../../arkServices.js';
 import {
   isMarketplaceService,
@@ -141,6 +142,38 @@ function exitIfServicesSkipped(skipped: {name: string; version: string}[]): void
   process.exit(1);
 }
 
+/**
+ * Expand requested service names to include their transitive `requires`,
+ * dependencies first. A visited set both de-duplicates and guards against
+ * a cycle in `requires` (a node already being visited is never re-entered).
+ */
+function resolveServiceOrder(
+  requestedNames: string[],
+  services: ServiceCollection,
+  skipDeps: boolean
+): string[] {
+  const resolved: string[] = [];
+  const visited = new Set<string>();
+
+  function visit(name: string): void {
+    if (visited.has(name)) return;
+    visited.add(name);
+    if (!skipDeps) {
+      const service = Object.values(services).find((s) => s.name === name);
+      for (const dep of service?.requires || []) {
+        visit(dep);
+      }
+    }
+    resolved.push(name);
+  }
+
+  for (const name of requestedNames) {
+    visit(name);
+  }
+
+  return resolved;
+}
+
 async function uninstallPrerequisites(
   service: ArkService,
   verbose: boolean = false
@@ -265,6 +298,7 @@ export async function installArk(
     arkVersion?: string;
     marketplaceVersion?: string;
     backend?: string;
+    deps?: boolean;
   } = {}
 ) {
   // Validate version strings
@@ -321,7 +355,27 @@ export async function installArk(
 
   // If specific services are requested, install only those services
   if (serviceNames.length > 0) {
-    for (const serviceName of serviceNames) {
+    const installableServices = getInstallableServices(backend);
+    const skipDeps = options.deps === false;
+    const resolvedServiceNames = resolveServiceOrder(
+      serviceNames,
+      installableServices,
+      skipDeps
+    );
+
+    if (skipDeps) {
+      output.warning(
+        '--no-deps: service dependencies (e.g. ark-broker for ark-tenant) will not be installed automatically; a tenant without a broker loses conversation history'
+      );
+    } else {
+      for (const name of resolvedServiceNames) {
+        if (!serviceNames.includes(name)) {
+          output.info(`${name} is required by a requested service, installing it first...`);
+        }
+      }
+    }
+
+    for (const serviceName of resolvedServiceNames) {
       // Check if it's a marketplace item
       if (isMarketplaceService(serviceName)) {
         const service = await getMarketplaceItem(serviceName);
@@ -374,13 +428,14 @@ export async function installArk(
       }
 
       // Core ARK service
-      const services = getInstallableServices(backend);
-      const service = Object.values(services).find((s) => s.name === serviceName);
+      const service = Object.values(installableServices).find(
+        (s) => s.name === serviceName
+      );
 
       if (!service) {
         output.error(`service '${serviceName}' not found`);
         output.info('available services:');
-        for (const s of Object.values(services)) {
+        for (const s of Object.values(installableServices)) {
           output.info(`  ${s.name}`);
         }
         process.exit(1);
@@ -775,6 +830,10 @@ export function createInstallCommand(config: ArkConfig) {
     .option(
       '--backend <type>',
       "storage backend: 'etcd' (default) or 'postgresql' (overrides storage.backend in .arkrc.yaml)"
+    )
+    .option(
+      '--no-deps',
+      "skip a requested service's dependencies (e.g. ark-broker for ark-tenant); the resulting install may lose the guarantees those dependencies provide"
     )
     .option('-v, --verbose', 'show commands being executed')
     .action(async (services, options) => {

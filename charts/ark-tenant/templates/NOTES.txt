@@ -1,0 +1,16 @@
+Ark tenant provisioned in namespace {{ .Release.Namespace }}.
+
+{{- if .Values.memory.requireBroker }}
+{{- $memory := lookup "ark.mckinsey.com/v1alpha1" "Memory" .Release.Namespace "default" }}
+{{- if $memory }}
+Default Memory -> {{ dig "status" "lastResolvedAddress" "(not yet resolved)" $memory }}
+{{- else }}
+Default Memory: not created yet. It appears once ark-broker is installed in
+this namespace (or once the ark-controller backstop observes it), pointing at
+{{ .Values.memory.brokerService }}.{{ .Release.Namespace }}.svc.cluster.local.
+{{- end }}
+{{- else }}
+memory.requireBroker is disabled: this tenant is not guaranteed a default
+Memory. Conversation history is lost unless a Memory named "default" is
+provisioned separately.
+{{- end }}
