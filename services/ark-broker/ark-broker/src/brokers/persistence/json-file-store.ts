@@ -153,7 +153,7 @@ export class JsonFileStore<T> {
 
   private deriveNextSequence(items: T[]): number {
     const last = items.at(-1) as {sequenceNumber?: number} | undefined;
-    return last?.sequenceNumber !== undefined ? last.sequenceNumber + 1 : 1;
+    return last?.sequenceNumber === undefined ? 1 : last.sequenceNumber + 1;
   }
 
   // Coalesced, non-blocking snapshot. The caller records the latest state and
