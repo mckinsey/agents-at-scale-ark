@@ -324,6 +324,32 @@ export class InMemorySessionsStorage implements SessionsStorage {
     return this.save();
   }
 
+  async deleteQuery(queryId: string): Promise<number> {
+    let removed = 0;
+
+    // Object.entries snapshots, so dropping sessions while iterating is safe.
+    for (const [sessionId, session] of Object.entries(this.store.sessions)) {
+      if (!session.queries[queryId]) continue;
+
+      delete session.queries[queryId];
+      removed++;
+
+      this.queryToSession.delete(queryId);
+
+      if (Object.keys(session.queries).length === 0) {
+        delete this.store.sessions[sessionId];
+        continue;
+      }
+
+      // lastActivity stays put: a delete is not activity.
+      recalculateSessionStatus(session);
+      this.emitter.emit('upsert', {sessionId, queryName: queryId});
+    }
+
+    if (removed > 0) this.deferredSave();
+    return removed;
+  }
+
   subscribe(
     callback: (data: {sessionId: string; queryName: string}) => void
   ): () => void {

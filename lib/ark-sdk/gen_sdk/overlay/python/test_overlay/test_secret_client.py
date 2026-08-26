@@ -591,5 +591,27 @@ class TestInitK8sCalledBeforeApiClient(unittest.IsolatedAsyncioTestCase):
         await self._assert_init_k8s_called_first(lambda: self.client.delete_secret('s'))
 
 
+class TestSecretClientDefaultHeaders(unittest.TestCase):
+    """SecretClient must apply default_headers so versioned-client secret access impersonates."""
+
+    def test_default_headers_applied_to_api_client(self):
+        secret_client = SecretClient(
+            namespace="ns",
+            default_headers={
+                "Impersonate-User": "user@example.com",
+                "Impersonate-Group": "team-a,team-b",
+            },
+        )
+        api = Mock()
+        secret_client._get_api_client(api)
+        api.set_default_header.assert_any_call("Impersonate-User", "user@example.com")
+        api.set_default_header.assert_any_call("Impersonate-Group", "team-a,team-b")
+
+    def test_no_headers_is_noop(self):
+        api = Mock()
+        SecretClient(namespace="ns")._get_api_client(api)
+        api.set_default_header.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

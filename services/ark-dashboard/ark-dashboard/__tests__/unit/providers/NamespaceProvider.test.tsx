@@ -1,9 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
-import { act } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -61,6 +59,8 @@ import { toast } from 'sonner';
 
 import { NamespaceProvider } from '@/providers/NamespaceProvider';
 
+const INITIAL_URL = 'http://localhost:3000/agents';
+
 describe('NamespaceProvider', () => {
   let queryClient: QueryClient;
 
@@ -73,6 +73,12 @@ describe('NamespaceProvider', () => {
       },
     });
     mockPush.mockClear();
+    mockSearchParamsToString.mockReturnValue('');
+    window.history.replaceState(null, '', INITIAL_URL);
+  });
+
+  afterEach(() => {
+    window.history.replaceState(null, '', INITIAL_URL);
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -146,16 +152,21 @@ describe('NamespaceProvider', () => {
   });
 
   describe('when namespace does not exist', () => {
-    it.skip('should show error and redirect to default namespace', async () => {
+    it('should show error and correct the URL to the namespace in use', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        'http://localhost:3000/agents?namespace=non-existent-ns',
+      );
       mockGetSearchParam.mockReturnValue('non-existent-ns');
+      mockSearchParamsToString.mockReturnValue('namespace=non-existent-ns');
       mockGetContext.mockReturnValue({
-        data: {
-          namespace: 'non-existent-ns',
-          cluster: 'test-cluster',
-          read_only_mode: false,
-        },
+        data: null,
         isPending: false,
-        error: null,
+        error: {
+          message: "Namespace 'non-existent-ns' not found",
+          data: { detail: { default_namespace: 'default' } },
+        },
       });
       mockGetAllNamespaces.mockReturnValue({
         data: [
@@ -169,15 +180,18 @@ describe('NamespaceProvider', () => {
       renderHook(() => useNamespace(), { wrapper });
 
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith('Namespace does not exist', {
-          description:
-            'The namespace "non-existent-ns" does not exist. Redirecting to default namespace.',
-        });
+        expect(toast.error).toHaveBeenCalledWith(
+          'Namespace "non-existent-ns" not accessible',
+          { description: 'Using default instead' },
+        );
       });
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/agents?namespace=default');
+        expect(window.location.search).toBe('?namespace=default');
       });
+
+      // Corrected in place, not navigated to
+      expect(mockPush).not.toHaveBeenCalled();
     });
 
     it('should not redirect if namespace is already default', async () => {
@@ -257,12 +271,13 @@ describe('NamespaceProvider', () => {
     });
   });
 
-  describe('available namespaces', () => {
-    it('should populate availableNamespaces from API', async () => {
-      mockGetSearchParam.mockReturnValue('default');
+  describe('URL synchronisation', () => {
+    it('preserves existing query params when adding the namespace', async () => {
+      mockGetSearchParam.mockReturnValue(null);
+      mockSearchParamsToString.mockReturnValue('filter=active');
       mockGetContext.mockReturnValue({
         data: {
-          namespace: 'default',
+          namespace: 'production',
           cluster: 'test-cluster',
           read_only_mode: false,
         },
@@ -270,47 +285,7 @@ describe('NamespaceProvider', () => {
         error: null,
       });
       mockGetAllNamespaces.mockReturnValue({
-        data: [
-          { name: 'default', id: 0 },
-          { name: 'testing', id: 1 },
-          { name: 'production', id: 2 },
-        ],
-        isPending: false,
-        error: null,
-      });
-
-      const { result } = renderHook(() => useNamespace(), { wrapper });
-
-      await waitFor(() => {
-        expect(result.current.availableNamespaces).toHaveLength(1);
-        expect(result.current.availableNamespaces[0].name).toBe('default');
-      });
-
-      expect(result.current.availableNamespaces).toEqual([
-        { name: 'default', id: 0 },
-      ]);
-    });
-  });
-
-  describe('setNamespace', () => {
-    it('preserves existing query params when setNamespace is called', async () => {
-      mockGetSearchParam.mockReturnValue('test-ns');
-      mockSearchParamsToString.mockReturnValue('namespace=test-ns&filter=active');
-      mockGetContext.mockReturnValue({
-        data: {
-          namespace: 'test-ns',
-          cluster: 'test-cluster',
-          read_only_mode: false,
-        },
-        isPending: false,
-        error: null,
-      });
-      mockGetAllNamespaces.mockReturnValue({
-        data: [
-          { name: 'default', id: 0 },
-          { name: 'test-ns', id: 1 },
-          { name: 'production', id: 2 },
-        ],
+        data: [{ name: 'production', id: 0 }],
         isPending: false,
         error: null,
       });
@@ -321,13 +296,9 @@ describe('NamespaceProvider', () => {
         expect(result.current.isNamespaceResolved).toBe(true);
       });
 
-      act(() => {
-        result.current.setNamespace('production');
+      await waitFor(() => {
+        expect(window.location.search).toBe('?filter=active&namespace=production');
       });
-
-      expect(mockPush).toHaveBeenCalledWith(
-        '/agents?namespace=production&filter=active',
-      );
     });
   });
 
