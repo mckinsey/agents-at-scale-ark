@@ -137,14 +137,19 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		return nil, fmt.Errorf("failed to build MCP server URL: %w", err)
 	}
 
-	headers := make(map[string]string)
-	for _, header := range mcpServerCRD.Spec.Headers {
-		value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
-		}
-		headers[header.Name] = value
+	headers, err := ResolveHeaders(ctx, k8sClient, mcpServerCRD.Spec.Headers, mcpServerNamespace)
+	if err != nil {
+		return nil, err
 	}
+
+	authMaterial, authWarnings, err := arkmcp.ResolveAuthorizationMaterial(ctx, k8sClient, &mcpServerCRD)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve authorization for MCP server %v: %w", mcpServerKey, err)
+	}
+	for _, warning := range authWarnings {
+		logf.FromContext(ctx).V(1).Info(warning, "mcpServer", mcpServerKey.String(), "tool", tool.Name)
+	}
+	authMaterial.ApplyBearer(headers)
 
 	// Parse timeout from MCPServer spec (default to 30s if not specified)
 	timeout := 30 * time.Second

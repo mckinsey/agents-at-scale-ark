@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 
 // Memory message interface - represents individual query messages
 export interface MemoryMessage {
@@ -45,12 +46,6 @@ export interface MemoryFilters {
   page?: number;
 }
 
-// API response interfaces
-interface MemoryListResponse {
-  items: MemoryResource[];
-  total?: number;
-}
-
 export type MemoryMessagesFilters = {
   memory?: string;
   conversation?: string;
@@ -61,12 +56,7 @@ export const memoryService = {
   // Get all memory resources in a namespace
   async getMemoryResources(namespace: string): Promise<MemoryResource[]> {
     try {
-      const url = `/api/v1/memories`;
-      const response = await apiClient.get<MemoryListResponse>(url, {
-        params: { namespace },
-      });
-
-      return response?.items || [];
+      return await fetchAllPages<MemoryResource>(`/api/v1/memories`);
     } catch (error) {
       console.error('Failed to fetch memory resources:', error);
       return [];

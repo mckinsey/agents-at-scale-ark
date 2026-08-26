@@ -70,6 +70,7 @@ OIDC_ISSUER_URL="https://your-oidc-provider.com"     # Required: OIDC issuer URL
 OIDC_CLIENT_ID="your-client-id"                      # Required: OIDC client ID
 OIDC_CLIENT_SECRET="your-client-secret"              # Optional: OIDC client secret
 OIDC_PROVIDER_NAME="Your Provider"                   # Optional: Display name for the OIDC provider in UI
+OIDC_SCOPES="openid email profile"                   # Optional: Space-separated OAuth scopes (defaults to "openid email profile")
 
 # Authentication Mode
 AUTH_MODE="hybrid"                                    # Required: see Authentication Modes section below
@@ -110,10 +111,20 @@ https://your-domain.com/api/auth/callback/mid
 https://your-domain.com/signout
 ```
 
-#### Required Scopes
+#### Scopes
+
+By default the dashboard requests `openid email profile`:
 - `openid` - Core OIDC functionality
 - `profile` - User profile information
 - `email` - User email address
+
+Override the requested scopes with the `OIDC_SCOPES` environment variable (space-separated). This is useful when a provider requires additional scopes. For example, some providers (such as Dex) only issue refresh tokens when `offline_access` is requested, which is required to keep sessions alive:
+
+```bash
+OIDC_SCOPES="openid email profile offline_access"
+```
+
+If `OIDC_SCOPES` is unset or empty, it falls back to the default `openid email profile`.
 
 ## Components and Hooks
 
@@ -630,6 +641,7 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8000/v1/agents
 #### Token Refresh Failures
 - Verify OIDC provider supports refresh tokens
 - Check `OIDC_CLIENT_SECRET` configuration
+- If the provider only issues refresh tokens for the `offline_access` scope (e.g. Dex), add it via `OIDC_SCOPES="openid email profile offline_access"`
 - Monitor browser console for refresh errors
 
 #### Federated Logout Issues

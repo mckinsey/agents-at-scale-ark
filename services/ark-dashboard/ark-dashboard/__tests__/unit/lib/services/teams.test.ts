@@ -43,7 +43,7 @@ describe('teamsService', () => {
 
       const result = await teamsService.getAll('default')
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`, { params: { namespace: 'default' } })
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`, { params: { limit: 100, namespace: 'default' } })
       expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team1`, { params: { namespace: 'default' } })
       expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team2`, { params: { namespace: 'default' } })
       

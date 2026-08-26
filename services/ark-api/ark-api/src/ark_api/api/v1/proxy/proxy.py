@@ -14,6 +14,7 @@ from ark_sdk.impersonation import ImpersonationConfig
 from ....auth.dependencies import get_impersonation_config
 
 from ..client_utils import get_impersonating_api_client
+from ..exceptions import handle_k8s_errors
 from ....models.models import ServiceListResponse
 from .proxy_resources import Resource
 
@@ -48,7 +49,7 @@ async def _get_a2a_server_address(a2a_server_name: str,
             resolved_address = status.get("lastResolvedAddress")
             spec = a2a_dict.get("spec", {})
             headers = {}
-            await get_headers(spec, headers, namespace)
+            await get_headers(spec, headers, namespace, impersonation)
             if not resolved_address:
                 raise HTTPException(
                     status_code=500,
@@ -82,7 +83,7 @@ async def _get_mcp_server_address(mcp_server_name: str,
             resolved_address = status.get("resolvedAddress")
             spec = mcp_dict.get("spec", {})
             headers = {}
-            await get_headers(spec, headers, namespace)
+            await get_headers(spec, headers, namespace, impersonation)
 
             if not resolved_address:
                 raise HTTPException(
@@ -176,6 +177,14 @@ async def list_services(
         service_names = [svc.metadata.name for svc in services.items]
         return ServiceListResponse(services=service_names)
 
+@handle_k8s_errors(operation="get", resource_type="service")
+async def _check_service_access(service_name: str, namespace: str, impersonation: Optional[ImpersonationConfig]) -> None:
+    """Gate the plain-service proxy on the user's RBAC, same as proxy_services."""
+    async with get_impersonating_api_client(impersonation) as api_client:
+        v1 = client.CoreV1Api(api_client)
+        await v1.read_namespaced_service(name=service_name, namespace=namespace)
+
+
 @router.options("/{resource}/{server_name}")
 @router.post("/{resource}/{server_name}")
 @router.get("/{resource}/{server_name}")
@@ -207,6 +216,7 @@ async def proxy_server(
     else:
         if namespace is None:
             namespace = get_context()["namespace"]
+        await _check_service_access(service_name=server_name, namespace=namespace, impersonation=impersonation)
         resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"  # NOSONAR - in-cluster traffic
         additional_headers = {}
 
@@ -231,6 +241,7 @@ async def proxy_server_path(resource: Resource,
     else:
         if namespace is None:
             namespace = get_context()["namespace"]
+        await _check_service_access(service_name=server_name, namespace=namespace, impersonation=impersonation)
         resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"  # NOSONAR - in-cluster traffic
         additional_headers = {}
 
@@ -247,8 +258,14 @@ async def proxy_services(
     service_name: str,
     api_path: str,
     request: Request,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> Response:
     """Proxy DELETE, PATCH, HEAD requests to other services in the cluster."""
-    resource_url = f"http://{service_name}/{api_path}"  # NOSONAR - in-cluster service validated by K8s
-    # Forward the request to the resolved resource URL
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    await _check_service_access(service_name=service_name, namespace=namespace, impersonation=impersonation)
+
+    resource_url = f"http://{service_name}.{namespace}.svc.cluster.local/{api_path}"  # NOSONAR - in-cluster traffic
     return await _proxy_request(resource_url, request)

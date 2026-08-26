@@ -1,5 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 
 // A2A Server interface for UI compatibility
 export interface A2AServer {
@@ -14,12 +15,6 @@ export interface A2AServer {
   discovering?: boolean;
   status_message?: string;
   annotations?: Record<string, string>;
-}
-
-// A2A Server list response
-interface A2AServerListResponse {
-  items: A2AServer[];
-  count: number;
 }
 
 export type DirectHeader = {
@@ -61,13 +56,11 @@ export interface A2AServerConfiguration {
 // Service for A2A server operations
 export const A2AServersService = {
   // Get all A2A servers in a namespace
-  async getAll(namespace: string): Promise<A2AServer[]> {
-    const response = await apiClient.get<A2AServerListResponse>(
+  async getAll(): Promise<A2AServer[]> {
+    const items = await fetchAllPages<Omit<A2AServer, 'id'>>(
       `/api/v1/a2a-servers`,
-      { params: { namespace } },
     );
-    console.log('A2A Servers:', response.items);
-    return response.items.map(item => ({
+    return items.map(item => ({
       ...item,
       id: item.name,
     }));

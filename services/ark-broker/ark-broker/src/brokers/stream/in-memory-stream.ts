@@ -66,12 +66,16 @@ export class InMemoryStream<T> implements Stream<T> {
     return this.items;
   }
 
+  cachedItemCount(): number {
+    return this.items.length;
+  }
+
   async filter(predicate: Predicate<T>): Promise<BrokerItem<T>[]> {
     return this.items.filter(predicate);
   }
 
   async save(): Promise<void> {
-    this.fileStore.save(this.items, this.nextSequence);
+    await this.fileStore.save(this.items, this.nextSequence);
   }
 
   async delete(predicate?: Predicate<T>): Promise<void> {

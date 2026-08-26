@@ -202,29 +202,36 @@ export function useAgentForm({
           });
         } else if (agent) {
           const updateData: AgentUpdateRequest = {
-            description: values.description || undefined,
-            modelRef:
-              !agent.isA2A &&
-              values.selectedModelName &&
-              values.selectedModelName !== '' &&
-              values.selectedModelName !== '__none__'
+            description: values.description || null,
+            modelRef: agent.isA2A
+              ? undefined
+              : values.selectedModelName &&
+                  values.selectedModelName !== '' &&
+                  values.selectedModelName !== '__none__'
                 ? {
                     name: values.selectedModelName,
                     namespace: values.selectedModelNamespace || undefined,
                   }
-                : undefined,
+                : null,
             executionEngine:
-              !agent.isA2A &&
-              values.executionEngineName &&
-              values.executionEngineName !== '__none__'
-                ? { name: values.executionEngineName }
-                : undefined,
-            prompt: !agent.isA2A ? values.prompt || undefined : undefined,
+              agent.isA2A || !isExperimentalExecutionEngineEnabled
+                ? undefined
+                : values.executionEngineName &&
+                    values.executionEngineName !== '__none__'
+                  ? { name: values.executionEngineName }
+                  : null,
+            prompt: agent.isA2A ? undefined : values.prompt || null,
             tools: agent.isA2A ? undefined : selectedTools,
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
           };
 
-          await agentsService.update(namespace, agent.name, updateData);
+          const updated = await agentsService.update(agent.name, updateData);
+          if (!updated) {
+            toast.error('Unable to update agent', {
+              description: 'Agent not found',
+            });
+            return;
+          }
           toast.success('Agent updated successfully');
 
           form.reset(values);
@@ -250,6 +257,7 @@ export function useAgentForm({
       queryClient,
       namespace,
       form,
+      isExperimentalExecutionEngineEnabled,
     ],
   );
 

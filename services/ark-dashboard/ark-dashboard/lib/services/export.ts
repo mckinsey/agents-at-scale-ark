@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api/client';
 import { apiUrl } from '@/lib/api/config';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 import {
@@ -9,14 +10,17 @@ import {
 } from '@/lib/services/export-utils';
 
 // Resource types from the API
+export type AgentResponse = components['schemas']['AgentResponse'];
+export type ModelResponse = components['schemas']['ModelResponse'];
+export type TeamResponse = components['schemas']['TeamResponse'];
+export type MCPServerResponse = components['schemas']['MCPServerResponse'];
+export type A2AServerResponse = components['schemas']['A2AServerResponse'];
 export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type ModelListResponse = components['schemas']['ModelListResponse'];
 export type TeamListResponse = components['schemas']['TeamListResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
 export type MCPServerListResponse =
   components['schemas']['MCPServerListResponse'];
-export type A2AServerListResponse =
-  components['schemas']['A2AServerListResponse'];
 
 // Export configuration types
 export interface ExportConfig {
@@ -89,13 +93,17 @@ export const exportService = {
   async fetchAllResources(namespace: string): Promise<ResourceExportData> {
     const params = { namespace };
     const results = await Promise.allSettled([
-      apiClient.get<AgentListResponse>('/api/v1/agents', { params }),
-      apiClient.get<TeamListResponse>('/api/v1/teams', { params }),
-      apiClient.get<ModelListResponse>('/api/v1/models', { params }),
-      apiClient.get<QueryListResponse>('/api/v1/queries', { params }),
-      apiClient.get<A2AServerListResponse>('/api/v1/a2a-servers', { params }),
-      apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers', { params }),
-      workflowTemplatesService.list(namespace),
+      fetchAllPages<AgentResponse>('/api/v1/agents').then(items => ({ items })),
+      fetchAllPages<TeamResponse>('/api/v1/teams').then(items => ({ items })),
+      fetchAllPages<ModelResponse>('/api/v1/models').then(items => ({ items })),
+      apiClient.get<QueryListResponse>('/api/v1/queries'),
+      fetchAllPages<A2AServerResponse>('/api/v1/a2a-servers').then(items => ({
+        items,
+      })),
+      fetchAllPages<MCPServerResponse>('/api/v1/mcp-servers').then(items => ({
+        items,
+      })),
+      workflowTemplatesService.list(),
     ]);
 
     return processResourceResponses(results, true);

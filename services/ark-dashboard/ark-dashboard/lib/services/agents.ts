@@ -1,5 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient, APIError } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 // Use the generated types from OpenAPI
@@ -42,14 +43,12 @@ export type Agent = AgentDetailResponseWithA2A & { id: string };
 // CRUD Operations
 export const agentsService = {
   // Get all agents
-  async getAll(namespace: string): Promise<Agent[]> {
-    const response = await apiClient.get<AgentListResponse>(`/api/v1/agents`, {
-      params: { namespace },
-    });
+  async getAll(): Promise<Agent[]> {
+    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`);
 
     // Map the response items to include id for UI compatibility
     const agents = await Promise.all(
-      response.items.map(async item => {
+      items.map(async item => {
         // Fetch detailed info for each agent to get full data
         const detailed = await agentsService.getByName(namespace, item.name);
         return detailed!;

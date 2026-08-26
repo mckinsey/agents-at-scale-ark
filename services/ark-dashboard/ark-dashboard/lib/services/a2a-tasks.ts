@@ -3,6 +3,7 @@ import type {
   A2ATaskListResponse,
 } from '@/lib/api/a2a-tasks-types';
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 
 export enum A2ATaskPhase {
   COMPLETED = 'completed',
@@ -23,13 +24,13 @@ export type A2ATask = A2ATaskDetailResponse & {
 };
 
 export const a2aTasksService = {
-  async getAll(namespace: string): Promise<A2ATask[]> {
-    const response = await apiClient.get<A2ATaskListResponse>(
-      '/api/v1/a2a-tasks',
-      { params: { namespace } },
-    );
+  async getAll(): Promise<A2ATask[]> {
+    const items =
+      await fetchAllPages<A2ATaskListResponse['items'][number]>(
+        '/api/v1/a2a-tasks',
+      );
 
-    return response.items.map(item => ({
+    return items.map(item => ({
       ...item,
       id: item.name,
     })) as A2ATask[];

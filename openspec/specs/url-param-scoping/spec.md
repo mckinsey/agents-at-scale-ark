@@ -48,6 +48,11 @@ Parameters named by a navigation target SHALL be applied to the destination URL 
 - **WHEN** the user follows a link that names a parameter in its target
 - **THEN** the destination URL contains that parameter with the value the link supplied
 
+#### Scenario: A link supplies a different namespace
+
+- **WHEN** the user follows a link whose target names a namespace other than the active one
+- **THEN** the destination keeps the namespace the link supplied, and the namespace left behind is not restored
+
 ### Requirement: Screen-owned parameters survive navigation within the same screen
 
 Navigation that does not change which screen is displayed SHALL preserve all current query parameters, so a screen can hold its own state — filters, sorting, pagination — in the URL.
@@ -113,3 +118,22 @@ Adding or correcting the namespace in the URL SHALL NOT create a browser history
 
 - **WHEN** the URL already names the active namespace
 - **THEN** no further URL update is performed
+
+### Requirement: Namespace synchronisation does not interrupt the screen
+
+Writing the active namespace into the URL SHALL NOT return the dashboard to its loading state, whether the namespace was added because the URL named none or substituted because the URL named an unreachable one.
+
+#### Scenario: Adding the namespace does not re-show the loading screen
+
+- **WHEN** the user opens a dashboard URL with no namespace parameter
+- **THEN** the dashboard passes through its loading state once, and stays on screen while the namespace is written into the URL
+
+#### Scenario: Correcting an unreachable namespace does not re-show the loading screen
+
+- **WHEN** an unreachable namespace is replaced with the fallback in the URL
+- **THEN** the dashboard stays on screen, and the substitution is reported once
+
+#### Scenario: A namespace being loaded is not displayed as active
+
+- **WHEN** the user navigates to a URL naming a namespace whose context has not loaded yet
+- **THEN** the dashboard does not present the previous namespace's resources as belonging to the requested one

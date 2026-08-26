@@ -14,6 +14,11 @@ import { toast } from 'sonner';
 
 import { queryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
+import {
+  DetailCard as QueryDetailCard,
+  DetailRow as QueryDetailRow,
+  DetailSectionCard as QuerySectionCard,
+} from '@/components/common/detail-card';
 import { JsonViewer } from '@/components/common/json-viewer';
 import { ChevronLeft, ContentCopy } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -139,72 +144,6 @@ interface TypedQueryDetailResponse
   metadata?: Record<string, string>;
   target?: { name: string; type: string };
   timeout?: string | null;
-}
-
-function QueryDetailCard({
-  title,
-  children,
-}: Readonly<{ title: string; children: ReactNode }>) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="bg-fill-onsurface-ui-1 flex items-center p-2">
-        <p className="label-regular-primary text-fg-primary">{title}</p>
-      </div>
-      <div className="border-stroke-divider flex flex-1 flex-col border-r border-b border-l px-2">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function QueryDetailRow({
-  label,
-  value,
-  last = false,
-  valueClassName,
-}: Readonly<{
-  label: string;
-  value: ReactNode;
-  last?: boolean;
-  valueClassName?: string;
-}>) {
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-2 py-2',
-        !last && 'border-stroke-divider border-b',
-      )}>
-      <span className="label-regular-primary text-fg-secondary w-[140px] shrink-0">
-        {label}
-      </span>
-      <span
-        className={cn(
-          'label-regular-primary text-fg-primary min-w-0 flex-1',
-          valueClassName ?? 'truncate',
-        )}
-        title={typeof value === 'string' ? value : undefined}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function QuerySectionCard({
-  title,
-  headerRight,
-  children,
-}: Readonly<{ title: string; headerRight?: ReactNode; children: ReactNode }>) {
-  return (
-    <div className="flex flex-col">
-      <div className="bg-fill-onsurface-ui-1 flex items-center gap-2 p-2">
-        <p className="label-regular-primary text-fg-primary flex-1">{title}</p>
-        {headerRight}
-      </div>
-      <div className="border-stroke-divider border-r border-b border-l px-2">
-        {children}
-      </div>
-    </div>
-  );
 }
 
 function QueryViewSegmentedToggle<T extends string>({

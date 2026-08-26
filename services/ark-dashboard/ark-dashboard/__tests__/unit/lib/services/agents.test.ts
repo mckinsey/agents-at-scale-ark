@@ -47,7 +47,7 @@ describe('agentsService', () => {
 
       const result = await agentsService.getAll('default')
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`, { params: { namespace: 'default' } })
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`, { params: { limit: 100, namespace: 'default' } })
       expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent1`, { params: { namespace: 'default' } })
       expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent2`, { params: { namespace: 'default' } })
       

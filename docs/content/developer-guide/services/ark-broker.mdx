@@ -38,16 +38,72 @@ All configuration options are documented in the Helm chart. Key configuration is
 
 Environment variables:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| PORT | Server port | 8080 |
-| MAX_MESSAGE_SIZE | Maximum message size in bytes | 10485760 (10MB) |
-| MAX_MEMORY_DB | Maximum number of messages/chunks to keep | 50000 |
-| MAX_ITEM_AGE | Maximum age of items in seconds | 0 (no age limit) |
-| MEMORY_FILE_PATH | Path to persist memory data | Not set (no persistence) |
-| STREAM_FILE_PATH | Path to persist stream data | Not set (no persistence) |
+| Variable | Description | Default | Chart default |
+|----------|-------------|---------|---------------|
+| `PORT` | Server port | `8080` | `memory.port` |
+| `HOST` | Bind address | `0.0.0.0` | — |
+| `LOG_LEVEL` | Log level (`fatal`…`trace`, `silent`) | `info` | — |
+| `REQUEST_TIMEOUT_MS` | Request timeout, 0 to disable | `0` | `server.requestTimeout` |
+| `MAX_MESSAGES` | Max messages held per store, 0 for unlimited | `0` | `limits.maxMessages` (50000) |
+| `MAX_CHUNKS` | Max completion chunks, 0 for unlimited | `0` | `limits.maxChunks` (200000) |
+| `MAX_SPANS` | Max OTEL spans, 0 for unlimited | `0` | `limits.maxSpans` (100000) |
+| `MAX_EVENTS` | Max operation events, 0 for unlimited | `0` | `limits.maxEvents` (200000) |
+| `MEMORY_FILE_PATH` | Path to persist messages | Not set (no persistence) | — |
+| `STREAM_FILE_PATH` | Path to persist chunks | Not set (no persistence) | — |
+| `TRACE_FILE_PATH` | Path to persist spans | Not set (no persistence) | — |
+| `EVENT_FILE_PATH` | Path to persist events | Not set (no persistence) | — |
+| `SESSIONS_FILE_PATH` | Path to persist the sessions index | Not set (no persistence) | — |
+
+Backend selection (`MESSAGE_BACKEND`, `EVENT_BACKEND`, `CHUNK_BACKEND`) and its Postgres and Redis settings are documented in the backend sections below. The request body limit is fixed at 10MB and is not configurable.
 
 The Helm chart can optionally configure a persistent volume for data storage by setting `persistence.enabled=true`.
+
+## Heap sizing
+
+V8 sizes its default heap from the host's memory rather than the container limit, so on a large node it may pick a cap unrelated to the memory the pod was actually given. Where that cap lands below the limit, the broker exhausts its heap and exits with `FATAL ERROR: Ineffective mark-compacts near heap limit` while the container still has headroom — a Node-initiated exit, not a Linux OOMKill.
+
+The chart sets `NODE_OPTIONS=--max-old-space-size=...` from `app.resources.limits.memory`, taking the lesser of 85% and `limit - 128Mi` — 870MB at the 1024Mi default. The margin is deliberate: the flag caps only the old space, V8's total heap ceiling lands roughly 24MB above it (measured under a container memory limit; without one V8 sizes the young generation from host memory and the delta is closer to 96MB — not a case that arises here, since the flag is only emitted when `limits.memory` is set), and non-heap memory (native buffers, sockets, protobuf parsing) sits above that, so a larger value trades a clean V8 heap limit for a kernel OOMKill. Because that 24MB is a fixed addition rather than a proportion, the `limit - 128Mi` term is what keeps small limits safe; it dominates below roughly 853Mi. Under a 256Mi limit that term yields a heap too small for the process to start, so `NODE_OPTIONS` is omitted entirely rather than rendered at an unusable size — 256Mi is the smallest limit the broker is sized for. Raising the limit raises the heap with it:
+
+```bash
+helm upgrade --install ark-broker services/ark-broker/chart \
+  --set app.resources.limits.memory=2Gi
+```
+
+Set `app.nodeOptions` to override the computed value. If `app.resources.limits.memory` is unset, `NODE_OPTIONS` is not emitted and V8 falls back to its own default.
+
+<Callout type="warning">
+  `app.nodeOptions` **replaces** the computed value rather than adding to it. Setting it for an unrelated flag drops the heap cap and returns V8 to its host-derived default — the failure this section exists to prevent. Include the flag yourself whenever you set it, as in `nodeOptions: "--max-old-space-size=870 --enable-source-maps"`.
+</Callout>
+
+Heap pressure scales with the in-memory stores, so `limits.maxMessages`, `limits.maxChunks`, `limits.maxSpans` and `limits.maxEvents` are the other lever. Moving messages or sessions to Postgres, or chunks to Redis, takes those stores off the heap; traces stay in memory regardless. On the default in-memory backend the sessions index has no size limit — it grows with the queries it has seen until `DELETE /sessions` purges it, which is the one heap consumer with no cap.
+
+## Metrics
+
+The broker exposes Prometheus metrics at `GET /metrics` on the service port:
+
+| Metric | Description |
+|--------|-------------|
+| `broker_messages_count` | Messages in the in-process message cache |
+| `broker_chunks_count` | Completion chunks in the in-process chunk cache |
+| `broker_spans_count` | OTEL spans in the in-process trace cache |
+| `broker_events_count` | Operation events in the in-process event cache |
+| `broker_sessions_count` | Sessions in the in-process sessions index |
+| `broker_session_queries_count` | Queries held across all sessions |
+
+A gauge is registered only for stores actually held in the heap — with `MESSAGE_BACKEND=postgres`, `broker_messages_count` is absent rather than reported as zero, and the two session gauges are absent under `SESSIONS_BACKEND=postgres`. Traces have no backend to move to, so `broker_spans_count` is always present.
+
+Session heap use tracks queries rather than sessions: each session holds every query it has seen, plus derived conversation and participant summaries. A small `broker_sessions_count` alongside a large `broker_session_queries_count` means a few long-lived sessions are holding the memory.
+
+Standard Node process metrics are included, notably `process_resident_memory_bytes` and `nodejs_heap_size_used_bytes`. Comparing the cache gauges against heap usage shows which store is consuming the heap before it fills.
+
+Nothing scrapes the endpoint by default. Set `prometheus.enable=true` to render a `ServiceMonitor` for it, which requires the Prometheus Operator in the cluster:
+
+```bash
+helm upgrade --install ark-broker services/ark-broker/chart \
+  --set prometheus.enable=true
+```
+
+Adjust the scrape cadence with `prometheus.interval` (default `30s`). Without the operator, reach the endpoint directly with `kubectl port-forward svc/ark-broker 8080:8080` and `curl localhost:8080/metrics`.
 
 ## Message backend (Postgres)
 

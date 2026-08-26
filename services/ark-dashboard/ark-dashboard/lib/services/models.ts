@@ -1,5 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -22,14 +23,12 @@ export type Model = ModelDetailResponse & { id: string };
 // CRUD Operations
 export const modelsService = {
   // Get all models
-  async getAll(namespace: string): Promise<Model[]> {
-    const response = await apiClient.get<ModelListResponse>(`/api/v1/models`, {
-      params: { namespace },
-    });
+  async getAll(): Promise<Model[]> {
+    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`);
 
     // Map the response items to include id for UI compatibility
     const models = await Promise.all(
-      response.items.map(async item => {
+      items.map(async item => {
         // Fetch detailed info for each model to get full data
         const detailed = await modelsService.getByName(namespace, item.name);
         return detailed!;

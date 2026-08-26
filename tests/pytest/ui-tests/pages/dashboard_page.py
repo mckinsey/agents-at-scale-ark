@@ -19,7 +19,7 @@ class DashboardPage(BasePage):
     SIDEBAR = "[data-testid='sidebar'], aside, nav"
     AGENT_BUILDER_TOGGLE = "button:has-text('Agent Builder')"
     
-    ADD_AGENT_BUTTON = "a[href^='/agents/new']:has-text('Create Agent')"
+    ADD_AGENT_BUTTON = "a[href^='/agents/new']:has-text('Create Agent'), button:has-text('Create Agent'), a:has-text('Create Agent')"
     ADD_MODEL_BUTTON = "button:has-text('Add Model'), button:has-text('Create Model'), a:has-text('Add Model')"
     ADD_QUERY_BUTTON = "button:has-text('Add Query'), button:has-text('Create Query'), a:has-text('Add Query')"
     ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), a:has-text('Add Tool')"
@@ -39,6 +39,7 @@ class DashboardPage(BasePage):
     def navigate_to_section(self, section: str) -> None:
         self.page.goto(f"{self.base_url}/{section}", wait_until="domcontentloaded")
         self.wait_for_load_state("domcontentloaded")
+        self.wait_for_namespace_in_url()
     
     def expand_agent_builder(self) -> None:
         try:
