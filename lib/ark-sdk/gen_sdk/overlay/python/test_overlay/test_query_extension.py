@@ -15,7 +15,9 @@ from ark_sdk.extensions.query import (
     _resolve_value_source,
     _parse_go_duration_to_seconds,
     _resolve_from_query,
+    _build_mcp_servers,
 )
+from ark_sdk.extensions.query import logger as query_logger
 
 
 def _team(members=(), selector_agent=None):
@@ -1049,6 +1051,63 @@ class TestResolveTtlFromQuery(unittest.IsolatedAsyncioTestCase):
         mock_ark, mock_query = self._make_mock_objects(None)
         request = await _resolve_from_query(mock_ark, mock_query, "default", "hello")
         self.assertIsNone(request.message_ttl_seconds)
+
+
+def _tool(tool_type, mcp=None):
+    return SimpleNamespace(spec=SimpleNamespace(type=tool_type, mcp=mcp))
+
+
+def _mcp_tool(server_name, tool_name):
+    return _tool(
+        "mcp",
+        SimpleNamespace(
+            mcp_server_ref=SimpleNamespace(name=server_name),
+            tool_name=tool_name,
+        ),
+    )
+
+
+class TestBuildMcpServersDropWarning(unittest.IsolatedAsyncioTestCase):
+    """Engines receive only mcp tools - the skip must not be silent."""
+
+    def _agent(self, *tool_names):
+        return SimpleNamespace(
+            metadata=SimpleNamespace(name="toolagent"),
+            spec=SimpleNamespace(tools=[SimpleNamespace(name=n) for n in tool_names]),
+        )
+
+    def _ark(self, tools):
+        ark = MagicMock()
+        ark.tools.a_get = AsyncMock(side_effect=lambda name, _ns: tools[name])
+        return ark
+
+    async def test_warns_naming_each_dropped_tool(self):
+        ark = self._ark({
+            "get-coordinates": _tool("http"),
+            "delegate": _tool("agent"),
+        })
+
+        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as logs:
+            servers = await _build_mcp_servers(ark, self._agent("get-coordinates", "delegate"), "default")
+
+        self.assertEqual(servers, [])
+        message = "\n".join(logs.output)
+        self.assertIn("toolagent", message)
+        self.assertIn("get-coordinates (http)", message)
+        self.assertIn("delegate (agent)", message)
+        self.assertIn("only mcp tools", message)
+
+    async def test_does_not_warn_when_every_tool_is_mcp(self):
+        ark = self._ark({"echo": _mcp_tool("mock-mcp", "echo")})
+
+        with patch(
+            "ark_sdk.extensions.query._resolve_mcp_server",
+            AsyncMock(return_value=None),
+        ):
+            with patch.object(query_logger, "warning") as warn:
+                await _build_mcp_servers(ark, self._agent("echo"), "default")
+
+        warn.assert_not_called()
 
 
 if __name__ == "__main__":

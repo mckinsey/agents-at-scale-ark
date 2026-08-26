@@ -3,8 +3,10 @@ package validation
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent) ([]string, error) {
@@ -24,15 +26,76 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 		}
 	}
 
+	if warning := v.engineToolWarning(ctx, agent); warning != "" {
+		warnings = append(warnings, warning)
+	}
+
 	warnings = append(warnings, CollectMigrationWarnings(agent.Annotations)...)
 	return warnings, nil
+}
+
+// engineToolWarning reports the tools an ExecutionEngine will never receive. An
+// engine is handed MCP connection details only - every other tool type is
+// dropped when the request is built, so the agent runs without them and answers
+// that the tool does not exist. Warn rather than reject: the drop is
+// intentional and existing agents must keep applying.
+func (v *Validator) engineToolWarning(ctx context.Context, agent *arkv1alpha1.Agent) string {
+	if !arka2a.IsNamedEngine(agent.Spec.ExecutionEngine) {
+		return ""
+	}
+
+	dropped := make([]string, 0, len(agent.Spec.Tools))
+	for _, tool := range agent.Spec.Tools {
+		toolType := v.resolveAgentToolType(ctx, agent.Namespace, tool)
+		if toolType == "" || toolType == ToolTypeMCP {
+			continue
+		}
+		dropped = append(dropped, fmt.Sprintf("%s (%s)", tool.Name, toolType))
+	}
+
+	if len(dropped) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf(
+		"agent '%s': execution engine '%s' receives only mcp tools; these tools will not be available to the agent: %s",
+		agent.Name,
+		agent.Spec.ExecutionEngine.Name,
+		strings.Join(dropped, ", "),
+	)
+}
+
+// resolveAgentToolType returns the tool's real type, or "" for tools that are
+// exempt or cannot be resolved. The deprecated 'custom' type does not say what
+// the tool is, so the Tool CRD decides - and every tool the dashboard attaches
+// is written as 'custom', which is exactly the case worth warning about. A tool
+// that cannot be read is left alone: the agent controller already reports it as
+// ToolNotFound, and admission must not depend on apply order. 'built-in' has no
+// Tool CRD and no meaning outside the completions loop the engine replaces.
+func (v *Validator) resolveAgentToolType(ctx context.Context, namespace string, tool arkv1alpha1.AgentTool) string {
+	if tool.Type == AgentToolTypeBuiltIn {
+		return ""
+	}
+	if tool.Type != toolTypeCustom {
+		return tool.Type
+	}
+
+	obj, err := v.Lookup.GetResource(ctx, "Tool", namespace, tool.GetToolCRDName())
+	if err != nil {
+		return ""
+	}
+	toolCRD, ok := obj.(*arkv1alpha1.Tool)
+	if !ok {
+		return ""
+	}
+	return toolCRD.Spec.Type
 }
 
 func validateAgentTool(index int, tool arkv1alpha1.AgentTool) error {
 	hasName := tool.Name != ""
 
 	switch tool.Type {
-	case "built-in":
+	case AgentToolTypeBuiltIn:
 		if !hasName {
 			return fmt.Errorf("tool[%d]: built-in tools must specify a name", index)
 		}

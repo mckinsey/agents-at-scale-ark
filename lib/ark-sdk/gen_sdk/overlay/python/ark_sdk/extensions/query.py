@@ -497,6 +497,7 @@ async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPSe
         return []
 
     server_tools: dict[str, list[str]] = {}
+    dropped: list[str] = []
     for agent_tool in agent.spec.tools:
         tool_name = getattr(agent_tool, "name", None)
         if not tool_name:
@@ -506,7 +507,9 @@ async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPSe
             tool_crd = await ark.tools.a_get(tool_name, namespace)
             tool_spec = tool_crd.spec
 
-            if getattr(tool_spec, "type", None) != "mcp":
+            tool_type = getattr(tool_spec, "type", None)
+            if tool_type != "mcp":
+                dropped.append(f"{tool_name} ({tool_type})")
                 continue
 
             mcp_ref = getattr(tool_spec, "mcp", None)
@@ -526,6 +529,12 @@ async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPSe
                 server_tools[server_name].append(mcp_tool_name)
         except Exception as e:
             logger.warning(f"Failed to resolve tool '{tool_name}': {e}")
+
+    if dropped:
+        logger.warning(
+            f"Agent '{getattr(agent.metadata, 'name', '?')}' runs on an execution engine, which receives "
+            f"only mcp tools; these tools will not be available to the agent: {', '.join(dropped)}"
+        )
 
     servers: list[MCPServerConfig] = []
     for server_name, tool_names in server_tools.items():

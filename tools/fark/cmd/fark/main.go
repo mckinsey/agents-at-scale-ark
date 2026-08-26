@@ -31,6 +31,10 @@ func initializeConfig() *Config {
 		log.Fatalf("Failed to get kubeconfig: %v", err)
 	}
 
+	// Print admission warnings the way kubectl does. Without this the client-go
+	// default routes them through klog, where they are easy to miss.
+	kubeConfig.WarningHandler = rest.NewWarningWriter(os.Stderr, rest.WarningWriterOptions{Deduplicate: true})
+
 	dynamicClient, err := dynamic.NewForConfig(kubeConfig)
 	if err != nil {
 		log.Fatalf("Failed to create dynamic client: %v", err)
