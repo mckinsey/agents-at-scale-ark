@@ -6,16 +6,32 @@ is checked, so an upgrade of an already-provisioned tenant is never blocked.
 
 `lookup` cannot reach the API server during `helm install --dry-run` (client-
 side) or `helm template`, and returns empty for every call in that mode.
-Probe a namespace-scoped object that always exists — the "default"
-ServiceAccount Kubernetes creates in every namespace — rather than a
-cluster-scoped one, so this degrades gracefully for an operator whose RBAC
-is confined to the tenant namespace itself, not just for a dry run.
+Two probes, OR'd together, detect that live case without either one alone
+producing a false negative:
+  - the "default" ServiceAccount in the release namespace — namespace-scoped,
+    so an operator whose RBAC is confined to that one namespace still sees a
+    live lookup. But Helm renders templates before `--create-namespace`
+    actually creates the namespace, so this alone is empty on that path even
+    though the lookup is live.
+  - the cluster-scoped kube-system Namespace, which covers exactly that case:
+    anyone passing `--create-namespace` already holds namespace-create RBAC,
+    which comes with namespace-read.
+Only a true non-live render (dry-run/template) leaves both empty.
+
+`ne $memoryValues.requireBroker false`, not a plain truthiness check: Sprig's
+`default` treats a boolean `false` as empty, so `default true .requireBroker`
+would silently re-enable the guard for someone who explicitly opted out with
+`--set memory.requireBroker=false`. Comparing against `false` distinguishes
+"unset" (nil, defaults to enabled) from "explicitly disabled" — both from a
+missing `requireBroker` key and from an entirely nulled-out `memory:` block.
 */}}
-{{- if and .Release.IsInstall (.Values.memory).requireBroker }}
-{{- if lookup "v1" "ServiceAccount" .Release.Namespace "default" }}
-{{- $broker := lookup "v1" "Service" .Release.Namespace (.Values.memory).brokerService }}
+{{- $memoryValues := .Values.memory | default dict }}
+{{- $brokerService := default "ark-broker" $memoryValues.brokerService }}
+{{- if and .Release.IsInstall (ne $memoryValues.requireBroker false) }}
+{{- if or (lookup "v1" "ServiceAccount" .Release.Namespace "default") (lookup "v1" "Namespace" "" "kube-system") }}
+{{- $broker := lookup "v1" "Service" .Release.Namespace $brokerService }}
 {{- if not $broker }}
-{{- fail (printf "no broker Service %q found in namespace %q: install ark-broker in this namespace first (e.g. 'ark install ark-broker'), or pass --set memory.requireBroker=false to provision this tenant without one" (.Values.memory).brokerService .Release.Namespace) }}
+{{- fail (printf "no broker Service %q found in namespace %q: install ark-broker in this namespace first (e.g. 'ark install ark-broker'), or pass --set memory.requireBroker=false to provision this tenant without one" $brokerService .Release.Namespace) }}
 {{- end }}
 {{- end }}
 {{- end }}

@@ -219,19 +219,24 @@ pipelines:
       kubectl wait --for=condition=Ready certificate/serving-cert -n ark-system --timeout=60s
     fi
 
+    # ark-broker's chart (deployed below via run_dependency_pipelines --all)
+    # renders a `lookup` against the ark.mckinsey.com API whenever
+    # createMemoryCRD is true (its own default) — wait for that API here,
+    # unconditionally, not just before ark-tenant's own Tool resources.
+    echo "Waiting for Ark API to be available..."
+    if [ "${STORAGE_BACKEND}" == "etcd" ]; then
+      kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
+    else
+      kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
+      ensure_tool_api
+    fi
+
     if [ "${ENABLE_ARGO}" == "true" ]; then
       run_dependency_pipelines argo-workflows --pipeline=deploy
     fi
     run_dependency_pipelines --all --exclude ark-controller --exclude argo-workflows --pipeline=deploy
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
-      echo "Waiting for Ark API to be available..."
-      if [ "${STORAGE_BACKEND}" == "etcd" ]; then
-        kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
-      else
-        kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
-        ensure_tool_api
-      fi
       # ark-tenant now requires a broker Service to exist in the namespace
       # (charts/ark-tenant preflight) — must run after the dependency
       # pipelines above, which is what actually deploys ark-broker.
@@ -281,19 +286,24 @@ pipelines:
       kubectl wait --for=condition=Ready certificate/serving-cert -n ark-system --timeout=60s
     fi
 
+    # ark-broker's chart (deployed below via run_dependency_pipelines --all)
+    # renders a `lookup` against the ark.mckinsey.com API whenever
+    # createMemoryCRD is true (its own default) — wait for that API here,
+    # unconditionally, not just before ark-tenant's own Tool resources.
+    echo "Waiting for Ark API to be available..."
+    if [ "${STORAGE_BACKEND}" == "etcd" ]; then
+      kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
+    else
+      kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
+      ensure_tool_api
+    fi
+
     if [ "${ENABLE_ARGO}" == "true" ]; then
       run_dependency_pipelines argo-workflows --pipeline=dev
     fi
     run_dependency_pipelines --all --exclude ark-controller --exclude argo-workflows --pipeline=dev
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
-      echo "Waiting for Ark API to be available..."
-      if [ "${STORAGE_BACKEND}" == "etcd" ]; then
-        kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
-      else
-        kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
-        ensure_tool_api
-      fi
       # ark-tenant now requires a broker Service to exist in the namespace
       # (charts/ark-tenant preflight) — must run after the dependency
       # pipelines above, which is what actually deploys ark-broker.

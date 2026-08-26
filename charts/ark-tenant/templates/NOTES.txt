@@ -1,5 +1,7 @@
+{{- $memoryValues := .Values.memory | default dict }}
+{{- $brokerService := default "ark-broker" $memoryValues.brokerService }}
 Ark tenant provisioned in namespace {{ .Release.Namespace }}.
-{{- if (.Values.memory).requireBroker }}
+{{- if ne $memoryValues.requireBroker false }}
 {{- if .Capabilities.APIVersions.Has "ark.mckinsey.com/v1alpha1/Memory" }}
 {{- $memory := lookup "ark.mckinsey.com/v1alpha1" "Memory" .Release.Namespace "default" }}
 {{- if $memory }}
@@ -14,7 +16,7 @@ Default Memory -> (not yet resolved)
 
 Default Memory: not created yet. It appears once ark-broker is installed in
 this namespace (or once the ark-controller backstop observes it), pointing at
-{{ (.Values.memory).brokerService }}.{{ .Release.Namespace }}.svc.cluster.local.
+{{ $brokerService }}.{{ .Release.Namespace }}.svc.cluster.local.
 {{- end }}
 {{- else }}
 
