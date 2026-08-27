@@ -134,7 +134,32 @@ ark query agent/my-agent "What was the last message?" --conversation-id "my-conv
 - **sessionId**: Groups related queries for tracking and telemetry purposes.
 - **conversationId**: Conversation threading identifier sent to all execution engines as A2A `contextId`. The completions engine uses it for memory continuity; named engines can use it for their own session management.
 
-When creating a query in the dashboard it is also possible to specify the memory resource. Note that in the dashboard 'chat' window, no memory is used — messages are simply stored client-side as is common for chat applications.
+When creating a query in the dashboard it is also possible to specify the memory resource. The dashboard chat window keeps its transcript client-side. It also threads a `conversationId` once it has one — but it only ever gets one because a memory backend minted it, so in a namespace with no working memory the chat has no `conversationId` at all and each turn starts from nothing.
+
+## Telling when memory is not working
+
+A namespace with **no** `Memory` degrades rather than failing: resolution falls back to a no-op and queries run without conversation history. A namespace with a `Memory` that never resolved an address is the harsher case — `NewHTTPMemory` errors, so those queries **fail**. The two are worth telling apart, because only the first one is reported on the `Query`:
+
+| Condition | `status: "True"` means |
+| --- | --- |
+| `MemoryUnavailable` | The query carried a `conversationId` but no memory backend was reachable, so history was dropped. |
+| `MemoryDegraded` | A backend was reachable but reading the history from it failed, so the query ran without prior context. |
+
+Both conditions are written on every query whose dispatch completes, carrying `status: "False"` and a reassuring message on the healthy path. Read the `status` field — the presence of the condition says nothing.
+
+```bash
+kubectl get query <name> -o jsonpath='{.status.conditions[?(@.type=="MemoryUnavailable")]}'
+```
+
+Two limits on that signal, both of which the `ark status` check below exists to cover:
+
+- A query that **failed to dispatch** carries neither condition. An unresolved `Memory` is exactly that case: the query errors with `failed to create memory client`, and no memory condition is written.
+- `MemoryUnavailable` requires a `conversationId` on the query, since it means "continuity was expected and not delivered". A dashboard chat in a namespace that never had a working memory never obtains one, so the notice below does not appear there — it appears when a chat that *had* continuity loses the backend.
+
+Two surfaces read this for you:
+
+- **Dashboard chat** shows a notice at the top of the conversation when the last turn reported either condition as `True`, quoting the condition's own message.
+- **`ark status`** prints a `default memory` line for the kubeconfig's current namespace, and it asks the namespace directly rather than reading conditions. It reports the namespace as broken when it has a broker but no `Memory`, and when a `Memory` exists but never resolved an address. A broker counts when it has published an enabled `ark-config-broker` / `ark-config-streaming` ConfigMap, or failing that when a Service carrying the broker chart's label is present — those ConfigMaps are optional, so their absence alone is not proof there is no broker. A namespace with no broker is reported as unconfigured rather than broken. What it cannot read, it does not guess at: an unlistable ConfigMap is always undetermined, and a forbidden cluster-scoped `ArkConfig` downgrades a *broken* verdict to undetermined rather than accusing the namespace of a fault that a default it cannot see may already rule out. The line is informational: it does not change the command's exit code.
 
 ## Memory HTTP API
 

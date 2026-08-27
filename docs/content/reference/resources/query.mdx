@@ -281,7 +281,7 @@ status:
 | Field | Description |
 | --- | --- |
 | `status.phase` | One of `pending`, `provisioning`, `running`, `done`, `error`, `canceled`. |
-| `status.conditions[]` | Standard Kubernetes conditions. The `Completed` condition flips to `True` on success or failure. |
+| `status.conditions[]` | Standard Kubernetes conditions. The `Completed` condition flips to `True` on success or failure. `MemoryUnavailable` and `MemoryDegraded` report conversation history that was dropped — both are written on every query whose dispatch completes, so read `status`, not presence. See [telling when memory is not working](/reference/resources/memory#telling-when-memory-is-not-working). |
 | `status.response` | Single response object (singular — there is no `responses[]` array). A selector resolves to one target, so there is always exactly one response. |
 | `status.response.content` | The final assistant message. |
 | `status.response.raw` | The full conversation as a JSON-encoded array of messages — what the dashboard's Debug tab renders. |
