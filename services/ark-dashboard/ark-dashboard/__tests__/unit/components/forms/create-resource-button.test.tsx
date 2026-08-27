@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -122,6 +122,18 @@ describe('CreateResourceButton', () => {
 
     await userEvent.keyboard('{Escape}');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    if (!overlay) {
+      throw new Error('dialog overlay not rendered');
+    }
+    fireEvent.pointerDown(overlay);
+    fireEvent.click(overlay);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toHaveValue('github-mcp-url');
 
     release({ name: 'github-mcp-url', value: 'https://x/mcp' });
 
