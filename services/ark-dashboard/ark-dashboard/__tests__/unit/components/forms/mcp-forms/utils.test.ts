@@ -5,6 +5,7 @@ import {
   type AddressMode,
   buildHeader,
   buildSpec,
+  buildUpdateAddressMode,
   type HeaderData,
   mapDetailAddress,
   mapDetailHeaders,
@@ -37,6 +38,19 @@ describe('mapDetailAddress', () => {
     expect(state).toEqual({
       kind: 'configuration',
       configurationName: 'github-mcp-url',
+      configurationKey: 'value',
+    });
+  });
+
+  it('keeps a configuration key other than value', () => {
+    const state = mapDetailAddress(
+      { valueFrom: { configMapKeyRef: { name: 'github-cm', key: 'url' } } },
+      'https://api.githubcopilot.com/mcp/',
+    );
+    expect(state).toEqual({
+      kind: 'configuration',
+      configurationName: 'github-cm',
+      configurationKey: 'url',
     });
   });
 
@@ -88,6 +102,28 @@ describe('buildSpec', () => {
     });
   });
 
+  it('preserves the original key when the configuration is unchanged', () => {
+    const spec = buildSpec({ ...values, configurationName: 'github-cm' }, [], {
+      kind: 'configuration',
+      originalName: 'github-cm',
+      originalKey: 'url',
+    });
+    expect(spec.address).toEqual({
+      valueFrom: { configMapKeyRef: { name: 'github-cm', key: 'url' } },
+    });
+  });
+
+  it('resets to the value key when the configuration changes', () => {
+    const spec = buildSpec({ ...values, configurationName: 'other-cm' }, [], {
+      kind: 'configuration',
+      originalName: 'github-cm',
+      originalKey: 'url',
+    });
+    expect(spec.address).toEqual({
+      valueFrom: { configMapKeyRef: { name: 'other-cm', key: 'value' } },
+    });
+  });
+
   it('round-trips a serviceRef untouched', () => {
     const serviceRef = {
       name: 'ark-mcp',
@@ -119,6 +155,57 @@ describe('buildSpec', () => {
         value: { valueFrom: { secretKeyRef: { name: 'github-pat', key: 'token' } } },
       },
     ]);
+  });
+});
+
+describe('buildUpdateAddressMode', () => {
+  it('carries the original configuration name and key', () => {
+    const mode = buildUpdateAddressMode({
+      kind: 'configuration',
+      configurationName: 'github-cm',
+      configurationKey: 'url',
+    });
+    expect(mode).toEqual({
+      kind: 'configuration',
+      originalName: 'github-cm',
+      originalKey: 'url',
+    });
+  });
+
+  it('keeps the serviceRef for a service address', () => {
+    const serviceRef = { name: 'ark-mcp', port: 'http' };
+    expect(buildUpdateAddressMode({ kind: 'service', serviceRef, resolvedAddress: '' })).toEqual({
+      kind: 'service',
+      serviceRef,
+    });
+  });
+
+  it('has no original to preserve for a literal address', () => {
+    expect(
+      buildUpdateAddressMode({ kind: 'literal', url: 'https://legacy/mcp' }),
+    ).toEqual({ kind: 'configuration' });
+  });
+});
+
+describe('editing an MCP server that uses a non-value configuration key', () => {
+  it('does not rewrite the key when only other fields change', () => {
+    const urlState = mapDetailAddress(
+      { valueFrom: { configMapKeyRef: { name: 'github-cm', key: 'url' } } },
+      'https://api.githubcopilot.com/mcp/',
+    );
+    const mode = buildUpdateAddressMode(urlState);
+    const spec = buildSpec(
+      {
+        ...values,
+        configurationName: 'github-cm',
+        description: 'GitHub MCP server',
+      },
+      [],
+      mode,
+    );
+    expect(spec.address).toEqual({
+      valueFrom: { configMapKeyRef: { name: 'github-cm', key: 'url' } },
+    });
   });
 });
 

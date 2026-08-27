@@ -14,6 +14,7 @@ import { McpServerFormShell } from './mcp-server-form-shell';
 import type { AddressMode, FormValues } from './utils';
 import {
   buildSpec,
+  buildUpdateAddressMode,
   createFormSchema,
   mapDetailAddress,
   mapDetailHeaders,
@@ -34,10 +35,7 @@ export function UpdateMcpServerForm({
   const headerRows = useHeaderRows(mapDetailHeaders(server.headers));
 
   const urlState = mapDetailAddress(server.address_source, server.address);
-  const addressMode: AddressMode =
-    urlState.kind === 'service'
-      ? { kind: 'service', serviceRef: urlState.serviceRef }
-      : { kind: 'configuration' };
+  const addressMode: AddressMode = buildUpdateAddressMode(urlState);
 
   const form = useForm<FormValues>({
     mode: 'onChange',

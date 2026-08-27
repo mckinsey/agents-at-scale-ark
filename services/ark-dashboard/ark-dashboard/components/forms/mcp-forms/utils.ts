@@ -16,12 +16,16 @@ import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 export const CONFIGURATION_VALUE_KEY = 'value';
 
 export type AddressMode =
-  | { kind: 'configuration' }
+  | { kind: 'configuration'; originalName?: string; originalKey?: string }
   | { kind: 'service'; serviceRef: MCPServerServiceRef };
 
 export type UrlFieldState =
   | { kind: 'create' }
-  | { kind: 'configuration'; configurationName: string }
+  | {
+      kind: 'configuration';
+      configurationName: string;
+      configurationKey: string;
+    }
   | { kind: 'literal'; url: string }
   | {
       kind: 'service';
@@ -107,6 +111,7 @@ export function mapDetailAddress(
     return {
       kind: 'configuration',
       configurationName: valueFrom.configMapKeyRef.name,
+      configurationKey: valueFrom.configMapKeyRef.key,
     };
   }
   if (valueFrom?.serviceRef) {
@@ -119,6 +124,20 @@ export function mapDetailAddress(
   return { kind: 'literal', url: addressSource?.value ?? resolvedAddress ?? '' };
 }
 
+export function buildUpdateAddressMode(urlState: UrlFieldState): AddressMode {
+  if (urlState.kind === 'service') {
+    return { kind: 'service', serviceRef: urlState.serviceRef };
+  }
+  if (urlState.kind === 'configuration') {
+    return {
+      kind: 'configuration',
+      originalName: urlState.configurationName,
+      originalKey: urlState.configurationKey,
+    };
+  }
+  return { kind: 'configuration' };
+}
+
 export function buildAddress(
   values: FormValues,
   addressMode: AddressMode,
@@ -126,11 +145,16 @@ export function buildAddress(
   if (addressMode.kind === 'service') {
     return { valueFrom: { serviceRef: addressMode.serviceRef } };
   }
+  const { originalName, originalKey } = addressMode;
+  const key =
+    originalKey && values.configurationName === originalName
+      ? originalKey
+      : CONFIGURATION_VALUE_KEY;
   return {
     valueFrom: {
       configMapKeyRef: {
         name: values.configurationName,
-        key: CONFIGURATION_VALUE_KEY,
+        key,
       },
     },
   };
