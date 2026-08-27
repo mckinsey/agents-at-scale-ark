@@ -10,19 +10,7 @@ export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type AgentCreateRequest = components['schemas']['AgentCreateRequest'];
 export type AgentUpdateRequest = components['schemas']['AgentUpdateRequest'];
 
-// AgentTool interface to match the API response structure
-export interface AgentTool {
-  type: string;
-  name?: string | null;
-  labelSelector?: {
-    matchLabels?: Record<string, string> | null;
-    matchExpressions?: Array<{
-      key: string;
-      operator: string;
-      values?: string[] | null;
-    }> | null;
-  } | null;
-}
+export type AgentTool = components['schemas']['AgentTool'];
 
 // Interface for skill objects based on a2a-enhanced-agent.yaml
 export interface Skill {

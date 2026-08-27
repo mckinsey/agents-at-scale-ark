@@ -26,38 +26,54 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 		}
 	}
 
-	if warning := v.engineToolWarning(ctx, agent); warning != "" {
-		warnings = append(warnings, warning)
-	}
+	warnings = append(warnings, v.engineToolWarnings(ctx, agent)...)
 
 	warnings = append(warnings, CollectMigrationWarnings(agent.Annotations)...)
 	return warnings, nil
 }
 
-func (v *Validator) engineToolWarning(ctx context.Context, agent *arkv1alpha1.Agent) string {
+func (v *Validator) engineToolWarnings(ctx context.Context, agent *arkv1alpha1.Agent) []string {
 	if !arka2a.IsNamedEngine(agent.Spec.ExecutionEngine) {
-		return ""
+		return nil
 	}
 
 	dropped := make([]string, 0, len(agent.Spec.Tools))
+	partials := make([]string, 0, len(agent.Spec.Tools))
 	for _, tool := range agent.Spec.Tools {
 		toolType := v.resolveAgentToolType(ctx, agent.Namespace, tool)
+		reported := tool.Name
+		if toolType != "" {
+			reported = fmt.Sprintf("%s (%s)", tool.Name, toolType)
+		}
+
+		if tool.Partial != nil {
+			partials = append(partials, reported)
+			continue
+		}
 		if toolType == "" || toolType == ToolTypeMCP {
 			continue
 		}
-		dropped = append(dropped, fmt.Sprintf("%s (%s)", tool.Name, toolType))
+		dropped = append(dropped, reported)
 	}
 
-	if len(dropped) == 0 {
-		return ""
+	var warnings []string
+	if len(dropped) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"agent '%s': execution engine '%s' receives only mcp tools; these tools will not be available to the agent: %s",
+			agent.Name,
+			agent.Spec.ExecutionEngine.Name,
+			strings.Join(dropped, ", "),
+		))
 	}
-
-	return fmt.Sprintf(
-		"agent '%s': execution engine '%s' receives only mcp tools; these tools will not be available to the agent: %s",
-		agent.Name,
-		agent.Spec.ExecutionEngine.Name,
-		strings.Join(dropped, ", "),
-	)
+	if len(partials) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"agent '%s': execution engine '%s' connects to mcp servers directly, so partial tools cannot have their preset parameters injected or hidden; these tools will not be available to the agent: %s",
+			agent.Name,
+			agent.Spec.ExecutionEngine.Name,
+			strings.Join(partials, ", "),
+		))
+	}
+	return warnings
 }
 
 func (v *Validator) resolveAgentToolType(ctx context.Context, namespace string, tool arkv1alpha1.AgentTool) string {

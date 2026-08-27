@@ -19,7 +19,11 @@ vi.mock('@/lib/services', () => ({
 
 interface AgentStub {
   readonly executionEngine?: { readonly name: string };
-  readonly tools?: readonly { readonly type: string; readonly name: string }[];
+  readonly tools?: readonly {
+    readonly type: string;
+    readonly name: string;
+    readonly partial?: { readonly name: string };
+  }[];
 }
 
 function mockAgent(agent: AgentStub) {
@@ -49,6 +53,10 @@ function mockToolTypes(tools: readonly { name: string; type: string }[]) {
   );
 }
 
+function joined(result: { current: { engineToolWarning: string | null } }) {
+  return result.current.engineToolWarning ?? '';
+}
+
 describe('useAgentQueryParameters - engineToolWarning', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -65,8 +73,7 @@ describe('useAgentQueryParameters - engineToolWarning', () => {
       ],
     });
 
-    expect(result.current.engineToolWarning).toBeTruthy();
-    const warning = result.current.engineToolWarning as string;
+    const warning = joined(result);
     expect(warning).toContain('executor-claude-agent-sdk');
     expect(warning).toContain('get-coordinates (http)');
     expect(warning).toContain('delegate (team)');
@@ -87,8 +94,7 @@ describe('useAgentQueryParameters - engineToolWarning', () => {
       ],
     });
 
-    expect(result.current.engineToolWarning).toBeTruthy();
-    const warning = result.current.engineToolWarning as string;
+    const warning = joined(result);
     expect(warning).toContain('get-coordinates (http)');
     expect(warning).not.toContain('echo');
   });
@@ -101,7 +107,76 @@ describe('useAgentQueryParameters - engineToolWarning', () => {
       tools: [{ type: 'built-in', name: 'terminate' }],
     });
 
-    expect(result.current.engineToolWarning).toContain('terminate (builtin)');
+    expect(joined(result)).toContain('terminate (builtin)');
+  });
+
+  it('warns about a partial tool even when it resolves to mcp', async () => {
+    mockToolTypes([{ name: 'echo', type: 'mcp' }]);
+
+    const result = await warningFor({
+      executionEngine: { name: 'mock-engine' },
+      tools: [
+        { type: 'custom', name: 'exposed-echo', partial: { name: 'echo' } },
+      ],
+    });
+
+    const warning = joined(result);
+    expect(warning).toContain('exposed-echo (mcp)');
+    expect(warning).toContain('partial tools cannot have their preset parameters');
+    expect(warning).not.toContain('receives only mcp tools');
+  });
+
+  it('gives a partial tool the partial reason, not the non-mcp one', async () => {
+    const result = await warningFor({
+      executionEngine: { name: 'mock-engine' },
+      tools: [
+        {
+          type: 'http',
+          name: 'get-chicago-coordinates',
+          partial: { name: 'get-coordinates' },
+        },
+      ],
+    });
+
+    const warning = joined(result);
+    expect(warning).toContain('get-chicago-coordinates (http)');
+    expect(warning).toContain('partial tools cannot have their preset parameters');
+    expect(warning).not.toContain('receives only mcp tools');
+  });
+
+  it('reports both reasons when an agent trips each', async () => {
+    mockToolTypes([{ name: 'echo', type: 'mcp' }]);
+
+    const result = await warningFor({
+      executionEngine: { name: 'mock-engine' },
+      tools: [
+        { type: 'http', name: 'get-coordinates' },
+        { type: 'custom', name: 'exposed-echo', partial: { name: 'echo' } },
+      ],
+    });
+
+    const warning = joined(result);
+    expect(warning).toContain('receives only mcp tools');
+    expect(warning).toContain('partial tools cannot have their preset parameters');
+    expect(warning).toContain('get-coordinates (http)');
+    expect(warning).toContain('exposed-echo (mcp)');
+  });
+
+  it('resolves a partial tool type by its underlying Tool name', async () => {
+    mockToolTypes([{ name: 'get-coordinates', type: 'http' }]);
+
+    const result = await warningFor({
+      executionEngine: { name: 'mock-engine' },
+      tools: [
+        {
+          type: 'custom',
+          name: 'get-chicago-coordinates',
+          partial: { name: 'get-coordinates' },
+        },
+      ],
+    });
+
+    expect(joined(result)).toContain('get-chicago-coordinates (http)');
   });
 
   it('stays quiet when a custom tool cannot be resolved', async () => {

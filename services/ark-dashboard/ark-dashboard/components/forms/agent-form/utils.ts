@@ -1,7 +1,14 @@
 'use client';
 
 import type { Parameter } from '@/components/ui/parameter-editor';
+import type { AgentTool } from '@/lib/services';
 import { generateUUID } from '@/lib/utils/uuid';
+
+// A partial tool's name is the alias exposed to the agent; the Tool CRD backing
+// it is partial.name. Mirrors AgentTool.GetToolCRDName() in the operator.
+export function toolCrdName(tool: AgentTool): string | null | undefined {
+  return tool.partial?.name || tool.name;
+}
 
 interface AgentParameterInput {
   name: string;

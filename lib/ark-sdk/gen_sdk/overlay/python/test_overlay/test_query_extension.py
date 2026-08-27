@@ -1015,7 +1015,9 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.mcpServers, [])
         message = "\n".join(log.output)
         self.assertIn("get-chicago-coordinates (http)", message)
-        self.assertIn("partial tools cannot be sent", message)
+        self.assertIn(
+            "partial tools cannot have their preset parameters injected or hidden", message
+        )
 
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")
@@ -1060,7 +1062,9 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.mcpServers, [])
         message = "\n".join(log.output)
         self.assertIn("get-chicago-coordinates (mcp)", message)
-        self.assertIn("preset parameters do not travel", message)
+        self.assertIn(
+            "partial tools cannot have their preset parameters injected or hidden", message
+        )
 
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")

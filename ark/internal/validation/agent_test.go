@@ -228,6 +228,7 @@ func TestValidateAgentEngineToolWarning(t *testing.T) {
 		tools       []arkv1alpha1.AgentTool
 		wantWarning bool
 		wantContain []string
+		wantOmit    []string
 	}{
 		{
 			name:        "engine with http tool warns",
@@ -282,7 +283,49 @@ func TestValidateAgentEngineToolWarning(t *testing.T) {
 			engine:      engine("mock-engine"),
 			tools:       []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "exposed", Partial: &arkv1alpha1.ToolPartial{Name: "http-tool"}}},
 			wantWarning: true,
-			wantContain: []string{"exposed (http)"},
+			wantContain: []string{"exposed (http)", "partial tools cannot have their preset parameters"},
+			wantOmit:    []string{"receives only mcp tools"},
+		},
+		{
+			name:        "engine with a partial tool backed by an mcp Tool CRD still warns",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "exposed-echo", Partial: &arkv1alpha1.ToolPartial{Name: "mcp-tool"}}},
+			wantWarning: true,
+			wantContain: []string{"exposed-echo (mcp)", "partial tools cannot have their preset parameters"},
+			wantOmit:    []string{"receives only mcp tools"},
+		},
+		{
+			name:        "engine with a partial tool declared mcp still warns",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: ToolTypeMCP, Name: "exposed-echo", Partial: &arkv1alpha1.ToolPartial{Name: "mcp-tool"}}},
+			wantWarning: true,
+			wantContain: []string{"exposed-echo (mcp)", "partial tools cannot have their preset parameters"},
+		},
+		{
+			name:        "engine with an unresolvable partial tool warns without a type",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "exposed", Partial: &arkv1alpha1.ToolPartial{Name: "missing"}}},
+			wantWarning: true,
+			wantContain: []string{"partial tools cannot have their preset parameters", "agent: exposed"},
+		},
+		{
+			name:   "engine with a plain tool and a partial tool warns about both",
+			engine: engine("mock-engine"),
+			tools: []arkv1alpha1.AgentTool{
+				{Type: "http", Name: "get-coordinates"},
+				{Type: toolTypeCustom, Name: "exposed-echo", Partial: &arkv1alpha1.ToolPartial{Name: "mcp-tool"}},
+			},
+			wantWarning: true,
+			wantContain: []string{
+				"receives only mcp tools",
+				"get-coordinates (http)",
+				"partial tools cannot have their preset parameters",
+				"exposed-echo (mcp)",
+			},
+		},
+		{
+			name:  "no engine with a partial tool does not warn",
+			tools: []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "exposed", Partial: &arkv1alpha1.ToolPartial{Name: "http-tool"}}},
 		},
 		{
 			name:   "reserved a2a engine does not warn",
@@ -314,12 +357,12 @@ func TestValidateAgentEngineToolWarning(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			assertEngineToolWarning(t, warnings, tt.wantWarning, tt.wantContain)
+			assertEngineToolWarning(t, warnings, tt.wantWarning, tt.wantContain, tt.wantOmit)
 		})
 	}
 }
 
-func assertEngineToolWarning(t *testing.T, warnings []string, wantWarning bool, wantContain []string) {
+func assertEngineToolWarning(t *testing.T, warnings []string, wantWarning bool, wantContain, wantOmit []string) {
 	t.Helper()
 
 	if !wantWarning {
@@ -329,12 +372,18 @@ func assertEngineToolWarning(t *testing.T, warnings []string, wantWarning bool, 
 		return
 	}
 
-	if len(warnings) != 1 {
-		t.Fatalf("expected exactly one warning, got %v", warnings)
+	if len(warnings) == 0 {
+		t.Fatal("expected a warning, got none")
 	}
+	joined := strings.Join(warnings, "\n")
 	for _, want := range wantContain {
-		if !strings.Contains(warnings[0], want) {
-			t.Errorf("warning %q missing %q", warnings[0], want)
+		if !strings.Contains(joined, want) {
+			t.Errorf("warnings %q missing %q", joined, want)
+		}
+	}
+	for _, omit := range wantOmit {
+		if strings.Contains(joined, omit) {
+			t.Errorf("warnings %q should not contain %q", joined, omit)
 		}
 	}
 }

@@ -2805,8 +2805,19 @@ export interface components {
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Name */
             name?: string | null;
+            partial?: components["schemas"]["AgentToolPartial"] | null;
             /** Type */
             type: string;
+        };
+        /**
+         * AgentToolPartial
+         * @description Underlying Tool CRD name, plus parameters preset and hidden from the agent.
+         */
+        AgentToolPartial: {
+            /** Name */
+            name?: string | null;
+            /** Parameters */
+            parameters?: components["schemas"]["AgentParameter"][] | null;
         };
         /**
          * AgentUpdateRequest

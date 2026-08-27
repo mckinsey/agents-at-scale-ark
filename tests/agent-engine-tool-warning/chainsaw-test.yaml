@@ -145,6 +145,159 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
 
+  - name: engine-agent-with-mcp-partial-tool-warns
+    try:
+    - apply:
+        file: manifests/a03-mcp-tool.yaml
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: engine-agent-mcp-partial-tool
+          spec:
+            prompt: "You are a test agent"
+            executionEngine:
+              name: mock-engine
+            tools:
+            - type: custom
+              name: exposed-search
+              partial:
+                name: search-docs
+                parameters:
+                - name: query
+                  value: "release notes"
+          EOF
+          )
+          echo "$OUTPUT"
+
+          # An mcp-backed partial resolves to type 'mcp', so the non-mcp check
+          # never fires - only the partial check catches it.
+          for EXPECTED in "exposed-search (mcp)" "partial tools cannot have their preset parameters"; do
+            if echo "$OUTPUT" | grep -qF "$EXPECTED"; then
+              echo "✓ Warning contains '$EXPECTED'"
+            else
+              echo "✗ Warning missing '$EXPECTED'"
+              exit 1
+            fi
+          done
+
+          if echo "$OUTPUT" | grep -qF "receives only mcp tools"; then
+            echo "✗ Partial tool reported with the non-mcp reason"
+            exit 1
+          fi
+          echo "✓ Partial tool reported with the partial reason"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: engine-agent-with-http-partial-tool-warns-about-partial
+    try:
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: engine-agent-http-partial-tool
+          spec:
+            prompt: "You are a test agent"
+            executionEngine:
+              name: mock-engine
+            tools:
+            - type: http
+              name: get-chicago-coordinates
+              partial:
+                name: get-coordinates
+                parameters:
+                - name: city
+                  value: Chicago
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if ! echo "$OUTPUT" | grep -qF "get-chicago-coordinates (http)"; then
+            echo "✗ Warning did not name the partial tool"
+            exit 1
+          fi
+          if echo "$OUTPUT" | grep -qF "receives only mcp tools"; then
+            echo "✗ Partial tool reported with the non-mcp reason"
+            exit 1
+          fi
+          echo "✓ Partial tool reported with the partial reason"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: engine-agent-with-plain-and-partial-tools-warns-about-both
+    try:
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: engine-agent-mixed-tools
+          spec:
+            prompt: "You are a test agent"
+            executionEngine:
+              name: mock-engine
+            tools:
+            - type: http
+              name: get-coordinates
+            - type: custom
+              name: exposed-search
+              partial:
+                name: search-docs
+          EOF
+          )
+          echo "$OUTPUT"
+
+          for EXPECTED in "receives only mcp tools" "get-coordinates (http)" "partial tools cannot have their preset parameters" "exposed-search (mcp)"; do
+            if echo "$OUTPUT" | grep -qF "$EXPECTED"; then
+              echo "✓ Warning contains '$EXPECTED'"
+            else
+              echo "✗ Warning missing '$EXPECTED'"
+              exit 1
+            fi
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: agent-without-engine-partial-does-not-warn
+    try:
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: local-agent-partial-tool
+          spec:
+            prompt: "You are a test agent"
+            tools:
+            - type: http
+              name: get-chicago-coordinates
+              partial:
+                name: get-coordinates
+                parameters:
+                - name: city
+                  value: Chicago
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -qF "partial tools cannot"; then
+            echo "✗ Unexpected partial warning without an execution engine"
+            exit 1
+          fi
+          echo "✓ No partial warning without an execution engine"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
   - name: agent-without-engine-does-not-warn
     try:
     - script:

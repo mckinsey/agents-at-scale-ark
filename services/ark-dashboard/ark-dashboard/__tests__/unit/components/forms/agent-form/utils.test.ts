@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { agentParametersChanged } from '@/components/forms/agent-form/utils';
+import {
+  agentParametersChanged,
+  toolCrdName,
+} from '@/components/forms/agent-form/utils';
 import type { Parameter } from '@/components/ui/parameter-editor';
+import type { AgentTool } from '@/lib/services';
 
 const queryParam = (overrides: Partial<Parameter> = {}): Parameter => ({
   id: 'query-param',
@@ -59,5 +63,37 @@ describe('agentParametersChanged', () => {
         [queryParam({ overrideQueryName: false })],
       ),
     ).toBe(true);
+  });
+});
+
+// Mirrors AgentTool.GetToolCRDName() in the operator. The form matches agent
+// tools against the Tool list by this name; using the exposed alias instead
+// listed every partial tool as unavailable.
+describe('toolCrdName', () => {
+  const tool = (overrides: Partial<AgentTool> = {}): AgentTool => ({
+    type: 'custom',
+    name: 'get-coordinates',
+    ...overrides,
+  });
+
+  it('returns the tool name when there is no partial', () => {
+    expect(toolCrdName(tool())).toBe('get-coordinates');
+  });
+
+  it('returns the underlying Tool name for a partial', () => {
+    expect(
+      toolCrdName(
+        tool({
+          name: 'get-chicago-coordinates',
+          partial: { name: 'get-coordinates' },
+        }),
+      ),
+    ).toBe('get-coordinates');
+  });
+
+  it('falls back to the tool name when the partial names no tool', () => {
+    expect(toolCrdName(tool({ partial: { name: null } }))).toBe(
+      'get-coordinates',
+    );
   });
 });

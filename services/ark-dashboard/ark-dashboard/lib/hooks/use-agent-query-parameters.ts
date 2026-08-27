@@ -10,6 +10,8 @@ export type ApiQueryParameter = components['schemas']['QueryParameter'];
 
 type AgentDetail = components['schemas']['AgentDetailResponse'];
 
+type AgentToolDetail = components['schemas']['AgentTool'];
+
 const BUILT_IN_A2A_ENGINE = 'a2a';
 
 const UNRESOLVED_TOOL_TYPES = ['custom', 'built-in'];
@@ -47,6 +49,10 @@ function stripPrefix(name: string): string {
   return name.includes('/') ? name.split('/').pop() || name : name;
 }
 
+function toolCrdName(tool: AgentToolDetail): string {
+  return tool.partial?.name || tool.name || '';
+}
+
 async function deriveEngineToolWarning(
   agent: AgentDetail | null,
 ): Promise<string | null> {
@@ -57,7 +63,7 @@ async function deriveEngineToolWarning(
   if (tools.length === 0) return null;
 
   const needsToolTypes = tools.some(
-    tool => UNRESOLVED_TOOL_TYPES.includes(tool.type) && tool.name,
+    tool => UNRESOLVED_TOOL_TYPES.includes(tool.type) && toolCrdName(tool),
   );
   const toolTypesByName = new Map<string, string>();
   if (needsToolTypes) {
@@ -67,18 +73,34 @@ async function deriveEngineToolWarning(
     });
   }
 
-  const dropped = tools
-    .map(tool => {
-      const type = UNRESOLVED_TOOL_TYPES.includes(tool.type)
-        ? toolTypesByName.get(tool.name || '')
-        : tool.type;
-      return type && type !== 'mcp' ? `${tool.name} (${type})` : null;
-    })
-    .filter((entry): entry is string => entry !== null);
+  const dropped: string[] = [];
+  const partials: string[] = [];
+  tools.forEach(tool => {
+    const type = UNRESOLVED_TOOL_TYPES.includes(tool.type)
+      ? toolTypesByName.get(toolCrdName(tool))
+      : tool.type;
+    const reported = type ? `${tool.name} (${type})` : `${tool.name}`;
 
-  if (dropped.length === 0) return null;
+    if (tool.partial) {
+      partials.push(reported);
+      return;
+    }
+    if (!type || type === 'mcp') return;
+    dropped.push(reported);
+  });
 
-  return `Execution engine '${engineName}' receives only mcp tools. Not available to this agent: ${dropped.join(', ')}`;
+  const reasons: string[] = [];
+  if (dropped.length > 0) {
+    reasons.push(
+      `Execution engine '${engineName}' receives only mcp tools. Not available to this agent: ${dropped.join(', ')}`,
+    );
+  }
+  if (partials.length > 0) {
+    reasons.push(
+      `Execution engine '${engineName}' connects to mcp servers directly, so partial tools cannot have their preset parameters injected or hidden. Not available to this agent: ${partials.join(', ')}`,
+    );
+  }
+  return reasons.length > 0 ? reasons.join(' ') : null;
 }
 
 async function resolveTeamMemberParameters(member: {

@@ -1124,6 +1124,86 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["status"]["phase"], "Ready")
 
     @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_get_agent_returns_partial_tool(self, mock_ark_client):
+        """A partial tool's underlying name and preset parameters reach the client."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {"name": "test-agent", "namespace": "default"},
+            "spec": {
+                "prompt": "You are a helpful assistant",
+                "tools": [
+                    {
+                        "type": "http",
+                        "name": "get-chicago-coordinates",
+                        "partial": {
+                            "name": "get-coordinates",
+                            "parameters": [{"name": "city", "value": "Chicago"}],
+                        },
+                    }
+                ],
+            },
+            "status": {},
+        }
+
+        mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        response = self.client.get("/v1/agents/test-agent?namespace=default")
+
+        self.assertEqual(response.status_code, 200)
+        tool = response.json()["tools"][0]
+        self.assertEqual(tool["name"], "get-chicago-coordinates")
+        self.assertEqual(tool["partial"]["name"], "get-coordinates")
+        self.assertEqual(tool["partial"]["parameters"][0]["value"], "Chicago")
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_preserves_partial_tool(self, mock_ark_client):
+        """Sending tools back on update must not strip a partial's preset parameters."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        tool_with_partial = {
+            "type": "http",
+            "name": "get-chicago-coordinates",
+            "partial": {
+                "name": "get-coordinates",
+                "parameters": [{"name": "city", "value": "Chicago"}],
+            },
+        }
+
+        existing_agent = Mock()
+        existing_agent.to_dict.return_value = {
+            "metadata": {"name": "test-agent", "namespace": "default"},
+            "spec": {"prompt": "Old prompt", "tools": [tool_with_partial]},
+            "status": {},
+        }
+
+        updated_agent = Mock()
+        updated_agent.to_dict.return_value = {
+            "metadata": {"name": "test-agent", "namespace": "default"},
+            "spec": {"prompt": "New prompt", "tools": [tool_with_partial]},
+            "status": {},
+        }
+
+        mock_client.agents.a_get = AsyncMock(return_value=existing_agent)
+        mock_client.agents.a_update = AsyncMock(return_value=updated_agent)
+
+        # The dashboard always sends tools back, even when only the prompt changed.
+        response = self.client.put(
+            "/v1/agents/test-agent?namespace=default",
+            json={"prompt": "New prompt", "tools": [tool_with_partial]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        written = mock_client.agents.a_update.await_args[0][0].to_dict()
+        self.assertEqual(
+            written["spec"]["tools"][0]["partial"],
+            {"name": "get-coordinates", "parameters": [{"name": "city", "value": "Chicago"}]},
+        )
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_success(self, mock_ark_client):
         """Test successful agent update."""
         # Setup async context manager mock

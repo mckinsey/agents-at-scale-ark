@@ -548,9 +548,9 @@ async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPSe
             )
         if partials:
             logger.warning(
-                f"Agent '{agent_name}': partial tools cannot be sent to an executor "
-                f"because their preset parameters do not travel with them; these tools "
-                f"were not available to the agent: {', '.join(partials)}"
+                f"Agent '{agent_name}': this executor connects to mcp servers directly, so "
+                f"partial tools cannot have their preset parameters injected or hidden; "
+                f"these tools were not available to the agent: {', '.join(partials)}"
             )
 
     servers: list[MCPServerConfig] = []
