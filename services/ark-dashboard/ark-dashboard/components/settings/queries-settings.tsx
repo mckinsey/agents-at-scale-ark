@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   useArkConfig,
-  useClearArkConfig,
   useUpdateArkConfig,
 } from '@/lib/services/arkconfig-hooks';
 
@@ -24,7 +23,6 @@ function validate(value: string): string | null {
 export function QueriesSettings() {
   const { data, isLoading, isError, error } = useArkConfig();
   const updateMutation = useUpdateArkConfig();
-  const clearMutation = useClearArkConfig();
 
   const [input, setInput] = useState<string>('');
   const [localError, setLocalError] = useState<string | null>(null);
@@ -63,13 +61,15 @@ export function QueriesSettings() {
     updateMutation.mutate({ queryTTL: trimmed === '' ? null : trimmed });
   };
 
+  // Clears this field only. Deleting the whole ArkConfig would also drop
+  // cluster-wide defaults this form does not manage, such as defaultMemory.
   const handleReset = () => {
     setLocalError(null);
     setInput('');
-    clearMutation.mutate();
+    updateMutation.mutate({ queryTTL: null });
   };
 
-  const isSaving = updateMutation.isPending || clearMutation.isPending;
+  const isSaving = updateMutation.isPending;
   const hasExisting = data?.exists ?? false;
 
   return (
@@ -114,7 +114,7 @@ export function QueriesSettings() {
           variant="outline"
           onClick={handleReset}
           disabled={isSaving || !hasExisting}>
-          {clearMutation.isPending ? 'Clearing...' : 'Reset to default'}
+          Reset to default
         </Button>
       </div>
     </div>
