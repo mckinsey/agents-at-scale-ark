@@ -100,6 +100,39 @@ describe('CreateResourceButton', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('locks the dialog and the fields while the request is in flight', async () => {
+    let release: (value: { name: string; value: string }) => void = () => {};
+    createConfiguration.mockReturnValue(
+      new Promise<{ name: string; value: string }>(resolve => {
+        release = resolve;
+      }),
+    );
+    const { onCreated } = renderButton();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add New' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'github-mcp-url');
+    await userEvent.type(screen.getByLabelText('Value'), 'https://x/mcp');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Name')).toBeDisabled(),
+    );
+    expect(screen.getByLabelText('Value')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    release({ name: 'github-mcp-url', value: 'https://x/mcp' });
+
+    await waitFor(() =>
+      expect(onCreated).toHaveBeenCalledWith('github-mcp-url'),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+  });
+
   it('prefills the value when given one', async () => {
     renderButton({ defaultValue: 'https://api.githubcopilot.com/mcp/' });
 

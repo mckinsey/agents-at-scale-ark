@@ -113,6 +113,8 @@ export function CreateResourceButton({
   const isPending =
     kind === 'secret' ? secret.isPending : configuration.isPending;
   const mutationError = kind === 'secret' ? secret.error : configuration.error;
+  const submittedName =
+    kind === 'secret' ? secret.variables?.name : configuration.variables?.name;
 
   useEffect(() => {
     if (!(mutationError instanceof APIError) || mutationError.status !== 409) {
@@ -122,10 +124,10 @@ export function CreateResourceButton({
       message: createResourceErrorMessage(
         mutationError,
         copy.kindLabel,
-        form.getValues('name'),
+        submittedName ?? '',
       ),
     });
-  }, [mutationError, copy.kindLabel, form]);
+  }, [mutationError, copy.kindLabel, form, submittedName]);
 
   const handleSubmit = (values: CreateResourceData) => {
     if (kind === 'secret') {
@@ -140,6 +142,9 @@ export function CreateResourceButton({
   };
 
   const handleOpenChange = (open: boolean) => {
+    if (!open && isPending) {
+      return;
+    }
     if (open) {
       form.reset({ name: '', value: defaultValue });
     }
@@ -168,7 +173,11 @@ export function CreateResourceButton({
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder={copy.namePlaceholder} />
+                      <Input
+                        {...field}
+                        placeholder={copy.namePlaceholder}
+                        disabled={isPending}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -185,6 +194,7 @@ export function CreateResourceButton({
                         {...field}
                         type={copy.masked ? 'password' : 'text'}
                         placeholder={copy.valuePlaceholder}
+                        disabled={isPending}
                       />
                     </FormControl>
                     <FormMessage />
@@ -194,7 +204,7 @@ export function CreateResourceButton({
             </div>
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="outline">
+                <Button type="button" variant="outline" disabled={isPending}>
                   Cancel
                 </Button>
               </DialogClose>
