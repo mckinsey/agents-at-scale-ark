@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -14,7 +14,6 @@ export const useListQueries = (params: ListQueriesParams = {}, enabled = true) =
   return useQuery({
     queryKey: ['list-all-queries', params, namespace],
     queryFn: () => queriesService.list(namespace, params),
-    placeholderData: keepPreviousData,
     enabled: enabled && Boolean(namespace),
   });
 };

@@ -32,7 +32,7 @@ describe('useWorkflow', () => {
   });
 
   it('returns null and stops loading when no name is provided', () => {
-    const { result } = renderHook(() => useWorkflow(''));
+    const { result } = renderHook(() => useWorkflow('default', ''));
 
     expect(result.current.workflow).toBeNull();
     expect(result.current.loading).toBe(false);
@@ -46,13 +46,14 @@ describe('useWorkflow', () => {
     vi.mocked(workflowsService.get).mockResolvedValue(workflow);
 
     const { result, unmount } = renderHook(() =>
-      useWorkflow('wf-1', 'default', 20),
+      useWorkflow('default', 'wf-1', 20),
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.workflow).toEqual(workflow);
     expect(result.current.error).toBeNull();
+    expect(workflowsService.get).toHaveBeenCalledWith('default', 'wf-1');
 
     await new Promise((resolve) => setTimeout(resolve, 60));
     expect(workflowsService.get).toHaveBeenCalledTimes(1);
@@ -65,7 +66,7 @@ describe('useWorkflow', () => {
     vi.mocked(workflowsService.get).mockResolvedValue(workflow);
 
     const { result, unmount } = renderHook(() =>
-      useWorkflow('wf-1', 'default', 20),
+      useWorkflow('default', 'wf-1', 20),
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -91,7 +92,7 @@ describe('useWorkflow', () => {
       .mockResolvedValue(succeeded);
 
     const { result, unmount } = renderHook(() =>
-      useWorkflow('wf-1', 'default', 20),
+      useWorkflow('default', 'wf-1', 20),
     );
 
     await waitFor(() =>
