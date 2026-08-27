@@ -10,6 +10,13 @@ export function useWorkflows(namespace: string, filters?: WorkflowFilters) {
   const [error, setError] = useState<Error | null>(null);
 
   const fetchWorkflows = useCallback(async () => {
+    if (!namespace) {
+      setWorkflows([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const data = await workflowsService.list(namespace, filters);
@@ -39,7 +46,7 @@ export function useWorkflow(
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!name) {
+    if (!name || !namespace) {
       setWorkflow(null);
       setLoading(false);
       return;

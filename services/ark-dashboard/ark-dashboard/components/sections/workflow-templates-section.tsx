@@ -142,7 +142,7 @@ export const WorkflowTemplatesSection = forwardRef<
         });
       }
     },
-    [fetchFlows],
+    [namespace, fetchFlows],
   );
 
   if (showLoading) {

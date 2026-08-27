@@ -152,7 +152,7 @@ export const memoryService = {
   },
 
   async deleteConversation(namespace: string, conversationId: string) {
-    apiClient.delete(`/api/v1/conversations/${conversationId}`, {
+    await apiClient.delete(`/api/v1/conversations/${conversationId}`, {
       params: { namespace },
     });
   },
@@ -166,13 +166,13 @@ export const memoryService = {
     conversationId: string;
     queryId: string;
   }) {
-    apiClient.delete(
+    await apiClient.delete(
       `/api/v1/conversations/${conversationId}/queries/${queryId}/messages`,
       { params: { namespace } },
     );
   },
 
   async resetMemory(namespace: string) {
-    apiClient.delete('/api/v1/conversations', { params: { namespace } });
+    await apiClient.delete('/api/v1/conversations', { params: { namespace } });
   },
 };
