@@ -498,27 +498,19 @@ async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPSe
 
     server_tools: dict[str, list[str]] = {}
     dropped: list[str] = []
-    partials: list[str] = []
     for agent_tool in agent.spec.tools:
         tool_name = getattr(agent_tool, "name", None)
         if not tool_name:
             continue
 
-        partial = getattr(agent_tool, "partial", None)
-        crd_name = (_get_attr_or_key(partial, "name") if partial else None) or tool_name
-
         try:
-            tool_crd = await ark.tools.a_get(crd_name, namespace)
+            tool_crd = await ark.tools.a_get(tool_name, namespace)
             tool_spec = tool_crd.spec
 
             tool_type = getattr(tool_spec, "type", None)
-            reported = f"{tool_name} ({tool_type})" if tool_type else tool_name
-            if partial:
-                partials.append(reported)
-                continue
             if tool_type != "mcp":
                 if tool_type:
-                    dropped.append(reported)
+                    dropped.append(f"{tool_name} ({tool_type})")
                 continue
 
             mcp_ref = getattr(tool_spec, "mcp", None)
@@ -537,21 +529,14 @@ async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPSe
                     server_tools[server_name] = []
                 server_tools[server_name].append(mcp_tool_name)
         except Exception as e:
-            logger.warning(f"Failed to resolve tool '{crd_name}': {e}")
+            logger.warning(f"Failed to resolve tool '{tool_name}': {e}")
 
-    if dropped or partials:
+    if dropped:
         agent_name = agent.metadata.get("name", "unknown") if agent.metadata else "unknown"
-        if dropped:
-            logger.warning(
-                f"Agent '{agent_name}': this executor receives only mcp tools; these "
-                f"tools were not available to the agent: {', '.join(dropped)}"
-            )
-        if partials:
-            logger.warning(
-                f"Agent '{agent_name}': partial tools cannot be sent to an executor "
-                f"because their preset parameters do not travel with them; these tools "
-                f"were not available to the agent: {', '.join(partials)}"
-            )
+        logger.warning(
+            f"Agent '{agent_name}': this executor receives only mcp tools; these "
+            f"tools were not available to the agent: {', '.join(dropped)}"
+        )
 
     servers: list[MCPServerConfig] = []
     for server_name, tool_names in server_tools.items():
