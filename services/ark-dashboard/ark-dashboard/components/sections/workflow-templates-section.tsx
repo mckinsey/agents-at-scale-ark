@@ -121,7 +121,7 @@ export const WorkflowTemplatesSection = forwardRef<
         throw error;
       }
     },
-    [],
+    [namespace],
   );
 
   const handleDeleteWorkflow = useCallback(

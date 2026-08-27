@@ -181,7 +181,7 @@ export default function ExportPage() {
       setSelectedKeys(new Set());
       const [data, lastTime] = await Promise.all([
         exportService.fetchAllResources(namespace),
-        exportService.getLastExportTime(namespace),
+        exportService.getLastExportTime(),
       ]);
       setResources(data);
       setLastExportTime(lastTime);
@@ -300,7 +300,7 @@ export default function ExportPage() {
         });
       }
 
-      setLastExportTime(await exportService.getLastExportTime(namespace));
+      setLastExportTime(await exportService.getLastExportTime());
     } catch (error) {
       toast.error('Export failed', {
         description: error instanceof Error ? error.message : 'Unknown error',

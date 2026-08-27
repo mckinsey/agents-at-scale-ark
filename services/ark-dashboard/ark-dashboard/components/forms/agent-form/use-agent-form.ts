@@ -34,10 +34,10 @@ import {
   transformFormParametersToApi,
 } from './utils';
 
-const EXISTING_AGENT_MODES: AgentFormMode[] = [
+const EXISTING_AGENT_MODES: ReadonlySet<AgentFormMode> = new Set([
   AgentFormMode.EDIT,
   AgentFormMode.VIEW,
-];
+]);
 
 interface UseAgentFormOptions {
   mode: AgentFormMode;
@@ -89,7 +89,7 @@ export function useAgentForm({
   });
 
   useEffect(() => {
-    const isExistingAgent = EXISTING_AGENT_MODES.includes(mode);
+    const isExistingAgent = EXISTING_AGENT_MODES.has(mode);
 
     const loadData = async () => {
       try {

@@ -1019,9 +1019,9 @@ export function SessionsSection() {
     const params = new URLSearchParams();
 
     // Preserve namespace parameter
-    const namespace = searchParams.get('namespace');
-    if (namespace) {
-      params.set('namespace', namespace);
+    const namespaceParam = searchParams.get('namespace');
+    if (namespaceParam) {
+      params.set('namespace', namespaceParam);
     }
 
     if (debouncedWorkflowName) {
@@ -1050,7 +1050,6 @@ export function SessionsSection() {
     statusFilter,
     sortOrder,
     router,
-    namespace,
   ]);
 
   const {

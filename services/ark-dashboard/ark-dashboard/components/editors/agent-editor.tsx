@@ -157,7 +157,7 @@ export function AgentEditor({
       setSelectedTools([]);
       setIsPromptExpanded(false);
     }
-  }, [namespace, open, agent, form]);
+  }, [open, agent, form]);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     if (agent) {

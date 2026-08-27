@@ -153,8 +153,11 @@ describe('exportService', () => {
         export_count: 5,
       });
 
-      const result = await exportService.getLastExportTime('test-namespace');
+      const result = await exportService.getLastExportTime();
       expect(result).toBe('2024-01-15T12:00:00Z');
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/v1/export/last-export-time',
+      );
     });
   });
 });

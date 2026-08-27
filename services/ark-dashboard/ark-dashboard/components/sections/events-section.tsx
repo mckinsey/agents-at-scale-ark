@@ -219,20 +219,27 @@ export function EventsSection({
       }
     },
     // Depend on individual URL params, not objects
-    [page, limit, type, kind, name],
+    [namespace, page, limit, type, kind, name],
   );
 
   // Load events when URL params change
   useEffect(() => {
     // Create a filter string to compare
-    const filterString = JSON.stringify({ page, limit, type, kind, name });
+    const filterString = JSON.stringify({
+      namespace,
+      page,
+      limit,
+      type,
+      kind,
+      name,
+    });
 
     // Only load if filters have actually changed
     if (lastLoadedFilters.current !== filterString) {
       lastLoadedFilters.current = filterString;
       loadEvents();
     }
-  }, [loadEvents, page, limit, type, kind, name]);
+  }, [loadEvents, namespace, page, limit, type, kind, name]);
 
   // Create query string helper
   const createQueryString = useCallback(

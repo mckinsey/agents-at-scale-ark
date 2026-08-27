@@ -412,6 +412,7 @@ export function useStudioChat({
       isStreaming,
       draftYaml,
       lastAgentYaml,
+      namespace,
       setBuilding,
       sessionId,
       timeout,

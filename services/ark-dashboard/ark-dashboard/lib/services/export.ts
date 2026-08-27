@@ -76,11 +76,10 @@ export interface ExportHistoryResponse {
 // Export service
 export const exportService = {
   // Get last export timestamp from backend
-  async getLastExportTime(namespace: string): Promise<string | null> {
+  async getLastExportTime(): Promise<string | null> {
     try {
       const response = await apiClient.get<ExportHistoryResponse>(
         '/api/v1/export/last-export-time',
-        { params: { namespace } },
       );
       return response.last_export;
     } catch (error) {

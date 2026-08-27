@@ -301,7 +301,7 @@ export function useWorkflowStudio({
         setSaving(false);
       }
     },
-    [draftYaml, replace, bypass],
+    [namespace, draftYaml, replace, bypass],
   );
 
   const save = useCallback(async () => {
