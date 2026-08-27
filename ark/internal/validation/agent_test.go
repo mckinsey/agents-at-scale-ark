@@ -3,6 +3,7 @@ package validation
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -197,5 +198,192 @@ func TestValidateAgentToolApproval(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestValidateAgentEngineToolWarning(t *testing.T) {
+	lookup := newMockLookup()
+	lookup.addResource("Tool", "default", "http-tool", &arkv1alpha1.Tool{
+		ObjectMeta: metav1.ObjectMeta{Name: "http-tool", Namespace: "default"},
+		Spec:       arkv1alpha1.ToolSpec{Type: "http"},
+	})
+	lookup.addResource("Tool", "default", "mcp-tool", &arkv1alpha1.Tool{
+		ObjectMeta: metav1.ObjectMeta{Name: "mcp-tool", Namespace: "default"},
+		Spec:       arkv1alpha1.ToolSpec{Type: "mcp"},
+	})
+	lookup.addResource("Tool", "default", "terminate", &arkv1alpha1.Tool{
+		ObjectMeta: metav1.ObjectMeta{Name: "terminate", Namespace: "default"},
+		Spec:       arkv1alpha1.ToolSpec{Type: "builtin"},
+	})
+	v := NewValidator(lookup)
+	ctx := context.Background()
+
+	engine := func(name string) *arkv1alpha1.ExecutionEngineRef {
+		return &arkv1alpha1.ExecutionEngineRef{Name: name}
+	}
+
+	tests := []struct {
+		name        string
+		engine      *arkv1alpha1.ExecutionEngineRef
+		tools       []arkv1alpha1.AgentTool
+		wantWarning bool
+		wantContain []string
+		wantOmit    []string
+	}{
+		{
+			name:        "engine with http tool warns",
+			engine:      engine("executor-claude-agent-sdk"),
+			tools:       []arkv1alpha1.AgentTool{{Type: "http", Name: "get-coordinates"}},
+			wantWarning: true,
+			wantContain: []string{"toolagent", "executor-claude-agent-sdk", "get-coordinates (http)", "only mcp tools"},
+		},
+		{
+			name:        "engine lists every dropped tool",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: "http", Name: "a"}, {Type: "mcp", Name: "b"}, {Type: "team", Name: "c"}},
+			wantWarning: true,
+			wantContain: []string{"a (http)", "c (team)"},
+		},
+		{
+			name:   "engine with mcp tool does not warn",
+			engine: engine("mock-engine"),
+			tools:  []arkv1alpha1.AgentTool{{Type: "mcp", Name: "echo"}},
+		},
+		{
+			name:        "engine with built-in tool warns with the Tool CRD type",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: toolTypeBuiltIn, Name: "terminate"}},
+			wantWarning: true,
+			wantContain: []string{"terminate (builtin)"},
+		},
+		{
+			name:   "engine with unresolvable built-in tool does not warn",
+			engine: engine("mock-engine"),
+			tools:  []arkv1alpha1.AgentTool{{Type: toolTypeBuiltIn, Name: "noop"}},
+		},
+		{
+			name:        "engine with deprecated custom tool resolves the real type from the Tool CRD",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "http-tool"}},
+			wantWarning: true,
+			wantContain: []string{"http-tool (http)"},
+		},
+		{
+			name:   "engine with deprecated custom tool backed by an mcp Tool CRD does not warn",
+			engine: engine("mock-engine"),
+			tools:  []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "mcp-tool"}},
+		},
+		{
+			name:   "engine with unresolvable custom tool does not warn",
+			engine: engine("mock-engine"),
+			tools:  []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "missing"}},
+		},
+		{
+			name:        "engine with a partial tool resolves the underlying Tool CRD",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "exposed", Partial: &arkv1alpha1.ToolPartial{Name: "http-tool"}}},
+			wantWarning: true,
+			wantContain: []string{"exposed (http)", "partial tools cannot have their preset parameters"},
+			wantOmit:    []string{"receives only mcp tools"},
+		},
+		{
+			name:        "engine with a partial tool backed by an mcp Tool CRD still warns",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "exposed-echo", Partial: &arkv1alpha1.ToolPartial{Name: "mcp-tool"}}},
+			wantWarning: true,
+			wantContain: []string{"exposed-echo (mcp)", "partial tools cannot have their preset parameters"},
+			wantOmit:    []string{"receives only mcp tools"},
+		},
+		{
+			name:        "engine with a partial tool declared mcp still warns",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: ToolTypeMCP, Name: "exposed-echo", Partial: &arkv1alpha1.ToolPartial{Name: "mcp-tool"}}},
+			wantWarning: true,
+			wantContain: []string{"exposed-echo (mcp)", "partial tools cannot have their preset parameters"},
+		},
+		{
+			name:        "engine with an unresolvable partial tool warns without a type",
+			engine:      engine("mock-engine"),
+			tools:       []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "exposed", Partial: &arkv1alpha1.ToolPartial{Name: "missing"}}},
+			wantWarning: true,
+			wantContain: []string{"partial tools cannot have their preset parameters", "agent: exposed"},
+		},
+		{
+			name:   "engine with a plain tool and a partial tool warns about both",
+			engine: engine("mock-engine"),
+			tools: []arkv1alpha1.AgentTool{
+				{Type: "http", Name: "get-coordinates"},
+				{Type: toolTypeCustom, Name: "exposed-echo", Partial: &arkv1alpha1.ToolPartial{Name: "mcp-tool"}},
+			},
+			wantWarning: true,
+			wantContain: []string{
+				"receives only mcp tools",
+				"get-coordinates (http)",
+				"partial tools cannot have their preset parameters",
+				"exposed-echo (mcp)",
+			},
+		},
+		{
+			name:  "no engine with a partial tool does not warn",
+			tools: []arkv1alpha1.AgentTool{{Type: toolTypeCustom, Name: "exposed", Partial: &arkv1alpha1.ToolPartial{Name: "http-tool"}}},
+		},
+		{
+			name:   "reserved a2a engine does not warn",
+			engine: engine("a2a"),
+			tools:  []arkv1alpha1.AgentTool{{Type: "http", Name: "get-coordinates"}},
+		},
+		{
+			name:  "no engine does not warn",
+			tools: []arkv1alpha1.AgentTool{{Type: "http", Name: "get-coordinates"}},
+		},
+		{
+			name:   "engine with no tools does not warn",
+			engine: engine("mock-engine"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{Name: "toolagent", Namespace: "default"},
+				Spec: arkv1alpha1.AgentSpec{
+					ExecutionEngine: tt.engine,
+					Tools:           tt.tools,
+				},
+			}
+
+			warnings, err := v.ValidateAgent(ctx, agent)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			assertEngineToolWarning(t, warnings, tt.wantWarning, tt.wantContain, tt.wantOmit)
+		})
+	}
+}
+
+func assertEngineToolWarning(t *testing.T, warnings []string, wantWarning bool, wantContain, wantOmit []string) {
+	t.Helper()
+
+	if !wantWarning {
+		if len(warnings) != 0 {
+			t.Fatalf("expected no warnings, got %v", warnings)
+		}
+		return
+	}
+
+	if len(warnings) == 0 {
+		t.Fatal("expected a warning, got none")
+	}
+	joined := strings.Join(warnings, "\n")
+	for _, want := range wantContain {
+		if !strings.Contains(joined, want) {
+			t.Errorf("warnings %q missing %q", joined, want)
+		}
+	}
+	for _, omit := range wantOmit {
+		if strings.Contains(joined, omit) {
+			t.Errorf("warnings %q should not contain %q", joined, omit)
+		}
 	}
 }

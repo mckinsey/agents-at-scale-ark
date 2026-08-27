@@ -3,8 +3,10 @@ package validation
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent) ([]string, error) {
@@ -24,15 +26,77 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 		}
 	}
 
+	warnings = append(warnings, v.engineToolWarnings(ctx, agent)...)
+
 	warnings = append(warnings, CollectMigrationWarnings(agent.Annotations)...)
 	return warnings, nil
+}
+
+func (v *Validator) engineToolWarnings(ctx context.Context, agent *arkv1alpha1.Agent) []string {
+	if !arka2a.IsNamedEngine(agent.Spec.ExecutionEngine) {
+		return nil
+	}
+
+	dropped := make([]string, 0, len(agent.Spec.Tools))
+	partials := make([]string, 0, len(agent.Spec.Tools))
+	for _, tool := range agent.Spec.Tools {
+		toolType := v.resolveAgentToolType(ctx, agent.Namespace, tool)
+		reported := tool.Name
+		if toolType != "" {
+			reported = fmt.Sprintf("%s (%s)", tool.Name, toolType)
+		}
+
+		if tool.Partial != nil {
+			partials = append(partials, reported)
+			continue
+		}
+		if toolType == "" || toolType == ToolTypeMCP {
+			continue
+		}
+		dropped = append(dropped, reported)
+	}
+
+	var warnings []string
+	if len(dropped) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"agent '%s': execution engine '%s' receives only mcp tools; these tools will not be available to the agent: %s",
+			agent.Name,
+			agent.Spec.ExecutionEngine.Name,
+			strings.Join(dropped, ", "),
+		))
+	}
+	if len(partials) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"agent '%s': execution engine '%s' connects to mcp servers directly, so partial tools cannot have their preset parameters injected or hidden; these tools will not be available to the agent: %s",
+			agent.Name,
+			agent.Spec.ExecutionEngine.Name,
+			strings.Join(partials, ", "),
+		))
+	}
+	return warnings
+}
+
+func (v *Validator) resolveAgentToolType(ctx context.Context, namespace string, tool arkv1alpha1.AgentTool) string {
+	if tool.Type != toolTypeCustom && tool.Type != toolTypeBuiltIn {
+		return tool.Type
+	}
+
+	obj, err := v.Lookup.GetResource(ctx, "Tool", namespace, tool.GetToolCRDName())
+	if err != nil {
+		return ""
+	}
+	toolCRD, ok := obj.(*arkv1alpha1.Tool)
+	if !ok {
+		return ""
+	}
+	return toolCRD.Spec.Type
 }
 
 func validateAgentTool(index int, tool arkv1alpha1.AgentTool) error {
 	hasName := tool.Name != ""
 
 	switch tool.Type {
-	case "built-in":
+	case toolTypeBuiltIn:
 		if !hasName {
 			return fmt.Errorf("tool[%d]: built-in tools must specify a name", index)
 		}

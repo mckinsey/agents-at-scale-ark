@@ -73,11 +73,18 @@ class AgentLabelSelector(BaseModel):
     matchExpressions: Optional[List[AgentLabelSelectorRequirement]] = None
 
 
+class AgentToolPartial(BaseModel):
+    """Underlying Tool CRD name, plus parameters preset and hidden from the agent."""
+    name: Optional[str] = None
+    parameters: Optional[List[AgentParameter]] = None
+
+
 class AgentTool(BaseModel):
     """Tool configuration for an agent."""
     type: str  # "built-in", "mcp", "http", "agent", "team", "builtin" (or deprecated "custom")
     name: Optional[str] = None
     labelSelector: Optional[AgentLabelSelector] = None
+    partial: Optional[AgentToolPartial] = None
 
 
 class AgentHeaderValue(BaseModel):

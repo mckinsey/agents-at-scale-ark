@@ -30,6 +30,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
 import {
   agentParametersChanged,
+  toolCrdName,
   transformAgentParametersToForm,
   transformFormParametersToApi,
 } from './utils';
@@ -112,7 +113,7 @@ export function useAgentForm({
           setExecutionEngines(enginesData);
 
           const missingTools = agentData.tools?.filter(
-            agentTool => !toolsData.some(t => t.name === agentTool.name),
+            agentTool => !toolsData.some(t => t.name === toolCrdName(agentTool)),
           ) as Tool[];
           setUnavailableTools(missingTools || []);
           setSelectedTools(agentData.tools || []);
@@ -266,24 +267,24 @@ export function useAgentForm({
       const newTool: AgentTool = { type: 'custom', name: tool.name };
       setSelectedTools(prev => [...prev, newTool]);
     } else {
-      setSelectedTools(prev => prev.filter(t => t.name !== tool.name));
+      setSelectedTools(prev => prev.filter(t => toolCrdName(t) !== tool.name));
     }
   }, []);
 
   const handleDeleteTool = useCallback((tool: Tool) => {
     setUnavailableTools(prev => prev.filter(t => t.name !== tool.name));
-    setSelectedTools(prev => prev.filter(t => t.name !== tool.name));
+    setSelectedTools(prev => prev.filter(t => toolCrdName(t) !== tool.name));
   }, []);
 
   const isToolSelected = useCallback(
-    (toolName: string) => selectedTools.some(t => t.name === toolName),
+    (toolName: string) => selectedTools.some(t => toolCrdName(t) === toolName),
     [selectedTools],
   );
 
   const hasToolsChanged = useCallback(() => {
     if (selectedTools.length !== initialTools.length) return true;
-    const selectedNames = selectedTools.map(t => t.name).sort();
-    const initialNames = initialTools.map(t => t.name).sort();
+    const selectedNames = selectedTools.map(toolCrdName).sort();
+    const initialNames = initialTools.map(toolCrdName).sort();
     return selectedNames.some((name, i) => name !== initialNames[i]);
   }, [selectedTools, initialTools]);
 

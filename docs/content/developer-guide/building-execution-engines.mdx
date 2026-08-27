@@ -225,4 +225,27 @@ for server in request.mcpServers:
 
 Your executor connects to each MCP server using its own MCP client (e.g., via LangChain, CrewAI, or the MCP SDK directly). The `tools` list is an allowlist — only register and use tools that appear in this list, even if the server exposes additional tools.
 
-Non-MCP tool types (http, agent, team, builtin) are not included in `mcpServers`.
+Non-MCP tool types (http, agent, team, builtin) are not included in `mcpServers`. MCP is the only tool type with a dialable endpoint, so there is nothing for an engine to invoke.
+
+Attaching one anyway is accepted, but warns. Applying the agent prints an admission warning naming the engine and the dropped tools:
+
+```
+Warning: agent 'toolagent': execution engine 'my-engine' receives only mcp tools;
+these tools will not be available to the agent: get-coordinates (http)
+```
+
+The dashboard shows the same warning in the agent's chat panel, and the SDK logs it when it builds the request. Without this the tool is dropped silently and the agent answers that it does not exist.
+
+### Partial tools
+
+Partial tools are withheld from engines too, including when the underlying Tool is `mcp`:
+
+```
+Warning: agent 'toolagent': execution engine 'my-engine' connects to mcp servers
+directly, so partial tools cannot have their preset parameters injected or hidden;
+these tools will not be available to the agent: get-chicago-coordinates (http)
+```
+
+A partial preconfigures parameters and hides them from the agent. Ark can only enforce that where it sits between the agent and the tool, which is the case for the default completions executor — it rewrites the schema before the model sees it, then injects the values before the call. Your executor connects to the MCP server itself and reads the schema from the server, so neither step is possible.
+
+Do not implement partials in your executor. The preset values can come from a Secret, so honouring them has to be enforced in one place rather than per executor. Supporting them properly needs an Ark-side MCP proxy that applies the partial and hands the engine a URL.

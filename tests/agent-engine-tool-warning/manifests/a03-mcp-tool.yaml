@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: search-docs
+spec:
+  type: mcp
+  description: "Searches documentation"
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: Search query
+    required: ["query"]
+  mcp:
+    mcpServerRef:
+      name: docs-mcp-server
+    toolName: search
