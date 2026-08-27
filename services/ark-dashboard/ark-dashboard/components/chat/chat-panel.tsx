@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { ChatNotice } from '@/components/chat/chat-notice';
+import { MemoryChatNotice } from '@/components/chat/memory-chat-notice';
 import { Autorenew, Build, Info, Send, Stop, Warning } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
@@ -47,6 +48,7 @@ export function ChatPanel({
     statusText,
     isWaitingForApprovalResponse,
     error,
+    memoryNotice,
     sendMessage,
     clearChat,
     messagesEndRef,
@@ -145,6 +147,16 @@ export function ChatPanel({
       </ScrollArea>
 
       <div className="border-stroke-divider flex-shrink-0 border-t">
+        {/* Pinned above the composer rather than sitting with the other
+            notices in the scroll area. Those are set at mount and read before
+            the first send; this one is set after the newest turn, and the
+            viewport is pinned to the bottom by then, so in the scroll area it
+            would be painted screens above where the user is looking. */}
+        {memoryNotice && (
+          <div className="px-4 pt-4">
+            <MemoryChatNotice notice={memoryNotice} />
+          </div>
+        )}
         {hasParameters && (
           <div className="px-4 pt-4">
             {parameterVariant === 'team' ? (

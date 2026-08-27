@@ -13,6 +13,9 @@ vi.mock('@/lib/services', () => ({
     streamQueryStatus: vi.fn(),
     getQueryResult: vi.fn(),
     getQuery: vi.fn(),
+    resolveMemoryNotice: vi
+      .fn()
+      .mockResolvedValue({ settled: true, notice: null }),
     submitChatQuery: vi.fn(),
     cancelQuery: vi.fn(),
   },
@@ -39,6 +42,10 @@ describe('useChatSession - Approval Handling', () => {
     vi.clearAllMocks();
     vi.resetAllMocks();
     vi.mocked(agentsService.getByName).mockResolvedValue(null);
+    vi.mocked(chatService.resolveMemoryNotice).mockResolvedValue({
+      settled: true,
+      notice: null,
+    });
   });
 
   describe('Tool Approval Detection', () => {
@@ -221,6 +228,61 @@ describe('useChatSession - Approval Handling', () => {
         expect(chatService.getQueryResult).toHaveBeenCalledWith(
           'test-query-poll',
         );
+      });
+    });
+
+    // applyTerminalResult is the third and least-travelled place the banner is
+    // written from; nothing else exercises it.
+    it('surfaces a memory notice carried by the post-approval result', async () => {
+      const unavailable = {
+        type: 'MemoryUnavailable' as const,
+        message: 'no Memory backend was reachable',
+      };
+      async function* approvalChunks(): AsyncGenerator<
+        Record<string, unknown>,
+        void,
+        unknown
+      > {
+        yield {
+          type: 'tool_approval_request',
+          taskId: 'task-notice',
+          toolCalls: [
+            {
+              id: 'call-1',
+              type: 'function',
+              function: { name: 'test-tool', arguments: '{}' },
+            },
+          ],
+        };
+      }
+
+      vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+        queryName: 'test-query-notice',
+        chunks: approvalChunks(),
+      });
+      vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+      vi.mocked(chatService.getQueryResult).mockResolvedValue({
+        terminal: true,
+        status: 'done',
+        messages: [{ role: 'assistant', content: 'Tool executed' }],
+        memoryLookup: { settled: true, notice: unavailable },
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper: createWrapper() },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('test message');
+      });
+
+      await act(async () => {
+        await result.current.pollAfterApproval();
+      });
+
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
       });
     });
 
@@ -415,6 +477,10 @@ describe('useChatSession - Conversation ID Continuity', () => {
     vi.clearAllMocks();
     vi.resetAllMocks();
     vi.mocked(agentsService.getByName).mockResolvedValue(null);
+    vi.mocked(chatService.resolveMemoryNotice).mockResolvedValue({
+      settled: true,
+      notice: null,
+    });
     globalThis.sessionStorage?.clear();
   });
 

@@ -35,6 +35,9 @@ vi.mock('@/lib/services', () => ({
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
     getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
+    resolveMemoryNotice: vi
+      .fn()
+      .mockResolvedValue({ settled: true, notice: null }),
   },
   agentsService: {
     getByName: vi.fn().mockResolvedValue({ parameters: [] }),
