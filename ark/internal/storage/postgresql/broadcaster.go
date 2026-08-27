@@ -130,6 +130,12 @@ func (b *kindBroadcaster) run() {
 	}
 }
 
+const broadcasterRelistQuery = `
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
+		FROM resources
+		WHERE kind = $1 AND resource_version > $2
+		ORDER BY resource_version ASC`
+
 // relist runs ONE query for the kind and fans the rows out to all subscribers.
 // Mirrors the old postgresWatcher.relist lookback/dedup semantics, but without the
 // namespace/label SQL filters (those become in-memory predicates at fan-out) and
@@ -146,16 +152,10 @@ func (b *kindBroadcaster) relist() {
 		from = 0
 	}
 
-	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
-		FROM resources
-		WHERE kind = $1 AND resource_version > $2
-		ORDER BY resource_version ASC`
-
 	broadcasterRelistTotal.WithLabelValues(b.kind).Inc()
 	ctx, cancel := context.WithTimeout(b.backend.ctx, relistQueryTimeout)
 	defer cancel()
-	rows, err := b.backend.db.QueryContext(ctx, query, b.kind, from)
+	rows, err := b.backend.db.QueryContext(ctx, broadcasterRelistQuery, b.kind, from)
 	if err != nil {
 		b.onRelistFailure(err)
 		return

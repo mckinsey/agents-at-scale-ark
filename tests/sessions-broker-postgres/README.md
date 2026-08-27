@@ -8,6 +8,7 @@ Verifies that two queries sharing a `sessionId` are recorded as two rows in the 
 - The broker's `session_queries` table has one row per query, both `phase='done'`
 - The `sessions` header row shows `status=idle`, `error_count=0`, two conversations
 - `GET /sessions/:id` returns the same shape over the broker HTTP API, including the two participants derived from those conversations
+- Deleting one of the two queries removes its `session_queries` row, and the header is left aggregated over the one that remains (`status=idle`, `error_count=0`, one conversation, named after the surviving agent)
 - Requires the broker running with postgres sessions backend (`postgresql: "true"` label)
 
 ## Running
