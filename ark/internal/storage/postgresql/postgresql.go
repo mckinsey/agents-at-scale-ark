@@ -198,7 +198,30 @@ func quoteConnValue(v string) string {
 const (
 	connectTimeoutSeconds = 10
 	startupPingTimeout    = 30 * time.Second
+
+	// The backend depends on PG15+ server behaviour (pg_current_snapshot
+	// pagination, pg_replication_slots.wal_status) and only majors in community
+	// support are tested in CI, so older servers are rejected at startup.
+	minServerVersionNum = 150000
 )
+
+func checkServerVersion(ctx context.Context, db *sql.DB) error {
+	var (
+		versionNum int
+		version    string
+	)
+	err := db.QueryRowContext(ctx,
+		"SELECT current_setting('server_version_num')::int, current_setting('server_version')").
+		Scan(&versionNum, &version)
+	if err != nil {
+		return fmt.Errorf("failed to read server version: %w", err)
+	}
+	if versionNum < minServerVersionNum {
+		return fmt.Errorf("PostgreSQL %s is not supported: the storage backend requires PostgreSQL %d or newer",
+			version, minServerVersionNum/10000)
+	}
+	return nil
+}
 
 func buildConnString(cfg Config) string {
 	parts := []string{
@@ -253,6 +276,11 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	if err := db.PingContext(pingCtx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	if err := checkServerVersion(pingCtx, db); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -345,6 +373,8 @@ func (p *PostgreSQLBackend) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_resources_labels ON resources USING GIN(labels);
 	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version);
 	CREATE INDEX IF NOT EXISTS idx_resources_deleted ON resources(deleted_at) WHERE deleted_at IS NOT NULL;
+	CREATE INDEX IF NOT EXISTS idx_resources_kind_rv ON resources(kind, resource_version);
+	CREATE INDEX IF NOT EXISTS idx_resources_rv ON resources(resource_version);
 
 	DROP TRIGGER IF EXISTS resource_change_trigger ON resources;
 	DROP FUNCTION IF EXISTS notify_resource_change();
@@ -1036,9 +1066,11 @@ func (p *PostgreSQLBackend) nudgeAllWatchers() {
 	}
 }
 
+const maxResourceVersionQuery = `SELECT MAX(resource_version) FROM resources`
+
 func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 	var rv sql.NullInt64
-	err := p.db.QueryRowContext(p.ctx, `SELECT MAX(resource_version) FROM resources`).Scan(&rv)
+	err := p.db.QueryRowContext(p.ctx, maxResourceVersionQuery).Scan(&rv)
 	if err != nil {
 		return 0, err
 	}

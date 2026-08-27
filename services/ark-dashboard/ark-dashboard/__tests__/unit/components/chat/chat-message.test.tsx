@@ -5,6 +5,7 @@ import { ChatMessage } from '@/components/chat/chat-message';
 import { submitApproval } from '@/lib/services/a2a-task-approvals';
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useRouter: () => ({
     push: vi.fn(),
   }),

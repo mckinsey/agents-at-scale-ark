@@ -7,6 +7,7 @@ const mockPush = vi.fn();
 const mockReplace = vi.fn();
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useParams: vi.fn(),
   useRouter: vi.fn(),
   useSearchParams: vi.fn(),

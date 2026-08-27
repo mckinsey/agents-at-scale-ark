@@ -188,6 +188,7 @@ const defaultArkServices: ServiceCollection = {
     description:
       'In-memory storage service with streaming support for Ark queries',
     enabled: true,
+    mandatory: true,
     category: 'service',
     chartPath: `${REGISTRY_BASE}/ark-broker:${CHART_VERSION}`,
     installArgs: [],
