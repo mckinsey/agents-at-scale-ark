@@ -1,9 +1,11 @@
-"""conversationId is bounded in length only, never in character set.
+"""conversationId is an opaque identifier that Ark passes through unchanged.
 
 Engines and memory services generate conversation IDs in formats Ark does not
-control, and those IDs land in status.conversationId unvalidated. The dashboard
-lists them and resends them as spec.conversationId on follow-up queries, so any
-character-set rule here breaks that round-trip.
+control, and those IDs land in status.conversationId with no validation. The
+dashboard lists them and resends them as spec.conversationId on follow-up
+queries, so any rule here that status does not also enforce breaks that
+round-trip. Constraining status instead is not an option: it is written from
+whatever the engine returns, so a rejected write becomes a reconcile loop.
 
 Executors that map a conversationId onto a filesystem path validate it at the
 path join, which is also the only layer that covers the direct A2A path.
@@ -13,11 +15,8 @@ import unittest
 from pathlib import Path
 
 import yaml
-from pydantic import ValidationError
 
 from ark_api.models.queries import (
-    CONVERSATION_ID_MAX_LENGTH,
-    CONVERSATION_ID_MIN_LENGTH,
     QueryCreateRequest,
     QueryDetailResponse,
     QueryResponse,
@@ -42,17 +41,12 @@ ENGINE_GENERATED = [
     "tenant/session",
     "conversation 1",
     "会話-1",
+    "a" * 512,
 ]
-
-REJECTED = ["", "a" * (CONVERSATION_ID_MAX_LENGTH + 1)]
-
-
-def _create(conversation_id):
-    return QueryCreateRequest(name="q", input="hi", conversationId=conversation_id)
 
 
 class TestEngineGeneratedIdsRoundTrip(unittest.TestCase):
-    """Regression test for the round-trip break.
+    """Regression test for the round-trip.
 
     An ID that reaches status.conversationId from an engine or memory service
     must be reusable in spec.conversationId, or follow-up queries against that
@@ -62,7 +56,10 @@ class TestEngineGeneratedIdsRoundTrip(unittest.TestCase):
     def test_create_accepts_engine_generated(self):
         for value in ENGINE_GENERATED:
             with self.subTest(value=value):
-                self.assertEqual(_create(value).conversationId, value)
+                request = QueryCreateRequest(
+                    name="q", input="hi", conversationId=value
+                )
+                self.assertEqual(request.conversationId, value)
 
     def test_update_accepts_engine_generated(self):
         for value in ENGINE_GENERATED:
@@ -71,57 +68,45 @@ class TestEngineGeneratedIdsRoundTrip(unittest.TestCase):
                     QueryUpdateRequest(conversationId=value).conversationId, value
                 )
 
+    def test_responses_accept_engine_generated(self):
+        for value in ENGINE_GENERATED:
+            with self.subTest(value=value):
+                response = QueryResponse(
+                    name="q", namespace="default", input="hi", conversationId=value
+                )
+                self.assertEqual(response.conversationId, value)
 
-class TestLengthBounds(unittest.TestCase):
-    def test_rejects_out_of_bounds(self):
-        for value in REJECTED:
-            with self.subTest(length=len(value)), self.assertRaises(ValidationError):
-                _create(value)
-
-    def test_accepts_boundaries(self):
-        for length in (CONVERSATION_ID_MIN_LENGTH, CONVERSATION_ID_MAX_LENGTH):
-            with self.subTest(length=length):
-                value = "a" * length
-                self.assertEqual(_create(value).conversationId, value)
+                detail = QueryDetailResponse(
+                    name="q", namespace="default", input="hi", conversationId=value
+                )
+                self.assertEqual(detail.conversationId, value)
 
     def test_omitted_is_allowed(self):
         self.assertIsNone(QueryCreateRequest(name="q", input="hi").conversationId)
         self.assertIsNone(QueryUpdateRequest().conversationId)
 
 
-class TestResponseModelsAreUnconstrained(unittest.TestCase):
-    """Read paths must return whatever the cluster holds, at any length."""
+class TestCrdDoesNotNarrowSpec(unittest.TestCase):
+    """spec.conversationId must not carry a rule status.conversationId lacks."""
 
-    def test_response_accepts_any_value(self):
-        oversized = "a" * (CONVERSATION_ID_MAX_LENGTH + 1)
-        response = QueryResponse(
-            name="q", namespace="default", input="hi", conversationId=oversized
-        )
-        self.assertEqual(response.conversationId, oversized)
-
-        detail = QueryDetailResponse(
-            name="q", namespace="default", input="hi", conversationId="thread.abc123"
-        )
-        self.assertEqual(detail.conversationId, "thread.abc123")
-
-
-class TestMatchesCrd(unittest.TestCase):
-    """The CRD is the source of truth; these constants are a hand-copied mirror."""
-
-    def _spec_conversation_id(self):
+    def _conversation_id_schemas(self):
         if not CRD_PATH.exists():
             self.skipTest(f"CRD not reachable from this checkout: {CRD_PATH}")
 
         crd = yaml.safe_load(CRD_PATH.read_text())
-        versions = crd["spec"]["versions"]
-        return versions[0]["schema"]["openAPIV3Schema"]["properties"]["spec"][
-            "properties"
-        ]["conversationId"]
+        schema = crd["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]
+        return (
+            schema["spec"]["properties"]["conversationId"],
+            schema["status"]["properties"]["conversationId"],
+        )
 
-    def test_lengths_match_crd(self):
-        conversation_id = self._spec_conversation_id()
-        self.assertEqual(conversation_id["minLength"], CONVERSATION_ID_MIN_LENGTH)
-        self.assertEqual(conversation_id["maxLength"], CONVERSATION_ID_MAX_LENGTH)
-
-    def test_crd_has_no_character_set_rule(self):
-        self.assertNotIn("pattern", self._spec_conversation_id())
+    def test_spec_is_no_stricter_than_status(self):
+        spec, status = self._conversation_id_schemas()
+        for keyword in ("pattern", "maxLength", "minLength", "format"):
+            with self.subTest(keyword=keyword):
+                self.assertEqual(
+                    spec.get(keyword),
+                    status.get(keyword),
+                    f"spec.conversationId {keyword} differs from status: any rule "
+                    f"not enforced on status breaks reuse of engine-generated IDs",
+                )
