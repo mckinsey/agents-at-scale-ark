@@ -49,6 +49,7 @@ function stripPrefix(name: string): string {
 }
 
 async function deriveEngineToolWarning(
+  namespace: string,
   agent: AgentDetail | null,
 ): Promise<string | null> {
   const engineName = agent?.executionEngine?.name;
@@ -62,41 +63,7 @@ async function deriveEngineToolWarning(
   );
   const toolTypesByName = new Map<string, string>();
   if (needsToolTypes) {
-    const allTools = await toolsService.getAll().catch(() => []);
-    allTools.forEach(tool => {
-      if (tool.type) toolTypesByName.set(tool.name, tool.type);
-    });
-  }
-
-  const dropped = tools
-    .map(tool => {
-      const type = UNRESOLVED_TOOL_TYPES.includes(tool.type)
-        ? toolTypesByName.get(tool.name || '')
-        : tool.type;
-      return type && type !== 'mcp' ? `${tool.name} (${type})` : null;
-    })
-    .filter((entry): entry is string => entry !== null);
-
-  if (dropped.length === 0) return null;
-
-  return `Execution engine '${engineName}' receives only mcp tools. Not available to this agent: ${dropped.join(', ')}`;
-}
-
-async function deriveEngineToolWarning(
-  agent: AgentDetail | null,
-): Promise<string | null> {
-  const engineName = agent?.executionEngine?.name;
-  if (!engineName || engineName === BUILT_IN_A2A_ENGINE) return null;
-
-  const tools = agent?.tools || [];
-  if (tools.length === 0) return null;
-
-  const needsToolTypes = tools.some(
-    tool => UNRESOLVED_TOOL_TYPES.includes(tool.type) && tool.name,
-  );
-  const toolTypesByName = new Map<string, string>();
-  if (needsToolTypes) {
-    const allTools = await toolsService.getAll().catch(() => []);
+    const allTools = await toolsService.getAll(namespace).catch(() => []);
     allTools.forEach(tool => {
       if (tool.type) toolTypesByName.set(tool.name, tool.type);
     });
@@ -212,7 +179,7 @@ export function useAgentQueryParameters(
         setAvailableParameters(extractAgentRequiredParams(agent?.parameters));
         setTeamAgents([]);
         setRows([]);
-        const warning = await deriveEngineToolWarning(agent);
+        const warning = await deriveEngineToolWarning(namespace, agent);
         if (cancelled) return;
         setEngineToolWarning(warning);
       })
