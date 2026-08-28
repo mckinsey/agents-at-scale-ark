@@ -1,202 +1,184 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 
-import JsonDisplay from '@/components/JsonDisplay';
-import { PageHeader } from '@/components/common/page-header';
-import type { BreadcrumbElement } from '@/components/common/page-header';
-import { StatusDot } from '@/components/sections/a2a-tasks-section/status-dot';
-import { mapTaskPhaseToVariant } from '@/components/sections/a2a-tasks-section/utils';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
+import {
+  DetailCard,
+  DetailRow,
+  DetailSectionCard,
+} from '@/components/common/detail-card';
+import { JsonViewer } from '@/components/common/json-viewer';
+import { NamespacedLink } from '@/components/namespaced-link';
+import { TaskStatus } from '@/components/sections/a2a-tasks-section/task-status';
 import { Button } from '@/components/ui/button';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
-import { simplifyDuration } from '@/lib/utils/time';
+import { formatTimestamp, simplifyDuration } from '@/lib/utils/time';
 
 export default function A2ATaskPage() {
   const params = useParams();
-  const router = useRouter();
   const taskId = params.id as string;
 
   const { data: task, isLoading, error } = useA2ATask(taskId);
 
-  const breadcrumbs: BreadcrumbElement[] = [
-    ...BASE_BREADCRUMBS,
-    { href: '/tasks', label: 'Tasks' },
-  ];
+  const breadcrumb = (
+    <DetailBreadcrumb
+      backHref="/tasks"
+      backLabel="A2A tasks"
+      current={task?.taskId || taskId}
+    />
+  );
 
   if (isLoading) {
     return (
-      <>
-        <PageHeader breadcrumbs={breadcrumbs} />
-        <div className="flex h-screen items-center justify-center">
-          <div className="text-muted-foreground">Loading task...</div>
+      <div className="content-shell flex h-full w-full flex-col">
+        {breadcrumb}
+        <div className="mt-5 flex flex-1 items-center justify-center">
+          <span className="label-regular-primary text-fg-secondary">
+            Loading...
+          </span>
         </div>
-      </>
+      </div>
     );
   }
 
   if (error || !task) {
     return (
-      <>
-        <PageHeader breadcrumbs={breadcrumbs} />
-        <div className="flex h-screen items-center justify-center">
-          <div className="text-center">
-            <h1 className="mb-2 text-xl font-semibold">Error loading task</h1>
-            <p className="text-muted-foreground">
-              {error instanceof Error ? error.message : 'Task not found'}
+      <div className="content-shell flex h-full w-full flex-col">
+        {breadcrumb}
+        <div className="mt-5 flex flex-1 flex-col items-center justify-center gap-3">
+          <p className="headings-h3-regular text-fg-primary">
+            {error ? "Couldn't load this A2A task" : 'A2A task not found'}
+          </p>
+          {error && (
+            <p className="label-regular-primary text-fg-secondary">
+              {error instanceof Error ? error.message : String(error)}
             </p>
-            <Button
-              variant="outline"
-              onClick={() => router.back()}
-              className="mt-4">
-              ← Back
-            </Button>
-          </div>
+          )}
+          <NamespacedLink href="/tasks">
+            <Button variant="outline">Back to A2A tasks</Button>
+          </NamespacedLink>
         </div>
-      </>
+      </div>
     );
   }
 
+  const createdAt = task.metadata?.creationTimestamp as string | undefined;
+  const completedAt = task.status?.completionTime;
   const duration =
-    task.metadata?.creationTimestamp && task.status?.completionTime
+    createdAt && completedAt
       ? simplifyDuration(
-          (new Date(task.status.completionTime).getTime() -
-            new Date(task.metadata.creationTimestamp as string).getTime()) /
-            1000 +
-            's',
+          `${(new Date(completedAt).getTime() - new Date(createdAt).getTime()) / 1000}s`,
         )
-      : '-';
+      : '—';
+
+  const parameterEntries = Object.entries(task.parameters ?? {});
 
   return (
-    <>
-      <PageHeader
-        breadcrumbs={breadcrumbs}
-        currentPage={task.taskId || taskId}
-      />
-      <div className="flex flex-1 flex-col overflow-auto p-4">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {/* Column 1: Identity & Status */}
-          <div className="space-y-4">
-            <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-3 text-sm font-medium text-gray-500">
-                Identity
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Task ID</span>
-                  <span className="font-mono">{task.taskId}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Phase</span>
-                  <div className="flex items-center justify-center gap-2">
-                    <span>{task.status?.phase}</span>
-                    <StatusDot
-                      variant={mapTaskPhaseToVariant(task.status?.phase)}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Protocol State</span>
-                  <span>{task.status?.protocolState || '-'}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-3 text-sm font-medium text-gray-500">
-                Relationships
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Agent</span>
-                  <span>{task.agentRef?.name || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Query</span>
-                  <span>{task.queryRef?.name || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Server</span>
-                  <span>{task.a2aServerRef?.name || '-'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Column 2: Configuration & Timing */}
-          <div className="space-y-4">
-            <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-3 text-sm font-medium text-gray-500">Timing</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Created</span>
-                  <span>
-                    {task.metadata?.creationTimestamp
-                      ? new Date(
-                          task.metadata.creationTimestamp as string,
-                        ).toLocaleString()
-                      : '-'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Completed</span>
-                  <span>
-                    {task.status?.completionTime
-                      ? new Date(task.status.completionTime).toLocaleString()
-                      : '-'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Duration</span>
-                  <span>{duration}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Timeout</span>
-                  <span>{task.timeout || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">TTL</span>
-                  <span>{task.ttl || '-'}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-3 text-sm font-medium text-gray-500">
-                Configuration
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="text-gray-500">Input</span>
-                  <div className="mt-1 rounded bg-gray-50 p-2 font-mono text-xs dark:bg-gray-800">
-                    {task.input || '-'}
-                  </div>
-                </div>
-                {task.parameters && (
-                  <div>
-                    <span className="text-gray-500">Parameters</span>
-                    <div className="mt-1">
-                      <JsonDisplay value={task.parameters} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Column 3: Raw Data */}
-          <div className="space-y-4">
-            <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-3 text-sm font-medium text-gray-500">
-                Raw Data
-              </h3>
-              <div className="max-h-[500px] overflow-auto">
-                <JsonDisplay value={task} />
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="content-shell flex h-full w-full flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        {breadcrumb}
+        <h1 className="headings-h2-regular text-fg-primary break-all">
+          {task.taskId || taskId}
+        </h1>
       </div>
-    </>
+
+      <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-5 lg:flex-row">
+            <DetailCard title="Identity">
+              <DetailRow
+                label="Status"
+                value={<TaskStatus phase={task.status?.phase} />}
+                valueClassName="min-w-0"
+                tooltip="Kubernetes lifecycle phase Ark manages for this task"
+              />
+              <DetailRow
+                label="Protocol state"
+                value={task.status?.protocolState || '—'}
+                tooltip="Raw state reported by the remote agent over the A2A protocol"
+                last
+              />
+            </DetailCard>
+
+            <DetailCard title="Timing">
+              <DetailRow
+                label="Created"
+                value={formatTimestamp(createdAt)}
+                tooltip="When this task resource was created"
+              />
+              <DetailRow
+                label="Completed"
+                value={formatTimestamp(completedAt)}
+                tooltip="When the task reached a terminal state"
+              />
+              <DetailRow
+                label="Duration"
+                value={duration}
+                tooltip="Time between creation and completion"
+              />
+              <DetailRow
+                label="Timeout"
+                value={task.timeout || '—'}
+                tooltip="How long Ark polls before marking the task failed"
+              />
+              <DetailRow
+                label="TTL"
+                value={task.ttl || '—'}
+                tooltip="How long the task is retained after completion"
+                last
+              />
+            </DetailCard>
+
+            <DetailCard title="Relationships">
+              <DetailRow
+                label="Agent"
+                value={task.agentRef?.name || '—'}
+                tooltip="Agent assigned to execute this task"
+              />
+              <DetailRow
+                label="Query"
+                value={task.queryRef?.name || '—'}
+                tooltip="Query that created this task"
+              />
+              <DetailRow
+                label="Server"
+                value={task.a2aServerRef?.name || '—'}
+                tooltip="A2A server polled for status updates; empty for approval tasks"
+                last
+              />
+            </DetailCard>
+          </div>
+
+          <DetailSectionCard title="Input">
+            <div className="text-fg-primary py-2 text-base leading-6 tracking-[-0.032px] whitespace-pre-wrap">
+              {task.input || '—'}
+            </div>
+          </DetailSectionCard>
+
+          {parameterEntries.length > 0 && (
+            <DetailSectionCard title="Parameters">
+              <div className="flex flex-col gap-2 py-2">
+                {parameterEntries.map(([name, value]) => (
+                  <div key={name} className="flex items-center gap-4">
+                    <span className="text-fg-secondary w-[140px] shrink-0 font-mono text-xs">
+                      {name}
+                    </span>
+                    <span className="text-fg-primary min-w-0 flex-1 truncate font-mono text-xs">
+                      {String(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </DetailSectionCard>
+          )}
+
+          <DetailSectionCard title="Raw Data">
+            <JsonViewer value={task} fileName={task.name || taskId} />
+          </DetailSectionCard>
+        </div>
+      </ScrollArea>
+    </div>
   );
 }

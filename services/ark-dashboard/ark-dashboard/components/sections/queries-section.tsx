@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { toast } from 'sonner';
 
-import { DatabaseSearch, Info, SwapVert, Trash } from '@/components/icons';
+import { SortableColumnHeader } from '@/components/common/sortable-column-header';
+import { DatabaseSearch, Info, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconActionButton } from '@/components/ui/icon-action-button';
@@ -24,6 +25,7 @@ import {
 } from '@/components/ui/tooltip';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import type { components } from '@/lib/api/generated/types';
+import { timestampValue, useValueSort } from '@/lib/hooks/use-value-sort';
 import { queriesService } from '@/lib/services/queries';
 import type { useListQueries } from '@/lib/services/queries-hooks';
 import { cn } from '@/lib/utils';
@@ -31,13 +33,15 @@ import { formatAge } from '@/lib/utils/time';
 
 type QueryResponse = components['schemas']['QueryResponse'];
 type ListQueriesResult = ReturnType<typeof useListQueries>;
-type SortDirection = 'asc' | 'desc';
 
 interface QueriesSectionProps {
   readonly searchTerm: string;
   readonly onClearSearch: () => void;
   readonly queryResult: ListQueriesResult;
 }
+
+const getCreatedTime = (query: QueryResponse) =>
+  timestampValue(query.creationTimestamp);
 
 const STATUS_CONFIG: Record<string, { label: string; dotClass: string }> = {
   done: { label: 'Done', dotClass: 'bg-status-success' },
@@ -233,8 +237,6 @@ export function QueriesSection({
   onClearSearch,
   queryResult,
 }: Readonly<QueriesSectionProps>) {
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-
   const { data, isLoading, isError, error, refetch } = queryResult;
 
   useEffect(() => {
@@ -249,15 +251,11 @@ export function QueriesSection({
   const queries = data?.items ?? [];
   const total = data?.total ?? 0;
 
-  const sortedQueries = [...queries].sort((a, b) => {
-    const aTime = a.creationTimestamp
-      ? new Date(a.creationTimestamp).getTime()
-      : 0;
-    const bTime = b.creationTimestamp
-      ? new Date(b.creationTimestamp).getTime()
-      : 0;
-    return sortDirection === 'desc' ? bTime - aTime : aTime - bTime;
-  });
+  const {
+    sortDirection,
+    toggleSortDirection,
+    sortedItems: sortedQueries,
+  } = useValueSort(queries, getCreatedTime);
 
   const handleDelete = async (queryName: string) => {
     try {
@@ -321,17 +319,11 @@ export function QueriesSection({
         <TableHeader>
           <TableRow>
             <TableHead size="small" className="w-[110px]">
-              <button
-                type="button"
-                onClick={() =>
-                  setSortDirection(prev => (prev === 'desc' ? 'asc' : 'desc'))
-                }
-                className="inline-flex items-center gap-1">
-                Added
-                <IconShell size="sm" variant="secondary">
-                  <SwapVert />
-                </IconShell>
-              </button>
+              <SortableColumnHeader
+                label="Added"
+                sortDirection={sortDirection}
+                onToggle={toggleSortDirection}
+              />
             </TableHead>
             <TableHead size="small" className="w-[200px]">
               Name

@@ -6,11 +6,12 @@ import { toast } from 'sonner';
 
 import { EventTypeIndicator } from '@/components/common/event-type-indicator';
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
-import { Autorenew, Poll, Warning } from '@/components/icons';
+import { Autorenew, Poll } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import {
   LearnMoreButton,
   ResourceEmptyState,
+  ResourceErrorState,
   ResourceNoResults,
 } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
@@ -403,16 +404,7 @@ export function EventsSection({
         </div>
 
         {loadError && (
-          <div
-            role="alert"
-            className="border-status-error/30 bg-status-error/10 flex flex-none items-start gap-2 border px-3 py-2">
-            <IconShell size="sm" className="text-fg-error mt-0.5 shrink-0">
-              <Warning />
-            </IconShell>
-            <p className="label-regular-primary text-fg-error">
-              Couldn&apos;t refresh events: {loadError}
-            </p>
-          </div>
+          <ResourceErrorState title={`Couldn't refresh events: ${loadError}`} />
         )}
 
         {events.length === 0 ? (

@@ -109,3 +109,12 @@ export function formatAge(timestamp: Date | string | null | undefined): string {
     return '-';
   }
 }
+
+export function formatTimestamp(timestamp: string | undefined | null): string {
+  if (!timestamp) return '—';
+  try {
+    return new Date(timestamp).toLocaleString();
+  } catch {
+    return timestamp;
+  }
+}
