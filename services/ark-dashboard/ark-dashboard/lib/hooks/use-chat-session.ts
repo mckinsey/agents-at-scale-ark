@@ -147,6 +147,7 @@ interface UseChatSessionReturn {
   removeParameterRow: (id: string) => void;
   canAddParameterRow: boolean;
   missingParameters: string[];
+  engineToolWarning: string | null;
 }
 
 export function useChatSession({
@@ -316,6 +317,7 @@ export function useChatSession({
     canAddRow: canAddParameterRow,
     missingParameters,
     toApiParameters,
+    engineToolWarning,
   } = useAgentQueryParameters(name, type);
 
   useEffect(() => {
@@ -1260,5 +1262,6 @@ export function useChatSession({
     removeParameterRow,
     canAddParameterRow,
     missingParameters,
+    engineToolWarning,
   };
 }
