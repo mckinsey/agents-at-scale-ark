@@ -12,7 +12,6 @@ import { JsonViewer } from '@/components/common/json-viewer';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { TaskStatus } from '@/components/sections/a2a-tasks-section/task-status';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
 import { formatTimestamp, simplifyDuration } from '@/lib/utils/time';
 
@@ -84,101 +83,106 @@ export default function A2ATaskPage() {
         </h1>
       </div>
 
-      <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-5 lg:flex-row">
-            <DetailCard title="Identity">
-              <DetailRow
-                label="Status"
-                value={<TaskStatus phase={task.status?.phase} />}
-                valueClassName="min-w-0"
-                tooltip="Kubernetes lifecycle phase Ark manages for this task"
-              />
-              <DetailRow
-                label="Protocol state"
-                value={task.status?.protocolState || '—'}
-                tooltip="Raw state reported by the remote agent over the A2A protocol"
-                last
-              />
-            </DetailCard>
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto">
+        <div className="flex flex-none flex-col gap-5 lg:flex-row">
+          <DetailCard title="Identity">
+            <DetailRow
+              label="Status"
+              value={<TaskStatus phase={task.status?.phase} />}
+              valueClassName="min-w-0"
+              tooltip="Kubernetes lifecycle phase Ark manages for this task"
+            />
+            <DetailRow
+              label="Protocol state"
+              value={task.status?.protocolState || '—'}
+              tooltip="Raw state reported by the remote agent over the A2A protocol"
+              last
+            />
+          </DetailCard>
 
-            <DetailCard title="Timing">
-              <DetailRow
-                label="Created"
-                value={formatTimestamp(createdAt)}
-                tooltip="When this task resource was created"
-              />
-              <DetailRow
-                label="Completed"
-                value={formatTimestamp(completedAt)}
-                tooltip="When the task reached a terminal state"
-              />
-              <DetailRow
-                label="Duration"
-                value={duration}
-                tooltip="Time between creation and completion"
-              />
-              <DetailRow
-                label="Timeout"
-                value={task.timeout || '—'}
-                tooltip="How long Ark polls before marking the task failed"
-              />
-              <DetailRow
-                label="TTL"
-                value={task.ttl || '—'}
-                tooltip="How long the task is retained after completion"
-                last
-              />
-            </DetailCard>
+          <DetailCard title="Timing">
+            <DetailRow
+              label="Created"
+              value={formatTimestamp(createdAt)}
+              tooltip="When this task resource was created"
+            />
+            <DetailRow
+              label="Completed"
+              value={formatTimestamp(completedAt)}
+              tooltip="When the task reached a terminal state"
+            />
+            <DetailRow
+              label="Duration"
+              value={duration}
+              tooltip="Time between creation and completion"
+            />
+            <DetailRow
+              label="Timeout"
+              value={task.timeout || '—'}
+              tooltip="How long Ark polls before marking the task failed"
+            />
+            <DetailRow
+              label="TTL"
+              value={task.ttl || '—'}
+              tooltip="How long the task is retained after completion"
+              last
+            />
+          </DetailCard>
 
-            <DetailCard title="Relationships">
-              <DetailRow
-                label="Agent"
-                value={task.agentRef?.name || '—'}
-                tooltip="Agent assigned to execute this task"
-              />
-              <DetailRow
-                label="Query"
-                value={task.queryRef?.name || '—'}
-                tooltip="Query that created this task"
-              />
-              <DetailRow
-                label="Server"
-                value={task.a2aServerRef?.name || '—'}
-                tooltip="A2A server polled for status updates; empty for approval tasks"
-                last
-              />
-            </DetailCard>
+          <DetailCard title="Relationships">
+            <DetailRow
+              label="Agent"
+              value={task.agentRef?.name || '—'}
+              tooltip="Agent assigned to execute this task"
+            />
+            <DetailRow
+              label="Query"
+              value={task.queryRef?.name || '—'}
+              tooltip="Query that created this task"
+            />
+            <DetailRow
+              label="Server"
+              value={task.a2aServerRef?.name || '—'}
+              tooltip="A2A server polled for status updates; empty for approval tasks"
+              last
+            />
+          </DetailCard>
+        </div>
+
+        <DetailSectionCard title="Input" className="flex-none">
+          <div className="text-fg-primary py-2 text-base leading-6 tracking-[-0.032px] whitespace-pre-wrap">
+            {task.input || '—'}
           </div>
+        </DetailSectionCard>
 
-          <DetailSectionCard title="Input">
-            <div className="text-fg-primary py-2 text-base leading-6 tracking-[-0.032px] whitespace-pre-wrap">
-              {task.input || '—'}
+        {parameterEntries.length > 0 && (
+          <DetailSectionCard title="Parameters" className="flex-none">
+            <div className="flex flex-col gap-2 py-2">
+              {parameterEntries.map(([name, value]) => (
+                <div key={name} className="flex items-center gap-4">
+                  <span className="text-fg-secondary w-[140px] shrink-0 font-mono text-xs">
+                    {name}
+                  </span>
+                  <span className="text-fg-primary min-w-0 flex-1 truncate font-mono text-xs">
+                    {String(value)}
+                  </span>
+                </div>
+              ))}
             </div>
           </DetailSectionCard>
+        )}
 
-          {parameterEntries.length > 0 && (
-            <DetailSectionCard title="Parameters">
-              <div className="flex flex-col gap-2 py-2">
-                {parameterEntries.map(([name, value]) => (
-                  <div key={name} className="flex items-center gap-4">
-                    <span className="text-fg-secondary w-[140px] shrink-0 font-mono text-xs">
-                      {name}
-                    </span>
-                    <span className="text-fg-primary min-w-0 flex-1 truncate font-mono text-xs">
-                      {String(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </DetailSectionCard>
-          )}
-
-          <DetailSectionCard title="Raw Data">
-            <JsonViewer value={task} fileName={task.name || taskId} />
-          </DetailSectionCard>
-        </div>
-      </ScrollArea>
+        <DetailSectionCard
+          title="Raw Data"
+          className="min-h-[240px] flex-1"
+          bodyClassName="min-h-0 flex-1 overflow-hidden">
+          <JsonViewer
+            className="h-full"
+            value={task}
+            fileName={task.name || taskId}
+          />
+        </DetailSectionCard>
+      </div>
     </div>
   );
 }
