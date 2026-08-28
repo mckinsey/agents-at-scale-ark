@@ -63,7 +63,10 @@ spec:
                 description: |-
                   ConversationId is sent as A2A ContextID when dispatching to execution engines.
                   Engines use it for conversation threading (e.g., memory lookup, session management).
+                  Constrained to path-safe characters: engines use it as a filesystem path segment.
+                maxLength: 128
                 minLength: 1
+                pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$
                 type: string
               input:
                 x-kubernetes-preserve-unknown-fields: true

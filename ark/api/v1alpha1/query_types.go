@@ -80,8 +80,11 @@ type QuerySpec struct {
 	SessionId string `json:"sessionId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`
 	// ConversationId is sent as A2A ContextID when dispatching to execution engines.
 	// Engines use it for conversation threading (e.g., memory lookup, session management).
+	// Constrained to path-safe characters: engines use it as a filesystem path segment.
 	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Time to retain Query after completion.
