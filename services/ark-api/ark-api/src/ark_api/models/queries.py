@@ -2,10 +2,14 @@
 
 from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from enum import Enum
 from openai.types.chat import ChatCompletionMessageParam
 from .agents import AgentOverride
+
+CONVERSATION_ID_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$"
+CONVERSATION_ID_MIN_LENGTH = 1
+CONVERSATION_ID_MAX_LENGTH = 128
 
 
 class InputType(str, Enum):
@@ -104,7 +108,12 @@ class QueryCreateRequest(BaseModel):
     selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    conversationId: Optional[str] = None
+    conversationId: Optional[str] = Field(
+        default=None,
+        pattern=CONVERSATION_ID_PATTERN,
+        min_length=CONVERSATION_ID_MIN_LENGTH,
+        max_length=CONVERSATION_ID_MAX_LENGTH,
+    )
     target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
@@ -122,7 +131,12 @@ class QueryUpdateRequest(BaseModel):
     selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    conversationId: Optional[str] = None
+    conversationId: Optional[str] = Field(
+        default=None,
+        pattern=CONVERSATION_ID_PATTERN,
+        min_length=CONVERSATION_ID_MIN_LENGTH,
+        max_length=CONVERSATION_ID_MAX_LENGTH,
+    )
     target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
