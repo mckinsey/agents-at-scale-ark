@@ -1,5 +1,6 @@
 import json
 import subprocess
+from pathlib import Path
 
 from helpers.ark_api_helper import send_request
 from helpers.broker_helper import (
@@ -9,12 +10,15 @@ from helpers.broker_helper import (
 )
 from helpers.queries_helper import QueriesHelper
 
+MOCK_LLM_MODEL_YAML = Path(__file__).parent.parent / "mock-llm-model.yaml"
+
 
 class TestQueriesCLI:
     helper = None
     created_queries = []
     agent_name = "test-cli-agent"
     model_name = "test-model-mock"
+    token_namespace = "test-cli-token-usage"
 
     @classmethod
     def setup_class(cls):
@@ -55,6 +59,55 @@ spec:
             ["kubectl", "delete", "agent", cls.agent_name, "-n", "default", "--ignore-not-found=true"],
             capture_output=True
         )
+
+        subprocess.run(
+            ["kubectl", "delete", "namespace", cls.token_namespace,
+             "--ignore-not-found=true", "--wait=false"],
+            capture_output=True
+        )
+
+    @classmethod
+    def _setup_token_namespace(cls):
+        subprocess.run(
+            ["kubectl", "create", "namespace", cls.token_namespace],
+            capture_output=True, text=True
+        )
+
+        model_yaml = MOCK_LLM_MODEL_YAML.read_text().replace(
+            "namespace: default", f"namespace: {cls.token_namespace}"
+        )
+        result = subprocess.run(
+            ["kubectl", "apply", "-f", "-"],
+            input=model_yaml, capture_output=True, text=True
+        )
+        assert result.returncode == 0, f"Failed to create token model: {result.stderr}"
+
+        agent_yaml = f"""apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: {cls.agent_name}
+  namespace: {cls.token_namespace}
+spec:
+  modelRef:
+    name: {cls.model_name}
+  prompt: |
+    You are a test agent used for CLI testing.
+    Keep responses concise and indicate that you are a test agent.
+"""
+        result = subprocess.run(
+            ["kubectl", "apply", "-f", "-"],
+            input=agent_yaml, capture_output=True, text=True
+        )
+        assert result.returncode == 0, f"Failed to create token agent: {result.stderr}"
+
+        result = subprocess.run(
+            ["kubectl", "wait", "--for=condition=ModelAvailable",
+             f"model/{cls.model_name}", "-n", cls.token_namespace, "--timeout=60s"],
+            capture_output=True, text=True
+        )
+        assert result.returncode == 0, f"Token model not available: {result.stderr}"
+
+        return QueriesHelper(namespace=cls.token_namespace)
 
     def test_setup_prerequisites(self):
         result = subprocess.run(
@@ -143,6 +196,56 @@ spec:
         success, status = self.helper.verify_query_status(query_name)
         assert success, "Failed to verify query status"
         assert status in ["Completed", "Failed", "InProgress"]
+
+    def test_token_usage_stays_bounded_across_questions(self):
+        per_query_token_ceiling = 1000
+        batch_size = 5
+        max_questions = 25
+
+        token_helper = self._setup_token_namespace()
+
+        cumulative_total_tokens = 0
+        tracked_queries = 0
+
+        for batch_start in range(0, max_questions, batch_size):
+            for index in range(batch_start, batch_start + batch_size):
+                query_name = f"test-query-cli-tokens-{index}"
+                success, message = token_helper.create_query(
+                    name=query_name,
+                    agent_name=self.agent_name,
+                    input_text=f"Question {index}: what is {index} plus one? "
+                               "Reply in one sentence.",
+                    timeout=60
+                )
+                assert success, f"Query creation failed: {message}"
+
+                success, token_usage = token_helper.wait_for_token_usage(query_name)
+                assert success, f"Query {query_name} reported no token usage"
+
+                total_tokens = token_usage.get("totalTokens", 0)
+                prompt_tokens = token_usage.get("promptTokens", 0)
+                assert total_tokens > 0, \
+                    f"Query {query_name} tracked zero tokens: {token_usage}"
+                assert prompt_tokens < per_query_token_ceiling, \
+                    f"Query {query_name} used {prompt_tokens} prompt tokens, " \
+                    f"expected < {per_query_token_ceiling} (#2606)"
+                assert total_tokens < per_query_token_ceiling, \
+                    f"Query {query_name} used {total_tokens} total tokens, " \
+                    f"expected < {per_query_token_ceiling} (#2606)"
+
+                cumulative_total_tokens += total_tokens
+                tracked_queries += 1
+
+            questions_asked = batch_start + batch_size
+            assert cumulative_total_tokens < questions_asked * per_query_token_ceiling, \
+                f"After {questions_asked} questions cumulative token usage was " \
+                f"{cumulative_total_tokens}, exceeding the per-query bound (#2606)"
+
+        assert tracked_queries == max_questions, \
+            f"Expected token usage for {max_questions} questions, " \
+            f"tracked {tracked_queries}"
+        assert cumulative_total_tokens > 0, \
+            "No token usage was accumulated across the questions"
 
     def test_delete_query(self):
         query_name = "test-query-cli-delete"
