@@ -201,13 +201,14 @@ async function installService(
   );
 
   let chartPath = service.chartPath!;
+  let chartVersion: string | undefined;
 
   // Override version for ARK core services
   if (
     arkVersionOverride &&
     chartPath.includes('ghcr.io/mckinsey/agents-at-scale-ark/charts')
   ) {
-    chartPath = chartPath.replace(/:[^:]+$/, `:${arkVersionOverride}`);
+    chartVersion = arkVersionOverride;
   }
 
   // Override version for marketplace items
@@ -215,16 +216,7 @@ async function installService(
     marketplaceVersionOverride &&
     chartPath.includes('ghcr.io/mckinsey/agents-at-scale-marketplace/charts')
   ) {
-    // Check if version tag exists after the last slash
-    const lastSlashIndex = chartPath.lastIndexOf('/');
-    const afterLastSlash = chartPath.slice(lastSlashIndex + 1);
-    if (afterLastSlash.includes(':')) {
-      // Replace existing version
-      chartPath = chartPath.replace(/:[^:/]+$/, `:${marketplaceVersionOverride}`);
-    } else {
-      // Append version
-      chartPath = `${chartPath}:${marketplaceVersionOverride}`;
-    }
+    chartVersion = marketplaceVersionOverride;
   }
 
   const helmArgs = [
@@ -233,6 +225,11 @@ async function installService(
     service.helmReleaseName,
     chartPath,
   ];
+
+  // Add --version flag if we have a version override
+  if (chartVersion) {
+    helmArgs.push('--version', chartVersion);
+  }
 
   // Only add namespace flag if service has explicit namespace
   if (service.namespace) {

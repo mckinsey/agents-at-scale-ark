@@ -2,14 +2,14 @@
  * Centralized ARK service definitions used by both install and status commands
  */
 
-import {loadConfig, getMarketplaceRegistry} from './lib/config.js';
+import { loadConfig, getMarketplaceRegistry } from './lib/config.js';
 import type {
   ArkService,
   ServiceCollection,
   ArkDependency,
   DependencyCollection,
 } from './types/arkService.js';
-import {createRequire} from 'module';
+import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const packageJson = require('../package.json');
@@ -22,7 +22,6 @@ export type {
 };
 
 const REGISTRY_BASE = 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts';
-const CHART_VERSION = `${packageJson.version as string}`;
 
 /**
  * Dependencies that should be installed before ARK services
@@ -90,7 +89,7 @@ const defaultArkServices: ServiceCollection = {
     mandatory: true,
     category: 'core',
     namespace: 'ark-system',
-    chartPath: `${REGISTRY_BASE}/ark-controller:${CHART_VERSION}`,
+    chartPath: `${REGISTRY_BASE}/ark-controller`,
     installArgs: ['--create-namespace', '--set', 'rbac.enable=true'],
     k8sDeploymentName: 'ark-controller',
     k8sDevDeploymentName: 'ark-controller-devspace',
@@ -105,7 +104,7 @@ const defaultArkServices: ServiceCollection = {
     mandatory: true,
     category: 'core',
     namespace: 'ark-system',
-    chartPath: `${REGISTRY_BASE}/ark-apiserver:${CHART_VERSION}`,
+    chartPath: `${REGISTRY_BASE}/ark-apiserver`,
     installArgs: ['--create-namespace'],
     k8sDeploymentName: 'ark-apiserver',
     requiresBackend: 'postgresql',
@@ -119,7 +118,7 @@ const defaultArkServices: ServiceCollection = {
     mandatory: true,
     category: 'core',
     namespace: 'ark-system',
-    chartPath: `${REGISTRY_BASE}/ark-completions:${CHART_VERSION}`,
+    chartPath: `${REGISTRY_BASE}/ark-completions`,
     installArgs: ['--create-namespace'],
     k8sDeploymentName: 'ark-completions',
   },
@@ -131,7 +130,7 @@ const defaultArkServices: ServiceCollection = {
     enabled: true,
     mandatory: true,
     category: 'core',
-    chartPath: `${REGISTRY_BASE}/ark-tenant:${CHART_VERSION}`,
+    chartPath: `${REGISTRY_BASE}/ark-tenant`,
     installArgs: [],
   },
 
@@ -141,7 +140,7 @@ const defaultArkServices: ServiceCollection = {
     description: 'API layer for interacting with Ark resources',
     enabled: true,
     category: 'service',
-    chartPath: `${REGISTRY_BASE}/ark-api:${CHART_VERSION}`,
+    chartPath: `${REGISTRY_BASE}/ark-api`,
     installArgs: [],
     k8sServiceName: 'ark-api',
     k8sServicePort: 80,
@@ -157,7 +156,7 @@ const defaultArkServices: ServiceCollection = {
     enabled: true,
     category: 'service',
     // namespace: undefined - uses current context namespace
-    chartPath: `${REGISTRY_BASE}/ark-dashboard:${CHART_VERSION}`,
+    chartPath: `${REGISTRY_BASE}/ark-dashboard`,
     installArgs: [],
     k8sServiceName: 'ark-dashboard',
     k8sServicePort: 3000,
@@ -173,7 +172,7 @@ const defaultArkServices: ServiceCollection = {
     enabled: true,
     category: 'service',
     // namespace: undefined - uses current context namespace
-    chartPath: `${REGISTRY_BASE}/ark-mcp:${CHART_VERSION}`,
+    chartPath: `${REGISTRY_BASE}/ark-mcp`,
     installArgs: [],
     k8sDeploymentName: 'ark-mcp',
     k8sDevDeploymentName: 'ark-mcp-devspace',
@@ -190,9 +189,9 @@ const defaultArkServices: ServiceCollection = {
     enabled: true,
     mandatory: true,
     category: 'service',
-    chartPath: `${REGISTRY_BASE}/ark-broker:${CHART_VERSION}`,
+    chartPath: `${REGISTRY_BASE}/ark-broker`,
     installArgs: [],
-    prerequisiteUninstalls: [{releaseName: 'ark-cluster-memory'}],
+    prerequisiteUninstalls: [{ releaseName: 'ark-cluster-memory' }],
     k8sDeploymentName: 'ark-broker',
     k8sDevDeploymentName: 'ark-broker-devspace',
   },
@@ -221,7 +220,7 @@ const defaultArkServices: ServiceCollection = {
     enabled: false, // Disabled - not needed for most users
     category: 'service',
     namespace: 'ark-system',
-    chartPath: `${REGISTRY_BASE}/localhost-gateway:${CHART_VERSION}`,
+    chartPath: `${REGISTRY_BASE}/localhost-gateway`,
     installArgs: [],
   },
 
@@ -272,7 +271,7 @@ function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {
     const override = overrides[key];
     result[key] =
       override && typeof override === 'object'
-        ? {...service, ...override}
+        ? { ...service, ...override }
         : service;
   }
 

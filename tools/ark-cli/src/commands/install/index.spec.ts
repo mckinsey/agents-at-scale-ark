@@ -653,7 +653,7 @@ describe('install command', () => {
       const mockService = {
         name: 'ark-api',
         helmReleaseName: 'ark-api',
-        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
         namespace: 'ark-system',
       };
       mockGetInstallableServices.mockReturnValue({
@@ -670,7 +670,9 @@ describe('install command', () => {
           'upgrade',
           '--install',
           'ark-api',
-          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.50',
+          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
+          '--version',
+          '0.1.50',
           '--namespace',
           'ark-system',
         ],
@@ -703,7 +705,9 @@ describe('install command', () => {
           'upgrade',
           '--install',
           'phoenix',
-          'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix:0.1.7',
+          'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix',
+          '--version',
+          '0.1.7',
           '--namespace',
           'default',
         ],
@@ -718,7 +722,7 @@ describe('install command', () => {
       const arkService = {
         name: 'ark-api',
         helmReleaseName: 'ark-api',
-        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
         namespace: 'ark-system',
       };
       const marketplaceService = {
@@ -749,7 +753,9 @@ describe('install command', () => {
       expect(mockExeca).toHaveBeenCalledWith(
         'helm',
         expect.arrayContaining([
-          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.50',
+          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
+          '--version',
+          '0.1.50',
         ]),
         expect.any(Object)
       );
@@ -757,7 +763,9 @@ describe('install command', () => {
       expect(mockExeca).toHaveBeenCalledWith(
         'helm',
         expect.arrayContaining([
-          'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix:0.1.7',
+          'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix',
+          '--version',
+          '0.1.7',
         ]),
         expect.any(Object)
       );
@@ -767,7 +775,7 @@ describe('install command', () => {
       const mockService = {
         name: 'ark-completions',
         helmReleaseName: 'ark-completions',
-        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions:0.1.57',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions',
         namespace: 'ark-system',
       };
       mockGetInstallableServices.mockReturnValue({
@@ -775,7 +783,7 @@ describe('install command', () => {
         'ark-api': {
           name: 'ark-api',
           helmReleaseName: 'ark-api',
-          chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+          chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
           namespace: 'ark-system',
         },
       });
@@ -906,7 +914,7 @@ describe('install command', () => {
       const mockService = {
         name: 'ark-api',
         helmReleaseName: 'ark-api',
-        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
         namespace: 'ark-system',
       };
       mockGetInstallableServices.mockReturnValue({'ark-api': mockService});
@@ -954,7 +962,7 @@ describe('install command', () => {
       const mockService = {
         name: 'phoenix',
         helmReleaseName: 'phoenix',
-        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix:0.1.5',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix',
         namespace: 'default',
       };
       mockIsMarketplaceService.mockReturnValue(true);
@@ -967,7 +975,9 @@ describe('install command', () => {
       expect(mockExeca).toHaveBeenCalledWith(
         'helm',
         expect.arrayContaining([
-          'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix:0.1.7',
+          'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix',
+          '--version',
+          '0.1.7',
         ]),
         expect.any(Object)
       );
@@ -1601,7 +1611,7 @@ describe('install command', () => {
       const mockService = {
         name: 'ark-api',
         helmReleaseName: 'ark-api',
-        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
         namespace: 'ark-system',
       };
       mockGetInstallableServices.mockReturnValue({'ark-api': mockService});
@@ -1613,7 +1623,9 @@ describe('install command', () => {
       expect(mockExeca).toHaveBeenCalledWith(
         'helm',
         expect.arrayContaining([
-          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:1.0.0-rc1',
+          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
+          '--version',
+          '1.0.0-rc1',
         ]),
         expect.any(Object)
       );
@@ -1623,7 +1635,7 @@ describe('install command', () => {
       const mockService = {
         name: 'ark-api',
         helmReleaseName: 'ark-api',
-        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
         namespace: 'ark-system',
       };
       mockGetInstallableServices.mockReturnValue({'ark-api': mockService});
@@ -1635,7 +1647,9 @@ describe('install command', () => {
       expect(mockExeca).toHaveBeenCalledWith(
         'helm',
         expect.arrayContaining([
-          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:1.0.0+20240101',
+          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api',
+          '--version',
+          '1.0.0+20240101',
         ]),
         expect.any(Object)
       );
