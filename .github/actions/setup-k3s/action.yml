@@ -305,7 +305,7 @@ runs:
           if [ "$attempt" -eq 60 ]; then
             echo "Timed out waiting for k3s apiserver"
             bash "${{ github.action_path }}/dump-k3s-state.sh" \
-              "timed out waiting for k3s apiserver to bind :6443"
+              "timed out waiting for k3s apiserver to bind :6443" || true
             exit 1
           fi
         done
@@ -334,9 +334,12 @@ runs:
         # 48s budget against a corpse - while still tolerating a brief flap.
         consecutive_refused=0
         for attempt in $(seq 1 24); do
-          probe_err=$(kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
-            --as=k3s-cloud-controller-manager 2>&1 >/dev/null)
-          if [ $? -eq 0 ]; then
+          # Assign inside the `if` so a failing probe does not trip the
+          # `set -e` that GitHub applies to `shell: bash`; capture stderr
+          # (2>&1 >/dev/null) so we can tell "connection refused" from a
+          # benign not-ready-yet denial.
+          if probe_err=$(kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+               --as=k3s-cloud-controller-manager 2>&1 >/dev/null); then
             echo "k3s bootstrap RBAC ready (attempt $attempt/24)"
             break
           fi
@@ -346,7 +349,7 @@ runs:
             if [ "$consecutive_refused" -ge 5 ]; then
               echo "control plane unreachable for ${consecutive_refused} consecutive probes; treating as a crash"
               bash "${{ github.action_path }}/dump-k3s-state.sh" \
-                "k3s control plane crashed during bootstrap RBAC wait"
+                "k3s control plane crashed during bootstrap RBAC wait" || true
               exit 1
             fi
           else
@@ -360,7 +363,7 @@ runs:
             kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
               --as=k3s-cloud-controller-manager -v=6 || true
             bash "${{ github.action_path }}/dump-k3s-state.sh" \
-              "timed out waiting for k3s bootstrap RBAC"
+              "timed out waiting for k3s bootstrap RBAC" || true
             exit 1
           fi
         done
