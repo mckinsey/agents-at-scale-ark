@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -570,9 +571,12 @@ func TestList_PaginationSnapshotConsistency_Integration(t *testing.T) {
 		}
 	}
 
-	objs, contToken, err := backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5})
+	objs, contToken, page1RV, err := backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5})
 	if err != nil {
 		t.Fatalf("page 1 List failed: %v", err)
+	}
+	if page1RV <= 0 {
+		t.Fatalf("page 1 List returned non-positive listRV %d", page1RV)
 	}
 	if len(objs) != 5 {
 		t.Fatalf("page 1: got %d rows, want 5", len(objs))
@@ -599,9 +603,15 @@ func TestList_PaginationSnapshotConsistency_Integration(t *testing.T) {
 	}
 	for contToken != "" {
 		var page []runtime.Object
-		page, contToken, err = backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5, Continue: contToken})
+		var pageRV int64
+		page, contToken, pageRV, err = backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5, Continue: contToken})
 		if err != nil {
 			t.Fatalf("subsequent List failed: %v", err)
+		}
+		// The list resourceVersion is pinned to page 1's head and carried in the
+		// continue token, so every page reports the same value.
+		if pageRV != page1RV {
+			t.Errorf("paginated list RV drifted: page1=%d, later page=%d", page1RV, pageRV)
 		}
 		for _, o := range page {
 			seen[o.(*integrationTestObject).Metadata.Name] = true
@@ -621,7 +631,7 @@ func TestList_PaginationSnapshotConsistency_Integration(t *testing.T) {
 	var reListToken string
 	for {
 		var page []runtime.Object
-		page, reListToken, err = backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5, Continue: reListToken})
+		page, reListToken, _, err = backend.List(ctx, testKind, testNS, storage.ListOptions{Limit: 5, Continue: reListToken})
 		if err != nil {
 			t.Fatalf("re-List failed: %v", err)
 		}
@@ -1184,5 +1194,178 @@ func TestWatchResumeDoesNotDropOutOfOrderCommit_Integration(t *testing.T) {
 		case <-deadline:
 			t.Fatalf("timeout waiting for sentinel; sawLost=%v", sawLost)
 		}
+	}
+}
+
+func TestWatchTooOldResourceVersionExpired_Integration(t *testing.T) {
+	cfg := testConfig(t)
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+	backend.StartWALConsumer()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testNS := "integration-test"
+	testKind := "PurgeFloorTestResource"
+
+	// Isolate from prior runs: the purge floor is a single shared row bumped with
+	// GREATEST, so reset both the persisted value and the in-memory mirror.
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM storage_metadata WHERE key = 'watch_purge_floor'")
+	backend.cachedPurgeFloor.Store(0)
+	defer func() {
+		_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	}()
+
+	obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+	obj.Metadata.Name = "purge-1"
+	obj.Metadata.Namespace = testNS
+	obj.Metadata.UID = "purge-uid-1"
+	obj.Spec = map[string]interface{}{"k": "v"}
+	if err := backend.Create(ctx, testKind, testNS, "purge-1", obj); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if err := backend.Delete(ctx, testKind, testNS, "purge-1"); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// The soft-delete leaves a tombstone at a bumped RV; that RV becomes the purge
+	// floor once the janitor hard-deletes it. Capture it before it is gone.
+	var tombstoneRV int64
+	if err := backend.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(resource_version), 0) FROM resources WHERE kind = $1 AND namespace = $2",
+		testKind, testNS).Scan(&tombstoneRV); err != nil {
+		t.Fatalf("read tombstone resourceVersion: %v", err)
+	}
+
+	// Age the tombstone past the retention window and run the janitor directly.
+	if _, err := backend.db.ExecContext(ctx,
+		"UPDATE resources SET deleted_at = NOW() - INTERVAL '10 minutes' WHERE kind = $1 AND namespace = $2",
+		testKind, testNS); err != nil {
+		t.Fatalf("age tombstone: %v", err)
+	}
+	backend.purgeExpired()
+
+	floor := backend.cachedPurgeFloor.Load()
+	if floor < tombstoneRV {
+		t.Fatalf("purge floor %d did not advance to tombstone RV %d", floor, tombstoneRV)
+	}
+
+	// Resuming from before the floor is a lost-tombstone hazard: expect 410-equivalent.
+	_, err = backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+		ResourceVersion: strconv.FormatInt(floor-1, 10),
+	})
+	if !errors.Is(err, storage.ErrResourceExpired) {
+		t.Fatalf("resume below floor: want ErrResourceExpired, got %v", err)
+	}
+
+	// Resuming exactly at the floor is still safe — the client holds the object at
+	// floor, so only later deltas are owed.
+	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+		ResourceVersion: strconv.FormatInt(floor, 10),
+	})
+	if err != nil {
+		t.Fatalf("resume at floor should be allowed, got %v", err)
+	}
+	w.Stop()
+}
+
+// TestListWatchHandoffAbovePurgeFloor_Integration is the regression guard for the
+// PR #3223 relist livelock: after a purge raises the global floor above a quiet
+// kind's surviving objects, the List->Watch handoff a reflector performs must
+// still resume cleanly. Before the fix the list RV was the per-kind item max
+// (below the floor), so every resume 410'd and the reflector relisted forever.
+// The backend now stamps the list RV with the store head (max item RV lifted to
+// the floor), which is always at or above the floor.
+func TestListWatchHandoffAbovePurgeFloor_Integration(t *testing.T) {
+	cfg := testConfig(t)
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer backend.Close()
+	backend.StartWALConsumer()
+
+	ctx := context.Background()
+	ns := "handoff-floor"
+	kind := "QuietKind"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", kind, ns)
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM storage_metadata WHERE key = 'watch_purge_floor'")
+	backend.cachedPurgeFloor.Store(0)
+	defer func() {
+		_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", kind, ns)
+	}()
+
+	mk := func(name, uid string) *integrationTestObject {
+		o := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: kind}
+		o.Metadata.Name = name
+		o.Metadata.Namespace = ns
+		o.Metadata.UID = uid
+		o.Spec = map[string]interface{}{"k": "v"}
+		return o
+	}
+
+	// Survivor object at a low RV — the only surviving object of this kind.
+	if err := backend.Create(ctx, kind, ns, "survivor", mk("survivor", "uid-survivor")); err != nil {
+		t.Fatalf("create survivor: %v", err)
+	}
+
+	// A newer object of the SAME kind, then deleted: its tombstone takes the
+	// highest RV. Purging it raises the floor above the survivor's RV.
+	if err := backend.Create(ctx, kind, ns, "churn", mk("churn", "uid-churn")); err != nil {
+		t.Fatalf("create churn: %v", err)
+	}
+	if err := backend.Delete(ctx, kind, ns, "churn"); err != nil {
+		t.Fatalf("delete churn: %v", err)
+	}
+	if _, err := backend.db.ExecContext(ctx,
+		"UPDATE resources SET deleted_at = NOW() - INTERVAL '10 minutes' WHERE kind = $1 AND namespace = $2 AND name = 'churn'",
+		kind, ns); err != nil {
+		t.Fatalf("age tombstone: %v", err)
+	}
+	backend.purgeExpired()
+	floor := backend.cachedPurgeFloor.Load()
+	if floor <= 0 {
+		t.Fatalf("expected a positive purge floor, got %d", floor)
+	}
+
+	// A populated quiet kind and an empty kind both resume from their list RV.
+	// The empty kind exercises the "empty list still carries the head" path.
+	for _, tc := range []struct {
+		name      string
+		listKind  string
+		wantItems int
+	}{
+		{name: "populated quiet kind", listKind: kind, wantItems: 1},
+		{name: "empty kind", listKind: "NeverWrittenKind", wantItems: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			objs, _, listRV, err := backend.List(ctx, tc.listKind, ns, storage.ListOptions{})
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			if len(objs) != tc.wantItems {
+				t.Fatalf("list returned %d objects, want %d", len(objs), tc.wantItems)
+			}
+			// The whole point: the list RV is at or above the floor, so the resume
+			// below cannot 410. A per-kind item max (the old behavior) would sit
+			// below the floor for both a quiet survivor and an empty kind.
+			if listRV < floor {
+				t.Fatalf("list RV %d is below purge floor %d — resume would 410 and livelock", listRV, floor)
+			}
+
+			w, err := backend.Watch(ctx, tc.listKind, ns, storage.WatchOptions{
+				ResourceVersion: strconv.FormatInt(listRV, 10),
+			})
+			if err != nil {
+				t.Fatalf("watch resume from list RV %d rejected (floor %d): %v", listRV, floor, err)
+			}
+			w.Stop()
+		})
 	}
 }
