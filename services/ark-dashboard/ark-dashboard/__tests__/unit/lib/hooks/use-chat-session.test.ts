@@ -26,9 +26,11 @@ const mockStartStreamChatResponse = vi.fn();
 const mockStreamQueryStatus = vi.fn();
 const mockSubmitChatQuery = vi.fn();
 const mockGetQueryResult = vi.fn();
+const mockGetQuery = vi.fn();
 const mockCancelQuery = vi.fn();
 const mockGetByName = vi.fn();
 const mockTeamGetByName = vi.fn();
+const mockResolveMemoryNotice = vi.fn();
 
 vi.mock('@/lib/services', () => ({
   chatService: {
@@ -38,7 +40,10 @@ vi.mock('@/lib/services', () => ({
     streamQueryStatus: (...args: unknown[]) => mockStreamQueryStatus(...args),
     submitChatQuery: (...args: unknown[]) => mockSubmitChatQuery(...args),
     getQueryResult: (...args: unknown[]) => mockGetQueryResult(...args),
+    getQuery: (...args: unknown[]) => mockGetQuery(...args),
     cancelQuery: (...args: unknown[]) => mockCancelQuery(...args),
+    resolveMemoryNotice: (...args: unknown[]) =>
+      mockResolveMemoryNotice(...args),
   },
   agentsService: {
     getByName: (...args: unknown[]) => mockGetByName(...args),
@@ -128,6 +133,8 @@ describe('useChatSession', () => {
       return Promise.resolve({ queryName: 'test-query', chunks });
     });
     mockStreamQueryStatus.mockResolvedValue(() => {});
+    mockResolveMemoryNotice.mockResolvedValue({settled: true, notice: null});
+    mockGetQuery.mockResolvedValue({ status: { phase: 'done' } });
   });
 
   afterEach(() => {
@@ -831,6 +838,335 @@ describe('useChatSession', () => {
         expect(result.current.isProcessing).toBe(false);
         expect(result.current.error).toBeNull();
       });
+    });
+  });
+
+  describe('memory notice', () => {
+    const unavailable = {
+      type: 'MemoryUnavailable' as const,
+      message:
+        'conversationId was set but no Memory backend was reachable; conversation history was disabled for this query',
+    };
+    const settled = (notice: typeof unavailable | null) => ({
+      settled: true,
+      notice,
+    });
+    const unsettled = {settled: false, notice: null};
+
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>(r => {
+        resolve = r;
+      });
+      return {promise, resolve};
+    }
+
+    // The streaming path cannot read the verdict off the stream: the executor
+    // closes it before the controller writes the terminal status. It polls,
+    // unawaited, so the lookup outlives the turn.
+    function streamedTurn() {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createContentChunk('Hello'),
+          createStopChunk(),
+          createArkFinalChunk({}),
+        ]),
+      );
+    }
+
+    // The polling path already holds a terminal response, so it reads the
+    // verdict straight off it.
+    function polledTurn(lookup?: {
+      settled: boolean;
+      notice: typeof unavailable | null;
+    }) {
+      store.set(storedIsChatStreamingEnabledAtom, false);
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Hi',
+        ...(lookup ? {memoryLookup: lookup} : {}),
+      });
+    }
+
+    function renderChat(name = 'test-agent') {
+      return renderHook(
+        ({ name: n }: { name: string }) => useChatSession({ name: n, type: 'agent' }),
+        { wrapper, initialProps: { name } },
+      );
+    }
+
+    it('starts with no notice', () => {
+      const { result } = renderChat();
+
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    it('surfaces the notice after a streamed turn', async () => {
+      streamedTurn();
+      mockResolveMemoryNotice.mockResolvedValue(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+      expect(mockResolveMemoryNotice).toHaveBeenCalledWith('test-query');
+    });
+
+    it('leaves the notice null when a streamed turn reports no problem', async () => {
+      streamedTurn();
+      mockResolveMemoryNotice.mockResolvedValue(settled(null));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(mockResolveMemoryNotice).toHaveBeenCalled();
+      });
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    it('takes the notice off the polled response, without a second lookup', async () => {
+      polledTurn(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+      expect(mockResolveMemoryNotice).not.toHaveBeenCalled();
+    });
+
+    it('drops the notice once a later turn is healthy again', async () => {
+      polledTurn(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+
+      polledTurn(settled(null));
+
+      await act(async () => {
+        await result.current.sendMessage('Hello again');
+      });
+
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toBeNull();
+      });
+    });
+
+    // A lookup that timed out, or a query that ended without the controller's
+    // verdict on it, says nothing about memory. Treating either as healthy made
+    // the banner flap off between turns of a chat that was still broken.
+    it('keeps a standing notice when the next turn carries no verdict', async () => {
+      polledTurn(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+
+      polledTurn();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello again');
+      });
+
+      await waitFor(() => {
+        expect(mockGetQueryResult).toHaveBeenCalledTimes(2);
+      });
+      expect(result.current.memoryNotice).toEqual(unavailable);
+    });
+
+    it('keeps a standing notice when a streamed lookup cannot settle', async () => {
+      streamedTurn();
+      mockResolveMemoryNotice
+        .mockResolvedValueOnce(settled(unavailable))
+        .mockResolvedValue(unsettled);
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+
+      streamedTurn();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello again');
+      });
+
+      await waitFor(() => {
+        expect(mockResolveMemoryNotice).toHaveBeenCalledTimes(2);
+      });
+      expect(result.current.memoryNotice).toEqual(unavailable);
+    });
+
+    // The lookup is fired unawaited and isProcessing goes false immediately, so
+    // the switcher and New chat are live while it is still running.
+    it('does not write a pending notice into the next target', async () => {
+      streamedTurn();
+      const pending = deferred<ReturnType<typeof settled>>();
+      mockResolveMemoryNotice.mockReturnValue(pending.promise);
+
+      const { result, rerender } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      rerender({ name: 'other-agent' });
+
+      await act(async () => {
+        pending.resolve(settled(unavailable));
+        await pending.promise;
+      });
+
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    // The turn's epoch is snapshotted when the turn starts, not when the lookup
+    // is fired, so a switch part-way through the turn is caught too.
+    it('does not write a notice for a turn the user switched away from mid-flight', async () => {
+      const pendingStream = deferred<void>();
+      mockStreamChatResponse.mockImplementation(async function* () {
+        yield createContentChunk('Hello');
+        yield createStopChunk();
+        await pendingStream.promise;
+        yield createArkFinalChunk({});
+      });
+      mockResolveMemoryNotice.mockResolvedValue(settled(unavailable));
+
+      const { result, rerender } = renderChat();
+
+      let turn: Promise<void>;
+      await act(async () => {
+        turn = result.current.sendMessage('Hello');
+        await Promise.resolve();
+      });
+
+      rerender({ name: 'other-agent' });
+
+      await act(async () => {
+        pendingStream.resolve();
+        await turn!;
+      });
+
+      await waitFor(() => {
+        expect(mockResolveMemoryNotice).toHaveBeenCalled();
+      });
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    it('does not write a pending notice back after the chat is cleared', async () => {
+      streamedTurn();
+      const pending = deferred<ReturnType<typeof settled>>();
+      mockResolveMemoryNotice.mockReturnValue(pending.promise);
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      act(() => {
+        result.current.clearChat();
+      });
+
+      await act(async () => {
+        pending.resolve(settled(unavailable));
+        await pending.promise;
+      });
+
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    // Two turns in flight at once: the older lookup must not overwrite what the
+    // newer one already decided.
+    it('ignores a lookup for a query that is no longer the current turn', async () => {
+      streamedTurn();
+      mockSubmitChatQuery
+        .mockResolvedValueOnce({ name: 'query-1' })
+        .mockResolvedValueOnce({ name: 'query-2' });
+      mockStartStreamChatResponse
+        .mockImplementationOnce((...args: unknown[]) =>
+          Promise.resolve({
+            queryName: 'query-1',
+            chunks: mockStreamChatResponse(...args),
+          }),
+        )
+        .mockImplementationOnce((...args: unknown[]) =>
+          Promise.resolve({
+            queryName: 'query-2',
+            chunks: mockStreamChatResponse(...args),
+          }),
+        );
+      const first = deferred<ReturnType<typeof settled>>();
+      mockResolveMemoryNotice
+        .mockReturnValueOnce(first.promise)
+        .mockResolvedValue(settled(null));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      streamedTurn();
+      await act(async () => {
+        await result.current.sendMessage('Hello again');
+      });
+
+      await act(async () => {
+        first.resolve(settled(unavailable));
+        await first.promise;
+      });
+
+      expect(mockResolveMemoryNotice).toHaveBeenCalledWith('query-1');
+      expect(mockResolveMemoryNotice).toHaveBeenCalledWith('query-2');
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    it('clears the notice when the chat is cleared', async () => {
+      polledTurn(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+
+      act(() => {
+        result.current.clearChat();
+      });
+
+      expect(result.current.memoryNotice).toBeNull();
     });
   });
 

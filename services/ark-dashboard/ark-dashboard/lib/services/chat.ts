@@ -58,6 +58,9 @@ const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...NON_TERMINAL_QUERY_STATUS_PHASES,
 ] as const;
 
+const MEMORY_NOTICE_POLL_ATTEMPTS = 6;
+const MEMORY_NOTICE_POLL_INTERVAL_MS = 500;
+
 type QueryStatusWithPhase = {
   phase: string;
   response?: {
@@ -66,9 +69,101 @@ type QueryStatusWithPhase = {
   };
   conditions?: Array<{
     type?: string;
+    status?: string;
     message?: string;
   }>;
 };
+
+// The controller writes both memory conditions on every query whose dispatch
+// completes, carrying Status "False" and a reassuring message on the healthy
+// path. Their presence therefore says nothing; only Status "True" reports a
+// problem. A query that failed before dispatch carries neither.
+export const MEMORY_CONDITION_TYPES = [
+  'MemoryUnavailable',
+  'MemoryDegraded',
+] as const;
+
+export type MemoryConditionType = (typeof MEMORY_CONDITION_TYPES)[number];
+
+export type MemoryNotice = {
+  type: MemoryConditionType;
+  message: string;
+};
+
+/**
+ * The outcome of asking a query what it recorded about memory. `settled` false
+ * means the question could not be answered — never that the answer was "no
+ * problem". Callers must leave what they are showing untouched in that case,
+ * or a slow status write silently clears a notice that is still true.
+ */
+export type MemoryNoticeLookup = {
+  settled: boolean;
+  notice: MemoryNotice | null;
+};
+
+const MEMORY_LOOKUP_UNSETTLED: MemoryNoticeLookup = {
+  settled: false,
+  notice: null,
+};
+
+const MEMORY_NOTICE_FALLBACK_MESSAGE: Record<MemoryConditionType, string> = {
+  MemoryUnavailable:
+    'No memory backend was reachable, so this query ran without conversation history.',
+  MemoryDegraded:
+    'Reading conversation history from the memory backend failed, so this query ran without prior context.',
+};
+
+/**
+ * Whether a query's status carries the controller's memory verdict at all.
+ *
+ * Both conditions are written by the same update that writes the terminal
+ * phase, so their presence — not the phase string — is the precise signal that
+ * there is an answer to read. A query that failed before dispatch is terminal
+ * and carries neither, and that says nothing about memory: reporting it as
+ * healthy would clear a notice that is still true.
+ */
+export function hasMemoryCondition(status: unknown): boolean {
+  if (!status || typeof status !== 'object') {
+    return false;
+  }
+  const conditions = (status as QueryStatusWithPhase).conditions;
+  if (!Array.isArray(conditions)) {
+    return false;
+  }
+  return conditions.some(
+    c =>
+      c?.type !== undefined &&
+      (MEMORY_CONDITION_TYPES as readonly string[]).includes(c.type),
+  );
+}
+
+/**
+ * Extract the memory problem a query's status reports, or null when it reports
+ * none. MemoryUnavailable wins over MemoryDegraded: losing the backend
+ * outright is the more useful thing to say. Only meaningful when
+ * hasMemoryCondition is true.
+ */
+export function extractMemoryNotice(status: unknown): MemoryNotice | null {
+  if (!status || typeof status !== 'object') {
+    return null;
+  }
+  const conditions = (status as QueryStatusWithPhase).conditions;
+  if (!Array.isArray(conditions)) {
+    return null;
+  }
+  for (const type of MEMORY_CONDITION_TYPES) {
+    const condition = conditions.find(c => c?.type === type);
+    if (condition?.status !== 'True') {
+      continue;
+    }
+    return {
+      type,
+      message:
+        condition.message?.trim() || MEMORY_NOTICE_FALLBACK_MESSAGE[type],
+    };
+  }
+  return null;
+}
 
 // Type guard for checking if a phase is terminal
 function isTerminalPhase(
@@ -86,6 +181,7 @@ export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
   response?: string;
+  memoryLookup?: MemoryNoticeLookup;
   messages?: Array<{
     role: string;
     content?: string;
@@ -310,6 +406,17 @@ export const chatService = {
           status: validatedPhase,
           response: response,
           messages: messages,
+          // Only when the controller's verdict is actually on the object. An
+          // absent key means "nothing to say", which the caller must not read
+          // as "nothing wrong".
+          ...(hasMemoryCondition(status)
+            ? {
+                memoryLookup: {
+                  settled: true,
+                  notice: extractMemoryNotice(status),
+                },
+              }
+            : {}),
         };
       }
 
@@ -317,6 +424,41 @@ export const chatService = {
     } catch {
       return { status: 'error', terminal: true };
     }
+  },
+
+  /**
+   * Poll a query until its memory verdict appears, then report it. The
+   * streaming path needs this rather than reading the query once: the executor
+   * closes the stream before the controller writes the terminal status, so the
+   * conditions are not on the resource yet when the last chunk arrives. The
+   * paths that already hold a terminal response read `memoryLookup` off it
+   * instead.
+   *
+   * Returns an unsettled lookup when the budget runs out, when every read
+   * failed, or when the query settled without a verdict. A transient error does
+   * not end the attempts — one bad response inside the window must not be
+   * reported as a clean bill of health.
+   */
+  async resolveMemoryNotice(
+    queryName: string,
+    attempts: number = MEMORY_NOTICE_POLL_ATTEMPTS,
+    delayMs: number = MEMORY_NOTICE_POLL_INTERVAL_MS,
+  ): Promise<MemoryNoticeLookup> {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+      let status: QueryDetailResponse['status'];
+      try {
+        status = (await this.getQuery(queryName))?.status;
+      } catch {
+        continue;
+      }
+      if (hasMemoryCondition(status)) {
+        return {settled: true, notice: extractMemoryNotice(status)};
+      }
+    }
+    return MEMORY_LOOKUP_UNSETTLED;
   },
 
   async streamQueryStatus(
