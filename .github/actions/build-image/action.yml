@@ -39,17 +39,22 @@ runs:
   steps:
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
+      with:
+        image: mirror.gcr.io/tonistiigi/binfmt:latest
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-      
+      with:
+        driver-opts: |
+          image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+
     - name: Run prebuild command
       if: ${{ inputs.prebuild }}
       shell: bash
       run: |
         echo "Running prebuild command: ${{ inputs.prebuild }}"
         ${{ inputs.prebuild }}
-        
+
     - name: Build and optionally push
       uses: docker/build-push-action@v6
       with:
