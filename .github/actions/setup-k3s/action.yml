@@ -304,10 +304,8 @@ runs:
           sleep 3
           if [ "$attempt" -eq 60 ]; then
             echo "Timed out waiting for k3s apiserver"
-            echo "--- systemctl status k3s ---"
-            sudo systemctl status k3s --no-pager || true
-            echo "--- journalctl -u k3s (last 5 min) ---"
-            sudo journalctl -u k3s --no-pager --since "5 minutes ago" --lines=200 || true
+            bash "${{ github.action_path }}/dump-k3s-state.sh" \
+              "timed out waiting for k3s apiserver to bind :6443"
             exit 1
           fi
         done
@@ -327,19 +325,42 @@ runs:
         # Probe the actual auth chain (rolebinding + configmap + apiserver
         # cache) instead of pattern-matching resource names; the rolebinding
         # the cloud-controller uses has been renamed across k3s versions.
+        #
+        # /livez already passed, so the apiserver was up. If the probe now
+        # fails with "connection refused" the control plane has crashed (prime
+        # suspect: OOM on the memory spike as calico/coredns/metrics start).
+        # Count consecutive refusals and fail fast with a state dump once the
+        # server has been solidly gone for ~10s, rather than burning the full
+        # 48s budget against a corpse - while still tolerating a brief flap.
+        consecutive_refused=0
         for attempt in $(seq 1 24); do
-          if kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
-               --as=k3s-cloud-controller-manager >/dev/null 2>&1; then
+          probe_err=$(kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+            --as=k3s-cloud-controller-manager 2>&1 >/dev/null)
+          if [ $? -eq 0 ]; then
             echo "k3s bootstrap RBAC ready (attempt $attempt/24)"
             break
           fi
-          echo "Waiting for k3s bootstrap RBAC (attempt $attempt/24)..."
+          if printf '%s' "$probe_err" | grep -qiE 'connection refused|was refused|dial tcp'; then
+            consecutive_refused=$((consecutive_refused + 1))
+            echo "apiserver unreachable (${consecutive_refused} in a row, attempt $attempt/24)"
+            if [ "$consecutive_refused" -ge 5 ]; then
+              echo "control plane unreachable for ${consecutive_refused} consecutive probes; treating as a crash"
+              bash "${{ github.action_path }}/dump-k3s-state.sh" \
+                "k3s control plane crashed during bootstrap RBAC wait"
+              exit 1
+            fi
+          else
+            consecutive_refused=0
+            echo "Waiting for k3s bootstrap RBAC (attempt $attempt/24)..."
+          fi
           sleep 2
           if [ "$attempt" -eq 24 ]; then
             echo "Timed out waiting for k3s bootstrap RBAC"
             kubectl -n kube-system get rolebinding,configmap || true
             kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
               --as=k3s-cloud-controller-manager -v=6 || true
+            bash "${{ github.action_path }}/dump-k3s-state.sh" \
+              "timed out waiting for k3s bootstrap RBAC"
             exit 1
           fi
         done
