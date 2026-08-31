@@ -7,6 +7,15 @@ import { agentsService, chatService } from '@/lib/services';
 
 import { useChatSession } from './use-chat-session';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services', () => ({
   chatService: {
     startStreamChatResponse: vi.fn(),
@@ -219,6 +228,7 @@ describe('useChatSession - Approval Handling', () => {
 
       await waitFor(() => {
         expect(chatService.getQueryResult).toHaveBeenCalledWith(
+          'default',
           'test-query-poll',
         );
       });
@@ -462,6 +472,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
 
     await waitFor(() => {
       expect(chatService.getQuery).toHaveBeenCalledWith(
+        'default',
         'test-query-missing-final',
       );
     });
@@ -492,7 +503,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
     });
 
     await waitFor(() => {
-      expect(chatService.getQuery).toHaveBeenCalledWith('test-query-first');
+      expect(chatService.getQuery).toHaveBeenCalledWith('default', 'test-query-first');
     });
 
     await act(async () => {
@@ -505,7 +516,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
 
     const secondCallArgs = vi.mocked(chatService.startStreamChatResponse).mock
       .calls[1];
-    expect(secondCallArgs[4]).toBe('conv-fallback');
+    expect(secondCallArgs[5]).toBe('conv-fallback');
   });
 
   it('does not call getQuery when the stream already provides a conversationId', async () => {
@@ -553,7 +564,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
     });
 
     await waitFor(() => {
-      expect(chatService.getQuery).toHaveBeenCalledWith('test-query-throws');
+      expect(chatService.getQuery).toHaveBeenCalledWith('default', 'test-query-throws');
     });
 
     expect(result.current.error).toBeNull();

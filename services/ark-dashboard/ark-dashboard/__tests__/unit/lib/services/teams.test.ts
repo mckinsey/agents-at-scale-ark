@@ -41,13 +41,11 @@ describe('teamsService', () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce({ ...mockTeam, name: 'team1' })
       vi.mocked(apiClient.get).mockResolvedValueOnce({ ...mockTeam, name: 'team2' })
 
-      const result = await teamsService.getAll()
+      const result = await teamsService.getAll('default')
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`, {
-        params: { limit: 100 },
-      })
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team1`)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team2`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`, { params: { limit: 100, namespace: 'default' } })
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team1`, { params: { namespace: 'default' } })
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team2`, { params: { namespace: 'default' } })
       
       expect(result).toHaveLength(2)
       expect(result[0]).toMatchObject({ id: 'team1', name: 'team1' })
@@ -59,11 +57,10 @@ describe('teamsService', () => {
     it('should fetch team by name and add id field', async () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockTeam)
 
-      const result = await teamsService.getByName('test-team')
+      const result = await teamsService.getByName('default', 'test-team')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/teams/test-team`
-      )
+        `/api/v1/teams/test-team`, { params: { namespace: 'default' } })
       expect(result).toMatchObject({
         ...mockTeam,
         id: 'test-team',
@@ -75,7 +72,7 @@ describe('teamsService', () => {
       error.response = { status: 404 }
       vi.mocked(apiClient.get).mockRejectedValueOnce(error)
 
-      const result = await teamsService.getByName('non-existent')
+      const result = await teamsService.getByName('default', 'non-existent')
 
       expect(result).toBeNull()
     })
@@ -84,7 +81,7 @@ describe('teamsService', () => {
       const error = new Error('Server error')
       vi.mocked(apiClient.get).mockRejectedValueOnce(error)
 
-      await expect(teamsService.getByName('test-team')).rejects.toThrow(
+      await expect(teamsService.getByName('default', 'test-team')).rejects.toThrow(
         'Server error'
       )
     })
@@ -94,22 +91,20 @@ describe('teamsService', () => {
     it('should convert numeric ID to string and call getByName', async () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockTeam)
 
-      const result = await teamsService.getById(123)
+      const result = await teamsService.getById('default', 123)
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/teams/123`
-      )
+        `/api/v1/teams/123`, { params: { namespace: 'default' } })
       expect(result).toMatchObject({ id: 'test-team' })
     })
 
     it('should handle string IDs', async () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockTeam)
 
-      await teamsService.getById('string-id')
+      await teamsService.getById('default', 'string-id')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/teams/string-id`
-      )
+        `/api/v1/teams/string-id`, { params: { namespace: 'default' } })
     })
   })
 
@@ -126,12 +121,11 @@ describe('teamsService', () => {
         name: 'new-team',
       })
 
-      const result = await teamsService.create(createRequest)
+      const result = await teamsService.create('default', createRequest)
 
       expect(apiClient.post).toHaveBeenCalledWith(
         `/api/v1/teams`,
-        createRequest
-      )
+        createRequest, { params: { namespace: 'default' } })
       expect(result).toMatchObject({
         id: 'new-team',
         name: 'new-team',
@@ -148,12 +142,11 @@ describe('teamsService', () => {
         displayName: 'Updated Team',
       })
 
-      const result = await teamsService.update('test-team', updates)
+      const result = await teamsService.update('default', 'test-team', updates)
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/teams/test-team`,
-        updates
-      )
+        updates, { params: { namespace: 'default' } })
       expect(result).toMatchObject({
         id: 'test-team',
         displayName: 'Updated Team',
@@ -165,7 +158,7 @@ describe('teamsService', () => {
       error.response = { status: 404 }
       vi.mocked(apiClient.put).mockRejectedValueOnce(error)
 
-      const result = await teamsService.update('non-existent', {})
+      const result = await teamsService.update('default', 'non-existent', {})
 
       expect(result).toBeNull()
     })
@@ -176,12 +169,11 @@ describe('teamsService', () => {
       const updates = { displayName: 'Updated' }
       vi.mocked(apiClient.put).mockResolvedValueOnce(mockTeam)
 
-      await teamsService.updateById(123, updates)
+      await teamsService.updateById('default', 123, updates)
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/teams/123`,
-        updates
-      )
+        updates, { params: { namespace: 'default' } })
     })
   })
 
@@ -189,11 +181,10 @@ describe('teamsService', () => {
     it('should delete team and return true', async () => {
       vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined)
 
-      const result = await teamsService.delete('test-team')
+      const result = await teamsService.delete('default', 'test-team')
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/teams/test-team`
-      )
+        `/api/v1/teams/test-team`, { params: { namespace: 'default' } })
       expect(result).toBe(true)
     })
 
@@ -202,7 +193,7 @@ describe('teamsService', () => {
       error.response = { status: 404 }
       vi.mocked(apiClient.delete).mockRejectedValueOnce(error)
 
-      const result = await teamsService.delete('non-existent')
+      const result = await teamsService.delete('default', 'non-existent')
 
       expect(result).toBe(false)
     })
@@ -211,7 +202,7 @@ describe('teamsService', () => {
       const error = new Error('Server error')
       vi.mocked(apiClient.delete).mockRejectedValueOnce(error)
 
-      await expect(teamsService.delete('test-team')).rejects.toThrow(
+      await expect(teamsService.delete('default', 'test-team')).rejects.toThrow(
         'Server error'
       )
     })
@@ -221,11 +212,10 @@ describe('teamsService', () => {
     it('should convert ID to string and call delete', async () => {
       vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined)
 
-      const result = await teamsService.deleteById(123)
+      const result = await teamsService.deleteById('default', 123)
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/teams/123`
-      )
+        `/api/v1/teams/123`, { params: { namespace: 'default' } })
       expect(result).toBe(true)
     })
   })

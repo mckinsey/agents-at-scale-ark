@@ -42,7 +42,7 @@ export function ViewAgentForm({
   onSuccess,
 }: Readonly<AgentFormProps>) {
   const { push } = useNamespacedNavigation();
-  const { readOnlyMode } = useNamespace();
+  const { namespace, readOnlyMode } = useNamespace();
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
@@ -51,11 +51,11 @@ export function ViewAgentForm({
   useEffect(() => {
     setAgentsLoading(true);
     agentsService
-      .getAll()
+      .getAll(namespace)
       .then(agents => setAllAgents(agents))
       .catch(console.error)
       .finally(() => setAgentsLoading(false));
-  }, []);
+  }, [namespace]);
 
   const { form, state, actions } = useAgentForm({
     mode: AgentFormMode.VIEW,
@@ -91,12 +91,12 @@ export function ViewAgentForm({
 
   const fetchAgentYaml = useCallback(async (name: string) => {
     try {
-      const raw = await agentsService.getRawResource(name);
+      const raw = await agentsService.getRawResource(namespace, name);
       setAgentYaml(toKubernetesYaml(raw));
     } catch {
       setAgentYaml('');
     }
-  }, []);
+  }, [namespace]);
 
   useEffect(() => {
     if (agent?.name && showYaml) {

@@ -9,12 +9,12 @@ class DashboardPage(BasePage):
     
     NAV_MENU = "nav[role='navigation'], nav.navbar, header nav"
     DASHBOARD_TITLE = "h1, h2, [data-testid='dashboard-title']"
-    AGENTS_TAB = "a[href='/agents']"
-    MODELS_TAB = "a[href='/models']"
-    QUERIES_TAB = "a[href='/queries']"
-    TOOLS_TAB = "a[href='/tools']"
-    TEAMS_TAB = "a[href='/teams']"
-    SECRETS_TAB = "a[href='/secrets']"
+    AGENTS_TAB = "a[href='/agents'], a[href^='/agents?']"
+    MODELS_TAB = "a[href='/models'], a[href^='/models?']"
+    QUERIES_TAB = "a[href='/queries'], a[href^='/queries?']"
+    TOOLS_TAB = "a[href='/tools'], a[href^='/tools?']"
+    TEAMS_TAB = "a[href='/teams'], a[href^='/teams?']"
+    SECRETS_TAB = "a[href='/secrets'], a[href^='/secrets?']"
     MAIN_CONTENT = "main[data-slot='sidebar-inset']"
     SIDEBAR = "[data-testid='sidebar'], aside, nav"
     AGENT_BUILDER_TOGGLE = "button:has-text('Agent Builder')"
@@ -45,7 +45,7 @@ class DashboardPage(BasePage):
         try:
             toggle = self.page.locator(self.AGENT_BUILDER_TOGGLE).first
             toggle.wait_for(state="visible", timeout=5000)
-            agents_link = self.page.locator("a[href='/agents']").first
+            agents_link = self.page.locator("a[href='/agents'], a[href^='/agents?']").first
             if not agents_link.is_visible(timeout=1000):
                 toggle.click()
                 agents_link.wait_for(state="visible", timeout=5000)

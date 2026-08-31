@@ -5,6 +5,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
 import type { Agent } from '@/lib/services';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 const mockCopy = vi.fn();
 const mockGetAll = vi.fn();
 
