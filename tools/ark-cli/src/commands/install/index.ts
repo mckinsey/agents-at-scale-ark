@@ -10,6 +10,7 @@ import {
   arkDependencies,
   arkServices,
   type ArkService,
+  type ServiceCollection,
 } from '../../arkServices.js';
 import {
   isMarketplaceService,
@@ -141,6 +142,57 @@ function exitIfServicesSkipped(skipped: {name: string; version: string}[]): void
   process.exit(1);
 }
 
+function findService(
+  services: ServiceCollection,
+  name: string
+): ArkService | undefined {
+  return Object.values(services).find(
+    (s) => s.name === name || s.helmReleaseName === name
+  );
+}
+
+/**
+ * Expand requested service names to include their transitive `requires`,
+ * dependencies first. A visited set both de-duplicates and guards against
+ * a cycle in `requires` (a node already being visited is never re-entered).
+ * A dependency that does not resolve to an installable service (disabled,
+ * or excluded for the current backend) is skipped with a warning rather
+ * than pushed through to a confusing "service not found" error for a name
+ * the caller never typed.
+ */
+function resolveServiceOrder(
+  requestedNames: string[],
+  services: ServiceCollection,
+  skipDeps: boolean
+): string[] {
+  const resolved: string[] = [];
+  const visited = new Set<string>();
+
+  function visit(name: string): void {
+    if (visited.has(name)) return;
+    visited.add(name);
+    if (!skipDeps) {
+      const service = findService(services, name);
+      for (const dep of service?.requires || []) {
+        if (findService(services, dep)) {
+          visit(dep);
+        } else {
+          output.warning(
+            `${name} requires ${dep}, but it is not installable in this configuration — skipping it`
+          );
+        }
+      }
+    }
+    resolved.push(name);
+  }
+
+  for (const name of requestedNames) {
+    visit(name);
+  }
+
+  return resolved;
+}
+
 async function uninstallPrerequisites(
   service: ArkService,
   verbose: boolean = false
@@ -265,6 +317,7 @@ export async function installArk(
     arkVersion?: string;
     marketplaceVersion?: string;
     backend?: string;
+    deps?: boolean;
   } = {}
 ) {
   // Validate version strings
@@ -321,7 +374,34 @@ export async function installArk(
 
   // If specific services are requested, install only those services
   if (serviceNames.length > 0) {
-    for (const serviceName of serviceNames) {
+    const installableServices = getInstallableServices(backend);
+    const skipDeps = options.deps === false;
+    const resolvedServiceNames = resolveServiceOrder(
+      serviceNames,
+      installableServices,
+      skipDeps
+    );
+
+    if (skipDeps) {
+      const skippedDeps = resolveServiceOrder(
+        serviceNames,
+        installableServices,
+        false
+      ).filter((name) => !serviceNames.includes(name));
+      if (skippedDeps.length > 0) {
+        output.warning(
+          `--no-deps: not installing ${skippedDeps.join(', ')} automatically; the requested service(s) may not behave as expected without them`
+        );
+      }
+    } else {
+      for (const name of resolvedServiceNames) {
+        if (!serviceNames.includes(name)) {
+          output.info(`${name} is required by a requested service, installing it first...`);
+        }
+      }
+    }
+
+    for (const serviceName of resolvedServiceNames) {
       // Check if it's a marketplace item
       if (isMarketplaceService(serviceName)) {
         const service = await getMarketplaceItem(serviceName);
@@ -374,17 +454,27 @@ export async function installArk(
       }
 
       // Core ARK service
-      const services = getInstallableServices(backend);
-      const service = Object.values(services).find((s) => s.name === serviceName);
+      const service = findService(installableServices, serviceName);
 
       if (!service) {
         output.error(`service '${serviceName}' not found`);
         output.info('available services:');
-        for (const s of Object.values(services)) {
+        for (const s of Object.values(installableServices)) {
           output.info(`  ${s.name}`);
         }
         process.exit(1);
       }
+
+      // Apply the override only for a service actually missing one of its
+      // `requires` from this install — whether because --no-deps skipped it
+      // globally, or because a specific dependency wasn't installable (e.g.
+      // disabled in .arkrc.yaml) — not just because --no-deps was passed at
+      // all, which would wrongly override a service whose dependency IS
+      // being installed alongside it (e.g. `ark install ark-broker
+      // ark-tenant --no-deps`).
+      const missingRequires = (service.requires || []).some(
+        (dep) => !resolvedServiceNames.includes(dep)
+      );
 
       output.info(`installing ${service.name}...`);
       try {
@@ -393,7 +483,10 @@ export async function installArk(
           options.verbose,
           options.arkVersion,
           options.marketplaceVersion,
-          backendInstallArgs(service, backend, postgresValues)
+          [
+            ...backendInstallArgs(service, backend, postgresValues),
+            ...(missingRequires ? service.dependencyOverrideArgs || [] : []),
+          ]
         );
         output.success(`${service.name} installed successfully`);
 
@@ -584,11 +677,17 @@ export async function installArk(
       }
     }
 
-    // Install selected services
-    for (const serviceName of selectedComponents) {
-      const service = Object.values(arkServices).find(
-        (s) => s.helmReleaseName === serviceName
-      );
+    // Install selected services, dependencies first: `mandatory` only forces
+    // a service into `selectedComponents`, it says nothing about install
+    // order, so a `requires` dependency (e.g. ark-broker for ark-tenant) must
+    // still be resolved here even though every mandatory name is present.
+    const orderedComponents = resolveServiceOrder(
+      selectedComponents,
+      arkServices,
+      false
+    );
+    for (const serviceName of orderedComponents) {
+      const service = findService(arkServices, serviceName);
       if (!service || !service.chartPath) {
         continue;
       }
@@ -655,7 +754,9 @@ export async function installArk(
       }
     }
 
-    // Install all services
+    // Install all services. Every service is selected here, so alphabetical
+    // order happens to put ark-broker before ark-tenant today — resolve
+    // `requires` explicitly anyway rather than depend on that coincidence.
     const services = getInstallableServices(backend);
     const sortedServices = Object.values(services).sort((a, b) => {
       // Ensure ark-controller is always first
@@ -663,8 +764,24 @@ export async function installArk(
       if (b.name === 'ark-controller') return 1;
       return a.name.localeCompare(b.name);
     });
-    for (const service of sortedServices) {
+    const orderedNames = resolveServiceOrder(
+      sortedServices.map((s) => s.name),
+      services,
+      false
+    );
+    const orderedServices = orderedNames
+      .map((name) => findService(services, name))
+      .filter((s): s is ArkService => Boolean(s));
+    for (const service of orderedServices) {
       output.info(`installing ${service.name}...`);
+
+      // A `requires` dependency disabled in .arkrc.yaml gets dropped (with a
+      // warning) by resolveServiceOrder above rather than installed — apply
+      // the same override as the named-service path so the dependent isn't
+      // then refused by its own chart-level guard.
+      const missingRequires = (service.requires || []).some(
+        (dep) => !orderedNames.includes(dep)
+      );
 
       try {
         await installService(
@@ -672,7 +789,10 @@ export async function installArk(
           options.verbose,
           options.arkVersion,
           options.marketplaceVersion,
-          backendInstallArgs(service, backend, postgresValues)
+          [
+            ...backendInstallArgs(service, backend, postgresValues),
+            ...(missingRequires ? service.dependencyOverrideArgs || [] : []),
+          ]
         );
         console.log(); // Add blank line after command output
       } catch (error) {
@@ -775,6 +895,10 @@ export function createInstallCommand(config: ArkConfig) {
     .option(
       '--backend <type>',
       "storage backend: 'etcd' (default) or 'postgresql' (overrides storage.backend in .arkrc.yaml)"
+    )
+    .option(
+      '--no-deps',
+      "skip a requested service's dependencies (e.g. ark-broker for ark-tenant); the resulting install may lose the guarantees those dependencies provide"
     )
     .option('-v, --verbose', 'show commands being executed')
     .action(async (services, options) => {

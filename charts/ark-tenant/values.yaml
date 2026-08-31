@@ -67,3 +67,13 @@ builtinTools:
     name: terminate
   noop:
     name: noop
+
+# Default Memory / broker requirement
+memory:
+  # Refuse `helm install` (never `helm upgrade`) when no broker Service is
+  # found in the release namespace. A tenant without a broker loses
+  # conversation history: https://github.com/mckinsey/agents-at-scale-ark/issues/2642
+  requireBroker: true
+  # Name of the ark-broker Service to look for. Override when ark-broker is
+  # installed under a non-standard Helm release name.
+  brokerService: ark-broker

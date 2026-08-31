@@ -84,6 +84,11 @@ roleBindings:
 # 'roleBindings' config is sufficient.
 ark-tenant:
   enabled: false
+  # This subchart provisions RBAC for a workflow-orchestration namespace, not
+  # a full conversational Ark tenant, so it should not require (or wait on) a
+  # broker Service the way `ark install ark-tenant` does.
+  memory:
+    requireBroker: false
   serviceAccount:
     # No need to create this service account - the argo chart creates it.
     create: false
