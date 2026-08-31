@@ -35,12 +35,11 @@ spec:
         file: manifests/a00-rbac.yaml
     - apply:
         file: manifests/a00-broker-config.yaml
-    - apply:
-        file: manifests/a00-memory.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Memory
         name: default
+        namespace: default
         timeout: 60s
         for:
           jsonPath:

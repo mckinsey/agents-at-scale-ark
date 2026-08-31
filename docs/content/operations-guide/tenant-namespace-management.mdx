@@ -23,6 +23,8 @@ ark dashboard
 
 > The Ark CLI uses your current kubectl context namespace. You can also install the charts directly with Helm — see the [Deploying Ark](/operations-guide/deploying-ark) guide.
 
+If a `Memory` named `default` already exists in the namespace from a previous manual setup, `ark install ark-broker` leaves it untouched rather than failing on ownership metadata, so it keeps pointing wherever it already pointed. Annotate and label it for Helm to adopt instead: `kubectl annotate memory default meta.helm.sh/release-name=ark-broker meta.helm.sh/release-namespace=<namespace> --overwrite && kubectl label memory default app.kubernetes.io/managed-by=Helm --overwrite`.
+
 ## Cross-Tenant Access
 
 By default, tenants are fully isolated. A user accessing Tenant A's dashboard cannot see resources in Tenant B. A cluster administrator can grant cross-tenant access using standard Kubernetes RBAC.
