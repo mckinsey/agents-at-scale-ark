@@ -4,11 +4,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
+import { DateTimeField } from '@/components/common/date-time-field';
+import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -29,12 +30,20 @@ import {
 } from '@/lib/services';
 import { useCreateAPIKey } from '@/lib/services/api-keys-hooks';
 
+/** Value shape DateTimeField emits once the date parses. */
+const DATETIME_LOCAL_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
 const formSchema = z.object({
   name: z
     .string()
     .min(1, 'Name is required')
     .max(100, 'Name must be less than 100 characters'),
-  expires_at: z.string().optional(),
+  expires_at: z
+    .string()
+    .optional()
+    .refine(value => !value || DATETIME_LOCAL_PATTERN.test(value), {
+      message: 'Enter a complete date as dd/mm/yyyy',
+    }),
 });
 
 interface AddAPIKeyDialogProps {
@@ -68,10 +77,7 @@ export function AddAPIKeyDialog({
 
     const response = await createAPIKeyMutation.mutateAsync(request);
 
-    // Reset form
     form.reset();
-
-    // Close dialog and show success
     onOpenChange(false);
     onSuccess(response);
   };
@@ -82,80 +88,98 @@ export function AddAPIKeyDialog({
     onOpenChange(false);
   };
 
+  // Escape and the X close via onOpenChange, which would otherwise skip the
+  // reset and leave a stale error banner behind on reopen.
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      onOpenChange(true);
+      return;
+    }
+    // Cancel is disabled while creating; Escape, the X and outside-click must
+    // not discard the in-flight mutation either.
+    if (createAPIKeyMutation.isPending) {
+      return;
+    }
+    handleCancel();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-[586px]">
         <DialogHeader>
           <DialogTitle>Create API Key</DialogTitle>
-          <DialogDescription>
-            Create a new API key for service-to-service authentication.
-          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name *</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Enter a descriptive name"
-                      disabled={createAPIKeyMutation.isPending}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="contents">
+            <div className="flex flex-col gap-6">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem className="gap-2">
+                    <FormLabel className="label-regular-primary text-fg-secondary">
+                      Name *
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        variant="inline"
+                        placeholder="enter a descriptive name"
+                        disabled={createAPIKeyMutation.isPending}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="expires_at"
+                render={({ field }) => (
+                  <FormItem className="gap-2">
+                    <FormLabel className="label-regular-primary text-fg-secondary">
+                      Expires at
+                    </FormLabel>
+                    <FormControl>
+                      <DateTimeField
+                        value={field.value ?? ''}
+                        onChange={field.onChange}
+                        disabled={createAPIKeyMutation.isPending}
+                        dateLabel="Expiry date"
+                        timeLabel="Expiry time"
+                      />
+                    </FormControl>
+                    <FormDescription className="paragraph-regular-primary text-fg-tertiary">
+                      Leave empty for no expiration
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {createAPIKeyMutation.error && (
+                <ResourceErrorState
+                  title="Couldn't create API key"
+                  description={
+                    createAPIKeyMutation.error instanceof Error
+                      ? createAPIKeyMutation.error.message
+                      : 'Failed to create API key'
+                  }
+                />
               )}
-            />
+            </div>
 
-            <FormField
-              control={form.control}
-              name="expires_at"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Expires At (optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="datetime-local"
-                      disabled={createAPIKeyMutation.isPending}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Leave empty for no expiration
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {createAPIKeyMutation.error && (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-red-600">
-                <p className="text-sm">
-                  {createAPIKeyMutation.error instanceof Error
-                    ? createAPIKeyMutation.error.message
-                    : 'Failed to create API key'}
-                </p>
-              </div>
-            )}
-
-            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-2">
+            <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
                 onClick={handleCancel}
-                disabled={createAPIKeyMutation.isPending}
-                className="w-full sm:w-auto">
+                disabled={createAPIKeyMutation.isPending}>
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={createAPIKeyMutation.isPending}
-                className="w-full sm:w-auto">
+              <Button type="submit" disabled={createAPIKeyMutation.isPending}>
                 {createAPIKeyMutation.isPending
                   ? 'Creating...'
                   : 'Create API Key'}
