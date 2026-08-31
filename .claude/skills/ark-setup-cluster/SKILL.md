@@ -90,6 +90,8 @@ If specific chart versions aren't published yet (e.g., on a feature branch), ins
 
 ```bash
 helm install ark-controller oci://mckinsey-ark-helm.jfrog.io/ark-helm/ark-controller --version <version>
+# ark-tenant's preflight requires a broker Service in the namespace; install
+# ark-broker first, or pass --set memory.requireBroker=false to skip the check.
 helm install ark-tenant oci://mckinsey-ark-helm.jfrog.io/ark-helm/ark-tenant --version <version>
 helm install ark-api oci://mckinsey-ark-helm.jfrog.io/ark-helm/ark-api --version <version>
 helm install ark-dashboard oci://mckinsey-ark-helm.jfrog.io/ark-helm/ark-dashboard --version <version>

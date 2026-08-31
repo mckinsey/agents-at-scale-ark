@@ -301,11 +301,15 @@ pipelines:
     if [ "${ENABLE_ARGO}" == "true" ]; then
       run_dependency_pipelines argo-workflows --pipeline=dev
     fi
-    run_dependency_pipelines --all --exclude ark-controller --exclude argo-workflows --pipeline=dev
+    # ark-broker explicitly and first: ark-tenant's preflight needs its Service,
+    # and both have to precede the --all pipeline below. localhost-gateway's dev
+    # pipeline ends in a blocking `until kubectl port-forward` loop that runs for
+    # the life of the session, so anything sequenced after --all never executes.
+    # (ark-broker's own dev pipeline ends in start_dev, which returns.)
+    run_dependency_pipelines ark-broker --pipeline=dev
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
-      # ark-tenant now requires a broker Service to exist in the namespace
-      # (charts/ark-tenant preflight) — must run after the dependency
-      # pipelines above, which is what actually deploys ark-broker.
       create_deployments ark-tenant
     fi
+
+    run_dependency_pipelines --all --exclude ark-controller --exclude ark-broker --exclude argo-workflows --pipeline=dev

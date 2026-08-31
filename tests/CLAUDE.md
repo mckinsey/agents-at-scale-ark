@@ -570,7 +570,10 @@ spec:
     try:
     - script:
         content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          # requireBroker=false: an ephemeral test namespace has no broker, and
+          # the chart's preflight refuses to install without one.
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait \
+            --set memory.requireBroker=false
     - apply:
         file: manifests/*.yaml
     - wait:
