@@ -18,11 +18,12 @@ function isAuthError(error: unknown): boolean {
 }
 
 export async function getAuthorAgentPreflight(
+  namespace: string,
   agentName: string,
 ): Promise<AuthorAgentPreflight> {
   const [agentResult, mcpServerResult] = await Promise.allSettled([
-    agentsService.getByName(agentName),
-    mcpServersService.get(KUBERNETES_MCP_SERVER_NAME),
+    agentsService.getByName(namespace, agentName),
+    mcpServersService.get(namespace, KUBERNETES_MCP_SERVER_NAME),
   ]);
 
   let unverifiable = false;

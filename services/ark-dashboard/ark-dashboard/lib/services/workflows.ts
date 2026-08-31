@@ -13,7 +13,7 @@ export interface WorkflowFilters {
 
 export const workflowsService = {
   async list(
-    namespace: string = 'default',
+    namespace: string,
     filters?: WorkflowFilters,
   ): Promise<ArgoWorkflow[]> {
     const params = new URLSearchParams({ namespace });
@@ -34,17 +34,14 @@ export const workflowsService = {
     return response.items;
   },
 
-  async get(
-    name: string,
-    namespace: string = 'default',
-  ): Promise<ArgoWorkflow> {
+  async get(namespace: string, name: string): Promise<ArgoWorkflow> {
     const response = await apiClient.get<ArgoWorkflow>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/${name}?namespace=${namespace}`,
     );
     return response;
   },
 
-  async getYaml(name: string, namespace: string = 'default'): Promise<string> {
+  async getYaml(namespace: string, name: string): Promise<string> {
     const response = await apiClient.get<string>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/${name}?namespace=${namespace}`,
       {
@@ -57,8 +54,8 @@ export const workflowsService = {
   },
 
   async getPodLogs(
+    namespace: string,
     podName: string,
-    namespace: string = 'default',
     container?: string,
   ): Promise<string> {
     const containerParam = container ? `&container=${container}` : '';
@@ -74,9 +71,9 @@ export const workflowsService = {
   },
 
   async getWorkflowLogs(
+    namespace: string,
     workflowName: string,
     nodeId: string,
-    namespace: string = 'default',
   ): Promise<string> {
     const response = await apiClient.get<string>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/namespaces/${namespace}/workflows/${workflowName}/${nodeId}/log`,

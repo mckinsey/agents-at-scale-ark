@@ -25,6 +25,7 @@ import {
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { queriesService } from '@/lib/services/queries';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import type { useListQueries } from '@/lib/services/queries-hooks';
 import { cn } from '@/lib/utils';
 import { formatAge } from '@/lib/utils/time';
@@ -233,6 +234,7 @@ export function QueriesSection({
   onClearSearch,
   queryResult,
 }: Readonly<QueriesSectionProps>) {
+  const { namespace } = useNamespace();
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const { data, isLoading, isError, error, refetch } = queryResult;
@@ -261,7 +263,7 @@ export function QueriesSection({
 
   const handleDelete = async (queryName: string) => {
     try {
-      await queriesService.delete(queryName);
+      await queriesService.delete(namespace, queryName);
       toast.success('Query Deleted', {
         description: 'Successfully deleted query',
       });
@@ -276,7 +278,7 @@ export function QueriesSection({
 
   const handleCancel = async (queryName: string) => {
     try {
-      await queriesService.cancel(queryName);
+      await queriesService.cancel(namespace, queryName);
       toast.success('Query Canceled', {
         description: 'Successfully canceled query',
       });

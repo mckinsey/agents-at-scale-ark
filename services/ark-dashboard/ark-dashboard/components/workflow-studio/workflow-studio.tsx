@@ -363,6 +363,7 @@ export function WorkflowStudio({
   ) => {
     try {
       const workflow = await workflowTemplatesService.run(
+        namespace,
         studio.workflowName,
         parameters,
         runName,

@@ -13,18 +13,27 @@ export type SecretDetailResponse =
 // Service with list operation
 export const secretsService = {
   // Get all secrets for a given namespace
-  async getAll(): Promise<Secret[]> {
-    const response = await apiClient.get<SecretListResponse>(`/api/v1/secrets`);
+  async getAll(namespace: string): Promise<Secret[]> {
+    const response = await apiClient.get<SecretListResponse>(
+      `/api/v1/secrets`,
+      { params: { namespace } },
+    );
     return response.items;
   },
 
   // Get a single secret's details, including the names of its keys
-  async get(name: string): Promise<SecretDetailResponse> {
-    return apiClient.get<SecretDetailResponse>(`/api/v1/secrets/${name}`);
+  async get(namespace: string, name: string): Promise<SecretDetailResponse> {
+    return apiClient.get<SecretDetailResponse>(`/api/v1/secrets/${name}`, {
+      params: { namespace },
+    });
   },
 
   // Create a new secret
-  async create(name: string, password: string): Promise<SecretDetailResponse> {
+  async create(
+    namespace: string,
+    name: string,
+    password: string,
+  ): Promise<SecretDetailResponse> {
     const request: SecretCreateRequest = {
       name,
       string_data: {
@@ -35,6 +44,7 @@ export const secretsService = {
     const response = await apiClient.post<SecretDetailResponse>(
       `/api/v1/secrets`,
       request,
+      { params: { namespace } },
     );
     trackEvent({
       name: 'secret_created',
@@ -44,7 +54,11 @@ export const secretsService = {
   },
 
   // Update an existing secret
-  async update(name: string, password: string): Promise<SecretDetailResponse> {
+  async update(
+    namespace: string,
+    name: string,
+    password: string,
+  ): Promise<SecretDetailResponse> {
     const request: SecretUpdateRequest = {
       string_data: {
         token: password,
@@ -53,6 +67,7 @@ export const secretsService = {
     const response = await apiClient.put<SecretDetailResponse>(
       `/api/v1/secrets/${name}`,
       request,
+      { params: { namespace } },
     );
     trackEvent({
       name: 'secret_updated',
@@ -62,8 +77,10 @@ export const secretsService = {
   },
 
   // Delete a secret
-  async delete(name: string): Promise<void> {
-    await apiClient.delete(`/api/v1/secrets/${name}`);
+  async delete(namespace: string, name: string): Promise<void> {
+    await apiClient.delete(`/api/v1/secrets/${name}`, {
+      params: { namespace },
+    });
     trackEvent({
       name: 'secret_deleted',
       properties: { secretName: name },

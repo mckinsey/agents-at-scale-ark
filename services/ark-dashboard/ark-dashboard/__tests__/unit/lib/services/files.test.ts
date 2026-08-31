@@ -38,10 +38,10 @@ describe('filesService', () => {
 
       vi.mocked(filesApiClient.get).mockResolvedValueOnce(mockResponse);
 
-      const result = await filesService.list();
+      const result = await filesService.list('default');
 
       expect(filesApiClient.get).toHaveBeenCalledWith('files', {
-        params: {},
+        params: { namespace: 'default' },
       });
       expect(result).toEqual(mockResponse);
     });
@@ -61,10 +61,10 @@ describe('filesService', () => {
 
       vi.mocked(filesApiClient.get).mockResolvedValueOnce(mockResponse);
 
-      const result = await filesService.list({ prefix: 'dir1/' });
+      const result = await filesService.list('default', { prefix: 'dir1/' });
 
       expect(filesApiClient.get).toHaveBeenCalledWith('files', {
-        params: { prefix: 'dir1/' },
+        params: { namespace: 'default', prefix: 'dir1/' },
       });
       expect(result).toEqual(mockResponse);
     });
@@ -78,7 +78,7 @@ describe('filesService', () => {
 
       vi.mocked(filesApiClient.get).mockResolvedValueOnce(mockResponse);
 
-      const result = await filesService.list({
+      const result = await filesService.list('default', {
         prefix: 'documents/',
         max_keys: 50,
         continuation_token: 'token-abc',
@@ -86,6 +86,7 @@ describe('filesService', () => {
 
       expect(filesApiClient.get).toHaveBeenCalledWith('files', {
         params: {
+          namespace: 'default',
           prefix: 'documents/',
           max_keys: 50,
           continuation_token: 'token-abc',
@@ -99,20 +100,22 @@ describe('filesService', () => {
     it('should delete a file by key', async () => {
       vi.mocked(filesApiClient.delete).mockResolvedValueOnce(undefined);
 
-      await filesService.delete('test-file.txt');
+      await filesService.delete('default', 'test-file.txt');
 
       expect(filesApiClient.delete).toHaveBeenCalledWith(
         'files/test-file.txt',
+        { params: { namespace: 'default' } },
       );
     });
 
     it('should URL encode the file key', async () => {
       vi.mocked(filesApiClient.delete).mockResolvedValueOnce(undefined);
 
-      await filesService.delete('folder/file with spaces.txt');
+      await filesService.delete('default', 'folder/file with spaces.txt');
 
       expect(filesApiClient.delete).toHaveBeenCalledWith(
         'files/folder%2Ffile%20with%20spaces.txt',
+        { params: { namespace: 'default' } },
       );
     });
   });
@@ -125,10 +128,10 @@ describe('filesService', () => {
 
       vi.mocked(filesApiClient.delete).mockResolvedValueOnce(mockResponse);
 
-      const result = await filesService.deleteDirectory('test-dir/');
+      const result = await filesService.deleteDirectory('default', 'test-dir/');
 
       expect(filesApiClient.delete).toHaveBeenCalledWith('directories', {
-        params: { prefix: 'test-dir/' },
+        params: { namespace: 'default', prefix: 'test-dir/' },
       });
       expect(result).toEqual(mockResponse);
     });
@@ -140,7 +143,7 @@ describe('filesService', () => {
 
       vi.mocked(filesApiClient.delete).mockResolvedValueOnce(mockResponse);
 
-      const result = await filesService.deleteDirectory('documents/');
+      const result = await filesService.deleteDirectory('default', 'documents/');
 
       expect(result.deleted_count).toBe(42);
     });
@@ -171,10 +174,12 @@ describe('filesService', () => {
       const file = new File(['content'], 'test.txt', { type: 'text/plain' });
       const prefix = 'uploads/';
 
-      const uploadPromise = filesService.upload(file, prefix);
+      const uploadPromise = filesService.upload('default', file, prefix);
 
       // Verify buildUrl was called to construct the URL with namespace
-      expect(filesApiClient.buildUrl).toHaveBeenCalledWith('files');
+      expect(filesApiClient.buildUrl).toHaveBeenCalledWith('files', {
+        namespace: 'default',
+      });
       // Verify the URL includes namespace from buildUrl
       expect(mockXHR.open).toHaveBeenCalledWith(
         'POST',
@@ -197,7 +202,7 @@ describe('filesService', () => {
       const prefix = 'uploads/';
       const onProgress = vi.fn();
 
-      filesService.upload(file, prefix, onProgress);
+      filesService.upload('default', file, prefix, onProgress);
 
       const progressCallback = mockXHR.upload.addEventListener.mock.calls.find(
         (call: any) => call[0] === 'progress',
@@ -214,7 +219,7 @@ describe('filesService', () => {
       const file = new File(['content'], 'test.txt');
       const prefix = 'uploads/';
 
-      filesService.upload(file, prefix);
+      filesService.upload('default', file, prefix);
 
       const progressCallback = mockXHR.upload.addEventListener.mock.calls.find(
         (call: any) => call[0] === 'progress',
@@ -229,7 +234,7 @@ describe('filesService', () => {
       const file = new File(['content'], 'test.txt');
       const prefix = 'uploads/';
 
-      const uploadPromise = filesService.upload(file, prefix);
+      const uploadPromise = filesService.upload('default', file, prefix);
 
       const errorCallback = mockXHR.addEventListener.mock.calls.find(
         (call: any) => call[0] === 'error',
@@ -244,7 +249,7 @@ describe('filesService', () => {
       const file = new File(['content'], 'test.txt');
       const prefix = 'uploads/';
 
-      const uploadPromise = filesService.upload(file, prefix);
+      const uploadPromise = filesService.upload('default', file, prefix);
 
       const loadCallback = mockXHR.addEventListener.mock.calls.find(
         (call: any) => call[0] === 'load',
@@ -268,11 +273,12 @@ describe('filesService', () => {
     });
 
     it('should use buildUrl to construct download URL with namespace', () => {
-      filesService.download('test-file.txt');
+      filesService.download('default', 'test-file.txt');
 
       // Verify buildUrl was called with the correct endpoint
       expect(filesApiClient.buildUrl).toHaveBeenCalledWith(
         'files/test-file.txt/download',
+        { namespace: 'default' },
       );
       // Verify the URL returned by buildUrl (with namespace) is used
       expect(windowOpenSpy).toHaveBeenCalledWith(
@@ -282,10 +288,11 @@ describe('filesService', () => {
     });
 
     it('should URL encode the file key in download URL', () => {
-      filesService.download('folder/file with spaces.txt');
+      filesService.download('default', 'folder/file with spaces.txt');
 
       expect(filesApiClient.buildUrl).toHaveBeenCalledWith(
         'files/folder%2Ffile%20with%20spaces.txt/download',
+        { namespace: 'default' },
       );
     });
   });
