@@ -1708,8 +1708,72 @@ describe('install command', () => {
           call[1].includes('ark-tenant')
       );
       expect(tenantInstallCall).toBeDefined();
-      expect(tenantInstallCall![1]).toEqual(
-        expect.arrayContaining(['--set', 'memory.requireBroker=false'])
+      expect(tenantInstallCall![1].join(' ')).toContain(
+        '--set memory.requireBroker=false'
+      );
+    });
+
+    // The override must key on the dependency actually being absent, not on
+    // --no-deps having been passed: with both named, the broker IS installed
+    // alongside, so overriding its preflight away would be wrong. `= skipDeps`
+    // passed every other test in this file.
+    it('does not pass the override when --no-deps is given but the dependency is installed alongside', async () => {
+      const tenantWithOverride = {
+        ...tenantService,
+        dependencyOverrideArgs: ['--set', 'memory.requireBroker=false'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantWithOverride,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync([
+        'node',
+        'test',
+        'ark-broker',
+        'ark-tenant',
+        '--no-deps',
+      ]);
+
+      const tenantInstallCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('ark-tenant')
+      );
+      expect(tenantInstallCall).toBeDefined();
+      expect(tenantInstallCall![1].join(' ')).not.toContain(
+        'memory.requireBroker=false'
+      );
+    });
+
+    // The mirror: without --no-deps and with the dependency present, the
+    // override must also stay off. `missingRequires = true` passed everything.
+    it('does not pass the override on a normal install that pulls the dependency in', async () => {
+      const tenantWithOverride = {
+        ...tenantService,
+        dependencyOverrideArgs: ['--set', 'memory.requireBroker=false'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantWithOverride,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-tenant']);
+
+      const tenantInstallCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('ark-tenant')
+      );
+      expect(tenantInstallCall).toBeDefined();
+      expect(tenantInstallCall![1].join(' ')).not.toContain(
+        'memory.requireBroker=false'
       );
     });
 
