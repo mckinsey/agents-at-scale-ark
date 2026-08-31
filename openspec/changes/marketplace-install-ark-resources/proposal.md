@@ -56,7 +56,7 @@ None. The marketplace catalogue capabilities (`marketplace-sources-configmap`, `
 ## Impact
 
 - **ark-api** — new module for chart render and validation; endpoints in `api/v1/marketplace_items.py` or a sibling `marketplace_install.py`. Install through `pyhelm3`, already a dependency (`utils/ark_services.py:77`); `helm` is already in the image (`services/ark-api/Dockerfile:11`).
-- **Check before coding:** `helm` accepts `oci://…/chart@sha256:…` and `--atomic` (verified on 3.19), but `pyhelm3` wraps the CLI and may pass neither. If so, use the binary directly rather than drop a guarantee.
+- **Verified against `pyhelm3` 0.5.4 (installed version):** `install_or_upgrade` passes `chart_ref` and `timeout` straight through, so the digest-pinned ref and the bounded timeout both work as assumed. `atomic=True` does not send `--atomic` — its default `atomic_arg` is `--rollback-on-failure`, which is not a real Helm flag (`helm upgrade --help` on 3.19 lists no such flag). The call site must pass `atomic_arg="--atomic"` explicitly, or the atomicity guarantee this proposal relies on silently does not apply.
 - **ark-api RBAC** — add `create` on `subjectaccessreviews` next to the existing `selfsubjectaccessreviews` entry. Nothing else is widened.
 - **ark-dashboard** — `install/route.ts` proxies the two endpoints; `marketplace-item-card.tsx` and the dialog render the outcomes. The unused `executeHelmCommand` helper is deleted.
 - **Installed badge** — unchanged; it reads the Helm release annotation `ark.mckinsey.com/marketplace-item-name` (`marketplace-transform.ts:257`).

@@ -75,7 +75,7 @@ Excluded:
 - **`ConfigMap` and `Secret`** — excluded in v1 at no cost, since every item rendering either kind also renders a `Deployment` and is refused anyway. Allowing them would let a chart overwrite a `Secret` another workload uses, and let the UI create credentials. Revisit when a real item is blocked by this alone; if added, `create` only, failing on collision.
 - **Everything else** — any object outside the list makes the item not installable.
 
-Rejection is all-or-nothing: a partial install leaves a namespace half-configured and the user cannot tell which half arrived. The same applies to the install itself, so ark-api uses `--atomic` and a bounded timeout.
+Rejection is all-or-nothing: a partial install leaves a namespace half-configured and the user cannot tell which half arrived. The same applies to the install itself, so ark-api uses `--atomic` and a bounded timeout — through `pyhelm3`'s `install_or_upgrade(atomic=True, atomic_arg="--atomic")`. The `atomic_arg` override is required: `pyhelm3` 0.5.4 defaults it to `--rollback-on-failure`, which is not a Helm flag, so calling `install_or_upgrade(atomic=True)` alone drops the guarantee this decision depends on.
 
 ## Decision: authorize per tier
 
