@@ -47,6 +47,8 @@ spec:
             value: "ark-controller"
           - name: ARK_MEMORY_HTTP_TIMEOUT_SECONDS
             value: "30"
+          - name: ARK_DEFAULT_MEMORY_AUTO_PROVISION
+            value: {{ .Values.defaultMemory.autoProvision | quote }}
           {{- if .Values.telemetry.tenantRouting.otelDiscovery }}
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"

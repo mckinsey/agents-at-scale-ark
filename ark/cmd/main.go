@@ -72,6 +72,7 @@ type config struct {
 	role                                             string
 	maxConcurrentQueries                             int
 	maxConcurrentReconciles                          int
+	defaultMemoryAutoProvision                       bool
 }
 
 const (
@@ -107,6 +108,11 @@ func main() {
 
 	if err := validateRole(result.role); err != nil {
 		setupLog.Error(err, "invalid role")
+		os.Exit(1)
+	}
+
+	if err := envBool("ARK_DEFAULT_MEMORY_AUTO_PROVISION", &result.defaultMemoryAutoProvision); err != nil {
+		setupLog.Error(err, "invalid ARK_DEFAULT_MEMORY_AUTO_PROVISION")
 		os.Exit(1)
 	}
 
@@ -182,6 +188,10 @@ func parseFlags() struct {
 		"Maximum number of Query reconciles running in parallel. The workqueue dedupes per-key, "+
 			"so this only enables concurrency across different Query objects. Set to 0 to use "+
 			"the controller-runtime default (1).")
+	// No CLI flag: this is toggled via the ARK_DEFAULT_MEMORY_AUTO_PROVISION
+	// env var (read once the logger is up, see main()) so an operator can
+	// flip it without touching chart args, matching ENABLE_WEBHOOKS.
+	cfg.defaultMemoryAutoProvision = true
 
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
@@ -334,6 +344,11 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Eventing:  eventingProvider,
 		}},
 		{"Memory", &controller.MemoryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"DefaultMemory", &controller.DefaultMemoryReconciler{
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			AutoProvision: cfg.defaultMemoryAutoProvision,
+		}},
 		{"ExecutionEngine", &controller.ExecutionEngineReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),
