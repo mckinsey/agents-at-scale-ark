@@ -1,0 +1,16 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: get-coordinates
+spec:
+  type: http
+  inputSchema:
+    type: object
+    properties:
+      city:
+        type: string
+        description: City to look up
+    required: ["city"]
+  description: "Resolves a city name to coordinates"
+  http:
+    url: http://mock-weather-api/v1/coordinates?city={city}

@@ -537,9 +537,13 @@ func (t *Team) checkAndHandleMaxTurns(turn int, newMessages *[]Message) bool {
 	return false
 }
 
+func selectorTranscript(history []Message, userInput Message, accumulated []Message) []Message {
+	transcript := append(slices.Clone(history), userInput)
+	return append(transcript, accumulated[len(history):]...)
+}
+
 func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	messages := append([]Message{}, history...)
-	messages = append(messages, userInput)
+	messages := slices.Clone(history)
 	var newMessages []Message
 
 	tmpl, err := t.setupSelectorTemplate()
@@ -551,7 +555,7 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 	previousMember := ""
 
 	for turn := 0; ; turn++ {
-		nextMember, err := t.determineNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
+		nextMember, err := t.determineNextMember(ctx, selectorTranscript(history, userInput, messages), tmpl, previousMember, legalTransitions)
 		if err != nil {
 			shouldTerminate, returnErr := t.handleMemberSelectionError(ctx, err, &newMessages)
 			if shouldTerminate {

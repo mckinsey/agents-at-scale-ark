@@ -418,4 +418,60 @@ class TestARKResourceClient(BaseTestCase):
             client.delete("missing-resource")
 
         self.assertEqual(ctx.exception.status, 404)
-    
+
+    # Impersonation Header Tests - Issue #3174
+    # get/list/list_page build a fresh ApiClient per call. These tests pin that the
+    # fresh client carries the configured default headers, so impersonated reads
+    # reach the API server under the user's identity instead of the service account.
+
+    def _impersonating_client(self):
+        return ARKResourceClient(
+            api_version="test.io/v1",
+            kind="TestResource",
+            plural="testresources",
+            model_class=MockModel,
+            namespace="default",
+            default_headers={
+                "Impersonate-User": "user@example.com",
+                "Impersonate-Group": "team-a,team-b",
+            }
+        )
+
+    def _assert_impersonation_headers_applied(self):
+        self.mock_client_instance.set_default_header.assert_any_call(
+            "Impersonate-User", "user@example.com"
+        )
+        self.mock_client_instance.set_default_header.assert_any_call(
+            "Impersonate-Group", "team-a,team-b"
+        )
+
+    def test_get_applies_default_headers_to_fresh_client(self):
+        """get() must configure impersonation headers on its per-call client"""
+        self.mock_api_client.get_namespaced_custom_object.return_value = self.sample_resource_data
+        client = self._impersonating_client()
+        self.mock_client_instance.set_default_header.reset_mock()
+
+        client.get("test-resource")
+
+        self._assert_impersonation_headers_applied()
+
+    def test_list_applies_default_headers_to_fresh_client(self):
+        """list() must configure impersonation headers on its per-call client"""
+        self.mock_api_client.list_namespaced_custom_object.return_value = {'items': []}
+        client = self._impersonating_client()
+        self.mock_client_instance.set_default_header.reset_mock()
+
+        client.list()
+
+        self._assert_impersonation_headers_applied()
+
+    def test_list_page_applies_default_headers_to_fresh_client(self):
+        """list_page() must configure impersonation headers on its per-call client"""
+        self.mock_api_client.list_namespaced_custom_object.return_value = {'items': []}
+        client = self._impersonating_client()
+        self.mock_client_instance.set_default_header.reset_mock()
+
+        client.list_page(limit=10)
+
+        self._assert_impersonation_headers_applied()
+

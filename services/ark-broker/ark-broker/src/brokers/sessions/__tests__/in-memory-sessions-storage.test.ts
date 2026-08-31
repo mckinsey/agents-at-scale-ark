@@ -419,6 +419,57 @@ describe('InMemorySessionsStorage', () => {
     });
   });
 
+  describe('deleteQuery', () => {
+    const indexOf = (): Map<string, string> =>
+      (storage as unknown as {queryToSession: Map<string, string>})
+        .queryToSession;
+
+    test('removes the query and leaves the session header where it was', async () => {
+      await storage.applyEvent({
+        sessionId: 's1',
+        queryName: 'q1',
+        _reason: 'QueryExecutionError',
+        error: 'boom',
+      });
+      await storage.applyEvent({sessionId: 's1', queryName: 'q2'});
+      const before = (await storage.getSession('s1'))!.lastActivity;
+
+      expect(await storage.deleteQuery('q1')).toBe(1);
+
+      const session = (await storage.getSession('s1'))!;
+      expect(Object.keys(session.queries)).toEqual(['q2']);
+      expect(session.errorCount).toBe(0);
+      expect(session.lastActivity).toBe(before);
+    });
+
+    test('clears the index for the deleted name only, across every session', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'shared'});
+      await storage.applyEvent({sessionId: 's1', queryName: 'keeper'});
+      await storage.applyEvent({sessionId: 's2', queryName: 'shared'});
+      await storage.applyEvent({sessionId: 's2', queryName: 'keeper'});
+
+      expect(await storage.deleteQuery('shared')).toBe(2);
+
+      expect(indexOf().has('shared')).toBe(false);
+      // Fails if the delete reaches for the whole index rather than one key.
+      expect(indexOf().get('keeper')).toBe('s2');
+      await storage.applyMessage('conv-1', 'keeper');
+      expect(
+        (await storage.getSession('s2'))!.queries['keeper']!.conversationId
+      ).toBe('conv-1');
+    });
+
+    test('drops the session once its last query goes', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+
+      await storage.deleteQuery('q1');
+
+      const store = await storage.getAll();
+      expect(Object.keys(store.sessions)).toHaveLength(0);
+      expect(indexOf().size).toBe(0);
+    });
+  });
+
   describe('subscribe', () => {
     test('emits on applyEvent', async () => {
       const received: Array<{sessionId: string; queryName: string}> = [];

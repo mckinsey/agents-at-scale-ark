@@ -925,6 +925,106 @@ func TestWatchResumeFromResourceVersion_Integration(t *testing.T) {
 	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
 }
 
+// TestWatchResumeOverlapEmitsModifiedNotAdded_Integration pins the #3246 interim
+// fix: rows within the lookback window at or below the resume point that the client
+// already holds are re-delivered as Modified, not Added, so a resuming informer
+// treats them as a no-op resync rather than 500 phantom creations. A genuine change
+// above the resume point is still Added.
+func TestWatchResumeOverlapEmitsModifiedNotAdded_Integration(t *testing.T) {
+	cfg := testConfig(t)
+
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+	backend.StartWALConsumer()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testNS := "integration-test"
+	testKind := "ResumeOverlapResource"
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	defer func() {
+		_, _ = backend.db.ExecContext(context.Background(), "DELETE FROM resources WHERE kind = $1 AND namespace = $2", testKind, testNS)
+	}()
+
+	mkObj := func(name, uid string) *integrationTestObject {
+		obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+		obj.Metadata.Name = name
+		obj.Metadata.Namespace = testNS
+		obj.Metadata.UID = uid
+		obj.Spec = map[string]interface{}{"k": "v"}
+		return obj
+	}
+
+	// overlap-1 exists before the watch; the client already holds it. Resuming from
+	// its own rv puts it inside the lookback window at rv == startRV.
+	const overlapName = "overlap-1"
+	if err := backend.Create(ctx, testKind, testNS, overlapName, mkObj(overlapName, "uid-overlap")); err != nil {
+		t.Fatalf("Create %s failed: %v", overlapName, err)
+	}
+	var baselineRV int64
+	if err := backend.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(resource_version), 0) FROM resources WHERE kind = $1 AND namespace = $2",
+		testKind, testNS).Scan(&baselineRV); err != nil {
+		t.Fatalf("read baseline resourceVersion: %v", err)
+	}
+
+	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+		ResourceVersion: strconv.FormatInt(baselineRV, 10),
+	})
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(500 * time.Millisecond)
+
+	// A genuine change above the resume point. Relist/stream emit ascending by rv, so
+	// overlap-1 (rv == baselineRV) arrives no later than this sentinel — making the
+	// sentinel a deterministic stop condition.
+	const sentinelName = "sentinel-1"
+	if err := backend.Create(ctx, testKind, testNS, sentinelName, mkObj(sentinelName, "uid-sentinel")); err != nil {
+		t.Fatalf("Create %s failed: %v", sentinelName, err)
+	}
+
+	deadline := time.After(15 * time.Second)
+	overlapType, sentinelType := watch.EventType(""), watch.EventType("")
+	for sentinelType == "" {
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				t.Fatal("watch channel closed before sentinel arrived")
+			}
+			if ev.Type == watch.Bookmark {
+				continue
+			}
+			obj, _ := ev.Object.(*integrationTestObject)
+			if obj == nil {
+				continue
+			}
+			switch obj.Metadata.Name {
+			case overlapName:
+				overlapType = ev.Type
+			case sentinelName:
+				sentinelType = ev.Type
+			}
+		case <-deadline:
+			t.Fatalf("timeout waiting for sentinel; overlapType=%q", overlapType)
+		}
+	}
+
+	if overlapType != watch.Modified {
+		t.Errorf("resume overlap object %q (rv=%d, <= startRV) emitted as %q; want Modified so a resuming informer resyncs rather than sees a phantom creation",
+			overlapName, baselineRV, overlapType)
+	}
+	if sentinelType != watch.Added {
+		t.Errorf("genuine change %q above the resume point emitted as %q; want Added", sentinelName, sentinelType)
+	}
+}
+
 // TestWatchResumeDoesNotDropOutOfOrderCommit_Integration guards the resume boundary
 // against the out-of-order-commit race that the relist() lookback exists to defend
 // against. BIGSERIAL assigns resource_version at INSERT statement time but a row is
@@ -1060,6 +1160,7 @@ func TestWatchResumeDoesNotDropOutOfOrderCommit_Integration(t *testing.T) {
 
 	deadline := time.After(15 * time.Second)
 	sawLost := false
+	lostType := watch.EventType("")
 	for {
 		select {
 		case ev, ok := <-w.ResultChan():
@@ -1076,10 +1177,17 @@ func TestWatchResumeDoesNotDropOutOfOrderCommit_Integration(t *testing.T) {
 			switch obj.Metadata.Name {
 			case lostName:
 				sawLost = true
+				lostType = ev.Type
 			case sentinelName:
 				if !sawLost {
 					t.Fatalf("resume from resourceVersion=%d silently dropped out-of-order commit %q (rv=%d, below resume point); "+
 						"the lookback window must floor at startRV-relistLookbackRVs, not at startRV", rvSeen, lostName, rvLost)
+				}
+				// The recovered row sits at rv <= startRV, so it arrives as Modified
+				// (an informer applies it as an add since it lacks the object) — the
+				// #3246 interim relabel must not turn no-drop recovery into a drop.
+				if lostType != watch.Modified {
+					t.Errorf("recovered out-of-order commit %q emitted as %q; want Modified", lostName, lostType)
 				}
 				return
 			}

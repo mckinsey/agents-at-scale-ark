@@ -1,0 +1,76 @@
+{{- if and .Values.configMapPolicy.enabled (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy") }}
+# Limits ark-api to the configmaps it owns. RBAC cannot: rules have no label
+# selector, and resourceNames cannot restrict create.
+# Skipped where ValidatingAdmissionPolicy is absent (pre-1.30): the chart
+# declares no kubeVersion floor, so failing would add one.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ .Values.serviceAccount.name }}-configmap-policy-{{ .Release.Namespace }}
+  annotations:
+    {{- with .Values.global.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE", "DELETE"]
+        resources: ["configmaps"]
+  matchConditions:
+    - name: only-ark-api
+      expression: >-
+        request.userInfo.username ==
+        'system:serviceaccount:{{ .Release.Namespace }}:{{ .Values.serviceAccount.name }}'
+  variables:
+    # object is null on DELETE.
+    - name: target
+      expression: "object == null ? oldObject : object"
+    - name: labels
+      expression: >-
+        has(variables.target.metadata.labels) ? variables.target.metadata.labels : {}
+    # oldObject is null on CREATE; only the UPDATE validation reads this.
+    - name: oldLabels
+      expression: >-
+        oldObject != null && has(oldObject.metadata.labels) ? oldObject.metadata.labels : {}
+    # List here every configmap ark-api writes that is not a configuration.
+    # Anything left out is denied at admission: a 403 in the cluster, with no
+    # failing test to warn you.
+    - name: unlabelled
+      expression: "['ark-export-metadata', 'marketplace-sources']"
+  validations:
+    # Marker matches ARK_RESOURCE_TYPE_LABEL in ark_sdk/labels.py.
+    # Indexing an absent CEL key errors, so test with `in` first.
+    - expression: >-
+        variables.target.metadata.name in variables.unlabelled ||
+        ('ark.mckinsey.com/resource-type' in variables.labels &&
+         variables.labels['ark.mckinsey.com/resource-type'] == 'configuration')
+      messageExpression: >-
+        'ark-api may only write configmaps labelled ark.mckinsey.com/resource-type=configuration, ' +
+        'ark-export-metadata or marketplace-sources; got ' + variables.target.metadata.name
+    # Checking the post-image alone would let ark-api adopt any configmap by
+    # adding the marker to it, so an update must also be gated on the pre-image.
+    - expression: >-
+        request.operation != 'UPDATE' ||
+        oldObject.metadata.name in variables.unlabelled ||
+        ('ark.mckinsey.com/resource-type' in variables.oldLabels &&
+         variables.oldLabels['ark.mckinsey.com/resource-type'] == 'configuration')
+      messageExpression: >-
+        'ark-api may only update configmaps that are already Ark configurations; got ' +
+        oldObject.metadata.name
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ .Values.serviceAccount.name }}-configmap-policy-{{ .Release.Namespace }}
+  annotations:
+    {{- with .Values.global.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  policyName: {{ .Values.serviceAccount.name }}-configmap-policy-{{ .Release.Namespace }}
+  # Unscoped: ark-api's configmap writes are not confined to one namespace.
+  validationActions: ["Deny"]
+{{- end }}

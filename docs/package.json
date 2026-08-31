@@ -1,6 +1,6 @@
 {
   "name": "y",
-  "version": "0.1.68-rc.1",
+  "version": "0.1.68",
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {
@@ -19,7 +19,7 @@
     "@napi-rs/simple-git": "^0.1.19",
     "@theguild/remark-mermaid": "^0.3.0",
     "cheerio": "^1.2.0",
-    "next": "16.2.11",
+    "next": "16.3.3",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.8",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^6.0.5",
     "@vitest/coverage-v8": "^4.1.10",
     "http-server": "^14.1.1",
     "js-yaml": "^4.3.1",
@@ -39,7 +39,7 @@
     "vitest": "^4.0.17"
   },
   "optionalDependencies": {
-    "@napi-rs/simple-git-linux-arm64-gnu": "^0.1.19",
+    "@napi-rs/simple-git-linux-arm64-gnu": "^1.1.0",
     "@napi-rs/simple-git-linux-arm64-musl": "^0.1.19",
     "@napi-rs/simple-git-linux-x64-gnu": "^0.1.19",
     "@napi-rs/simple-git-linux-x64-musl": "^1.1.0"

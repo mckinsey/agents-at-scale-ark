@@ -102,7 +102,7 @@ DELETE /v1/api-keys/{public_key}
 ```bash
 # OIDC Configuration (for JWT auth)
 OIDC_ISSUER_URL=https://your-oidc-provider.com/realms/your-realm
-OIDC_APPLICATION_ID=your-app-id
+OIDC_APPLICATION_ID=your-app-id        # single value, or comma-separated (app-a,app-b) to accept multiple audiences
 
 # Authentication Mode
 AUTH_MODE=hybrid        # Recommended: support both JWT and API keys

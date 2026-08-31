@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { components } from '@/lib/api/generated/types';
-import { agentsService, teamsService } from '@/lib/services';
+import { agentsService, teamsService, toolsService } from '@/lib/services';
 import { extractAgentRequiredParams } from '@/lib/utils/query-parameters';
 
 export type ApiQueryParameter = components['schemas']['QueryParameter'];
+
+type AgentDetail = components['schemas']['AgentDetailResponse'];
+
+const BUILT_IN_A2A_ENGINE = 'a2a';
+
+const UNRESOLVED_TOOL_TYPES = ['custom', 'built-in'];
 
 export interface ParameterRow {
   id: string;
@@ -34,10 +40,45 @@ interface UseAgentQueryParametersResult {
   canAddRow: boolean;
   missingParameters: string[];
   toApiParameters: () => ApiQueryParameter[] | undefined;
+  engineToolWarning: string | null;
 }
 
 function stripPrefix(name: string): string {
   return name.includes('/') ? name.split('/').pop() || name : name;
+}
+
+async function deriveEngineToolWarning(
+  agent: AgentDetail | null,
+): Promise<string | null> {
+  const engineName = agent?.executionEngine?.name;
+  if (!engineName || engineName === BUILT_IN_A2A_ENGINE) return null;
+
+  const tools = agent?.tools || [];
+  if (tools.length === 0) return null;
+
+  const needsToolTypes = tools.some(
+    tool => UNRESOLVED_TOOL_TYPES.includes(tool.type) && tool.name,
+  );
+  const toolTypesByName = new Map<string, string>();
+  if (needsToolTypes) {
+    const allTools = await toolsService.getAll().catch(() => []);
+    allTools.forEach(tool => {
+      if (tool.type) toolTypesByName.set(tool.name, tool.type);
+    });
+  }
+
+  const dropped = tools
+    .map(tool => {
+      const type = UNRESOLVED_TOOL_TYPES.includes(tool.type)
+        ? toolTypesByName.get(tool.name || '')
+        : tool.type;
+      return type && type !== 'mcp' ? `${tool.name} (${type})` : null;
+    })
+    .filter((entry): entry is string => entry !== null);
+
+  if (dropped.length === 0) return null;
+
+  return `Execution engine '${engineName}' receives only mcp tools. Not available to this agent: ${dropped.join(', ')}`;
 }
 
 async function resolveTeamMemberParameters(member: {
@@ -68,6 +109,9 @@ export function useAgentQueryParameters(
   const [availableParameters, setAvailableParameters] = useState<string[]>([]);
   const [teamAgents, setTeamAgents] = useState<TeamAgentParameters[]>([]);
   const [rows, setRows] = useState<ParameterRow[]>([]);
+  const [engineToolWarning, setEngineToolWarning] = useState<string | null>(
+    null,
+  );
   const rowIdCounter = useRef(0);
 
   const createRowId = useCallback(() => {
@@ -83,6 +127,7 @@ export function useAgentQueryParameters(
       setAvailableParameters([]);
       setTeamAgents([]);
       setRows([]);
+      setEngineToolWarning(null);
       return;
     }
 
@@ -104,12 +149,14 @@ export function useAgentQueryParameters(
           setTeamAgents(resolved.filter(entry => entry.parameters.length > 0));
           setAvailableParameters([]);
           setRows([]);
+          setEngineToolWarning(null);
         })
         .catch(() => {
           if (cancelled) return;
           setTeamAgents([]);
           setAvailableParameters([]);
           setRows([]);
+          setEngineToolWarning(null);
         });
       return () => {
         cancelled = true;
@@ -119,17 +166,21 @@ export function useAgentQueryParameters(
     const targetName = stripPrefix(participantName);
     agentsService
       .getByName(targetName)
-      .then(agent => {
+      .then(async agent => {
         if (cancelled) return;
         setAvailableParameters(extractAgentRequiredParams(agent?.parameters));
         setTeamAgents([]);
         setRows([]);
+        const warning = await deriveEngineToolWarning(agent);
+        if (cancelled) return;
+        setEngineToolWarning(warning);
       })
       .catch(() => {
         if (cancelled) return;
         setAvailableParameters([]);
         setTeamAgents([]);
         setRows([]);
+        setEngineToolWarning(null);
       });
     return () => {
       cancelled = true;
@@ -222,5 +273,6 @@ export function useAgentQueryParameters(
     canAddRow,
     missingParameters,
     toApiParameters,
+    engineToolWarning,
   };
 }
