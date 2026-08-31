@@ -107,7 +107,7 @@ The release name comes from catalogue metadata, so two users installing the same
 
 ## Trade-offs accepted
 
-- **No catalogue item is installable on day one.** Every chart that can be fetched renders a `Deployment`, so none passes the allowlist. Nor is any of them close: widening the allowlist enough to admit one would mean allowing `RoleBinding` (escalation) or installing part of a chart (half-configured namespace). The fix belongs in the marketplace — items meant for UI install publish an Ark-only chart, which needs no change here.
+- **Catalogue coverage starts thin.** Measured 2026-07-29 against the 20-item catalogue: 1 (`argo-make-author`, rendering only an `Agent`) passes; 12 are refused, all rendering a `Deployment`, several also `Role`/`RoleBinding`; 7 cannot be fetched (a separate marketplace CI gap, out of scope here). Widening the allowlist to admit the 12 would mean allowing `RoleBinding` (escalation) or installing part of a chart (half-configured namespace) — not a smaller version of this change. The fix belongs in the marketplace — items meant for UI install publish an Ark-only chart, which needs no change here.
 - **Coverage is point-in-time and the catalogue moves.** Rendered content depends on chart values and published version; measured a month apart, the same items rendered different kinds. Hence validation renders per request rather than being precomputed.
 - **Authorization is our code.** The review is a separate call from the write, so a future path that skips it would install on the Service Account's privilege. Mitigation is structural: one install function owns render → validate → review → install, and nothing else reaches `helm install`.
 

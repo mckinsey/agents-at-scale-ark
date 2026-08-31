@@ -61,6 +61,6 @@ None. The marketplace catalogue capabilities (`marketplace-sources-configmap`, `
 - **ark-dashboard** — `install/route.ts` proxies the two endpoints; `marketplace-item-card.tsx` and the dialog render the outcomes. The unused `executeHelmCommand` helper is deleted.
 - **Installed badge** — unchanged; it reads the Helm release annotation `ark.mckinsey.com/marketplace-item-name` (`marketplace-transform.ts:257`).
 - **Uninstall and upgrade** — out of scope for v1. `DELETE` keeps returning the command.
-- **No catalogue item is installable on day one.** Every chart that can be fetched renders a `Deployment`, so none passes the allowlist. The mechanism ships before the content exists — a deliberate trade, explained in the design.
+- **Catalogue coverage starts thin.** Of the 20 items in the catalogue as of 2026-07-29, 1 (`argo-make-author`, which renders only an `Agent`) passes the allowlist, 12 are refused for rendering a `Deployment` or RBAC objects, and 7 cannot be fetched at all (a separate marketplace CI gap). The mechanism ships ahead of most of the content — a deliberate trade, explained in the design.
 - **Docs** — `docs/content/developer-guide/marketplace.mdx`: replace the "No in-dashboard install" limitation.
 - **Supersedes** the parked change `marketplace-install-from-dashboard`, which described the rejected design where the dashboard ran helm.
