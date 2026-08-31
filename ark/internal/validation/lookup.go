@@ -88,7 +88,10 @@ func (l *StorageLookup) GetConfigMap(ctx context.Context, namespace, name string
 }
 
 // Compile-time interface satisfaction.
-var _ ArkConfigLookup = (*WebhookLookup)(nil)
+var (
+	_ ArkConfigLookup = (*WebhookLookup)(nil)
+	_ DefaultsLookup  = (*WebhookLookup)(nil)
+)
 
 func newArkObject(kind string) client.Object {
 	switch kind {

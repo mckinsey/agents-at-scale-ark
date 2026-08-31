@@ -49,6 +49,32 @@ describe('QueriesSettings', () => {
     });
   });
 
+  it('reset clears only queryTTL, leaving other ArkConfig defaults alone', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: '720h',
+      defaultMemory: { name: 'broker-memory' },
+      exists: true,
+    });
+    vi.mocked(arkConfigService.update).mockResolvedValue({
+      queryTTL: null,
+      defaultMemory: { name: 'broker-memory' },
+      exists: true,
+    });
+
+    renderWithClient();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query ttl/i)).toHaveValue('720h');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /reset to default/i }));
+
+    await waitFor(() => {
+      expect(arkConfigService.update).toHaveBeenCalledWith({ queryTTL: null });
+    });
+    expect(arkConfigService.clear).not.toHaveBeenCalled();
+  });
+
   it('validates bad duration input before calling the API', async () => {
     vi.mocked(arkConfigService.get).mockResolvedValue({
       queryTTL: null,

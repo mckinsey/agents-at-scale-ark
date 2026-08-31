@@ -33,7 +33,7 @@ func (v *Validator) Validate(ctx context.Context, obj runtime.Object) ([]string,
 	return nil, nil
 }
 
-func ApplyDefaults(ctx context.Context, obj runtime.Object, lookup ArkConfigLookup) {
+func ApplyDefaults(ctx context.Context, obj runtime.Object, lookup DefaultsLookup) {
 	switch o := obj.(type) {
 	case *arkv1alpha1.Agent:
 		DefaultAgent(o)

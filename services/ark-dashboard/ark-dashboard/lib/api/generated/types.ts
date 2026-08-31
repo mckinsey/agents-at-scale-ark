@@ -463,7 +463,9 @@ export interface paths {
         get: operations["get_arkconfig_v1_arkconfig_get"];
         /**
          * Upsert Arkconfig
-         * @description Create or update the singleton ArkConfig with the supplied defaults.
+         * @description Create or update the singleton ArkConfig with the fields the request carried.
+         *
+         *     Fields the request omitted are left untouched; send a field as null to clear it.
          */
         put: operations["upsert_arkconfig_v1_arkconfig_put"];
         post?: never;
@@ -2877,10 +2879,27 @@ export interface components {
             taskId: string;
         };
         /**
+         * ArkConfigMemoryRef
+         * @description Name of the Memory used as the cluster-wide default for queries.
+         *
+         *     Extra keys are rejected rather than dropped: a `namespace` here would be
+         *     silently ignored, while the same value applied with kubectl is refused by
+         *     the validating webhook.
+         */
+        ArkConfigMemoryRef: {
+            /**
+             * Name
+             * @description Memory name. Always resolved in the namespace of the query being defaulted; a namespace cannot be set here.
+             */
+            name: string;
+        };
+        /**
          * ArkConfigResponse
          * @description Cluster-wide Ark defaults. Singleton resource named 'default'.
          */
         ArkConfigResponse: {
+            /** @description Memory injected into Query resources that do not specify spec.memory, and only when a Memory with that name exists in the query namespace. */
+            defaultMemory?: components["schemas"]["ArkConfigMemoryRef"] | null;
             /**
              * Exists
              * @description Whether the ArkConfig singleton exists in the cluster.
@@ -2896,8 +2915,14 @@ export interface components {
         /**
          * ArkConfigUpdateRequest
          * @description Update payload for the ArkConfig singleton.
+         *
+         *     Only the fields present in the request body are touched, so a client that
+         *     manages one default cannot wipe another set elsewhere. Send a field as
+         *     null to clear it.
          */
         ArkConfigUpdateRequest: {
+            /** @description Default Memory for queries. Pass null to clear. */
+            defaultMemory?: components["schemas"]["ArkConfigMemoryRef"] | null;
             /**
              * Queryttl
              * @description Default TTL for queries (e.g. '720h'). Pass null to clear.
