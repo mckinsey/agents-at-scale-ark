@@ -14,6 +14,11 @@ import { toast } from 'sonner';
 
 import { queryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
+import {
+  DetailCard as QueryDetailCard,
+  DetailRow as QueryDetailRow,
+  DetailSectionCard as QuerySectionCard,
+} from '@/components/common/detail-card';
 import { JsonViewer } from '@/components/common/json-viewer';
 import { ChevronLeft, ContentCopy } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -139,72 +144,6 @@ interface TypedQueryDetailResponse
   metadata?: Record<string, string>;
   target?: { name: string; type: string };
   timeout?: string | null;
-}
-
-function QueryDetailCard({
-  title,
-  children,
-}: Readonly<{ title: string; children: ReactNode }>) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="bg-fill-onsurface-ui-1 flex items-center p-2">
-        <p className="label-regular-primary text-fg-primary">{title}</p>
-      </div>
-      <div className="border-stroke-divider flex flex-1 flex-col border-r border-b border-l px-2">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function QueryDetailRow({
-  label,
-  value,
-  last = false,
-  valueClassName,
-}: Readonly<{
-  label: string;
-  value: ReactNode;
-  last?: boolean;
-  valueClassName?: string;
-}>) {
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-2 py-2',
-        !last && 'border-stroke-divider border-b',
-      )}>
-      <span className="label-regular-primary text-fg-secondary w-[140px] shrink-0">
-        {label}
-      </span>
-      <span
-        className={cn(
-          'label-regular-primary text-fg-primary min-w-0 flex-1',
-          valueClassName ?? 'truncate',
-        )}
-        title={typeof value === 'string' ? value : undefined}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function QuerySectionCard({
-  title,
-  headerRight,
-  children,
-}: Readonly<{ title: string; headerRight?: ReactNode; children: ReactNode }>) {
-  return (
-    <div className="flex flex-col">
-      <div className="bg-fill-onsurface-ui-1 flex items-center gap-2 p-2">
-        <p className="label-regular-primary text-fg-primary flex-1">{title}</p>
-        {headerRight}
-      </div>
-      <div className="border-stroke-divider border-r border-b border-l px-2">
-        {children}
-      </div>
-    </div>
-  );
 }
 
 function QueryViewSegmentedToggle<T extends string>({
@@ -599,7 +538,7 @@ function QueryDetailContent() {
         }),
       };
 
-      const savedQuery = await queriesService.create(queryData);
+      const savedQuery = await queriesService.create(namespace, queryData);
 
       toast('Query Executed', {
         description: `Query "${savedQuery.name}" has been created and is now executing.`,
@@ -647,11 +586,11 @@ function QueryDetailContent() {
         setMemoriesLoading(true);
         try {
           const [agents, models, teams, tools, memories] = await Promise.all([
-            agentsService.getAll(),
-            modelsService.getAll(),
-            teamsService.getAll(),
-            toolsService.getAll(),
-            memoriesService.getAll(),
+            agentsService.getAll(namespace),
+            modelsService.getAll(namespace),
+            teamsService.getAll(namespace),
+            toolsService.getAll(namespace),
+            memoriesService.getAll(namespace),
           ]);
 
           const targets = [
@@ -691,7 +630,7 @@ function QueryDetailContent() {
 
     const loadQuery = async () => {
       try {
-        const queryData = await queriesService.get(queryId);
+        const queryData = await queriesService.get(namespace, queryId);
         setQuery(queryData as TypedQueryDetailResponse);
 
         // Load existing parameters
@@ -728,26 +667,26 @@ function QueryDetailContent() {
     if (query?.target?.type === 'tool') {
       const toolName = query.target.name;
       toolsService
-        .getDetail(toolName)
+        .getDetail(namespace, toolName)
         .then(setToolSchema)
         .catch(() => setToolSchema(null)); // Silent failure
     } else {
       setToolSchema(null);
     }
-  }, [query?.target]);
+  }, [namespace, query?.target]);
 
   // Fetch agent details when target is an agent (for AC2: agent-required params)
   useEffect(() => {
     if (query?.target?.type === 'agent') {
       const agentName = query.target.name;
       agentsService
-        .getByName(agentName)
+        .getByName(namespace, agentName)
         .then(setSelectedAgentDetails)
         .catch(() => setSelectedAgentDetails(null));
     } else {
       setSelectedAgentDetails(null);
     }
-  }, [query?.target]);
+  }, [namespace, query?.target]);
 
   // Extract agent-required query parameters
   const agentRequiredParams = useMemo(

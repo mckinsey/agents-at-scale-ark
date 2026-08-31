@@ -114,8 +114,7 @@ export function Pagination({
   return (
     <div
       className={cn(
-        'flex w-full items-center py-3',
-        showItemsPerPage ? 'justify-between' : 'justify-center',
+        'grid w-full grid-cols-[1fr_auto_1fr] items-center py-3',
         className,
       )}>
       {showItemsPerPage && (
@@ -140,7 +139,7 @@ export function Pagination({
         </div>
       )}
 
-      <nav aria-label="Pagination">
+      <nav aria-label="Pagination" className="col-start-2 justify-self-center">
         <ul className="flex items-center gap-2">
           <li>
             <button

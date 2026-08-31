@@ -180,7 +180,7 @@ export default function BrokerPage() {
     async function fetchMemories() {
       setLoading(true);
       try {
-        const data = await memoriesService.getAll();
+        const data = await memoriesService.getAll(namespace);
         if (isStale) return;
         setMemories(data);
         setHasMemoriesError(false);

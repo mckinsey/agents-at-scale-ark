@@ -61,6 +61,13 @@ describe('SessionsBroker', () => {
     expect(Object.keys(store.sessions)).toHaveLength(0);
   });
 
+  test('delegates deleteQuery', async () => {
+    await broker.applyEvent({sessionId: 'sess-1', queryName: 'query-1'});
+
+    expect(await broker.deleteQuery('query-1')).toBe(1);
+    expect(await broker.getSession('sess-1')).toBeUndefined();
+  });
+
   test('delegates subscribe', async () => {
     const received: Array<{sessionId: string; queryName: string}> = [];
     broker.subscribe((data) => received.push(data));

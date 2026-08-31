@@ -62,8 +62,8 @@ export function ToolsSection() {
       setLoading(true);
       try {
         const [toolsData, agentsData] = await Promise.all([
-          toolsService.getAll(),
-          agentsService.getAll(),
+          toolsService.getAll(namespace),
+          agentsService.getAll(namespace),
         ]);
         setTools(toolsData);
         setAgents(agentsData);
@@ -126,7 +126,7 @@ export function ToolsSection() {
       return;
     }
     try {
-      await toolsService.delete(tool.name);
+      await toolsService.delete(namespace, tool.name);
       setTools(prev => prev.filter(t => t.id !== id));
       toast.success('Tool deleted successfully');
     } catch (error) {

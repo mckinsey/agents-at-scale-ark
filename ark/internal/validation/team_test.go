@@ -256,7 +256,7 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 	})
 }
 
-func TestValidateNoMixedTeam(t *testing.T) {
+func TestValidateTeamAcceptsMixedMembers(t *testing.T) {
 	engineAgent := func(engine string) *arkv1alpha1.Agent {
 		agent := &arkv1alpha1.Agent{}
 		if engine != "" {
@@ -266,9 +266,8 @@ func TestValidateNoMixedTeam(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		agents     map[string]*arkv1alpha1.Agent
-		wantReject bool
+		name   string
+		agents map[string]*arkv1alpha1.Agent
 	}{
 		{
 			name:   "all internal agents",
@@ -279,18 +278,16 @@ func TestValidateNoMixedTeam(t *testing.T) {
 			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent("mock-engine"), "b": engineAgent("mock-engine")},
 		},
 		{
-			name:   "a2a agents count as internal",
+			name:   "a2a agent beside an internal agent",
 			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent(arka2a.ExecutionEngineA2A), "b": engineAgent("")},
 		},
 		{
-			name:       "internal beside external is rejected",
-			agents:     map[string]*arkv1alpha1.Agent{"a": engineAgent(""), "b": engineAgent("mock-engine")},
-			wantReject: true,
+			name:   "internal agent beside an engine-backed agent",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent(""), "b": engineAgent("mock-engine")},
 		},
 		{
-			name:       "a2a beside a named engine is rejected",
-			agents:     map[string]*arkv1alpha1.Agent{"a": engineAgent(arka2a.ExecutionEngineA2A), "b": engineAgent("mock-engine")},
-			wantReject: true,
+			name:   "a2a agent beside an engine-backed agent",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent(arka2a.ExecutionEngineA2A), "b": engineAgent("mock-engine")},
 		},
 	}
 
@@ -308,14 +305,7 @@ func TestValidateNoMixedTeam(t *testing.T) {
 				Spec:       arkv1alpha1.TeamSpec{Strategy: "sequential", Members: members},
 			}
 
-			err := NewValidator(lookup).validateNoMixedTeam(context.Background(), team)
-			if tt.wantReject {
-				if err == nil {
-					t.Fatal("expected a mixed-team rejection")
-				}
-				return
-			}
-			if err != nil {
+			if _, err := NewValidator(lookup).ValidateTeam(context.Background(), team); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})

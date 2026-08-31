@@ -26,10 +26,7 @@ vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: vi.fn(() => ({
     namespace: mockNamespace,
     isNamespaceResolved: true,
-    availableNamespaces: [{ name: mockNamespace }],
     isPending: false,
-    setNamespace: vi.fn(),
-    createNamespace: vi.fn(),
     readOnlyMode: false,
   })),
 }));
@@ -86,12 +83,12 @@ describe('useToolForm', () => {
     });
 
     expect(mockToolsService.create).toHaveBeenCalledWith(
+      'default',
       expect.objectContaining({
         name: 'my-tool',
         type: 'mcp',
         description: 'desc',
         inputSchema: { a: 1 },
-        namespace: 'default',
       }),
     );
     expect(onSuccess).toHaveBeenCalledTimes(1);
@@ -107,6 +104,7 @@ describe('useToolForm', () => {
     });
 
     expect(mockToolsService.create).toHaveBeenCalledWith(
+      'default',
       expect.objectContaining({ url: 'https://x.dev' }),
     );
   });
@@ -120,6 +118,7 @@ describe('useToolForm', () => {
       );
     });
     expect(mockToolsService.create).toHaveBeenCalledWith(
+      'default',
       expect.objectContaining({ agent: 'agent-1' }),
     );
 
@@ -129,6 +128,7 @@ describe('useToolForm', () => {
       );
     });
     expect(mockToolsService.create).toHaveBeenCalledWith(
+      'default',
       expect.objectContaining({ team: 'team-1' }),
     );
   });
@@ -218,7 +218,6 @@ describe('useToolForm', () => {
 describe('useToolForm — view mode', () => {
   const detail = {
     name: 'my-tool',
-    namespace: 'default',
     description: 'desc',
     annotations: { note: 'x' },
     spec: {
@@ -238,7 +237,7 @@ describe('useToolForm — view mode', () => {
     );
 
     await waitFor(() => {
-      expect(mockToolsService.getDetail).toHaveBeenCalledWith('my-tool');
+      expect(mockToolsService.getDetail).toHaveBeenCalledWith('default', 'my-tool');
     });
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);

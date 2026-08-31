@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
@@ -503,6 +505,97 @@ func TestSetConditionMemoryDegraded(t *testing.T) {
 		cond := findCondition(query.Status.Conditions, condType)
 		require.NotNil(t, cond)
 		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	})
+}
+
+// The setters above run against an in-memory Query, but the terminal write
+// refetches the object inside mutateStatus. Without the snapshot in
+// savedQueryStatus, both conditions are dropped before they are ever persisted
+// and a completed query carries only Completed.
+func TestUpdateStatusWithDuration_PersistsMemoryConditions(t *testing.T) {
+	ctx := context.Background()
+	unavailableType := string(arkv1alpha1.QueryMemoryUnavailable)
+	degradedType := string(arkv1alpha1.QueryMemoryDegraded)
+
+	newPersistedQuery := func(name string) (*arkv1alpha1.Query, *QueryReconciler, client.Client) {
+		q := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: &arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "test-agent"},
+			},
+			Status: arkv1alpha1.QueryStatus{Phase: statusRunning},
+		}
+		c := fake.NewClientBuilder().WithScheme(newTestScheme()).
+			WithObjects(q).
+			WithStatusSubresource(&arkv1alpha1.Query{}).
+			Build()
+		return q, &QueryReconciler{Client: c, Scheme: c.Scheme()}, c
+	}
+
+	fetch := func(t *testing.T, c client.Client, q *arkv1alpha1.Query) *arkv1alpha1.Query {
+		t.Helper()
+		after := &arkv1alpha1.Query{}
+		require.NoError(t, c.Get(ctx, apimachinerytypes.NamespacedName{Name: q.Name, Namespace: q.Namespace}, after))
+		return after
+	}
+
+	t.Run("persists the False form when memory was healthy", func(t *testing.T) {
+		q, r, c := newPersistedQuery("memory-conditions-false")
+		r.setConditionMemoryUnavailable(q, false)
+		r.setConditionMemoryDegraded(q, false)
+
+		require.NoError(t, r.updateStatusWithDuration(ctx, q, statusDone, &metav1.Duration{Duration: time.Second}))
+
+		after := fetch(t, c, q)
+		unavailable := findCondition(after.Status.Conditions, unavailableType)
+		require.NotNil(t, unavailable, "MemoryUnavailable must be persisted in its False form so consumers can tell 'memory was fine' from 'never evaluated'")
+		assert.Equal(t, metav1.ConditionFalse, unavailable.Status)
+		assert.Equal(t, "MemoryReachable", unavailable.Reason)
+
+		degraded := findCondition(after.Status.Conditions, degradedType)
+		require.NotNil(t, degraded, "MemoryDegraded must be persisted in its False form")
+		assert.Equal(t, metav1.ConditionFalse, degraded.Status)
+		assert.Equal(t, "MemoryHealthy", degraded.Reason)
+
+		require.NotNil(t, findCondition(after.Status.Conditions, string(arkv1alpha1.QueryCompleted)), "the phase condition must still be written alongside the restored memory conditions")
+	})
+
+	t.Run("persists the True form when memory was unavailable", func(t *testing.T) {
+		q, r, c := newPersistedQuery("memory-conditions-unavailable")
+		r.setConditionMemoryUnavailable(q, true)
+		r.setConditionMemoryDegraded(q, false)
+
+		require.NoError(t, r.updateStatusWithDuration(ctx, q, statusDone, &metav1.Duration{Duration: time.Second}))
+
+		after := fetch(t, c, q)
+		unavailable := findCondition(after.Status.Conditions, unavailableType)
+		require.NotNil(t, unavailable)
+		assert.Equal(t, metav1.ConditionTrue, unavailable.Status)
+		assert.Equal(t, "NoMemoryBackend", unavailable.Reason)
+	})
+
+	t.Run("persists the True form when memory was degraded", func(t *testing.T) {
+		q, r, c := newPersistedQuery("memory-conditions-degraded")
+		r.setConditionMemoryUnavailable(q, false)
+		r.setConditionMemoryDegraded(q, true)
+
+		require.NoError(t, r.updateStatusWithDuration(ctx, q, statusDone, &metav1.Duration{Duration: time.Second}))
+
+		after := fetch(t, c, q)
+		degraded := findCondition(after.Status.Conditions, degradedType)
+		require.NotNil(t, degraded)
+		assert.Equal(t, metav1.ConditionTrue, degraded.Status)
+		assert.Equal(t, "GetMessagesFailed", degraded.Reason)
+	})
+
+	t.Run("leaves conditions absent when dispatch never evaluated memory", func(t *testing.T) {
+		q, r, c := newPersistedQuery("memory-conditions-untouched")
+
+		require.NoError(t, r.updateStatusWithDuration(ctx, q, statusRunning, nil))
+
+		after := fetch(t, c, q)
+		assert.Nil(t, findCondition(after.Status.Conditions, unavailableType), "a non-dispatch status write must not invent a memory condition")
+		assert.Nil(t, findCondition(after.Status.Conditions, degradedType))
 	})
 }
 

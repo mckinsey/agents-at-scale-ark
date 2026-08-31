@@ -66,7 +66,7 @@ STORAGE_BACKEND=postgresql devspace dev
 When using `postgresql`, the controller runs an embedded API server instead of using CRDs.
 
 <Callout type="warning">
-Switching between storage backends is destructive. Resources created with etcd (CRDs) are not visible in PostgreSQL and vice versa. The DevSpace pipeline cleans up CRDs and APIServices from the previous backend when switching, so any existing Ark resources will be lost.
+Switching between storage backends is destructive. Resources created with etcd (CRDs) are not visible in PostgreSQL and vice versa. Switching to `postgresql` makes the DevSpace pipeline delete every Ark CRD and clear its finalizers, so all existing Ark resources are lost. `ark install` leaves the CRDs in place; DevSpace does not. Switching back to `etcd` runs no cleanup at all: the `ark.mckinsey.com` APIServices stay registered and keep shadowing the reinstalled CRDs until you remove them. Export first: see [Migrating between storage backends](/operations-guide/postgres-storage-backend#migrating-between-storage-backends).
 </Callout>
 
 - ark-api and ark-dashboard deploy to namespace: default
