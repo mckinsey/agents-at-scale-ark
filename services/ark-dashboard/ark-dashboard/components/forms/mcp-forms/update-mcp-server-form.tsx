@@ -13,6 +13,7 @@ import { McpServerFields } from './mcp-server-fields';
 import { McpServerFormShell } from './mcp-server-form-shell';
 import type { FormValues } from './utils';
 import { buildSpec, formSchema, mapDetailHeaders, useHeaderRows } from './utils';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 const formId = 'update-mcp-server-form';
 
@@ -23,6 +24,7 @@ type UpdateMcpServerFormProps = {
 export function UpdateMcpServerForm({
   server,
 }: Readonly<UpdateMcpServerFormProps>) {
+  const { namespace } = useNamespace();
   const { push } = useNamespacedNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const headerRows = useHeaderRows(mapDetailHeaders(server.headers));
@@ -46,7 +48,7 @@ export function UpdateMcpServerForm({
 
     setIsSubmitting(true);
     try {
-      await mcpServersService.update(server.name, {
+      await mcpServersService.update(namespace, server.name, {
         spec: buildSpec(values, nonEmptyHeaders),
       });
       toast.success('MCP server updated successfully');

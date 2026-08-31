@@ -32,9 +32,11 @@ describe('configurationsService', () => {
         count: 1,
       });
 
-      const result = await configurationsService.getAll();
+      const result = await configurationsService.getAll('default');
 
-      expect(mockGet).toHaveBeenCalledWith('/api/v1/configurations');
+      expect(mockGet).toHaveBeenCalledWith('/api/v1/configurations', {
+        params: { namespace: 'default' },
+      });
       expect(result).toEqual([CONFIGURATION]);
     });
   });
@@ -45,10 +47,14 @@ describe('configurationsService', () => {
         .spyOn(apiClient, 'get')
         .mockResolvedValue(CONFIGURATION);
 
-      const result = await configurationsService.get('github-mcp-url');
+      const result = await configurationsService.get(
+        'default',
+        'github-mcp-url',
+      );
 
       expect(mockGet).toHaveBeenCalledWith(
         '/api/v1/configurations/github-mcp-url',
+        { params: { namespace: 'default' } },
       );
       expect(result).toEqual(CONFIGURATION);
     });
@@ -68,9 +74,11 @@ describe('configurationsService', () => {
         labels: ['mcp'],
       };
 
-      const result = await configurationsService.create(request);
+      const result = await configurationsService.create('default', request);
 
-      expect(mockPost).toHaveBeenCalledWith('/api/v1/configurations', request);
+      expect(mockPost).toHaveBeenCalledWith('/api/v1/configurations', request, {
+        params: { namespace: 'default' },
+      });
       expect(result).toEqual(CONFIGURATION);
     });
 
@@ -78,7 +86,7 @@ describe('configurationsService', () => {
       vi.spyOn(apiClient, 'post').mockRejectedValue(new Error('Conflict'));
 
       await expect(
-        configurationsService.create({
+        configurationsService.create('default', {
           name: 'github-mcp-url',
           value: 'x',
           labels: [],
@@ -94,11 +102,12 @@ describe('configurationsService', () => {
         .mockResolvedValue(CONFIGURATION);
 
       const request = { value: 'https://new.test/mcp/', labels: [] };
-      await configurationsService.update('github-mcp-url', request);
+      await configurationsService.update('default', 'github-mcp-url', request);
 
       expect(mockPut).toHaveBeenCalledWith(
         '/api/v1/configurations/github-mcp-url',
         request,
+        { params: { namespace: 'default' } },
       );
     });
   });
@@ -109,10 +118,11 @@ describe('configurationsService', () => {
         .spyOn(apiClient, 'delete')
         .mockResolvedValue(undefined);
 
-      await configurationsService.delete('github-mcp-url');
+      await configurationsService.delete('default', 'github-mcp-url');
 
       expect(mockDelete).toHaveBeenCalledWith(
         '/api/v1/configurations/github-mcp-url',
+        { params: { namespace: 'default' } },
       );
     });
   });
@@ -129,11 +139,13 @@ describe('configurationsService', () => {
         .mockResolvedValue({ items: [reference], count: 1 });
 
       const result = await configurationsService.getReferences(
+        'default',
         'github-mcp-url',
       );
 
       expect(mockGet).toHaveBeenCalledWith(
         '/api/v1/configurations/github-mcp-url/references',
+        { params: { namespace: 'default' } },
       );
       expect(result).toEqual([reference]);
     });

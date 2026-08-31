@@ -32,6 +32,8 @@ function pickLatestConversation(
 }
 
 export const studioChatHistoryService = {
+  // No namespace parameter on purpose: both calls below read broker endpoints,
+  // which resolve the memory in the pod's namespace and ignore ?namespace=.
   async load(sessionId: string): Promise<StudioChatHistory | null> {
     try {
       const session = await brokerSessionsService.getSession(sessionId);

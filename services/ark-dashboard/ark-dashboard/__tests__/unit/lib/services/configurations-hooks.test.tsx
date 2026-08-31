@@ -24,6 +24,15 @@ import {
   useUpdateConfiguration,
 } from '@/lib/services/configurations-hooks';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/configurations', () => ({
   configurationsService: {
     getAll: vi.fn(),
@@ -123,7 +132,10 @@ describe('configurations-hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(configurationsService.get).toHaveBeenCalledWith('db-host');
+      expect(configurationsService.get).toHaveBeenCalledWith(
+        'default',
+        'db-host',
+      );
       expect(result.current.data).toEqual(configuration);
     });
 
@@ -154,6 +166,7 @@ describe('configurations-hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(configurationsService.getReferences).toHaveBeenCalledWith(
+        'default',
         'db-host',
       );
       expect(result.current.data).toEqual(references);
@@ -266,6 +279,7 @@ describe('configurations-hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(configurationsService.update).toHaveBeenCalledWith(
+        'default',
         'db-host',
         updateRequest,
       );
@@ -350,7 +364,10 @@ describe('configurations-hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(configurationsService.delete).toHaveBeenCalledWith('db-host');
+      expect(configurationsService.delete).toHaveBeenCalledWith(
+        'default',
+        'db-host',
+      );
       expect(toast.success).toHaveBeenCalledWith(
         'Configuration deleted successfully',
       );

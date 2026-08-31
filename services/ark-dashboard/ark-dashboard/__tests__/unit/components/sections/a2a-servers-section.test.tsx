@@ -6,6 +6,15 @@ import { A2AServersService } from '@/lib/services';
 import type { A2AServer } from '@/lib/services';
 import { toast } from 'sonner';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services', () => ({
   A2AServersService: {
     getAll: vi.fn(),
@@ -185,7 +194,7 @@ describe('A2AServersSection', () => {
     await userEvent.click(deleteButtons[0]);
 
     await waitFor(() => {
-      expect(A2AServersService.delete).toHaveBeenCalledWith('server-1');
+      expect(A2AServersService.delete).toHaveBeenCalledWith('default', 'server-1');
       expect(toast.success).toHaveBeenCalledWith('A2A Server Deleted', {
         description: 'Successfully deleted test-server-1',
       });

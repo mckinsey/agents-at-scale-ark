@@ -180,7 +180,7 @@ export default function ExportPage() {
       setIsLoading(true);
       setSelectedKeys(new Set());
       const [data, lastTime] = await Promise.all([
-        exportService.fetchAllResources(),
+        exportService.fetchAllResources(namespace),
         exportService.getLastExportTime(),
       ]);
       setResources(data);
@@ -192,7 +192,7 @@ export default function ExportPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [namespace]);
 
   useEffect(() => {
     loadResources();
@@ -289,12 +289,12 @@ export default function ExportPage() {
       setExportingAction(action);
 
       if (action === 'all') {
-        await exportService.exportAll();
+        await exportService.exportAll(namespace);
         toast.success('Export successful', {
           description: 'Successfully exported all resources',
         });
       } else {
-        await exportService.exportResources(buildSelection());
+        await exportService.exportResources(namespace, buildSelection());
         toast.success('Export successful', {
           description: `Successfully exported ${selectedCount} resources`,
         });
