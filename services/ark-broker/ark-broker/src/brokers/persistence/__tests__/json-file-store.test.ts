@@ -29,13 +29,23 @@ function legacy(items: Item[], nextSequence: number): string {
   return JSON.stringify({items, nextSequence});
 }
 
+// JSONL text: a header line then one record per line.
+function jsonl(items: Item[], nextSequence: number): string {
+  return (
+    [
+      JSON.stringify({nextSequence}),
+      ...items.map((it) => JSON.stringify(it)),
+    ].join('\n') + '\n'
+  );
+}
+
 describe('JsonFileStore', () => {
   let dir: string;
   let path: string;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'json-file-store-'));
-    path = join(dir, 'data.json');
+    path = join(dir, 'data.jsonl');
   });
 
   afterEach(() => {
@@ -49,7 +59,7 @@ describe('JsonFileStore', () => {
     expect(await store.loadBounded({})).toBeNull();
   });
 
-  it('returns null when the file does not exist', async () => {
+  it('returns null when neither the .jsonl nor a legacy .json exists', async () => {
     const store = new JsonFileStore<Item>(logger, 'Test', path);
     expect(await store.loadBounded({})).toBeNull();
   });
@@ -162,7 +172,7 @@ describe('JsonFileStore.loadBounded — JSONL', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'json-file-store-jsonl-'));
-    path = join(dir, 'data.json');
+    path = join(dir, 'data.jsonl');
   });
 
   afterEach(() => {
@@ -244,21 +254,24 @@ describe('JsonFileStore.loadBounded — JSONL', () => {
   });
 });
 
-describe('JsonFileStore.loadBounded — legacy migration', () => {
+describe('JsonFileStore.loadBounded — legacy .json migration to a new .jsonl', () => {
   let dir: string;
   let path: string;
+  let legacyPath: string;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'json-file-store-legacy-'));
-    path = join(dir, 'data.json');
+    path = join(dir, 'data.jsonl');
+    legacyPath = join(dir, 'data.json');
   });
 
   afterEach(() => {
     rmSync(dir, {recursive: true, force: true});
   });
 
-  it('reads a legacy monolithic snapshot and rewrites it as JSONL in place', async () => {
-    writeFileSync(path, legacy([item(1), item(2)], 3));
+  it('migrates a monolithic .json into a new .jsonl, leaving the .json intact', async () => {
+    const original = legacy([item(1), item(2)], 3);
+    writeFileSync(legacyPath, original);
 
     const loaded = await new JsonFileStore<Item>(
       logger,
@@ -267,15 +280,32 @@ describe('JsonFileStore.loadBounded — legacy migration', () => {
     ).loadBounded({maxBytes: 100_000});
 
     expect(loaded).toEqual({items: [item(1), item(2)], nextSequence: 3});
-    // The file is now JSONL (header line first), not the monolithic object.
+    // A new .jsonl file exists in JSONL form ...
+    expect(existsSync(path)).toBe(true);
     const lines = readFileSync(path, 'utf-8').trimEnd().split('\n');
     expect(JSON.parse(lines[0])).toEqual({nextSequence: 3});
     expect(JSON.parse(lines[1])).toEqual(item(1));
+    // ... and the legacy .json is untouched (rollback-safe).
+    expect(readFileSync(legacyPath, 'utf-8')).toBe(original);
+  });
+
+  it('prefers an existing .jsonl and never reads the legacy .json', async () => {
+    writeFileSync(legacyPath, legacy([item(1)], 2));
+    // Different content in the .jsonl proves it wins.
+    writeFileSync(path, jsonl([item(9)], 10));
+
+    const loaded = await new JsonFileStore<Item>(
+      logger,
+      'Test',
+      path
+    ).loadBounded({maxBytes: 100_000});
+
+    expect(loaded).toEqual({items: [item(9)], nextSequence: 10});
   });
 
   it('bounds a legacy snapshot by bytes during migration', async () => {
     writeFileSync(
-      path,
+      legacyPath,
       legacy(
         Array.from({length: 100}, (_, i) => item(i + 1, 1000)),
         101
@@ -291,7 +321,7 @@ describe('JsonFileStore.loadBounded — legacy migration', () => {
     expect(totalBytes(loaded!.items)).toBeLessThanOrEqual(5000);
     expect(loaded!.items.at(-1)!.sequenceNumber).toBe(100);
     expect(loaded!.nextSequence).toBe(101);
-    // Migrated file is JSONL and bounded to the retained tail.
+    // New file is JSONL and bounded to the retained tail.
     expect(readFileSync(path, 'utf-8').startsWith('{"nextSequence"')).toBe(
       true
     );
@@ -300,7 +330,7 @@ describe('JsonFileStore.loadBounded — legacy migration', () => {
   it('keeps the valid prefix when a legacy snapshot is torn', async () => {
     const good = JSON.stringify(item(1, 5));
     writeFileSync(
-      path,
+      legacyPath,
       `{"items":[${good},{"sequenceNumber":2,"timestamp":"2026-01`
     );
 

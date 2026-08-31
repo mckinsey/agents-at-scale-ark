@@ -12,16 +12,23 @@ import type {Logger} from '@ark-broker/logging/logger.js';
 const LEGACY_PREFIX = '{"items"';
 
 type Limits = {maxBytes?: number};
+type Loaded<T> = {items: T[]; nextSequence: number};
 
 export class JsonFileStore<T> {
   private flushing: Promise<void> | null = null;
   private pending: {items: T[]; nextSequence: number} | null = null;
+  // The sibling `.json` this store may migrate from once. It is only ever read,
+  // never written, so a rollback to the pre-.jsonl build still finds it intact.
+  private readonly legacyPath?: string;
 
   constructor(
     private readonly logger: Logger,
     private name: string,
     private path?: string
   ) {
+    this.legacyPath = path?.endsWith('.jsonl')
+      ? path.replace(/\.jsonl$/, '.json')
+      : undefined;
     if (path) {
       this.logger.info({path}, 'persistence enabled');
     }
@@ -29,30 +36,51 @@ export class JsonFileStore<T> {
 
   // Sole loader. Never materializes the whole file: JSONL is read line by line
   // and a legacy monolithic snapshot is stream-parsed, both retaining only the
-  // most-recent tail within `maxBytes`. A legacy file is rewritten as JSONL in
-  // place on first load. A torn trailing record keeps the valid prefix rather
-  // than discarding everything.
-  async loadBounded(
-    limits: Limits
-  ): Promise<{items: T[]; nextSequence: number} | null> {
+  // most-recent tail within `maxBytes`. Steady state reads the `.jsonl` at
+  // `path`. If that does not exist yet, a one-time migration reads the sibling
+  // pre-JSONL `.json` snapshot and writes a new `.jsonl`, leaving the `.json`
+  // untouched so a rollback can still read it. A torn trailing record keeps the
+  // valid prefix rather than discarding all.
+  async loadBounded(limits: Limits): Promise<Loaded<T> | null> {
     if (!this.path) return null;
-    if (!existsSync(this.path)) {
-      this.logger.info('no existing data');
-      return null;
+    if (existsSync(this.path)) {
+      return this.readFrom(this.path, limits);
     }
+    if (this.legacyPath && existsSync(this.legacyPath)) {
+      const loaded = await this.readFrom(this.legacyPath, limits);
+      if (loaded) {
+        this.logger.info(
+          {from: this.legacyPath, to: this.path},
+          'migrating legacy store to a new .jsonl file'
+        );
+        await this.save(loaded.items, loaded.nextSequence);
+      }
+      return loaded;
+    }
+    this.logger.info('no existing data');
+    return null;
+  }
+
+  private async readFrom(
+    filePath: string,
+    limits: Limits
+  ): Promise<Loaded<T> | null> {
     try {
-      const format = await this.detectFormat();
+      const format = await this.detectFormat(filePath);
       if (format === 'empty') return null;
-      if (format === 'legacy') return await this.migrateLegacy(limits);
-      return await this.readJsonl(limits);
+      return format === 'legacy'
+        ? await this.readLegacy(filePath, limits)
+        : await this.readJsonl(filePath, limits);
     } catch (err) {
-      this.logger.error({err}, 'failed to load');
+      this.logger.error({err, path: filePath}, 'failed to load');
       return null;
     }
   }
 
-  private async detectFormat(): Promise<'jsonl' | 'legacy' | 'empty'> {
-    const fd = await open(this.path!, 'r');
+  private async detectFormat(
+    filePath: string
+  ): Promise<'jsonl' | 'legacy' | 'empty'> {
+    const fd = await open(filePath, 'r');
     try {
       const buf = Buffer.alloc(64);
       const {bytesRead} = await fd.read(buf, 0, 64, 0);
@@ -65,8 +93,9 @@ export class JsonFileStore<T> {
   }
 
   private async readJsonl(
+    filePath: string,
     limits: Limits
-  ): Promise<{items: T[]; nextSequence: number}> {
+  ): Promise<Loaded<T>> {
     const {maxBytes} = limits;
     const buf: T[] = [];
     const sizes: number[] = [];
@@ -74,7 +103,7 @@ export class JsonFileStore<T> {
     let headerSequence = 0;
     let sawHeader = false;
     const rl = createInterface({
-      input: createReadStream(this.path!, {encoding: 'utf-8'}),
+      input: createReadStream(filePath, {encoding: 'utf-8'}),
       crlfDelay: Infinity,
     });
     try {
@@ -117,16 +146,17 @@ export class JsonFileStore<T> {
     };
   }
 
-  // One-time conversion: bounded stream-parse the legacy object (never the whole
-  // file in memory), then rewrite it as JSONL so every later load uses readline.
-  private async migrateLegacy(
+  // Bounded stream-parse of a legacy monolithic snapshot. The caller writes the
+  // result to the new `.jsonl`; this method never rewrites the legacy file.
+  private async readLegacy(
+    filePath: string,
     limits: Limits
-  ): Promise<{items: T[]; nextSequence: number}> {
+  ): Promise<Loaded<T>> {
     const {
       items,
       nextSequence: persisted,
       dropped,
-    } = await this.streamLegacy(limits);
+    } = await this.streamLegacy(filePath, limits);
     const nextSequence = Math.max(
       persisted ?? 0,
       this.deriveNextSequence(items)
@@ -140,10 +170,9 @@ export class JsonFileStore<T> {
     } else {
       this.logger.info(
         {count: items.length},
-        'migrating legacy snapshot to jsonl'
+        'read legacy snapshot for migration'
       );
     }
-    await this.save(items, nextSequence);
     return {items, nextSequence};
   }
 
@@ -151,6 +180,7 @@ export class JsonFileStore<T> {
   // `items` within the budget and capture `nextSequence`. Never holds the whole
   // file in memory; a torn tail keeps the valid prefix.
   private streamLegacy(
+    filePath: string,
     limits: Limits
   ): Promise<{items: T[]; nextSequence?: number; dropped: number}> {
     const {maxBytes} = limits;
@@ -170,7 +200,7 @@ export class JsonFileStore<T> {
       };
       // .pipe() does not tear down the source when the parser errors, so destroy
       // it explicitly to avoid leaking the fd on the torn-tail path.
-      const source = createReadStream(this.path!);
+      const source = createReadStream(filePath);
       const finish = (err?: unknown): void => {
         if (settled) return;
         settled = true;

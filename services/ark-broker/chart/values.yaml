@@ -176,15 +176,15 @@ persistence:
   size: 1Gi
   # Path where data will be stored
   mountPath: /data
-  # Filename for the memory data
-  memoryFileName: messages.json
-  # Filename for the stream data
-  streamFileName: completionchunks.json
-  # Filename for the trace data
-  traceFileName: oteltraces.json
-  # Filename for the event data
-  eventFileName: events.json
-  # Filename for the sessions data
+  # Filename for the memory data (JSONL: header line + one record per line)
+  memoryFileName: messages.jsonl
+  # Filename for the stream data (JSONL)
+  streamFileName: completionchunks.jsonl
+  # Filename for the trace data (JSONL)
+  traceFileName: oteltraces.jsonl
+  # Filename for the event data (JSONL)
+  eventFileName: events.jsonl
+  # Filename for the sessions data (single JSON object, not JSONL)
   sessionsFileName: sessions.json
   # Use existing PVC instead of creating a new one
   existingClaim: ""
