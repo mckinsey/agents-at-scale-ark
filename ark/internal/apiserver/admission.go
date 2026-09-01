@@ -59,6 +59,7 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 	}
 	admissionUpdate := func(ctx context.Context, obj, old runtime.Object) error {
 		validation.ApplyDefaults(ctx, obj, nil)
+		ctx = validation.ServiceAccountAuthzContextForUpdate(ctx, old, obj)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)
