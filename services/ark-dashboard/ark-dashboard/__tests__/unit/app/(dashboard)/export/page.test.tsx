@@ -139,6 +139,7 @@ describe('ExportPage', () => {
 
     await waitFor(() => {
       expect(exportService.exportResources).toHaveBeenCalledWith(
+        'default',
         expect.objectContaining({
           agents: expect.arrayContaining([
             expect.objectContaining({ id: 'agent-1', selected: true }),

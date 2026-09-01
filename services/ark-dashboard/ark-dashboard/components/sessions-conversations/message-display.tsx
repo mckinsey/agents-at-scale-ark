@@ -1,6 +1,5 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
 import { type RefObject, memo, useEffect, useMemo, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +19,7 @@ import { IconShell } from '@/components/ui/icon-shell';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { stripNamespace } from '@/lib/utils/participant';
 import { getParticipantIcon } from '@/lib/utils/participant-icon';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { ApprovalNotification } from './approval-notification';
 import { SessionMessage } from './session-message';
@@ -302,8 +302,7 @@ export function MessageDisplay({
     scrollToBottom,
     resumeAutoScroll,
   } = useStickyScroll();
-  const searchParams = useSearchParams();
-  const namespace = searchParams.get('namespace') || 'default';
+  const { namespace } = useNamespace();
   const [isWaitingForNextMessage, setIsWaitingForNextMessage] = useState(false);
   const [messageCountWhenWaitingStarted, setMessageCountWhenWaitingStarted] =
     useState<number | null>(null);

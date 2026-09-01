@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -22,6 +23,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -94,6 +96,20 @@ func validateRole(role string) error {
 
 func leaderElectionID(role string) string {
 	return "ark-" + role + "-leader"
+}
+
+// watchNamespaces returns the namespaces the controller cache is confined to, from
+// ARK_WATCH_NAMESPACES (comma-separated). Empty means watch all namespaces, which is the
+// default. Confining the cache lets the ServiceAccount be granted core resource access
+// through per-namespace RoleBindings instead of a cluster-wide ClusterRoleBinding.
+func watchNamespaces() []string {
+	var out []string
+	for _, ns := range strings.Split(os.Getenv("ARK_WATCH_NAMESPACES"), ",") {
+		if ns = strings.TrimSpace(ns); ns != "" {
+			out = append(out, ns)
+		}
+	}
+	return out
 }
 
 func main() {
@@ -210,6 +226,15 @@ func setupManager(cfg config) (ctrl.Manager, *certwatcher.CertWatcher, *certwatc
 			BurstSize: 100,
 			QPS:       100,
 		}),
+	}
+
+	if ns := watchNamespaces(); len(ns) > 0 {
+		defaults := make(map[string]cache.Config, len(ns))
+		for _, n := range ns {
+			defaults[n] = cache.Config{}
+		}
+		managerOptions.Cache = cache.Options{DefaultNamespaces: defaults}
+		setupLog.Info("controller cache scoped to namespaces", "namespaces", ns)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
@@ -516,7 +541,7 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 		setupLog.Error(err, "invalid apiserver configuration")
 		os.Exit(1)
 	}
-	cfg.K8sClient = mgr.GetClient()
+	cfg.K8sClient = mgr.GetAPIReader()
 	cfg.RestConfig = mgr.GetConfig()
 
 	server := apiserver.New(cfg)

@@ -6,9 +6,13 @@ import type {
 } from '@/lib/types/files';
 
 export const filesService = {
-  async list(params: ListFilesParams = {}): Promise<ListFilesResponse> {
+  async list(
+    namespace: string,
+    params: ListFilesParams = {},
+  ): Promise<ListFilesResponse> {
     const response = await filesApiClient.get<ListFilesResponse>('files', {
       params: {
+        namespace,
         ...(params.prefix !== undefined && { prefix: params.prefix }),
         ...(params.max_keys !== undefined && { max_keys: params.max_keys }),
         ...(params.continuation_token !== undefined && {
@@ -20,6 +24,7 @@ export const filesService = {
   },
 
   async upload(
+    namespace: string,
     file: File,
     prefix: string,
     onProgress?: (progress: number) => void,
@@ -49,17 +54,22 @@ export const filesService = {
         reject(new Error('Upload failed'));
       });
 
-      xhr.open('POST', filesApiClient.buildUrl('files'));
+      xhr.open('POST', filesApiClient.buildUrl('files', { namespace }));
       xhr.send(formData);
     });
   },
 
-  async delete(key: string): Promise<void> {
-    await filesApiClient.delete(`files/${encodeURIComponent(key)}`);
+  async delete(namespace: string, key: string): Promise<void> {
+    await filesApiClient.delete(`files/${encodeURIComponent(key)}`, {
+      params: { namespace },
+    });
   },
 
-  download(key: string): void {
-    const url = filesApiClient.buildUrl(`files/${encodeURIComponent(key)}/download`);
+  download(namespace: string, key: string): void {
+    const url = filesApiClient.buildUrl(
+      `files/${encodeURIComponent(key)}/download`,
+      { namespace },
+    );
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = key.split('/').pop() || 'download';
@@ -69,11 +79,14 @@ export const filesService = {
     document.body.removeChild(anchor);
   },
 
-  async deleteDirectory(prefix: string): Promise<DeleteDirectoryResponse> {
+  async deleteDirectory(
+    namespace: string,
+    prefix: string,
+  ): Promise<DeleteDirectoryResponse> {
     const response = await filesApiClient.delete<DeleteDirectoryResponse>(
       'directories',
       {
-        params: { prefix },
+        params: { namespace, prefix },
       },
     );
     return response;

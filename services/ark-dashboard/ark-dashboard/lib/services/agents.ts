@@ -43,14 +43,16 @@ export type Agent = AgentDetailResponseWithA2A & { id: string };
 // CRUD Operations
 export const agentsService = {
   // Get all agents
-  async getAll(): Promise<Agent[]> {
-    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`);
+  async getAll(namespace: string): Promise<Agent[]> {
+    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`, {
+      namespace,
+    });
 
     // Map the response items to include id for UI compatibility
     const agents = await Promise.all(
       items.map(async item => {
         // Fetch detailed info for each agent to get full data
-        const detailed = await agentsService.getByName(item.name);
+        const detailed = await agentsService.getByName(namespace, item.name);
         return detailed!;
       }),
     );
@@ -59,10 +61,11 @@ export const agentsService = {
   },
 
   // Get a single agent by name
-  async getByName(name: string): Promise<Agent | null> {
+  async getByName(namespace: string, name: string): Promise<Agent | null> {
     try {
       const response = await apiClient.get<AgentDetailResponse>(
         `/api/v1/agents/${name}`,
+        { params: { namespace } },
       );
       return {
         ...response,
@@ -77,16 +80,17 @@ export const agentsService = {
   },
 
   // Get a single agent by ID (for UI compatibility - ID is actually the name)
-  async getById(id: number | string): Promise<Agent | null> {
+  async getById(namespace: string, id: number | string): Promise<Agent | null> {
     // Convert numeric ID to string name
     const name = String(id);
-    return agentsService.getByName(name);
+    return agentsService.getByName(namespace, name);
   },
 
-  async create(agent: AgentCreateRequest): Promise<Agent> {
+  async create(namespace: string, agent: AgentCreateRequest): Promise<Agent> {
     const response = await apiClient.post<AgentDetailResponse>(
       `/api/v1/agents`,
       agent,
+      { params: { namespace } },
     );
 
     trackEvent({
@@ -105,6 +109,7 @@ export const agentsService = {
   },
 
   async update(
+    namespace: string,
     name: string,
     updates: AgentUpdateRequest,
   ): Promise<Agent | null> {
@@ -112,6 +117,7 @@ export const agentsService = {
       const response = await apiClient.put<AgentDetailResponse>(
         `/api/v1/agents/${name}`,
         updates,
+        { params: { namespace } },
       );
 
       trackEvent({
@@ -135,16 +141,19 @@ export const agentsService = {
 
   // Update by ID (for UI compatibility)
   async updateById(
+    namespace: string,
     id: number | string,
     updates: AgentUpdateRequest,
   ): Promise<Agent | null> {
     const name = String(id);
-    return agentsService.update(name, updates);
+    return agentsService.update(namespace, name, updates);
   },
 
-  async delete(name: string): Promise<boolean> {
+  async delete(namespace: string, name: string): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/agents/${name}`);
+      await apiClient.delete(`/api/v1/agents/${name}`, {
+        params: { namespace },
+      });
 
       trackEvent({
         name: 'agent_deleted',
@@ -163,14 +172,18 @@ export const agentsService = {
   },
 
   // Delete by ID (for UI compatibility)
-  async deleteById(id: number | string): Promise<boolean> {
+  async deleteById(namespace: string, id: number | string): Promise<boolean> {
     const name = String(id);
-    return agentsService.delete(name);
+    return agentsService.delete(namespace, name);
   },
 
-  async getRawResource(name: string): Promise<Record<string, unknown>> {
+  async getRawResource(
+    namespace: string,
+    name: string,
+  ): Promise<Record<string, unknown>> {
     return apiClient.get<Record<string, unknown>>(
       `/api/v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent/${name}`,
+      { params: { namespace } },
     );
   },
 };

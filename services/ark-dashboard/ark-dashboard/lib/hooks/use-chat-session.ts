@@ -25,6 +25,7 @@ import {
 } from '@/lib/hooks/use-agent-query-parameters';
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import type { ChatResponse } from '@/lib/services/chat';
 import type {
   ArkExtendedChunk,
@@ -146,12 +147,14 @@ interface UseChatSessionReturn {
   removeParameterRow: (id: string) => void;
   canAddParameterRow: boolean;
   missingParameters: string[];
+  engineToolWarning: string | null;
 }
 
 export function useChatSession({
   name,
   type,
 }: UseChatSessionParams): UseChatSessionReturn {
+  const { namespace } = useNamespace();
   const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
   const [lastConversationId, setLastConversationId] = useAtom(
     lastConversationIdAtom,
@@ -269,7 +272,7 @@ export function useChatSession({
     const queryName = lastQueryName.current;
     if (!queryName) return;
     try {
-      const fullQuery = await chatService.getQuery(queryName);
+      const fullQuery = await chatService.getQuery(namespace, queryName);
       const fallbackConversationId = (
         fullQuery?.status as { conversationId?: string } | undefined
       )?.conversationId;
@@ -279,7 +282,7 @@ export function useChatSession({
     } catch (err) {
       console.error('Failed to fetch conversationId fallback:', err);
     }
-  }, [updateConversationId]);
+  }, [namespace, updateConversationId]);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
@@ -314,6 +317,7 @@ export function useChatSession({
     canAddRow: canAddParameterRow,
     missingParameters,
     toApiParameters,
+    engineToolWarning,
   } = useAgentQueryParameters(name, type);
 
   useEffect(() => {
@@ -421,6 +425,7 @@ export function useChatSession({
 
       const { queryName: streamQueryName, chunks } =
         await chatService.startStreamChatResponse(
+          namespace,
           userMessage,
           type,
           name,
@@ -435,6 +440,7 @@ export function useChatSession({
       lastQueryName.current = queryName;
 
       const stopPhasePolling = await chatService.streamQueryStatus(
+        namespace,
         streamQueryName,
         status => {
           if (status && typeof status === 'object' && 'phase' in status) {
@@ -798,6 +804,7 @@ export function useChatSession({
       chatMessages,
       conversationId,
       name,
+      namespace,
       queryTimeout,
       sessionId,
       setChatHistory,
@@ -813,6 +820,7 @@ export function useChatSession({
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
+        namespace,
         userMessage,
         type,
         name,
@@ -832,12 +840,18 @@ export function useChatSession({
 
       while (!pollingStopped) {
         try {
-          const result = await chatService.getQueryResult(query.name);
+          const result = await chatService.getQueryResult(
+            namespace,
+            query.name,
+          );
 
           setProcessingPhase(result.status);
 
           if (result.terminal) {
-            const fullQuery = await chatService.getQuery(query.name);
+            const fullQuery = await chatService.getQuery(
+              namespace,
+              query.name,
+            );
             const queryConversationId = (
               fullQuery?.status as { conversationId?: string } | undefined
             )?.conversationId;
@@ -964,6 +978,7 @@ export function useChatSession({
       buildChatMessages,
       chatMessages,
       name,
+      namespace,
       queryTimeout,
       sessionId,
       type,
@@ -1088,12 +1103,14 @@ export function useChatSession({
       },
     ]);
 
-    await chatService.cancelQuery(lastQueryName.current).catch(() => {});
-  }, [setIsProcessing, updateChatMessages]);
+    await chatService
+      .cancelQuery(namespace, lastQueryName.current)
+      .catch(() => {});
+  }, [namespace, setIsProcessing, updateChatMessages]);
 
   const handleCascadingApproval = useCallback(
     async (queryName: string): Promise<boolean> => {
-      const query = await chatService.getQuery(queryName);
+      const query = await chatService.getQuery(namespace, queryName);
       const status = query?.status as
         | { response?: { a2a?: { taskId?: string } } }
         | undefined;
@@ -1101,11 +1118,14 @@ export function useChatSession({
       if (!taskId) return false;
 
       try {
-        const a2aTask = await chatService.getA2ATask(`a2a-task-${taskId}`);
+        const a2aTask = await chatService.getA2ATask(
+          namespace,
+          `a2a-task-${taskId}`,
+        );
         const message = buildCascadingApprovalMessage(
           a2aTask,
           queryName,
-          query?.namespace || 'default',
+          query?.namespace || namespace,
           taskId,
         );
         if (!message) return false;
@@ -1123,7 +1143,7 @@ export function useChatSession({
         return false;
       }
     },
-    [updateChatMessages, setIsProcessing],
+    [namespace, updateChatMessages, setIsProcessing],
   );
 
   const applyTerminalResult = useCallback(
@@ -1186,7 +1206,7 @@ export function useChatSession({
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       try {
-        const result = await chatService.getQueryResult(queryName);
+        const result = await chatService.getQueryResult(namespace, queryName);
 
         if (
           result.status === 'input-required' &&
@@ -1206,6 +1226,7 @@ export function useChatSession({
 
     setIsWaitingForApprovalResponse(false);
   }, [
+    namespace,
     updateChatMessages,
     setIsProcessing,
     handleCascadingApproval,
@@ -1241,5 +1262,6 @@ export function useChatSession({
     removeParameterRow,
     canAddParameterRow,
     missingParameters,
+    engineToolWarning,
   };
 }
