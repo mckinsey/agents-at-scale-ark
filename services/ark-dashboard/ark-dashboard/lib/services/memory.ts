@@ -54,9 +54,11 @@ export type MemoryMessagesFilters = {
 
 export const memoryService = {
   // Get all memory resources in a namespace
-  async getMemoryResources(): Promise<MemoryResource[]> {
+  async getMemoryResources(namespace: string): Promise<MemoryResource[]> {
     try {
-      return await fetchAllPages<MemoryResource>(`/api/v1/memories`);
+      return await fetchAllPages<MemoryResource>(`/api/v1/memories`, {
+        namespace,
+      });
     } catch (error) {
       console.error('Failed to fetch memory resources:', error);
       return [];
@@ -64,14 +66,14 @@ export const memoryService = {
   },
 
   // Get all conversations across all memories
-  async getConversations(): Promise<
+  async getConversations(namespace: string): Promise<
     { conversationId: string; memoryName: string }[]
   > {
     try {
       const url = `/api/v1/conversations`;
       const response = await apiClient.get<{
         items: { conversationId: string; memoryName: string }[];
-      }>(url);
+      }>(url, { params: { namespace } });
 
       return response?.items || [];
     } catch (error) {
@@ -82,6 +84,7 @@ export const memoryService = {
 
   // Get stored conversation messages for a specific conversation
   async getConversation(
+    namespace: string,
     memoryName: string,
     conversationId: string,
   ): Promise<Conversation | null> {
@@ -90,6 +93,7 @@ export const memoryService = {
       const apiUrl = `/api/v1/memories/${memoryName}/conversations/${conversationId}/messages`;
       const response = await apiClient.get<{ messages: StoredMessage[] }>(
         apiUrl,
+        { params: { namespace } },
       );
 
       return {
@@ -105,7 +109,10 @@ export const memoryService = {
   },
 
   // Get all memory messages using the new consolidated endpoint
-  async getAllMemoryMessages(filters?: MemoryMessagesFilters): Promise<
+  async getAllMemoryMessages(
+    namespace: string,
+    filters?: MemoryMessagesFilters,
+  ): Promise<
     {
       timestamp: string;
       memoryName: string;
@@ -136,7 +143,7 @@ export const memoryService = {
           queryId: string;
           message: { role: string; content: string; name?: string };
         }[];
-      }>(url);
+      }>(url, { params: { namespace } });
       return response?.items || [];
     } catch (error) {
       console.error('Failed to fetch memory messages:', error);
@@ -144,23 +151,28 @@ export const memoryService = {
     }
   },
 
-  async deleteConversation(conversationId: string) {
-    apiClient.delete(`/api/v1/conversations/${conversationId}`);
+  async deleteConversation(namespace: string, conversationId: string) {
+    await apiClient.delete(`/api/v1/conversations/${conversationId}`, {
+      params: { namespace },
+    });
   },
 
   async deleteQuery({
+    namespace,
     conversationId,
     queryId,
   }: {
+    namespace: string;
     conversationId: string;
     queryId: string;
   }) {
-    apiClient.delete(
+    await apiClient.delete(
       `/api/v1/conversations/${conversationId}/queries/${queryId}/messages`,
+      { params: { namespace } },
     );
   },
 
-  async resetMemory() {
-    apiClient.delete('/api/v1/conversations');
+  async resetMemory(namespace: string) {
+    await apiClient.delete('/api/v1/conversations', { params: { namespace } });
   },
 };

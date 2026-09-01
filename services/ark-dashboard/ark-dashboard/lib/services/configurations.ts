@@ -15,21 +15,28 @@ export type ConfigurationReferenceListResponse =
   components['schemas']['ConfigurationReferenceListResponse'];
 
 export const configurationsService = {
-  async getAll(): Promise<Configuration[]> {
+  async getAll(namespace: string): Promise<Configuration[]> {
     const response = await apiClient.get<ConfigurationListResponse>(
       `/api/v1/configurations`,
+      { params: { namespace } },
     );
     return response.items;
   },
 
-  async get(name: string): Promise<Configuration> {
-    return apiClient.get<Configuration>(`/api/v1/configurations/${name}`);
+  async get(namespace: string, name: string): Promise<Configuration> {
+    return apiClient.get<Configuration>(`/api/v1/configurations/${name}`, {
+      params: { namespace },
+    });
   },
 
-  async create(request: ConfigurationCreateRequest): Promise<Configuration> {
+  async create(
+    namespace: string,
+    request: ConfigurationCreateRequest,
+  ): Promise<Configuration> {
     const response = await apiClient.post<Configuration>(
       `/api/v1/configurations`,
       request,
+      { params: { namespace } },
     );
     trackEvent({
       name: 'configuration_created',
@@ -44,12 +51,14 @@ export const configurationsService = {
    * so callers must send the complete desired state on every call.
    */
   async update(
+    namespace: string,
     name: string,
     request: ConfigurationUpdateRequest,
   ): Promise<Configuration> {
     const response = await apiClient.put<Configuration>(
       `/api/v1/configurations/${name}`,
       request,
+      { params: { namespace } },
     );
     trackEvent({
       name: 'configuration_updated',
@@ -58,17 +67,23 @@ export const configurationsService = {
     return response;
   },
 
-  async delete(name: string): Promise<void> {
-    await apiClient.delete(`/api/v1/configurations/${name}`);
+  async delete(namespace: string, name: string): Promise<void> {
+    await apiClient.delete(`/api/v1/configurations/${name}`, {
+      params: { namespace },
+    });
     trackEvent({
       name: 'configuration_deleted',
       properties: { configurationName: name },
     });
   },
 
-  async getReferences(name: string): Promise<ConfigurationReference[]> {
+  async getReferences(
+    namespace: string,
+    name: string,
+  ): Promise<ConfigurationReference[]> {
     const response = await apiClient.get<ConfigurationReferenceListResponse>(
       `/api/v1/configurations/${name}/references`,
+      { params: { namespace } },
     );
     return response.items;
   },

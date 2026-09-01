@@ -47,6 +47,10 @@ spec:
             value: "ark-controller"
           - name: ARK_MEMORY_HTTP_TIMEOUT_SECONDS
             value: "30"
+          {{- with .Values.controllerManager.watchNamespaces }}
+          - name: ARK_WATCH_NAMESPACES
+            value: {{ join "," . | quote }}
+          {{- end }}
           {{- if .Values.telemetry.tenantRouting.otelDiscovery }}
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"

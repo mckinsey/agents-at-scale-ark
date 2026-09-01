@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { stripNamespace } from '@/lib/utils/participant';
 import { generateUUID } from '@/lib/utils/uuid';
 import type { ParticipantType } from '@/lib/services/conversations';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface Props {
   readonly open: boolean;
@@ -53,24 +54,28 @@ const FILTERS: { readonly label: string; readonly value: TabFilter }[] = [
 ];
 
 export function NewSessionDialog({ open, onOpenChange }: Props) {
+  const { namespace } = useNamespace();
   const { push } = useNamespacedNavigation();
   const [search, setSearch] = useState('');
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
 
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
-    queryKey: ['agents'],
-    queryFn: () => agentsService.getAll(),
+    queryKey: ['agents', namespace],
+    queryFn: () => agentsService.getAll(namespace),
+    enabled: Boolean(namespace),
   });
 
   const { data: teams = [], isLoading: loadingTeams } = useQuery({
-    queryKey: ['teams'],
-    queryFn: () => teamsService.getAll(),
+    queryKey: ['teams', namespace],
+    queryFn: () => teamsService.getAll(namespace),
+    enabled: Boolean(namespace),
   });
 
   const { data: tools = [], isLoading: loadingTools } = useQuery({
-    queryKey: ['tools'],
-    queryFn: () => toolsService.getAll(),
+    queryKey: ['tools', namespace],
+    queryFn: () => toolsService.getAll(namespace),
+    enabled: Boolean(namespace),
   });
 
   const isLoading = loadingAgents || loadingTeams || loadingTools;

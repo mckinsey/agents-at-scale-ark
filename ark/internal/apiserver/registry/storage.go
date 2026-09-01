@@ -128,7 +128,7 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
-	objects, continueToken, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
+	objects, continueToken, listRV, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
 	if err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
@@ -139,7 +139,7 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	}
 
 	list := s.config.NewListFunc()
-	if err := setListItems(list, objects, continueToken); err != nil {
+	if err := setListItems(list, objects, continueToken, listRV); err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
 		return nil, err
@@ -490,6 +490,9 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 		if errors.Is(err, storage.ErrInvalidRequest) {
 			return nil, apierrors.NewBadRequest(err.Error())
 		}
+		if errors.Is(err, storage.ErrResourceExpired) {
+			return nil, apierrors.NewResourceExpired(err.Error())
+		}
 		return nil, err
 	}
 	return watcher, nil
@@ -584,7 +587,7 @@ func handleUpdateError(err error, cfg ResourceConfig, operation, name string, st
 	return fmt.Errorf("failed to %s %s: %w", operation, cfg.SingularName, err)
 }
 
-func setListItems(list runtime.Object, objects []runtime.Object, continueToken string) error {
+func setListItems(list runtime.Object, objects []runtime.Object, continueToken string, listRV int64) error {
 	if err := meta.SetList(list, objects); err != nil {
 		return fmt.Errorf("failed to set list items: %w", err)
 	}
@@ -592,26 +595,12 @@ func setListItems(list runtime.Object, objects []runtime.Object, continueToken s
 	if err != nil {
 		return fmt.Errorf("failed to access list metadata: %w", err)
 	}
-	// Compute the list's resourceVersion numerically. Lexicographic string max
-	// mis-orders across digit-count boundaries (e.g. "9" > "10"), which yields
-	// a lower-than-true list RV and breaks the list→watch handoff (the client
-	// then resumes watch from a stale point).
-	var maxRV uint64
-	for _, obj := range objects {
-		objMeta, err := meta.Accessor(obj)
-		if err != nil {
-			continue
-		}
-		n, err := strconv.ParseUint(objMeta.GetResourceVersion(), 10, 64)
-		if err != nil {
-			continue
-		}
-		if n > maxRV {
-			maxRV = n
-		}
-	}
-	if maxRV > 0 {
-		accessor.SetResourceVersion(strconv.FormatUint(maxRV, 10))
+	// listRV is the backend's store head revision: always at or above the purge
+	// floor, so the list→watch handoff never resumes below the floor, and set
+	// even for an empty kind so a watch can still resume. Zero means the store
+	// is empty (nothing ever written); leave the RV unset in that case.
+	if listRV > 0 {
+		accessor.SetResourceVersion(strconv.FormatInt(listRV, 10))
 	}
 	if continueToken != "" {
 		accessor.SetContinue(continueToken)

@@ -5,8 +5,10 @@ import { McpServersTable } from '@/components/sections/mcp-servers-table';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { mcpServersService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function McpServersSection() {
+  const { namespace } = useNamespace();
   return (
     <ResourceListSection
       icon={<PlugConnect />}
@@ -25,8 +27,8 @@ export function McpServersSection() {
           <p>Get started by adding your first MCP Server.</p>
         </>
       }
-      loadItems={() => mcpServersService.getAll()}
-      deleteItem={id => mcpServersService.delete(id)}
+      loadItems={() => mcpServersService.getAll(namespace)}
+      deleteItem={id => mcpServersService.delete(namespace, id)}
       renderTable={(servers, onDelete, reload) => (
         <McpServersTable
           servers={servers}
