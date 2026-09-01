@@ -1,30 +1,11 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
-import type { Dispatch, PropsWithChildren, SetStateAction } from 'react';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
-import type { Control, UseFormReturn, UseFormSetValue } from 'react-hook-form';
-import { useForm, useWatch } from 'react-hook-form';
+import { useEffect } from 'react';
+import type { Control } from 'react-hook-form';
+import { useFormContext, useWatch } from 'react-hook-form';
 import { toast } from '@/components/ui/sonner';
-import { z } from 'zod';
 
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { CreateResourceButton } from '@/components/forms/shared/create-resource-dialog';
 import {
   FieldDescription,
   FieldError,
@@ -58,15 +39,9 @@ import {
   SUPPORTED_MODEL_PROVIDERS,
 } from '@/lib/constants/model-types';
 import type { Secret } from '@/lib/services';
-import type { SecretDetailResponse } from '@/lib/services/secrets';
-import {
-  useCreateSecret,
-  useGetAllSecrets,
-} from '@/lib/services/secrets-hooks';
+import { useGetAllSecrets } from '@/lib/services/secrets-hooks';
 import type { KeysOfUnion } from '@/lib/types/utils';
 import { cn } from '@/lib/utils';
-import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
-import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { useModelConfigurationForm } from './model-configuration-form-context';
 import type { FormValues } from './schema';
@@ -74,7 +49,6 @@ import type { FormValues } from './schema';
 export function ModelConfiguratorForm() {
   const { form, formId, onSubmit, provider, disabledFields } =
     useModelConfigurationForm();
-  const { namespace } = useNamespace();
 
   const {
     data: secrets,
@@ -94,123 +68,120 @@ export function ModelConfiguratorForm() {
   }, [secretsError]);
 
   return (
-    <SecretDialogProvider formValueSetter={form.setValue} namespace={namespace}>
-      <Form {...form}>
-        <form
-          id={formId}
-          onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-6">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field, fieldState }) => (
-              <FieldSet className="gap-2">
-                <FieldTitle>Name</FieldTitle>
-                <Input
-                  variant="inline"
-                  {...field}
-                  placeholder="e.g., gpt-4-turbo"
-                  disabled={disabledFields?.name}
-                  aria-invalid={!!fieldState.error}
-                />
-                <FieldError>{fieldState.error?.message}</FieldError>
-              </FieldSet>
-            )}
+    <Form {...form}>
+      <form
+        id={formId}
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="flex flex-col gap-6">
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field, fieldState }) => (
+            <FieldSet className="gap-2">
+              <FieldTitle>Name</FieldTitle>
+              <Input
+                variant="inline"
+                {...field}
+                placeholder="e.g., gpt-4-turbo"
+                disabled={disabledFields?.name}
+                aria-invalid={!!fieldState.error}
+              />
+              <FieldError>{fieldState.error?.message}</FieldError>
+            </FieldSet>
+          )}
+        />
+        <FieldSet className="gap-2">
+          <FieldTitle>Type</FieldTitle>
+          <Input
+            variant="inline"
+            value={getModelTypeDisplayName('completions')}
+            disabled
+            readOnly
           />
-          <FieldSet className="gap-2">
-            <FieldTitle>Type</FieldTitle>
-            <Input
-              variant="inline"
-              value={getModelTypeDisplayName('completions')}
-              disabled
-              readOnly
-            />
-          </FieldSet>
-          <FormField
+        </FieldSet>
+        <FormField
+          control={form.control}
+          name="provider"
+          render={({ field }) => (
+            <FieldSet className="gap-2">
+              <FieldTitle>Provider</FieldTitle>
+              <Select
+                items={MODEL_PROVIDER_DISPLAY_NAMES}
+                onValueChange={field.onChange}
+                value={field.value}
+                disabled={disabledFields?.provider}>
+                <SelectTrigger
+                  aria-label="Provider"
+                  className={cn(GHOST_TRIGGER, 'w-full')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-fill-onsurface-ui-2">
+                  {SUPPORTED_MODEL_PROVIDERS.map(value => (
+                    <SelectItem key={value} value={value}>
+                      <SelectItemText>
+                        {MODEL_PROVIDER_DISPLAY_NAMES[value]}
+                      </SelectItemText>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldSet>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="model"
+          render={({ field, fieldState }) => (
+            <FieldSet className="gap-2">
+              <FieldTitle>Model</FieldTitle>
+              <Input
+                variant="inline"
+                {...field}
+                placeholder={
+                  provider === 'openai'
+                    ? 'e.g., gpt-4-turbo-preview'
+                    : provider === 'azure'
+                      ? 'e.g., gpt-4'
+                      : provider === 'anthropic'
+                        ? 'e.g., claude-sonnet-4-20250514'
+                        : 'e.g., anthropic.claude-v2'
+                }
+                aria-invalid={!!fieldState.error}
+              />
+              <FieldError>{fieldState.error?.message}</FieldError>
+            </FieldSet>
+          )}
+        />
+        {provider === 'openai' && (
+          <OpenAISpecificFields
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
             control={form.control}
-            name="provider"
-            render={({ field }) => (
-              <FieldSet className="gap-2">
-                <FieldTitle>Provider</FieldTitle>
-                <Select
-                  items={MODEL_PROVIDER_DISPLAY_NAMES}
-                  onValueChange={field.onChange}
-                  value={field.value}
-                  disabled={disabledFields?.provider}>
-                  <SelectTrigger
-                    aria-label="Provider"
-                    className={cn(GHOST_TRIGGER, 'w-full')}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-fill-onsurface-ui-2">
-                    {SUPPORTED_MODEL_PROVIDERS.map(value => (
-                      <SelectItem key={value} value={value}>
-                        <SelectItemText>
-                          {MODEL_PROVIDER_DISPLAY_NAMES[value]}
-                        </SelectItemText>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FieldSet>
-            )}
           />
-          <FormField
+        )}
+        {provider === 'azure' && (
+          <AzureSpecificFields
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
             control={form.control}
-            name="model"
-            render={({ field, fieldState }) => (
-              <FieldSet className="gap-2">
-                <FieldTitle>Model</FieldTitle>
-                <Input
-                  variant="inline"
-                  {...field}
-                  placeholder={
-                    provider === 'openai'
-                      ? 'e.g., gpt-4-turbo-preview'
-                      : provider === 'azure'
-                        ? 'e.g., gpt-4'
-                        : provider === 'anthropic'
-                          ? 'e.g., claude-sonnet-4-20250514'
-                          : 'e.g., anthropic.claude-v2'
-                  }
-                  aria-invalid={!!fieldState.error}
-                />
-                <FieldError>{fieldState.error?.message}</FieldError>
-              </FieldSet>
-            )}
           />
-          {provider === 'openai' && (
-            <OpenAISpecificFields
-              isSecretsPending={isSecretsPending}
-              secrets={secrets}
-              control={form.control}
-            />
-          )}
-          {provider === 'azure' && (
-            <AzureSpecificFields
-              isSecretsPending={isSecretsPending}
-              secrets={secrets}
-              control={form.control}
-            />
-          )}
-          {provider === 'bedrock' && (
-            <AWSBedrockSpecificFields
-              isSecretsPending={isSecretsPending}
-              secrets={secrets}
-              control={form.control}
-            />
-          )}
-          {provider === 'anthropic' && (
-            <AnthropicSpecificFields
-              isSecretsPending={isSecretsPending}
-              secrets={secrets}
-              control={form.control}
-            />
-          )}
-        </form>
-      </Form>
-      <CreateNewSecretDialog />
-    </SecretDialogProvider>
+        )}
+        {provider === 'bedrock' && (
+          <AWSBedrockSpecificFields
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
+            control={form.control}
+          />
+        )}
+        {provider === 'anthropic' && (
+          <AnthropicSpecificFields
+            isSecretsPending={isSecretsPending}
+            secrets={secrets}
+            control={form.control}
+          />
+        )}
+      </form>
+    </Form>
   );
 }
 
@@ -235,6 +206,8 @@ function SecretSelectorField({
   label: string;
   placeholder: string;
 }) {
+  const { setValue } = useFormContext<FormValues>();
+
   return (
     <FormField
       control={control}
@@ -249,7 +222,15 @@ function SecretSelectorField({
               <SelectTrigger className={cn(GHOST_TRIGGER, 'flex-1')}>
                 <SelectValue placeholder={placeholder} />
               </SelectTrigger>
-              <CreateNewSecretButton fieldName={fieldName} />
+              <CreateResourceButton
+                kind="secret"
+                onCreated={name =>
+                  setValue(fieldName, name, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
+              />
             </div>
             <SelectContent className="bg-fill-onsurface-ui-2">
               {isSecretsPending ? (
@@ -615,200 +596,5 @@ function AnthropicSpecificFields({
         )}
       />
     </>
-  );
-}
-
-const newSecretSchema = z.object({
-  name: kubernetesNameSchema,
-  password: z.string().min(1, 'Value is required'),
-});
-
-type NewSecretData = z.infer<typeof newSecretSchema>;
-
-type FormFields = KeysOfUnion<FormValues>;
-
-interface SecretDialogContext {
-  form: UseFormReturn<NewSecretData, unknown, NewSecretData>;
-  isPending: boolean;
-  handleSubmit: (formValues: NewSecretData) => void;
-  setFieldToSet: Dispatch<SetStateAction<FormFields | undefined>>;
-}
-
-const SecretDialogContext = createContext<SecretDialogContext | undefined>(
-  undefined,
-);
-
-type SecretDialogProviderProps = {
-  formValueSetter: UseFormSetValue<FormValues>;
-  namespace: string;
-};
-
-function SecretDialogProvider({
-  children,
-  formValueSetter,
-  namespace,
-}: PropsWithChildren<SecretDialogProviderProps>) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [fieldToSet, setFieldToSet] = useState<FormFields | undefined>(
-    undefined,
-  );
-
-  const form = useForm<NewSecretData>({
-    mode: 'onChange',
-    resolver: zodResolver(newSecretSchema),
-    defaultValues: {
-      name: '',
-      password: '',
-    },
-  });
-
-  const toggleDialog = useCallback(() => {
-    setIsOpen(prev => !prev);
-  }, []);
-
-  const handleSuccess = useCallback(
-    (data: SecretDetailResponse) => {
-      if (fieldToSet) {
-        formValueSetter(fieldToSet, data.name, {
-          shouldValidate: true,
-          shouldDirty: true,
-        });
-        setFieldToSet(undefined);
-      }
-      toggleDialog();
-    },
-    [toggleDialog, formValueSetter, fieldToSet],
-  );
-
-  const { mutate, isPending } = useCreateSecret({ onSuccess: handleSuccess });
-
-  const handleSubmit = useCallback(
-    (formValues: NewSecretData) => {
-      mutate(formValues);
-    },
-    [mutate],
-  );
-
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      if (open) {
-        form.reset();
-      }
-      toggleDialog();
-    },
-    [toggleDialog, form],
-  );
-
-  return (
-    <SecretDialogContext.Provider
-      value={{
-        form,
-        isPending,
-        handleSubmit,
-        setFieldToSet,
-      }}>
-      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-        {children}
-      </Dialog>
-    </SecretDialogContext.Provider>
-  );
-}
-
-function useSecretDialog() {
-  const context = useContext(SecretDialogContext);
-  if (!context) {
-    throw new Error(
-      'useSecretDialog must be used within a SecretDialogProvider',
-    );
-  }
-
-  return context;
-}
-
-type CreateNewSecretButtonProps = {
-  fieldName: FormFields;
-};
-
-function CreateNewSecretButton({ fieldName }: CreateNewSecretButtonProps) {
-  const { setFieldToSet } = useSecretDialog();
-
-  const handleClick = useCallback(() => {
-    setFieldToSet(fieldName);
-  }, [setFieldToSet, fieldName]);
-
-  return (
-    <DialogTrigger asChild onClick={handleClick}>
-      <Button type="button" variant="outline" size="default" className="">
-        Add New
-      </Button>
-    </DialogTrigger>
-  );
-}
-
-function CreateNewSecretDialog() {
-  const { form, handleSubmit, isPending } = useSecretDialog();
-
-  return (
-    <DialogContent className="sm:max-w-[425px]">
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(handleSubmit)}>
-          <DialogHeader>
-            <DialogTitle>Add New Secret</DialogTitle>
-            <DialogDescription>
-              Enter the details for the new secret.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder="e.g. api-key-production" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Value</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="password"
-                      placeholder="Enter the secret token"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                Cancel
-              </Button>
-            </DialogClose>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? (
-                <>
-                  <Spinner size="sm" className="mx-auto my-2" />
-                  <span>Adding Secret...</span>
-                </>
-              ) : (
-                <span>Add Secret</span>
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </Form>
-    </DialogContent>
   );
 }
