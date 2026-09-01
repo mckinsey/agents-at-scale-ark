@@ -324,14 +324,15 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	v1alpha1Storage := make(map[string]rest.Storage)
 	for _, res := range V1Alpha1Resources {
 		cfg := registry.ResourceConfig{
-			Kind:         res.Kind,
-			Resource:     res.Resource,
-			SingularName: res.SingularName,
-			NewFunc:      res.NewFunc,
-			NewListFunc:  res.NewListFunc,
+			Kind:          res.Kind,
+			Resource:      res.Resource,
+			SingularName:  res.SingularName,
+			ClusterScoped: res.ClusterScoped,
+			NewFunc:       res.NewFunc,
+			NewListFunc:   res.NewListFunc,
 		}
 		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-		v1alpha1Storage[res.Resource] = NewAdmissionStorage(inner, v)
+		v1alpha1Storage[res.Resource] = NewAdmissionStorage(inner, v, lookup)
 		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = v1alpha1Storage
@@ -339,14 +340,15 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	v1prealpha1Storage := make(map[string]rest.Storage)
 	for _, res := range V1PreAlpha1Resources {
 		cfg := registry.ResourceConfig{
-			Kind:         res.Kind,
-			Resource:     res.Resource,
-			SingularName: res.SingularName,
-			NewFunc:      res.NewFunc,
-			NewListFunc:  res.NewListFunc,
+			Kind:          res.Kind,
+			Resource:      res.Resource,
+			SingularName:  res.SingularName,
+			ClusterScoped: res.ClusterScoped,
+			NewFunc:       res.NewFunc,
+			NewListFunc:   res.NewListFunc,
 		}
 		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-		v1prealpha1Storage[res.Resource] = NewAdmissionStorage(inner, v)
+		v1prealpha1Storage[res.Resource] = NewAdmissionStorage(inner, v, lookup)
 		v1prealpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = v1prealpha1Storage
