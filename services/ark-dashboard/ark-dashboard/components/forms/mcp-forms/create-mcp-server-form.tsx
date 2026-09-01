@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from '@/components/ui/sonner';
@@ -8,6 +9,7 @@ import { toast } from '@/components/ui/sonner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { mcpServersService } from '@/lib/services';
 import type { MCPServerCreateRequest } from '@/lib/services/mcp-servers';
+import { GET_ALL_MCP_SERVERS_QUERY_KEY } from '@/lib/services/mcp-servers-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { McpServerFields } from './mcp-server-fields';
@@ -22,6 +24,7 @@ const addressMode: AddressMode = { kind: 'configuration' };
 export function CreateMcpServerForm() {
   const { push } = useNamespacedNavigation();
   const { namespace } = useNamespace();
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const headerRows = useHeaderRows();
 
@@ -51,6 +54,9 @@ export function CreateMcpServerForm() {
     setIsSubmitting(true);
     try {
       await mcpServersService.create(namespace, createData);
+      queryClient.invalidateQueries({
+        queryKey: [GET_ALL_MCP_SERVERS_QUERY_KEY],
+      });
       toast.success('MCP server created successfully');
       push('/mcp');
     } catch (error) {

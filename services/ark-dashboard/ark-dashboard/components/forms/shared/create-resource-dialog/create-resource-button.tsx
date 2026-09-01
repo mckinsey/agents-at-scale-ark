@@ -160,7 +160,11 @@ export function CreateResourceButton({
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)}>
+          <form
+            onSubmit={event => {
+              event.stopPropagation();
+              form.handleSubmit(handleSubmit)(event);
+            }}>
             <DialogHeader>
               <DialogTitle>{dialogTitle ?? copy.title}</DialogTitle>
               <DialogDescription>{copy.description}</DialogDescription>

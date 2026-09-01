@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from '@/components/ui/sonner';
@@ -8,6 +9,10 @@ import { toast } from '@/components/ui/sonner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { mcpServersService } from '@/lib/services';
 import type { MCPServerDetail } from '@/lib/services/mcp-servers';
+import {
+  GET_ALL_MCP_SERVERS_QUERY_KEY,
+  GET_MCP_SERVER_QUERY_KEY,
+} from '@/lib/services/mcp-servers-hooks';
 
 import { McpServerFields } from './mcp-server-fields';
 import { McpServerFormShell } from './mcp-server-form-shell';
@@ -33,6 +38,7 @@ export function UpdateMcpServerForm({
 }: Readonly<UpdateMcpServerFormProps>) {
   const { namespace } = useNamespace();
   const { push } = useNamespacedNavigation();
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const headerRows = useHeaderRows(mapDetailHeaders(server.headers));
 
@@ -61,6 +67,12 @@ export function UpdateMcpServerForm({
     try {
       await mcpServersService.update(namespace, server.name, {
         spec: buildSpec(values, nonEmptyHeaders, addressMode),
+      });
+      queryClient.invalidateQueries({
+        queryKey: [GET_ALL_MCP_SERVERS_QUERY_KEY],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [GET_MCP_SERVER_QUERY_KEY, server.name],
       });
       toast.success('MCP server updated successfully');
       push('/mcp');
