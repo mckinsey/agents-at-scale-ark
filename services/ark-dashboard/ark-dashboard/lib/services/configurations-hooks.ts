@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
 
 import { APIError } from '@/lib/api/client';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { configurationsService } from './configurations';
 import type {
@@ -26,25 +27,32 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 export const useGetAllConfigurations = () => {
+  const { namespace } = useNamespace();
+
   return useQuery({
-    queryKey: [GET_ALL_CONFIGURATIONS_QUERY_KEY],
-    queryFn: configurationsService.getAll,
+    queryKey: [GET_ALL_CONFIGURATIONS_QUERY_KEY, namespace],
+    queryFn: () => configurationsService.getAll(namespace),
+    enabled: Boolean(namespace),
   });
 };
 
 export const useGetConfiguration = (name: string | undefined) => {
+  const { namespace } = useNamespace();
+
   return useQuery({
-    queryKey: [GET_CONFIGURATION_QUERY_KEY, name],
-    queryFn: () => configurationsService.get(name ?? ''),
-    enabled: Boolean(name),
+    queryKey: [GET_CONFIGURATION_QUERY_KEY, name, namespace],
+    queryFn: () => configurationsService.get(namespace, name ?? ''),
+    enabled: Boolean(name) && Boolean(namespace),
   });
 };
 
 export const useGetConfigurationReferences = (name: string | undefined) => {
+  const { namespace } = useNamespace();
+
   return useQuery({
-    queryKey: [GET_CONFIGURATION_REFERENCES_QUERY_KEY, name],
-    queryFn: () => configurationsService.getReferences(name ?? ''),
-    enabled: Boolean(name),
+    queryKey: [GET_CONFIGURATION_REFERENCES_QUERY_KEY, name, namespace],
+    queryFn: () => configurationsService.getReferences(namespace, name ?? ''),
+    enabled: Boolean(name) && Boolean(namespace),
   });
 };
 
@@ -56,11 +64,12 @@ export const useCreateConfiguration = (
   props?: UseCreateConfigurationProps,
 ) => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
     mutationKey: [CREATE_CONFIGURATION_MUTATION_KEY],
     mutationFn: (request: ConfigurationCreateRequest) =>
-      configurationsService.create(request),
+      configurationsService.create(namespace, request),
     onSuccess: data => {
       toast.success('Configuration created successfully');
       props?.onSuccess?.(data);
@@ -91,6 +100,7 @@ export const useUpdateConfiguration = (
   props?: UseUpdateConfigurationProps,
 ) => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
     mutationKey: [UPDATE_CONFIGURATION_MUTATION_KEY],
@@ -100,7 +110,7 @@ export const useUpdateConfiguration = (
     }: {
       name: string;
       request: ConfigurationUpdateRequest;
-    }) => configurationsService.update(name, request),
+    }) => configurationsService.update(namespace, name, request),
     onSuccess: data => {
       toast.success('Configuration updated successfully');
       props?.onSuccess?.(data);
@@ -134,10 +144,11 @@ export const useDeleteConfiguration = (
   props?: UseDeleteConfigurationProps,
 ) => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
     mutationKey: [DELETE_CONFIGURATION_MUTATION_KEY],
-    mutationFn: (name: string) => configurationsService.delete(name),
+    mutationFn: (name: string) => configurationsService.delete(namespace, name),
     onSuccess: (_data, name) => {
       queryClient.removeQueries({
         queryKey: [GET_CONFIGURATION_QUERY_KEY, name],

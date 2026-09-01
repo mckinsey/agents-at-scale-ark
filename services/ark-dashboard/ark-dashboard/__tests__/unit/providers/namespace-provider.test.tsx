@@ -41,12 +41,12 @@ vi.mock('@/lib/services/namespaces-hooks', () => ({
 
 vi.mock('@/lib/api/client', () => {
   class APIClient {
-    setDefaultParam = vi.fn();
+    get = vi.fn();
   }
   return {
     APIClient,
     apiClient: {
-      setDefaultParam: vi.fn(),
+      get: vi.fn(),
     },
   };
 });

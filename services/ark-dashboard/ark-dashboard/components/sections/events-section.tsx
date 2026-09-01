@@ -42,6 +42,7 @@ import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Event, eventsService } from '@/lib/services/events';
 import { cn } from '@/lib/utils';
 import { formatAge } from '@/lib/utils/time';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 const COL = {
   added: 'w-[100px]',
@@ -140,6 +141,7 @@ export function EventsSection({
   name,
   totalCount,
 }: EventsSectionProps) {
+  const { namespace } = useNamespace();
   const router = useRouter();
   const { push: namespacedPush } = useNamespacedNavigation();
   const pathname = usePathname();
@@ -175,10 +177,10 @@ export function EventsSection({
         };
 
         // Always load filter options from ALL events to get complete lists
-        const filterOptions = await eventsService.getAllFilterOptions();
+        const filterOptions = await eventsService.getAllFilterOptions(namespace);
 
         // Then load filtered events based on current filters
-        const eventsData = await eventsService.getAll(filters);
+        const eventsData = await eventsService.getAll(namespace, filters);
 
         setEvents(eventsData.items);
         setTotalEvents(eventsData.total);
@@ -190,7 +192,7 @@ export function EventsSection({
         // If a kind is selected, filter names to only show names from that kind
         if (kind) {
           // Need to get all events to properly filter names by kind
-          const allEventsData = await eventsService.getAll({
+          const allEventsData = await eventsService.getAll(namespace, {
             kind: kind,
             limit: 1000, // Get more events to find all names for this kind
           });
@@ -218,20 +220,27 @@ export function EventsSection({
       }
     },
     // Depend on individual URL params, not objects
-    [page, limit, type, kind, name],
+    [namespace, page, limit, type, kind, name],
   );
 
   // Load events when URL params change
   useEffect(() => {
     // Create a filter string to compare
-    const filterString = JSON.stringify({ page, limit, type, kind, name });
+    const filterString = JSON.stringify({
+      namespace,
+      page,
+      limit,
+      type,
+      kind,
+      name,
+    });
 
     // Only load if filters have actually changed
     if (lastLoadedFilters.current !== filterString) {
       lastLoadedFilters.current = filterString;
       loadEvents();
     }
-  }, [loadEvents, page, limit, type, kind, name]);
+  }, [loadEvents, namespace, page, limit, type, kind, name]);
 
   // Create query string helper
   const createQueryString = useCallback(
