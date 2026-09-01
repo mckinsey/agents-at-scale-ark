@@ -21,6 +21,15 @@ vi.mock('@/lib/services/secrets', () => ({
   },
 }));
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'test-namespace',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 function renderButton(
   props: Partial<Parameters<typeof CreateResourceButton>[0]> = {},
 ) {
