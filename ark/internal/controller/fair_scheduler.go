@@ -58,7 +58,7 @@ func (s *fairScheduler) tryAcquire(ns string) bool {
 
 	if s.inFlight >= s.max {
 		s.markWaitingLocked(ns, now)
-		s.publishLocked()
+		s.publishLocked(ns)
 		return false
 	}
 
@@ -66,14 +66,14 @@ func (s *fairScheduler) tryAcquire(ns string) bool {
 	if s.perNS[ns] >= share {
 		s.markWaitingLocked(ns, now)
 		queryFairnessDeniedTotal.WithLabelValues(ns).Inc()
-		s.publishLocked()
+		s.publishLocked(ns)
 		return false
 	}
 
 	s.inFlight++
 	s.perNS[ns]++
 	delete(s.waitingSeen, ns)
-	s.publishLocked()
+	s.publishLocked(ns)
 	return true
 }
 
@@ -91,9 +91,8 @@ func (s *fairScheduler) release(ns string) {
 	}
 	if s.perNS[ns] == 0 {
 		delete(s.perNS, ns)
-		queryInflightGauge.DeleteLabelValues(ns)
 	}
-	s.publishLocked()
+	s.publishLocked(ns)
 }
 
 // shareLocked is the per-namespace cap for the current active-tenant count,
@@ -110,37 +109,49 @@ func (s *fairScheduler) shareLocked(ns string, now time.Time) int {
 // countActiveLocked returns the number of namespaces currently competing for
 // the pool: those with in-flight work, plus those that attempted and were
 // denied within the window, plus ns itself. Stale waiting entries are pruned.
+// Computed arithmetically (no set allocation) since it runs on every acquire.
 func (s *fairScheduler) countActiveLocked(ns string, now time.Time) int {
+	s.pruneWaitingLocked(now)
+	active := s.activeTenantsLocked()
+	if _, inFlight := s.perNS[ns]; !inFlight {
+		if _, waiting := s.waitingSeen[ns]; !waiting {
+			active++
+		}
+	}
+	return active
+}
+
+// activeTenantsLocked counts namespaces holding a slot plus those with a
+// (non-pruned) waiting mark not already counted. Allocation-free.
+func (s *fairScheduler) activeTenantsLocked() int {
+	active := len(s.perNS)
+	for k := range s.waitingSeen {
+		if _, inFlight := s.perNS[k]; !inFlight {
+			active++
+		}
+	}
+	return active
+}
+
+func (s *fairScheduler) pruneWaitingLocked(now time.Time) {
 	for k, seen := range s.waitingSeen {
 		if now.Sub(seen) > s.window {
 			delete(s.waitingSeen, k)
 		}
 	}
-
-	active := make(map[string]struct{}, len(s.perNS)+len(s.waitingSeen)+1)
-	for k := range s.perNS {
-		active[k] = struct{}{}
-	}
-	for k := range s.waitingSeen {
-		active[k] = struct{}{}
-	}
-	active[ns] = struct{}{}
-	return len(active)
 }
 
 func (s *fairScheduler) markWaitingLocked(ns string, now time.Time) {
 	s.waitingSeen[ns] = now
 }
 
-func (s *fairScheduler) publishLocked() {
-	for ns, n := range s.perNS {
+// publishLocked updates only the changed namespace's in-flight gauge and the
+// active-tenant gauge, so cost is independent of how many namespaces hold slots.
+func (s *fairScheduler) publishLocked(ns string) {
+	if n := s.perNS[ns]; n > 0 {
 		queryInflightGauge.WithLabelValues(ns).Set(float64(n))
+	} else {
+		queryInflightGauge.DeleteLabelValues(ns)
 	}
-	active := len(s.perNS)
-	for ns := range s.waitingSeen {
-		if _, ok := s.perNS[ns]; !ok {
-			active++
-		}
-	}
-	queryActiveTenantsGauge.Set(float64(active))
+	queryActiveTenantsGauge.Set(float64(s.activeTenantsLocked()))
 }
