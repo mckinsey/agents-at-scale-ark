@@ -53,6 +53,7 @@ import {
 import { useMultiFilePreview } from '@/hooks/use-multi-file-preview';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { filesService } from '@/lib/services/files';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import { useGetFilesCount } from '@/lib/services/files-count-hooks';
 import {
   useDeleteDirectory,
@@ -113,6 +114,7 @@ function RowActionsMenu({ children }: Readonly<{ children: React.ReactNode }>) {
 }
 
 export function FilesSection() {
+  const { namespace } = useNamespace();
   const [prefix, setPrefix] = useAtom(filesBrowserPrefixAtom);
   const [uploading, setUploading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -255,7 +257,7 @@ export function FilesSection() {
         type: pendingFile.type,
       });
 
-      await filesService.upload(renamedFile, prefix);
+      await filesService.upload(namespace, renamedFile, prefix);
 
       toast.success('File Uploaded Successfully');
       setPendingFile(null);
@@ -323,7 +325,7 @@ export function FilesSection() {
   };
 
   const handleDownload = (key: string) => {
-    filesService.download(key);
+    filesService.download(namespace, key);
   };
 
   const handleCopySuccess = (path: string) => {
@@ -336,7 +338,7 @@ export function FilesSection() {
     if (!nextToken) return;
 
     try {
-      const moreData = await filesService.list({
+      const moreData = await filesService.list(namespace, {
         prefix,
         max_keys: 100,
         continuation_token: nextToken,

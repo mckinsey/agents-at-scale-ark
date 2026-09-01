@@ -7,6 +7,15 @@ import { agentsService } from '@/lib/services/agents';
 import { teamsService } from '@/lib/services/teams';
 import { toolsService } from '@/lib/services/tools';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/agents');
 vi.mock('@/lib/services/teams');
 vi.mock('@/lib/services/tools');

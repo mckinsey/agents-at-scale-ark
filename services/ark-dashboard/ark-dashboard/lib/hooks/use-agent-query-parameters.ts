@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { components } from '@/lib/api/generated/types';
 import { agentsService, teamsService, toolsService } from '@/lib/services';
 import { extractAgentRequiredParams } from '@/lib/utils/query-parameters';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export type ApiQueryParameter = components['schemas']['QueryParameter'];
 
@@ -48,6 +49,7 @@ function stripPrefix(name: string): string {
 }
 
 async function deriveEngineToolWarning(
+  namespace: string,
   agent: AgentDetail | null,
 ): Promise<string | null> {
   const engineName = agent?.executionEngine?.name;
@@ -61,7 +63,7 @@ async function deriveEngineToolWarning(
   );
   const toolTypesByName = new Map<string, string>();
   if (needsToolTypes) {
-    const allTools = await toolsService.getAll().catch(() => []);
+    const allTools = await toolsService.getAll(namespace).catch(() => []);
     allTools.forEach(tool => {
       if (tool.type) toolTypesByName.set(tool.name, tool.type);
     });
@@ -81,11 +83,14 @@ async function deriveEngineToolWarning(
   return `Execution engine '${engineName}' receives only mcp tools. Not available to this agent: ${dropped.join(', ')}`;
 }
 
-async function resolveTeamMemberParameters(member: {
-  name: string;
-}): Promise<TeamAgentParameters> {
+async function resolveTeamMemberParameters(
+  namespace: string,
+  member: {
+    name: string;
+  },
+): Promise<TeamAgentParameters> {
   const agent = await agentsService
-    .getByName(stripPrefix(member.name))
+    .getByName(namespace, stripPrefix(member.name))
     .catch(() => null);
   return {
     name: member.name,
@@ -105,6 +110,7 @@ export function useAgentQueryParameters(
   participantName: string | null | undefined,
   participantType: string | null | undefined,
 ): UseAgentQueryParametersResult {
+  const { namespace } = useNamespace();
   const isTeam = participantType === 'team';
   const [availableParameters, setAvailableParameters] = useState<string[]>([]);
   const [teamAgents, setTeamAgents] = useState<TeamAgentParameters[]>([]);
@@ -136,14 +142,16 @@ export function useAgentQueryParameters(
     if (participantType === 'team') {
       const targetName = stripPrefix(participantName);
       teamsService
-        .getByName(targetName)
+        .getByName(namespace, targetName)
         .then(async team => {
           // Nested team members are not expanded for now; only agent members.
           const agentMembers = (team?.members || []).filter(
             member => member.type === 'agent',
           );
           const resolved = await Promise.all(
-            agentMembers.map(resolveTeamMemberParameters),
+            agentMembers.map(member =>
+              resolveTeamMemberParameters(namespace, member),
+            ),
           );
           if (cancelled) return;
           setTeamAgents(resolved.filter(entry => entry.parameters.length > 0));
@@ -165,13 +173,13 @@ export function useAgentQueryParameters(
 
     const targetName = stripPrefix(participantName);
     agentsService
-      .getByName(targetName)
+      .getByName(namespace, targetName)
       .then(async agent => {
         if (cancelled) return;
         setAvailableParameters(extractAgentRequiredParams(agent?.parameters));
         setTeamAgents([]);
         setRows([]);
-        const warning = await deriveEngineToolWarning(agent);
+        const warning = await deriveEngineToolWarning(namespace, agent);
         if (cancelled) return;
         setEngineToolWarning(warning);
       })
@@ -185,7 +193,7 @@ export function useAgentQueryParameters(
     return () => {
       cancelled = true;
     };
-  }, [participantName, participantType]);
+  }, [namespace, participantName, participantType]);
 
   // Total variable slots a user can fill: one row per variable for agents, and
   // one row per (agent, variable) pair for teams.

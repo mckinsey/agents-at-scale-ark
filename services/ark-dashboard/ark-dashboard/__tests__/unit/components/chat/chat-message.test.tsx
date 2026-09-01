@@ -16,6 +16,15 @@ vi.mock('@/lib/services/a2a-task-approvals', () => ({
   submitApproval: vi.fn(),
 }));
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'test-namespace',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 describe('ChatMessage', () => {
   describe('basic rendering', () => {
     it('should render user message', () => {
@@ -289,7 +298,6 @@ describe('ChatMessage', () => {
           content=""
           approvalRequest={approvalRequest}
           queryName="q-1"
-          namespace="default"
           pollAfterApproval={pollAfterApproval}
         />,
       );
@@ -299,7 +307,7 @@ describe('ChatMessage', () => {
       await waitFor(() =>
         expect(submitApproval).toHaveBeenCalledWith(
           'a2a-task-task-123',
-          'default',
+          'test-namespace',
           'approved',
         ),
       );
@@ -314,7 +322,6 @@ describe('ChatMessage', () => {
           content=""
           approvalRequest={approvalRequest}
           queryName="q-1"
-          namespace="default"
           pollAfterApproval={pollAfterApproval}
         />,
       );
@@ -324,7 +331,7 @@ describe('ChatMessage', () => {
       await waitFor(() =>
         expect(submitApproval).toHaveBeenCalledWith(
           'a2a-task-task-123',
-          'default',
+          'test-namespace',
           'rejected',
         ),
       );

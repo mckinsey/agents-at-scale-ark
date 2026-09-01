@@ -25,8 +25,8 @@ export function useWorkflowTemplateAccess(): WorkflowTemplateAccess {
     setCanUpdate(false);
 
     Promise.allSettled([
-      workflowTemplatesService.canCreate(),
-      workflowTemplatesService.canUpdate(),
+      workflowTemplatesService.canCreate(namespace),
+      workflowTemplatesService.canUpdate(namespace),
     ]).then(([createResult, updateResult]) => {
       if (cancelled) {
         return;
