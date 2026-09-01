@@ -10,6 +10,15 @@ import {
 } from '@/lib/services/workflow-mapper';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
   useSearchParams: vi.fn(),

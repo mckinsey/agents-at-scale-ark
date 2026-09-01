@@ -225,4 +225,13 @@ for server in request.mcpServers:
 
 Your executor connects to each MCP server using its own MCP client (e.g., via LangChain, CrewAI, or the MCP SDK directly). The `tools` list is an allowlist — only register and use tools that appear in this list, even if the server exposes additional tools.
 
-Non-MCP tool types (http, agent, team, builtin) are not included in `mcpServers`.
+Non-MCP tool types (http, agent, team, builtin) are not included in `mcpServers`. MCP is the only tool type with a dialable endpoint, so there is nothing for an engine to invoke.
+
+Attaching one anyway is accepted, but warns. Applying the agent prints an admission warning naming the engine and the dropped tools:
+
+```
+Warning: agent 'toolagent': execution engine 'my-engine' receives only mcp tools;
+these tools will not be available to the agent: get-coordinates (http)
+```
+
+The dashboard shows the same warning in the agent's chat panel, and the SDK logs it when it builds the request. Without this the tool is dropped silently and the agent answers that it does not exist.

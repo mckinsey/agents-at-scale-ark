@@ -83,7 +83,7 @@ export function useToolForm({
     const loadTool = async () => {
       setLoading(true);
       try {
-        const detail = await toolsService.getDetail(toolName);
+        const detail = await toolsService.getDetail(namespace, toolName);
         if (cancelled) return;
         setTool(detail);
         reset(toolToFormValues(detail));
@@ -109,7 +109,7 @@ export function useToolForm({
     const loadAgents = async () => {
       setAgentsLoading(true);
       try {
-        const data = await agentsService.getAll();
+        const data = await agentsService.getAll(namespace);
         if (!cancelled) setAgents(data);
       } catch (error) {
         console.error('Failed to load agents:', error);
@@ -129,7 +129,7 @@ export function useToolForm({
     const loadTeams = async () => {
       setTeamsLoading(true);
       try {
-        const data = await teamsService.getAll();
+        const data = await teamsService.getAll(namespace);
         if (!cancelled) setTeams(data);
       } catch (error) {
         console.error('Failed to load teams:', error);
@@ -183,10 +183,9 @@ export function useToolForm({
 
     setSaving(true);
     try {
-      await toolsService.create({
+      await toolsService.create(namespace, {
         name: values.name.trim(),
         ...specFields,
-        namespace,
       });
       onSuccess?.();
     } catch (error) {

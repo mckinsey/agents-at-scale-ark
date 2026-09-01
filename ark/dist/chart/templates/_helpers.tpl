@@ -105,6 +105,19 @@ false
 {{- end -}}
 {{- end -}}
 
+{{- define "ark.watchNamespaceSelector" -}}
+{{- with .Values.controllerManager.watchNamespaces -}}
+namespaceSelector:
+  matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: In
+      values:
+      {{- range . }}
+        - {{ . | quote }}
+      {{- end }}
+{{- end }}
+{{- end -}}
+
 {{- define "ark.originAnnotations" -}}
 {{- if .Values.origin }}
 ark.mckinsey.com/origin: {{ dict "type" (.Values.origin.type | default "marketplace") "uri" .Values.origin.uri "version" .Chart.Version | toJson | quote }}

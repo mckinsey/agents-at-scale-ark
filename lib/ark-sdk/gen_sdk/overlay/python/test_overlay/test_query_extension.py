@@ -742,6 +742,14 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         tool.name = name
         return tool
 
+    def _make_params_partial_agent_tool(self, name):
+        tool = MagicMock()
+        tool.name = name
+        tool.partial = SimpleNamespace(
+            name=None, parameters=[SimpleNamespace(name="units", value="metric")]
+        )
+        return tool
+
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")
     async def test_single_server_multiple_tools(self, mock_with_client, mock_init_k8s):
@@ -880,10 +888,128 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         mock_with_client.return_value = mock_ctx
 
         ref = QueryRef(name="q1", namespace="default")
-        request = await resolve_query(ref, "hi")
+        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+            request = await resolve_query(ref, "hi")
 
         self.assertEqual(len(request.mcpServers), 1)
         self.assertEqual(request.mcpServers[0].name, "github-mcp")
+        self.assertEqual(request.mcpServers[0].tools, ["search"])
+
+        message = "\n".join(log.output)
+        self.assertIn("a1", message)
+        self.assertIn("weather-api (http)", message)
+        self.assertIn("only mcp tools", message)
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_no_drop_warning_when_all_tools_are_mcp(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [self._make_agent_tool("github-mcp-search")]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(return_value=self._make_tool_crd("mcp", "github-mcp", "search"))
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=self._make_mcp_server_crd("http://github:8080/mcp"))
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        with self.assertNoLogs("ark_sdk.extensions.query", level="WARNING"):
+            request = await resolve_query(ref, "hi")
+
+        self.assertEqual(len(request.mcpServers), 1)
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_tool_with_unreadable_type_is_not_reported(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [self._make_agent_tool("typeless")]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(return_value=self._make_tool_crd(None))
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        with self.assertNoLogs("ark_sdk.extensions.query", level="WARNING"):
+            request = await resolve_query(ref, "hi")
+
+        self.assertEqual(request.mcpServers, [])
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_partial_with_only_preset_parameters_still_reaches_the_executor(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [self._make_params_partial_agent_tool("weather-mcp")]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(return_value=self._make_tool_crd("mcp", "github-mcp", "search"))
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=self._make_mcp_server_crd())
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        with self.assertNoLogs("ark_sdk.extensions.query", level="WARNING"):
+            request = await resolve_query(ref, "hi")
+
+        mock_ark.tools.a_get.assert_awaited_once_with("weather-mcp", "default")
+        self.assertEqual(len(request.mcpServers), 1)
         self.assertEqual(request.mcpServers[0].tools, ["search"])
 
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)

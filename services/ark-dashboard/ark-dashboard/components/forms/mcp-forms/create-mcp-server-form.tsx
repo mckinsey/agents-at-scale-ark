@@ -48,7 +48,7 @@ export function CreateMcpServerForm() {
 
     setIsSubmitting(true);
     try {
-      await mcpServersService.create(createData);
+      await mcpServersService.create(namespace, createData);
       toast.success('MCP server created successfully');
       push('/mcp');
     } catch (error) {
