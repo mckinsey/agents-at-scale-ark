@@ -77,6 +77,12 @@ completions:
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
   enable: true
+  # The ark-deployer ClusterRole grants the permissions needed to deploy Ark
+  # from a CI/CD system (e.g. GitHub Actions with OIDC federation). The role is
+  # not bound by the chart and is not used by the controller itself. Disable it
+  # if you do not deploy Ark through a CI/CD identity.
+  deployer:
+    enable: true
   # Service account impersonation for multi-tenancy
   impersonation:
     # Enable impersonation to allow the controller to execute queries using the
