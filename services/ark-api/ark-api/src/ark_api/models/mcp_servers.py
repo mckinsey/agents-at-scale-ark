@@ -52,6 +52,16 @@ class MCPServerValueSource(BaseModel):
             }
 
 
+class MCPServerAddressSource(BaseModel):
+    """Read model for spec.address: reports both fields as stored.
+
+    MCPServerValueSource is the write model and its serializer collapses to
+    whichever of value/valueFrom is set, which would hide the origin here.
+    """
+    value: Optional[str] = None
+    valueFrom: Optional[MCPServerValueFrom] = None
+
+
 class MCPServerHeader(BaseModel):
     name: str
     value: MCPServerValueSource
@@ -98,6 +108,7 @@ class MCPServerDetailResponse(BaseModel):
     annotations: Optional[Dict[str, str]] = None
     available: Optional[AvailabilityStatus] = None
     address: Optional[str] = None
+    address_source: Optional[MCPServerAddressSource] = None
     transport: Optional[str] = None
     headers: Optional[List[MCPServerHeader]]
     tool_count: Optional[int] = None
