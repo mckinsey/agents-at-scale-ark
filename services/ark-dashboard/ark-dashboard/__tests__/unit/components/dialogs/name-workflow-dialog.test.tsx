@@ -5,6 +5,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NameWorkflowDialog } from '@/components/dialogs/name-workflow-dialog';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/workflow-templates', () => ({
   workflowTemplatesService: {
     list: vi.fn(),

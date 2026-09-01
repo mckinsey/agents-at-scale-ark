@@ -17,6 +17,7 @@ import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Event } from '@/lib/services/events';
 import { eventsService } from '@/lib/services/events';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 function formatTimestamp(timestamp: string | undefined | null) {
   if (!timestamp) return '—';
@@ -51,6 +52,7 @@ function EventBreadcrumb({ current }: Readonly<{ current: string }>) {
 }
 
 function EventDetailContent() {
+  const { namespace } = useNamespace();
   const params = useParams();
   const eventId = params.id as string;
 
@@ -60,7 +62,7 @@ function EventDetailContent() {
   useEffect(() => {
     const loadEvent = async () => {
       try {
-        const eventData = await eventsService.get(eventId);
+        const eventData = await eventsService.get(namespace, eventId);
         setEvent(eventData);
       } catch (error) {
         toast.error('Failed to Load Event', {
@@ -75,7 +77,7 @@ function EventDetailContent() {
     };
 
     loadEvent();
-  }, [eventId]);
+  }, [namespace, eventId]);
 
   const breadcrumb = <EventBreadcrumb current={eventId} />;
 

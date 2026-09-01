@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
 
 import { APIError } from '@/lib/api/client';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { secretsService } from './secrets';
 import type { Secret, SecretDetailResponse } from './secrets';
@@ -13,17 +14,22 @@ export const UPDATE_SECRET_MUTATION_KEY = 'update-secret';
 export const DELETE_SECRET_MUTATION_KEY = 'delete-secret';
 
 export const useGetAllSecrets = () => {
+  const { namespace } = useNamespace();
+
   return useQuery({
-    queryKey: [GET_ALL_SECRETS_QUERY_KEY],
-    queryFn: secretsService.getAll,
+    queryKey: [GET_ALL_SECRETS_QUERY_KEY, namespace],
+    queryFn: () => secretsService.getAll(namespace),
+    enabled: Boolean(namespace),
   });
 };
 
 export const useGetSecret = (name: string | undefined) => {
+  const { namespace } = useNamespace();
+
   return useQuery({
-    queryKey: [GET_SECRET_QUERY_KEY, name],
-    queryFn: () => secretsService.get(name ?? ''),
-    enabled: Boolean(name),
+    queryKey: [GET_SECRET_QUERY_KEY, name, namespace],
+    queryFn: () => secretsService.get(namespace, name ?? ''),
+    enabled: Boolean(name && namespace),
   });
 };
 
@@ -33,25 +39,27 @@ type UseCreateSecretProps = {
 
 export const useCreateSecret = (props: UseCreateSecretProps) => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
     mutationKey: [CREATE_SECRET_MUTATION_KEY],
     mutationFn: ({ name, password }: { name: string; password: string }) => {
-      return secretsService.create(name, password);
+      return secretsService.create(namespace, name, password);
     },
     onMutate: async newSecret => {
       // Cancel any outgoing refetches
       // (so they don't overwrite our optimistic update)
       await queryClient.cancelQueries({
-        queryKey: [GET_ALL_SECRETS_QUERY_KEY],
+        queryKey: [GET_ALL_SECRETS_QUERY_KEY, namespace],
       });
       // Snapshot the previous value
       const previousTodos: Secret[] | undefined = queryClient.getQueryData([
         GET_ALL_SECRETS_QUERY_KEY,
+        namespace,
       ]);
       // Optimistically update to the new value
       queryClient.setQueryData(
-        [GET_ALL_SECRETS_QUERY_KEY],
+        [GET_ALL_SECRETS_QUERY_KEY, namespace],
         (old: Secret[] | undefined): Secret[] => [
           ...(old ?? []),
           { id: newSecret.name, name: newSecret.name },
@@ -71,7 +79,7 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
       // If the mutation fails,
       // use the result returned from onMutate to roll back
       queryClient.setQueryData(
-        [GET_ALL_SECRETS_QUERY_KEY],
+        [GET_ALL_SECRETS_QUERY_KEY, namespace],
         onMutateResult?.previousTodos,
       );
 
@@ -102,11 +110,12 @@ type UseUpdateSecretProps = {
 
 export const useUpdateSecret = (props: UseUpdateSecretProps) => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
     mutationKey: [UPDATE_SECRET_MUTATION_KEY],
     mutationFn: ({ name, password }: { name: string; password: string }) => {
-      return secretsService.update(name, password);
+      return secretsService.update(namespace, name, password);
     },
     onSuccess: data => {
       toast.success('Secret updated successfully');
@@ -142,11 +151,12 @@ type UseDeleteSecretProps = {
 
 export const useDeleteSecret = (props?: UseDeleteSecretProps) => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
     mutationKey: [DELETE_SECRET_MUTATION_KEY],
     mutationFn: (name: string) => {
-      return secretsService.delete(name);
+      return secretsService.delete(namespace, name);
     },
     onSuccess: () => {
       toast.success('Secret deleted successfully');

@@ -389,6 +389,7 @@ describe('conversationsService', () => {
       const { chatService } = await import('@/lib/services/chat');
 
       await conversationsService.sendMessage({
+        namespace: 'default',
         conversationId: 'conv-1',
         message: 'Hello',
         sessionId: 'session-1',
@@ -397,6 +398,7 @@ describe('conversationsService', () => {
       });
 
       expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+        'default',
         'Hello',
         'agent',
         'test-agent',
@@ -412,6 +414,7 @@ describe('conversationsService', () => {
       const { chatService } = await import('@/lib/services/chat');
 
       await conversationsService.sendMessage({
+        namespace: 'default',
         conversationId: 'conv-1',
         message: 'Hello',
         sessionId: 'session-1',
@@ -420,6 +423,7 @@ describe('conversationsService', () => {
       });
 
       expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+        'default',
         'Hello',
         'agent',
         'test-agent',
@@ -435,6 +439,7 @@ describe('conversationsService', () => {
       const { chatService } = await import('@/lib/services/chat');
 
       await conversationsService.sendMessage({
+        namespace: 'default',
         conversationId: 'conv-1',
         message: 'Hello',
         sessionId: 'session-1',
@@ -442,6 +447,7 @@ describe('conversationsService', () => {
       });
 
       expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+        'default',
         'Hello',
         'agent',
         'test-agent',

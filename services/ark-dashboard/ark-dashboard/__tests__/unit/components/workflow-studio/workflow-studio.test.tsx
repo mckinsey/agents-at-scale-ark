@@ -148,8 +148,9 @@ describe('WorkflowStudio', () => {
         expect(workflowTemplatesService.save).toHaveBeenCalledTimes(1);
       });
 
-      const [savedYaml, savedMode] = vi.mocked(workflowTemplatesService.save)
-        .mock.calls[0];
+      const [, savedYaml, savedMode] = vi.mocked(
+        workflowTemplatesService.save,
+      ).mock.calls[0];
       expect(savedMode).toBe('create');
       expect(savedYaml).toContain('name: my-workflow');
       expect(savedYaml).not.toContain('placeholder');
@@ -186,7 +187,7 @@ describe('WorkflowStudio', () => {
       await waitFor(() => {
         expect(workflowTemplatesService.save).toHaveBeenCalledTimes(1);
       });
-      expect(vi.mocked(workflowTemplatesService.save).mock.calls[0][1]).toBe(
+      expect(vi.mocked(workflowTemplatesService.save).mock.calls[0][2]).toBe(
         'update',
       );
     });
@@ -233,7 +234,7 @@ describe('WorkflowStudio', () => {
       await waitFor(() => {
         expect(workflowTemplatesService.save).toHaveBeenCalledTimes(1);
       });
-      expect(vi.mocked(workflowTemplatesService.save).mock.calls[0][1]).toBe(
+      expect(vi.mocked(workflowTemplatesService.save).mock.calls[0][2]).toBe(
         'update',
       );
       expect(workflowTemplatesService.nameExists).not.toHaveBeenCalled();
@@ -443,7 +444,7 @@ describe('WorkflowStudio', () => {
         expect(workflowTemplatesService.save).toHaveBeenCalledTimes(1);
       });
 
-      const [savedYaml] = vi.mocked(workflowTemplatesService.save).mock
+      const [, savedYaml] = vi.mocked(workflowTemplatesService.save).mock
         .calls[0];
       expect(savedYaml).toContain('workflows.argoproj.io/title: My Title');
       expect(savedYaml).toContain(

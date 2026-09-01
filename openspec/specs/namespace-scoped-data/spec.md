@@ -1,8 +1,10 @@
+# namespace-scoped-data Specification
+
 ## Purpose
 
 Defines how the active namespace identifies the dashboard's fetched and cached data, so resources belonging to one namespace are never displayed, requested, or stored for another.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Displayed resources belong to the active namespace
 
@@ -22,6 +24,11 @@ The dashboard SHALL display only resources belonging to the namespace currently 
 
 - **WHEN** the active namespace changes to one that contains no resources of the displayed type
 - **THEN** the screen shows an empty state rather than the previous namespace's resources
+
+#### Scenario: A list retrieved across several pages
+
+- **WHEN** a resource list is large enough that the dashboard retrieves it in more than one page
+- **THEN** every page is retrieved for the active namespace, so no page of the list belongs to another namespace
 
 ### Requirement: Requests are deferred until the active namespace is resolved
 

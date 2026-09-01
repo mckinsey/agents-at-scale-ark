@@ -59,7 +59,7 @@ export function SecretsSection() {
   useEffect(() => {
     const loadModels = async () => {
       try {
-        setModels(await modelsService.getAll());
+        setModels(await modelsService.getAll(namespace));
       } catch (error) {
         console.error('Failed to load models:', error);
       }
