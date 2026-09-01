@@ -11,8 +11,15 @@ import type { MCPServerDetail } from '@/lib/services/mcp-servers';
 
 import { McpServerFields } from './mcp-server-fields';
 import { McpServerFormShell } from './mcp-server-form-shell';
-import type { FormValues } from './utils';
-import { buildSpec, formSchema, mapDetailHeaders, useHeaderRows } from './utils';
+import type { AddressMode, FormValues } from './utils';
+import {
+  buildSpec,
+  buildUpdateAddressMode,
+  createFormSchema,
+  mapDetailAddress,
+  mapDetailHeaders,
+  useHeaderRows,
+} from './utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 const formId = 'update-mcp-server-form';
@@ -29,13 +36,17 @@ export function UpdateMcpServerForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const headerRows = useHeaderRows(mapDetailHeaders(server.headers));
 
+  const urlState = mapDetailAddress(server.address_source, server.address);
+  const addressMode: AddressMode = buildUpdateAddressMode(urlState);
+
   const form = useForm<FormValues>({
     mode: 'onChange',
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(createFormSchema(addressMode)),
     defaultValues: {
       name: server.name,
       description: server.description ?? '',
-      baseUrl: server.address ?? '',
+      configurationName:
+        urlState.kind === 'configuration' ? urlState.configurationName : '',
       transport: server.transport === 'sse' ? 'sse' : 'http',
     },
   });
@@ -49,7 +60,7 @@ export function UpdateMcpServerForm({
     setIsSubmitting(true);
     try {
       await mcpServersService.update(namespace, server.name, {
-        spec: buildSpec(values, nonEmptyHeaders),
+        spec: buildSpec(values, nonEmptyHeaders, addressMode),
       });
       toast.success('MCP server updated successfully');
       push('/mcp');
@@ -78,6 +89,7 @@ export function UpdateMcpServerForm({
         formId={formId}
         onSubmit={onSubmit}
         headerRows={headerRows}
+        urlState={urlState}
         nameDisabled
         transportDisabled
       />

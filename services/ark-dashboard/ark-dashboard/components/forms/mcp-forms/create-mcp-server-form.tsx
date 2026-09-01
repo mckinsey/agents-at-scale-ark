@@ -12,10 +12,12 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { McpServerFields } from './mcp-server-fields';
 import { McpServerFormShell } from './mcp-server-form-shell';
-import type { FormValues } from './utils';
-import { buildSpec, formSchema, useHeaderRows } from './utils';
+import type { AddressMode, FormValues } from './utils';
+import { buildSpec, createFormSchema, useHeaderRows } from './utils';
 
 const formId = 'create-mcp-server-form';
+
+const addressMode: AddressMode = { kind: 'configuration' };
 
 export function CreateMcpServerForm() {
   const { push } = useNamespacedNavigation();
@@ -25,11 +27,11 @@ export function CreateMcpServerForm() {
 
   const form = useForm<FormValues>({
     mode: 'onChange',
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(createFormSchema(addressMode)),
     defaultValues: {
       name: '',
       description: '',
-      baseUrl: '',
+      configurationName: '',
       transport: 'http',
     },
   });
@@ -43,7 +45,7 @@ export function CreateMcpServerForm() {
     const createData: MCPServerCreateRequest = {
       name: values.name,
       namespace,
-      spec: buildSpec(values, nonEmptyHeaders),
+      spec: buildSpec(values, nonEmptyHeaders, addressMode),
     };
 
     setIsSubmitting(true);
@@ -76,6 +78,7 @@ export function CreateMcpServerForm() {
         formId={formId}
         onSubmit={onSubmit}
         headerRows={headerRows}
+        urlState={{ kind: 'create' }}
       />
     </McpServerFormShell>
   );
