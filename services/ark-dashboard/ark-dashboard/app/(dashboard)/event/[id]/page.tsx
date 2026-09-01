@@ -19,15 +19,6 @@ import { eventsService } from '@/lib/services/events';
 import { formatTimestamp } from '@/lib/utils/time';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-function formatTimestamp(timestamp: string | undefined | null) {
-  if (!timestamp) return '—';
-  try {
-    return new Date(timestamp).toLocaleString();
-  } catch {
-    return timestamp;
-  }
-}
-
 function EventBreadcrumb({ current }: Readonly<{ current: string }>) {
   return (
     <DetailBreadcrumb backHref="/events" backLabel="Events" current={current} />

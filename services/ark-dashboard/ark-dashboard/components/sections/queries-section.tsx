@@ -239,7 +239,6 @@ export function QueriesSection({
   queryResult,
 }: Readonly<QueriesSectionProps>) {
   const { namespace } = useNamespace();
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const { data, isLoading, isError, error, refetch } = queryResult;
 
