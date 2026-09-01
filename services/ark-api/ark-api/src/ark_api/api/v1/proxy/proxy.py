@@ -166,9 +166,11 @@ async def _proxy_request(
                 key: value for key, value in response.headers.items()
                 if key.lower() not in hop_by_hop_headers
             }
+            # Only a 2xx body is the file; sanitizing a JSON error would mask its status.
             if (
                 file_gateway_server
                 and file_gateway_path
+                and 200 <= response.status_code < 300
                 and is_file_gateway_download(
                     file_gateway_server, request.method, file_gateway_path
                 )

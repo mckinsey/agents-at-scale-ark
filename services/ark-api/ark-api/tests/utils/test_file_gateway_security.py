@@ -46,6 +46,41 @@ class TestFileGatewaySecurity(unittest.TestCase):
         self.assertNotIn(b"<script", sanitized_body.lower())
         self.assertNotIn(b"onload=", sanitized_body.lower())
 
+    def test_sanitize_upload_handles_all_name_parameter_forms(self):
+        # RFC 2045 allows an unquoted token and spaces around "="; both bypassed the match.
+        for disposition in (
+            b'Content-Disposition: form-data; name="file"; filename="x.svg"',
+            b"Content-Disposition: form-data; name='file'; filename='x.svg'",
+            b"Content-Disposition: form-data; name=file; filename=x.svg",
+            b'Content-Disposition: form-data; name = "file"; filename="x.svg"',
+            b'Content-Disposition: form-data; name="upload"; filename="x.svg"',
+        ):
+            body = (
+                b"--B\r\n" + disposition + b"\r\nContent-Type: image/svg+xml\r\n\r\n"
+                + MALICIOUS_SVG + b"\r\n--B--\r\n"
+            )
+            sanitized = sanitize_file_gateway_upload(
+                body, "multipart/form-data; boundary=B"
+            )
+            with self.subTest(disposition=disposition):
+                self.assertNotIn(b"<script", sanitized.lower())
+                self.assertNotIn(b"onload=", sanitized.lower())
+
+    def test_sanitize_upload_leaves_non_svg_parts_untouched(self):
+        # Safe only because SVG detection is a root-element check.
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="prefix"\r\n\r\nuploads\r\n'
+            b'--B\r\nContent-Disposition: form-data; name="note"\r\n\r\n'
+            b"<html><p>svg rocks</p><br></html>\r\n"
+            b'--B\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\n'
+            b"Content-Type: image/png\r\n\r\n\x89PNG\r\n\x1a\n\r\n--B--\r\n"
+        )
+
+        self.assertEqual(
+            sanitize_file_gateway_upload(body, "multipart/form-data; boundary=B"),
+            body,
+        )
+
     def test_secure_download_adds_attachment_headers(self):
         content, headers = secure_file_gateway_download(
             MALICIOUS_SVG,
@@ -94,9 +129,7 @@ class TestFileGatewaySecurity(unittest.TestCase):
         self.assertTrue(disposition.startswith('attachment; filename="'))
 
     def test_secure_download_neutralizes_active_content_type(self):
-        # An image-extension file served as text/html: the dashboard preview turns
-        # non-svg images into a blob: URL whose type is the response content-type,
-        # and opening that blob in a tab would execute the body in the app origin.
+        # The preview blobs non-svg images with the response type, so text/html executes.
         _, headers = secure_file_gateway_download(
             b"<html><script>alert(1)</script></html>",
             {"content-type": "text/html"},
@@ -107,8 +140,7 @@ class TestFileGatewaySecurity(unittest.TestCase):
         self.assertEqual(len([k for k in headers if k.lower() == "content-type"]), 1)
 
     def test_secure_download_preserves_real_image_content_type(self):
-        # Downgrading every type would break the <img> preview, so genuine image
-        # types must survive untouched.
+        # Downgrading every type would break the <img> preview.
         _, headers = secure_file_gateway_download(
             b"\x89PNG\r\n",
             {"content-type": "image/png"},

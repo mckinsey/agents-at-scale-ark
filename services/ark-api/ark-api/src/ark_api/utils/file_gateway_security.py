@@ -14,8 +14,7 @@ from .svg_sanitize import (
 
 FILE_GATEWAY_SERVICES = frozenset({"file-gateway-api", "file-gateway"})
 DOWNLOAD_SUFFIX = "/download"
-# Types a browser executes as a document. SVG is absent on purpose: it is
-# sanitized above and the preview needs a real image type to render.
+# Types a browser executes as a document; SVG is excluded, it is sanitized instead.
 ACTIVE_CONTENT_TYPES = frozenset({
     "text/html",
     "application/xhtml+xml",
@@ -121,12 +120,9 @@ def sanitize_file_gateway_upload(body: bytes, content_type: str | None) -> bytes
     rebuilt_parts: list[tuple[str, bytes]] = []
     changed = False
 
+    # Every part: a raw match on name="file" misses name=file; only <svg> roots change.
     for headers, content in _iter_multipart_parts(body, boundary):
         filename, part_content_type = _parse_multipart_headers(headers)
-        if 'name="file"' not in headers and "name='file'" not in headers:
-            rebuilt_parts.append((headers, content))
-            continue
-
         try:
             sanitized = sanitize_svg_if_needed(filename, part_content_type, content)
         except ValueError as exc:
@@ -182,10 +178,7 @@ def secure_file_gateway_download(
         if key.lower() not in dropped
     }
     if neutralize_type:
-        # Attachment alone does not cover a client that re-wraps the body in a
-        # blob: URL — the response headers are lost and the blob's own type
-        # decides whether opening it executes script. Lower-case key so the
-        # proxy's media_type lookup picks this up instead of the original.
+        # A blob: URL keeps the type but loses headers; lower-case key so media_type reads it.
         response_headers["content-type"] = "application/octet-stream"
     response_headers["Content-Disposition"] = _content_disposition(filename)
     response_headers["X-Content-Type-Options"] = "nosniff"

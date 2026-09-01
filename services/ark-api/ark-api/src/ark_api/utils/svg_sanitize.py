@@ -1,5 +1,6 @@
 """Sanitize SVG content to prevent script execution when rendered in browsers."""
 
+import io
 import re
 from xml.etree import ElementTree as ET
 
@@ -8,8 +9,7 @@ try:
 except ImportError:
     DefusedET = ET
 
-# Spec-defined XML namespace identifiers, never fetched. The http:// form is
-# literal: rewriting it to https:// emits a namespace browsers do not treat as SVG.
+# Namespace identifiers, never fetched; https:// here would not be treated as SVG.
 ET.register_namespace("", "http://www.w3.org/2000/svg")  # NOSONAR - namespace identifier, not a URL
 ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")  # NOSONAR - namespace identifier, not a URL
 
@@ -32,6 +32,8 @@ DANGEROUS_LOCAL_NAMES = frozenset({
 EVENT_HANDLER_ATTR = re.compile(r"^on[a-z]+", re.I)
 HREF_SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*:", re.I)
 UNSAFE_STYLE = re.compile(r"expression\s*\(|javascript:", re.I)
+# Browsers drop these before parsing a scheme, so "java&#9;script:" runs as "javascript:".
+URL_IGNORED_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 FILENAME_ATTR = re.compile(r'filename="([^"]+)"', re.I)
 CONTENT_TYPE_ATTR = re.compile(r"content-type:\s*([^\r\n]+)", re.I)
 
@@ -54,10 +56,21 @@ def is_svg_content_type(content_type: str | None) -> bool:
 
 
 def looks_like_svg(content: bytes) -> bool:
+    """Content-sniff an SVG document, for payloads smuggled under another name."""
     if not content:
         return False
     head = content[:4096].lstrip()
-    return head.startswith(b"<") and b"svg" in head[:512].lower()
+    if not head.startswith(b"<") or b"svg" not in head[:512].lower():
+        return False
+    try:
+        # Root element decides; "start" events stop there, so large files are not read.
+        for _event, elem in DefusedET.iterparse(io.BytesIO(content), events=("start",)):
+            return _local_name(elem.tag) == "svg"
+    except ET.ParseError:
+        return False
+    except Exception:  # noqa: BLE001 - defusedxml refused it, so fail closed
+        return True
+    return False
 
 
 def is_svg_payload(filename: str | None, content_type: str | None, content: bytes) -> bool:
@@ -73,7 +86,7 @@ def _is_safe_href(value: str) -> bool:
     protocol-relative prefix (//) is treated as unsafe and stripped, which blocks
     both script execution and external resource loading (data exfiltration).
     """
-    stripped = value.strip()
+    stripped = URL_IGNORED_CHARS.sub("", value).strip()
     if not stripped or stripped.startswith("#"):
         return True
     if stripped.startswith("//"):
@@ -93,13 +106,14 @@ def _sanitize_attributes(elem: ET.Element) -> None:
             if not _is_safe_href(elem.attrib[attr]):
                 del elem.attrib[attr]
             continue
-        if local_attr == "style" and UNSAFE_STYLE.search(elem.attrib[attr]):
+        if local_attr == "style" and UNSAFE_STYLE.search(
+            URL_IGNORED_CHARS.sub("", elem.attrib[attr])
+        ):
             del elem.attrib[attr]
 
 
 def _sanitize_element(elem: ET.Element) -> None:
-    # list() snapshots the children: removing from a live element shifts the
-    # index and skips the next sibling, letting adjacent <script> tags survive.
+    # list() snapshots: removing from a live element skips the next sibling.
     for child in list(elem):  # NOSONAR - iterating a snapshot while mutating
         if _local_name(child.tag) in DANGEROUS_LOCAL_NAMES:
             elem.remove(child)
