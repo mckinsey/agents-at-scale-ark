@@ -70,13 +70,14 @@ export const filesService = {
       `files/${encodeURIComponent(key)}/download`,
       { namespace },
     );
+    // Save rather than navigate: backstops ark-api's attachment header (stored XSS) and avoids window.open's stranded tab.
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = key.split('/').pop() || 'download';
     anchor.rel = 'noopener noreferrer';
     document.body.appendChild(anchor);
     anchor.click();
-    document.body.removeChild(anchor);
+    anchor.remove();
   },
 
   async deleteDirectory(

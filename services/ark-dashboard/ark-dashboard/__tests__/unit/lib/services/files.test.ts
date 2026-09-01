@@ -265,14 +265,13 @@ describe('filesService', () => {
   });
 
   describe('download', () => {
-    let appendChildSpy: ReturnType<typeof vi.spyOn>;
-    let removeChildSpy: ReturnType<typeof vi.spyOn>;
     let clickSpy: ReturnType<typeof vi.fn>;
+    let removeSpy: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
       clickSpy = vi.fn();
-      appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation(node => node);
-      removeChildSpy = vi.spyOn(document.body, 'removeChild').mockImplementation(node => node);
+      removeSpy = vi.fn();
+      vi.spyOn(document.body, 'appendChild').mockImplementation(node => node);
       vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
         if (tag === 'a') {
           return {
@@ -280,6 +279,7 @@ describe('filesService', () => {
             download: '',
             rel: '',
             click: clickSpy,
+            remove: removeSpy,
           } as unknown as HTMLAnchorElement;
         }
         return document.createElement(tag);
@@ -294,6 +294,7 @@ describe('filesService', () => {
         { namespace: 'default' },
       );
       expect(clickSpy).toHaveBeenCalled();
+      expect(removeSpy).toHaveBeenCalled();
     });
 
     it('should URL encode the file key in download URL', () => {

@@ -8,8 +8,10 @@ try:
 except ImportError:
     DefusedET = ET
 
-ET.register_namespace("", "http://www.w3.org/2000/svg")
-ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
+# Spec-defined XML namespace identifiers, never fetched. The http:// form is
+# literal: rewriting it to https:// emits a namespace browsers do not treat as SVG.
+ET.register_namespace("", "http://www.w3.org/2000/svg")  # NOSONAR - namespace identifier, not a URL
+ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")  # NOSONAR - namespace identifier, not a URL
 
 # Elements removed entirely: they can execute script, embed active/external
 # content, or animate attributes into dangerous values.
@@ -80,7 +82,8 @@ def _is_safe_href(value: str) -> bool:
 
 
 def _sanitize_attributes(elem: ET.Element) -> None:
-    for attr in list(elem.attrib):
+    # list() snapshots the keys: deleting from a live attrib raises RuntimeError.
+    for attr in list(elem.attrib):  # NOSONAR - iterating a snapshot while mutating
         attr_lower = attr.lower()
         local_attr = attr_lower.rsplit("}", 1)[-1] if "}" in attr_lower else attr_lower
         if EVENT_HANDLER_ATTR.match(local_attr):
@@ -95,7 +98,9 @@ def _sanitize_attributes(elem: ET.Element) -> None:
 
 
 def _sanitize_element(elem: ET.Element) -> None:
-    for child in list(elem):
+    # list() snapshots the children: removing from a live element shifts the
+    # index and skips the next sibling, letting adjacent <script> tags survive.
+    for child in list(elem):  # NOSONAR - iterating a snapshot while mutating
         if _local_name(child.tag) in DANGEROUS_LOCAL_NAMES:
             elem.remove(child)
             continue

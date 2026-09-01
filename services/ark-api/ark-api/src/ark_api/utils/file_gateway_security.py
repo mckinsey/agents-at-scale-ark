@@ -13,6 +13,15 @@ from .svg_sanitize import (
 )
 
 FILE_GATEWAY_SERVICES = frozenset({"file-gateway-api", "file-gateway"})
+DOWNLOAD_SUFFIX = "/download"
+# Types a browser executes as a document. SVG is absent on purpose: it is
+# sanitized above and the preview needs a real image type to render.
+ACTIVE_CONTENT_TYPES = frozenset({
+    "text/html",
+    "application/xhtml+xml",
+    "text/xml",
+    "application/xml",
+})
 SVG_DOWNLOAD_CSP = (
     "default-src 'none'; script-src 'none'; object-src 'none'; frame-src 'none'"
 )
@@ -97,7 +106,7 @@ def is_file_gateway_download(server_name: str, method: str, path: str) -> bool:
     return (
         server_name in FILE_GATEWAY_SERVICES
         and method.upper() == "GET"
-        and path.rstrip("/").endswith("/download")
+        and path.rstrip("/").endswith(DOWNLOAD_SUFFIX)
     )
 
 
@@ -134,9 +143,9 @@ def sanitize_file_gateway_upload(body: bytes, content_type: str | None) -> bytes
 
 def _filename_from_download_path(path: str) -> str | None:
     trimmed = path.rstrip("/")
-    if not trimmed.endswith("/download"):
+    if not trimmed.endswith(DOWNLOAD_SUFFIX):
         return None
-    file_path = trimmed[: -len("/download")]
+    file_path = trimmed[: -len(DOWNLOAD_SUFFIX)]
     if "/" not in file_path:
         return unquote(file_path)
     return unquote(file_path.rsplit("/", 1)[-1])
@@ -161,11 +170,23 @@ def secure_file_gateway_download(
     # header is the primary control: it neutralizes stored XSS for any file type
     # (SVG, HTML, etc.) regardless of content. SVG sanitize + CSP are added on top
     # as defense-in-depth.
+    dropped = {"content-length", "content-disposition"}
+    base_type = (content_type or "").split(";")[0].strip().lower()
+    neutralize_type = base_type in ACTIVE_CONTENT_TYPES
+    if neutralize_type:
+        dropped.add("content-type")
+
     response_headers = {
         key: value
         for key, value in response_headers.items()
-        if key.lower() not in {"content-length", "content-disposition"}
+        if key.lower() not in dropped
     }
+    if neutralize_type:
+        # Attachment alone does not cover a client that re-wraps the body in a
+        # blob: URL — the response headers are lost and the blob's own type
+        # decides whether opening it executes script. Lower-case key so the
+        # proxy's media_type lookup picks this up instead of the original.
+        response_headers["content-type"] = "application/octet-stream"
     response_headers["Content-Disposition"] = _content_disposition(filename)
     response_headers["X-Content-Type-Options"] = "nosniff"
     response_headers["Content-Length"] = str(len(content))
