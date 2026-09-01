@@ -23,8 +23,8 @@ export class JsonFileStore<T> {
 
   constructor(
     private readonly logger: Logger,
-    private name: string,
-    private path?: string
+    private readonly name: string,
+    private readonly path?: string
   ) {
     this.legacyPath = path?.endsWith('.jsonl')
       ? path.replace(/\.jsonl$/, '.json')
