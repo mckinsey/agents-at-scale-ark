@@ -72,6 +72,17 @@ Enabling it adds a second ClusterRole, `ark-apiserver-admission-webhooks`, grant
 Before wiring either mechanism the apiserver runs a `SelfSubjectAccessReview` for each of its watches. A missing or deleted `ark-apiserver-admission-policy` ClusterRoleBinding therefore lands on the same fallback as an unsupported host, naming the binding — rather than leaving the plugin's informers unable to sync, which upstream turns into a 10-second stall and an opaque `Forbidden` on **every write**. The review needs no extra RBAC (`system:basic-user` grants it to all authenticated identities). It confirms the grant exists at startup only; a binding removed while the process is running still fails at request time, which is what that mechanism's `required` is for.
 - `policy.extraParamRules` — extra RBAC rules for policies that use `paramKind`. The plugin builds a dynamic informer per `paramKind` and the policy silently never matches if it cannot read that resource. ConfigMaps and Secrets are already covered by the parameter-resolution role, so ConfigMap-based params work out of the box; **any other `paramKind` needs a rule here.**
 
+### Metrics
+
+`metrics.enabled=true` (default `false`) serves Prometheus metrics on port `8443` and adds a `metrics` port to the Service (and to the NetworkPolicy when enabled). The endpoint exposes the Ark apiserver collectors (`ark_apiserver_storage_*`, `ark_apiserver_requests_*`, `ark_apiserver_admission_enforcement_active`), the watch broadcaster collectors (`ark_apiserver_watch_*`) and the PostgreSQL backend gauges:
+
+- `ark_apiserver_wal_consumer_active` — `1` on the replica running the WAL consumer; across a healthy deployment the sum is exactly `1`.
+- `ark_apiserver_wal_last_message_timestamp_seconds` — staleness means the consumer is wedged.
+- `ark_apiserver_replication_slot_lag_bytes` — WAL pinned by the `ark_cdc` slot; a climbing value is the disk-filling condition described under "Replication slot lifecycle". Sampled every 30s on the leader; `NaN` elsewhere. The query reads `pg_replication_slots`, which works for the slot owner by default — a locked-down role needs `GRANT pg_monitor TO <role>`.
+- `ark_apiserver_db_pool_*` — connection pool stats (`sql.DBStats`); `wait_count_total` rising means pool exhaustion.
+
+`metrics.secure=true` (default) serves HTTPS and requires a bearer token authorized via TokenReview/SubjectAccessReview; the RBAC is already covered by the `system:auth-delegator` binding. `metrics.serviceMonitor.enabled=true` renders a ServiceMonitor (requires the Prometheus Operator CRDs) scraping every `metrics.serviceMonitor.interval` (default `30s`).
+
 ### Replication slot lifecycle
 
 The apiserver creates a **persistent** logical replication slot named `ark_cdc` on the configured PostgreSQL database to drive its watch stream. The slot survives apiserver pod restarts, which is what lets watchers resume from the last confirmed WAL position rather than missing events from the restart gap.

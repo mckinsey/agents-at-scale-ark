@@ -12,5 +12,11 @@ spec:
       port: {{ .Values.apiserver.port }}
       targetPort: {{ .Values.apiserver.port }}
       protocol: TCP
+    {{- if .Values.metrics.enabled }}
+    - name: metrics
+      port: 8443
+      targetPort: metrics
+      protocol: TCP
+    {{- end }}
   selector:
     {{- include "ark-apiserver.selectorLabels" . | nindent 4 }}

@@ -14,6 +14,9 @@ import (
 )
 
 func (p *PostgreSQLBackend) startWALConsumer() {
+	walConsumerActive.Set(1)
+	defer walConsumerActive.Set(0)
+
 	backoff := time.Second
 	maxBackoff := 30 * time.Second
 

@@ -127,6 +127,18 @@ policy:
   #       verbs: ["get", "list", "watch"]
   extraParamRules: []
 
+# Prometheus metrics endpoint (controller-runtime metrics server on port 8443). Serves
+# the Ark apiserver collectors plus the WAL consumer, replication slot lag and DB pool
+# gauges from the PostgreSQL backend.
+metrics:
+  enabled: false
+  # Serve HTTPS with authn/authz filtering (TokenReview + SubjectAccessReview); the
+  # auth-delegator binding the chart already grants covers the required RBAC.
+  secure: true
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+
 networkPolicy:
   enabled: false
   extraIngressFrom: []
