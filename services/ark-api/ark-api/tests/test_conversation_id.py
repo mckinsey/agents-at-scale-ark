@@ -32,6 +32,8 @@ CRD_PATH = (
     / "ark.mckinsey.com_queries.yaml"
 )
 
+NON_CONSTRAINING_KEYWORDS = {"description", "default", "example", "title"}
+
 ENGINE_GENERATED = [
     "550e8400-e29b-41d4-a716-446655440000",
     "hitl-demo-conv-001",
@@ -87,7 +89,15 @@ class TestEngineGeneratedIdsRoundTrip(unittest.TestCase):
 
 
 class TestCrdDoesNotNarrowSpec(unittest.TestCase):
-    """spec.conversationId must not carry a rule status.conversationId lacks."""
+    """spec.conversationId and status.conversationId must validate identically.
+
+    A rule on spec that status does not enforce breaks reuse of engine-generated
+    IDs. A rule on status breaks the write from the engine, which turns one
+    misbehaving engine into a reconcile loop. So the two must agree, and the
+    check compares every schema keyword rather than a named list: a marker such
+    as XValidation or Enum narrows spec without touching pattern, maxLength,
+    minLength or format, and would walk past a fixed enumeration.
+    """
 
     def _conversation_id_schemas(self):
         if not CRD_PATH.exists():
@@ -100,13 +110,21 @@ class TestCrdDoesNotNarrowSpec(unittest.TestCase):
             schema["status"]["properties"]["conversationId"],
         )
 
-    def test_spec_is_no_stricter_than_status(self):
+    def test_spec_and_status_validate_identically(self):
         spec, status = self._conversation_id_schemas()
-        for keyword in ("pattern", "maxLength", "minLength", "format"):
-            with self.subTest(keyword=keyword):
-                self.assertEqual(
-                    spec.get(keyword),
-                    status.get(keyword),
-                    f"spec.conversationId {keyword} differs from status: any rule "
-                    f"not enforced on status breaks reuse of engine-generated IDs",
-                )
+
+        differing = sorted(
+            keyword
+            for keyword in set(spec) | set(status)
+            if keyword not in NON_CONSTRAINING_KEYWORDS
+            and spec.get(keyword) != status.get(keyword)
+        )
+
+        self.assertEqual(
+            differing,
+            [],
+            f"spec.conversationId and status.conversationId disagree on "
+            f"{differing}: a rule on spec that status does not enforce breaks "
+            f"reuse of engine-generated IDs, and a rule on status breaks the "
+            f"write from the engine",
+        )
