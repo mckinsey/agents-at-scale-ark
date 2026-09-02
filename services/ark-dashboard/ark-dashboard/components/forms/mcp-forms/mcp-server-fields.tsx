@@ -132,6 +132,8 @@ export function McpServerFields({
               deleteRow={deleteRow}
               nameError={headerErrors[row.key]?.nameError}
               valueError={headerErrors[row.key]?.valueError}
+              namePlaceholder="e.g., Authorization"
+              valuePlaceholder="e.g., Bearer token"
             />
           ))}
           <Button

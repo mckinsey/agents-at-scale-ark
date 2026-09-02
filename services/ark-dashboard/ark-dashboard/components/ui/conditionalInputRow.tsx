@@ -32,6 +32,8 @@ interface ConditionalInputRowProps {
   deleteRow: (key: string) => void;
   nameError?: string;
   valueError?: string;
+  namePlaceholder?: string;
+  valuePlaceholder?: string;
 }
 
 export function ConditionalInputRow({
@@ -41,6 +43,8 @@ export function ConditionalInputRow({
   deleteRow,
   nameError,
   valueError,
+  namePlaceholder,
+  valuePlaceholder,
 }: ConditionalInputRowProps) {
   return (
     <div className="flex items-start gap-3">
@@ -50,7 +54,7 @@ export function ConditionalInputRow({
           variant="inline"
           value={data.name}
           onChange={e => onChange({ name: e.target.value })}
-          placeholder="e.g., Authorization"
+          placeholder={namePlaceholder}
           aria-invalid={!!nameError}
         />
         {nameError && (
@@ -86,7 +90,7 @@ export function ConditionalInputRow({
               variant="inline"
               value={data.value}
               onChange={e => onChange({ value: e.target.value })}
-              placeholder="e.g., Bearer token"
+              placeholder={valuePlaceholder}
               aria-invalid={!!valueError}
             />
             {valueError && (
