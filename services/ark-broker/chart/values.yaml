@@ -73,7 +73,6 @@ redis:
     mountPath: /etc/redis-ssl
 
   keyPrefix: "ark-broker"
-  streamTtlSeconds: 3600
   connectTimeoutMs: 10000
   debugCommands: false
 
@@ -144,14 +143,16 @@ memory:
 # Each store persists to JSON. Limits prevent unbounded file growth.
 # Estimates: messages ~2KB, chunks ~500B, spans ~1KB, events ~500B each
 limits:
-  # Max messages to persist (~100MB at 50k messages)
-  maxMessages: 50000
-  # Max stream chunks to persist (~100MB at 200k chunks)
-  maxChunks: 200000
-  # Max trace spans to persist (~100MB at 100k spans)
-  maxSpans: 100000
-  # Max events to persist (~100MB at 200k events)
-  maxEvents: 200000
+  # Per-store in-memory byte budgets. Each store retains the most-recent data
+  # within its budget; the sum is sized to fit the ~870MB Node heap the
+  # container derives from its memory limit (see app.resources). Raise these and
+  # app.resources.limits.memory together to retain more.
+  messageMaxBytes: 104857600 # 100 MiB — conversation memory
+  eventMaxBytes: 104857600 # 100 MiB — operation events
+  chunkMaxBytes: 33554432 # 32 MiB — transient streaming chunks (also TTL-bounded)
+  traceMaxBytes: 33554432 # 32 MiB — OTEL spans
+  # Retention window for streaming chunks, in seconds.
+  chunkTtlSeconds: 3600
 
 # Prometheus ServiceMonitor for the broker's GET /metrics endpoint.
 # Requires the Prometheus Operator (monitoring.coreos.com/v1) in the cluster.
@@ -175,15 +176,15 @@ persistence:
   size: 1Gi
   # Path where data will be stored
   mountPath: /data
-  # Filename for the memory data
-  memoryFileName: messages.json
-  # Filename for the stream data
-  streamFileName: completionchunks.json
-  # Filename for the trace data
-  traceFileName: oteltraces.json
-  # Filename for the event data
-  eventFileName: events.json
-  # Filename for the sessions data
+  # Filename for the memory data (JSONL: header line + one record per line)
+  memoryFileName: messages.jsonl
+  # Filename for the stream data (JSONL)
+  streamFileName: completionchunks.jsonl
+  # Filename for the trace data (JSONL)
+  traceFileName: oteltraces.jsonl
+  # Filename for the event data (JSONL)
+  eventFileName: events.jsonl
+  # Filename for the sessions data (single JSON object, not JSONL)
   sessionsFileName: sessions.json
   # Use existing PVC instead of creating a new one
   existingClaim: ""
