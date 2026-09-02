@@ -3,6 +3,7 @@ import type {MessageData} from '../memory-broker.js';
 import type {PaginatedList, PaginationParams} from '../pagination.js';
 import type {BrokerItem} from './broker-item.js';
 import {InMemoryQueryDeletableStream} from './in-memory-query-deletable-stream.js';
+import type {InMemoryStreamOptions} from './in-memory-stream.js';
 import type {
   ConversationStats,
   MessageFilter,
@@ -14,8 +15,8 @@ export class InMemoryMessageStream
   extends InMemoryQueryDeletableStream<MessageData>
   implements MessageStream
 {
-  constructor(logger: Logger, name: string, path?: string, maxItems?: number) {
-    super(logger, name, (data) => data.queryId, path, maxItems);
+  constructor(logger: Logger, name: string, opts?: InMemoryStreamOptions) {
+    super(logger, name, (data) => data.queryId, opts);
   }
 
   private predicateFor(filter: MessageFilter): Predicate<MessageData> {

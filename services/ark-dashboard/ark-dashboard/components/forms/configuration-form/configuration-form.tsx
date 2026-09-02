@@ -2,7 +2,8 @@
 
 import { useId } from 'react';
 
-import { ChevronLeft, Info } from '@/components/icons';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
+import { Info } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -56,8 +57,8 @@ export function ConfigurationForm({
     return (
       <div
         aria-hidden
-        className="flex w-full content-shell flex-1 flex-col gap-6 pt-16">
-        {SKELETON_FIELDS.map((field) => (
+        className="content-shell flex w-full flex-1 flex-col gap-6 pt-16">
+        {SKELETON_FIELDS.map(field => (
           <div key={field} className="flex w-[576px] flex-col gap-2">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-9 w-full" />
@@ -68,25 +69,14 @@ export function ConfigurationForm({
   }
 
   return (
-    <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
+    <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
       <header className="flex flex-none flex-col gap-4">
         <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <ChevronLeft className="size-4 text-white/30" />
-            <NamespacedLink
-              href="/configurations"
-              className="text-white/30 transition-colors hover:text-white/60">
-              Configurations
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-white/60">
-              /
-            </span>
-            <span aria-current="page" className="text-white/60">
-              {heading}
-            </span>
-          </nav>
+          <DetailBreadcrumb
+            backHref="/configurations"
+            backLabel="Configurations"
+            current={heading}
+          />
           <div className="flex items-center gap-2">
             <NamespacedLink href="/configurations">
               <Button variant="outline">Cancel</Button>
