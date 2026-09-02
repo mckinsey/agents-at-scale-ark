@@ -142,7 +142,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'my-a2a-server');
 
-      const descInput = screen.getByPlaceholderText('What this server does');
+      const descInput = screen.getByPlaceholderText('what this server does');
       await user.type(descInput, 'My A2A server description');
 
       const urlInput = screen.getByPlaceholderText(
