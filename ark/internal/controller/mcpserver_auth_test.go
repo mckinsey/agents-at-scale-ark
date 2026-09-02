@@ -212,7 +212,7 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationDiscoveryFailed))
 	})
 
-	It("populates authorization state even when auth server metadata fetch fails", func() {
+	It("surfaces state=DiscoveryFailed when auth server metadata yields no usable endpoints", func() {
 		srv := fakeMCPServerWithOpts(fakeMCPServerOpts{compliant: true, brokenAuthServer: true})
 		defer srv.Close()
 
@@ -242,16 +242,37 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
 
 		Expect(out.Status.Authorization).NotTo(BeNil())
-		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateRequired))
-		Expect(out.Status.Authorization.Resource).To(Equal(srv.URL + "/mcp"))
-		Expect(out.Status.Authorization.ResourceName).To(Equal("Fake MCP (Test)"))
-		Expect(out.Status.Authorization.AuthorizationServers).To(ConsistOf(srv.URL))
+		// Required would offer the dashboard an Authenticate button that
+		// ark-api rejects with 422, since auth/start needs both endpoints.
+		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateDiscoveryFailed))
 		Expect(out.Status.Authorization.AuthorizationEndpoint).To(BeEmpty())
 		Expect(out.Status.Authorization.TokenEndpoint).To(BeEmpty())
 
 		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
 		Expect(avail).NotTo(BeNil())
-		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationRequired))
+		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationDiscoveryFailed))
+	})
+
+	It("keeps state=Required for a machine-managed server whose AS advertises no authorization_endpoint", func() {
+		srv := newMachineMCPServer(machineMCPOpts{advertiseClientCredentials: true})
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-cc-no-authz-endpoint"
+		createMachineMCPServer(ctx, name, srv.URL+"/mcp", srv.privateKey)
+
+		r := newMachineReconciler()
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+
+		// client_credentials has no browser redirect, so a missing
+		// authorization_endpoint is normal and must not be downgraded to
+		// DiscoveryFailed — the controller mints the token itself.
+		Expect(out.Status.Authorization).NotTo(BeNil())
+		Expect(out.Status.Authorization.State).NotTo(Equal(arkv1alpha1.MCPServerAuthorizationStateDiscoveryFailed))
+		Expect(out.Status.Authorization.AuthorizationEndpoint).To(BeEmpty())
+		Expect(out.Status.Authorization.TokenEndpoint).To(Equal(srv.URL + "/token"))
 	})
 
 	It("surfaces state=DiscoveryFailed when the server returns 401 without a usable WWW-Authenticate header", func() {
