@@ -96,5 +96,115 @@ class TestAuthorizationBlock(unittest.TestCase):
             self.assertNotIn(forbidden, serialized)
 
 
+class TestAddressSource(unittest.TestCase):
+    @staticmethod
+    def _mcp(address):
+        spec = {"transport": "http"}
+        if address is not None:
+            spec["address"] = address
+        return {
+            "metadata": {"name": "github-mcp", "namespace": "team-a"},
+            "spec": spec,
+            "status": {"resolvedAddress": "https://resolved.example/mcp"},
+        }
+
+    def test_literal_address_exposes_value(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp({"value": "https://api.githubcopilot.com/mcp/"})
+        )
+        self.assertEqual(
+            resp.address_source.value, "https://api.githubcopilot.com/mcp/"
+        )
+        self.assertIsNone(resp.address_source.valueFrom)
+
+    def test_config_map_address_exposes_reference(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp(
+                {
+                    "valueFrom": {
+                        "configMapKeyRef": {"name": "github-mcp-url", "key": "value"}
+                    }
+                }
+            )
+        )
+        self.assertEqual(
+            resp.address_source.valueFrom.configMapKeyRef.name, "github-mcp-url"
+        )
+        self.assertEqual(resp.address_source.valueFrom.configMapKeyRef.key, "value")
+        self.assertIsNone(resp.address_source.value)
+
+    def test_service_ref_address_is_preserved(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp(
+                {
+                    "valueFrom": {
+                        "serviceRef": {
+                            "name": "ark-mcp",
+                            "port": "http",
+                            "path": "/mcp",
+                            "namespace": "ark",
+                        }
+                    }
+                }
+            )
+        )
+        service_ref = resp.address_source.valueFrom.serviceRef
+        self.assertEqual(service_ref.name, "ark-mcp")
+        self.assertEqual(service_ref.path, "/mcp")
+        self.assertEqual(service_ref.namespace, "ark")
+
+    def test_query_parameter_ref_address_is_preserved(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp({"valueFrom": {"queryParameterRef": {"name": "endpoint"}}})
+        )
+        self.assertEqual(
+            resp.address_source.valueFrom.queryParameterRef.name, "endpoint"
+        )
+        self.assertIsNone(resp.address_source.value)
+
+    def test_secret_key_ref_address_is_preserved(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp(
+                {"valueFrom": {"secretKeyRef": {"name": "mcp-url", "key": "address"}}}
+            )
+        )
+        secret_ref = resp.address_source.valueFrom.secretKeyRef
+        self.assertEqual(secret_ref.name, "mcp-url")
+        self.assertEqual(secret_ref.key, "address")
+        self.assertIsNone(resp.address_source.value)
+
+    def test_missing_address_yields_none(self):
+        resp = mcp_server_to_detail_response(self._mcp(None))
+        self.assertIsNone(resp.address_source)
+
+    def test_resolved_address_is_unchanged(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp(
+                {
+                    "valueFrom": {
+                        "configMapKeyRef": {"name": "github-mcp-url", "key": "value"}
+                    }
+                }
+            )
+        )
+        self.assertEqual(resp.address, "https://resolved.example/mcp")
+
+    def test_reference_survives_serialization(self):
+        resp = mcp_server_to_detail_response(
+            self._mcp(
+                {
+                    "valueFrom": {
+                        "configMapKeyRef": {"name": "github-mcp-url", "key": "value"}
+                    }
+                }
+            )
+        )
+        dumped = resp.model_dump()["address_source"]
+        self.assertEqual(
+            dumped["valueFrom"]["configMapKeyRef"]["name"], "github-mcp-url"
+        )
+        self.assertIsNone(dumped["value"])
+
+
 if __name__ == "__main__":
     unittest.main()

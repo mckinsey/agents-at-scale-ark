@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MetricCard } from '@/components/cards/metric-card';
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams('namespace=test-ns'),
 }));

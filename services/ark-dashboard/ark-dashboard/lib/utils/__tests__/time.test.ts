@@ -15,10 +15,20 @@ describe('formatAge', () => {
     expect(formatAge('')).toBe('-');
   });
 
-  it('should return "now" for times less than 1 minute ago', () => {
+  it('should format seconds correctly', () => {
     const now = new Date('2024-01-01T12:00:00Z');
+
     const thirtySecondsAgo = new Date(now.getTime() - 30 * 1000);
-    expect(formatAge(thirtySecondsAgo.toISOString())).toBe('now');
+    expect(formatAge(thirtySecondsAgo.toISOString())).toBe('30s ago');
+
+    const fiftyNineSecondsAgo = new Date(now.getTime() - 59 * 1000);
+    expect(formatAge(fiftyNineSecondsAgo.toISOString())).toBe('59s ago');
+  });
+
+  it('should return "now" for times less than 1 second ago', () => {
+    const now = new Date('2024-01-01T12:00:00Z');
+    const halfASecondAgo = new Date(now.getTime() - 500);
+    expect(formatAge(halfASecondAgo.toISOString())).toBe('now');
   });
 
   it('should return "now" for future dates', () => {
@@ -31,15 +41,15 @@ describe('formatAge', () => {
 
     // 5 minutes ago
     const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-    expect(formatAge(fiveMinutesAgo.toISOString())).toBe('5m');
+    expect(formatAge(fiveMinutesAgo.toISOString())).toBe('5m ago');
 
     // 12 minutes ago
     const twelveMinutesAgo = new Date(now.getTime() - 12 * 60 * 1000);
-    expect(formatAge(twelveMinutesAgo.toISOString())).toBe('12m');
+    expect(formatAge(twelveMinutesAgo.toISOString())).toBe('12m ago');
 
     // 59 minutes ago
     const fiftyNineMinutesAgo = new Date(now.getTime() - 59 * 60 * 1000);
-    expect(formatAge(fiftyNineMinutesAgo.toISOString())).toBe('59m');
+    expect(formatAge(fiftyNineMinutesAgo.toISOString())).toBe('59m ago');
   });
 
   it('should format hours correctly', () => {
@@ -47,19 +57,21 @@ describe('formatAge', () => {
 
     // Exactly 3 hours ago
     const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-    expect(formatAge(threeHoursAgo.toISOString())).toBe('3h');
+    expect(formatAge(threeHoursAgo.toISOString())).toBe('3h ago');
 
     // 3 hours and 5 minutes ago
     const threeHoursFiveMinutesAgo = new Date(
       now.getTime() - (3 * 60 + 5) * 60 * 1000,
     );
-    expect(formatAge(threeHoursFiveMinutesAgo.toISOString())).toBe('3h5m');
+    expect(formatAge(threeHoursFiveMinutesAgo.toISOString())).toBe('3h5m ago');
 
     // 3 hours and 14 minutes ago
     const threeHoursFourteenMinutesAgo = new Date(
       now.getTime() - (3 * 60 + 14) * 60 * 1000,
     );
-    expect(formatAge(threeHoursFourteenMinutesAgo.toISOString())).toBe('3h14m');
+    expect(formatAge(threeHoursFourteenMinutesAgo.toISOString())).toBe(
+      '3h14m ago',
+    );
   });
 
   it('should format days correctly', () => {
@@ -67,17 +79,17 @@ describe('formatAge', () => {
 
     // Exactly 2 days ago
     const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
-    expect(formatAge(twoDaysAgo.toISOString())).toBe('2d');
+    expect(formatAge(twoDaysAgo.toISOString())).toBe('2d ago');
 
     // 2 days and 1 hour ago
     const twoDaysOneHourAgo = new Date(
       now.getTime() - (2 * 24 + 1) * 60 * 60 * 1000,
     );
-    expect(formatAge(twoDaysOneHourAgo.toISOString())).toBe('2d1h');
+    expect(formatAge(twoDaysOneHourAgo.toISOString())).toBe('2d1h ago');
 
     // 40 hours ago (1d16h)
     const fortyHoursAgo = new Date(now.getTime() - 40 * 60 * 60 * 1000);
-    expect(formatAge(fortyHoursAgo.toISOString())).toBe('1d16h');
+    expect(formatAge(fortyHoursAgo.toISOString())).toBe('1d16h ago');
   });
 
   it('should return full date for times more than a week ago', () => {

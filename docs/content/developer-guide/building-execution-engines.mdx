@@ -116,6 +116,31 @@ spec:
 
 Without this annotation, streaming requests are handled transparently — clients still receive a valid SSE response, just without incremental chunks.
 
+### Streaming text and tool calls
+
+`BaseExecutor` provides two methods for pushing activity to the stream as it happens:
+
+```python
+async def execute_agent(self, request):
+    await self.stream_chunk("Looking that up...")
+
+    await self.stream_tool_call(
+        name="Bash",
+        arguments={"command": "ls /tmp"},   # dict or pre-serialized JSON string
+        tool_call_id="toolu_1",             # optional, from your framework
+    )
+```
+
+`stream_chunk()` emits a text delta. `stream_tool_call()` emits an OpenAI-format `delta.tool_calls` chunk, the same shape the built-in completions engine produces, so the dashboard and CLI render engine tool activity without any client changes. Call it as each tool is invoked — an agent running a long tool loop otherwise appears idle until it produces text.
+
+Both are no-ops when the broker is unavailable or the call is a team-member sub-request, so they are always safe to call.
+
+Streaming state is scoped to the request, so concurrent queries handled by the same executor never share it. Child tasks inherit that state, so calling either method from `asyncio.gather()` or `asyncio.create_task()` works — including the streamed-text flag, which is visible to the caller afterwards.
+
+Both methods are coroutines and must be awaited on the event loop. Do not call them from a worker thread: `asyncio.to_thread()` and a raw `threading.Thread` each produce an un-awaited coroutine, so nothing is sent and nothing is raised. If your engine does work in a thread, return the result and stream it from the async side.
+
+Tool *results* are not streamed. They can be large and may contain secrets, and the built-in engine does not stream them either. Return them in your `execute_agent()` messages instead, where they reach the UI with the completed query.
+
 ## Team Membership
 
 An engine-backed Agent can be a member of a `Team`. Teams are orchestrated by the completions executor, which calls your engine once per member turn.
@@ -200,4 +225,13 @@ for server in request.mcpServers:
 
 Your executor connects to each MCP server using its own MCP client (e.g., via LangChain, CrewAI, or the MCP SDK directly). The `tools` list is an allowlist — only register and use tools that appear in this list, even if the server exposes additional tools.
 
-Non-MCP tool types (http, agent, team, builtin) are not included in `mcpServers`.
+Non-MCP tool types (http, agent, team, builtin) are not included in `mcpServers`. MCP is the only tool type with a dialable endpoint, so there is nothing for an engine to invoke.
+
+Attaching one anyway is accepted, but warns. Applying the agent prints an admission warning naming the engine and the dropped tools:
+
+```
+Warning: agent 'toolagent': execution engine 'my-engine' receives only mcp tools;
+these tools will not be available to the agent: get-coordinates (http)
+```
+
+The dashboard shows the same warning in the agent's chat panel, and the SDK logs it when it builds the request. Without this the tool is dropped silently and the agent answers that it does not exist.

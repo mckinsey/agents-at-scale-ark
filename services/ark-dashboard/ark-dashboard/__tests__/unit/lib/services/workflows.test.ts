@@ -42,8 +42,7 @@ describe('workflowsService', () => {
       const result = await workflowsService.list('default');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default');
       expect(result).toEqual(mockWorkflows);
     });
 
@@ -65,8 +64,7 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&workflowName=test'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&workflowName=test');
       expect(result).toEqual(mockWorkflows);
     });
 
@@ -82,8 +80,7 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=prod&workflowTemplateName=my-template'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=prod&workflowTemplateName=my-template');
     });
 
     it('should list workflows with status filter', async () => {
@@ -98,8 +95,7 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&status=succeeded'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&status=succeeded');
     });
 
     it('should list workflows with all filters', async () => {
@@ -116,8 +112,7 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=custom-ns&workflowName=prod&workflowTemplateName=ci-template&status=running'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=custom-ns&workflowName=prod&workflowTemplateName=ci-template&status=running');
     });
   });
 
@@ -131,11 +126,10 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockWorkflow);
 
-      const result = await workflowsService.get('my-workflow');
+      const result = await workflowsService.get('default', 'my-workflow');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/my-workflow?namespace=default'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/my-workflow?namespace=default');
       expect(result).toEqual(mockWorkflow);
     });
 
@@ -148,11 +142,10 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockWorkflow);
 
-      const result = await workflowsService.get('test-wf', 'prod');
+      const result = await workflowsService.get('prod', 'test-wf');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf?namespace=prod'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf?namespace=prod');
       expect(result).toEqual(mockWorkflow);
     });
   });
@@ -163,7 +156,7 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockYaml);
 
-      const result = await workflowsService.getYaml('my-workflow');
+      const result = await workflowsService.getYaml('default', 'my-workflow');
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/my-workflow?namespace=default',
@@ -181,7 +174,7 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockYaml);
 
-      await workflowsService.getYaml('test-wf', 'staging');
+      await workflowsService.getYaml('staging', 'test-wf');
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf?namespace=staging',
@@ -200,7 +193,7 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
-      const result = await workflowsService.getPodLogs('pod-123');
+      const result = await workflowsService.getPodLogs('default', 'pod-123');
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/api/v1/namespaces/default/pods/pod-123/log?tailLines=1000',
@@ -219,8 +212,8 @@ describe('workflowsService', () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
       const result = await workflowsService.getPodLogs(
-        'pod-456',
         'default',
+        'pod-456',
         'main'
       );
 
@@ -240,7 +233,7 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
-      await workflowsService.getPodLogs('pod-789', 'prod', 'sidecar');
+      await workflowsService.getPodLogs('prod', 'pod-789', 'sidecar');
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/api/v1/namespaces/prod/pods/pod-789/log?tailLines=1000&container=sidecar',
@@ -260,6 +253,7 @@ describe('workflowsService', () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
       const result = await workflowsService.getWorkflowLogs(
+        'default',
         'my-workflow',
         'node-id-123'
       );
@@ -281,9 +275,9 @@ describe('workflowsService', () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
       await workflowsService.getWorkflowLogs(
+        'staging',
         'test-workflow',
-        'node-456',
-        'staging'
+        'node-456'
       );
 
       expect(apiClient.get).toHaveBeenCalledWith(

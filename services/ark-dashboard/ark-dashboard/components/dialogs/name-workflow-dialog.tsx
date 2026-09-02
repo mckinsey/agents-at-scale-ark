@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export interface NameWorkflowValues {
   name: string;
@@ -52,6 +53,7 @@ export function NameWorkflowDialog({
   onOpenChange,
   onConfirm,
 }: Readonly<NameWorkflowDialogProps>) {
+  const { namespace } = useNamespace();
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -71,7 +73,7 @@ export function NameWorkflowDialog({
 
     let cancelled = false;
     workflowTemplatesService
-      .list()
+      .list(namespace)
       .then(templates => {
         if (!cancelled) {
           setExistingNames(templates.map(template => template.metadata.name));
@@ -86,7 +88,7 @@ export function NameWorkflowDialog({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [namespace, open]);
 
   const nameError = useMemo(
     () => getNameError(name, existingNames),
