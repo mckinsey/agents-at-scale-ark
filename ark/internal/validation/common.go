@@ -14,6 +14,10 @@ const schemeHTTP = "http"
 
 type Validator struct {
 	Lookup ResourceLookup
+	// SAAuthorizer authorizes a Query's requested service account against the
+	// admission requester. Set only on the admission-webhook path; nil on other
+	// validation paths (e.g. apiserver storage), where the check is skipped.
+	SAAuthorizer *ServiceAccountAuthorizer
 }
 
 func NewValidator(lookup ResourceLookup) *Validator {

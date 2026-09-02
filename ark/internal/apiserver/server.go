@@ -320,6 +320,19 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 
 	lookup := &validation.StorageLookup{Backend: s.backend, K8sClient: s.config.K8sClient}
 	v := validation.NewValidator(lookup)
+	// Aggregated APIs skip admission webhooks, so authorize a Query's requested
+	// service account here too. The requester comes from delegated authentication
+	// via request.UserFrom; the SubjectAccessReview is created against the host
+	// kube-apiserver (RestConfig), which evaluates it with the impersonate RBAC.
+	// K8sClient is a get-only reader for parameter resolution, so a separate
+	// write-capable client is needed to create the review.
+	if s.config.RestConfig != nil {
+		authzClient, err := client.New(s.config.RestConfig, client.Options{})
+		if err != nil {
+			return fmt.Errorf("failed to build authorization client for service account checks: %w", err)
+		}
+		v.SAAuthorizer = &validation.ServiceAccountAuthorizer{Client: authzClient}
+	}
 
 	v1alpha1Storage := make(map[string]rest.Storage)
 	for _, res := range V1Alpha1Resources {

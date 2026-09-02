@@ -42,6 +42,16 @@ rules:
   - serviceaccounts
   verbs:
   - impersonate
+  {{- with .Values.rbac.impersonation.allowedServiceAccounts }}
+  resourceNames:
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
 {{- end }}
 - apiGroups:
   - ark.mckinsey.com

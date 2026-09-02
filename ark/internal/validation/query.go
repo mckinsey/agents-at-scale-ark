@@ -18,6 +18,11 @@ func (v *Validator) ValidateQuery(ctx context.Context, query *arkv1alpha1.Query)
 	if !query.DeletionTimestamp.IsZero() {
 		return nil, nil
 	}
+	if v.SAAuthorizer != nil {
+		if err := v.SAAuthorizer.AuthorizeQueryServiceAccount(ctx, query); err != nil {
+			return nil, err
+		}
+	}
 	if err := v.validateQueryTargets(ctx, query); err != nil {
 		return nil, err
 	}

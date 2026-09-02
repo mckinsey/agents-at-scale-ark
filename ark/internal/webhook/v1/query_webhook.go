@@ -14,6 +14,7 @@ import (
 func SetupQueryWebhookWithManager(mgr ctrl.Manager) error {
 	lookup := &validation.WebhookLookup{Client: mgr.GetClient()}
 	v := validation.NewValidator(lookup)
+	v.SAAuthorizer = &validation.ServiceAccountAuthorizer{Client: mgr.GetClient()}
 	return ctrl.NewWebhookManagedBy(mgr).For(&arkv1alpha1.Query{}).
 		WithDefaulter(&validation.WebhookDefaulter{Lookup: lookup}).
 		WithValidator(&validation.WebhookValidator{V: v}).
