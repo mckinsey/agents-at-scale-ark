@@ -32,6 +32,7 @@ type ToolApprovalConfig struct {
 	// Required indicates whether human approval is required before executing this tool
 	Required bool `json:"required,omitempty"`
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="5m"
 	// Timeout specifies how long to wait for approval before timing out
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 	// +kubebuilder:validation:Optional

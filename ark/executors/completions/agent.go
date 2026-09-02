@@ -168,11 +168,13 @@ func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history 
 }
 
 // executeModelCall executes a single model call with optional streaming support.
-func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, eventStream EventStreamInterface, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
+func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, eventStream EventStreamInterface, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice, boundary toolResultBoundary) (*openai.ChatCompletion, error) {
 	a.Model.OutputSchema = a.OutputSchema
 	a.Model.SchemaName = fmt.Sprintf("%.64s", fmt.Sprintf("namespace-%s-agent-%s", a.Namespace, a.Name))
 
-	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools, toolChoice)
+	modelMessages := boundary.apply(agentMessages, a.Tools)
+
+	response, err := a.Model.ChatCompletion(ctx, modelMessages, eventStream, 1, tools, toolChoice)
 	if err != nil {
 		return nil, fmt.Errorf("agent %s execution failed: %w", a.FullName(), err)
 	}
@@ -283,13 +285,14 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 	}
 
 	newMessages := []Message{}
+	boundary := newToolResultBoundary()
 
 	for {
 		if ctx.Err() != nil {
 			return newMessages, ctx.Err()
 		}
 
-		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, opts.ToolChoice)
+		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, opts.ToolChoice, boundary)
 		if err != nil {
 			return nil, err
 		}
@@ -488,12 +491,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 	}
 
 	// Pre-compute approval requirements for O(1) lookup during execution
-	approvalMap := make(map[string]*arkv1alpha1.ToolApprovalConfig)
-	for _, tool := range crd.Spec.Tools {
-		if tool.Approval != nil && tool.Approval.Required {
-			approvalMap[tool.Name] = tool.Approval
-		}
-	}
+	approvalMap := buildApprovalMap(crd.Spec.Tools, tools)
 
 	return &Agent{
 		Name:                  crd.Name,
@@ -576,12 +574,14 @@ func (a *Agent) runAgenticLoopFromResumption(
 	eventStream EventStreamInterface,
 	tools []openai.ChatCompletionToolParam,
 ) (*ExecutionResult, error) {
+	boundary := newToolResultBoundary()
+
 	for {
 		if ctx.Err() != nil {
 			return &ExecutionResult{Messages: newMessages}, ctx.Err()
 		}
 
-		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, ToolChoiceUnset)
+		response, err := a.executeModelCall(ctx, agentMessages, eventStream, tools, ToolChoiceUnset, boundary)
 		if err != nil {
 			return nil, err
 		}

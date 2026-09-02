@@ -35,6 +35,42 @@ func (a *Agent) requiresApproval(toolName string) *arkv1alpha1.ToolApprovalConfi
 	return a.approvalRequiredTools[toolName]
 }
 
+// buildApprovalMap resolves the approval config for each of an agent's tools.
+//
+// Approval can be declared on the Tool CRD (applies to every agent using it) or on the
+// agent's reference to that tool. The two are unioned on Required, so an agent cannot
+// drop a gate the Tool declares; Timeout and OnTimeout come from the agent when set,
+// otherwise from the Tool.
+func buildApprovalMap(agentTools []arkv1alpha1.AgentTool, registry *ToolRegistry) map[string]*arkv1alpha1.ToolApprovalConfig {
+	approvalMap := make(map[string]*arkv1alpha1.ToolApprovalConfig)
+	for _, agentTool := range agentTools {
+		merged := mergeApprovalConfig(registry.ToolApproval(agentTool.Name), agentTool.Approval)
+		if merged != nil && merged.Required {
+			approvalMap[agentTool.Name] = merged
+		}
+	}
+	return approvalMap
+}
+
+func mergeApprovalConfig(fromTool, fromAgent *arkv1alpha1.ToolApprovalConfig) *arkv1alpha1.ToolApprovalConfig {
+	if fromTool == nil {
+		return fromAgent
+	}
+	if fromAgent == nil {
+		return fromTool
+	}
+
+	merged := *fromTool
+	merged.Required = fromTool.Required || fromAgent.Required
+	if fromAgent.Timeout != nil {
+		merged.Timeout = fromAgent.Timeout
+	}
+	if fromAgent.OnTimeout != "" {
+		merged.OnTimeout = fromAgent.OnTimeout
+	}
+	return &merged
+}
+
 func approvalToolNames(err *ApprovalRequiredError) string {
 	names := make([]string, 0, len(err.ToolCalls))
 	for _, tc := range err.ToolCalls {

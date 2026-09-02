@@ -62,6 +62,11 @@ app:
     # Default: 10.0 seconds
     - name: PROXY_TIMEOUT
       value: "10.0"
+    # Maximum accepted file-gateway upload size, in bytes
+    # Applies only to file-gateway uploads, not to A2A or MCP proxy traffic
+    # Default: 1048576 (1 MB), matching the dashboard's client-side limit
+    - name: PROXY_MAX_UPLOAD_BYTES
+      value: "1048576"
     # A2A Gateway environment variables
     # These configure the external URLs advertised in agent cards (.well-known/agent.json)
     # Must match your external routing configuration (HTTPRoute/Ingress)

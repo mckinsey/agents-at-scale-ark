@@ -346,6 +346,7 @@ spec:
                             required before executing this tool
                           type: boolean
                         timeout:
+                          default: 5m
                           description: Timeout specifies how long to wait for approval
                             before timing out
                           type: string

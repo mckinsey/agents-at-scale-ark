@@ -285,6 +285,27 @@ func (v *Validator) ValidateValueSource(ctx context.Context, vs *arkv1alpha1.Val
 	return nil
 }
 
+// ValidateApprovalConfig checks a tool approval block. Shared by the Agent path, where
+// approval sits on the agent's tool reference, and the Tool path, where it applies to
+// every agent using that tool.
+func ValidateApprovalConfig(approval *arkv1alpha1.ToolApprovalConfig, contextPrefix string) error {
+	if approval == nil {
+		return nil
+	}
+
+	// Validate timeout is positive if specified
+	if approval.Timeout != nil && approval.Timeout.Duration <= 0 {
+		return fmt.Errorf("%sapproval.timeout must be a positive duration", contextPrefix)
+	}
+
+	// Validate onTimeout enum
+	if approval.OnTimeout != "" && approval.OnTimeout != "reject" && approval.OnTimeout != "proceed" {
+		return fmt.Errorf("%sapproval.onTimeout must be 'reject' or 'proceed'", contextPrefix)
+	}
+
+	return nil
+}
+
 func CollectMigrationWarnings(resourceAnnotations map[string]string) []string {
 	var warnings []string
 	for key, value := range resourceAnnotations {
