@@ -101,6 +101,27 @@ class TestSvgSanitize(unittest.TestCase):
         self.assertNotIn("style=", text)
         self.assertIn('href="#safe"', text)  # legitimate refs still survive
 
+    def test_sanitize_svg_rejects_excessive_nesting(self):
+        # RecursionError is not a ValueError, so it would escape as a 500.
+        deep = (
+            b'<svg xmlns="http://www.w3.org/2000/svg">'
+            + b"<g>" * 5000 + b"<rect/>" + b"</g>" * 5000
+            + b"</svg>"
+        )
+        with self.assertRaisesRegex(ValueError, "nesting exceeds"):
+            sanitize_svg(deep)
+
+    def test_sanitize_svg_allows_normal_nesting(self):
+        nested = (
+            b'<svg xmlns="http://www.w3.org/2000/svg">'
+            + b"<g>" * 100 + b'<g onload="alert(1)"><script>x</script><rect/></g>'
+            + b"</g>" * 100 + b"</svg>"
+        )
+        out = sanitize_svg(nested)
+        self.assertNotIn(b"<script", out)
+        self.assertNotIn(b"onload", out)
+        self.assertIn(b"<rect", out)
+
     def test_sanitize_svg_rejects_dangerous_root(self):
         with self.assertRaisesRegex(ValueError, "Disallowed root"):
             sanitize_svg(b"<script>alert(1)</script>")

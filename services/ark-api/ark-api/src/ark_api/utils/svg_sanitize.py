@@ -29,6 +29,9 @@ DANGEROUS_LOCAL_NAMES = frozenset({
     "style",
 })
 
+# Well under sys.getrecursionlimit(), which ET.tostring() consumes when serializing.
+MAX_SVG_DEPTH = 256
+
 EVENT_HANDLER_ATTR = re.compile(r"^on[a-z]+", re.I)
 HREF_SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*:", re.I)
 UNSAFE_STYLE = re.compile(r"expression\s*\(|javascript:", re.I)
@@ -112,14 +115,20 @@ def _sanitize_attributes(elem: ET.Element) -> None:
             del elem.attrib[attr]
 
 
-def _sanitize_element(elem: ET.Element) -> None:
-    # list() snapshots: removing from a live element skips the next sibling.
-    for child in list(elem):  # NOSONAR - iterating a snapshot while mutating
-        if _local_name(child.tag) in DANGEROUS_LOCAL_NAMES:
-            elem.remove(child)
-            continue
-        _sanitize_element(child)
-    _sanitize_attributes(elem)
+def _sanitize_element(root: ET.Element) -> None:
+    # Depth-capped: RecursionError here or in ET.tostring() would escape as a 500.
+    stack = [(root, 0)]
+    while stack:
+        elem, depth = stack.pop()
+        if depth > MAX_SVG_DEPTH:
+            raise ValueError(f"SVG nesting exceeds {MAX_SVG_DEPTH} levels")
+        # list() snapshots: removing from a live element skips the next sibling.
+        for child in list(elem):  # NOSONAR - iterating a snapshot while mutating
+            if _local_name(child.tag) in DANGEROUS_LOCAL_NAMES:
+                elem.remove(child)
+                continue
+            stack.append((child, depth + 1))
+        _sanitize_attributes(elem)
 
 
 def sanitize_svg(content: bytes) -> bytes:
