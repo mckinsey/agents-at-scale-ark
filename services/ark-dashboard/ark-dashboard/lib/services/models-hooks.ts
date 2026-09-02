@@ -15,7 +15,7 @@ export const useGetAllModels = () => {
 
   return useQuery({
     queryKey: [GET_ALL_MODELS_QUERY_KEY, namespace],
-    queryFn: () => modelsService.getAll(namespace),
+    queryFn: () => modelsService.list(namespace),
     enabled: Boolean(namespace),
   });
 };
