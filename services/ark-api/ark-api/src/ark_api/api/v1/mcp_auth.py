@@ -6,11 +6,13 @@ import logging
 from typing import Optional
 from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ark_sdk.client import with_ark_client
+from ark_sdk.impersonation import ImpersonationConfig
 
+from ...auth.dependencies import get_impersonation_config
 from ...core.mcp_auth_config import McpAuthConfigError, get_mcp_auth_config
 from ...models.mcp_auth import (
     AuthLogoutRequest,
@@ -154,13 +156,14 @@ async def start_mcp_auth(
     namespace: Optional[str] = Query(
         None, description="Namespace for this request (defaults to current context)"
     ),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> AuthStartResponse:
     cfg = _get_config_or_503()
     redirect_uri = cfg.public_callback_url
     force = bool(body.force)
     caller_identity = _resolve_caller_identity(request)
 
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
         mcp_dict = mcp_server.to_dict()
         ns = (mcp_dict.get("metadata") or {}).get("namespace") or namespace
@@ -360,6 +363,7 @@ async def mcp_auth_callback(
     code: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
     error_description: Optional[str] = Query(None),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> Response:
     cfg = _get_config_or_503()
 
@@ -415,7 +419,7 @@ async def mcp_auth_callback(
             status_code=400,
         )
 
-    async with with_ark_client(secret_ns, VERSION) as ark_client:
+    async with with_ark_client(secret_ns, VERSION, impersonation=impersonation) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(flow.server_name)
         authorization = _read_authorization_status(mcp_server)
         token_ref = _read_token_secret_ref(mcp_server)
@@ -510,10 +514,11 @@ async def get_mcp_auth_status(
     namespace: Optional[str] = Query(
         None, description="Namespace for this request (defaults to current context)"
     ),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> AuthStatusResponse:
     _get_config_or_503()
 
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
         authorization = _read_authorization_status(mcp_server)
         server_state = authorization.state if authorization else None
@@ -589,6 +594,7 @@ async def logout_mcp_auth(
     namespace: Optional[str] = Query(
         None, description="Namespace for this request (defaults to current context)"
     ),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> AuthLogoutResponse:
     keep_client = bool(body.keep_client)
     delete_secret = bool(body.delete_secret)
@@ -598,7 +604,7 @@ async def logout_mcp_auth(
             detail="keep_client and delete_secret are mutually exclusive",
         )
 
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
         mcp_dict = mcp_server.to_dict()
         ns = (mcp_dict.get("metadata") or {}).get("namespace") or namespace

@@ -119,10 +119,10 @@ type QueryReconciler struct {
 	sem        *semaphore.Weighted
 	operations sync.Map
 
-	// brokerEventsEndpoint resolves the broker endpoint for a namespace, used
-	// by deleteBrokerEvents. Defaults to routing.ResolveBrokerEndpoint when
-	// nil; tests override it to avoid depending on real cluster DNS.
-	brokerEventsEndpoint func(ctx context.Context, namespace string) (string, error)
+	// brokerEndpoint resolves the broker endpoint for a namespace, used by the
+	// finalizer's broker cleanups. Defaults to routing.ResolveBrokerEndpoint
+	// when nil; tests override it to avoid depending on real cluster DNS.
+	brokerEndpoint func(ctx context.Context, namespace string) (string, error)
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;create;update;patch;delete
@@ -1036,10 +1036,30 @@ func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status 
 	}
 }
 
+// memoryConditionTypes are set on the in-memory Query by the dispatch path and
+// must survive the refetch inside mutateStatus. They are the only conditions
+// this reconcile knows more about than the API server does; every other
+// condition is authored inside the mutator against the refetched object.
+var memoryConditionTypes = []arkv1alpha1.QueryConditionType{
+	arkv1alpha1.QueryMemoryUnavailable,
+	arkv1alpha1.QueryMemoryDegraded,
+}
+
+func memoryConditionsFrom(query *arkv1alpha1.Query) []metav1.Condition {
+	var conditions []metav1.Condition
+	for _, condType := range memoryConditionTypes {
+		if cond := meta.FindStatusCondition(query.Status.Conditions, string(condType)); cond != nil {
+			conditions = append(conditions, *cond)
+		}
+	}
+	return conditions
+}
+
 type savedQueryStatus struct {
-	response       *arkv1alpha1.Response
-	tokenUsage     arkv1alpha1.TokenUsage
-	conversationId string
+	response         *arkv1alpha1.Response
+	tokenUsage       arkv1alpha1.TokenUsage
+	conversationId   string
+	memoryConditions []metav1.Condition
 }
 
 func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
@@ -1050,16 +1070,20 @@ func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
 	if s.conversationId != "" {
 		query.Status.ConversationId = s.conversationId
 	}
+	for _, cond := range s.memoryConditions {
+		meta.SetStatusCondition(&query.Status.Conditions, cond)
+	}
 }
 
 func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
-	// This reconcile holds the freshest Response/TokenUsage/ConversationId in
-	// memory; the refetch inside mutateStatus would drop them, so re-apply the
-	// snapshot onto the refetched object before writing.
+	// This reconcile holds the freshest Response/TokenUsage/ConversationId and
+	// memory conditions in memory; the refetch inside mutateStatus would drop
+	// them, so re-apply the snapshot onto the refetched object before writing.
 	saved := savedQueryStatus{
-		response:       query.Status.Response,
-		tokenUsage:     query.Status.TokenUsage,
-		conversationId: query.Status.ConversationId,
+		response:         query.Status.Response,
+		tokenUsage:       query.Status.TokenUsage,
+		conversationId:   query.Status.ConversationId,
+		memoryConditions: memoryConditionsFrom(query),
 	}
 	// Do NOT clear A2A taskID when transitioning from input-required to running.
 	// The executor needs the taskID to detect this is a resumption after approval
@@ -1209,7 +1233,11 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 		log.Info("cancelled running operation for query", "name", query.Name, "namespace", query.Namespace)
 	}
 
-	return stderrors.Join(r.deleteBrokerMessages(ctx, query), r.deleteBrokerEvents(ctx, query))
+	return stderrors.Join(
+		r.deleteBrokerMessages(ctx, query),
+		r.deleteBrokerEvents(ctx, query),
+		r.deleteBrokerSessionQuery(ctx, query),
+	)
 }
 
 func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1alpha1.Query) error {
@@ -1287,34 +1315,50 @@ func deleteBrokerResource(ctx context.Context, baseURL, path, resource, queryNam
 	return nil
 }
 
-// resolveBrokerEventsEndpoint resolves the broker endpoint for namespace,
-// returning "" when no broker is configured there.
-func (r *QueryReconciler) resolveBrokerEventsEndpoint(ctx context.Context, namespace string) (string, error) {
-	if r.brokerEventsEndpoint != nil {
-		return r.brokerEventsEndpoint(ctx, namespace)
+// resolveBrokerEndpoint resolves the broker endpoint for namespace, returning
+// "" when no broker is configured there.
+func (r *QueryReconciler) resolveBrokerEndpoint(ctx context.Context, namespace string) (string, error) {
+	if r.brokerEndpoint != nil {
+		return r.brokerEndpoint(ctx, namespace)
 	}
 	return routing.ResolveBrokerEndpoint(ctx, r.Client, namespace)
 }
 
-// deleteBrokerEvents removes the broker's operation events for query. Unlike
-// deleteBrokerMessages, this does not go through the Memory contract: events
-// are emitted directly to the broker endpoint discovered via the
-// ark-config-broker ConfigMap (see internal/eventing/broker), keyed by the
-// Query's UID rather than its name (see operation_tracker.go).
-func (r *QueryReconciler) deleteBrokerEvents(ctx context.Context, query *arkv1alpha1.Query) error {
+// deleteBrokerQueryResource removes one query-scoped resource from the broker
+// serving query's namespace. Unlike deleteBrokerMessages this does not go
+// through the Memory contract: events and sessions are broker concerns, reached
+// at the endpoint discovered via the ark-config-broker ConfigMap (see
+// internal/eventing/broker). key is what the broker files the resource under,
+// and it is the one thing that differs between the callers.
+func (r *QueryReconciler) deleteBrokerQueryResource(ctx context.Context, query *arkv1alpha1.Query, pathFmt, resource, key string) error {
 	log := logf.FromContext(ctx)
 
-	endpoint, err := r.resolveBrokerEventsEndpoint(ctx, query.Namespace)
+	endpoint, err := r.resolveBrokerEndpoint(ctx, query.Namespace)
 	if err != nil {
 		return fmt.Errorf("failed to resolve broker endpoint: %w", err)
 	}
 	if endpoint == "" {
-		log.Info("no broker configured for namespace, skipping broker event cleanup", "namespace", query.Namespace, "query", query.Name)
+		log.Info("no broker configured for namespace, skipping broker cleanup", "namespace", query.Namespace, "resource", resource, "query", query.Name)
 		return nil
 	}
 
-	path := fmt.Sprintf(common.QueryEventsEndpointFmt, url.PathEscape(string(query.UID)))
-	return deleteBrokerResource(ctx, endpoint, path, "events", query.Name)
+	path := fmt.Sprintf(pathFmt, url.PathEscape(key))
+	return deleteBrokerResource(ctx, endpoint, path, resource, query.Name)
+}
+
+// deleteBrokerEvents removes the broker's operation events for query, keyed by
+// the Query UID rather than its name (see operation_tracker.go).
+func (r *QueryReconciler) deleteBrokerEvents(ctx context.Context, query *arkv1alpha1.Query) error {
+	return r.deleteBrokerQueryResource(ctx, query, common.QueryEventsEndpointFmt, "events", string(query.UID))
+}
+
+// deleteBrokerSessionQuery removes query's row from the broker's sessions read
+// model, keyed by the Query NAME and not the UID: session_queries.query_id is
+// written from the event's queryName field, and the sessions payload carries no
+// UID at all, so keying this on query.UID would match no rows and still get a
+// 200 back - the cleanup would silently do nothing.
+func (r *QueryReconciler) deleteBrokerSessionQuery(ctx context.Context, query *arkv1alpha1.Query) error {
+	return r.deleteBrokerQueryResource(ctx, query, common.QuerySessionsEndpointFmt, "session query", query.Name)
 }
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {

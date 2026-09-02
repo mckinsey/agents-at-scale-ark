@@ -18,6 +18,16 @@ describe('PostgresSessionsStorage', () => {
     storage = new PostgresSessionsStorage(silentLogger, db(), 3600);
   });
 
+  async function headerTimes(
+    sessionId: string
+  ): Promise<{last_activity: Date; expires_at: Date}> {
+    const [row] = await db()<{last_activity: Date; expires_at: Date}[]>`
+      SELECT last_activity, expires_at FROM sessions
+      WHERE session_id = ${sessionId}
+    `;
+    return row!;
+  }
+
   describe('applyEvent', () => {
     test('creates session and query on first event', async () => {
       await storage.applyEvent({
@@ -686,6 +696,156 @@ describe('PostgresSessionsStorage', () => {
     });
   });
 
+  describe('deleteQuery', () => {
+    test('removes the named query row', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 's1', queryName: 'q2'});
+
+      expect(await storage.deleteQuery('q1')).toBe(1);
+
+      const rows = await db()`
+        SELECT query_id FROM session_queries WHERE session_id = 's1'
+      `;
+      expect(rows.map((r) => r['query_id'])).toEqual(['q2']);
+    });
+
+    // SessionEventData carries no queryId at all, so a UID can never reach
+    // session_queries - keying the cleanup on query.UID would delete nothing
+    // and still answer 200.
+    test('is keyed on the query name, so an id-shaped key matches nothing', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+
+      expect(
+        await storage.deleteQuery('e5f6a7b8-1234-4321-9876-abcdefabcdef')
+      ).toBe(0);
+      expect(await storage.deleteQuery('q1')).toBe(1);
+    });
+
+    test('recomputes errorCount, status and conversations from what remains', async () => {
+      await storage.applyEvent({
+        sessionId: 's1',
+        queryName: 'q1',
+        conversationId: 'c1',
+        agent: 'agent-a',
+        _reason: 'QueryExecutionError',
+        error: 'boom',
+      });
+      await storage.applyEvent({
+        sessionId: 's1',
+        queryName: 'q2',
+        conversationId: 'c2',
+        agent: 'agent-b',
+        _reason: 'QueryExecutionComplete',
+      });
+
+      await storage.deleteQuery('q1');
+
+      const session = (await storage.getSession('s1'))!;
+      expect(session.errorCount).toBe(0);
+      expect(session.status).toBe('idle');
+      expect(session.conversations!.map((c) => c.name)).toEqual(['agent-b']);
+      expect(session.participants!.map((p) => p.name)).toEqual(['agent-b']);
+    });
+
+    test('does not move last_activity or expires_at', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 's1', queryName: 'q2'});
+
+      const before = await headerTimes('s1');
+      await sleep(20);
+      await storage.deleteQuery('q1');
+
+      expect(await headerTimes('s1')).toEqual(before);
+    });
+
+    test('does not revive an expired session', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 's1', queryName: 'q2'});
+      await db()`
+        UPDATE sessions SET expires_at = now() - interval '1 hour'
+        WHERE session_id = 's1'
+      `;
+
+      await storage.deleteQuery('q1');
+
+      expect(await storage.getSession('s1')).toBeUndefined();
+    });
+
+    test('drops the header once its last query goes', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+
+      await storage.deleteQuery('q1');
+
+      const headers = await db()`
+        SELECT session_id FROM sessions WHERE session_id = 's1'
+      `;
+      expect(headers).toHaveLength(0);
+    });
+
+    test('keeps the header while another query remains', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 's1', queryName: 'q2'});
+
+      await storage.deleteQuery('q1');
+
+      expect(await storage.getSession('s1')).toBeDefined();
+    });
+
+    test('cleans every session holding the name', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'shared'});
+      await storage.applyEvent({sessionId: 's1', queryName: 'keeper'});
+      await storage.applyEvent({sessionId: 's2', queryName: 'shared'});
+      await storage.applyEvent({sessionId: 's2', queryName: 'keeper'});
+
+      expect(await storage.deleteQuery('shared')).toBe(2);
+
+      const rows = await db()`
+        SELECT session_id FROM session_queries WHERE query_id = 'shared'
+      `;
+      expect(rows).toHaveLength(0);
+    });
+
+    test('leaves a reused query name with exactly one owning session', async () => {
+      await storage.applyEvent({sessionId: 's-old', queryName: 'q1'});
+      await storage.deleteQuery('q1');
+      await storage.applyEvent({sessionId: 's-new', queryName: 'q1'});
+
+      // The probe applyMessage uses to find a query's owner.
+      const owners = await db()`
+        SELECT session_id FROM session_queries WHERE query_id = 'q1'
+      `;
+      expect(owners.map((r) => r['session_id'])).toEqual(['s-new']);
+
+      await storage.applyMessage('conv-1', 'q1');
+      const session = (await storage.getSession('s-new'))!;
+      expect(session.queries['q1']!.conversationId).toBe('conv-1');
+    });
+
+    test('an unknown query is a no-op', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+
+      expect(await storage.deleteQuery('nope')).toBe(0);
+      expect(await storage.getSession('s1')).toBeDefined();
+    });
+
+    test('notifies surviving sessions and not dropped ones', async () => {
+      await storage.whenListening();
+      await storage.applyEvent({sessionId: 's-lives', queryName: 'shared'});
+      await storage.applyEvent({sessionId: 's-lives', queryName: 'keeper'});
+      await storage.applyEvent({sessionId: 's-dies', queryName: 'shared'});
+      // The setup's own notifications are still in flight; subscribing before
+      // they drain attributes them to the delete.
+      await sleep(200);
+
+      const received: string[] = [];
+      storage.subscribe(({sessionId}) => received.push(sessionId));
+      await storage.deleteQuery('shared');
+      await sleep(200);
+
+      expect(received).toEqual(['s-lives']);
+    });
+  });
+
   describe('subscribe', () => {
     test('emits on applyEvent, delivered via LISTEN/NOTIFY', async () => {
       await storage.whenListening();
@@ -1218,6 +1378,48 @@ describe('PostgresSessionsStorage', () => {
       const session = (await storage.getSession('shared-conv'))!;
       expect(session.conversations).toHaveLength(1);
       expect(session.conversations![0]!.messageCount).toBe(N);
+    });
+
+    test('a delete taking the header before the query row cannot deadlock an event for that same query', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'keeper'});
+
+      // Both writers must want the same query row, or there is no cycle to
+      // form. Queued behind the header, an event that reaches the header first
+      // would deadlock against a delete already holding that row - which is
+      // what taking the header before the DELETE prevents.
+      const gate = holdSessionHeader('sess-1');
+      await gate.locked;
+
+      const eventing = storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'q1',
+        _reason: 'QueryExecutionComplete',
+      });
+      await waitForLockWaiters(1);
+      const deleting = storage.deleteQuery('q1');
+      await waitForLockWaiters(2);
+      gate.release();
+      await gate.done;
+
+      await Promise.all([eventing, deleting]);
+      expect(await storage.getSession('sess-1')).toBeDefined();
+    });
+
+    test('a late event for a deleted query recreates it', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.deleteQuery('q1');
+
+      // Characterises the window, it does not endorse it. Cancelling the query
+      // does not narrow this: the finalizer's cancel makes the executor emit
+      // QueryExecutionCanceled, and the emitter dispatches it under
+      // context.WithoutCancel, so deleting a running query is the case most
+      // likely to hit it. Closing it needs a tombstone table, which trades a
+      // bounded orphan for an unbounded one (#2622 has no reaper).
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+
+      const session = (await storage.getSession('sess-1'))!;
+      expect(Object.keys(session.queries)).toEqual(['q1']);
     });
   });
 

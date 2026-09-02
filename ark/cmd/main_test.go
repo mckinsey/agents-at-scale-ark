@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,6 +40,26 @@ func TestValidateRole(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), c.wantErr) {
 			t.Errorf("validateRole(%q) error = %q, want substring %q", c.role, err.Error(), c.wantErr)
+		}
+	}
+}
+
+func TestWatchNamespaces(t *testing.T) {
+	cases := []struct {
+		env  string
+		want []string
+	}{
+		{"", nil},
+		{"   ", nil},
+		{"team-a", []string{"team-a"}},
+		{"team-a,ark-system", []string{"team-a", "ark-system"}},
+		{" team-a , ark-system ,", []string{"team-a", "ark-system"}},
+	}
+	for _, c := range cases {
+		t.Setenv("ARK_WATCH_NAMESPACES", c.env)
+		got := watchNamespaces()
+		if !slices.Equal(got, c.want) {
+			t.Errorf("watchNamespaces() with %q = %v, want %v", c.env, got, c.want)
 		}
 	}
 }

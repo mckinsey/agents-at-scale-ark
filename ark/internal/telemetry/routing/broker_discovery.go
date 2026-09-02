@@ -42,40 +42,42 @@ func DiscoverBrokerEndpoints(ctx context.Context, k8sClient client.Client) ([]Br
 		return nil, nil
 	}
 
-	cmList := &corev1.ConfigMapList{}
-	if err := k8sClient.List(ctx, cmList, scopedListOptions()...); err != nil {
-		return nil, fmt.Errorf("failed to list ConfigMaps: %w", err)
-	}
+	endpoints := make([]BrokerEndpoint, 0)
 
-	endpoints := make([]BrokerEndpoint, 0, len(cmList.Items))
-
-	for _, cm := range cmList.Items {
-		if cm.Name != brokerConfigName {
-			continue
+	for _, opts := range scopedListOptionSets() {
+		cmList := &corev1.ConfigMapList{}
+		if err := k8sClient.List(ctx, cmList, opts...); err != nil {
+			return nil, fmt.Errorf("failed to list ConfigMaps: %w", err)
 		}
 
-		config, err := parseBrokerConfig(&cm)
-		if err != nil {
-			log.Error(err, "failed to parse broker config", "namespace", cm.Namespace)
-			continue
+		for _, cm := range cmList.Items {
+			if cm.Name != brokerConfigName {
+				continue
+			}
+
+			config, err := parseBrokerConfig(&cm)
+			if err != nil {
+				log.Error(err, "failed to parse broker config", "namespace", cm.Namespace)
+				continue
+			}
+
+			if config.Enabled != "true" {
+				continue
+			}
+
+			endpoint, err := buildEndpoint(cm.Namespace, config.ServiceRef)
+			if err != nil {
+				log.Error(err, "failed to build endpoint", "namespace", cm.Namespace)
+				continue
+			}
+
+			endpoints = append(endpoints, BrokerEndpoint{
+				Namespace: cm.Namespace,
+				Endpoint:  endpoint,
+			})
+
+			log.Info("discovered broker endpoint", "namespace", cm.Namespace, "endpoint", endpoint)
 		}
-
-		if config.Enabled != "true" {
-			continue
-		}
-
-		endpoint, err := buildEndpoint(cm.Namespace, config.ServiceRef)
-		if err != nil {
-			log.Error(err, "failed to build endpoint", "namespace", cm.Namespace)
-			continue
-		}
-
-		endpoints = append(endpoints, BrokerEndpoint{
-			Namespace: cm.Namespace,
-			Endpoint:  endpoint,
-		})
-
-		log.Info("discovered broker endpoint", "namespace", cm.Namespace, "endpoint", endpoint)
 	}
 
 	return endpoints, nil

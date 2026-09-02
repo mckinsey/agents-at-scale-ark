@@ -122,7 +122,11 @@ type Config struct {
 	AuthMode        string
 	TLSCertFile     string
 	TLSKeyFile      string
-	K8sClient       client.Client
+	// K8sClient reads Secrets and ConfigMaps for valueFrom parameter resolution. It is the
+	// uncached reader, so a Get hits the host apiserver directly instead of populating a
+	// cluster-wide informer. That keeps the apiserver ServiceAccount at get-only on those
+	// resources rather than needing list and watch across every namespace.
+	K8sClient client.Reader
 	// RestConfig points at the host kube-apiserver, where the policy objects live.
 	RestConfig *clientrest.Config
 	// AuditLogPath "-" writes JSON to stdout. AuditPolicyFile is mandatory when AuditEnabled.
@@ -318,9 +322,17 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	v := validation.NewValidator(lookup)
 	// Aggregated APIs skip admission webhooks, so authorize a Query's requested
 	// service account here too. The requester comes from delegated authentication
-	// via request.UserFrom; SubjectAccessReviews are evaluated by the host
-	// kube-apiserver through the K8sClient.
-	v.SAAuthorizer = &validation.ServiceAccountAuthorizer{Client: s.config.K8sClient}
+	// via request.UserFrom; the SubjectAccessReview is created against the host
+	// kube-apiserver (RestConfig), which evaluates it with the impersonate RBAC.
+	// K8sClient is a get-only reader for parameter resolution, so a separate
+	// write-capable client is needed to create the review.
+	if s.config.RestConfig != nil {
+		authzClient, err := client.New(s.config.RestConfig, client.Options{})
+		if err != nil {
+			return fmt.Errorf("failed to build authorization client for service account checks: %w", err)
+		}
+		v.SAAuthorizer = &validation.ServiceAccountAuthorizer{Client: authzClient}
+	}
 
 	v1alpha1Storage := make(map[string]rest.Storage)
 	for _, res := range V1Alpha1Resources {

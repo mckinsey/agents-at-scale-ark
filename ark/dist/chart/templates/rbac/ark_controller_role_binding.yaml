@@ -1,4 +1,58 @@
 {{- if .Values.rbac.enable }}
+{{- if .Values.controllerManager.watchNamespaces }}
+# Namespaced mode: the controller cache is confined to watchNamespaces, so its access to the
+# namespaced rules in ark-controller-role is granted per namespace via RoleBindings. The
+# cluster-scoped ArkConfig is not reachable through a RoleBinding, so it gets its own small
+# ClusterRole bound cluster-wide.
+{{- range .Values.controllerManager.watchNamespaces }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    {{- include "chart.labels" $ | nindent 4 }}
+  name: ark-controller-rolebinding
+  namespace: {{ . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-controller-role
+subjects:
+- kind: ServiceAccount
+  name: ark-controller
+  namespace: ark-system
+---
+{{- end }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: ark-controller-cluster-role
+rules:
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - arkconfigs
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: ark-controller-cluster-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-controller-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: ark-controller
+  namespace: ark-system
+{{- else }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -13,4 +67,5 @@ subjects:
 - kind: ServiceAccount
   name: ark-controller
   namespace: ark-system
+{{- end }}
 {{- end -}}

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { apiUrl } from '@/lib/api/config';
 import { filesApiClient } from '@/lib/api/files-client';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import {
   getLanguageFromExtension,
   isImageFile,
@@ -35,6 +36,7 @@ export interface PreviewTab {
 }
 
 export function useMultiFilePreview() {
+  const { namespace } = useNamespace();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [tabs, setTabs] = useState<PreviewTab[]>([]);
   const [activeTabKey, setActiveTabKey] = useState<string | null>(null);
@@ -74,7 +76,10 @@ export function useMultiFilePreview() {
     setPreviewOpen(true);
 
     try {
-      const url = filesApiClient.buildUrl(`files/${encodeURIComponent(key)}/download`);
+      const url = filesApiClient.buildUrl(
+        `files/${encodeURIComponent(key)}/download`,
+        { namespace },
+      );
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -219,7 +224,7 @@ export function useMultiFilePreview() {
         setPreviewOpen(false);
       }
     }
-  }, [tabs]);
+  }, [namespace, tabs]);
 
   const closeTab = useCallback((key: string) => {
     setTabs(prev => {

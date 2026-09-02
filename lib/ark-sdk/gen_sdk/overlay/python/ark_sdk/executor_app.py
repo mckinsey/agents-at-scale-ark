@@ -28,7 +28,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from .broker import BrokerClient, discover_broker_url
-from .executor import BaseExecutor
+from .executor import BaseExecutor, begin_request_state
 from .extensions.query import (
     QUERY_EXTENSION_URI,
     extract_query_ref,
@@ -227,9 +227,9 @@ class A2AExecutorAdapter(AgentExecutor):
                 message_ttl_seconds=request.message_ttl_seconds,
             ) if broker_url else None
 
+        begin_request_state()
         self.executor._broker_client = broker
         self.executor._query_status_updater = None if sub_target else QueryStatusUpdater(query_ref)
-        self.executor._streamed = False
 
         try:
             response_messages = await self.executor.execute_agent(request)
@@ -278,6 +278,7 @@ class A2AExecutorAdapter(AgentExecutor):
             self.executor._broker_client = None
             self.executor._query_status_updater = None
             self.executor._streamed = False
+            self.executor._tool_call_index = 0
 
     async def cancel(self, context: Any, event_queue: EventQueue) -> None:
         pass

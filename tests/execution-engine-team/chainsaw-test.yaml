@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: execution-engine-team
 spec:
-  description: Test sequential teams whose members run on a named ExecutionEngine, all-engine and mixed with a local member
+  description: Test sequential teams with engine-backed members - all-engine, mixed with a local member, and a local member paired with an a2a-engine member
   steps:
   - name: step-1
     try:
@@ -119,6 +119,27 @@ spec:
           status:
             phase: done
             (contains(response.content, 'transcript contained the engine member turn')): true
+    # The a2a team's second member runs on the built-in a2a engine and echoes
+    # what it was sent, so the response content is the input that reached it.
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: a2a-team-query
+        timeout: 120s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-team-query
+          status:
+            phase: done
+            (contains(response.content, 'A2A-TRANSCRIPT-MARKER')): true
+            (contains(response.content, '# a2a-writer:')): true
     catch:
     - events: {}
     - describe:
@@ -141,6 +162,14 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Team
         name: mixed-team
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: a2a-team-query
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Team
+        name: a2a-team
 
     cleanup:
     - script:
