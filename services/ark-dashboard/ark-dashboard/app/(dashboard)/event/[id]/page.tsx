@@ -21,7 +21,12 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 function EventBreadcrumb({ current }: Readonly<{ current: string }>) {
   return (
-    <DetailBreadcrumb backHref="/events" backLabel="Events" current={current} />
+    <DetailBreadcrumb
+      backHref="/events"
+      backLabel="Events"
+      current={current}
+      className="break-all"
+    />
   );
 }
 

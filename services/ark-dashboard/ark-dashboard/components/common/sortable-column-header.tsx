@@ -3,11 +3,19 @@ import { IconShell } from '@/components/ui/icon-shell';
 import type { SortDirection } from '@/lib/hooks/use-value-sort';
 import { cn } from '@/lib/utils';
 
+type OrderLabels = Readonly<Record<SortDirection, string>>;
+
+const DATE_ORDER_LABELS: OrderLabels = {
+  desc: 'newest first',
+  asc: 'oldest first',
+};
+
 interface SortableColumnHeaderProps {
   readonly label: string;
   readonly sortDirection: SortDirection;
   readonly onToggle: () => void;
   readonly className?: string;
+  readonly orderLabels?: OrderLabels;
 }
 
 export function SortableColumnHeader({
@@ -15,8 +23,9 @@ export function SortableColumnHeader({
   sortDirection,
   onToggle,
   className,
+  orderLabels = DATE_ORDER_LABELS,
 }: Readonly<SortableColumnHeaderProps>) {
-  const order = sortDirection === 'desc' ? 'newest first' : 'oldest first';
+  const order = orderLabels[sortDirection];
 
   return (
     <button
