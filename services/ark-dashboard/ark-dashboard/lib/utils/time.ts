@@ -112,9 +112,7 @@ export function formatAge(timestamp: Date | string | null | undefined): string {
 
 export function formatTimestamp(timestamp: string | undefined | null): string {
   if (!timestamp) return '—';
-  try {
-    return new Date(timestamp).toLocaleString();
-  } catch {
-    return timestamp;
-  }
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return timestamp;
+  return date.toLocaleString();
 }

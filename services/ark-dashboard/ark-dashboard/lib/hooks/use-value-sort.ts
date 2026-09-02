@@ -3,7 +3,10 @@ import { useCallback, useMemo, useState } from 'react';
 export type SortDirection = 'asc' | 'desc';
 
 export function timestampValue(timestamp: string | null | undefined): number {
-  return timestamp ? new Date(timestamp).getTime() : 0;
+  if (!timestamp) return 0;
+  const value = new Date(timestamp).getTime();
+
+  return Number.isNaN(value) ? 0 : value;
 }
 
 export function useValueSort<T>(

@@ -12,6 +12,7 @@ import { JsonViewer } from '@/components/common/json-viewer';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { TaskStatus } from '@/components/sections/a2a-tasks-section/task-status';
 import { Button } from '@/components/ui/button';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
 import { formatTimestamp, simplifyDuration } from '@/lib/utils/time';
 
@@ -26,6 +27,7 @@ export default function A2ATaskPage() {
       backHref="/tasks"
       backLabel="A2A tasks"
       current={task?.taskId || taskId}
+      className="break-all"
     />
   );
 
@@ -163,9 +165,13 @@ export default function A2ATaskPage() {
                   <span className="text-fg-secondary w-[140px] shrink-0 font-mono text-xs">
                     {name}
                   </span>
-                  <span className="text-fg-primary min-w-0 flex-1 truncate font-mono text-xs">
-                    {String(value)}
-                  </span>
+                  <TruncatedTooltip
+                    label={String(value)}
+                    contentClassName="max-w-[420px] break-all">
+                    <span className="text-fg-primary min-w-0 flex-1 truncate font-mono text-xs">
+                      {String(value)}
+                    </span>
+                  </TruncatedTooltip>
                 </div>
               ))}
             </div>

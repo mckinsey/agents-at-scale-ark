@@ -21,8 +21,11 @@ describe('TaskStatus', () => {
     expect(screen.getByText('Unknown')).toBeInTheDocument();
   });
 
-  it('exposes the status to assistive tech rather than colour alone', () => {
+  it('conveys the status as text without repeating it for assistive tech', () => {
     render(<TaskStatus phase="failed" />);
-    expect(screen.getByRole('img', { name: 'Failed' })).toBeInTheDocument();
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('img', { name: 'Failed' }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -41,7 +41,7 @@ export function DetailBreadcrumb({
       <span aria-hidden="true" className="text-fg-secondary">
         /
       </span>
-      <span aria-current="page" className="text-fg-secondary break-all">
+      <span aria-current="page" className="text-fg-secondary">
         {current}
       </span>
     </nav>

@@ -11,7 +11,7 @@ export function TaskStatus({ phase }: TaskStatusProps) {
 
   return (
     <span className="inline-flex items-center gap-2">
-      <StatusBadge variant={variant} role="img" aria-label={label} />
+      <StatusBadge variant={variant} aria-hidden="true" />
       <span className="label-regular-primary text-fg-primary">{label}</span>
     </span>
   );

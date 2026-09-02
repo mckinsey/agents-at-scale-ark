@@ -25,6 +25,11 @@ describe('timestampValue', () => {
     expect(timestampValue(null)).toBe(0);
   });
 
+  it('returns 0 for an unparseable timestamp so the comparator stays consistent', () => {
+    expect(timestampValue('garbage')).toBe(0);
+    expect(timestampValue('2023-13-45')).toBe(0);
+  });
+
   it('returns epoch milliseconds for a timestamp', () => {
     expect(timestampValue('2024-06-01T00:00:00Z')).toBe(
       new Date('2024-06-01T00:00:00Z').getTime(),
@@ -71,6 +76,25 @@ describe('useValueSort', () => {
 
     expect(result.current.sortDirection).toBe('asc');
     expect(ids(result.current.sortedItems)[0]).toBe('undated');
+  });
+
+  it('keeps rows with a broken date from disturbing the rest of the order', () => {
+    const withBroken: Row[] = [
+      { id: 'middle', createdAt: '2024-06-01T00:00:00Z' },
+      { id: 'broken', createdAt: 'garbage' },
+      { id: 'newest', createdAt: '2025-01-01T00:00:00Z' },
+      { id: 'oldest', createdAt: '2023-01-01T00:00:00Z' },
+    ];
+    const { result } = renderHook(() =>
+      useValueSort(withBroken, getCreatedTime),
+    );
+
+    expect(ids(result.current.sortedItems)).toEqual([
+      'newest',
+      'middle',
+      'oldest',
+      'broken',
+    ]);
   });
 
   it('keeps ties in source order in both directions', () => {
