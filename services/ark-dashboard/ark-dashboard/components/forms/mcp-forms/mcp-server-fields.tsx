@@ -67,7 +67,7 @@ export function McpServerFields({
               <Input
                 variant="inline"
                 {...field}
-                placeholder="e.g., gpt-4-turbo"
+                placeholder="e.g., github-remote-mcp"
                 disabled={nameDisabled}
                 aria-invalid={!!fieldState.error}
               />

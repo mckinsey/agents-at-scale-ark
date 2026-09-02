@@ -50,7 +50,7 @@ export function ConditionalInputRow({
           variant="inline"
           value={data.name}
           onChange={e => onChange({ name: e.target.value })}
-          placeholder="e.g., gpt-4-turbo"
+          placeholder="e.g., Authorization"
           aria-invalid={!!nameError}
         />
         {nameError && (
@@ -86,7 +86,7 @@ export function ConditionalInputRow({
               variant="inline"
               value={data.value}
               onChange={e => onChange({ value: e.target.value })}
-              placeholder="e.g., gpt-4-turbo"
+              placeholder="e.g., Bearer token"
               aria-invalid={!!valueError}
             />
             {valueError && (
