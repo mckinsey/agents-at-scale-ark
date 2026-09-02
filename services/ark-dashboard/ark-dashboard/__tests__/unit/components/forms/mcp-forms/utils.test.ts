@@ -6,6 +6,7 @@ import {
   buildHeader,
   buildSpec,
   buildUpdateAddressMode,
+  createFormSchema,
   type HeaderData,
   mapDetailAddress,
   mapDetailHeaders,
@@ -92,6 +93,29 @@ describe('mapDetailAddress', () => {
   });
 });
 
+describe('createFormSchema', () => {
+  const schema = createFormSchema({ kind: 'configuration' });
+
+  it('accepts a missing description', () => {
+    const result = schema.safeParse({
+      name: 'github-mcp',
+      configurationName: 'github-mcp-url',
+      transport: 'http',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an empty description', () => {
+    const result = schema.safeParse({ ...values, description: '' });
+    expect(result.success).toBe(true);
+  });
+
+  it('still requires the url', () => {
+    const result = schema.safeParse({ ...values, configurationName: '' });
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('buildSpec', () => {
   it('writes a configMapKeyRef for the configuration mode', () => {
     const spec = buildSpec(values, [], { kind: 'configuration' });
@@ -122,6 +146,25 @@ describe('buildSpec', () => {
     expect(spec.address).toEqual({
       valueFrom: { configMapKeyRef: { name: 'other-cm', key: 'value' } },
     });
+  });
+
+  it('keeps a provided description', () => {
+    const spec = buildSpec(values, [], { kind: 'configuration' });
+    expect(spec.description).toBe('GitHub remote MCP');
+  });
+
+  it('omits the description when it is empty', () => {
+    const spec = buildSpec({ ...values, description: '   ' }, [], {
+      kind: 'configuration',
+    });
+    expect(spec.description).toBeUndefined();
+  });
+
+  it('omits the description when it is not set', () => {
+    const spec = buildSpec({ ...values, description: undefined }, [], {
+      kind: 'configuration',
+    });
+    expect(spec.description).toBeUndefined();
   });
 
   it('round-trips a serviceRef untouched', () => {
