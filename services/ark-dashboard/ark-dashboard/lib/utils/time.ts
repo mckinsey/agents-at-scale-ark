@@ -113,6 +113,6 @@ export function formatAge(timestamp: Date | string | null | undefined): string {
 export function formatTimestamp(timestamp: string | undefined | null): string {
   if (!timestamp) return '—';
   const date = new Date(timestamp);
-  if (isNaN(date.getTime())) return timestamp;
+  if (Number.isNaN(date.getTime())) return timestamp;
   return date.toLocaleString();
 }
