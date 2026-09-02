@@ -11,7 +11,10 @@ interface AccessReviewResponse {
 }
 
 export const accessReviewService = {
-  async check(params: AccessReviewParams): Promise<boolean> {
+  async check(
+    namespace: string,
+    params: AccessReviewParams,
+  ): Promise<boolean> {
     const response = await apiClient.post<AccessReviewResponse>(
       '/api/v1/resources/access-review',
       {
@@ -19,6 +22,7 @@ export const accessReviewService = {
         resource: params.resource,
         verb: params.verb,
       },
+      { params: { namespace } },
     );
     return response.allowed;
   },

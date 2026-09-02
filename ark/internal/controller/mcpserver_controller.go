@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -733,88 +734,87 @@ func (r *MCPServerReconciler) convertInputSchemaToRawExtension(schema any) *runt
 	return &runtime.RawExtension{Raw: bytes}
 }
 
-// Field indexes mapping a Secret name back to the MCPServers that
-// reference it. Indexes rather than a List-and-filter so a Secret event
-// does not scan every MCPServer in the namespace.
-const (
-	indexTokenSecretRef = ".spec.authorization.tokenSecretRef.name"
-	indexSigningKeyRef  = ".spec.authorization.clientCredentials.clientAuthentication.privateKeyJWT.secretKeyRef.name"
-)
-
-func mcpServerTokenSecretIndexer(obj client.Object) []string {
-	mcpServer, ok := obj.(*arkv1alpha1.MCPServer)
-	if !ok || mcpServer.Spec.Authorization == nil {
-		return nil
-	}
-	if name := mcpServer.Spec.Authorization.TokenSecretRef.Name; name != "" {
-		return []string{name}
-	}
-	return nil
-}
-
-func mcpServerSigningKeyIndexer(obj client.Object) []string {
-	mcpServer, ok := obj.(*arkv1alpha1.MCPServer)
-	if !ok || mcpServer.Spec.Authorization == nil || mcpServer.Spec.Authorization.ClientCredentials == nil {
-		return nil
-	}
-	pkjwt := mcpServer.Spec.Authorization.ClientCredentials.ClientAuthentication.PrivateKeyJWT
-	if pkjwt == nil || pkjwt.SecretKeyRef.Name == "" {
-		return nil
-	}
-	return []string{pkjwt.SecretKeyRef.Name}
-}
-
-// findMCPServersForSecret enqueues every MCPServer that names this Secret
-// as either its token output or its signing-key input.
-//
-// This is the primary signal for Secret changes — a rotated signing key
-// or an out-of-band token edit is picked up immediately rather than at
-// the next poll. Expiry is not a Secret change and cannot arrive this
-// way, so the renewal requeue remains the mechanism for that.
-func (r *MCPServerReconciler) findMCPServersForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
-	seen := map[types.NamespacedName]struct{}{}
-	var requests []reconcile.Request
-
-	for _, index := range []string{indexTokenSecretRef, indexSigningKeyRef} {
-		var list arkv1alpha1.MCPServerList
-		if err := r.List(ctx, &list,
-			client.InNamespace(obj.GetNamespace()),
-			client.MatchingFields{index: obj.GetName()},
-		); err != nil {
-			logf.FromContext(ctx).Error(err, "mapping Secret to MCPServers",
-				"index", index, "secret", obj.GetName(), "namespace", obj.GetNamespace())
-			continue
-		}
-		for i := range list.Items {
-			nn := types.NamespacedName{Name: list.Items[i].Name, Namespace: list.Items[i].Namespace}
-			if _, dup := seen[nn]; dup {
-				continue
-			}
-			seen[nn] = struct{}{}
-			requests = append(requests, reconcile.Request{NamespacedName: nn})
-		}
-	}
-	return requests
-}
-
 func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	indexes := map[string]client.IndexerFunc{
-		indexTokenSecretRef: mcpServerTokenSecretIndexer,
-		indexSigningKeyRef:  mcpServerSigningKeyIndexer,
-	}
-	for field, indexer := range indexes {
-		if err := mgr.GetFieldIndexer().IndexField(
-			context.Background(), &arkv1alpha1.MCPServer{}, field, indexer,
-		); err != nil {
-			return err
-		}
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.MCPServer{}).
-		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.findMCPServersForSecret)).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToMCPServers), builder.WithPredicates(dataChangedPredicate())).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToMCPServers), builder.WithPredicates(dataChangedPredicate())).
 		Named("mcpserver").
 		Complete(r)
+}
+
+// mapSecretToMCPServers enqueues MCPServers whose address, headers or
+// authorization token reference the Secret.
+func (r *MCPServerReconciler) mapSecretToMCPServers(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapDependencyToMCPServers(ctx, obj, func(s arkv1alpha1.MCPServer) bool {
+		return mcpServerReferencesSecret(s, obj.GetName())
+	})
+}
+
+// mapConfigMapToMCPServers enqueues MCPServers whose address or headers
+// reference the ConfigMap.
+func (r *MCPServerReconciler) mapConfigMapToMCPServers(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapDependencyToMCPServers(ctx, obj, func(s arkv1alpha1.MCPServer) bool {
+		return mcpServerReferencesConfigMap(s, obj.GetName())
+	})
+}
+
+func (r *MCPServerReconciler) mapDependencyToMCPServers(ctx context.Context, obj client.Object, matches func(arkv1alpha1.MCPServer) bool) []reconcile.Request {
+	return mapDependencyRequests(ctx, r.Client, obj, &arkv1alpha1.MCPServerList{},
+		func(l *arkv1alpha1.MCPServerList) []arkv1alpha1.MCPServer { return l.Items },
+		matches,
+		func(s arkv1alpha1.MCPServer) types.NamespacedName {
+			return types.NamespacedName{Name: s.Name, Namespace: s.Namespace}
+		})
+}
+
+// mcpServerReferences walks the two places an MCPServer resolves a value from a
+// dependency: spec.address and each spec.headers[].value. The two use distinct
+// valueFrom types, so callers supply one matcher per shape.
+func mcpServerReferences(
+	server arkv1alpha1.MCPServer,
+	matchValue func(*arkv1alpha1.ValueFromSource) bool,
+	matchHeader func(*arkv1alpha1.HeaderValueSource) bool,
+) bool {
+	if vf := server.Spec.Address.ValueFrom; vf != nil && matchValue(vf) {
+		return true
+	}
+	for _, header := range server.Spec.Headers {
+		if vf := header.Value.ValueFrom; vf != nil && matchHeader(vf) {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpServerReferencesConfigMap(server arkv1alpha1.MCPServer, configMapName string) bool {
+	return mcpServerReferences(server,
+		func(vf *arkv1alpha1.ValueFromSource) bool {
+			return vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == configMapName
+		},
+		func(vf *arkv1alpha1.HeaderValueSource) bool {
+			return vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == configMapName
+		})
+}
+
+func mcpServerReferencesSecret(server arkv1alpha1.MCPServer, secretName string) bool {
+	if auth := server.Spec.Authorization; auth != nil {
+		if auth.TokenSecretRef.Name == secretName {
+			return true
+		}
+		if cc := auth.ClientCredentials; cc != nil {
+			if pkjwt := cc.ClientAuthentication.PrivateKeyJWT; pkjwt != nil && pkjwt.SecretKeyRef.Name == secretName {
+				return true
+			}
+		}
+	}
+	return mcpServerReferences(server,
+		func(vf *arkv1alpha1.ValueFromSource) bool {
+			return vf.SecretKeyRef != nil && vf.SecretKeyRef.Name == secretName
+		},
+		func(vf *arkv1alpha1.HeaderValueSource) bool {
+			return vf.SecretKeyRef != nil && vf.SecretKeyRef.Name == secretName
+		})
 }
 
 // parseTimeout returns the MCPServer spec timeout as a duration,

@@ -34,6 +34,7 @@ import {
   Shield,
   SmartToy,
   Storefront,
+  Tune,
   UnfoldMore,
   VpnKey,
 } from '@/components/icons';
@@ -88,6 +89,7 @@ interface CollapsibleSectionProps {
   icon: React.ReactNode;
   label: string;
   isActive: boolean;
+  activeKey: string;
   sidebarState: 'expanded' | 'collapsed';
   onExpand: () => void;
   onNavigate: (key: string) => void;
@@ -102,6 +104,7 @@ function CollapsibleSection({
   icon,
   label,
   isActive,
+  activeKey,
   sidebarState,
   onExpand,
   onNavigate,
@@ -143,6 +146,7 @@ function CollapsibleSection({
           <SidebarMenuItem key={item.key}>
             <SidebarMenuButton
               onClick={() => isNamespaceResolved && onNavigate(item.key)}
+              isActive={item.key === activeKey}
               disabled={!isNamespaceResolved || loading}>
               <span>{item.title}</span>
             </SidebarMenuButton>
@@ -247,12 +251,7 @@ export function AppSidebar() {
         fromSection: pathname.split('/')[1],
       },
     });
-    const currentParams = new URLSearchParams(window.location.search);
-    const queryString = currentParams.toString();
-    const targetUrl = queryString
-      ? `/${sectionKey}?${queryString}`
-      : `/${sectionKey}`;
-    navigateTo(targetUrl);
+    navigateTo(`/${sectionKey}`);
   };
 
   const getCurrentSection = () => pathname.split('/')[1];
@@ -329,6 +328,7 @@ export function AppSidebar() {
                 icon={<SmartToy />}
                 label="Agent builder"
                 isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
+                activeKey={getCurrentSection()}
                 sidebarState={sidebarState}
                 onExpand={() => {
                   setSidebarOpen(true);
@@ -396,6 +396,7 @@ export function AppSidebar() {
                 icon={<Earthquake />}
                 label="Monitoring"
                 isActive={isAnySectionActive(MONITORING_SECTIONS)}
+                activeKey={getCurrentSection()}
                 sidebarState={sidebarState}
                 onExpand={() => {
                   setSidebarOpen(true);
@@ -457,6 +458,16 @@ export function AppSidebar() {
                   tooltip="Secrets">
                   <Shield />
                   <span>Secrets</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('configurations')}
+                  isActive={getCurrentSection() === 'configurations'}
+                  tooltip="Configurations">
+                  <Tune />
+                  <span>Configurations</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 

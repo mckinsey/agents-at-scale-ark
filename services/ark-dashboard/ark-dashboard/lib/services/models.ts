@@ -23,14 +23,16 @@ export type Model = ModelDetailResponse & { id: string };
 // CRUD Operations
 export const modelsService = {
   // Get all models
-  async getAll(): Promise<Model[]> {
-    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`);
+  async getAll(namespace: string): Promise<Model[]> {
+    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`, {
+      namespace,
+    });
 
     // Map the response items to include id for UI compatibility
     const models = await Promise.all(
       items.map(async item => {
         // Fetch detailed info for each model to get full data
-        const detailed = await modelsService.getByName(item.name);
+        const detailed = await modelsService.getByName(namespace, item.name);
         return detailed!;
       }),
     );
@@ -39,10 +41,11 @@ export const modelsService = {
   },
 
   // Get a single model by name
-  async getByName(name: string): Promise<Model | null> {
+  async getByName(namespace: string, name: string): Promise<Model | null> {
     try {
       const response = await apiClient.get<ModelDetailResponse>(
         `/api/v1/models/${name}`,
+        { params: { namespace } },
       );
       return {
         ...response,
@@ -57,16 +60,17 @@ export const modelsService = {
   },
 
   // Get a single model by ID (for UI compatibility - ID is actually the name)
-  async getById(id: number | string): Promise<Model | null> {
+  async getById(namespace: string, id: number | string): Promise<Model | null> {
     // Convert numeric ID to string name
     const name = String(id);
-    return modelsService.getByName(name);
+    return modelsService.getByName(namespace, name);
   },
 
-  async create(model: ModelCreateRequest): Promise<Model> {
+  async create(namespace: string, model: ModelCreateRequest): Promise<Model> {
     const response = await apiClient.post<ModelDetailResponse>(
       `/api/v1/models`,
       model,
+      { params: { namespace } },
     );
 
     trackEvent({
@@ -84,6 +88,7 @@ export const modelsService = {
   },
 
   async update(
+    namespace: string,
     name: string,
     updates: ModelUpdateRequest,
   ): Promise<Model | null> {
@@ -91,6 +96,7 @@ export const modelsService = {
       const response = await apiClient.put<ModelDetailResponse>(
         `/api/v1/models/${name}`,
         updates,
+        { params: { namespace } },
       );
 
       trackEvent({
@@ -114,16 +120,19 @@ export const modelsService = {
 
   // Update by ID (for UI compatibility)
   async updateById(
+    namespace: string,
     id: number | string,
     updates: ModelUpdateRequest,
   ): Promise<Model | null> {
     const name = String(id);
-    return modelsService.update(name, updates);
+    return modelsService.update(namespace, name, updates);
   },
 
-  async delete(name: string): Promise<boolean> {
+  async delete(namespace: string, name: string): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/models/${name}`);
+      await apiClient.delete(`/api/v1/models/${name}`, {
+        params: { namespace },
+      });
 
       trackEvent({
         name: 'model_deleted',
@@ -142,8 +151,8 @@ export const modelsService = {
   },
 
   // Delete by ID (for UI compatibility)
-  async deleteById(id: number | string): Promise<boolean> {
+  async deleteById(namespace: string, id: number | string): Promise<boolean> {
     const name = String(id);
-    return modelsService.delete(name);
+    return modelsService.delete(namespace, name);
   },
 };

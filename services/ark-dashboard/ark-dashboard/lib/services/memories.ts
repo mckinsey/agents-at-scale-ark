@@ -23,14 +23,16 @@ export type Memory = MemoryDetailResponse & { id: string };
 // CRUD Operations
 export const memoriesService = {
   // Get all memories
-  async getAll(): Promise<Memory[]> {
-    const items = await fetchAllPages<MemoryResponse>(`/api/v1/memories`);
+  async getAll(namespace: string): Promise<Memory[]> {
+    const items = await fetchAllPages<MemoryResponse>(`/api/v1/memories`, {
+      namespace,
+    });
 
     // Map the response items to include id for UI compatibility
     const memories = await Promise.all(
       items.map(async item => {
         // Fetch detailed info for each memory to get full data
-        const detailed = await memoriesService.getByName(item.name);
+        const detailed = await memoriesService.getByName(namespace, item.name);
         return detailed!;
       }),
     );
@@ -39,10 +41,11 @@ export const memoriesService = {
   },
 
   // Get a single memory by name
-  async getByName(name: string): Promise<Memory | null> {
+  async getByName(namespace: string, name: string): Promise<Memory | null> {
     try {
       const response = await apiClient.get<MemoryDetailResponse>(
         `/api/v1/memories/${name}`,
+        { params: { namespace } },
       );
       return {
         ...response,
@@ -57,17 +60,24 @@ export const memoriesService = {
   },
 
   // Get a single memory by ID (for UI compatibility - ID is actually the name)
-  async getById(id: number | string): Promise<Memory | null> {
+  async getById(
+    namespace: string,
+    id: number | string,
+  ): Promise<Memory | null> {
     // Convert numeric ID to string name
     const name = String(id);
-    return memoriesService.getByName(name);
+    return memoriesService.getByName(namespace, name);
   },
 
   // Create a new memory
-  async create(memory: MemoryCreateRequest): Promise<Memory> {
+  async create(
+    namespace: string,
+    memory: MemoryCreateRequest,
+  ): Promise<Memory> {
     const response = await apiClient.post<MemoryDetailResponse>(
       `/api/v1/memories`,
       memory,
+      { params: { namespace } },
     );
     return {
       ...response,
@@ -77,6 +87,7 @@ export const memoriesService = {
 
   // Update an existing memory
   async update(
+    namespace: string,
     name: string,
     updates: MemoryUpdateRequest,
   ): Promise<Memory | null> {
@@ -84,6 +95,7 @@ export const memoriesService = {
       const response = await apiClient.put<MemoryDetailResponse>(
         `/api/v1/memories/${name}`,
         updates,
+        { params: { namespace } },
       );
       return {
         ...response,
@@ -99,17 +111,20 @@ export const memoriesService = {
 
   // Update by ID (for UI compatibility)
   async updateById(
+    namespace: string,
     id: number | string,
     updates: MemoryUpdateRequest,
   ): Promise<Memory | null> {
     const name = String(id);
-    return memoriesService.update(name, updates);
+    return memoriesService.update(namespace, name, updates);
   },
 
   // Delete a memory
-  async delete(name: string): Promise<boolean> {
+  async delete(namespace: string, name: string): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/memories/${name}`);
+      await apiClient.delete(`/api/v1/memories/${name}`, {
+        params: { namespace },
+      });
       return true;
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {
@@ -120,8 +135,11 @@ export const memoriesService = {
   },
 
   // Delete by ID (for UI compatibility)
-  async deleteById(id: number | string): Promise<boolean> {
+  async deleteById(
+    namespace: string,
+    id: number | string,
+  ): Promise<boolean> {
     const name = String(id);
-    return memoriesService.delete(name);
+    return memoriesService.delete(namespace, name);
   },
 };

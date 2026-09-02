@@ -27,6 +27,15 @@ import type {
 
 import { FilesSection } from './files-section';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('copy-to-clipboard');
 vi.mock('sonner');
 vi.mock('@/lib/services/files');
@@ -139,6 +148,7 @@ describe('FilesSection', () => {
       );
 
       expect(mockFilesService.download).toHaveBeenCalledWith(
+        'default',
         'documents/report.pdf',
       );
     });
@@ -818,7 +828,7 @@ describe('FilesSection', () => {
       fireEvent.click(loadMoreButton);
 
       await waitFor(() => {
-        expect(mockFilesService.list).toHaveBeenCalledWith({
+        expect(mockFilesService.list).toHaveBeenCalledWith('default', {
           prefix: '',
           max_keys: 100,
           continuation_token: 'token123',

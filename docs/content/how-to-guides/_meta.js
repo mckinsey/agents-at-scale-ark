@@ -22,6 +22,10 @@ export default {
     title: 'Add tools and MCP servers',
     href: '/user-guide/tools'
   },
+  configurations: {
+    title: 'Parametrize resources per environment',
+    href: '/user-guide/configurations'
+  },
   'ark-cli': {
     title: 'Use the Ark CLI',
     href: '/user-guide/ark-cli'

@@ -5,7 +5,6 @@ package registry
 import (
 	"context"
 	"errors"
-	"strconv"
 	"testing"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/storage"
@@ -816,6 +816,38 @@ func TestGenericStorage_Watch_FieldSelectorReturnsBadRequest(t *testing.T) {
 	}
 }
 
+// expiredWatchBackend stands in for the PostgreSQL backend rejecting a resume from
+// below the purge floor, so the registry's error mapping can be tested in isolation.
+type expiredWatchBackend struct {
+	*mockBackend
+}
+
+func (b *expiredWatchBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
+	return nil, storage.ErrResourceExpired
+}
+
+func TestGenericStorage_Watch_TooOldResourceVersionReturnsExpired(t *testing.T) {
+	t.Parallel()
+	backend := &expiredWatchBackend{mockBackend: newMockBackend()}
+	config := ResourceConfig{
+		Kind:         "Agent",
+		Resource:     "agents",
+		SingularName: "agent",
+		NewFunc:      func() runtime.Object { return &arkv1alpha1.Agent{} },
+		NewListFunc:  func() runtime.Object { return &arkv1alpha1.AgentList{} },
+	}
+	gs := NewGenericStorage(backend, &mockConverter{}, config, nil)
+	ctx := contextWithNamespace(testNS())
+
+	_, err := gs.Watch(ctx, &metainternalversion.ListOptions{ResourceVersion: "5"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !apierrors.IsResourceExpired(err) {
+		t.Errorf("expected ResourceExpired (410), got %T: %v", err, err)
+	}
+}
+
 func TestGenericStorage_ConvertToTable_Single(t *testing.T) {
 	t.Parallel()
 	gs, _ := newTestStorage()
@@ -985,7 +1017,7 @@ func TestSetListItems(t *testing.T) {
 		&arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a2", ResourceVersion: "2"}},
 	}
 
-	err := setListItems(list, objects, "next-token")
+	err := setListItems(list, objects, "next-token", 2)
 	if err != nil {
 		t.Fatalf("setListItems() error = %v", err)
 	}
@@ -998,41 +1030,26 @@ func TestSetListItems(t *testing.T) {
 	}
 }
 
-func TestSetListItems_ResourceVersionIsNumericMax(t *testing.T) {
+func TestSetListItems_StampsBackendListRV(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
-		rvs      []string
+		listRV   int64
 		expected string
 	}{
 		{
-			name:     "digit-count boundary 9 vs 10",
-			rvs:      []string{"9", "10"},
-			expected: "10",
-		},
-		{
-			name:     "digit-count boundary 9 vs 100",
-			rvs:      []string{"9", "100"},
+			name:     "stamps the backend-supplied head revision",
+			listRV:   100,
 			expected: "100",
 		},
 		{
-			name:     "mixed order",
-			rvs:      []string{"3", "20", "100", "5"},
-			expected: "100",
+			name:     "head above every item RV (lifted to purge floor)",
+			listRV:   500,
+			expected: "500",
 		},
 		{
-			name:     "empty and invalid rvs are skipped",
-			rvs:      []string{"", "not-a-number", "42"},
-			expected: "42",
-		},
-		{
-			name:     "no valid rvs leaves list rv unset",
-			rvs:      []string{"", "abc"},
-			expected: "",
-		},
-		{
-			name:     "empty list leaves rv unset",
-			rvs:      nil,
+			name:     "zero (empty store) leaves rv unset",
+			listRV:   0,
 			expected: "",
 		},
 	}
@@ -1040,14 +1057,14 @@ func TestSetListItems_ResourceVersionIsNumericMax(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			list := &arkv1alpha1.AgentList{}
-			objects := make([]runtime.Object, 0, len(tt.rvs))
-			for i, rv := range tt.rvs {
-				objects = append(objects, &arkv1alpha1.Agent{
-					ObjectMeta: metav1.ObjectMeta{Name: "a" + strconv.Itoa(i), ResourceVersion: rv},
-				})
+			// Item RVs are deliberately far below listRV: setListItems must use the
+			// backend head, not the item max, so a resume never lands below the floor.
+			objects := []runtime.Object{
+				&arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a1", ResourceVersion: "3"}},
+				&arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a2", ResourceVersion: "7"}},
 			}
 
-			if err := setListItems(list, objects, ""); err != nil {
+			if err := setListItems(list, objects, "", tt.listRV); err != nil {
 				t.Fatalf("setListItems() error = %v", err)
 			}
 

@@ -30,7 +30,7 @@ import { useTeamForm } from './use-team-form';
 
 export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { push } = useNamespacedNavigation();
-  const { readOnlyMode } = useNamespace();
+  const { namespace, readOnlyMode } = useNamespace();
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
@@ -42,12 +42,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     if (isViewing) {
       setTeamsLoading(true);
       teamsService
-        .getAll()
+        .getAll(namespace)
         .then(teams => setAllTeams(teams))
         .catch(console.error)
         .finally(() => setTeamsLoading(false));
     }
-  }, [isViewing]);
+  }, [namespace, isViewing]);
 
   const { form, state, actions } = useTeamForm({
     mode,
@@ -73,12 +73,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
 
   const fetchTeamYaml = useCallback(async (name: string) => {
     try {
-      const raw = await teamsService.getRawResource(name);
+      const raw = await teamsService.getRawResource(namespace, name);
       setTeamYaml(toKubernetesYaml(raw));
     } catch {
       setTeamYaml('');
     }
-  }, []);
+  }, [namespace]);
 
   useEffect(() => {
     if (team?.name && showYaml) {

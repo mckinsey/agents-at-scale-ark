@@ -9,17 +9,17 @@ class DashboardPage(BasePage):
     
     NAV_MENU = "nav[role='navigation'], nav.navbar, header nav"
     DASHBOARD_TITLE = "h1, h2, [data-testid='dashboard-title']"
-    AGENTS_TAB = "a[href='/agents']"
-    MODELS_TAB = "a[href='/models']"
-    QUERIES_TAB = "a[href='/queries']"
-    TOOLS_TAB = "a[href='/tools']"
-    TEAMS_TAB = "a[href='/teams']"
-    SECRETS_TAB = "a[href='/secrets']"
+    AGENTS_TAB = "a[href='/agents'], a[href^='/agents?']"
+    MODELS_TAB = "a[href='/models'], a[href^='/models?']"
+    QUERIES_TAB = "a[href='/queries'], a[href^='/queries?']"
+    TOOLS_TAB = "a[href='/tools'], a[href^='/tools?']"
+    TEAMS_TAB = "a[href='/teams'], a[href^='/teams?']"
+    SECRETS_TAB = "a[href='/secrets'], a[href^='/secrets?']"
     MAIN_CONTENT = "main[data-slot='sidebar-inset']"
     SIDEBAR = "[data-testid='sidebar'], aside, nav"
     AGENT_BUILDER_TOGGLE = "button:has-text('Agent Builder')"
     
-    ADD_AGENT_BUTTON = "a[href='/agents/new']:has-text('Create Agent')"
+    ADD_AGENT_BUTTON = "a[href^='/agents/new']:has-text('Create Agent'), button:has-text('Create Agent'), a:has-text('Create Agent')"
     ADD_MODEL_BUTTON = "button:has-text('Add Model'), button:has-text('Create Model'), a:has-text('Add Model')"
     ADD_QUERY_BUTTON = "button:has-text('Add Query'), button:has-text('Create Query'), a:has-text('Add Query')"
     ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), a:has-text('Add Tool')"
@@ -39,12 +39,13 @@ class DashboardPage(BasePage):
     def navigate_to_section(self, section: str) -> None:
         self.page.goto(f"{self.base_url}/{section}", wait_until="domcontentloaded")
         self.wait_for_load_state("domcontentloaded")
+        self.wait_for_namespace_in_url()
     
     def expand_agent_builder(self) -> None:
         try:
             toggle = self.page.locator(self.AGENT_BUILDER_TOGGLE).first
             toggle.wait_for(state="visible", timeout=5000)
-            agents_link = self.page.locator("a[href='/agents']").first
+            agents_link = self.page.locator("a[href='/agents'], a[href^='/agents?']").first
             if not agents_link.is_visible(timeout=1000):
                 toggle.click()
                 agents_link.wait_for(state="visible", timeout=5000)

@@ -62,8 +62,9 @@ subjects:
 ---
 # ConfigMaps + Secrets read access is required cluster-wide because the apiserver
 # resolves Query/Agent/Model parameter references via valueFrom.configMapKeyRef and
-# valueFrom.secretKeyRef at admission time. Without this, parameter resolution
-# blocks on a controller-runtime informer that can't sync, and POSTs time out.
+# valueFrom.secretKeyRef at admission time. The apiserver reads them by name through the
+# uncached reader (mgr.GetAPIReader), so it only needs get, not list or watch. Without
+# list/watch the ServiceAccount cannot enumerate or dump Secrets it was never pointed at.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -73,7 +74,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["configmaps", "secrets"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -110,8 +111,10 @@ rules:
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get", "list", "watch"]
-  {{- /* paramKind policies need read access to the param resource or the informer never
-    syncs and the policy silently never matches. ConfigMaps/Secrets are granted above. */}}
+  {{- /* paramKind policies need list/watch on the param resource or the informer never
+    syncs and the policy silently never matches. The parameter-resolution role above is
+    get-only, so a ConfigMap/Secret paramKind must add its own list/watch rule here via
+    policy.extraParamRules, scoped as narrowly as the deployment allows. */}}
   {{- with .Values.policy.extraParamRules }}
   {{- toYaml . | nindent 2 }}
   {{- end }}

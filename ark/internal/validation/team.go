@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 const (
@@ -40,36 +39,7 @@ func (v *Validator) ValidateTeam(ctx context.Context, team *arkv1alpha1.Team) ([
 		}
 	}
 
-	if err := v.validateNoMixedTeam(ctx, team); err != nil {
-		return nil, err
-	}
-
 	return CollectMigrationWarnings(team.Annotations), nil
-}
-
-func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.Team) error {
-	var hasInternalAgents, hasExternalAgents bool
-
-	for i, member := range team.Spec.Members {
-		if member.Type != MemberTypeAgent {
-			continue
-		}
-		obj, err := v.Lookup.GetResource(ctx, "Agent", team.Namespace, member.Name)
-		if err != nil {
-			return fmt.Errorf("team member %d: failed to load agent '%s': %v", i, member.Name, err)
-		}
-		agent := obj.(*arkv1alpha1.Agent)
-		if arka2a.IsNamedEngine(agent.Spec.ExecutionEngine) {
-			hasExternalAgents = true
-		} else {
-			hasInternalAgents = true
-		}
-		if hasInternalAgents && hasExternalAgents {
-			return fmt.Errorf("mixed teams are not allowed: team contains both internal and external agents. Team member %d: agent '%s' uses external execution engine '%s'",
-				i, member.Name, agent.Spec.ExecutionEngine.Name)
-		}
-	}
-	return nil
 }
 
 func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team) error {
