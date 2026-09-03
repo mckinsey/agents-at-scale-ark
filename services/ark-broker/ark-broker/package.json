@@ -28,6 +28,8 @@
     ]
   },
   "dependencies": {
+    "@streamparser/json": "^0.0.26",
+    "@streamparser/json-node": "^0.0.26",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "cors": "^2.8.5",
@@ -81,7 +83,7 @@
     },
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
-    "qs": "^6.15.2",
+    "qs": "^6.16.0",
     "swagger-jsdoc": {
       "glob": "^7.2.3"
     },
@@ -93,7 +95,7 @@
     "ws": "^8.21.0",
     "form-data": "^4.0.6",
     "undici": "^7.28.0",
-    "fast-uri": "^3.1.6",
+    "fast-uri": "^4.1.4",
     "dockerode": {
       "protobufjs": "^7.6.5"
     }
