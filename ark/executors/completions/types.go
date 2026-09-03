@@ -2,6 +2,7 @@ package completions
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -32,6 +33,19 @@ func ToolMessage[T string | []openai.ChatCompletionContentPartTextParam](content
 	return Message(openai.ToolMessage(content, toolCallID))
 }
 
+func NewUserImageMessage(caption string, images []ToolResultImage) Message {
+	parts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(images)+1)
+	if caption != "" {
+		parts = append(parts, openai.TextContentPart(caption))
+	}
+	for _, image := range images {
+		parts = append(parts, openai.ImageContentPart(
+			openai.ChatCompletionContentPartImageImageURLParam{URL: image.DataURL()},
+		))
+	}
+	return Message(openai.UserMessage(parts))
+}
+
 type TeamMember interface {
 	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error)
 	GetName() string
@@ -40,10 +54,36 @@ type TeamMember interface {
 }
 
 type ToolResult struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Content string `json:"content,omitempty"`
-	Error   string `json:"error,omitempty"`
+	ID      string            `json:"id"`
+	Name    string            `json:"name"`
+	Content string            `json:"content,omitempty"`
+	Images  []ToolResultImage `json:"images,omitempty"`
+	Error   string            `json:"error,omitempty"`
+}
+
+// ToolResultImage holds an image already base64-encoded. Both wire formats that carry it
+// want base64 - an OpenAI data URL and an Anthropic image block - so it is encoded once,
+// where the bytes arrive, and never decoded again on the request path.
+type ToolResultImage struct {
+	MediaType string `json:"mediaType"`
+	B64       string `json:"b64"`
+	Bytes     int    `json:"bytes"`
+}
+
+func newToolResultImage(mediaType string, data []byte) ToolResultImage {
+	return ToolResultImage{
+		MediaType: mediaType,
+		B64:       base64.StdEncoding.EncodeToString(data),
+		Bytes:     len(data),
+	}
+}
+
+func (i ToolResultImage) DataURL() string {
+	return dataURLPrefix + i.MediaType + base64Marker + i.B64
+}
+
+func (i ToolResultImage) Base64() string {
+	return i.B64
 }
 
 type ToolExecutor interface {

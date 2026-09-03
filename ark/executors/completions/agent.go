@@ -35,6 +35,7 @@ type Agent struct {
 	ExecutionEngine       *arkv1alpha1.ExecutionEngineRef
 	Annotations           map[string]string
 	OutputSchema          *runtime.RawExtension
+	ImagePolicy           *imagePolicy
 	client                client.Client
 	approvalRequiredTools map[string]*arkv1alpha1.ToolApprovalConfig
 }
@@ -194,7 +195,14 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 	return assistantMessage
 }
 
-func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
+func (a *Agent) imagePolicy() *imagePolicy {
+	if a.ImagePolicy != nil {
+		return a.ImagePolicy
+	}
+	return defaultImagePolicy()
+}
+
+func (a *Agent) executeToolCallWithImages(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall, budget *imageTurnBudget) (Message, []ToolResultImage, error) {
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
 
 	// If the result has an error field set, use that as the message content
@@ -203,13 +211,15 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 	if result.Error != "" {
 		content = result.Error
 	}
-	toolMessage := ToolMessage(content, result.ID)
+
+	images, note := budget.admit(ctx, toolCall.Function.Name, result.Images)
+	toolMessage := ToolMessage(content+note, result.ID)
 
 	if err != nil {
-		return toolMessage, err
+		return toolMessage, nil, err
 	}
 
-	return toolMessage, nil
+	return toolMessage, images, nil
 }
 
 func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, agentMessages, newMessages *[]Message) error {
@@ -250,19 +260,28 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 	}
 
 	// No approval needed, execute normally
+	budget := a.imagePolicy().NewTurnBudget()
+	outcomes := make([]toolOutcome, 0, len(toolCalls))
 	for _, tc := range toolCalls {
 		if ctx.Err() != nil {
+			appendToolOutcomes(agentMessages, newMessages, outcomes)
 			return ctx.Err()
 		}
 
-		toolMessage, err := a.executeToolCall(ctx, tc)
-		*agentMessages = append(*agentMessages, toolMessage)
-		*newMessages = append(*newMessages, toolMessage)
+		toolMessage, images, err := a.executeToolCallWithImages(ctx, tc, budget)
+		outcomes = append(outcomes, toolOutcome{
+			toolName: tc.Function.Name,
+			message:  toolMessage,
+			images:   images,
+		})
 
 		if err != nil {
+			appendToolOutcomes(agentMessages, newMessages, outcomes)
 			return err
 		}
 	}
+
+	appendToolOutcomes(agentMessages, newMessages, outcomes)
 	return nil
 }
 
@@ -546,23 +565,25 @@ func (a *Agent) reconstructMessagesForResumption(
 	assistantMsgConverted := Message(assistantMsg.ToParam())
 	agentMessages = append(agentMessages, assistantMsgConverted)
 
-	// Append tool results as tool messages
-	toolResultMessages := []Message{}
+	// Append tool results as tool messages, followed by any images they returned
+	outcomes := make([]toolOutcome, 0, len(approvedResults))
 	for _, result := range approvedResults {
 		content := result.Content
 		if result.Error != "" {
 			content = result.Error
 		}
-		toolMsg := ToolMessage(content, result.ID)
-		agentMessages = append(agentMessages, toolMsg)
-		toolResultMessages = append(toolResultMessages, toolMsg)
+		outcomes = append(outcomes, toolOutcome{
+			toolName: result.Name,
+			message:  ToolMessage(content, result.ID),
+			images:   result.Images,
+		})
 	}
-
-	log.Info("Reconstructed conversation for resumption", "totalMessages", len(agentMessages), "toolResults", len(approvedResults))
 
 	// newMessages should contain the reconstructed messages so they get saved to memory
 	newMessages := []Message{assistantMsgConverted}
-	newMessages = append(newMessages, toolResultMessages...)
+	appendToolOutcomes(&agentMessages, &newMessages, outcomes)
+
+	log.Info("Reconstructed conversation for resumption", "totalMessages", len(agentMessages), "toolResults", len(approvedResults))
 	log.Info("Starting resumption with reconstructed messages in newMessages", "count", len(newMessages))
 
 	return agentMessages, newMessages, nil

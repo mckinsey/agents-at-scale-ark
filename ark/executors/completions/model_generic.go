@@ -28,8 +28,16 @@ type Model struct {
 	Provider          ChatCompletionProvider
 	OutputSchema      *runtime.RawExtension
 	SchemaName        string
+	ImagePolicy       *imagePolicy
 	telemetryRecorder telemetry.ModelRecorder
 	eventingRecorder  eventing.ModelRecorder
+}
+
+func (m *Model) imagePolicy() *imagePolicy {
+	if m.ImagePolicy != nil {
+		return m.ImagePolicy
+	}
+	return defaultImagePolicy()
 }
 
 func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStream EventStreamInterface, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
@@ -45,6 +53,8 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 		"modelType": m.Type,
 	}
 	ctx = m.eventingRecorder.Start(ctx, "LLMCall", fmt.Sprintf("Calling model %s", m.Model), operationData)
+
+	messages = m.imagePolicy().ApplyRequestBudget(messages)
 
 	otelMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 	for i, msg := range messages {

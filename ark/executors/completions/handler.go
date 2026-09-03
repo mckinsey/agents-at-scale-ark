@@ -945,6 +945,7 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 	// Convert parsed tool calls to openai format
 	toolCalls := make([]openai.ChatCompletionMessageToolCall, len(toolCallsData))
 	approvedResults := []ToolResult{}
+	imageBudget := agent.imagePolicy().NewTurnBudget()
 
 	for i, tcData := range toolCallsData {
 		tc := openai.ChatCompletionMessageToolCall{
@@ -960,35 +961,31 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 		//nolint:nestif // TODO: Refactor to reduce nesting complexity
 		if isApproved {
 			// APPROVED: Execute the tool
-			result, err := agent.executeToolCall(ctx, tc)
+			result, images, err := agent.executeToolCallWithImages(ctx, tc, imageBudget)
 			if err != nil {
 				log.Error(err, "failed to execute approved tool call", "toolName", tc.Function.Name)
 				// Create error result
 				approvedResults = append(approvedResults, ToolResult{
 					ID:      tc.ID,
+					Name:    tc.Function.Name,
 					Content: fmt.Sprintf("Error executing tool: %v", err),
 				})
 			} else {
 				// Extract message content - result is a Message type (tool message)
 				// Convert to string content for tool result
+				content := fmt.Sprintf("%v", result)
 				if toolMsg := result.OfTool; toolMsg != nil {
-					if content := toolMsg.Content.OfString; content.Value != "" {
-						approvedResults = append(approvedResults, ToolResult{
-							ID:      tc.ID,
-							Content: content.Value,
-						})
-					} else {
-						approvedResults = append(approvedResults, ToolResult{
-							ID:      tc.ID,
-							Content: fmt.Sprintf("%v", toolMsg.Content),
-						})
+					content = fmt.Sprintf("%v", toolMsg.Content)
+					if text := toolMsg.Content.OfString; text.Value != "" {
+						content = text.Value
 					}
-				} else {
-					approvedResults = append(approvedResults, ToolResult{
-						ID:      tc.ID,
-						Content: fmt.Sprintf("%v", result),
-					})
 				}
+				approvedResults = append(approvedResults, ToolResult{
+					ID:      tc.ID,
+					Name:    tc.Function.Name,
+					Content: content,
+					Images:  images,
+				})
 			}
 		} else if isRejected {
 			// REJECTED: Return error result without executing
