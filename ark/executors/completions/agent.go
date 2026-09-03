@@ -220,7 +220,7 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 	var approvalConfig *arkv1alpha1.ToolApprovalConfig
 
 	for _, tc := range toolCalls {
-		if config := a.requiresApproval(tc.Function.Name); config != nil {
+		if config := a.requiresApproval(tc.Function.Name, tc.Function.Arguments); config != nil {
 			toolCallsNeedingApproval = append(toolCallsNeedingApproval, ToolCall(tc))
 			if approvalConfig == nil {
 				approvalConfig = config

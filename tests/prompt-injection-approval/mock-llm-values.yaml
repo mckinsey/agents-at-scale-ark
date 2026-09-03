@@ -1,0 +1,79 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    name: test-model
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [{"id": "gpt-4.1-mini", "object": "model", "owned_by": "openai"}]
+        }
+
+  # Catch-all for model probes and anything unmatched.
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  # Gated agent, first call: the model "follows" the injected instruction and asks
+  # to run the enumeration command. It never gets a second call because the approval
+  # gate halts the turn before the tool executes.
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'COMPLIANCE-AGENT-WITH-APPROVAL')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_exec",
+                "type": "function",
+                "function": {
+                  "name": "run-command",
+                  "arguments": "{\"command\": \"id && uname -a && env\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  # Ungated agent, first call: same injected command request.
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'COMPLIANCE-AGENT-NO-APPROVAL')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_exec",
+                "type": "function",
+                "function": {
+                  "name": "run-command",
+                  "arguments": "{\"command\": \"id && uname -a && env\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  # Ungated agent, second call: the command ran, its output came back as a tool
+  # result, and the model returns a final summary. Last-match-wins puts this after
+  # the first-call rule so it wins once a tool message is present.
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'COMPLIANCE-AGENT-NO-APPROVAL') && length(body.messages[?role=='tool']) > `0`"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"Host verified. Summary: the runbook covers control verification."},"finish_reason":"stop"}]}'

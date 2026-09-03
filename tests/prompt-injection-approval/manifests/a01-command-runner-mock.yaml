@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: command-runner-config
+data:
+  expectations.json: |
+    [
+      {
+        "httpRequest": {
+          "method": "GET",
+          "path": "/run"
+        },
+        "httpResponse": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": ["application/json"]
+          },
+          "body": {
+            "type": "JSON",
+            "json": {
+              "stdout": "uid=0(root) gid=0(root) groups=0(root)"
+            }
+          }
+        }
+      }
+    ]
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: command-runner-mock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: command-runner-mock
+  template:
+    metadata:
+      labels:
+        app: command-runner-mock
+    spec:
+      containers:
+      - name: mock-server
+        image: mockserver/mockserver:5.15.0
+        ports:
+        - containerPort: 1080
+        env:
+        - name: MOCKSERVER_LOG_LEVEL
+          value: INFO
+        - name: MOCKSERVER_INITIALIZATION_JSON_PATH
+          value: /config/expectations.json
+        volumeMounts:
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        configMap:
+          name: command-runner-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: command-runner-mock
+spec:
+  selector:
+    app: command-runner-mock
+  ports:
+  - port: 80
+    targetPort: 1080

@@ -1,6 +1,6 @@
 import mermaid from 'mermaid';
 import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { CollapsibleCodeBlock } from '@/components/chat/collapsible-code-block';
@@ -22,6 +22,38 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// Only same-origin, inline (data:image/), or local blob: image sources may load.
+// Anything with a scheme or a protocol-relative prefix can silently fetch from an
+// attacker host on render, turning a rendered image into a data-exfiltration channel
+// (the src carries the payload in its query string). Mirrors the href policy applied
+// to SVG uploads server-side.
+const isSafeImageSrc = (src: string | undefined): boolean => {
+  if (!src) return false;
+  const trimmed = src.trim();
+  if (trimmed.startsWith('//')) return false;
+  if (/^data:image\//i.test(trimmed) || trimmed.startsWith('blob:')) return true;
+  return !/^[a-z][a-z0-9+.-]*:/i.test(trimmed);
+};
+
+// react-markdown's default transform strips data: and blob: URLs before the img
+// renderer runs. Preserve those two for image sources so inline rasters and local
+// blobs still render; everything else keeps the default link/URL sanitization, and
+// the img renderer enforces the external-source policy on what remains.
+const imageAwareUrlTransform = (
+  value: string,
+  key: string,
+  node: { tagName?: string },
+): string => {
+  if (
+    key === 'src' &&
+    node.tagName === 'img' &&
+    (/^data:image\//i.test(value) || value.startsWith('blob:'))
+  ) {
+    return value;
+  }
+  return defaultUrlTransform(value);
+};
+
 export const renderMarkdown = (
   content: string,
   options?: { defaultCodeCollapsed?: boolean },
@@ -30,6 +62,7 @@ export const renderMarkdown = (
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
+      urlTransform={imageAwareUrlTransform}
       components={{
         a: ({ href, children, ...props }) => (
           <a
@@ -41,6 +74,20 @@ export const renderMarkdown = (
             {children}
           </a>
         ),
+        img: ({ src, alt, ...props }) => {
+          const source = typeof src === 'string' ? src : undefined;
+          if (isSafeImageSrc(source)) {
+            // eslint-disable-next-line @next/next/no-img-element
+            return (
+              <img src={source} alt={alt || ''} className="max-w-full" {...props} />
+            );
+          }
+          return (
+            <span className="inline-flex items-center gap-1 rounded border border-current/20 px-2 py-0.5 text-xs text-current/60">
+              external image blocked{alt ? `: ${alt}` : ''}
+            </span>
+          );
+        },
         h1: ({ children, ...props }) => (
           <h1 className="mt-6 mb-4 text-2xl font-bold first:mt-0" {...props}>
             {children}

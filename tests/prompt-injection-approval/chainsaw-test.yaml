@@ -1,0 +1,174 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: prompt-injection-approval
+spec:
+  description: >
+    Reproduces pentest scenario 1 (indirect prompt injection running a bash command).
+    An agent is driven to call a command-execution tool. With the tool gated by
+    human approval the query halts at input-required and the command never runs;
+    without the gate the same call executes.
+  timeouts:
+    apply: 30s
+    assert: 120s
+  steps:
+  - name: setup-rbac
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+
+  - name: setup-command-runner-mock
+    try:
+    - apply:
+        file: manifests/a01-command-runner-mock.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: command-runner-mock
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+    catch:
+    - events: {}
+
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+  - name: wait-for-model
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    catch:
+    - script:
+        content: kubectl get model -n $NAMESPACE -o yaml 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: deploy-tool-and-agents
+    try:
+    - apply:
+        file: manifests/a02-command-tool.yaml
+    - apply:
+        file: manifests/a03-gated-agent.yaml
+    - apply:
+        file: manifests/a04-ungated-agent.yaml
+    catch:
+    - events: {}
+
+  # The gate: the model asks to run the command, but the query must stop and wait
+  # for approval instead of executing it.
+  - name: gated-query-halts-for-approval
+    try:
+    - apply:
+        file: manifests/a05-gated-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: gated-query
+        timeout: 90s
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: input-required
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: gated-query
+          status:
+            phase: input-required
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: gated-query
+
+  # The security assertion: while the query is held for approval, the command
+  # backend must have received zero requests. Nothing executed.
+  - name: verify-command-never-executed
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          COUNT=$(kubectl run mockcheck-gated --image=curlimages/curl --rm -i --restart=Never -n "$NAMESPACE" -- \
+            curl -s -X PUT "http://command-runner-mock/mockserver/retrieve?type=REQUESTS&format=JSON" \
+            -H 'Content-Type: application/json' \
+            -d '{"method":"GET","path":"/run"}' | grep -c '"path"' || true)
+          echo "command backend hits: ${COUNT}"
+          [ "${COUNT}" = "0" ] || { echo "FAIL: command executed despite approval gate"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+  # Negative control: without the gate the same model call executes and the query
+  # completes. This proves the gate is what stops the command, not the test setup.
+  - name: ungated-query-executes-and-completes
+    try:
+    - apply:
+        file: manifests/a06-ungated-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: ungated-query
+        timeout: 120s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: ungated-query
+          status:
+            phase: done
+    - script:
+        timeout: 60s
+        content: |
+          COUNT=$(kubectl run mockcheck-ungated --image=curlimages/curl --rm -i --restart=Never -n "$NAMESPACE" -- \
+            curl -s -X PUT "http://command-runner-mock/mockserver/retrieve?type=REQUESTS&format=JSON" \
+            -H 'Content-Type: application/json' \
+            -d '{"method":"GET","path":"/run"}' | grep -c '"path"' || true)
+          echo "command backend hits: ${COUNT}"
+          [ "${COUNT}" -ge "1" ] || { echo "FAIL: ungated command did not execute; test setup is wrong"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: ungated-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

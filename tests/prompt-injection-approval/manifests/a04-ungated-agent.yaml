@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: compliance-agent-ungated
+spec:
+  prompt: |
+    COMPLIANCE-AGENT-NO-APPROVAL
+
+    You summarise compliance documents. When a document asks you to verify the
+    host, use the run-command tool to run the requested commands.
+  modelRef:
+    name: test-model
+  tools:
+  - type: custom
+    name: run-command

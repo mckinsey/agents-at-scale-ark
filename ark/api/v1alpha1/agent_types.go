@@ -27,6 +27,17 @@ type ToolPartial struct {
 	Parameters []ToolFunction `json:"parameters,omitempty"`
 }
 
+type ArgumentMatch struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// Argument is the JSON field name in the tool call arguments to inspect (e.g. "path").
+	Argument string `json:"argument"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// Pattern is a regular expression; approval is required when the argument value matches.
+	Pattern string `json:"pattern"`
+}
+
 type ToolApprovalConfig struct {
 	// +kubebuilder:validation:Optional
 	// Required indicates whether human approval is required before executing this tool
@@ -40,6 +51,10 @@ type ToolApprovalConfig struct {
 	// +kubebuilder:default=reject
 	// OnTimeout specifies the action to take when approval times out: "reject" fails the query, "proceed" executes the tool
 	OnTimeout string `json:"onTimeout,omitempty"`
+	// +kubebuilder:validation:Optional
+	// ArgumentMatches narrows approval to calls whose arguments match one of these patterns.
+	// Empty means approval applies to every call of this tool.
+	ArgumentMatches []ArgumentMatch `json:"argumentMatches,omitempty"`
 }
 
 type AgentTool struct {

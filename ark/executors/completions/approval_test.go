@@ -100,7 +100,7 @@ func TestRequiresApproval(t *testing.T) {
 				approvalRequiredTools: tt.approvalMap,
 			}
 
-			config := agent.requiresApproval(tt.toolName)
+			config := agent.requiresApproval(tt.toolName, "{}")
 
 			if tt.expectConfig {
 				require.NotNil(t, config, "Expected approval config but got nil")
@@ -588,8 +588,8 @@ func TestRequiresApprovalUsesMergedMap(t *testing.T) {
 		registryWithToolApproval("write-file", approvalConfig(true, "5m", "reject")),
 	)}
 
-	assert.NotNil(t, agent.requiresApproval("write-file"))
-	assert.Nil(t, agent.requiresApproval("list-directory"))
+	assert.NotNil(t, agent.requiresApproval("write-file", "{}"))
+	assert.Nil(t, agent.requiresApproval("list-directory", "{}"))
 }
 
 func TestHandleApprovalRequiredWithNilTimeout(t *testing.T) {
@@ -626,4 +626,79 @@ func TestHandleApprovalRequiredWithTimeout(t *testing.T) {
 	task, ok := result.Result.(*protocol.Task)
 	require.True(t, ok)
 	assert.Equal(t, "5m0s", task.Metadata["timeout"])
+}
+
+func sensitivePathConfig() *arkv1alpha1.ToolApprovalConfig {
+	return &arkv1alpha1.ToolApprovalConfig{
+		Required:  true,
+		OnTimeout: "reject",
+		ArgumentMatches: []arkv1alpha1.ArgumentMatch{
+			{Argument: "path", Pattern: `^/var/run/secrets|^/proc/`},
+		},
+	}
+}
+
+func TestRequiresApprovalGatesMatchingArgument(t *testing.T) {
+	agent := &Agent{approvalRequiredTools: map[string]*arkv1alpha1.ToolApprovalConfig{
+		"file-gateway-read-file": sensitivePathConfig(),
+	}}
+
+	got := agent.requiresApproval(
+		"file-gateway-read-file",
+		`{"path":"/var/run/secrets/kubernetes.io/serviceaccount/token"}`,
+	)
+	assert.NotNil(t, got, "sensitive path must be gated")
+}
+
+func TestRequiresApprovalSkipsNonMatchingArgument(t *testing.T) {
+	agent := &Agent{approvalRequiredTools: map[string]*arkv1alpha1.ToolApprovalConfig{
+		"file-gateway-read-file": sensitivePathConfig(),
+	}}
+
+	got := agent.requiresApproval("file-gateway-read-file", `{"path":"/uploads/report.md"}`)
+	assert.Nil(t, got, "a normal document read must stay automatic")
+}
+
+func TestRequiresApprovalWithoutMatchersGatesEveryCall(t *testing.T) {
+	agent := &Agent{approvalRequiredTools: map[string]*arkv1alpha1.ToolApprovalConfig{
+		"run-command": approvalConfig(true, "5m", "reject"),
+	}}
+
+	assert.NotNil(t, agent.requiresApproval("run-command", `{"command":"ls"}`))
+	assert.NotNil(t, agent.requiresApproval("run-command", `{"command":"rm -rf /"}`))
+}
+
+func TestRequiresApprovalFailsClosedOnUnparseableArguments(t *testing.T) {
+	agent := &Agent{approvalRequiredTools: map[string]*arkv1alpha1.ToolApprovalConfig{
+		"file-gateway-read-file": sensitivePathConfig(),
+	}}
+
+	got := agent.requiresApproval("file-gateway-read-file", "not json")
+	assert.NotNil(t, got, "a gated tool with unparseable arguments must be held, not waved through")
+}
+
+func TestMergeArgumentMatchesGateAllWinsOverMatchers(t *testing.T) {
+	fromTool := sensitivePathConfig()
+	fromAgent := approvalConfig(true, "5m", "reject") // Required, no matchers -> gate all
+
+	merged := mergeApprovalConfig(fromTool, fromAgent)
+
+	require.NotNil(t, merged)
+	assert.Empty(t, merged.ArgumentMatches, "a Required side with no matchers must widen the gate to all calls")
+}
+
+func TestMergeArgumentMatchesUnionsBothSides(t *testing.T) {
+	fromTool := &arkv1alpha1.ToolApprovalConfig{
+		Required:        true,
+		ArgumentMatches: []arkv1alpha1.ArgumentMatch{{Argument: "path", Pattern: "^/proc/"}},
+	}
+	fromAgent := &arkv1alpha1.ToolApprovalConfig{
+		Required:        true,
+		ArgumentMatches: []arkv1alpha1.ArgumentMatch{{Argument: "path", Pattern: "^/var/run/secrets"}},
+	}
+
+	merged := mergeApprovalConfig(fromTool, fromAgent)
+
+	require.NotNil(t, merged)
+	assert.Len(t, merged.ArgumentMatches, 2, "matchers from both sides must be unioned")
 }
