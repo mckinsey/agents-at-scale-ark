@@ -1,11 +1,13 @@
 'use client';
 
+import copy from 'copy-to-clipboard';
 import { format, isValid } from 'date-fns';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Check, ContentCopy } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { IconShell } from '@/components/ui/icon-shell';
+import { IconActionButton } from '@/components/ui/icon-action-button';
+import { toast } from '@/components/ui/sonner';
 import {
   Table,
   TableBody,
@@ -26,14 +28,12 @@ import { type APIKey } from '@/lib/services';
 const TIMESTAMP_FORMAT = 'dd/MM/yyyy, HH:mm:ss';
 const COPY_RESET_MS = 2000;
 
-/** Figma column ratios: 0.75 / 0.75 / 0.5 / 0.5 / 0.5 / 0.25 of 3.25fr. */
 const COLUMN_WIDTHS = {
-  name: 'w-[23%]',
-  publicKey: 'w-[23%]',
-  created: 'w-[15.5%]',
-  lastUsed: 'w-[15.5%]',
-  expires: 'w-[15.5%]',
-  actions: 'w-[7.5%]',
+  publicKey: 'w-[220px]',
+  created: 'w-[160px]',
+  lastUsed: 'w-[160px]',
+  expires: 'w-[160px]',
+  actions: 'w-[80px]',
 } as const;
 
 /** 'Never' means the event has not happened; '—' means the value was unusable. */
@@ -65,7 +65,7 @@ function APIKeyRow({
 }: Readonly<APIKeyRowProps>) {
   return (
     <TableRow className="relative isolate">
-      <TableCell size="small" className={COLUMN_WIDTHS.name}>
+      <TableCell size="small">
         <span aria-hidden className={rowHoverOverlayClass} />
         <TruncatedTooltip label={apiKey.name}>
           <span className="block truncate">{apiKey.name}</span>
@@ -79,26 +79,17 @@ function APIKeyRow({
               {apiKey.public_key}
             </span>
           </TruncatedTooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => onCopy(apiKey)}
-                aria-label={
-                  copied
-                    ? 'Public key copied'
-                    : `Copy public key for ${apiKey.name}`
-                }
-                className="focus-visible:ring-stroke-status-focus flex size-4 shrink-0 cursor-pointer items-center justify-center outline-none focus-visible:ring-1">
-                <IconShell size="sm" variant="secondary">
-                  {copied ? <Check /> : <ContentCopy />}
-                </IconShell>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {copied ? 'Copied' : 'Copy public key'}
-            </TooltipContent>
-          </Tooltip>
+          <IconActionButton
+            label={
+              copied
+                ? 'Public key copied'
+                : `Copy public key for ${apiKey.name}`
+            }
+            tooltip={copied ? 'Copied' : 'Copy public key'}
+            onClick={() => onCopy(apiKey)}
+            className="shrink-0">
+            {copied ? <Check /> : <ContentCopy />}
+          </IconActionButton>
         </div>
       </TableCell>
 
@@ -146,30 +137,24 @@ export function APIKeysTable({ data, onRevoke }: Readonly<APIKeysTableProps>) {
     [],
   );
 
-  const handleCopy = useCallback(async (apiKey: APIKey) => {
-    try {
-      await navigator.clipboard.writeText(apiKey.public_key);
-      setCopiedKeyId(apiKey.id);
-      // One shared marker, so an earlier timer must not clear a later tick.
-      if (resetTimer.current) {
-        clearTimeout(resetTimer.current);
-      }
-      resetTimer.current = setTimeout(
-        () => setCopiedKeyId(null),
-        COPY_RESET_MS,
-      );
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+  const handleCopy = useCallback((apiKey: APIKey) => {
+    if (!copy(apiKey.public_key)) {
+      toast.error('Failed to copy public key');
+      return;
     }
+    setCopiedKeyId(apiKey.id);
+    // One shared marker, so an earlier timer must not clear a later tick.
+    if (resetTimer.current) {
+      clearTimeout(resetTimer.current);
+    }
+    resetTimer.current = setTimeout(() => setCopiedKeyId(null), COPY_RESET_MS);
   }, []);
 
   return (
-    <Table className="table-fixed border-separate border-spacing-x-2 border-spacing-y-0">
+    <Table className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
-          <TableHead size="small" className={COLUMN_WIDTHS.name}>
-            Name
-          </TableHead>
+          <TableHead size="small">Name</TableHead>
           <TableHead size="small" className={COLUMN_WIDTHS.publicKey}>
             Public Key
           </TableHead>

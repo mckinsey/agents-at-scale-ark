@@ -13,13 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { IconShell } from '@/components/ui/icon-shell';
+import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
 } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
+import { toast } from '@/components/ui/sonner';
 import { type APIKeyCreateResponse } from '@/lib/services';
 
 const COPY_RESET_MS = 2000;
@@ -63,15 +64,12 @@ function CredentialField({
           className="cursor-pointer"
         />
         <InputGroupAddon align="inline-end">
-          <button
-            type="button"
-            onClick={onCopy}
-            aria-label={copied ? `${label} copied` : `Copy ${label}`}
-            className="focus-visible:ring-stroke-status-focus flex size-5 cursor-pointer items-center justify-center outline-none focus-visible:ring-1">
-            <IconShell size="sm">
-              {copied ? <Check /> : <ContentCopy />}
-            </IconShell>
-          </button>
+          <IconActionButton
+            label={copied ? `${label} copied` : `Copy ${label}`}
+            tooltip={copied ? 'Copied' : `Copy ${label}`}
+            onClick={onCopy}>
+            {copied ? <Check /> : <ContentCopy />}
+          </IconActionButton>
         </InputGroupAddon>
       </InputGroup>
     </div>
@@ -96,7 +94,10 @@ export function APIKeyCreatedDialog({
   useEffect(() => clearResetTimer, []);
 
   const copyToClipboard = (text: string, target: CopyTarget) => {
-    copy(text);
+    if (!copy(text)) {
+      toast.error('Failed to copy to clipboard');
+      return;
+    }
     setCopiedTarget(target);
     // One shared marker, so an earlier timer must not clear a later tick.
     clearResetTimer();

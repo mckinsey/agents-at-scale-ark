@@ -43,6 +43,9 @@ const formSchema = z.object({
     .optional()
     .refine(value => !value || DATETIME_LOCAL_PATTERN.test(value), {
       message: 'Enter a complete date as dd/mm/yyyy',
+    })
+    .refine(value => !value || new Date(value) > new Date(), {
+      message: 'Expiry must be in the future',
     }),
 });
 
@@ -105,7 +108,7 @@ export function AddAPIKeyDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[586px]">
+      <DialogContent className="sm:max-w-[586px]" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Create API Key</DialogTitle>
         </DialogHeader>
@@ -124,7 +127,7 @@ export function AddAPIKeyDialog({
                     <FormControl>
                       <Input
                         variant="inline"
-                        placeholder="enter a descriptive name"
+                        placeholder="Enter a descriptive name"
                         disabled={createAPIKeyMutation.isPending}
                         {...field}
                       />
@@ -139,16 +142,20 @@ export function AddAPIKeyDialog({
                 name="expires_at"
                 render={({ field }) => (
                   <FormItem className="gap-2">
-                    <FormLabel className="label-regular-primary text-fg-secondary">
+                    <FormLabel
+                      id="expires-at-label"
+                      className="label-regular-primary text-fg-secondary">
                       Expires at
                     </FormLabel>
                     <FormControl>
                       <DateTimeField
+                        ref={field.ref}
+                        name={field.name}
                         value={field.value ?? ''}
                         onChange={field.onChange}
+                        onBlur={field.onBlur}
                         disabled={createAPIKeyMutation.isPending}
-                        dateLabel="Expiry date"
-                        timeLabel="Expiry time"
+                        aria-labelledby="expires-at-label"
                       />
                     </FormControl>
                     <FormDescription className="paragraph-regular-primary text-fg-tertiary">
