@@ -71,6 +71,9 @@ describe('export command', () => {
       'teams',
       'mcpservers',
       'a2aservers',
+      'clusterworkflowtemplates',
+      'workflowtemplates',
+      'cronworkflows',
     ];
 
     expect(mockExeca).toHaveBeenCalledTimes(expectedResourceTypes.length);
@@ -619,6 +622,109 @@ describe('export command', () => {
     expect(mockOutput.warning).toHaveBeenCalledWith(
       'no resources found to export'
     );
+  });
+
+  it('warns and skips Argo types when the CRD is not installed', async () => {
+    const argoTypes = [
+      'clusterworkflowtemplates',
+      'workflowtemplates',
+      'cronworkflows',
+    ];
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (argoTypes.includes(resourceType)) {
+        const error = new Error('kubectl failed') as Error & {stderr?: string};
+        error.stderr = `error: the server doesn't have a resource type "${resourceType}"`;
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify(mockKubectlGetResponse)});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    for (const resourceType of argoTypes) {
+      expect(mockOutput.warning).toHaveBeenCalledWith(
+        `${resourceType} CRD not installed on this cluster, skipping`
+      );
+    }
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 7 resources to test.yaml'
+    );
+  });
+
+  it('exports Argo resources when the CRDs are installed', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'workflowtemplates') {
+        return Promise.resolve({
+          stdout: JSON.stringify({
+            items: [
+              {
+                apiVersion: 'argoproj.io/v1alpha1',
+                kind: 'WorkflowTemplate',
+                metadata: {name: 'cobol-wf'},
+                spec: {entrypoint: 'main'},
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({stdout: JSON.stringify({items: []})});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    expect(yamlContent).toContain('kind: WorkflowTemplate');
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 1 resources to test.yaml'
+    );
+  });
+
+  it('propagates non-"not found" errors from an Argo type', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'workflowtemplates') {
+        const error = new Error('boom') as Error & {stderr?: string};
+        error.stderr = 'The connection to the server was refused';
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify({items: []})});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    expect(mockOutput.error).toHaveBeenCalledWith('export failed:', 'boom');
+    expect(mockWriteFile).not.toHaveBeenCalled();
+  });
+
+  it('does not swallow a missing-CRD error for Ark-native types', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'agents') {
+        const error = new Error('kubectl failed') as Error & {stderr?: string};
+        error.stderr =
+          'error: the server doesn\'t have a resource type "agents"';
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify({items: []})});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'export failed:',
+      'kubectl failed'
+    );
+    expect(mockWriteFile).not.toHaveBeenCalled();
   });
 
   it('fails if kubectl get fails for a resource type', async () => {

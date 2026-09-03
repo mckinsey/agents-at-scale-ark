@@ -5,6 +5,15 @@ import type {ArkConfig} from '../../lib/config.js';
 import {listResources} from '../../lib/kubectl.js';
 import output from '../../lib/output.js';
 
+// Argo workflow resources, in dependency order (cluster templates before the
+// namespaced templates that may reference them). These live in Argo CRDs that
+// may not be installed on the source cluster, so they are treated as optional.
+const ARGO_RESOURCE_TYPES = [
+  'clusterworkflowtemplates',
+  'workflowtemplates',
+  'cronworkflows',
+];
+
 // resource types in dependency order so that they can be loaded correctly
 // by default these will all be exported if not specified; can be overridden with defaultExportTypes in config
 const RESOURCE_ORDER = [
@@ -15,7 +24,12 @@ const RESOURCE_ORDER = [
   'teams',
   'mcpservers',
   'a2aservers',
+  ...ARGO_RESOURCE_TYPES,
 ];
+
+// resource types whose CRDs may be absent; a missing CRD is warned and skipped
+// rather than failing the whole export
+const OPTIONAL_RESOURCE_TYPES = new Set(ARGO_RESOURCE_TYPES);
 
 const SERVER_MANAGED_METADATA_FIELDS = [
   'resourceVersion',
@@ -53,6 +67,17 @@ interface ExportOptions {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isResourceTypeNotFoundError(error: unknown): boolean {
+  const stderr =
+    isRecord(error) && typeof error.stderr === 'string' ? error.stderr : '';
+  const message = error instanceof Error ? error.message : String(error);
+  const combined = `${stderr}\n${message}`;
+  return (
+    combined.includes("doesn't have a resource type") ||
+    combined.includes('could not find the requested resource')
+  );
 }
 
 function sanitizeResource(resource: ExportResource): ExportResource {
@@ -154,10 +179,24 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
       }
 
       output.info(`fetching ${resourceType}...`);
-      const resources = await listResources<ExportResource>(resourceType, {
-        namespace: options.namespace,
-        labels: options.labels,
-      });
+      let resources: ExportResource[];
+      try {
+        resources = await listResources<ExportResource>(resourceType, {
+          namespace: options.namespace,
+          labels: options.labels,
+        });
+      } catch (error) {
+        if (
+          OPTIONAL_RESOURCE_TYPES.has(resourceType) &&
+          isResourceTypeNotFoundError(error)
+        ) {
+          output.warning(
+            `${resourceType} CRD not installed on this cluster, skipping`
+          );
+          continue;
+        }
+        throw error;
+      }
 
       const resourceCount = resources.length;
       if (resources.length > 0) {
