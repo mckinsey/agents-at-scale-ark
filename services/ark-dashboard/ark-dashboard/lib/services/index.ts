@@ -16,6 +16,7 @@ export {
   type Agent,
   type Skill,
   type AgentTool,
+  type ToolApprovalConfig,
   type AgentCreateRequest,
   type AgentUpdateRequest,
 } from './agents';

@@ -24,6 +24,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { PromptField } from './prompt-field';
+import { ToolApprovalsSection } from './sections/tool-approvals-section';
 import { ToolsMultiSelect } from './sections/tools-multi-select';
 import { AgentFormMode, type AgentFormProps } from './types';
 import { useAgentForm } from './use-agent-form';
@@ -51,10 +52,18 @@ export function CreateAgentForm({
     availableTools,
     toolsLoading,
     unavailableTools,
+    selectedTools,
     parameters,
   } = state;
 
-  const { setParameters, handleToolToggle, isToolSelected, onSubmit } = actions;
+  const {
+    setParameters,
+    handleToolToggle,
+    isToolSelected,
+    getToolApproval,
+    setToolApproval,
+    onSubmit,
+  } = actions;
 
   const promptValue = form.watch('prompt') || '';
   const isDisabled = form.formState.isSubmitting;
@@ -195,6 +204,13 @@ export function CreateAgentForm({
                 disabled={isDisabled}
               />
             </FieldSet>
+
+            <ToolApprovalsSection
+              selectedTools={selectedTools}
+              getToolApproval={getToolApproval}
+              onApprovalChange={setToolApproval}
+              disabled={isDisabled}
+            />
 
             <FormField
               control={form.control}
