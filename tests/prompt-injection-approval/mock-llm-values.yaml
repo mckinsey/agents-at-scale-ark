@@ -69,11 +69,13 @@ config:
           }]
         }
 
-  # Ungated agent, second call: the command ran, its output came back as a tool
-  # result, and the model returns a final summary. Last-match-wins puts this after
-  # the first-call rule so it wins once a tool message is present.
+  # Second call: the command ran and its output came back as a tool result, so the
+  # model returns a final summary. Only the ungated path ever reaches here — the gated
+  # path halts at approval before the tool runs, so it never produces a tool message.
+  # Last-match-wins puts this after the first-call rules so it wins once a tool result
+  # is present.
   - path: "/v1/chat/completions"
-    match: "contains(body.messages[0].content || '', 'COMPLIANCE-AGENT-NO-APPROVAL') && length(body.messages[?role=='tool']) > `0`"
+    match: "body.messages[?role=='tool']"
     response:
       status: 200
       content: '{"choices":[{"message":{"role":"assistant","content":"Host verified. Summary: the runbook covers control verification."},"finish_reason":"stop"}]}'
