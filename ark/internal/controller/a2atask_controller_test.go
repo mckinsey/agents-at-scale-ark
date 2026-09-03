@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -588,8 +589,15 @@ func TestReconcileTimeout(t *testing.T) {
 		done, err := r.reconcileTimeout(ctx, task)
 		assert.NoError(t, err)
 		assert.True(t, done)
-		assert.Equal(t, arka2a.PhaseFailed, task.Status.Phase)
-		assert.NotEmpty(t, task.Status.Error)
-		assert.NotNil(t, task.Status.CompletionTime)
+
+		persisted := &arkv1alpha1.A2ATask{}
+		assert.NoError(t, r.Get(ctx, types.NamespacedName{Name: "expired", Namespace: "default"}, persisted))
+		assert.Equal(t, arka2a.PhaseFailed, persisted.Status.Phase)
+		assert.Equal(t, "Task polling timeout after 1h0m0s", persisted.Status.Error)
+		assert.NotNil(t, persisted.Status.CompletionTime)
+		completed := apimeta.FindStatusCondition(persisted.Status.Conditions, string(arkv1alpha1.A2ATaskCompleted))
+		assert.NotNil(t, completed)
+		assert.Equal(t, metav1.ConditionTrue, completed.Status)
+		assert.Equal(t, "TaskTimeout", completed.Reason)
 	})
 }
