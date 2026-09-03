@@ -62,7 +62,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
     queryKey: ['agents', namespace],
-    queryFn: () => agentsService.getAll(namespace),
+    queryFn: () => agentsService.list(namespace),
     enabled: Boolean(namespace),
   });
 
