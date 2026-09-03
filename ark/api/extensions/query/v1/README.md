@@ -106,13 +106,17 @@ POST /message HTTP/1.1
 
 Only a QueryRef (name + namespace) crosses the A2A boundary. The controller sends no agent config, model credentials, tool definitions, or MCP server details over the wire.
 
-The executor resolves all resources locally from the cluster using its pod's service account:
+The executor resolves all resources locally from the cluster:
 
-1. Fetch the Query CRD using the QueryRef
+1. Fetch the Query CRD using the QueryRef, as the executor's pod service account
 2. Fetch the referenced Agent CRD
 3. Resolve the Model CRD (including API keys from Secrets)
 4. Resolve MCPServer CRDs referenced by the agent's MCP-type tools (including headers from Secrets)
 5. Build the `ExecutionEngineRequest` in-process
+
+Steps 2-4 run as the Query's `spec.serviceAccount` when it declares one, matching the identity the controller uses for the same field; otherwise they run as the executor's pod service account. Step 1 always uses the pod service account, since `spec.serviceAccount` is only knowable from the Query itself.
+
+Honouring a declared `spec.serviceAccount` requires the executor's service account to hold `impersonate` on `serviceaccounts` in the namespace. Without it the query fails rather than falling back to the pod identity — a declared restriction that cannot be applied is an error, not a default.
 
 Secrets never traverse the A2A boundary — they are read from Kubernetes within the executor pod.
 
