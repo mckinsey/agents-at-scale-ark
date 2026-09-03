@@ -367,6 +367,12 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Cache openapi-generator JAR
+        uses: actions/cache@v4
+        with:
+          path: lib/ark-sdk/.openapi-generator-cli
+          key: openapi-generator-jar-${{ hashFiles('lib/ark-sdk/openapitools.json') }}
+
       - run: make -j24 services-build-all
 
       - name: Check generated types are unchanged
@@ -507,6 +513,17 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           version: "0.11.21"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Cache openapi-generator JAR
+        uses: actions/cache@v4
+        with:
+          path: lib/ark-sdk/.openapi-generator-cli
+          key: openapi-generator-jar-${{ hashFiles('lib/ark-sdk/openapitools.json') }}
 
       - name: Build libraries
         run: make libs-build-all
