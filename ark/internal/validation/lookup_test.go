@@ -2,6 +2,7 @@ package validation
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,5 +91,14 @@ func TestStorageLookup_GetArkConfig_NotFoundFallsBack(t *testing.T) {
 	got := ResolveQueryTTL(context.Background(), lookup)
 	if got.Duration != DefaultTTLFallback {
 		t.Errorf("ResolveQueryTTL = %v, want fallback %v", got.Duration, DefaultTTLFallback)
+	}
+}
+
+func TestStorageLookup_GetArkConfig_UnexpectedType(t *testing.T) {
+	lookup := &StorageLookup{Backend: &fakeBackend{obj: &arkv1alpha1.Agent{}}}
+
+	_, err := lookup.GetArkConfig(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "unexpected type") {
+		t.Fatalf("GetArkConfig error = %v, want unexpected type", err)
 	}
 }
