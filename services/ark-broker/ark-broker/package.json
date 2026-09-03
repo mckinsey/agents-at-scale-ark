@@ -83,7 +83,7 @@
     },
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
-    "qs": "^6.15.2",
+    "qs": "^6.16.0",
     "swagger-jsdoc": {
       "glob": "^7.2.3"
     },
