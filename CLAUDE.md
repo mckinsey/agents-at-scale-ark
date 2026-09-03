@@ -229,7 +229,7 @@ For build failures, CI issues, CVEs, dependabot management, and test failures, u
 
 # Testing Guidelines
 
-When writing tests for any service, consult `tests/CLAUDE.md` for comprehensive testing patterns and best practices.
+When writing tests for any service, consult `tests/CLAUDE.md` for comprehensive testing patterns and best practices. That guide covers Chainsaw e2e tests; for a service's own unit tests, also check that service's `CLAUDE.md` — `services/ark-dashboard/CLAUDE.md` in particular carries conventions a dashboard change will otherwise miss.
 
 # Commit and PR Requirements
 

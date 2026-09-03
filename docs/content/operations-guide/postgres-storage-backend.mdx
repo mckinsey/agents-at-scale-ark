@@ -46,7 +46,7 @@ max_wal_senders       >= 1
 
 ### Minimum version
 
-The watch stream decodes the WAL with the built-in `pgoutput` plugin and a `CREATE PUBLICATION`, introduced in PostgreSQL 10. The hard minimum is **PostgreSQL 13**: slot health checks read `pg_replication_slots.wal_status` and list pagination calls `pg_current_snapshot()`, neither of which exists in earlier majors. Run a currently-supported major (**14 or newer**) in production.
+The hard minimum is **PostgreSQL 15** — the apiserver checks `server_version_num` at startup and refuses to run against anything older. The floor tracks community support: 13 is already end-of-life, 14 follows in November 2026, and 15 is supported until November 2027. The storage integration suite runs against PostgreSQL 15 in CI to keep the floor honest; bump it together with the startup check when raising the minimum.
 
 A user/role with permission to:
 
@@ -79,6 +79,7 @@ On first start, `ark-apiserver` creates:
 
 - A single table, `resources`, with one row per Ark resource (Agent, Model, Query, Team, …). Columns include `kind`, `namespace`, `name`, `uid`, `resource_version`, JSONB columns for `spec`, `status`, `labels`, `annotations`, `finalizers`, `owner_references`, plus timestamps and a soft-delete flag (`deleted_at`).
 - Indexes on `(kind, namespace)`, `(kind, namespace, name)`, a GIN index on `labels`, and a unique partial index on active (non-deleted) rows.
+- Indexes on `(kind, resource_version)` and `(resource_version)`, which serve the watch path: watches read changes as a resource-version range within a kind, and the bookmark refresh reads the highest resource version in the table.
 - A publication and a logical replication slot, both named `ark_cdc`. The slot is what powers `kubectl get -w` and controller informers.
 
 The slot is **persistent**: it survives apiserver restarts. It is dropped automatically on `helm uninstall` — see [Uninstall and cleanup](#uninstall-and-cleanup) below.
@@ -96,6 +97,8 @@ FROM pg_replication_slots WHERE slot_name = 'ark_cdc';
 ```
 
 `retained` should stay small. Sustained growth means no replica is consuming the slot — check that a pod holds the `ark-apiserver-leader` lease and that `active` is true. Setting `max_slot_wal_keep_size` caps the damage: Postgres invalidates the slot instead of filling the disk, and the apiserver recreates it on the next restart.
+
+Upgrading an existing deployment creates any index the schema is missing on the next apiserver start. Each build holds a write lock on `resources` until it completes — under half a second for a table of 100k rows, proportionally longer for a larger one.
 
 ## Installing PostgreSQL mode
 
@@ -193,6 +196,28 @@ helm upgrade --install ark-apiserver \
 
 The apiserver chart's `postgresql.host`, `postgresql.user`, and `postgresql.passwordSecretName` are **required** values — `helm install` will fail at template time if they are missing.
 
+### Connecting to the database
+
+Several checks on this page are SQL. Connect with the values you configured above, reading the password from the secret you created in step 2:
+
+```bash
+export PGHOST=ark-storage.example.com   # postgresql.host
+export PGPORT=5432                      # postgresql.port
+export PGUSER=ark                       # postgresql.user
+export PGDATABASE=ark                   # postgresql.database, default "ark"
+export PGSSLMODE=require                # postgresql.sslMode
+export PGPASSWORD=$(kubectl get secret ark-db-password -n ark-system \
+  -o jsonpath='{.data.password}' | base64 -d)
+
+psql -c 'SELECT count(*) FROM resources;'
+```
+
+If Postgres runs inside the cluster and is not reachable from your workstation, forward the port first and set `PGHOST=127.0.0.1`:
+
+```bash
+kubectl port-forward -n ark-system svc/<postgres-service> 5432:5432
+```
+
 ## Verifying the install
 
 ```bash
@@ -222,11 +247,233 @@ spec:
 EOF
 ```
 
-Then connect to Postgres and confirm the row exists:
+Then connect to Postgres ([Connecting to the database](#connecting-to-the-database)) and confirm the row exists:
 
 ```sql
 SELECT kind, namespace, name, uid FROM resources WHERE kind = 'Agent';
 ```
+
+## Migrating between storage backends
+
+Switching backends does not move data. etcd and PostgreSQL hold separate copies of the `ark.mckinsey.com` resources, and neither backend can see the other's. Export first, switch, then import.
+
+Both directions use the same four steps: export, switch, import, verify. Two of them depend on the direction — the switch in step 2, and the backend check in step 4.
+
+### Before you start
+
+- **Ark CLI `v0.1.68` or newer** (first tagged `v0.1.68-rc`). Install it with `npm install -g @agents-at-scale/ark` (see [Ark CLI](/user-guide/ark-cli)) and check with `ark --version`. Older versions export server-managed fields that the destination rejects or stores as stale, and they include MCPServer-generated Tools and A2AServer-generated Agents that should not be imported. `ark import --upsert`, which makes the procedure re-runnable, arrived in `v0.1.67`.
+- **`kubectl` pointed at the right cluster.** Step 1 reads every namespace and step 2 can delete every Ark CRD, so confirm the context before you begin.
+- **`psql` access to the database** for the check in step 4. See [Connecting to the database](#connecting-to-the-database).
+- **`jq`, `yq`, and `bc`**, used by the export and count commands below.
+- **Time to finish steps 1 to 3 in one go.** Resources created between the export and the switch are not migrated.
+
+### What moves
+
+Only `ark.mckinsey.com` resources are backend-specific. Secrets, ConfigMaps, Deployments, and other core Kubernetes objects stay in etcd in both modes. Leave them alone.
+
+| Resources | How |
+|---|---|
+| Tools, Models, Agents, Teams, MCPServers, A2AServers | `ark export` |
+| ExecutionEngines, Memories | `ark export` does not handle these kinds. Dump and clean them with `kubectl` and `yq` |
+| Queries, A2ATasks | Not migrated. See below. |
+| ArkConfigs | Cannot move. The aggregated apiserver does not serve this kind (`ark/internal/apiserver/resources.go`), so it exists only in etcd mode. Re-create it by hand if you switch back. |
+
+Tools generated by an MCPServer and Agents generated by an A2AServer are left out of the export. The destination controller recreates them once you import the parent resource.
+
+**Queries and A2ATasks do not transfer, and the loss is permanent.** Their status and resource versions belong to the backend that produced them, so the new backend starts with no query history. The old copies are not deleted — they remain in etcd behind the retained CRDs, or in the PostgreSQL `resources` table — but nothing reads them while the other backend is serving. If you need the history, snapshot it before you switch: `kubectl get queries,a2atasks -A -o yaml > query-history.yaml`, or `pg_dump` the `resources` table.
+
+### 1. Export before switching
+
+Run this while the source backend is still serving. `ark export` reads one namespace at a time (the current context namespace unless you pass `-n`) and overwrites its output file, so give each namespace its own file in a directory named for the backend you are leaving. The reverse migration writes its own set and must not clobber this one.
+
+Use an empty directory. `mkdir` without `-p` fails if one is already there, which is what you want: a leftover directory from an earlier attempt still holds files for namespaces that no longer exist, and step 3 imports everything it finds.
+
+```bash
+# Confirm you are on the intended cluster. Step 2 can delete every Ark CRD.
+kubectl config current-context
+
+outdir=ark-export-etcd    # ark-export-postgres when migrating the other way
+mkdir "$outdir"
+
+for ns in $(kubectl get agents,models,teams,tools,mcpservers,a2aservers -A \
+  -o jsonpath='{.items[*].metadata.namespace}' | tr ' ' '\n' | sort -u); do
+  ark export -n "$ns" -t tools,models,agents,teams,mcpservers,a2aservers \
+    -o "$outdir/$ns.yaml"
+done
+```
+
+`-t` omits `secrets`. Secrets are core Kubernetes objects served from etcd in both modes, so they never move. Because `ark import` uses `kubectl create`, importing them back onto the cluster they already live on fails the import with `AlreadyExists`.
+
+`ark export` cannot handle ExecutionEngines and Memories, so remove the server-managed fields yourself. A plain `kubectl get -o yaml` includes `uid`, `resourceVersion`, and `status`, which the destination backend either rejects or stores as stale:
+
+```bash
+kubectl get executionengines,memories -A -o yaml \
+  | yq 'del(
+      .items[].metadata.uid,
+      .items[].metadata.resourceVersion,
+      .items[].metadata.generation,
+      .items[].metadata.creationTimestamp,
+      .items[].metadata.managedFields,
+      .items[].metadata.ownerReferences,
+      .items[].metadata.finalizers,
+      .items[].metadata.annotations."kubectl.kubernetes.io/last-applied-configuration",
+      .items[].status
+    )' > "$outdir/extras.yaml"
+```
+
+This `del` list mirrors the fields `ark export` removes (`SERVER_MANAGED_METADATA_FIELDS` in `tools/ark-cli/src/commands/export/index.ts`). If an import later rejects a field, compare the two lists.
+
+Check the export before running step 2, which can be irreversible. `ark export` reports failures on stderr but still exits `0`, and it writes no file for a namespace that holds nothing — so a failed run looks like a clean one. Compare three counts:
+
+```bash
+outdir=ark-export-etcd    # same directory as above, if you started a new shell
+
+# 1. Everything on the cluster, generated resources included. Step 4 reuses this.
+kubectl get agents,models,teams,tools,mcpservers,a2aservers -A --no-headers | wc -l
+
+# 2. What the export should contain. ark export drops only Tools generated by an
+# MCPServer and Agents generated by an A2AServer, matched on the generated label
+# or the ownerReference. Every other kind is exported in full.
+{
+  kubectl get models,teams,mcpservers,a2aservers -A --no-headers | wc -l
+  kubectl get tools -A -o json | jq '[.items[] | select(
+      .metadata.labels["mcp/server"] == null and
+      ([.metadata.ownerReferences[]? | select(.kind == "MCPServer")] | length == 0)
+    )] | length'
+  kubectl get agents -A -o json | jq '[.items[] | select(
+      .metadata.labels["a2a/server"] == null and
+      ([.metadata.ownerReferences[]? | select(.kind == "A2AServer")] | length == 0)
+    )] | length'
+} | paste -sd+ - | bc
+
+# 3. What the files contain: one 'kind:' line per resource, plus one for the
+# List wrapper in extras.yaml. Items inside that wrapper are indented, so
+# '^kind:' does not count them twice.
+cat "$outdir"/*.yaml | grep -c '^kind:'
+```
+
+Count 3 should equal count 2 plus one. Do not compare it against count 1: generated Tools and Agents are excluded on purpose, so on a cluster running an MCPServer the export is smaller than the cluster inventory. Note count 1 down for step 4, which runs after the controller has recreated them.
+
+If count 3 does not match, stop and fix the export before switching.
+
+**Count 3 is too low.** The export missed resources. Common causes, most likely first:
+
+- **A namespace produced no file.** `ark export` writes nothing and warns `no resources found to export` when a namespace comes back empty. Compare `ls "$outdir"` with the namespaces the loop covered.
+- **No files at all.** Count 3 reports `0`, and some shells also print `no matches found` for the unmatched glob. The `0` is the real answer: check that the namespace loop ran.
+- **The export failed part-way.** It prints `export failed:` on stderr and still exits `0`, so re-run the loop and read every line. The file is written only after all kinds are fetched, so a failure loses the whole namespace, not one kind.
+- **Missing permissions.** `ark export` calls `kubectl get`. A kind your credentials cannot list fails that namespace instead of producing a partial file.
+
+Fix the cause, then re-run the export for the affected namespaces. Each run overwrites its own file, so repeating is safe.
+
+**Count 3 is too high.** The export kept resources that count 2 excluded. This usually means an old CLI: the generated-resource exclusion arrived in [#3105](https://github.com/mckinsey/agents-at-scale-ark/pull/3105), first tagged `v0.1.68-rc`. Earlier versions write MCPServer-generated Tools and A2AServer-generated Agents into the files. Upgrade the CLI, then re-run step 1 into a new directory. Importing generated resources creates duplicates: they arrive without the ownerReference that links them to their parent, so the destination controller adds its own copies alongside them and nothing cleans up either set.
+
+For every run, `ark export` prints `found N <kind>`, `excluded N controller-managed resources`, and `exported N resources to <file>`. Read those lines — they record what the command actually did.
+
+Keep the export directory until the migration is verified; it is your rollback. The files hold desired state only, so they apply cleanly to either backend.
+
+### 2. Switch the backend
+
+**etcd → PostgreSQL.** Follow [Installing PostgreSQL mode](#installing-postgresql-mode). What happens to the etcd copies depends on how you switch:
+
+- **`ark install` and raw Helm keep them.** The controller chart templates the CRDs out when `storage.backend=postgresql`, but they carry `helm.sh/resource-policy: keep` (`crd.keep`, default `true`), so Helm skips the deletion. The etcd copies stay intact but unreachable: the `v1alpha1.ark.mckinsey.com` APIService now claims that group-version path, and the [aggregation layer](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/) proxies every request to `ark-apiserver`.
+- **DevSpace deletes them.** Both the `dev` and `deploy` pipelines run `kubectl delete` on every `ark.mckinsey.com` CRD and clear their finalizers before installing the apiserver (`ark/devspace.yaml`). That destroys the etcd copies with no recovery path. Never point either at a cluster whose resources you have not exported.
+
+Deleting a CRD deletes every custom resource of that kind. If you set `crd.keep=false`, the `ark install` path becomes destructive in the same way.
+
+**PostgreSQL → etcd.** The switch is the command sequence in [Rolling back](#rolling-back): deregister the APIServices, then reinstall the controller with `storage.backend=etcd`. Do it before you import. While the APIServices are registered, the aggregation layer proxies every write to `ark-apiserver`, so the import would land back in Postgres and step 4 would verify the wrong backend.
+
+### 3. Import
+
+Import every file in the directory from step 1: one per namespace, plus `extras.yaml`.
+
+```bash
+outdir=ark-export-etcd    # the directory step 1 wrote
+for f in "$outdir"/*.yaml; do
+  ark import "$f" || { echo "import failed: $f"; break; }
+done
+```
+
+`ark import` exits non-zero on the first resource it cannot import, but a plain loop moves straight on to the next file. Stop on failure, as above. Otherwise a namespace that failed to import is easy to miss, and step 4 is the only thing left to catch it.
+
+`ark import` uses `kubectl create`, so it fails if a resource already exists. To resume a partial import or re-run the migration, add `--upsert`, which switches to `kubectl apply`:
+
+```bash
+for f in "$outdir"/*.yaml; do
+  ark import "$f" --upsert || { echo "import failed: $f"; break; }
+done
+```
+
+`--upsert` overwrites the spec of resources already in the destination. Imports can still fail on immutable-field changes and admission-webhook rejections; the command reports how many resources it created, configured, and left unchanged before the error.
+
+One class of rejection resolves itself on a second pass. Ark validates that referenced resources exist, so a Team whose member is another Team is rejected if that member has not been created yet — `ark export` orders Agents before Teams, but not Teams among themselves. Re-run the loop with `--upsert`: the first pass creates the members, the second pass accepts the Teams that referenced them.
+
+`kubectl apply` does not prune, so `--upsert` only creates or updates. A resource deleted after the export was taken, or deleted in the destination while the other backend was serving, comes back. Delete those explicitly once the import is done.
+
+### 4. Verify
+
+These counts apply in both directions — they go through the Kubernetes API, whichever backend is serving it.
+
+```bash
+# Compare against count 1 from step 1: the full inventory, generated resources
+# included. Give the controller time to reconcile before trusting a shortfall.
+kubectl get agents,models,teams,tools,mcpservers,a2aservers -A --no-headers | wc -l
+
+# MCPServer-generated Tools and A2AServer-generated Agents reappear
+# once the controller reconciles their parents.
+kubectl get tools,agents -A
+```
+
+Going etcd → PostgreSQL, this should equal count 1. Going PostgreSQL → etcd it can be **higher**, and that is expected: if the CRDs were kept, etcd still holds everything from before the original switch, and you have just imported the PostgreSQL-era resources on top. Only a number *below* count 1 means something is missing.
+
+The backend check differs by direction.
+
+**etcd → PostgreSQL.** Confirm the rows landed in Postgres — see [Connecting to the database](#connecting-to-the-database) for the connection:
+
+```sql
+SELECT kind, count(*) FROM resources WHERE deleted_at IS NULL GROUP BY kind;
+```
+
+**PostgreSQL → etcd.** Do not run that query. `helm uninstall ark-apiserver` leaves the `resources` table in place (see [Uninstall and cleanup](#uninstall-and-cleanup)), so it still returns the pre-rollback rows and reads as a pass even if nothing reached etcd. Confirm etcd is serving instead:
+
+```bash
+# The aggregation layer no longer claims the group-version path.
+kubectl get apiservice v1alpha1.ark.mckinsey.com v1prealpha1.ark.mckinsey.com
+# (NotFound)
+
+# The CRDs are back, so the counts above came from etcd.
+kubectl get crd -o name | grep ark.mckinsey.com
+```
+
+Finally, run a query against a migrated agent. This is the check that matters: it proves the controller can resolve the agent's model, tools, and secret references in the new backend, which counting rows does not.
+
+```bash
+kubectl get agents -A                      # pick a migrated agent
+ark query agent/<name> "Reply with OK."
+```
+
+A response means the migration works end to end. An error naming a missing model, tool, or secret means that reference did not survive — re-check the export for that kind.
+
+### Rolling back
+
+Roll back through the same four steps. Run step 1 against PostgreSQL first, into `ark-export-postgres/`. Anything created while it was serving exists only there, and the `ark-export-etcd/` directory holds the pre-switch state you must not overwrite. Then run the switch below, and import `ark-export-postgres/` in step 3.
+
+```bash
+# The chart owns both APIServices, so this deregisters them.
+helm uninstall ark-apiserver -n ark-system
+kubectl get apiservice v1alpha1.ark.mckinsey.com v1prealpha1.ark.mckinsey.com
+# (NotFound)
+
+# Re-apply the rest of your controller values alongside the backend flip.
+helm upgrade --install ark-controller \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system \
+  --set rbac.enable=true \
+  --set storage.backend=etcd
+```
+
+Removing the APIServices releases the group-version path. If the CRDs were kept, the original etcd resources are reachable again as they were before the switch; if they were deleted, the etcd-mode controller chart reinstalls the CRDs empty. Either way, import `ark-export-postgres/` to bring across everything created while PostgreSQL was serving. Use `--upsert` when the CRDs were kept, since the pre-switch resources are already there. Re-create any ArkConfig by hand: the aggregated apiserver never served it, so it is not in the export.
+
+`helm uninstall ark-apiserver` drops the `ark_cdc` replication slot but leaves the `resources` table, so the PostgreSQL copy survives a rollback and the migration can be retried in either direction. See [Uninstall and cleanup](#uninstall-and-cleanup).
 
 ## Security model
 

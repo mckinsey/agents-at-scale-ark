@@ -12,7 +12,10 @@ ARK_SDK_WHEEL_NAME := ark_sdk-$(ARK_SDK_PEP440_VERSION)-py3-none-any.whl
 ARK_SDK_WHL := $(ARK_SDK_OUT)/py-sdk/dist/$(ARK_SDK_WHEEL_NAME)
 ARK_SDK_CRD_FILES := $(wildcard ark/config/crd/bases/ark*.yaml)
 ARK_SDK_OPENAPI := $(ARK_SDK_OUT)/ark_schema.json
-ARK_SDK_OVERLAY_FILES := $(shell find $(ARK_SDK_LIB_DIR)/gen_sdk/overlay/python/ark_sdk -name '*.py')
+ARK_SDK_OVERLAY_FILES := $(shell find $(ARK_SDK_LIB_DIR)/gen_sdk/overlay/python -name '*.py' -not -path '*/.venv/*')
+# Code-generation inputs: generator modules and templates that produce base_client.py,
+# versioned clients and tests. Changes here must force a wheel rebuild.
+ARK_SDK_GEN_FILES := $(shell find $(ARK_SDK_LIB_DIR)/gen_sdk -maxdepth 1 -name '*.py') $(shell find $(ARK_SDK_LIB_DIR)/gen_sdk/template -type f)
 
 # Pre-calculate all stamp paths
 ARK_SDK_STAMP_BUILD := $(ARK_SDK_OUT)/stamp-build
@@ -52,7 +55,7 @@ $(ARK_SDK_STAMP_NPM_INSTALL): $(ARK_SDK_LIB_DIR)/package.json $(ARK_SDK_LIB_DIR)
 	@touch $@
 
 # Build Python wheel in $(OUT) directory
-$(ARK_SDK_WHL): $(ARK_SDK_OPENAPI) $(ARK_SDK_LIB_DIR)/generate_ark_clients.py $(ARK_SDK_LIB_DIR)/pyproject.toml $(ARK_SDK_OVERLAY_FILES) $(ARK_SDK_STAMP_NPM_INSTALL) | $(OUT)
+$(ARK_SDK_WHL): $(ARK_SDK_OPENAPI) $(ARK_SDK_LIB_DIR)/generate_ark_clients.py $(ARK_SDK_LIB_DIR)/pyproject.toml $(ARK_SDK_OVERLAY_FILES) $(ARK_SDK_GEN_FILES) $(ARK_SDK_STAMP_NPM_INSTALL) | $(OUT)
 	@mkdir -p $(ARK_SDK_OUT)/py-sdk
 	cd $(ARK_SDK_LIB_DIR) && PATH="$(BUILD_EXTRA_PATH)" ./retry.sh npx @openapitools/openapi-generator-cli generate -i $(ARK_SDK_OPENAPI) -g python -o $(ARK_SDK_OUT)/py-sdk --package-name ark_sdk
 	cd $(ARK_SDK_LIB_DIR) && tar -cf - -C gen_sdk/overlay/python . | tar -xf - -C $(ARK_SDK_OUT)/py-sdk

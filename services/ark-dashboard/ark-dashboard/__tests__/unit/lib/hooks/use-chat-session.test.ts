@@ -13,6 +13,15 @@ import { storedIsChatStreamingEnabledAtom } from '@/atoms/experimental-features'
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { useChatSession } from '@/lib/hooks/use-chat-session';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
 }));
@@ -723,7 +732,7 @@ describe('useChatSession', () => {
             m => m.content === 'Conversation stopped by user',
           ),
         ).toBe(true);
-        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+        expect(mockCancelQuery).toHaveBeenCalledWith('default', 'test-query');
       });
     });
 
@@ -770,7 +779,7 @@ describe('useChatSession', () => {
             m => m.content === 'Conversation stopped by user',
           ),
         ).toBe(true);
-        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+        expect(mockCancelQuery).toHaveBeenCalledWith('default', 'test-query');
       });
     });
 
@@ -806,7 +815,7 @@ describe('useChatSession', () => {
             m => m.content === 'Conversation stopped by user',
           ),
         ).toBe(true);
-        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+        expect(mockCancelQuery).toHaveBeenCalledWith('default', 'test-query');
       });
     });
 
