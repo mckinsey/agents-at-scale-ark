@@ -27,6 +27,7 @@ const DATE_DIGIT_COUNT = 8;
 // 00:00 instead would make "today" an already-expired key.
 const END_OF_DAY_HOUR = 23;
 const END_OF_DAY_MINUTE = 59;
+const EMPTY_TIME_SEGMENT = '--';
 
 /**
  * `<input type="date">` renders its separators from the browser's UI locale and
@@ -150,10 +151,12 @@ function parseTimePart(time: string): TimeParts {
 }
 
 function formatTimeParts({ hour, minute }: TimeParts): string {
-  if (hour === null || minute === null) {
+  if (hour === null && minute === null) {
     return '';
   }
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  const segment = (part: number | null) =>
+    part === null ? EMPTY_TIME_SEGMENT : String(part).padStart(2, '0');
+  return `${segment(hour)}:${segment(minute)}`;
 }
 
 /** Fills only the segments the user left empty, so clearing one half never
@@ -172,7 +175,7 @@ interface DateTimeFieldProps {
   /** Value in `datetime-local` form: `yyyy-MM-ddTHH:mm`, or empty. */
   readonly value: string;
   readonly onChange: (value: string) => void;
-  readonly onBlur?: (event: React.FocusEvent<HTMLDivElement>) => void;
+  readonly onBlur?: (event: React.FocusEvent<HTMLFieldSetElement>) => void;
   readonly name?: string;
   readonly ref?: React.Ref<HTMLInputElement>;
   readonly disabled?: boolean;
@@ -248,9 +251,9 @@ export function DateTimeField({
 
   /**
    * Emits `yyyy-MM-ddTHH:mm` once the date parses. Otherwise it mirrors the raw
-   * text, so a half-typed date reaches the form as an invalid value the schema
-   * can reject — rather than as `''`, which reads as "no expiry" and would
-   * silently create a never-expiring key.
+   * text, so a half-typed date — or a time entered without one — reaches the
+   * form as an invalid value the schema can reject, rather than as `''`, which
+   * reads as "no expiry" and would silently create a never-expiring key.
    */
   const emit = (nextDateText: string, nextTime: TimeParts) => {
     const parsed = parseDisplayDate(nextDateText);
@@ -310,22 +313,37 @@ export function DateTimeField({
   };
 
   /**
-   * Normalises a half-cleared time back to end of day once focus leaves, so the
-   * field can never display a blank time while submitting 23:59.
+   * Normalises a half-cleared time back to end of day, so the field can never
+   * display a blank segment while submitting 23:59. Runs when focus leaves and
+   * on Enter, which submits the form without blurring. An empty time with no
+   * date is the "no expiry" state rather than an incomplete entry, so it is
+   * left alone; a partly typed one is settled even without a date.
    */
-  const handleBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+  const settleTime = () => {
+    if (time.hour !== null && time.minute !== null) {
+      return;
+    }
+    const isEmpty = time.hour === null && time.minute === null;
+    if (isEmpty && !parseDisplayDate(dateText)) {
+      return;
+    }
+    const effectiveTime = withEndOfDayDefaults(time);
+    setTime(effectiveTime);
+    emit(dateText, effectiveTime);
+  };
+
+  const handleBlur = (event: React.FocusEvent<HTMLFieldSetElement>) => {
     if (event.currentTarget.contains(event.relatedTarget)) {
       return;
     }
-    if (
-      parseDisplayDate(dateText) &&
-      (time.hour === null || time.minute === null)
-    ) {
-      const effectiveTime = withEndOfDayDefaults(time);
-      setTime(effectiveTime);
-      emit(dateText, effectiveTime);
-    }
+    settleTime();
     onBlur?.(event);
+  };
+
+  const handleTimeKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      settleTime();
+    }
   };
 
   const handleCalendarSelect = (nextDate: Date | undefined) => {
@@ -339,10 +357,10 @@ export function DateTimeField({
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
-      <div
-        role="group"
+      <fieldset
         aria-labelledby={ariaLabelledBy}
-        onBlur={handleBlur}>
+        onBlur={handleBlur}
+        className="m-0 min-w-0 border-0 p-0">
         <InputGroup variant="inline" size="default" className="gap-3">
           <InputGroupInput
             id={fieldId}
@@ -383,6 +401,7 @@ export function DateTimeField({
               disabled={disabled}
               onComplete={() => minuteRef.current?.focus()}
               onNavigateRight={() => minuteRef.current?.focus()}
+              onKeyDown={handleTimeKeyDown}
               aria-label="Hour"
               aria-describedby={ariaDescribedBy}
               aria-invalid={ariaInvalid}
@@ -398,6 +417,7 @@ export function DateTimeField({
               max={59}
               disabled={disabled}
               onNavigateLeft={() => hourRef.current?.focus()}
+              onKeyDown={handleTimeKeyDown}
               aria-label="Minute"
               aria-describedby={ariaDescribedBy}
               aria-invalid={ariaInvalid}
@@ -418,7 +438,7 @@ export function DateTimeField({
             </PopoverTrigger>
           </InputGroupAddon>
         </InputGroup>
-      </div>
+      </fieldset>
       <PopoverContent
         className="w-auto overflow-hidden border-none p-0"
         align="start"

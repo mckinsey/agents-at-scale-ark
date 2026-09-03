@@ -244,6 +244,59 @@ describe('DateTimeField', () => {
     expect(lastCall(onChangeSpy)).toBe('2026-08-24T23:59');
   });
 
+  it('mirrors a half-typed time so a dateless entry cannot read as no expiry', async () => {
+    const onChangeSpy = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onChangeSpy={onChangeSpy} />);
+
+    await user.type(hourInput(), '1');
+
+    expect(hourInput()).toHaveValue('01');
+    expect(lastCall(onChangeSpy)).toBe('01:--');
+  });
+
+  it('settles a half-typed time with no date on blur', async () => {
+    const onChangeSpy = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onChangeSpy={onChangeSpy} />);
+
+    await user.type(hourInput(), '14');
+    await user.click(outside());
+
+    expect(hourInput()).toHaveValue('14');
+    expect(minuteInput()).toHaveValue('59');
+    expect(lastCall(onChangeSpy)).toBe('14:59');
+  });
+
+  it('leaves an empty field alone on blur so no expiry stays no expiry', async () => {
+    const onChangeSpy = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onChangeSpy={onChangeSpy} />);
+
+    await user.click(hourInput());
+    await user.click(outside());
+
+    expect(hourInput()).toHaveValue('');
+    expect(minuteInput()).toHaveValue('');
+    expect(onChangeSpy).not.toHaveBeenCalled();
+  });
+
+  it('settles a cleared minute on Enter, which submits without blurring', async () => {
+    const onChangeSpy = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Harness initialValue="2026-08-24T14:30" onChangeSpy={onChangeSpy} />,
+    );
+
+    await user.type(minuteInput(), '{backspace}');
+    expect(minuteInput()).toHaveValue('');
+
+    await user.type(minuteInput(), '{enter}');
+
+    expect(minuteInput()).toHaveValue('59');
+    expect(lastCall(onChangeSpy)).toBe('2026-08-24T14:59');
+  });
+
   it('overwrites in place when a digit is typed into a complete date', async () => {
     const onChangeSpy = vi.fn();
     const user = userEvent.setup();
