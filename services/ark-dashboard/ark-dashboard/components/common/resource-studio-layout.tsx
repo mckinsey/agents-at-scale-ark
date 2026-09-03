@@ -2,9 +2,10 @@
 
 import { type ReactNode, useState } from 'react';
 
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
 import { PanelToggleButton } from '@/components/common/panel-toggle-button';
 import { ResourceSwitcherBar } from '@/components/common/resource-switcher-bar';
-import { ChevronLeft, Warning } from '@/components/icons';
+import { Warning } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -58,27 +59,14 @@ export function ResourceStudioLayout({
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
 
   return (
-    <div className="flex min-h-0 w-full content-shell flex-1 flex-col overflow-hidden">
+    <div className="content-shell flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       <header className="flex flex-none flex-col gap-4 pb-5">
         <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <NamespacedLink
-              href={listHref}
-              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-              <IconShell size="sm" className="opacity-100">
-                <ChevronLeft />
-              </IconShell>
-              {listLabel}
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-fg-secondary">
-              /
-            </span>
-            <span aria-current="page" className="text-fg-secondary">
-              {displayName}
-            </span>
-          </nav>
+          <DetailBreadcrumb
+            backHref={listHref}
+            backLabel={listLabel}
+            current={displayName}
+          />
           <div className="flex items-center gap-3">
             <NamespacedLink href={listHref}>
               <Button variant="outline">Back</Button>
