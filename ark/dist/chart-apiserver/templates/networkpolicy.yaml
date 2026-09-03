@@ -25,7 +25,7 @@ spec:
           protocol: TCP
     {{- if .Values.metrics.enabled }}
     - ports:
-        - port: 8443
+        - port: {{ .Values.metrics.port }}
           protocol: TCP
     {{- end }}
 {{- end }}

@@ -79,7 +79,7 @@ var (
 	walLastMessageTimestamp = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "ark_apiserver_wal_last_message_timestamp_seconds",
-			Help: "Unix time of the last WAL message (XLogData or keepalive) received by the consumer",
+			Help: "Unix time of the last WAL message (XLogData or keepalive) received by the consumer; NaN on replicas not running the WAL consumer",
 		},
 	)
 
@@ -192,6 +192,7 @@ func (dbPoolCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func init() {
+	walLastMessageTimestamp.Set(math.NaN())
 	replicationSlotLagBytes.Set(math.NaN())
 	ctrlmetrics.Registry.MustRegister(
 		broadcasterRelistTotal,

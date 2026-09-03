@@ -74,10 +74,10 @@ Before wiring either mechanism the apiserver runs a `SelfSubjectAccessReview` fo
 
 ### Metrics
 
-`metrics.enabled=true` (default `false`) serves Prometheus metrics on port `8443` and adds a `metrics` port to the Service (and to the NetworkPolicy when enabled). The endpoint exposes the Ark apiserver collectors (`ark_apiserver_storage_*`, `ark_apiserver_requests_*`, `ark_apiserver_admission_enforcement_active`), the watch broadcaster collectors (`ark_apiserver_watch_*`) and the PostgreSQL backend gauges:
+`metrics.enabled=true` (default `false`) serves Prometheus metrics on `metrics.port` (default `8443`) and adds a `metrics` port to the Service (and to the NetworkPolicy when enabled). The endpoint exposes the Ark apiserver collectors (`ark_apiserver_storage_*`, `ark_apiserver_requests_*`, `ark_apiserver_admission_enforcement_active`), the watch broadcaster collectors (`ark_apiserver_watch_*`) and the PostgreSQL backend gauges:
 
 - `ark_apiserver_wal_consumer_active` — `1` on the replica running the WAL consumer; across a healthy deployment the sum is exactly `1`.
-- `ark_apiserver_wal_last_message_timestamp_seconds` — staleness means the consumer is wedged.
+- `ark_apiserver_wal_last_message_timestamp_seconds` — staleness means the consumer is wedged. `NaN` on replicas not running the consumer (including a leader that just lost the lease), so a `time() - ark_apiserver_wal_last_message_timestamp_seconds > 300` alert stays quiet on followers; if you scope it anyway, join on `ark_apiserver_wal_consumer_active == 1`.
 - `ark_apiserver_replication_slot_lag_bytes` — WAL pinned by the `ark_cdc` slot; a climbing value is the disk-filling condition described under "Replication slot lifecycle". Sampled every 30s on the leader; `NaN` elsewhere. The query reads `pg_replication_slots`, which works for the slot owner by default — a locked-down role needs `GRANT pg_monitor TO <role>`.
 - `ark_apiserver_db_pool_*` — connection pool stats (`sql.DBStats`); `wait_count_total` rising means pool exhaustion.
 

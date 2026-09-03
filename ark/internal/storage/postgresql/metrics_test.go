@@ -19,6 +19,16 @@ import (
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
+// A follower never runs the consumer, so its timestamp must read NaN rather
+// than 0: `time() - <timestamp> > 300` would otherwise fire on every replica
+// that is not the leader. First in the package's test order so it observes
+// the init() value before any test drives the consumer.
+func TestLastMessageTimestampIsNaNWithoutConsumer(t *testing.T) {
+	if got := testutil.ToFloat64(walLastMessageTimestamp); !math.IsNaN(got) {
+		t.Errorf("ark_apiserver_wal_last_message_timestamp_seconds before any consumer ran = %v, want NaN", got)
+	}
+}
+
 // swapDBPoolStats installs fn for the test and restores the previous value,
 // so tests over the package-level pointer do not leak into each other.
 func swapDBPoolStats(t *testing.T, fn func() sql.DBStats) {
@@ -214,6 +224,9 @@ func TestStartWALConsumerSetsActiveGauge(t *testing.T) {
 	<-done
 	if got := testutil.ToFloat64(walConsumerActive); got != 0 {
 		t.Errorf("ark_apiserver_wal_consumer_active after stop = %v, want 0", got)
+	}
+	if got := testutil.ToFloat64(walLastMessageTimestamp); !math.IsNaN(got) {
+		t.Errorf("ark_apiserver_wal_last_message_timestamp_seconds after stop = %v, want NaN", got)
 	}
 }
 

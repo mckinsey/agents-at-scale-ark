@@ -39,7 +39,7 @@ spec:
           args:
             - --role=apiserver
             - --leader-elect
-            - --metrics-bind-address={{ ternary ":8443" "0" .Values.metrics.enabled }}
+            - --metrics-bind-address={{ ternary (printf ":%d" (int .Values.metrics.port)) "0" .Values.metrics.enabled }}
             {{- if .Values.metrics.enabled }}
             - --metrics-secure={{ .Values.metrics.secure }}
             {{- end }}
@@ -109,7 +109,7 @@ spec:
               protocol: TCP
             {{- if .Values.metrics.enabled }}
             - name: metrics
-              containerPort: 8443
+              containerPort: {{ .Values.metrics.port }}
               protocol: TCP
             {{- end }}
           livenessProbe:
