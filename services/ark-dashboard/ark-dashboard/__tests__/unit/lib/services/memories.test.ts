@@ -28,20 +28,17 @@ describe('memoriesService', () => {
   });
 
   describe('getAll', () => {
-    it('scopes the paginated list to the namespace and hydrates each item', async () => {
+    it('scopes the paginated list to the namespace without per-item detail fetches', async () => {
       vi.mocked(fetchAllPages).mockResolvedValue([{ name: 'session-memory' }]);
-      vi.spyOn(apiClient, 'get').mockResolvedValue(DETAIL);
+      const get = vi.spyOn(apiClient, 'get');
 
       const result = await memoriesService.getAll(NAMESPACE);
 
       expect(fetchAllPages).toHaveBeenCalledWith('/api/v1/memories', {
         namespace: NAMESPACE,
       });
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/memories/session-memory',
-        { params: { namespace: NAMESPACE } },
-      );
-      expect(result).toEqual([{ ...DETAIL, id: 'session-memory' }]);
+      expect(get).not.toHaveBeenCalled();
+      expect(result).toEqual([{ name: 'session-memory', id: 'session-memory' }]);
     });
   });
 

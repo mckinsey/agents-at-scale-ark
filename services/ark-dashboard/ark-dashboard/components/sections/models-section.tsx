@@ -26,7 +26,7 @@ export function ModelsSection() {
           <p>Get started by adding your first model.</p>
         </>
       }
-      loadItems={() => modelsService.getAll(namespace)}
+      loadItems={() => modelsService.list(namespace)}
       deleteItem={id => modelsService.deleteById(namespace, id)}
       renderTable={(models, onDelete) => (
         <ModelsTable models={models} onDelete={onDelete} />

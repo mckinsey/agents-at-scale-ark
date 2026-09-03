@@ -57,6 +57,28 @@ describe('agentsService', () => {
     })
   })
 
+  describe('list', () => {
+    it('should fetch all agents without hydrating each item', async () => {
+      const mockListResponse: AgentListResponse = {
+        items: [
+          { name: 'agent1', displayName: 'Agent 1' },
+          { name: 'agent2', displayName: 'Agent 2' },
+        ],
+      }
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockListResponse)
+
+      const result = await agentsService.list('default')
+
+      expect(apiClient.get).toHaveBeenCalledTimes(1)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`, { params: { limit: 100, namespace: 'default' } })
+
+      expect(result).toHaveLength(2)
+      expect(result[0]).toMatchObject({ id: 'agent1', name: 'agent1' })
+      expect(result[1]).toMatchObject({ id: 'agent2', name: 'agent2' })
+    })
+  })
+
   describe('getByName', () => {
     it('should fetch agent by name and add id field', async () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockAgent)

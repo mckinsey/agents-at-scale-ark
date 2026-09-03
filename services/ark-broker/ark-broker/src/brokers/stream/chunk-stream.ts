@@ -11,6 +11,8 @@ export interface CompletionChunkData {
 }
 
 export interface ChunkStream {
+  init?(): Promise<void>;
+  close?(): void;
   appendChunk(
     queryId: string,
     chunk: unknown
