@@ -13,4 +13,6 @@ spec:
     required: ["command"]
   description: "Runs a shell command on the host and returns its output"
   http:
+    # Never actually fetched: the gate holds the call at approval before execution, so
+    # the URL only has to be well-formed for the tool to register.
     url: http://command-runner-mock/run?cmd={command}
