@@ -63,7 +63,9 @@ When Ark dispatches a query to your engine:
 
 Secrets never leave the cluster over A2A — they are resolved locally within your executor pod. You never interact with the extension or Kubernetes APIs directly.
 
-Resource resolution runs as the Query's `spec.serviceAccount` when it declares one, and as your executor pod's service account otherwise. Queries that declare one need your executor's service account to hold `impersonate` on `serviceaccounts` in the namespace; without it the query fails rather than silently resolving with the pod identity.
+Resource resolution runs as the Query's `spec.serviceAccount` when it declares one, and as your executor pod's service account otherwise. Queries that declare one need your executor's service account to hold `impersonate` on `serviceaccounts`; without it the query fails rather than silently resolving with the pod identity.
+
+Scope that grant with `resourceNames` to the accounts queries may name. Granting it unscoped lets anything holding your executor's token act as any service account in the namespace.
 
 ## Extension Spec
 
