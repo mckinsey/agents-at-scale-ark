@@ -9,7 +9,9 @@ import {
   Server,
   SquarePlay,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
 import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
@@ -17,6 +19,7 @@ import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { MARKETPLACE_ITEM_PARAM } from '@/lib/constants/marketplace';
 import type {
   MarketplaceCategory,
   MarketplaceFilters,
@@ -35,10 +38,16 @@ const FILTERS: Record<string, Partial<MarketplaceFilters>> = {
 } as const;
 
 export default function MarketplacePage() {
+  const searchParams = useSearchParams();
+  const requestedItemId = searchParams.get(MARKETPLACE_ITEM_PARAM);
+
   const [filters, setFilters] = useState<MarketplaceFilters>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [autoOpenItemId, setAutoOpenItemId] = useState<string | null>(null);
+  const requestedItemHandled = useRef(false);
+  const isInitialSearchRun = useRef(true);
   const itemsPerPage = 6;
 
   const { data, isPending } = useGetMarketplaceItems(filters);
@@ -64,6 +73,11 @@ export default function MarketplacePage() {
   const pageTitle = data ? `Marketplace (${data.items.length})` : 'Marketplace';
 
   useEffect(() => {
+    if (isInitialSearchRun.current) {
+      isInitialSearchRun.current = false;
+      return;
+    }
+
     const timer = setTimeout(() => {
       setCurrentPage(1);
       setFilters(prev => ({
@@ -74,6 +88,29 @@ export default function MarketplacePage() {
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  useEffect(() => {
+    if (!requestedItemId || requestedItemHandled.current || !data) {
+      return;
+    }
+    requestedItemHandled.current = true;
+
+    const item = data.items.find(
+      candidate => candidate.id === requestedItemId,
+    );
+    if (!item) {
+      toast.error(`Marketplace item "${requestedItemId}" not found`);
+      return;
+    }
+
+    setSearchQuery(item.name);
+    setCurrentPage(1);
+    setFilters(prev => ({ ...prev, search: item.name }));
+
+    if (item.status !== 'installed' && item.type !== 'demo') {
+      setAutoOpenItemId(item.id);
+    }
+  }, [data, requestedItemId]);
 
   const handleSearch = (value: string) => {
     setSearchQuery(value);
@@ -214,7 +251,11 @@ export default function MarketplacePage() {
         {!isPending && data && data.items.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {currentItems.map(item => (
-              <MarketplaceItemCard key={item.id} item={item} />
+              <MarketplaceItemCard
+                key={item.id}
+                item={item}
+                autoOpenInstall={item.id === autoOpenItemId}
+              />
             ))}
           </div>
         )}
