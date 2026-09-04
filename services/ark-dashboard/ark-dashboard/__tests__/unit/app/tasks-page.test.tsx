@@ -18,6 +18,8 @@ vi.mock('@/lib/services/a2a-tasks-hooks', () => ({
     },
     isPending: false,
     error: null,
+    refetch: vi.fn(),
+    isFetching: false,
   })),
   useDeleteA2ATask: vi.fn(() => ({
     mutateAsync: vi.fn(),
@@ -64,7 +66,10 @@ describe('TasksPage', () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText('A2A Tasks (0)')).toBeInTheDocument();
+    expect(screen.getByText('A2A tasks (0)')).toBeInTheDocument();
+    expect(
+      screen.getByText('Manage agent-to-agent messaging, and collaboration'),
+    ).toBeInTheDocument();
   });
 
   it('should render the A2ATasksSection component', () => {
@@ -80,6 +85,6 @@ describe('TasksPage', () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText('No A2A Tasks Found')).toBeInTheDocument();
+    expect(screen.getByText('No A2A task yet')).toBeInTheDocument();
   });
 });

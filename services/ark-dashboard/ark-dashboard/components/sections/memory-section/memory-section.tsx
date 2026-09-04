@@ -1,10 +1,11 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useId, useMemo, useState } from 'react';
+import { useCallback, useId, useMemo } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
-import { Database, SwapVert } from '@/components/icons';
+import { SortableColumnHeader } from '@/components/common/sortable-column-header';
+import { Database } from '@/components/icons';
 import {
   LearnMoreButton,
   ResourceEmptyState,
@@ -21,7 +22,6 @@ import {
   ComboboxList,
   ComboboxTrigger,
 } from '@/components/ui/combobox';
-import { IconShell } from '@/components/ui/icon-shell';
 import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
 import { Pagination } from '@/components/ui/pagination';
@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { DOCS_URLS } from '@/lib/constants/docs';
+import { useValueSort } from '@/lib/hooks/use-value-sort';
 import {
   useGetAllMemoryMessages,
   useGetConversations,
@@ -57,7 +58,12 @@ const COL = {
   query: 'w-[220px]',
 };
 
-type SortDirection = 'asc' | 'desc';
+const EMPTY_MESSAGES: never[] = [];
+
+// Sort by sequence number rather than timestamp: sequence keeps messages in the
+// correct order regardless of timestamp precision.
+const getSequence = (message: { sequence?: number | null }) =>
+  message.sequence || 0;
 
 /** URL query parameters the filters are stored in. */
 type MemoryFilterParam = 'memory' | 'conversationId' | 'queryId';
@@ -137,8 +143,6 @@ export function MemorySection() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-
   const readPositiveInt = (key: string, fallback: number) => {
     const parsed = Number.parseInt(searchParams.get(key) ?? '', 10);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -182,15 +186,11 @@ export function MemorySection() {
     [conversations.data],
   );
 
-  const sortedMessages = useMemo(() => {
-    // Sort by sequence number (newest first by default) to maintain proper chronological order
-    // This ensures messages appear in the correct order regardless of timestamp precision
-    const messages = [...(memoryMessages.data ?? [])];
-    return messages.sort((a, b) => {
-      const diff = (a.sequence || 0) - (b.sequence || 0);
-      return sortDirection === 'desc' ? -diff : diff;
-    });
-  }, [memoryMessages.data, sortDirection]);
+  const {
+    sortDirection,
+    toggleSortDirection,
+    sortedItems: sortedMessages,
+  } = useValueSort(memoryMessages.data ?? EMPTY_MESSAGES, getSequence);
 
   const totalMessages = sortedMessages.length;
 
@@ -371,20 +371,11 @@ export function MemorySection() {
               <TableHeader>
                 <TableRow>
                   <TableHead size="small" className={COL.added}>
-                    <button
-                      type="button"
-                      className="flex cursor-pointer items-center gap-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-stroke-status-focus"
-                      onClick={() =>
-                        setSortDirection(prev =>
-                          prev === 'desc' ? 'asc' : 'desc',
-                        )
-                      }
-                      aria-label={`Sort by added, currently ${sortDirection === 'desc' ? 'newest first' : 'oldest first'}`}>
-                      Added
-                      <IconShell size="sm" variant="secondary">
-                        <SwapVert />
-                      </IconShell>
-                    </button>
+                    <SortableColumnHeader
+                      label="Added"
+                      sortDirection={sortDirection}
+                      onToggle={toggleSortDirection}
+                    />
                   </TableHead>
                   <TableHead size="small" className={COL.memory}>
                     Memory
