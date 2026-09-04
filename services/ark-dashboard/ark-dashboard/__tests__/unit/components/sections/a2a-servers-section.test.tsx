@@ -1,21 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { A2AServersSection } from '@/components/sections/a2a-servers-section';
-import { A2AServersService } from '@/lib/services';
-import type { A2AServer } from '@/lib/services';
 import { toast } from 'sonner';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { A2AServersSection } from '@/components/sections/a2a-servers-section';
+import { A2AServersService } from '@/lib/services/a2a-servers';
+import type { A2AServer } from '@/lib/services/a2a-servers';
+
+let readOnly = false;
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
     namespace: 'default',
     isNamespaceResolved: true,
     isPending: false,
-    readOnlyMode: false,
+    readOnlyMode: readOnly,
   }),
 }));
 
-vi.mock('@/lib/services', () => ({
+vi.mock('@/lib/services/a2a-servers', () => ({
   A2AServersService: {
     getAll: vi.fn(),
     delete: vi.fn(),
@@ -31,23 +35,24 @@ vi.mock('sonner', () => ({
 }));
 
 vi.mock('@/lib/hooks', () => ({
-  useDelayedLoading: vi.fn((loading) => loading),
+  useDelayedLoading: vi.fn(loading => loading),
 }));
 
-vi.mock('@/components/cards', () => ({
-  A2AServerCard: vi.fn(({ a2aServer, onInfo, onDelete }) => (
-    <div data-testid="a2a-server-card">
-      <div>{a2aServer.name}</div>
-      <button onClick={() => onInfo(a2aServer)}>Info</button>
-      <button onClick={() => onDelete(a2aServer.id)}>Delete</button>
-    </div>
+vi.mock('@/components/sections/a2a-servers-table', () => ({
+  A2AServersTable: vi.fn(({ servers, onDelete }) => (
+    <table data-testid="a2a-servers-table">
+      <tbody>
+        {servers.map((server: { id: string; name: string }) => (
+          <tr key={server.id}>
+            <td>{server.name}</td>
+            <td>
+              <button onClick={() => onDelete(server.id)}>Delete</button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )),
-}));
-
-vi.mock('@/components/dialogs/info-dialog', () => ({
-  InfoDialog: vi.fn(({ open, title }) =>
-    open ? <div data-testid="info-dialog">{title}</div> : null
-  ),
 }));
 
 vi.mock('@/components/editors/a2a-editor', () => ({
@@ -65,35 +70,20 @@ vi.mock('@/components/editors/a2a-editor', () => ({
           Save
         </button>
       </div>
-    ) : null
+    ) : null,
   ),
 }));
 
-vi.mock('@/components/ui/button', () => ({
-  Button: vi.fn(({ children, onClick, asChild }) => {
-    if (asChild) {
-      return <div>{children}</div>;
-    }
-    return <button onClick={onClick}>{children}</button>;
-  }),
-}));
-
-vi.mock('@/components/ui/empty', () => ({
-  Empty: ({ children }: { children: React.ReactNode }) => <div data-testid="empty">{children}</div>,
-  EmptyHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  EmptyMedia: ({ children }: { children: React.ReactNode; variant?: string }) => <div>{children}</div>,
-  EmptyTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  EmptyDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  EmptyContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}));
-
-vi.mock('@/lib/constants', () => ({
-  DASHBOARD_SECTIONS: {
-    a2a: {
-      icon: () => <div>IconMock</div>,
-    },
-  },
-}));
+function renderSection() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <A2AServersSection />
+    </QueryClientProvider>,
+  );
+}
 
 describe('A2AServersSection', () => {
   const mockServers: A2AServer[] = [
@@ -114,23 +104,41 @@ describe('A2AServersSection', () => {
   ];
 
   beforeEach(() => {
+    readOnly = false;
     vi.clearAllMocks();
   });
 
   it('should display loading state initially', async () => {
     vi.mocked(A2AServersService.getAll).mockImplementation(
-      () => new Promise(() => {})
+      () => new Promise(() => {}),
     );
 
-    render(<A2AServersSection namespace="default" />);
+    renderSection();
 
     expect(screen.getByText('Loading...')).toBeInTheDocument();
+  });
+
+  it('should render the page header', async () => {
+    vi.mocked(A2AServersService.getAll).mockResolvedValue(mockServers);
+
+    renderSection();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: 'A2A servers' }),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        'Register servers that host agents via the A2A protocol',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('should load and display A2A servers', async () => {
     vi.mocked(A2AServersService.getAll).mockResolvedValue(mockServers);
 
-    render(<A2AServersSection namespace="default" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByText('test-server-1')).toBeInTheDocument();
@@ -138,14 +146,56 @@ describe('A2AServersSection', () => {
     });
   });
 
+  it('should pass the namespace to the service', async () => {
+    vi.mocked(A2AServersService.getAll).mockResolvedValue(mockServers);
+
+    renderSection();
+
+    await waitFor(() => {
+      expect(A2AServersService.getAll).toHaveBeenCalledWith('default');
+    });
+  });
+
   it('should display empty state when no servers', async () => {
     vi.mocked(A2AServersService.getAll).mockResolvedValue([]);
 
-    render(<A2AServersSection namespace="default" />);
+    renderSection();
 
     await waitFor(() => {
-      expect(screen.getByTestId('empty')).toBeInTheDocument();
-      expect(screen.getByText('No A2A Servers Yet')).toBeInTheDocument();
+      expect(screen.getByText('No A2A server yet')).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText("You haven't added any A2A server yet."),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Get started to see servers.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Learn more' })).toHaveAttribute(
+      'href',
+      'https://mckinsey.github.io/agents-at-scale-ark/reference/resources/a2aserver/',
+    );
+  });
+
+  it('should hide the header action while the empty state is shown', async () => {
+    vi.mocked(A2AServersService.getAll).mockResolvedValue([]);
+
+    renderSection();
+
+    await waitFor(() => {
+      expect(screen.getByText('No A2A server yet')).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole('button', { name: 'Create A2A server' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('should show the header action when servers exist', async () => {
+    vi.mocked(A2AServersService.getAll).mockResolvedValue(mockServers);
+
+    renderSection();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Create A2A server' }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -153,7 +203,7 @@ describe('A2AServersSection', () => {
     const error = new Error('Failed to fetch');
     vi.mocked(A2AServersService.getAll).mockRejectedValue(error);
 
-    render(<A2AServersSection namespace="default" />);
+    renderSection();
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('Failed to Load A2A Servers', {
@@ -162,29 +212,11 @@ describe('A2AServersSection', () => {
     });
   });
 
-  it('should open info dialog when info button clicked', async () => {
-    vi.mocked(A2AServersService.getAll).mockResolvedValue(mockServers);
-
-    render(<A2AServersSection namespace="default" />);
-
-    await waitFor(() => {
-      expect(screen.getByText('test-server-1')).toBeInTheDocument();
-    });
-
-    const infoButtons = screen.getAllByText('Info');
-    await userEvent.click(infoButtons[0]);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('info-dialog')).toBeInTheDocument();
-      expect(screen.getByText('A2A Server: test-server-1')).toBeInTheDocument();
-    });
-  });
-
   it('should handle delete successfully', async () => {
     vi.mocked(A2AServersService.getAll).mockResolvedValue(mockServers);
     vi.mocked(A2AServersService.delete).mockResolvedValue();
 
-    render(<A2AServersSection namespace="default" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByText('test-server-1')).toBeInTheDocument();
@@ -194,7 +226,10 @@ describe('A2AServersSection', () => {
     await userEvent.click(deleteButtons[0]);
 
     await waitFor(() => {
-      expect(A2AServersService.delete).toHaveBeenCalledWith('default', 'server-1');
+      expect(A2AServersService.delete).toHaveBeenCalledWith(
+        'default',
+        'server-1',
+      );
       expect(toast.success).toHaveBeenCalledWith('A2A Server Deleted', {
         description: 'Successfully deleted test-server-1',
       });
@@ -206,7 +241,7 @@ describe('A2AServersSection', () => {
     const error = new Error('Delete failed');
     vi.mocked(A2AServersService.delete).mockRejectedValue(error);
 
-    render(<A2AServersSection namespace="default" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByText('test-server-1')).toBeInTheDocument();
@@ -225,14 +260,13 @@ describe('A2AServersSection', () => {
   it('should open editor from empty state', async () => {
     vi.mocked(A2AServersService.getAll).mockResolvedValue([]);
 
-    render(<A2AServersSection namespace="default" />);
+    renderSection();
 
     await waitFor(() => {
-      expect(screen.getByText('No A2A Servers Yet')).toBeInTheDocument();
+      expect(screen.getByText('No A2A server yet')).toBeInTheDocument();
     });
 
-    const addButton = screen.getByText('Add A2A Server');
-    await userEvent.click(addButton);
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('a2a-editor')).toBeInTheDocument();
@@ -247,14 +281,13 @@ describe('A2AServersSection', () => {
       namespace: 'default',
     });
 
-    render(<A2AServersSection namespace="default" />);
+    renderSection();
 
     await waitFor(() => {
-      expect(screen.getByText('No A2A Servers Yet')).toBeInTheDocument();
+      expect(screen.getByText('No A2A server yet')).toBeInTheDocument();
     });
 
-    const addButton = screen.getByText('Add A2A Server');
-    await userEvent.click(addButton);
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('a2a-editor')).toBeInTheDocument();
@@ -276,14 +309,13 @@ describe('A2AServersSection', () => {
     const error = new Error('Create failed');
     vi.mocked(A2AServersService.create).mockRejectedValue(error);
 
-    render(<A2AServersSection namespace="default" />);
+    renderSection();
 
     await waitFor(() => {
-      expect(screen.getByText('No A2A Servers Yet')).toBeInTheDocument();
+      expect(screen.getByText('No A2A server yet')).toBeInTheDocument();
     });
 
-    const addButton = screen.getByText('Add A2A Server');
-    await userEvent.click(addButton);
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('a2a-editor')).toBeInTheDocument();

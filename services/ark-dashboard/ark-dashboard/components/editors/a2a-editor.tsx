@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -44,6 +43,8 @@ const formSchema = z.object({
       'Polling interval must be a valid number',
     ),
 });
+
+const LABEL_CLASS = 'label-regular-primary text-fg-secondary';
 
 export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
   const form = useForm<z.infer<typeof formSchema>>({
@@ -81,27 +82,23 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-[586px]">
         <DialogHeader>
-          <DialogTitle>Create New A2A Server</DialogTitle>
-          <DialogDescription>
-            Fill in the information for the new A2A server.
-          </DialogDescription>
+          <DialogTitle>Create new A2A server</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-4 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="contents">
+            <div className="flex flex-col gap-6">
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Name <span className="text-red-500">*</span>
-                    </FormLabel>
+                    <FormLabel className={LABEL_CLASS}>Name *</FormLabel>
                     <FormControl>
                       <Input
+                        variant="inline"
                         placeholder="e.g., deep-research"
                         disabled={form.formState.isSubmitting}
                         {...field}
@@ -117,10 +114,11 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel className={LABEL_CLASS}>Description</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="What this server does"
+                        variant="inline"
+                        placeholder="what this server does"
                         disabled={form.formState.isSubmitting}
                         {...field}
                       />
@@ -135,11 +133,10 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
                 name="baseUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      URL <span className="text-red-500">*</span>
-                    </FormLabel>
+                    <FormLabel className={LABEL_CLASS}>URL *</FormLabel>
                     <FormControl>
                       <Input
+                        variant="inline"
                         placeholder="https://agentspace-a2a.default.svc.cluster.local:2973/a2a/agent/..."
                         disabled={form.formState.isSubmitting}
                         {...field}
@@ -155,9 +152,12 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
                 name="pollingInterval"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Polling Interval (seconds)</FormLabel>
+                    <FormLabel className={LABEL_CLASS}>
+                      Polling Interval (seconds)
+                    </FormLabel>
                     <FormControl>
                       <Input
+                        variant="inline"
                         type="number"
                         placeholder="e.g., 60"
                         disabled={form.formState.isSubmitting}
