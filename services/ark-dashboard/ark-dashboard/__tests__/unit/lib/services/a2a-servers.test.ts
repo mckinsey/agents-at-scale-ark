@@ -13,16 +13,16 @@ describe('A2AServersService', () => {
     it('should call delete endpoint with correct identifier', async () => {
       const mockDelete = vi.spyOn(apiClient, 'delete').mockResolvedValue(undefined);
 
-      await A2AServersService.delete('test-server');
+      await A2AServersService.delete('default', 'test-server');
 
-      expect(mockDelete).toHaveBeenCalledWith('/api/v1/a2a-servers/test-server');
+      expect(mockDelete).toHaveBeenCalledWith('/api/v1/a2a-servers/test-server', { params: { namespace: 'default' } });
     });
 
     it('should handle delete errors', async () => {
       const mockError = new Error('Delete failed');
       vi.spyOn(apiClient, 'delete').mockRejectedValue(mockError);
 
-      await expect(A2AServersService.delete('test-server')).rejects.toThrow('Delete failed');
+      await expect(A2AServersService.delete('default', 'test-server')).rejects.toThrow('Delete failed');
     });
   });
 
@@ -42,9 +42,9 @@ describe('A2AServersService', () => {
         namespace: 'default',
       });
 
-      const result = await A2AServersService.create(config);
+      const result = await A2AServersService.create('default', config);
 
-      expect(mockPost).toHaveBeenCalledWith('/api/v1/a2a-servers', config);
+      expect(mockPost).toHaveBeenCalledWith('/api/v1/a2a-servers', config, { params: { namespace: 'default' } });
       expect(result).toHaveProperty('id');
       expect(result).toHaveProperty('name', 'test-server');
     });
@@ -64,9 +64,9 @@ describe('A2AServersService', () => {
         namespace: 'default',
       });
 
-      const result = await A2AServersService.update('test-server', spec);
+      const result = await A2AServersService.update('default', 'test-server', spec);
 
-      expect(mockPut).toHaveBeenCalledWith('/api/v1/a2a-servers/test-server', spec);
+      expect(mockPut).toHaveBeenCalledWith('/api/v1/a2a-servers/test-server', spec, { params: { namespace: 'default' } });
       expect(result).toHaveProperty('id');
       expect(result).toHaveProperty('name', 'test-server');
     });

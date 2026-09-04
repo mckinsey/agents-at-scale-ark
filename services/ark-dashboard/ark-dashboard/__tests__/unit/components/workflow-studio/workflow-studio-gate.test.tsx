@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioChatGate } from '@/components/workflow-studio/studio-chat-gate';
+import { EXPERIMENTAL_NOTICE_STORAGE_KEY } from '@/components/workflow-studio/use-experimental-notice';
 import { WorkflowStudio } from '@/components/workflow-studio/workflow-studio';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { getAuthorAgentPreflight } from '@/lib/services/author-agent-preflight';
@@ -90,6 +91,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   currentNamespace = 'default';
   preflightMock.mockResolvedValue(present);
+  window.localStorage.clear();
+  window.localStorage.setItem(EXPERIMENTAL_NOTICE_STORAGE_KEY, 'true');
 });
 
 describe('WorkflowStudio author-agent gate', () => {
@@ -111,6 +114,35 @@ describe('WorkflowStudio author-agent gate', () => {
       screen.getByTestId('studio-gate-agent-marketplace-link'),
     ).toHaveAttribute('href', '/marketplace?item=argo-make-author');
     expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+  });
+
+  it('shows the experimental notice before the install gate on first use', async () => {
+    window.localStorage.removeItem(EXPERIMENTAL_NOTICE_STORAGE_KEY);
+    preflightMock.mockResolvedValue({
+      agentPresent: false,
+      agentReady: false,
+      mcpServerPresent: true,
+      mcpServerReady: true,
+      unverifiable: false,
+    });
+
+    render(<WorkflowStudio mode="new" initialName="wf" />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('studio-experimental-notice'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('studio-chat-gate')).toBeNull();
+
+    fireEvent.click(
+      screen.getByTestId('studio-experimental-notice-dismiss'),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('studio-chat-gate')).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('studio-experimental-notice')).toBeNull();
   });
 
   it('shows the disabled banner linking to the agent when the agent is present but not ready', async () => {

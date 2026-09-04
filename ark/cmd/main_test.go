@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,6 +40,26 @@ func TestValidateRole(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), c.wantErr) {
 			t.Errorf("validateRole(%q) error = %q, want substring %q", c.role, err.Error(), c.wantErr)
+		}
+	}
+}
+
+func TestWatchNamespaces(t *testing.T) {
+	cases := []struct {
+		env  string
+		want []string
+	}{
+		{"", nil},
+		{"   ", nil},
+		{"team-a", []string{"team-a"}},
+		{"team-a,ark-system", []string{"team-a", "ark-system"}},
+		{" team-a , ark-system ,", []string{"team-a", "ark-system"}},
+	}
+	for _, c := range cases {
+		t.Setenv("ARK_WATCH_NAMESPACES", c.env)
+		got := watchNamespaces()
+		if !slices.Equal(got, c.want) {
+			t.Errorf("watchNamespaces() with %q = %v, want %v", c.env, got, c.want)
 		}
 	}
 }
@@ -154,6 +175,13 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 		"ARK_POSTGRES_SSL_ROOT_CERT",
 		"ARK_POSTGRES_SSL_CERT",
 		"ARK_POSTGRES_SSL_KEY",
+		"ARK_APISERVER_AUDIT_ENABLED",
+		"ARK_APISERVER_AUDIT_POLICY_FILE",
+		"ARK_APISERVER_AUDIT_LOG_PATH",
+		"ARK_APISERVER_POLICY_CEL_ENABLED",
+		"ARK_APISERVER_POLICY_CEL_REQUIRED",
+		"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_ENABLED",
+		"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED",
 	}
 
 	cases := []struct {
@@ -165,24 +193,88 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 		{
 			name: "defaults when env unset",
 			env:  map[string]string{},
-			want: apiserver.Config{PostgresSSL: "require"},
+			// Off with no env: audit is "on by default" only once a policy file exists.
+			want: apiserver.Config{PostgresSSL: "require", AuditEnabled: false, AuditLogPath: "-"},
+		},
+		{
+			name: "audit defaults on once a policy file is configured",
+			env:  map[string]string{"ARK_APISERVER_AUDIT_POLICY_FILE": "/etc/ark/audit/policy.yaml"},
+			want: apiserver.Config{
+				PostgresSSL:     "require",
+				AuditEnabled:    true,
+				AuditPolicyFile: "/etc/ark/audit/policy.yaml",
+				AuditLogPath:    "-",
+			},
+		},
+		{
+			// Not downgraded to off: applyAudit turns this into a startup error instead.
+			name: "explicit audit opt-in without a policy file stays enabled",
+			env:  map[string]string{"ARK_APISERVER_AUDIT_ENABLED": "true"},
+			want: apiserver.Config{PostgresSSL: "require", AuditEnabled: true, AuditLogPath: "-"},
+		},
+		{
+			name: "CEL enforcement can be made a startup requirement",
+			env:  map[string]string{"ARK_APISERVER_POLICY_CEL_REQUIRED": "true"},
+			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-", CELRequired: true},
+		},
+		{
+			name:    "invalid CEL required bool",
+			env:     map[string]string{"ARK_APISERVER_POLICY_CEL_REQUIRED": "sometimes"},
+			wantErr: "ARK_APISERVER_POLICY_CEL_REQUIRED",
+		},
+		{
+			// Enabled is the default, so only an explicit opt-out sets CELDisabled.
+			name: "CEL enforcement can be switched off",
+			env:  map[string]string{"ARK_APISERVER_POLICY_CEL_ENABLED": "false"},
+			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-", CELDisabled: true},
+		},
+		{
+			name: "CEL enabled explicitly leaves enforcement wired",
+			env:  map[string]string{"ARK_APISERVER_POLICY_CEL_ENABLED": "true"},
+			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-"},
+		},
+		{
+			name:    "invalid CEL enabled bool",
+			env:     map[string]string{"ARK_APISERVER_POLICY_CEL_ENABLED": "maybe"},
+			wantErr: "ARK_APISERVER_POLICY_CEL_ENABLED",
+		},
+		{
+			// The combination one shared flag could not express: webhooks mandatory with CEL
+			// left at its best-effort default.
+			name: "third-party webhooks can be required independently of CEL",
+			env: map[string]string{
+				"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_ENABLED":  "true",
+				"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED": "true",
+			},
+			want: apiserver.Config{
+				PostgresSSL: "require", AuditLogPath: "-",
+				ThirdPartyWebhooks: true, ThirdPartyWebhooksRequired: true,
+			},
+		},
+		{
+			name:    "invalid third-party webhooks required bool",
+			env:     map[string]string{"ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED": "sometimes"},
+			wantErr: "ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED",
 		},
 		{
 			name: "every variable set",
 			env: map[string]string{
-				"ARK_APISERVER_PORT":          "8443",
-				"ARK_POSTGRES_HOST":           "db.example.com",
-				"ARK_POSTGRES_PORT":           "5433",
-				"ARK_POSTGRES_DATABASE":       "ark",
-				"ARK_POSTGRES_USER":           "ark",
-				"ARK_POSTGRES_PASSWORD":       "secret",
-				"ARK_POSTGRES_SSL_MODE":       "verify-full",
-				"ARK_APISERVER_AUTH_MODE":     "delegated",
-				"ARK_APISERVER_TLS_CERT_FILE": "/certs/tls.crt",
-				"ARK_APISERVER_TLS_KEY_FILE":  "/certs/tls.key",
-				"ARK_POSTGRES_SSL_ROOT_CERT":  "/etc/ark/postgres-tls/ca.crt",
-				"ARK_POSTGRES_SSL_CERT":       "/etc/ark/postgres-tls/tls.crt",
-				"ARK_POSTGRES_SSL_KEY":        "/etc/ark/postgres-tls/tls.key",
+				"ARK_APISERVER_PORT":              "8443",
+				"ARK_POSTGRES_HOST":               "db.example.com",
+				"ARK_POSTGRES_PORT":               "5433",
+				"ARK_POSTGRES_DATABASE":           "ark",
+				"ARK_POSTGRES_USER":               "ark",
+				"ARK_POSTGRES_PASSWORD":           "secret",
+				"ARK_POSTGRES_SSL_MODE":           "verify-full",
+				"ARK_APISERVER_AUTH_MODE":         "delegated",
+				"ARK_APISERVER_TLS_CERT_FILE":     "/certs/tls.crt",
+				"ARK_APISERVER_TLS_KEY_FILE":      "/certs/tls.key",
+				"ARK_POSTGRES_SSL_ROOT_CERT":      "/etc/ark/postgres-tls/ca.crt",
+				"ARK_POSTGRES_SSL_CERT":           "/etc/ark/postgres-tls/tls.crt",
+				"ARK_POSTGRES_SSL_KEY":            "/etc/ark/postgres-tls/tls.key",
+				"ARK_APISERVER_AUDIT_ENABLED":     "true",
+				"ARK_APISERVER_AUDIT_POLICY_FILE": "/etc/ark/audit/policy.yaml",
+				"ARK_APISERVER_AUDIT_LOG_PATH":    "/var/log/ark/audit.log",
 			},
 			want: apiserver.Config{
 				BindPort:        8443,
@@ -198,7 +290,20 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 				PostgresSSLRoot: "/etc/ark/postgres-tls/ca.crt",
 				PostgresSSLCert: "/etc/ark/postgres-tls/tls.crt",
 				PostgresSSLKey:  "/etc/ark/postgres-tls/tls.key",
+				AuditEnabled:    true,
+				AuditPolicyFile: "/etc/ark/audit/policy.yaml",
+				AuditLogPath:    "/var/log/ark/audit.log",
 			},
+		},
+		{
+			name: "audit can be disabled",
+			env:  map[string]string{"ARK_APISERVER_AUDIT_ENABLED": "false"},
+			want: apiserver.Config{PostgresSSL: "require", AuditEnabled: false, AuditLogPath: "-"},
+		},
+		{
+			name:    "invalid audit enabled bool",
+			env:     map[string]string{"ARK_APISERVER_AUDIT_ENABLED": "maybe"},
+			wantErr: "ARK_APISERVER_AUDIT_ENABLED",
 		},
 		{
 			name:    "invalid apiserver port",

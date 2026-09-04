@@ -5,7 +5,7 @@ metadata:
   labels:
     postgresql: "true"
 spec:
-  description: Two queries sharing a sessionId land as two rows in the Postgres session_queries table under one sessions header row, with conversations and errorCount aggregated on it; GET /sessions/:id returns the same shape over HTTP, participants included
+  description: Two queries sharing a sessionId land as two rows in the Postgres session_queries table under one sessions header row, with conversations and errorCount aggregated on it; GET /sessions/:id returns the same shape over HTTP, participants included; deleting one Query removes its row and leaves the header aggregated over what remains
   steps:
   - name: setup-mock-llm
     try:
@@ -103,26 +103,20 @@ spec:
   - name: verify-session-in-postgres
     try:
     - script:
-        timeout: 60s
+        timeout: 180s
         content: |
-          SESSION_ID="e2e-sessions-broker-postgres"
-          QUERY_COUNT=""
           # Two queries share one session, so their events serialize on the
           # same header row (by design - see PostgresSessionsStorage). Under
           # a busy CI runner, with the shared postgresql-matrix Postgres
           # instance also taking writes from every other postgresql-labelled
-          # test running concurrently, draining that backlog can take longer
-          # than a quick local run ever does - give it real margin rather
-          # than a tight retry budget tuned against an idle cluster.
-          for i in $(seq 1 40); do
-            QUERY_COUNT=$(bash ../shared/psql-query.sh \
-              "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}' AND phase='done';" \
-              | tr -d ' \n')
-            [ "${QUERY_COUNT}" = "2" ] && break
-            sleep 1
-          done
+          # test running concurrently, one query's row can take well over a
+          # minute to reach phase=done. The in-pod poll breaks as soon as both
+          # rows land, so a generous budget only costs wall-clock when the
+          # backlog is genuinely deep.
+          QUERY_COUNT=$(bash ../shared/psql-poll.sh \
+            "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}' AND phase='done';" \
+            "2" 300 0.5) || { echo "expected 2 done session_queries rows, got '${QUERY_COUNT}'"; exit 1; }
           echo "done session_queries rows: ${QUERY_COUNT}"
-          [ "${QUERY_COUNT}" = "2" ] || { echo "expected 2 done session_queries rows, got ${QUERY_COUNT}"; exit 1; }
 
           HEADER=$(bash ../shared/psql-query.sh \
             "SELECT status || ',' || error_count || ',' || jsonb_array_length(conversations) FROM sessions WHERE session_id='${SESSION_ID}';" \
@@ -141,6 +135,8 @@ spec:
           [ "${CONV_NAMES}" = "sessions-postgres-agent-a,sessions-postgres-agent-b" ] || { echo "expected 'sessions-postgres-agent-a,sessions-postgres-agent-b', got '${CONV_NAMES}'"; exit 1; }
         env:
         - name: NAMESPACE
+          value: ($namespace)
+        - name: SESSION_ID
           value: ($namespace)
     catch:
     - events: {}
@@ -162,7 +158,7 @@ spec:
           RESULT=$(kubectl exec -n "$BROKER_NS" deployment/ark-broker -- \
             node -e "
               const h = require('http');
-              h.get('http://localhost:8080/sessions/e2e-sessions-broker-postgres', (r) => {
+              h.get('http://localhost:8080/sessions/${SESSION_ID}', (r) => {
                 let d = '';
                 r.on('data', (c) => { d += c; });
                 r.on('end', () => {
@@ -180,6 +176,57 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+        - name: SESSION_ID
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          bash ../shared/dump-broker-logs.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: delete-query-cascades-to-sessions
+    try:
+    # This blocks until the object is gone, and the finalizer only completes if
+    # every broker cleanup returned - so reaching the next step is already an
+    # assertion that the sessions delete did not fail.
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: sessions-postgres-query-2
+    - script:
+        timeout: 120s
+        content: |
+          ROWS=$(bash ../shared/psql-poll.sh \
+            "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}';" \
+            "1" 120 0.5) || { echo "expected 1 remaining session_queries row, got '${ROWS}'"; exit 1; }
+          echo "session_queries rows after delete: ${ROWS}"
+
+          GONE=$(bash ../shared/psql-query.sh \
+            "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}' AND query_id='sessions-postgres-query-2';" \
+            | tr -d ' \n')
+          echo "rows for the deleted query: ${GONE}"
+          [ "${GONE}" = "0" ] || { echo "expected 0, got '${GONE}'"; exit 1; }
+
+          HEADER=$(bash ../shared/psql-query.sh \
+            "SELECT status || ',' || error_count || ',' || jsonb_array_length(conversations) FROM sessions WHERE session_id='${SESSION_ID}';" \
+            | tr -d ' \n')
+          echo "sessions header after delete (status,error_count,conversations): ${HEADER}"
+          [ "${HEADER}" = "idle,0,1" ] || { echo "expected 'idle,0,1', got '${HEADER}'"; exit 1; }
+
+          # The count alone would pass on a regression that kept the wrong
+          # conversation, so the surviving name is what pins agent-a.
+          CONV_NAMES=$(bash ../shared/psql-query.sh \
+            "SELECT string_agg(c->>'name', ',' ORDER BY c->>'name') FROM sessions s, jsonb_array_elements(s.conversations) c WHERE s.session_id='${SESSION_ID}';" \
+            | tr -d ' \n')
+          echo "conversation names after delete: ${CONV_NAMES}"
+          [ "${CONV_NAMES}" = "sessions-postgres-agent-a" ] || { echo "expected 'sessions-postgres-agent-a', got '${CONV_NAMES}'"; exit 1; }
+        env:
+        - name: SESSION_ID
+          value: ($namespace)
     catch:
     - events: {}
     - script:
@@ -190,6 +237,13 @@ spec:
           value: ($namespace)
 
     cleanup:
+    - script:
+        content: |
+          bash ../shared/psql-query.sh \
+            "DELETE FROM session_queries WHERE session_id='${SESSION_ID}'; DELETE FROM sessions WHERE session_id='${SESSION_ID}';" || true
+        env:
+        - name: SESSION_ID
+          value: ($namespace)
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true

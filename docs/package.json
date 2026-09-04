@@ -1,6 +1,6 @@
 {
   "name": "y",
-  "version": "0.1.67",
+  "version": "0.1.68",
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {
@@ -19,7 +19,7 @@
     "@napi-rs/simple-git": "^0.1.19",
     "@theguild/remark-mermaid": "^0.3.0",
     "cheerio": "^1.2.0",
-    "next": "16.2.11",
+    "next": "16.3.3",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.8",
@@ -28,18 +28,18 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^6.0.5",
     "@vitest/coverage-v8": "^4.1.10",
     "http-server": "^14.1.1",
     "js-yaml": "^4.3.1",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "linkinator": "^7.6.1",
     "pagefind": "^1.5.2",
     "picomatch": "^4.0.4",
     "vitest": "^4.0.17"
   },
   "optionalDependencies": {
-    "@napi-rs/simple-git-linux-arm64-gnu": "^0.1.19",
+    "@napi-rs/simple-git-linux-arm64-gnu": "^1.1.0",
     "@napi-rs/simple-git-linux-arm64-musl": "^0.1.19",
     "@napi-rs/simple-git-linux-x64-gnu": "^0.1.19",
     "@napi-rs/simple-git-linux-x64-musl": "^1.1.0"
@@ -51,7 +51,7 @@
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
     "postcss": "^8.5.18",
-    "@xmldom/xmldom": "0.9.10",
+    "@xmldom/xmldom": "0.9.11",
     "speech-rule-engine": "4.1.4",
     "uuid": "^14.0.0",
     "lodash-es": "4.18.1",

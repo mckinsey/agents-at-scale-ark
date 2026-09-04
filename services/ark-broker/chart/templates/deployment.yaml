@@ -57,26 +57,24 @@ spec:
               containerPort: {{ .Values.memory.port }}
               protocol: TCP
           env:
+            {{- with (include "ark-broker.nodeOptions" .) }}
+            - name: NODE_OPTIONS
+              value: {{ . | quote }}
+            {{- end }}
             - name: PORT
               value: {{ .Values.memory.port | quote }}
             - name: REQUEST_TIMEOUT_MS
               value: {{ .Values.server.requestTimeout | quote }}
-            {{- if .Values.limits.maxMessages }}
-            - name: MAX_MESSAGES
-              value: {{ .Values.limits.maxMessages | quote }}
-            {{- end }}
-            {{- if .Values.limits.maxChunks }}
-            - name: MAX_CHUNKS
-              value: {{ .Values.limits.maxChunks | quote }}
-            {{- end }}
-            {{- if .Values.limits.maxSpans }}
-            - name: MAX_SPANS
-              value: {{ .Values.limits.maxSpans | quote }}
-            {{- end }}
-            {{- if .Values.limits.maxEvents }}
-            - name: MAX_EVENTS
-              value: {{ .Values.limits.maxEvents | quote }}
-            {{- end }}
+            - name: MESSAGE_MAX_BYTES
+              value: {{ .Values.limits.messageMaxBytes | quote }}
+            - name: EVENT_MAX_BYTES
+              value: {{ .Values.limits.eventMaxBytes | quote }}
+            - name: CHUNK_MAX_BYTES
+              value: {{ .Values.limits.chunkMaxBytes | quote }}
+            - name: TRACE_MAX_BYTES
+              value: {{ .Values.limits.traceMaxBytes | quote }}
+            - name: CHUNK_TTL_SECONDS
+              value: {{ .Values.limits.chunkTtlSeconds | quote }}
             - name: MESSAGE_BACKEND
               value: {{ .Values.backends.message | quote }}
             - name: EVENT_BACKEND
@@ -104,8 +102,6 @@ spec:
             {{- end }}
             - name: REDIS_KEY_PREFIX
               value: {{ .Values.redis.keyPrefix | quote }}
-            - name: REDIS_STREAM_TTL_SECONDS
-              value: {{ .Values.redis.streamTtlSeconds | quote }}
             - name: REDIS_CONNECT_TIMEOUT_MS
               value: {{ .Values.redis.connectTimeoutMs | quote }}
             {{- if .Values.redis.debugCommands }}

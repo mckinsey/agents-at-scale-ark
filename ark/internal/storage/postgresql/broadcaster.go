@@ -102,8 +102,12 @@ func (b *kindBroadcaster) unsubscribe(w *postgresWatcher) {
 	broadcasterActiveWatchers.WithLabelValues(b.kind).Set(float64(n))
 }
 
+// relistInterval is the safety-net cadence for the per-kind relist ticker. A var,
+// not a const, so integration tests can shorten it; production keeps 120s.
+var relistInterval = 120 * time.Second
+
 func (b *kindBroadcaster) run() {
-	relistTicker := time.NewTicker(120 * time.Second)
+	relistTicker := time.NewTicker(relistInterval)
 	defer relistTicker.Stop()
 
 	// Prime the cursor at the current max rv so the first relist fans out only
@@ -126,33 +130,32 @@ func (b *kindBroadcaster) run() {
 	}
 }
 
+const broadcasterRelistQuery = `
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
+		FROM resources
+		WHERE kind = $1 AND resource_version > $2
+		ORDER BY resource_version ASC`
+
 // relist runs ONE query for the kind and fans the rows out to all subscribers.
 // Mirrors the old postgresWatcher.relist lookback/dedup semantics, but without the
 // namespace/label SQL filters (those become in-memory predicates at fan-out) and
 // once per kind rather than once per watcher.
 func (b *kindBroadcaster) relist() {
-	const lookback int64 = 500
 	// relistQueryTimeout bounds a single relist query. run() calls relist()
 	// inline on one goroutine, so an unbounded query would stall fan-out to
 	// every subscriber of this kind; the deadline caps that blast radius.
 	// Generous relative to the 120s safety-net tick, so it only trips a query
 	// that is genuinely hung rather than merely large.
 	const relistQueryTimeout = 30 * time.Second
-	from := b.lastSeenRV.Load() - lookback
+	from := b.lastSeenRV.Load() - relistLookbackRVs
 	if from < 0 {
 		from = 0
 	}
 
-	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
-		FROM resources
-		WHERE kind = $1 AND resource_version > $2
-		ORDER BY resource_version ASC`
-
 	broadcasterRelistTotal.WithLabelValues(b.kind).Inc()
 	ctx, cancel := context.WithTimeout(b.backend.ctx, relistQueryTimeout)
 	defer cancel()
-	rows, err := b.backend.db.QueryContext(ctx, query, b.kind, from)
+	rows, err := b.backend.db.QueryContext(ctx, broadcasterRelistQuery, b.kind, from)
 	if err != nil {
 		b.onRelistFailure(err)
 		return

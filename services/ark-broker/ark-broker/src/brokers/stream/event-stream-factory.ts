@@ -20,7 +20,9 @@ export function createEventStream(
   return new InMemoryEventStream(
     logger.child({broker: 'memory-events'}),
     'Event',
-    config.persistence.eventFilePath,
-    config.limits.maxEvents
+    {
+      path: config.persistence.eventFilePath,
+      maxBytes: config.limits.eventMaxBytes,
+    }
   );
 }

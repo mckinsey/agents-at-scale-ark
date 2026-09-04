@@ -419,6 +419,57 @@ describe('InMemorySessionsStorage', () => {
     });
   });
 
+  describe('deleteQuery', () => {
+    const indexOf = (): Map<string, string> =>
+      (storage as unknown as {queryToSession: Map<string, string>})
+        .queryToSession;
+
+    test('removes the query and leaves the session header where it was', async () => {
+      await storage.applyEvent({
+        sessionId: 's1',
+        queryName: 'q1',
+        _reason: 'QueryExecutionError',
+        error: 'boom',
+      });
+      await storage.applyEvent({sessionId: 's1', queryName: 'q2'});
+      const before = (await storage.getSession('s1'))!.lastActivity;
+
+      expect(await storage.deleteQuery('q1')).toBe(1);
+
+      const session = (await storage.getSession('s1'))!;
+      expect(Object.keys(session.queries)).toEqual(['q2']);
+      expect(session.errorCount).toBe(0);
+      expect(session.lastActivity).toBe(before);
+    });
+
+    test('clears the index for the deleted name only, across every session', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'shared'});
+      await storage.applyEvent({sessionId: 's1', queryName: 'keeper'});
+      await storage.applyEvent({sessionId: 's2', queryName: 'shared'});
+      await storage.applyEvent({sessionId: 's2', queryName: 'keeper'});
+
+      expect(await storage.deleteQuery('shared')).toBe(2);
+
+      expect(indexOf().has('shared')).toBe(false);
+      // Fails if the delete reaches for the whole index rather than one key.
+      expect(indexOf().get('keeper')).toBe('s2');
+      await storage.applyMessage('conv-1', 'keeper');
+      expect(
+        (await storage.getSession('s2'))!.queries['keeper']!.conversationId
+      ).toBe('conv-1');
+    });
+
+    test('drops the session once its last query goes', async () => {
+      await storage.applyEvent({sessionId: 's1', queryName: 'q1'});
+
+      await storage.deleteQuery('q1');
+
+      const store = await storage.getAll();
+      expect(Object.keys(store.sessions)).toHaveLength(0);
+      expect(indexOf().size).toBe(0);
+    });
+  });
+
   describe('subscribe', () => {
     test('emits on applyEvent', async () => {
       const received: Array<{sessionId: string; queryName: string}> = [];
@@ -451,6 +502,65 @@ describe('InMemorySessionsStorage', () => {
       await storage.applyEvent({sessionId: 's1'});
 
       expect(received).toHaveLength(0);
+    });
+  });
+
+  describe('cache size accessors', () => {
+    test('starts empty', () => {
+      expect(storage.cachedItemCount()).toBe(0);
+      expect(storage.cachedQueryCount()).toBe(0);
+    });
+
+    test('counts sessions and queries independently', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q2'});
+      await storage.applyEvent({sessionId: 'sess-2', queryName: 'q3'});
+
+      expect(storage.cachedItemCount()).toBe(2);
+      expect(storage.cachedQueryCount()).toBe(3);
+    });
+
+    test('repeated events for a known query do not inflate the count', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.applyEvent({
+        sessionId: 'sess-1',
+        queryName: 'q1',
+        _reason: 'QueryExecutionComplete',
+      });
+
+      expect(storage.cachedQueryCount()).toBe(1);
+    });
+
+    test('counts the same query name reused across sessions', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'shared'});
+      await storage.applyEvent({sessionId: 'sess-2', queryName: 'shared'});
+
+      expect(storage.cachedItemCount()).toBe(2);
+      expect(storage.cachedQueryCount()).toBe(2);
+    });
+
+    test('resets on delete', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.delete();
+
+      expect(storage.cachedItemCount()).toBe(0);
+      expect(storage.cachedQueryCount()).toBe(0);
+    });
+
+    test('follows removals from the store', async () => {
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q1'});
+      await storage.applyEvent({sessionId: 'sess-1', queryName: 'q2'});
+      await storage.applyEvent({sessionId: 'sess-2', queryName: 'q3'});
+
+      const store = await storage.getAll();
+      delete store.sessions['sess-1'].queries['q2'];
+
+      expect(storage.cachedQueryCount()).toBe(2);
+
+      delete store.sessions['sess-1'];
+
+      expect(storage.cachedItemCount()).toBe(1);
+      expect(storage.cachedQueryCount()).toBe(1);
     });
   });
 });

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
-import { Autorenew, Build, Info, Send, Stop } from '@/components/icons';
+import { ChatNotice } from '@/components/chat/chat-notice';
+import { Autorenew, Build, Info, Send, Stop, Warning } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -43,6 +44,7 @@ export function ChatPanel({
     messages,
     isProcessing,
     processingPhase,
+    statusText,
     isWaitingForApprovalResponse,
     error,
     sendMessage,
@@ -66,6 +68,7 @@ export function ChatPanel({
     removeParameterRow,
     canAddParameterRow,
     missingParameters,
+    engineToolWarning,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -110,16 +113,16 @@ export function ChatPanel({
         onViewportScroll={handleScroll}
         className="h-0 min-h-0 flex-1">
         <div className="space-y-4 p-4">
+          {engineToolWarning && (
+            <ChatNotice icon={<Warning />} iconClassName="text-status-warning">
+              {engineToolWarning}
+            </ChatNotice>
+          )}
           {missingParameters.length > 0 && (
-            <div className="bg-fill-onsurface-ui-3 text-fg-secondary flex items-center gap-2 rounded-full px-4 py-2">
-              <IconShell className="text-status-information shrink-0">
-                <Info />
-              </IconShell>
-              <span className="text-sm">
-                This {type === 'team' ? 'team' : 'agent'} needs a value
-                definition before you can send a message. Please add it below.
-              </span>
-            </div>
+            <ChatNotice icon={<Info />} iconClassName="text-status-information">
+              This {type === 'team' ? 'team' : 'agent'} needs a value definition
+              before you can send a message. Please add it below.
+            </ChatNotice>
           )}
           <ChatMessageList
             messages={messages}
@@ -130,6 +133,7 @@ export function ChatPanel({
             debugMode={debugMode}
             isProcessing={isProcessing}
             processingPhase={processingPhase}
+            statusText={statusText}
             isWaitingForApprovalResponse={isWaitingForApprovalResponse}
             error={error}
             viewMode={viewMode}
@@ -213,9 +217,7 @@ export function ChatPanel({
                       size="icon-sm"
                       aria-pressed={debugMode}
                       aria-label={
-                        debugMode
-                          ? 'Disable tool calls'
-                          : 'Activate tool calls'
+                        debugMode ? 'Hide tool calls' : 'Show tool calls'
                       }
                       onClick={() => {
                         const enabled = !debugMode;
@@ -236,13 +238,13 @@ export function ChatPanel({
                       <span
                         className={cn(
                           'absolute -right-0.5 -top-0.5 size-2 rounded-full',
-                          debugMode ? 'bg-status-success' : 'bg-status-error',
+                          debugMode ? 'bg-status-success' : 'bg-fg-disabled',
                         )}
                       />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {debugMode ? 'Disable tool calls' : 'Activate tool calls'}
+                    {debugMode ? 'Hide tool calls' : 'Show tool calls'}
                   </TooltipContent>
                 </Tooltip>
 

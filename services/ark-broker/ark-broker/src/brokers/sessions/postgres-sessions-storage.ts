@@ -19,6 +19,7 @@ import {
   applyQueryPhase,
   buildQueryEntry,
   deriveParticipants,
+  isTerminalPhase,
   mergeQueryMetadata,
   normalizeEventData,
   recalculateSessionConversations,
@@ -57,6 +58,7 @@ type SessionQueryRow = {
   last_activity: Date;
   last_applied_event_sequence: string;
   last_applied_message_sequence: string;
+  last_phase_event_sequence: string;
 };
 
 function rowToQueryEntry(row: SessionQueryRow): QueryEntry {
@@ -217,13 +219,28 @@ export class PostgresSessionsStorage implements SessionsStorage {
   }
 
   /**
+   * Ordered by created_at because conversation startTime and duration come from
+   * the first and last query of each conversation, and because the tie-break in
+   * the status election depends on this order.
+   */
+  private async readSession(
+    sql: postgres.TransactionSql,
+    header: SessionRow
+  ): Promise<SessionEntry> {
+    const rows = await sql<SessionQueryRow[]>`
+      SELECT * FROM session_queries
+      WHERE session_id = ${header.session_id}
+      ORDER BY created_at, query_id
+    `;
+    return rowsToSessionEntry(header, rows);
+  }
+
+  /**
    * Recomputes the header's aggregates from the session's own query rows, via
    * the same pure function the in-memory backend uses, so the two backends
    * cannot drift apart and a wrong aggregate repairs itself on the next write.
    * Runs after the session_queries write, with the header already locked, so
    * it sees this transaction's own row and no concurrent writer's half-state.
-   * Ordered by created_at because conversation startTime and duration are
-   * taken from the first and last query of each conversation.
    */
   private async refreshHeader(
     sql: postgres.TransactionSql,
@@ -231,13 +248,7 @@ export class PostgresSessionsStorage implements SessionsStorage {
     now: string,
     conversationsOnly = false
   ): Promise<void> {
-    const rows = await sql<SessionQueryRow[]>`
-      SELECT * FROM session_queries
-      WHERE session_id = ${header.session_id}
-      ORDER BY created_at, query_id
-    `;
-
-    const session = rowsToSessionEntry(header, rows);
+    const session = await this.readSession(sql, header);
     if (conversationsOnly) {
       recalculateSessionConversations(session);
     } else {
@@ -250,6 +261,28 @@ export class PostgresSessionsStorage implements SessionsStorage {
         status = ${session.status ?? 'idle'},
         last_activity = ${now},
         expires_at = now() + make_interval(secs => ${this.ttlSeconds}),
+        conversations = ${sql.json((session.conversations ?? []) as unknown as postgres.JSONValue)}
+      WHERE session_id = ${header.session_id}
+    `;
+  }
+
+  /**
+   * Recomputes the aggregates from the remaining query rows without touching
+   * last_activity or expires_at. refreshHeader cannot serve this: it moves both
+   * on every call, so a delete would register as activity and would revive an
+   * expired session back into the list.
+   */
+  private async refreshHeaderAggregates(
+    sql: postgres.TransactionSql,
+    header: SessionRow
+  ): Promise<void> {
+    const session = await this.readSession(sql, header);
+    recalculateSessionStatus(session);
+
+    await sql`
+      UPDATE sessions SET
+        error_count = ${session.errorCount ?? 0},
+        status = ${session.status ?? 'idle'},
         conversations = ${sql.json((session.conversations ?? []) as unknown as postgres.JSONValue)}
       WHERE session_id = ${header.session_id}
     `;
@@ -296,15 +329,25 @@ export class PostgresSessionsStorage implements SessionsStorage {
       `;
       const existingRow = existingRows[0];
 
-      // Out of order, so its phase must not be applied - but its identity
-      // fields still can be, because filling them is first-write-wins and
-      // order-independent. Dropping the whole event would lose the agent and
-      // conversationId that only the earlier event carries, and a query with
-      // no conversationId never joins its conversation at all.
+      // Two independent watermarks. `stale` (the all-events one) guards
+      // metadata order and which query wins the session-status election. A
+      // separate phase watermark, advanced only by terminal events, guards the
+      // phase: a reordered non-terminal event bumps `last_applied_event_sequence`
+      // but not the phase watermark, so the query's own `done` - applied after
+      // it with a lower sequence - is not mistaken for a replay and dropped.
       const stale =
         existingRow !== undefined &&
         sequence !== undefined &&
         sequence <= Number(existingRow.last_applied_event_sequence);
+      const phaseStale =
+        existingRow !== undefined &&
+        sequence !== undefined &&
+        sequence <= Number(existingRow.last_phase_event_sequence);
+      // Only terminal events decide the phase, so only they move its watermark;
+      // GREATEST keeps it from regressing and a 0 from a non-terminal event
+      // leaves it untouched.
+      const terminal = isTerminalPhase(queryPhase);
+      const phaseSequence = terminal ? (sequence ?? 0) : 0;
 
       const now = new Date().toISOString();
       const entry = existingRow
@@ -318,25 +361,32 @@ export class PostgresSessionsStorage implements SessionsStorage {
           );
       if (existingRow) {
         const filled = mergeQueryMetadata(entry, normalizedEventData);
-        if (stale && !filled) return false;
-        // Deliberately leaves lastActivity alone when stale: it elects which
-        // query decides the session's status, and an event we already know is
-        // out of order has no business winning that election.
-        if (!stale) applyQueryPhase(entry, queryPhase, now, errorMsg);
+        // Nothing left to do only when the metadata is stale, adds no field, and
+        // this event decides no phase newer than the last one - a non-terminal
+        // event never decides a phase, so it qualifies whenever it is stale.
+        if (stale && !filled && (!terminal || phaseStale)) return false;
+        if (!stale) {
+          applyQueryPhase(entry, queryPhase, now, errorMsg);
+        } else if (terminal && !phaseStale) {
+          // Metadata-stale but newer than the last phase decision: write the
+          // phase without re-electing this query as the session's latest
+          // activity (a higher-sequence event already holds that election).
+          applyQueryPhase(entry, queryPhase, now, errorMsg, false);
+        }
       }
 
       await sql`
         INSERT INTO session_queries (
           session_id, query_id, namespace, conversation_id, agent,
           team, tool, target_type, phase, error, created_at, completed_at,
-          last_activity, last_applied_event_sequence
+          last_activity, last_applied_event_sequence, last_phase_event_sequence
         ) VALUES (
           ${sessionId}, ${queryName}, ${entry.namespace ?? null},
           ${entry.conversationId ?? null}, ${entry.agent ?? null},
           ${entry.team ?? null}, ${entry.tool ?? null}, ${entry.targetType},
           ${entry.phase}, ${entry.error ?? null}, ${entry.createdAt},
           ${entry.completedAt ?? null}, ${entry.lastActivity},
-          ${sequence ?? 0}
+          ${sequence ?? 0}, ${phaseSequence}
         )
         ON CONFLICT (session_id, query_id) DO UPDATE SET
           namespace = EXCLUDED.namespace,
@@ -354,6 +404,10 @@ export class PostgresSessionsStorage implements SessionsStorage {
           last_applied_event_sequence = GREATEST(
             session_queries.last_applied_event_sequence,
             COALESCE(${sequence ?? null}::bigint, 0)
+          ),
+          last_phase_event_sequence = GREATEST(
+            session_queries.last_phase_event_sequence,
+            ${phaseSequence}::bigint
           )
       `;
 
@@ -600,6 +654,70 @@ export class PostgresSessionsStorage implements SessionsStorage {
 
   async delete(): Promise<void> {
     await this.db`DELETE FROM sessions`;
+  }
+
+  async deleteQuery(queryId: string): Promise<number> {
+    // Unlocked probe. No expires_at filter: an expired-but-present row is
+    // exactly the durable leftover this exists to remove.
+    const owners = await this.db<{session_id: string}[]>`
+      SELECT DISTINCT session_id FROM session_queries
+      WHERE query_id = ${queryId}
+      ORDER BY session_id
+    `;
+
+    let removed = 0;
+    const survivors: string[] = [];
+
+    // One transaction per owning session, each locking a single header. A
+    // transaction spanning several would be the only thing here that could
+    // deadlock against the write paths, which lock one. Idempotent, so the
+    // finalizer's retry after a partial failure is safe.
+    for (const {session_id: sessionId} of owners) {
+      const outcome = await this.db.begin(async (sql) => {
+        // Header before the query row, the order both write paths take.
+        const header = await this.lockHeader(sql, sessionId);
+        if (!header) return undefined;
+
+        const deleted = await sql<{query_id: string}[]>`
+          DELETE FROM session_queries
+          WHERE session_id = ${sessionId} AND query_id = ${queryId}
+          RETURNING query_id
+        `;
+        if (deleted.length === 0) return undefined;
+
+        // In this transaction, so it sees this transaction's own DELETE: read on
+        // the pool it would still count the row just removed and the header
+        // would never be dropped. Concurrent inserts are not the concern here -
+        // the header lock above already excludes them.
+        const [remaining] = await sql<[{n: string}]>`
+          SELECT count(*)::text AS n FROM session_queries
+          WHERE session_id = ${sessionId}
+        `;
+        if (Number(remaining!.n) === 0) {
+          await sql`DELETE FROM sessions WHERE session_id = ${sessionId}`;
+          return {count: deleted.length, survived: false};
+        }
+
+        await this.refreshHeaderAggregates(sql, header);
+        return {count: deleted.length, survived: true};
+      });
+
+      if (!outcome) continue;
+      removed += outcome.count;
+      if (outcome.survived) survivors.push(sessionId);
+    }
+
+    // After commit, on the pool: notifying inside db.begin() deadlocks
+    // postgres.js's own pool. Only survivors, since a session that is gone
+    // yields no SSE frame anyway - the stream drops a getSession that misses.
+    for (const sessionId of survivors) {
+      await this.db.notify(
+        NOTIFY_CHANNEL,
+        JSON.stringify({sessionId, queryName: queryId})
+      );
+    }
+
+    return removed;
   }
 
   subscribe(

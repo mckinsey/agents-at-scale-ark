@@ -1,9 +1,28 @@
 import type { ReactNode } from 'react';
 
-import { Search } from '@/components/icons';
+import { Search, Warning } from '@/components/icons';
+import { Button, wrapTextNodes } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+
+interface LearnMoreButtonProps {
+  readonly href: string;
+  readonly label?: string;
+}
+
+export function LearnMoreButton({
+  href,
+  label = 'Learn more',
+}: Readonly<LearnMoreButtonProps>) {
+  return (
+    <Button asChild variant="outline">
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {wrapTextNodes(label)}
+      </a>
+    </Button>
+  );
+}
 
 interface ResourceSearchInputProps {
   readonly value: string;
@@ -90,6 +109,39 @@ export function ResourceNoResults({ icon, message }: ResourceNoResultsProps) {
       <p className="text-fg-secondary text-base leading-6 tracking-[-0.128px]">
         {message}
       </p>
+    </div>
+  );
+}
+
+interface ResourceErrorStateProps {
+  readonly title: string;
+  readonly description?: ReactNode;
+  readonly className?: string;
+}
+
+export function ResourceErrorState({
+  title,
+  description,
+  className,
+}: Readonly<ResourceErrorStateProps>) {
+  return (
+    <div
+      role="alert"
+      className={cn(
+        'border-status-error/30 bg-status-error/10 flex flex-none items-start gap-2 border px-3 py-2',
+        className,
+      )}>
+      <IconShell size="sm" className="text-fg-error mt-0.5 shrink-0">
+        <Warning />
+      </IconShell>
+      <div>
+        <p className="label-regular-primary text-fg-error">{title}</p>
+        {description ? (
+          <p className="paragraph-regular-primary text-fg-secondary mt-1">
+            {description}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

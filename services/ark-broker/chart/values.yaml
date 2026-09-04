@@ -12,7 +12,8 @@ backends:
   sessions: memory
   chunk: memory
 
-# PostgreSQL connection — required when backends.message=postgres or backends.event=postgres
+# PostgreSQL connection — required when backends.message=postgres,
+# backends.event=postgres or backends.sessions=postgres
 database:
   # Plain connection URL. Avoid in production — use urlSecretRef instead.
   url: ""
@@ -72,11 +73,10 @@ redis:
     mountPath: /etc/redis-ssl
 
   keyPrefix: "ark-broker"
-  streamTtlSeconds: 3600
   connectTimeoutMs: 10000
   debugCommands: false
 
-# Migration init container image — used when backends.message=postgres
+# Migration init container image — used when any Postgres backend is enabled
 migrate:
   image:
     repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-broker-migrate
@@ -105,6 +105,22 @@ app:
       memory: "1024Mi"
       cpu: "1000m"
 
+  # NODE_OPTIONS for the broker container.
+  # Leave empty to derive --max-old-space-size from resources.limits.memory, as the
+  # lesser of 85% and limit-128Mi (870MB at the 1024Mi default), omitted entirely below
+  # a 256Mi limit where the result would be too small to start. V8 sizes its default
+  # heap from host memory, not the container limit, so without this the process can
+  # exhaust its heap while the container still has headroom. Bumping limits.memory is
+  # enough — the heap follows.
+  # The margin is not slack: V8's total heap ceiling sits ~24MB above the value set
+  # here, and non-heap memory (native buffers, sockets) sits above that. Raising it
+  # risks a kernel OOMKill in place of a clean V8 heap limit.
+  # Set explicitly only to override the computed value. This REPLACES it rather than
+  # adding to it, so always include --max-old-space-size when setting other flags —
+  # omitting it drops the heap cap back to V8's host-derived default:
+  #   nodeOptions: "--max-old-space-size=870 --enable-source-maps"
+  nodeOptions: ""
+
 server:
   requestTimeout: 0
 
@@ -127,14 +143,22 @@ memory:
 # Each store persists to JSON. Limits prevent unbounded file growth.
 # Estimates: messages ~2KB, chunks ~500B, spans ~1KB, events ~500B each
 limits:
-  # Max messages to persist (~100MB at 50k messages)
-  maxMessages: 50000
-  # Max stream chunks to persist (~100MB at 200k chunks)
-  maxChunks: 200000
-  # Max trace spans to persist (~100MB at 100k spans)
-  maxSpans: 100000
-  # Max events to persist (~100MB at 200k events)
-  maxEvents: 200000
+  # Per-store in-memory byte budgets. Each store retains the most-recent data
+  # within its budget; the sum is sized to fit the ~870MB Node heap the
+  # container derives from its memory limit (see app.resources). Raise these and
+  # app.resources.limits.memory together to retain more.
+  messageMaxBytes: 104857600 # 100 MiB — conversation memory
+  eventMaxBytes: 104857600 # 100 MiB — operation events
+  chunkMaxBytes: 33554432 # 32 MiB — transient streaming chunks (also TTL-bounded)
+  traceMaxBytes: 33554432 # 32 MiB — OTEL spans
+  # Retention window for streaming chunks, in seconds.
+  chunkTtlSeconds: 3600
+
+# Prometheus ServiceMonitor for the broker's GET /metrics endpoint.
+# Requires the Prometheus Operator (monitoring.coreos.com/v1) in the cluster.
+prometheus:
+  enable: false
+  interval: 30s
 
 # Streaming configuration
 streaming:
@@ -152,15 +176,15 @@ persistence:
   size: 1Gi
   # Path where data will be stored
   mountPath: /data
-  # Filename for the memory data
-  memoryFileName: messages.json
-  # Filename for the stream data
-  streamFileName: completionchunks.json
-  # Filename for the trace data
-  traceFileName: oteltraces.json
-  # Filename for the event data
-  eventFileName: events.json
-  # Filename for the sessions data
+  # Filename for the memory data (JSONL: header line + one record per line)
+  memoryFileName: messages.jsonl
+  # Filename for the stream data (JSONL)
+  streamFileName: completionchunks.jsonl
+  # Filename for the trace data (JSONL)
+  traceFileName: oteltraces.jsonl
+  # Filename for the event data (JSONL)
+  eventFileName: events.jsonl
+  # Filename for the sessions data (single JSON object, not JSONL)
   sessionsFileName: sessions.json
   # Use existing PVC instead of creating a new one
   existingClaim: ""

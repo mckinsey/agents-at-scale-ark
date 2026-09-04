@@ -6,6 +6,15 @@ import { ChatInput } from '@/components/sessions-conversations/chat-input';
 import type { Conversation } from '@/lib/services/conversations';
 import { useSendMessage } from '@/lib/services/conversations-hooks';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/conversations-hooks');
 vi.mock('@/components/ui/sonner', () => ({
   toast: {
@@ -88,7 +97,7 @@ describe('ChatInput', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'Activate tool calls' }),
+        screen.getByRole('button', { name: 'Show tool calls' }),
       ).toHaveAttribute('aria-pressed', 'false');
 
       rerender(
@@ -100,7 +109,7 @@ describe('ChatInput', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'Disable tool calls' }),
+        screen.getByRole('button', { name: 'Hide tool calls' }),
       ).toHaveAttribute('aria-pressed', 'true');
     });
 
@@ -116,7 +125,7 @@ describe('ChatInput', () => {
       );
 
       await user.click(
-        screen.getByRole('button', { name: 'Activate tool calls' }),
+        screen.getByRole('button', { name: 'Show tool calls' }),
       );
 
       expect(mockOnShowToolCallsChange).toHaveBeenCalledWith(true);
@@ -419,7 +428,7 @@ describe('ChatInput', () => {
       render(<ChatInput {...baseProps} conversation={agentConversation} />);
 
       await waitFor(() => {
-        expect(mockGetByName).toHaveBeenCalledWith('param-agent');
+        expect(mockGetByName).toHaveBeenCalledWith('default', 'param-agent');
       });
 
       await userEvent.type(

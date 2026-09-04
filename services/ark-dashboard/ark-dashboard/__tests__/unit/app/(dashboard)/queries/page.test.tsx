@@ -10,6 +10,7 @@ const mockRefetch = vi.fn();
 let searchParamsStore = new URLSearchParams();
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useRouter: () => ({ replace: mockReplace }),
   useSearchParams: () => searchParamsStore,
 }));

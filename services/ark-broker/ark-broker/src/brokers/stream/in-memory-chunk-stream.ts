@@ -3,20 +3,27 @@ import type {
   PaginatedList,
   PaginationParams,
 } from '@ark-broker/brokers/pagination.js';
-import {InMemoryStream} from './in-memory-stream.js';
+import {InMemoryStream, InMemoryStreamOptions} from './in-memory-stream.js';
 import type {BrokerItem} from './broker-item.js';
 import type {ChunkStream, CompletionChunkData} from './chunk-stream.js';
 
 export class InMemoryChunkStream implements ChunkStream {
   private readonly stream: InMemoryStream<CompletionChunkData>;
 
-  constructor(logger: Logger, path?: string, maxItems?: number) {
+  constructor(logger: Logger, opts?: InMemoryStreamOptions) {
     this.stream = new InMemoryStream<CompletionChunkData>(
       logger,
       'CompletionChunk',
-      path,
-      maxItems
+      opts
     );
+  }
+
+  async init(): Promise<void> {
+    await this.stream.init();
+  }
+
+  close(): void {
+    this.stream.close();
   }
 
   appendChunk(
@@ -73,6 +80,10 @@ export class InMemoryChunkStream implements ChunkStream {
 
   all(): Promise<BrokerItem<CompletionChunkData>[]> {
     return this.stream.all();
+  }
+
+  cachedItemCount(): number {
+    return this.stream.cachedItemCount();
   }
 
   async paginate(

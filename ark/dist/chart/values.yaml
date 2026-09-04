@@ -12,6 +12,16 @@ controllerManager:
   # objects. Set to 0 to use the controller-runtime default (1). See issue
   # #2609.
   maxConcurrentReconciles: 4
+  # Namespaces the controller watches and reconciles. Empty (default) watches all
+  # namespaces and binds the controller ServiceAccount cluster-wide. When set, the
+  # controller cache is confined to these namespaces and its access to core resources
+  # (Secrets, ConfigMaps, Services, Events) and Ark CRDs is granted through per-namespace
+  # RoleBindings instead of a cluster-wide ClusterRoleBinding. The admission webhooks are
+  # scoped to these namespaces and broker/telemetry discovery lists them instead of the
+  # cluster, so all access matches the granted RBAC. Ark resources in other namespaces are
+  # not validated or reconciled. Include the release namespace so the controller can manage
+  # its own resources.
+  watchNamespaces: []
   container:
     image:
       repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-controller
@@ -108,9 +118,12 @@ webhook:
   timeoutSeconds: 30
   failurePolicy: Fail
 
-# [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
+# [PROMETHEUS]: Create a ServiceMonitor so Prometheus scrapes controller
+# metrics. Enabled by default, but the ServiceMonitor only renders when the
+# Prometheus Operator CRDs (monitoring.coreos.com/v1) are present, so it is a
+# no-op on clusters without them. Set false to skip it entirely.
 prometheus:
-  enable: false
+  enable: true
 
 # [CERT-MANAGER]: To enable cert-manager injection to webhooks set true
 certmanager:

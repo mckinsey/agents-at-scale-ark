@@ -4,10 +4,20 @@ import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioChatPanel } from '@/components/workflow-studio/studio-chat-panel';
+import { EXPERIMENTAL_NOTICE_STORAGE_KEY } from '@/components/workflow-studio/use-experimental-notice';
 import { useStudioChat } from '@/components/workflow-studio/use-studio-chat';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { chatService } from '@/lib/services/chat';
 import { studioChatHistoryService } from '@/lib/services/studio-chat-history';
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
 
 vi.mock('@/lib/services/chat', () => ({
   chatService: {
@@ -199,6 +209,8 @@ async function waitForTurnComplete() {
 describe('StudioChatPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
+    window.localStorage.setItem(EXPERIMENTAL_NOTICE_STORAGE_KEY, 'true');
   });
 
   describe('loading', () => {
@@ -276,7 +288,7 @@ describe('StudioChatPanel', () => {
         expect(chatService.startStreamChatResponse).toHaveBeenCalled(),
       );
       const dispatched = vi.mocked(chatService.startStreamChatResponse).mock
-        .calls[0][0];
+        .calls[0][1];
       expect(dispatched).toBe('add a validation step');
       expect(dispatched).not.toContain('WorkflowTemplate');
 
@@ -295,7 +307,7 @@ describe('StudioChatPanel', () => {
         expect(chatService.startStreamChatResponse).toHaveBeenCalled(),
       );
       const dispatched = vi.mocked(chatService.startStreamChatResponse).mock
-        .calls[0][0];
+        .calls[0][1];
       expect(dispatched).toContain('```yaml');
       expect(dispatched).toContain('kind: WorkflowTemplate');
       expect(dispatched).toContain('make it faster');
@@ -315,7 +327,7 @@ describe('StudioChatPanel', () => {
         expect(chatService.startStreamChatResponse).toHaveBeenCalled(),
       );
       const dispatched = vi.mocked(chatService.startStreamChatResponse).mock
-        .calls[0][0];
+        .calls[0][1];
       expect(dispatched).toContain('kind: WorkflowTemplate');
       expect(dispatched).toContain('tweak it');
     });
@@ -551,8 +563,8 @@ describe('StudioChatPanel', () => {
         expect(chatService.startStreamChatResponse).toHaveBeenCalled(),
       );
       const call = vi.mocked(chatService.startStreamChatResponse).mock.calls[0];
-      expect(call[3]).toBe('argo-make-default-my-workflow');
-      expect(call[4]).toBe('conv-prev');
+      expect(call[4]).toBe('argo-make-default-my-workflow');
+      expect(call[5]).toBe('conv-prev');
     });
   });
 
@@ -594,6 +606,45 @@ describe('StudioChatPanel', () => {
     });
   });
 
+  describe('experimental notice', () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it('blocks the composer on first use and unblocks it after dismissal', async () => {
+      renderPanel();
+
+      expect(
+        await screen.findByTestId('studio-experimental-notice'),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+      expect(screen.getByTestId('studio-chat-send')).toBeDisabled();
+      expect(screen.getByTestId('studio-chat-suggestion-0')).toBeDisabled();
+
+      fireEvent.click(
+        screen.getByTestId('studio-experimental-notice-dismiss'),
+      );
+
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId('studio-experimental-notice'),
+        ).toBeNull(),
+      );
+      expect(screen.getByTestId('studio-chat-input')).not.toBeDisabled();
+      expect(screen.getByTestId('studio-chat-suggestion-0')).not.toBeDisabled();
+    });
+
+    it('stays hidden once acknowledged in localStorage', () => {
+      window.localStorage.setItem(EXPERIMENTAL_NOTICE_STORAGE_KEY, 'true');
+      renderPanel();
+
+      expect(
+        screen.queryByTestId('studio-experimental-notice'),
+      ).toBeNull();
+      expect(screen.getByTestId('studio-chat-input')).not.toBeDisabled();
+    });
+  });
+
   describe('new conversation', () => {
     it('clears the transcript and resets the conversation id', async () => {
       mockStream(() => [contentChunk('ok'), finalChunk('conv-1')]);
@@ -607,7 +658,7 @@ describe('StudioChatPanel', () => {
         expect(chatService.startStreamChatResponse).toHaveBeenCalledTimes(2),
       );
       expect(
-        vi.mocked(chatService.startStreamChatResponse).mock.calls[1][4],
+        vi.mocked(chatService.startStreamChatResponse).mock.calls[1][5],
       ).toBe('conv-1');
       await waitForTurnComplete();
 
@@ -619,7 +670,7 @@ describe('StudioChatPanel', () => {
         expect(chatService.startStreamChatResponse).toHaveBeenCalledTimes(3),
       );
       expect(
-        vi.mocked(chatService.startStreamChatResponse).mock.calls[2][4],
+        vi.mocked(chatService.startStreamChatResponse).mock.calls[2][5],
       ).toBeUndefined();
     });
   });

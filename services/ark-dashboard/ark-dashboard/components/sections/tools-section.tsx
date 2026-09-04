@@ -3,9 +3,11 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/sonner';
 
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Build } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import {
+  LearnMoreButton,
   ResourceEmptyState,
   ResourceNoResults,
   ResourceSearchInput,
@@ -16,7 +18,6 @@ import {
   ToolsTable,
 } from '@/components/sections/tools-table';
 import { Button } from '@/components/ui/button';
-import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -26,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
 import {
   type Agent,
@@ -35,9 +37,6 @@ import {
   toolsService,
 } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
-
-const LEARN_MORE_URL =
-  'https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/';
 
 type TypeFilter = 'All' | ToolTypeKey;
 
@@ -63,8 +62,8 @@ export function ToolsSection() {
       setLoading(true);
       try {
         const [toolsData, agentsData] = await Promise.all([
-          toolsService.getAll(),
-          agentsService.getAll(),
+          toolsService.getAll(namespace),
+          agentsService.getAll(namespace),
         ]);
         setTools(toolsData);
         setAgents(agentsData);
@@ -127,7 +126,7 @@ export function ToolsSection() {
       return;
     }
     try {
-      await toolsService.delete(tool.name);
+      await toolsService.delete(namespace, tool.name);
       setTools(prev => prev.filter(t => t.id !== id));
       toast.success('Tool deleted successfully');
     } catch (error) {
@@ -171,9 +170,7 @@ export function ToolsSection() {
         actions={
           <>
             {addToolButton}
-            <a href={LEARN_MORE_URL} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline">Learn more</Button>
-            </a>
+            <LearnMoreButton href={DOCS_URLS.tools} />
           </>
         }
       />
@@ -225,22 +222,12 @@ export function ToolsSection() {
 
   return (
     <div className="flex h-full w-full content-shell flex-col">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <IconShell size="default" variant="primary">
-              <Build className="size-full" />
-            </IconShell>
-            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-              Tools
-            </h1>
-          </div>
-          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-            Create and manage tools
-          </p>
-        </div>
-        {!isEmpty && addToolButton}
-      </div>
+      <ResourcePageHeader
+        icon={<Build className="size-full" />}
+        title="Tools"
+        description="Create and manage tools"
+        actions={!isEmpty && addToolButton}
+      />
 
       {body}
     </div>
