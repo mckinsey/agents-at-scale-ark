@@ -112,6 +112,7 @@ describe('StudioHeaderActions', () => {
 
     await waitFor(() => {
       expect(workflowTemplatesService.getStats).toHaveBeenCalledWith(
+        'default',
         'existing-workflow',
       );
     });
@@ -176,6 +177,7 @@ describe('StudioHeaderActions', () => {
 
     await waitFor(() => {
       expect(workflowTemplatesService.getStats).toHaveBeenCalledWith(
+        'default',
         'existing-workflow',
       );
     });
@@ -220,6 +222,7 @@ describe('StudioHeaderActions', () => {
 
     await waitFor(() => {
       expect(workflowTemplatesService.delete).toHaveBeenCalledWith(
+        'default',
         'existing-workflow',
       );
     });
@@ -292,7 +295,7 @@ describe('WorkflowStudio run button', () => {
     await waitFor(() => {
       expect(workflowTemplatesService.run).toHaveBeenCalledTimes(1);
     });
-    expect(vi.mocked(workflowTemplatesService.run).mock.calls[0][0]).toBe(
+    expect(vi.mocked(workflowTemplatesService.run).mock.calls[0][1]).toBe(
       'existing-workflow',
     );
   });

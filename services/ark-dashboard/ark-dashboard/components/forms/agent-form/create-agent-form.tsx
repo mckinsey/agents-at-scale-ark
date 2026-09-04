@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft } from '@/components/icons';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -62,26 +62,15 @@ export function CreateAgentForm({
   const cancelHref = onCancel ? undefined : '/agents';
 
   return (
-    <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
+    <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
       {/* Header — figma 4254:21323 (80px tall, 16px gap between rows) */}
       <header className="flex flex-none flex-col gap-4">
         <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <ChevronLeft className="size-4 text-white/30" />
-            <NamespacedLink
-              href="/agents"
-              className="text-white/30 transition-colors hover:text-white/60">
-              Agents
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-white/60">
-              /
-            </span>
-            <span aria-current="page" className="text-white/60">
-              Create agent
-            </span>
-          </nav>
+          <DetailBreadcrumb
+            backHref="/agents"
+            backLabel="Agents"
+            current="Create agent"
+          />
           <div className="flex items-center gap-2">
             {cancelHref ? (
               <NamespacedLink href={cancelHref}>

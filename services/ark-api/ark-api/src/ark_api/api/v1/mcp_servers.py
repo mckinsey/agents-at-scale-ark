@@ -18,12 +18,9 @@ from ...models.mcp_servers import (
     MCPServerUpdateRequest,
     MCPServerDetailResponse,
     MCPServerAuthorization,
+    MCPServerAddressSource,
 )
 from ...models.common import AvailabilityStatus, extract_availability_from_conditions
-from ...services.mcp_auth_persistence import (
-    ANNOTATION_AUTHORIZED_AT,
-    ANNOTATION_AUTHORIZED_BY,
-)
 from .exceptions import handle_k8s_errors
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 from .pagination import PaginationParams
@@ -38,9 +35,9 @@ VERSION = "v1alpha1"
 
 
 def _build_authorization(
-    status: dict, annotations: Optional[dict], spec: dict
+    status: dict, spec: dict
 ) -> Optional[MCPServerAuthorization]:
-    """Build the authorization block from status.authorization and annotations.
+    """Build the authorization block from status.authorization.
 
     Returns None when status.authorization is absent. Never includes token or
     Secret material.
@@ -48,14 +45,11 @@ def _build_authorization(
     authorization = status.get("authorization")
     if not authorization:
         return None
-    annotations = annotations or {}
     spec_authorization = (spec or {}).get("authorization") or {}
     return MCPServerAuthorization(
         state=authorization.get("state"),
         resourceName=authorization.get("resourceName"),
         expiresAt=authorization.get("expiresAt"),
-        authorizedBy=annotations.get(ANNOTATION_AUTHORIZED_BY),
-        authorizedAt=annotations.get(ANNOTATION_AUTHORIZED_AT),
         machineManaged=bool(spec_authorization.get("clientCredentials")),
     )
 
@@ -84,7 +78,7 @@ def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
         transport=spec.get("transport"),
         available=availability,
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status, metadata.get("annotations"), spec),
+        authorization=_build_authorization(status, spec),
     )
 
 
@@ -96,6 +90,7 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
     conditions = status.get("conditions", [])
     availability = extract_availability_from_conditions(conditions, "Available")
     headers = spec.get("headers", [])
+    address_spec = spec.get("address")
     logger.info(f"Spec: {status}")
     return MCPServerDetailResponse(
         name=metadata.get("name", ""),
@@ -107,9 +102,10 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
         available=availability,
         status=status,
         address=status.get("resolvedAddress"),
+        address_source=MCPServerAddressSource(**address_spec) if address_spec else None,
         transport=spec.get("transport"),
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status, metadata.get("annotations"), spec),
+        authorization=_build_authorization(status, spec),
     )
 
 

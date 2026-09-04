@@ -60,7 +60,10 @@ export function StudioHeaderActions({
 
     const fetchStats = async () => {
       try {
-        const next = await workflowTemplatesService.getStats(workflowName);
+        const next = await workflowTemplatesService.getStats(
+          namespace,
+          workflowName,
+        );
         if (!cancelled) {
           setStats(next);
         }
@@ -80,7 +83,7 @@ export function StudioHeaderActions({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [persisted, workflowName]);
+  }, [namespace, persisted, workflowName]);
 
   const handleOpenInArgo = useCallback(() => {
     const url = `${ARGO_BASE_URL}/workflow-templates/${namespace}/${workflowName}`;
@@ -89,7 +92,7 @@ export function StudioHeaderActions({
 
   const handleConfirmDelete = useCallback(async () => {
     try {
-      await workflowTemplatesService.delete(workflowName);
+      await workflowTemplatesService.delete(namespace, workflowName);
       toast.success('Workflow template deleted', {
         description: workflowName,
       });
@@ -99,7 +102,7 @@ export function StudioHeaderActions({
         description: errorMessage(error),
       });
     }
-  }, [workflowName, push]);
+  }, [namespace, workflowName, push]);
 
   const notPersistedTip = 'Save the workflow first';
   const totalRuns = stats?.total ?? 0;

@@ -49,6 +49,7 @@ import {
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import { cn } from '@/lib/utils';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
@@ -251,8 +252,8 @@ function WorkflowStepDetail({
         if (detail.podName) {
           try {
             logData = await workflowsService.getPodLogs(
-              detail.podName,
               detail.namespace!,
+              detail.podName,
             );
           } catch {
             // If pod logs fail, try archived workflow logs
@@ -263,9 +264,9 @@ function WorkflowStepDetail({
         // If pod logs didn't work or no podName, try archived workflow logs
         if (!logData) {
           logData = await workflowsService.getWorkflowLogs(
+            detail.namespace!,
             detail.workflowName!,
             detail.nodeId!,
-            detail.namespace!,
           );
         }
 
@@ -971,6 +972,7 @@ const normalizeStatus = (status: string): string => {
 };
 
 export function SessionsSection() {
+  const { namespace } = useNamespace();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1017,9 +1019,9 @@ export function SessionsSection() {
     const params = new URLSearchParams();
 
     // Preserve namespace parameter
-    const namespace = searchParams.get('namespace');
-    if (namespace) {
-      params.set('namespace', namespace);
+    const namespaceParam = searchParams.get('namespace');
+    if (namespaceParam) {
+      params.set('namespace', namespaceParam);
     }
 
     if (debouncedWorkflowName) {
@@ -1055,7 +1057,7 @@ export function SessionsSection() {
     loading,
     error,
     refetch: refetchWorkflows,
-  } = useWorkflows('default', filters);
+  } = useWorkflows(namespace, filters);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
@@ -1105,10 +1107,10 @@ export function SessionsSection() {
 
   const { workflow: selectedWorkflowDetail, loading: loadingDetail } =
     useWorkflow(
+      namespace,
       useRealData && selectedSessionFromList?.type === 'workflow'
         ? selectedSessionId || ''
         : '',
-      'default',
     );
 
   const selectedSession =

@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useNamespace } from '@/providers/NamespaceProvider';
+
 import { filesService } from './files';
 
 export const GET_FILES_COUNT_QUERY_KEY = 'get-files-count';
@@ -7,7 +9,7 @@ export const GET_FILES_COUNT_QUERY_KEY = 'get-files-count';
 const MAX_FILES_COUNT = 10000;
 const MAX_KEYS_PER_REQUEST = 1000;
 
-async function countFilesRecursively(): Promise<number> {
+async function countFilesRecursively(namespace: string): Promise<number> {
   let total = 0;
   let frontier = [''];
 
@@ -19,7 +21,7 @@ async function countFilesRecursively(): Promise<number> {
 
       let continuationToken: string | undefined;
       do {
-        const result = await filesService.list({
+        const result = await filesService.list(namespace, {
           prefix,
           max_keys: MAX_KEYS_PER_REQUEST,
           continuation_token: continuationToken,
@@ -39,9 +41,12 @@ async function countFilesRecursively(): Promise<number> {
 }
 
 export const useGetFilesCount = () => {
+  const { namespace } = useNamespace();
+
   return useQuery({
-    queryKey: [GET_FILES_COUNT_QUERY_KEY],
-    queryFn: countFilesRecursively,
+    queryKey: [GET_FILES_COUNT_QUERY_KEY, namespace],
+    queryFn: () => countFilesRecursively(namespace),
+    enabled: Boolean(namespace),
     staleTime: 30000,
   });
 };

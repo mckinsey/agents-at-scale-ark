@@ -10,6 +10,7 @@ import { formatExpiry } from '@/lib/utils/mcp-auth';
 let readOnly = false;
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useSearchParams: () => new URLSearchParams(),
 }));
 

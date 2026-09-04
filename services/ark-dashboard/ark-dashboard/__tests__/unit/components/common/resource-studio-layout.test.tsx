@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams('namespace=test-ns'),
 }));
