@@ -11,12 +11,21 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 )
 
-func TestDefaultAgent(t *testing.T) {
+//nolint:gocognit
+func TestDefaultAgentModelRef(t *testing.T) {
 	t.Run("sets default modelRef", func(t *testing.T) {
 		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
 		DefaultAgent(agent)
 		if agent.Spec.ModelRef == nil || agent.Spec.ModelRef.Name != "default" {
 			t.Fatal("expected default modelRef")
+		}
+	})
+
+	t.Run("marks an injected modelRef as defaulted", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
+		DefaultAgent(agent)
+		if !HasDefaultedModelRef(agent) {
+			t.Fatal("expected the injected modelRef to be marked as defaulted")
 		}
 	})
 
@@ -29,6 +38,78 @@ func TestDefaultAgent(t *testing.T) {
 		DefaultAgent(agent)
 		if agent.Spec.ModelRef.Name != "custom" {
 			t.Fatal("should preserve existing modelRef")
+		}
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("an explicit modelRef should not be marked as defaulted")
+		}
+	})
+
+	t.Run("does not mark an explicit default modelRef as defaulted", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			Spec: arkv1alpha1.AgentSpec{
+				ModelRef: &arkv1alpha1.AgentModelRef{Name: "default"},
+			},
+		}
+		DefaultAgent(agent)
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("a user-supplied 'default' modelRef should not be marked as defaulted")
+		}
+	})
+
+	t.Run("clears the marker when an explicit modelRef replaces the injected one", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
+		DefaultAgent(agent)
+
+		agent.Spec.ModelRef = &arkv1alpha1.AgentModelRef{Name: "custom"}
+		DefaultAgent(agent)
+
+		if agent.Spec.ModelRef.Name != "custom" {
+			t.Fatal("should preserve the explicit modelRef")
+		}
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("expected the defaulted marker to be cleared")
+		}
+	})
+
+	t.Run("skips default for execution engine agent", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a"},
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine"},
+			},
+		}
+		DefaultAgent(agent)
+		if agent.Spec.ModelRef != nil {
+			t.Fatal("execution engine agent should not get default modelRef")
+		}
+	})
+
+	t.Run("removes the injected modelRef when an execution engine is added", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
+		DefaultAgent(agent)
+
+		agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{Name: "engine"}
+		DefaultAgent(agent)
+
+		if agent.Spec.ModelRef != nil {
+			t.Fatal("expected the injected modelRef to be removed")
+		}
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("expected the defaulted marker to be cleared")
+		}
+	})
+
+	t.Run("keeps an explicit modelRef on an execution engine agent", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a"},
+			Spec: arkv1alpha1.AgentSpec{
+				ModelRef:        &arkv1alpha1.AgentModelRef{Name: "custom"},
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine"},
+			},
+		}
+		DefaultAgent(agent)
+		if agent.Spec.ModelRef == nil || agent.Spec.ModelRef.Name != "custom" {
+			t.Fatal("should preserve an explicit modelRef")
 		}
 	})
 
@@ -43,7 +124,9 @@ func TestDefaultAgent(t *testing.T) {
 			t.Fatal("a2a agent should not get default modelRef")
 		}
 	})
+}
 
+func TestDefaultAgent(t *testing.T) {
 	t.Run("adds custom tool deprecation warning", func(t *testing.T) {
 		agent := &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-agent"},
