@@ -1,0 +1,44 @@
+postgresql:
+  enabled: false
+  auth:
+    password: "dummy-not-used"
+
+clickhouse:
+  enabled: false
+  auth:
+    password: "dummy-not-used"
+
+langfuse:
+  nextauth:
+    url: http://localhost:3000
+    secret:
+      secretKeyRef:
+        name: langfuse-secrets
+        key: NEXTAUTH_SECRET
+  salt:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: SALT
+  database:
+    url:
+      secretKeyRef:
+        name: langfuse-db-secret
+        key: DATABASE_URL
+  telemetryEnabled: false
+
+ingress:
+  enabled: false
+
+replicaCount: 2
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+service:
+  port: 3000
+  type: LoadBalancer
