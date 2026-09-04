@@ -33,11 +33,16 @@ inputs:
   build-args:
     description: 'Additional build arguments (multiline string)'
     required: false
+  cache-mode:
+    description: 'buildx gha cache export mode: min (final image layers only) or max (all stages)'
+    required: false
+    default: 'min'
 
 runs:
   using: 'composite'
   steps:
     - name: Set up QEMU
+      if: ${{ contains(inputs.platforms, ',') || contains(inputs.platforms, 'arm') }}
       uses: docker/setup-qemu-action@v3
       with:
         image: mirror.gcr.io/tonistiigi/binfmt:latest
@@ -70,4 +75,4 @@ runs:
         cache-from: |
           type=gha,scope=${{ inputs.image }}
         cache-to: |
-          type=gha,mode=min,scope=${{ inputs.image }}
+          type=gha,mode=${{ inputs.cache-mode }},scope=${{ inputs.image }}

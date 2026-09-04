@@ -416,6 +416,7 @@ jobs:
           - path: services/ark-dashboard
             image: ark-dashboard
             install-uv: true
+            cache-mode: max
             prebuild: "make ark-dashboard-deps"
           - path: services/ark-broker/ark-broker
             image: ark-broker
@@ -468,6 +469,7 @@ jobs:
           push: true
           prebuild: ${{ matrix.prebuild }}
           dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
+          cache-mode: ${{ matrix.cache-mode || 'min' }}
 
   xray-container-scan:
     needs: [setup-container-cache-registry, build-containers]
