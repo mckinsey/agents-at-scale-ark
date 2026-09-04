@@ -33,7 +33,7 @@ echo "--- disk (root) ---"
 df -h /
 
 echo "--- cluster state (best-effort; apiserver may be down) ---"
-kubectl get nodes -o wide
-kubectl get pods -A -o wide
+kubectl get nodes -o wide --request-timeout 180s
+kubectl get pods -A -o wide --request-timeout 180s
 
 echo "::endgroup::"
