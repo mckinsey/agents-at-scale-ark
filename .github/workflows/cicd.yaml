@@ -406,16 +406,18 @@ jobs:
         include:
           - path: ark
             image: ark-controller
+            cache-mode: max
           - path: ark
             image: ark-completions
             dockerfile: Dockerfile.completions
+            cache-mode: max
           - path: services/ark-api
             image: ark-api
             install-uv: true
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
           - path: services/ark-dashboard
             image: ark-dashboard
-            install-uv: true
+            cache-mode: max
             prebuild: "make ark-dashboard-deps"
           - path: services/ark-broker/ark-broker
             image: ark-broker
@@ -468,6 +470,7 @@ jobs:
           push: true
           prebuild: ${{ matrix.prebuild }}
           dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
+          cache-mode: ${{ matrix.cache-mode || 'min' }}
 
   xray-container-scan:
     needs: [setup-container-cache-registry, build-containers]
