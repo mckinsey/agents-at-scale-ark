@@ -406,11 +406,9 @@ jobs:
         include:
           - path: ark
             image: ark-controller
-            cache-mode: max
           - path: ark
             image: ark-completions
             dockerfile: Dockerfile.completions
-            cache-mode: max
           - path: services/ark-api
             image: ark-api
             install-uv: true
