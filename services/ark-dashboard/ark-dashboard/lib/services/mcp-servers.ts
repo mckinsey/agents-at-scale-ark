@@ -63,26 +63,17 @@ export type ValueFrom = {
 
 // Service for MCP server operations
 export const mcpServersService = {
-  // Get all MCP servers in a namespace
+  // List and detail responses compute `available` identically, no per-item fetch needed (#2581)
   async getAll(namespace: string): Promise<MCPServer[]> {
     const items = await fetchAllPages<MCPServerResponse>(
       `/api/v1/mcp-servers`,
       { namespace },
     );
 
-    const mcpservers = await Promise.all(
-      items.map(async item => {
-        if (item.available !== 'True') {
-          const mcp = await mcpServersService.get(namespace, item.name);
-          item.available = mcp?.available;
-        }
-        return {
-          ...item,
-          id: item.name,
-        };
-      }),
-    );
-    return mcpservers;
+    return items.map(item => ({
+      ...item,
+      id: item.name,
+    }));
   },
 
   async get(

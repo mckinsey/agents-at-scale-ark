@@ -36,7 +36,7 @@ export type UrlFieldState =
 export function createFormSchema(addressMode: AddressMode) {
   return z.object({
     name: kubernetesNameSchema,
-    description: z.string().min(1, 'Description is required'),
+    description: z.string().optional(),
     configurationName:
       addressMode.kind === 'service'
         ? z.string()
@@ -166,7 +166,7 @@ export function buildSpec(
   addressMode: AddressMode,
 ): MCPServerSpec {
   return {
-    description: values.description,
+    description: values.description?.trim() || undefined,
     transport: values.transport,
     address: buildAddress(values, addressMode),
     headers: headers.map(buildHeader),

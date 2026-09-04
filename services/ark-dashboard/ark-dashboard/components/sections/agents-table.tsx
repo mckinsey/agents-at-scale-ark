@@ -19,14 +19,14 @@ import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
-import type { Agent } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { OriginCell, OriginColumnHeader } from './origin-column';
 
 interface AgentsTableProps {
-  readonly agents: readonly Agent[];
+  readonly agents: readonly AgentListItem[];
   readonly onDelete: (id: string) => void;
 }
 
@@ -44,7 +44,7 @@ const COL = {
 
 function AgentStatus({
   status,
-}: Readonly<{ status?: Agent['available'] | null }>) {
+}: Readonly<{ status?: AgentListItem['available'] | null }>) {
   const value = status ?? 'Unknown';
   const config = STATUS_CONFIG[value];
   return (
@@ -58,7 +58,7 @@ function AgentStatus({
 }
 
 interface AgentTableRowProps {
-  readonly agent: Agent;
+  readonly agent: AgentListItem;
   readonly onDelete: (id: string) => void;
 }
 
