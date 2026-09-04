@@ -39,7 +39,10 @@ spec:
           args:
             - --role=apiserver
             - --leader-elect
-            - --metrics-bind-address=0
+            - --metrics-bind-address={{ ternary (printf ":%d" (int .Values.metrics.port)) "0" .Values.metrics.enabled }}
+            {{- if .Values.metrics.enabled }}
+            - --metrics-secure={{ .Values.metrics.secure }}
+            {{- end }}
             - --health-probe-bind-address=:8081
           env:
             - name: ENABLE_WEBHOOKS
@@ -104,6 +107,11 @@ spec:
             - name: health
               containerPort: 8081
               protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:

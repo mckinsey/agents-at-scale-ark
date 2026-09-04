@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 var (
@@ -118,13 +119,18 @@ func (*enforcementCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
+// Registered on controller-runtime's registry: that is the one served by
+// --metrics-bind-address, so registering on the prometheus default registry
+// would leave these collectors unscrapeable.
 func init() {
-	prometheus.MustRegister(StorageOperations)
-	prometheus.MustRegister(StorageLatency)
-	prometheus.MustRegister(RequestsTotal)
-	prometheus.MustRegister(RequestDuration)
-	prometheus.MustRegister(ActiveResources)
-	prometheus.MustRegister(EnforcementActive)
+	ctrlmetrics.Registry.MustRegister(
+		StorageOperations,
+		StorageLatency,
+		RequestsTotal,
+		RequestDuration,
+		ActiveResources,
+		EnforcementActive,
+	)
 }
 
 func RecordStorageOperation(operation, kind, status string) {

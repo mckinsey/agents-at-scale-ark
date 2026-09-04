@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 // resetReadyFns clears the process-wide hooks so cases do not leak into each other. These tests
@@ -124,6 +125,39 @@ func TestSetEnforcementReadyFunc_ReplacesPreviousHook(t *testing.T) {
 	SetEnforcementReadyFunc(MechanismCEL, func() bool { return false })
 
 	assertEnforcement(t, 0, 0)
+}
+
+// Guards against a collector regressing to the prometheus default registry:
+// --metrics-bind-address serves controller-runtime's registry, so a metric
+// registered anywhere else is unscrapeable.
+func TestMetricsGatheredByControllerRuntimeRegistry(t *testing.T) {
+	StorageOperations.WithLabelValues("get", "RegistryTest", "success")
+	StorageLatency.WithLabelValues("get", "RegistryTest")
+	RequestsTotal.WithLabelValues("registrytests", "get")
+	RequestDuration.WithLabelValues("registrytests", "get")
+	ActiveResources.WithLabelValues("RegistryTest")
+
+	families, err := ctrlmetrics.Registry.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	gathered := make(map[string]bool, len(families))
+	for _, f := range families {
+		gathered[f.GetName()] = true
+	}
+
+	for _, name := range []string{
+		"ark_apiserver_storage_operations_total",
+		"ark_apiserver_storage_latency_seconds",
+		"ark_apiserver_requests_total",
+		"ark_apiserver_request_duration_seconds",
+		"ark_apiserver_active_resources",
+		"ark_apiserver_admission_enforcement_active",
+	} {
+		if !gathered[name] {
+			t.Errorf("metric %s not gathered by controller-runtime registry", name)
+		}
+	}
 }
 
 func TestRecordStorageOperation(t *testing.T) {
