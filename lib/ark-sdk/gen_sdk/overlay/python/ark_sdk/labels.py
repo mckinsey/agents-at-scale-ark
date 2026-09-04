@@ -4,13 +4,9 @@ from typing import Dict, List, Optional
 from ark_sdk.constants import ARK_DOMAIN
 
 ARK_LABEL_PREFIX = ARK_DOMAIN
-ARK_RESOURCE_TYPE_LABEL = f"{ARK_LABEL_PREFIX}resource-type"
 ARK_TAG_LABEL_PREFIX = f"{ARK_LABEL_PREFIX}label."
 
-CONFIGURATION_RESOURCE_TYPE = "configuration"
-CONFIGURATION_LABEL_SELECTOR = f"{ARK_RESOURCE_TYPE_LABEL}={CONFIGURATION_RESOURCE_TYPE}"
-
-TAG_PATTERN = re.compile(r"^[a-zA-Z0-9]([-_.a-zA-Z0-9]*[a-zA-Z0-9])?$")
+TAG_PATTERN = re.compile(r"^[a-zA-Z0-9]+$")
 TAG_MAX_LENGTH = 63 - len("label.")
 
 
@@ -24,8 +20,7 @@ def validate_tag(tag: str) -> str:
         )
     if not TAG_PATTERN.match(tag):
         raise ValueError(
-            f"Tag '{tag}' is invalid: use letters, digits, '-', '_' or '.', "
-            "starting and ending with a letter or digit"
+            f"Tag '{tag}' is invalid: use only letters and digits"
         )
     return tag
 

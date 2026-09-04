@@ -21,11 +21,20 @@ interface MockGetConfigurationResult {
   isLoading: boolean;
 }
 
+interface MockGetAllConfigurationsResult {
+  data: MockConfiguration[] | undefined;
+}
+
 const mockCreateMutateAsync = vi.fn().mockResolvedValue(undefined);
 const mockUpdateMutateAsync = vi.fn().mockResolvedValue(undefined);
 const mockUseGetConfiguration = vi.fn<() => MockGetConfigurationResult>(() => ({
   data: undefined,
   isLoading: false,
+}));
+const mockUseGetAllConfigurations = vi.fn<
+  () => MockGetAllConfigurationsResult
+>(() => ({
+  data: [],
 }));
 
 vi.mock('next/navigation', () => ({
@@ -44,6 +53,7 @@ vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
 
 vi.mock('@/lib/services/configurations-hooks', () => ({
   useGetConfiguration: () => mockUseGetConfiguration(),
+  useGetAllConfigurations: () => mockUseGetAllConfigurations(),
   useCreateConfiguration: () => ({
     mutateAsync: mockCreateMutateAsync,
     isPending: false,
@@ -75,6 +85,9 @@ describe('ConfigurationForm', () => {
     mockUseGetConfiguration.mockReturnValue({
       data: undefined,
       isLoading: false,
+    });
+    mockUseGetAllConfigurations.mockReturnValue({
+      data: [],
     });
   });
 
@@ -144,7 +157,7 @@ describe('ConfigurationForm', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/starting and ending with a letter or digit/i),
+        screen.getByText(/use only letters and digits/i),
       ).toBeInTheDocument();
     });
     expect(mockCreateMutateAsync).not.toHaveBeenCalled();
@@ -159,7 +172,7 @@ describe('ConfigurationForm', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/starting and ending with a letter or digit/i),
+        screen.getByText(/use only letters and digits/i),
       ).toBeInTheDocument();
     });
   });
@@ -190,12 +203,12 @@ describe('ConfigurationForm', () => {
     await user.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => {
       expect(
-        screen.getByText(/starting and ending with a letter or digit/i),
+        screen.getByText(/use only letters and digits/i),
       ).toBeInTheDocument();
     });
 
     await user.clear(field(LABEL_FIELD));
-    await user.type(field(LABEL_FIELD), 'mcp-servers');
+    await user.type(field(LABEL_FIELD), 'mcpservers');
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
@@ -204,7 +217,7 @@ describe('ConfigurationForm', () => {
         value: 'https://example.test/mcp/',
         description: null,
         alias: null,
-        labels: ['mcp-servers'],
+        labels: ['mcpservers'],
       });
     });
   });
@@ -231,6 +244,74 @@ describe('ConfigurationForm', () => {
 
     expect(field(NAME_FIELD)).toBeDisabled();
     expect(field(VALUE_FIELD)).toBeEnabled();
+  });
+
+  it('suggests existing configuration names as alias options and fills the field on selection', async () => {
+    mockUseGetAllConfigurations.mockReturnValue({
+      data: [
+        {
+          id: 'uuid-2',
+          name: 'other-config',
+          value: 'v',
+          description: null,
+          alias: 'existing-alias',
+          labels: [],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.click(field(ALIAS_FIELD));
+    await user.click(await screen.findByText('other-config'));
+
+    expect(field(ALIAS_FIELD)).toHaveValue('other-config');
+  });
+
+  it('does not offer the configuration being edited as its own alias option', async () => {
+    mockUseGetConfiguration.mockReturnValue({
+      data: {
+        id: 'uuid-1234',
+        name: 'github-mcp-url',
+        value: 'https://example.test/mcp/',
+        description: null,
+        alias: null,
+        labels: [],
+      },
+      isLoading: false,
+    });
+    mockUseGetAllConfigurations.mockReturnValue({
+      data: [
+        {
+          id: 'uuid-1234',
+          name: 'github-mcp-url',
+          value: 'https://example.test/mcp/',
+          description: null,
+          alias: null,
+          labels: [],
+        },
+        {
+          id: 'uuid-2',
+          name: 'other-config',
+          value: 'v',
+          description: null,
+          alias: null,
+          labels: [],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(
+      <ConfigurationForm
+        mode={ConfigurationFormMode.EDIT}
+        configurationName="github-mcp-url"
+      />,
+    );
+
+    await user.click(field(ALIAS_FIELD));
+
+    expect(await screen.findByText('other-config')).toBeInTheDocument();
+    expect(screen.queryByText('github-mcp-url')).not.toBeInTheDocument();
   });
 
   it('rejects a description longer than 256 characters', async () => {
