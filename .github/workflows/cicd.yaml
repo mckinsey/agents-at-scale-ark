@@ -417,6 +417,7 @@ jobs:
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
           - path: services/ark-dashboard
             image: ark-dashboard
+            install-uv: true
             cache-mode: max
             prebuild: "make ark-dashboard-deps"
           - path: services/ark-broker/ark-broker
