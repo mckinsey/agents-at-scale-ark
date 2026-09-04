@@ -9,7 +9,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -327,9 +326,9 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
 				MaxConcurrentQueries: 1,
-				sem:                  semaphore.NewWeighted(1),
+				sched:                newFairScheduler(1, queryFairnessWaitWindow),
 			}
-			Expect(r.sem.TryAcquire(1)).To(BeTrue(), "pre-condition: semaphore should start drainable")
+			Expect(r.sched.tryAcquire("default")).To(BeTrue(), "pre-condition: semaphore should start drainable")
 
 			query := arkv1alpha1.Query{
 				ObjectMeta: metav1.ObjectMeta{
@@ -360,7 +359,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 0,
 			}
-			Expect(r.sem).To(BeNil(), "nil semaphore means enforcement is disabled")
+			Expect(r.sched).To(BeNil(), "nil semaphore means enforcement is disabled")
 
 			query := arkv1alpha1.Query{
 				ObjectMeta: metav1.ObjectMeta{
@@ -404,9 +403,9 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
 				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 1,
-				sem:                  semaphore.NewWeighted(1),
+				sched:                newFairScheduler(1, queryFairnessWaitWindow),
 			}
-			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+			Expect(r.sched.tryAcquire("default")).To(BeTrue())
 
 			query := newTestQuery("phase-queued-then-running")
 			Expect(k8sClient.Create(ctx, query)).To(Succeed())
@@ -420,7 +419,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			Expect(k8sClient.Get(ctx, req.NamespacedName, queued)).To(Succeed())
 			Expect(queued.Status.Phase).To(Equal(statusQueued))
 
-			r.sem.Release(1)
+			r.sched.release("default")
 
 			_, err = r.handleRunningPhase(ctx, req, *queued)
 			Expect(err).NotTo(HaveOccurred())
@@ -443,7 +442,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 0,
 			}
-			Expect(r.sem).To(BeNil())
+			Expect(r.sched).To(BeNil())
 
 			query := newTestQuery("phase-no-semaphore")
 			Expect(k8sClient.Create(ctx, query)).To(Succeed())
@@ -465,9 +464,9 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
 				MaxConcurrentQueries: 1,
-				sem:                  semaphore.NewWeighted(1),
+				sched:                newFairScheduler(1, queryFairnessWaitWindow),
 			}
-			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+			Expect(r.sched.tryAcquire("default")).To(BeTrue())
 
 			query := newTestQuery("phase-queued-idempotent")
 			Expect(k8sClient.Create(ctx, query)).To(Succeed())
@@ -623,18 +622,21 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 	})
 
 	Context("initSemaphore", func() {
-		It("creates a semaphore sized to MaxConcurrentQueries", func() {
+		It("creates a fair scheduler sized to MaxConcurrentQueries", func() {
 			r := &QueryReconciler{MaxConcurrentQueries: 3}
 			r.initSemaphore()
-			Expect(r.sem).NotTo(BeNil())
-			Expect(r.sem.TryAcquire(3)).To(BeTrue(), "should permit MaxConcurrentQueries acquisitions")
-			Expect(r.sem.TryAcquire(1)).To(BeFalse(), "should deny the next acquisition once the cap is reached")
+			Expect(r.sched).NotTo(BeNil())
+			// Cap is 3: three acquisitions succeed, the fourth is refused.
+			Expect(r.sched.tryAcquire("default")).To(BeTrue())
+			Expect(r.sched.tryAcquire("default")).To(BeTrue())
+			Expect(r.sched.tryAcquire("default")).To(BeTrue())
+			Expect(r.sched.tryAcquire("default")).To(BeFalse(), "should deny acquisitions past MaxConcurrentQueries")
 		})
 
-		It("leaves the semaphore nil when MaxConcurrentQueries is 0", func() {
+		It("leaves the scheduler nil when MaxConcurrentQueries is 0", func() {
 			r := &QueryReconciler{MaxConcurrentQueries: 0}
 			r.initSemaphore()
-			Expect(r.sem).To(BeNil())
+			Expect(r.sched).To(BeNil())
 		})
 	})
 
@@ -647,7 +649,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 	})
 
 	Context("SetupWithManager", func() {
-		It("registers the controller and sizes the semaphore from MaxConcurrentQueries", func() {
+		It("registers the controller and sizes the scheduler from MaxConcurrentQueries", func() {
 			mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -660,9 +662,11 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 
 			Expect(r.SetupWithManager(mgr)).To(Succeed())
 
-			Expect(r.sem).NotTo(BeNil(), "initSemaphore should have run via SetupWithManager")
-			Expect(r.sem.TryAcquire(2)).To(BeTrue(), "semaphore should permit MaxConcurrentQueries acquisitions")
-			Expect(r.sem.TryAcquire(1)).To(BeFalse(), "semaphore should refuse the next acquisition once the cap is reached")
+			Expect(r.sched).NotTo(BeNil(), "initSemaphore should have run via SetupWithManager")
+			// Cap is 2: two acquisitions succeed, the third is refused.
+			Expect(r.sched.tryAcquire("default")).To(BeTrue())
+			Expect(r.sched.tryAcquire("default")).To(BeTrue())
+			Expect(r.sched.tryAcquire("default")).To(BeFalse(), "scheduler should refuse acquisitions past MaxConcurrentQueries")
 		})
 	})
 
@@ -670,12 +674,12 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 		It("deletes the operation entry and releases the semaphore", func() {
 			r := &QueryReconciler{
 				MaxConcurrentQueries: 1,
-				sem:                  semaphore.NewWeighted(1),
+				sched:                newFairScheduler(1, queryFairnessWaitWindow),
 			}
 			// Saturate the semaphore to model "a query is already in flight"; the
 			// next TryAcquire fails until something releases the slot.
-			Expect(r.sem.TryAcquire(1)).To(BeTrue())
-			Expect(r.sem.TryAcquire(1)).To(BeFalse(), "semaphore should now be full")
+			Expect(r.sched.tryAcquire("default")).To(BeTrue())
+			Expect(r.sched.tryAcquire("default")).To(BeFalse(), "semaphore should now be full")
 
 			namespacedName := types.NamespacedName{Name: "finish-query", Namespace: "default"}
 			_, cancel := context.WithCancel(context.Background())
@@ -686,7 +690,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 
 			_, exists := r.operations.Load(namespacedName)
 			Expect(exists).To(BeFalse(), "operations entry should be cleared")
-			Expect(r.sem.TryAcquire(1)).To(BeTrue(), "semaphore slot should have been released")
+			Expect(r.sched.tryAcquire("default")).To(BeTrue(), "semaphore slot should have been released")
 		})
 
 		It("does not panic when the semaphore is nil", func() {
@@ -707,9 +711,9 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
 				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 1,
-				sem:                  semaphore.NewWeighted(1),
+				sched:                newFairScheduler(1, queryFairnessWaitWindow),
 			}
-			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+			Expect(r.sched.tryAcquire("default")).To(BeTrue())
 
 			namespacedName := types.NamespacedName{Name: "panic-query", Namespace: "default"}
 			r.operations.Store(namespacedName, context.CancelFunc(func() {}))
@@ -721,7 +725,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 
 			_, exists := r.operations.Load(namespacedName)
 			Expect(exists).To(BeFalse(), "cleanup must run even on panic")
-			Expect(r.sem.TryAcquire(1)).To(BeTrue(), "semaphore must be released even on panic")
+			Expect(r.sched.tryAcquire("default")).To(BeTrue(), "semaphore must be released even on panic")
 		})
 	})
 })
