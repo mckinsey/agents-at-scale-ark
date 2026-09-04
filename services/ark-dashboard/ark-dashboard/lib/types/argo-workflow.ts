@@ -31,6 +31,7 @@ export interface ArgoNodeStatus {
     | 'Steps'
     | 'StepGroup'
     | 'DAG'
+    | 'Retry'
     | 'Container'
     | 'Script'
     | 'Suspend';
@@ -69,6 +70,7 @@ export interface ArgoWorkflowStatus {
   progress?: string;
   message?: string;
   nodes?: Record<string, ArgoNodeStatus>;
+  compressedNodes?: string;
   artifactRepositoryRef?: {
     configMap: string;
     key: string;
