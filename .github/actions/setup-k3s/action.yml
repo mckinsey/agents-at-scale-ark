@@ -239,6 +239,18 @@ runs:
         if [[ "${{ inputs.extra-setup-args }}" != *--egress-selector-mode* ]]; then
           default_extra_setup_args=--egress-selector-mode=disabled
         fi
+        # Disable the embedded cloud-controller-manager. On a slow/loaded runner
+        # it can read kube-system/extension-apiserver-authentication before its
+        # own bootstrap rolebinding lands, hit a 403, treat it as fatal, and
+        # exit - which k3s turns into a full "Shutdown request received", taking
+        # the control plane down mid-bootstrap. systemd then restarts into the
+        # same race, crash-looping until our RBAC wait times out. It is an
+        # upstream k3s startup-ordering bug (k3s-io/k3s#7328). We run bare-metal
+        # k3s with no cloud provider, so the CCM has no real job here; removing
+        # it eliminates the race entirely. See the untaint step below - without
+        # the CCM, the node.cloudprovider.kubernetes.io/uninitialized taint is
+        # never cleared, so we clear it ourselves.
+        k3s_disable_ccm=--disable-cloud-controller
         # Skip the install script's binary download when we've already staged
         # one (which is the only path here, since k3s-version is required for
         # the cache key). Fall back to letting the script download if the
@@ -259,6 +271,7 @@ runs:
                  sh /tmp/k3s-install.sh \
                    ${k3s_disable_metrics} \
                    ${k3s_disable_traefik} \
+                   ${k3s_disable_ccm} \
                    --disable-network-policy \
                    --flannel-backend=none \
                    ${k3s_docker} \
@@ -304,10 +317,8 @@ runs:
           sleep 3
           if [ "$attempt" -eq 60 ]; then
             echo "Timed out waiting for k3s apiserver"
-            echo "--- systemctl status k3s ---"
-            sudo systemctl status k3s --no-pager || true
-            echo "--- journalctl -u k3s (last 5 min) ---"
-            sudo journalctl -u k3s --no-pager --since "5 minutes ago" --lines=200 || true
+            bash "${{ github.action_path }}/dump-k3s-state.sh" \
+              "timed out waiting for k3s apiserver to bind :6443" || true
             exit 1
           fi
         done
@@ -327,22 +338,80 @@ runs:
         # Probe the actual auth chain (rolebinding + configmap + apiserver
         # cache) instead of pattern-matching resource names; the rolebinding
         # the cloud-controller uses has been renamed across k3s versions.
+        #
+        # /livez already passed, so the apiserver was up. If the probe now
+        # fails with "connection refused" the control plane has crashed (prime
+        # suspect: OOM on the memory spike as calico/coredns/metrics start).
+        # Count consecutive refusals and fail fast with a state dump once the
+        # server has been solidly gone for ~10s, rather than burning the full
+        # 48s budget against a corpse - while still tolerating a brief flap.
+        consecutive_refused=0
         for attempt in $(seq 1 24); do
-          if kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
-               --as=k3s-cloud-controller-manager >/dev/null 2>&1; then
+          # Assign inside the `if` so a failing probe does not trip the
+          # `set -e` that GitHub applies to `shell: bash`; capture stderr
+          # (2>&1 >/dev/null) so we can tell "connection refused" from a
+          # benign not-ready-yet denial.
+          if probe_err=$(kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
+               --as=k3s-cloud-controller-manager 2>&1 >/dev/null); then
             echo "k3s bootstrap RBAC ready (attempt $attempt/24)"
             break
           fi
-          echo "Waiting for k3s bootstrap RBAC (attempt $attempt/24)..."
+          if printf '%s' "$probe_err" | grep -qiE 'connection refused|was refused|dial tcp'; then
+            consecutive_refused=$((consecutive_refused + 1))
+            echo "apiserver unreachable (${consecutive_refused} in a row, attempt $attempt/24)"
+            if [ "$consecutive_refused" -ge 5 ]; then
+              echo "control plane unreachable for ${consecutive_refused} consecutive probes; treating as a crash"
+              bash "${{ github.action_path }}/dump-k3s-state.sh" \
+                "k3s control plane crashed during bootstrap RBAC wait" || true
+              exit 1
+            fi
+          else
+            consecutive_refused=0
+            echo "Waiting for k3s bootstrap RBAC (attempt $attempt/24)..."
+          fi
           sleep 2
           if [ "$attempt" -eq 24 ]; then
             echo "Timed out waiting for k3s bootstrap RBAC"
             kubectl -n kube-system get rolebinding,configmap || true
             kubectl -n kube-system auth can-i get configmap/extension-apiserver-authentication \
               --as=k3s-cloud-controller-manager -v=6 || true
+            bash "${{ github.action_path }}/dump-k3s-state.sh" \
+              "timed out waiting for k3s bootstrap RBAC" || true
             exit 1
           fi
         done
+        echo "::endgroup::"
+      shell: bash
+
+    # With --disable-cloud-controller there is no cloud-controller-manager to
+    # clear the node.cloudprovider.kubernetes.io/uninitialized:NoSchedule taint
+    # that kubelet applies at registration. Left in place it blocks scheduling
+    # of coredns, metrics-server and traefik, so clear it before those roll out.
+    - name: Clear uninitialized node taint
+      run: |
+        echo "::group::Clear uninitialized node taint"
+        taint=node.cloudprovider.kubernetes.io/uninitialized
+        for attempt in $(seq 1 30); do
+          nodes=$(kubectl get nodes -o name 2>/dev/null || true)
+          if [ -n "$nodes" ]; then
+            kubectl taint nodes --all "${taint}-" >/dev/null 2>&1 || true
+            current=$(kubectl get nodes -o jsonpath='{range .items[*]}{range .spec.taints[*]}{.key}{"\n"}{end}{end}' 2>/dev/null || true)
+            if ! printf '%s' "$current" | grep -Fqx "$taint"; then
+              echo "uninitialized taint cleared (attempt $attempt/30)"
+              break
+            fi
+          fi
+          echo "Waiting for node registration / taint removal (attempt $attempt/30)..."
+          sleep 2
+          if [ "$attempt" -eq 30 ]; then
+            echo "Timed out clearing uninitialized node taint"
+            kubectl get nodes -o wide || true
+            bash "${{ github.action_path }}/dump-k3s-state.sh" \
+              "timed out clearing uninitialized node taint" || true
+            exit 1
+          fi
+        done
+        kubectl get nodes -o wide || true
         echo "::endgroup::"
       shell: bash
 

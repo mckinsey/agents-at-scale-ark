@@ -80,12 +80,12 @@ export function ResourceEmptyState({
                 {icon}
               </IconShell>
             </div>
-            <p className="text-fg-primary text-xl leading-7">{title}</p>
-            <div className="text-fg-secondary text-center text-base leading-6 tracking-[-0.128px]">
+            <p className="headings-h3-regular text-fg-primary">{title}</p>
+            <div className="label-large-primary text-fg-secondary text-center">
               {description}
             </div>
           </div>
-          <div className="flex items-start gap-3 [&>*]:min-w-[100px]">
+          <div className="flex items-start gap-3 [&>*]:min-w-[100px] [&_button]:min-w-[100px]">
             {actions}
           </div>
         </div>
@@ -108,9 +108,7 @@ export function ResourceNoResults({ icon, message }: ResourceNoResultsProps) {
           {icon}
         </IconShell>
       </div>
-      <p className="text-fg-secondary text-base leading-6 tracking-[-0.128px]">
-        {message}
-      </p>
+      <p className="label-large-primary text-fg-secondary">{message}</p>
     </div>
   );
 }
