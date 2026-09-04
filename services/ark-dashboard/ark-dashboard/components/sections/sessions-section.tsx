@@ -157,6 +157,13 @@ interface TeamSession extends BaseSession {
 
 type Session = WorkflowSession | TeamSession;
 
+function getStepBorderColor(status: StepStatus): string {
+  if (status === 'running') return 'border-l-blue-500';
+  if (status === 'succeeded') return 'border-l-green-500';
+  if (status === 'failed') return 'border-l-red-500';
+  return 'border-l-border';
+}
+
 function getStatusIcon(status: StepStatus) {
   switch (status) {
     case 'succeeded':
@@ -594,13 +601,6 @@ function WorkflowStepNode({
 
   const childDepth = isParallelNode ? depth + 1 : depth;
 
-  const getBorderColor = () => {
-    if (step.status === 'running') return 'border-l-blue-500';
-    if (step.status === 'succeeded') return 'border-l-green-500';
-    if (step.status === 'failed') return 'border-l-red-500';
-    return 'border-l-border';
-  };
-
   return (
     <div className={cn('relative flex min-w-0', depth > 0 && 'ml-3 sm:ml-5')}>
       {depth > 0 && (
@@ -623,7 +623,7 @@ function WorkflowStepNode({
         <div
           className={cn(
             'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col gap-2 rounded-md border border-l-4 px-2 py-2 transition-all sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-2.5',
-            getBorderColor(),
+            getStepBorderColor(step.status),
             step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
             step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
           )}>
@@ -717,13 +717,6 @@ function TeamStepNode({
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
 
-  const getBorderColor = () => {
-    if (step.status === 'running') return 'border-l-blue-500';
-    if (step.status === 'succeeded') return 'border-l-green-500';
-    if (step.status === 'failed') return 'border-l-red-500';
-    return 'border-l-border';
-  };
-
   return (
     <div className={cn('relative flex', depth > 0 && 'ml-3 sm:ml-5')}>
       {depth > 0 && (
@@ -742,7 +735,7 @@ function TeamStepNode({
         <div
           className={cn(
             'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col gap-2 rounded-md border border-l-4 px-2 py-2 transition-all sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-2.5',
-            getBorderColor(),
+            getStepBorderColor(step.status),
             step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
             step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
           )}>

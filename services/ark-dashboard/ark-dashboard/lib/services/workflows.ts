@@ -7,10 +7,10 @@ import type {
 
 async function gunzipBase64(encoded: string): Promise<string> {
   const binary = atob(encoded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
+  const bytes = Uint8Array.from(
+    binary,
+    character => character.codePointAt(0) ?? 0,
+  );
 
   const decompressed = new ReadableStream<BufferSource>({
     start(controller) {
