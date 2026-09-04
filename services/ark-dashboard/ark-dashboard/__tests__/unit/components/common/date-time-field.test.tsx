@@ -297,6 +297,23 @@ describe('DateTimeField', () => {
     expect(lastCall(onChangeSpy)).toBe('2026-08-24T14:59');
   });
 
+  it('settles a cleared minute on Enter from the date segment', async () => {
+    const onChangeSpy = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Harness initialValue="2026-08-24T14:30" onChangeSpy={onChangeSpy} />,
+    );
+
+    await user.type(minuteInput(), '{backspace}');
+    await user.click(dateInput());
+    expect(minuteInput()).toHaveValue('');
+
+    await user.keyboard('{enter}');
+
+    expect(minuteInput()).toHaveValue('59');
+    expect(lastCall(onChangeSpy)).toBe('2026-08-24T14:59');
+  });
+
   it('overwrites in place when a digit is typed into a complete date', async () => {
     const onChangeSpy = vi.fn();
     const user = userEvent.setup();

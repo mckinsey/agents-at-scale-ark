@@ -85,7 +85,7 @@ export function ResourceEmptyState({
               {description}
             </div>
           </div>
-          <div className="flex items-start gap-3 [&>*]:min-w-[100px]">
+          <div className="flex items-start gap-3 [&>*]:min-w-[100px] [&_button]:min-w-[100px]">
             {actions}
           </div>
         </div>

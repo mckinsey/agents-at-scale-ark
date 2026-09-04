@@ -37,7 +37,7 @@ const COLUMN_WIDTHS = {
 } as const;
 
 /** 'Never' means the event has not happened; '—' means the value was unusable. */
-function formatTimestamp(value: string | null | undefined): string {
+function formatApiKeyTimestamp(value: string | null | undefined): string {
   if (!value) {
     return 'Never';
   }
@@ -94,15 +94,15 @@ function APIKeyRow({
       </TableCell>
 
       <TableCell size="small" className={COLUMN_WIDTHS.created}>
-        {formatTimestamp(apiKey.created_at)}
+        {formatApiKeyTimestamp(apiKey.created_at)}
       </TableCell>
 
       <TableCell size="small" className={COLUMN_WIDTHS.lastUsed}>
-        {formatTimestamp(apiKey.last_used_at)}
+        {formatApiKeyTimestamp(apiKey.last_used_at)}
       </TableCell>
 
       <TableCell size="small" className={COLUMN_WIDTHS.expires}>
-        {formatTimestamp(apiKey.expires_at)}
+        {formatApiKeyTimestamp(apiKey.expires_at)}
       </TableCell>
 
       <TableCell size="small" className={COLUMN_WIDTHS.actions}>

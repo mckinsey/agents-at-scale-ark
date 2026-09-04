@@ -340,7 +340,7 @@ export function DateTimeField({
     onBlur?.(event);
   };
 
-  const handleTimeKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       settleTime();
     }
@@ -381,6 +381,7 @@ export function DateTimeField({
             placeholder="dd/mm/yyyy"
             value={dateText}
             onChange={handleDateChange}
+            onKeyDown={handleKeyDown}
             disabled={disabled}
             data-empty={dateText ? 'false' : 'true'}
             className={dateSegmentClassName}
@@ -401,7 +402,7 @@ export function DateTimeField({
               disabled={disabled}
               onComplete={() => minuteRef.current?.focus()}
               onNavigateRight={() => minuteRef.current?.focus()}
-              onKeyDown={handleTimeKeyDown}
+              onKeyDown={handleKeyDown}
               aria-label="Hour"
               aria-describedby={ariaDescribedBy}
               aria-invalid={ariaInvalid}
@@ -417,7 +418,7 @@ export function DateTimeField({
               max={59}
               disabled={disabled}
               onNavigateLeft={() => hourRef.current?.focus()}
-              onKeyDown={handleTimeKeyDown}
+              onKeyDown={handleKeyDown}
               aria-label="Minute"
               aria-describedby={ariaDescribedBy}
               aria-invalid={ariaInvalid}
