@@ -34,6 +34,20 @@ spec:
           kind: WorkflowTemplate
           metadata:
             name: ark-query
+    - script:
+        timeout: 30s
+        content: |
+          set -eu
+          args=$(kubectl -n "$NAMESPACE" get deployment \
+            -l app.kubernetes.io/component=workflow-controller \
+            -o jsonpath='{.items[0].spec.template.spec.containers[0].args}')
+          echo "$args" | grep -q -- '-nonroot' || {
+            echo "workflow pods must use the non-root argoexec image, got: $args" >&2
+            exit 1
+          }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     cleanup:
     - script:
         content: |
