@@ -8,6 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
+from helpers.k8s import DEFAULT_NAMESPACE
 from pages.models_page import MOCK_LLM_MODEL_NAME
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,51 @@ def pytest_addoption(parser):
         parser.addoption("--log-browser-console", action="store_true", default=False)
     except ValueError:
         pass
+
+
+def get_resource(kind: str, name: str, namespace: str = DEFAULT_NAMESPACE) -> dict | None:
+    """Read one resource as a dict, or None when it does not exist."""
+    result = subprocess.run(
+        ["kubectl", "get", kind, name, "-n", namespace, "-o", "json"],
+        capture_output=True, text=True, timeout=30
+    )
+    if result.returncode != 0:
+        if "NotFound" in result.stderr:
+            return None
+        raise RuntimeError(f"kubectl get {kind}/{name}: {result.stderr.strip()}")
+    return json.loads(result.stdout)
+
+
+def list_resources(kind: str, namespace: str = DEFAULT_NAMESPACE) -> list[dict]:
+    """List every resource of a kind in a namespace."""
+    result = subprocess.run(
+        ["kubectl", "get", kind, "-n", namespace, "-o", "json"],
+        capture_output=True, text=True, timeout=30
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"kubectl get {kind}: {result.stderr.strip()}")
+    return json.loads(result.stdout).get("items", [])
+
+
+def wait_for_resource(kind: str, name: str, condition: str,
+                      namespace: str = DEFAULT_NAMESPACE,
+                      timeout_s: int = 120) -> tuple[bool, str]:
+    """Watch a resource until `condition` holds, via `kubectl wait`.
+
+    `condition` is passed straight through as the --for value, so it takes
+    either form kubectl accepts: "condition=ModelAvailable" or
+    "jsonpath={.status.phase}=done". This watches rather than polls.
+    """
+    try:
+        result = subprocess.run(
+            ["kubectl", "wait", f"{kind}/{name}", "-n", namespace,
+             f"--for={condition}", f"--timeout={timeout_s}s"],
+            capture_output=True, text=True, timeout=timeout_s + 30
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"kubectl wait on {kind}/{name} timed out after {timeout_s}s"
+    ok = result.returncode == 0
+    return ok, result.stdout if ok else result.stderr
 
 
 def get_ark_pods():

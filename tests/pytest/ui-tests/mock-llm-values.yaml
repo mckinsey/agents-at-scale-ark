@@ -18,3 +18,11 @@ config:
     response:
       status: 200
       content: '{"id":"mock-response","object":"chat.completion","model":"gpt-4.1-mini","choices":[{"message":{"role":"assistant","content":"Hello! I received your message."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}'
+
+  # Endpoint backing the approval-gated tool used by the HITL journeys. Keeping
+  # it in-cluster means those tests need no outbound network for the tool call
+  # itself. See fixtures/hitl-approval-agents.yaml.
+  - path: "/hitl-protected-action"
+    response:
+      status: 200
+      content: '{"result":"hitl-protected-action executed"}'
