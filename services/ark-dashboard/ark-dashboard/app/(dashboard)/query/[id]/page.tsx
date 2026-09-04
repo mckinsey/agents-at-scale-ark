@@ -14,13 +14,14 @@ import { toast } from 'sonner';
 
 import { queryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
 import {
   DetailCard as QueryDetailCard,
   DetailRow as QueryDetailRow,
   DetailSectionCard as QuerySectionCard,
 } from '@/components/common/detail-card';
 import { JsonViewer } from '@/components/common/json-viewer';
-import { ChevronLeft, ContentCopy } from '@/components/icons';
+import { ContentCopy } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
 import { QueryTargetsField } from '@/components/query-fields/query-targets-field';
@@ -138,8 +139,10 @@ interface QueryStatus {
   };
 }
 
-interface TypedQueryDetailResponse
-  extends Omit<QueryDetailResponse, 'status' | 'targets'> {
+interface TypedQueryDetailResponse extends Omit<
+  QueryDetailResponse,
+  'status' | 'targets'
+> {
   status?: QueryStatus | null;
   metadata?: Record<string, string>;
   target?: { name: string; type: string };
@@ -218,27 +221,14 @@ function QueryViewMode({
   const eventsHref = `/events?kind=Query&name=${query.name}`;
 
   return (
-    <div className="flex w-full content-shell flex-col gap-5">
+    <div className="content-shell flex w-full flex-col gap-5">
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <NamespacedLink
-              href="/queries"
-              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-              <IconShell size="sm" className="opacity-100">
-                <ChevronLeft />
-              </IconShell>
-              Queries
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-fg-secondary">
-              /
-            </span>
-            <span aria-current="page" className="text-fg-secondary">
-              {query.name}
-            </span>
-          </nav>
+          <DetailBreadcrumb
+            backHref="/queries"
+            backLabel="Queries"
+            current={query.name}
+          />
           <div className="flex items-center gap-3">
             <a href={eventsHref} target="_blank" rel="noopener noreferrer">
               <Button variant="outline">View events</Button>
@@ -538,7 +528,7 @@ function QueryDetailContent() {
         }),
       };
 
-      const savedQuery = await queriesService.create(queryData);
+      const savedQuery = await queriesService.create(namespace, queryData);
 
       toast('Query Executed', {
         description: `Query "${savedQuery.name}" has been created and is now executing.`,
@@ -586,11 +576,11 @@ function QueryDetailContent() {
         setMemoriesLoading(true);
         try {
           const [agents, models, teams, tools, memories] = await Promise.all([
-            agentsService.getAll(),
-            modelsService.getAll(),
-            teamsService.getAll(),
-            toolsService.getAll(),
-            memoriesService.getAll(),
+            agentsService.list(namespace),
+            modelsService.list(namespace),
+            teamsService.getAll(namespace),
+            toolsService.getAll(namespace),
+            memoriesService.getAll(namespace),
           ]);
 
           const targets = [
@@ -630,7 +620,7 @@ function QueryDetailContent() {
 
     const loadQuery = async () => {
       try {
-        const queryData = await queriesService.get(queryId);
+        const queryData = await queriesService.get(namespace, queryId);
         setQuery(queryData as TypedQueryDetailResponse);
 
         // Load existing parameters
@@ -667,26 +657,26 @@ function QueryDetailContent() {
     if (query?.target?.type === 'tool') {
       const toolName = query.target.name;
       toolsService
-        .getDetail(toolName)
+        .getDetail(namespace, toolName)
         .then(setToolSchema)
         .catch(() => setToolSchema(null)); // Silent failure
     } else {
       setToolSchema(null);
     }
-  }, [query?.target]);
+  }, [namespace, query?.target]);
 
   // Fetch agent details when target is an agent (for AC2: agent-required params)
   useEffect(() => {
     if (query?.target?.type === 'agent') {
       const agentName = query.target.name;
       agentsService
-        .getByName(agentName)
+        .getByName(namespace, agentName)
         .then(setSelectedAgentDetails)
         .catch(() => setSelectedAgentDetails(null));
     } else {
       setSelectedAgentDetails(null);
     }
-  }, [query?.target]);
+  }, [namespace, query?.target]);
 
   // Extract agent-required query parameters
   const agentRequiredParams = useMemo(
@@ -732,27 +722,14 @@ function QueryDetailContent() {
   const isToolTarget = toolSchema && query.target?.type === 'tool';
 
   return (
-    <div className="flex w-full content-shell flex-col gap-5">
+    <div className="content-shell flex w-full flex-col gap-5">
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <NamespacedLink
-              href="/queries"
-              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-              <IconShell size="sm" className="opacity-100">
-                <ChevronLeft />
-              </IconShell>
-              Queries
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-fg-secondary">
-              /
-            </span>
-            <span aria-current="page" className="text-fg-secondary">
-              New Query
-            </span>
-          </nav>
+          <DetailBreadcrumb
+            backHref="/queries"
+            backLabel="Queries"
+            current="New Query"
+          />
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => push('/query/new')}>
               New Query

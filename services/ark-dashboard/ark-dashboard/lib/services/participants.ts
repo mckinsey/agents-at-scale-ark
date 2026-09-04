@@ -9,11 +9,11 @@ export interface Participant {
 }
 
 export const participantsService = {
-  async getAll(): Promise<Participant[]> {
+  async getAll(namespace: string): Promise<Participant[]> {
     const results = await Promise.allSettled([
-      agentsService.getAll(),
-      teamsService.getAll(),
-      toolsService.getAll(),
+      agentsService.list(namespace),
+      teamsService.getAll(namespace),
+      toolsService.getAll(namespace),
     ]);
 
     const agents = results[0].status === 'fulfilled' ? results[0].value : [];

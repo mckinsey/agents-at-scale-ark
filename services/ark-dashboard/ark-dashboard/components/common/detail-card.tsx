@@ -78,20 +78,28 @@ interface DetailSectionCardProps {
   readonly title: string;
   readonly headerRight?: ReactNode;
   readonly children: ReactNode;
+  readonly className?: string;
+  readonly bodyClassName?: string;
 }
 
 export function DetailSectionCard({
   title,
   headerRight,
   children,
+  className,
+  bodyClassName,
 }: Readonly<DetailSectionCardProps>) {
   return (
-    <div className="flex flex-col">
+    <div className={cn('flex flex-col', className)}>
       <div className="bg-fill-onsurface-ui-1 flex items-center gap-2 p-2">
         <p className="label-regular-primary text-fg-primary flex-1">{title}</p>
         {headerRight}
       </div>
-      <div className="border-stroke-divider border-r border-b border-l px-2">
+      <div
+        className={cn(
+          'border-stroke-divider border-r border-b border-l px-2',
+          bodyClassName,
+        )}>
         {children}
       </div>
     </div>

@@ -122,7 +122,11 @@ type Config struct {
 	AuthMode        string
 	TLSCertFile     string
 	TLSKeyFile      string
-	K8sClient       client.Client
+	// K8sClient reads Secrets and ConfigMaps for valueFrom parameter resolution. It is the
+	// uncached reader, so a Get hits the host apiserver directly instead of populating a
+	// cluster-wide informer. That keeps the apiserver ServiceAccount at get-only on those
+	// resources rather than needing list and watch across every namespace.
+	K8sClient client.Reader
 	// RestConfig points at the host kube-apiserver, where the policy objects live.
 	RestConfig *clientrest.Config
 	// AuditLogPath "-" writes JSON to stdout. AuditPolicyFile is mandatory when AuditEnabled.

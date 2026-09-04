@@ -7,7 +7,7 @@ vi.mock('@/lib/services', () => ({
     getDetail: vi.fn(),
   },
   agentsService: {
-    getAll: vi.fn(),
+    list: vi.fn(),
   },
   teamsService: {
     getAll: vi.fn(),
@@ -61,7 +61,7 @@ function values(overrides: Partial<ToolFormValues> = {}): ToolFormValues {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockAgentsService.getAll.mockResolvedValue([]);
+  mockAgentsService.list.mockResolvedValue([]);
   mockTeamsService.getAll.mockResolvedValue([]);
   mockToolsService.create.mockResolvedValue(undefined);
 });
@@ -83,12 +83,12 @@ describe('useToolForm', () => {
     });
 
     expect(mockToolsService.create).toHaveBeenCalledWith(
+      'default',
       expect.objectContaining({
         name: 'my-tool',
         type: 'mcp',
         description: 'desc',
         inputSchema: { a: 1 },
-        namespace: 'default',
       }),
     );
     expect(onSuccess).toHaveBeenCalledTimes(1);
@@ -104,6 +104,7 @@ describe('useToolForm', () => {
     });
 
     expect(mockToolsService.create).toHaveBeenCalledWith(
+      'default',
       expect.objectContaining({ url: 'https://x.dev' }),
     );
   });
@@ -117,6 +118,7 @@ describe('useToolForm', () => {
       );
     });
     expect(mockToolsService.create).toHaveBeenCalledWith(
+      'default',
       expect.objectContaining({ agent: 'agent-1' }),
     );
 
@@ -126,6 +128,7 @@ describe('useToolForm', () => {
       );
     });
     expect(mockToolsService.create).toHaveBeenCalledWith(
+      'default',
       expect.objectContaining({ team: 'team-1' }),
     );
   });
@@ -178,7 +181,7 @@ describe('useToolForm', () => {
   });
 
   it('loads agents when type becomes agent', async () => {
-    mockAgentsService.getAll.mockResolvedValue([{ name: 'agent-1' }] as never);
+    mockAgentsService.list.mockResolvedValue([{ name: 'agent-1' }] as never);
     const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
 
     act(() => {
@@ -186,7 +189,7 @@ describe('useToolForm', () => {
     });
 
     await waitFor(() => {
-      expect(mockAgentsService.getAll).toHaveBeenCalled();
+      expect(mockAgentsService.list).toHaveBeenCalled();
     });
     await waitFor(() => {
       expect(result.current.state.agents).toEqual([{ name: 'agent-1' }]);
@@ -215,7 +218,6 @@ describe('useToolForm', () => {
 describe('useToolForm — view mode', () => {
   const detail = {
     name: 'my-tool',
-    namespace: 'default',
     description: 'desc',
     annotations: { note: 'x' },
     spec: {
@@ -235,7 +237,7 @@ describe('useToolForm — view mode', () => {
     );
 
     await waitFor(() => {
-      expect(mockToolsService.getDetail).toHaveBeenCalledWith('my-tool');
+      expect(mockToolsService.getDetail).toHaveBeenCalledWith('default', 'my-tool');
     });
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);

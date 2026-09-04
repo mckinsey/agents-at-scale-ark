@@ -20,13 +20,15 @@ import {
 import { useGetAllSecrets } from '@/lib/services/secrets-hooks';
 import { cn } from '@/lib/utils';
 
-import type { FormValues, HeaderRows } from './utils';
+import { McpUrlField } from './mcp-url-field';
+import type { FormValues, HeaderRows, UrlFieldState } from './utils';
 
 interface McpServerFieldsProps {
   readonly form: UseFormReturn<FormValues>;
   readonly formId: string;
   readonly onSubmit: (values: FormValues) => void;
   readonly headerRows: HeaderRows;
+  readonly urlState: UrlFieldState;
   readonly nameDisabled?: boolean;
   readonly transportDisabled?: boolean;
 }
@@ -36,6 +38,7 @@ export function McpServerFields({
   formId,
   onSubmit,
   headerRows,
+  urlState,
   nameDisabled,
   transportDisabled,
 }: McpServerFieldsProps) {
@@ -64,7 +67,7 @@ export function McpServerFields({
               <Input
                 variant="inline"
                 {...field}
-                placeholder="e.g., gpt-4-turbo"
+                placeholder="e.g., github-remote-mcp"
                 disabled={nameDisabled}
                 aria-invalid={!!fieldState.error}
               />
@@ -88,23 +91,7 @@ export function McpServerFields({
             </FieldSet>
           )}
         />
-        <FormField
-          control={form.control}
-          name="baseUrl"
-          render={({ field, fieldState }) => (
-            <FieldSet className="gap-2">
-              <FieldTitle>URL</FieldTitle>
-              <Input
-                variant="inline"
-                {...field}
-                placeholder="https:/github.com/v1"
-                onChange={e => field.onChange(e.target.value.trim())}
-                aria-invalid={!!fieldState.error}
-              />
-              <FieldError>{fieldState.error?.message}</FieldError>
-            </FieldSet>
-          )}
-        />
+        <McpUrlField form={form} state={urlState} />
         <FormField
           control={form.control}
           name="transport"
@@ -145,6 +132,8 @@ export function McpServerFields({
               deleteRow={deleteRow}
               nameError={headerErrors[row.key]?.nameError}
               valueError={headerErrors[row.key]?.valueError}
+              namePlaceholder="e.g., Authorization"
+              valuePlaceholder="e.g., Bearer token"
             />
           ))}
           <Button

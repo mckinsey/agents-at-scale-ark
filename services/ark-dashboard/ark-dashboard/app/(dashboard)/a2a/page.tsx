@@ -1,7 +1,6 @@
 'use client';
 
 import { Plus } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
 import { useRef } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
@@ -9,10 +8,10 @@ import { A2AServersSection } from '@/components/sections/a2a-servers-section';
 import type { A2AServersSectionHandle } from '@/components/sections/a2a-servers-section';
 import { Button } from '@/components/ui/button';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export default function A2APage() {
-  const searchParams = useSearchParams();
-  const namespace = searchParams.get('namespace') || 'default';
+  const { namespace } = useNamespace();
   const a2aSectionRef = useRef<A2AServersSectionHandle>(null);
 
   return (
