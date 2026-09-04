@@ -1,17 +1,12 @@
 """Human-in-the-loop tool approval journeys in the dashboard.
 
-Unlike the rest of this suite these tests need a real OpenAI-compatible
-endpoint. An approval card only appears once an agent emits a tool call; the
-executor always streams model calls for a top-level query, and mock-llm drops
-tool_calls from a streamed response, so it cannot drive the approval gate.
-
-Export CICD_OPENAI_API_KEY (or E2E_TEST_OPENAI_API_KEY) plus the matching base
-URL to run them, or deselect them with ``-m 'not llm'``.
+An approval card only appears once an agent emits a tool call, so these run on
+the suite's mock model, scripted to answer a rollout request with one call to
+hitl-protected-action. See ../mock-llm-values.yaml for how that tool call is
+served over the streaming path the dashboard uses.
 """
 
-import os
 from pathlib import Path
-from string import Template
 
 import pytest
 from playwright.sync_api import Page
@@ -23,10 +18,8 @@ from pages.hitl_approvals_page import HitlApprovalsPage
 from pages.sessions_page import SessionsPage
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
-MODEL_FIXTURE = FIXTURES_DIR / "hitl-gateway-model.yaml"
 AGENTS_FIXTURE = FIXTURES_DIR / "hitl-approval-agents.yaml"
 
-MODEL_NAME = "hitl-gateway-model"
 APPROVAL_AGENT = "hitl-approval-agent"
 EXPIRING_AGENT = "hitl-expiring-agent"
 PROTECTED_TOOL = "hitl-protected-action"
@@ -39,8 +32,8 @@ PHASE_DONE = "done"
 TASK_PHASE_COMPLETED = "completed"
 TASK_PHASE_FAILED = "failed"
 
-# Long enough for the executor to reach a real model and come back.
-QUERY_SETTLE_TIMEOUT_S = 180
+# Long enough for the executor to finish the turn after a decision is taken.
+QUERY_SETTLE_TIMEOUT_S = 120
 
 
 def _phase_reached(kind: str, name: str, phase: str, timeout_s: int = 120) -> tuple[bool, str]:
@@ -98,34 +91,8 @@ def _start_rollout_conversation(page: Page, agent_name: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def hitl_agents(ark_setup):
-    """Install the approval-gated tool, the gateway model and the HITL agents."""
-    api_key = os.environ.get("CICD_OPENAI_API_KEY") or os.environ.get(
-        "E2E_TEST_OPENAI_API_KEY"
-    )
-    base_url = os.environ.get("CICD_OPENAI_BASE_URL") or os.environ.get(
-        "E2E_TEST_OPENAI_BASE_URL"
-    )
-    if not api_key or not base_url:
-        pytest.fail(
-            "HITL journeys need a real LLM endpoint. Set CICD_OPENAI_API_KEY (or "
-            "E2E_TEST_OPENAI_API_KEY) and CICD_OPENAI_BASE_URL (or "
-            "E2E_TEST_OPENAI_BASE_URL), or deselect these tests with -m 'not llm'."
-        )
-
-    model_manifest = Template(MODEL_FIXTURE.read_text()).substitute(
-        HITL_MODEL_API_KEY=api_key,
-        HITL_MODEL_BASE_URL=base_url,
-        HITL_MODEL_NAME=os.environ.get("E2E_TEST_OPENAI_MODEL", "gpt-4.1-mini"),
-    )
-    applied, message = apply_yaml(model_manifest)
-    assert applied, f"could not create the HITL model: {message}"
-
-    available, message = wait_for_resource(
-        "model", MODEL_NAME, "condition=ModelAvailable"
-    )
-    assert available, f"HITL model never became available: {message}"
-
+def hitl_agents(mock_llm_model):
+    """Install the approval-gated tool and the HITL agents."""
     applied, message = apply_yaml(AGENTS_FIXTURE.read_text())
     assert applied, f"could not create the HITL agents: {message}"
 
@@ -138,12 +105,9 @@ def hitl_agents(ark_setup):
     for agent in HITL_AGENTS:
         delete_resource("agent", agent)
     delete_resource("tool", PROTECTED_TOOL)
-    delete_resource("model", MODEL_NAME)
-    delete_resource("secret", "hitl-gateway-token")
 
 
 @pytest.mark.hitl
-@pytest.mark.llm
 @pytest.mark.xdist_group("ark_hitl")
 class TestHitlApprovalJourneys:
     """The four things a human can do with an approval-gated tool call."""

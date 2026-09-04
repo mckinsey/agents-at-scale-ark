@@ -1,9 +1,10 @@
 # Agents and tool backing the human-in-the-loop journeys.
 #
-# The prompt leaves the agent no choice but to call the tool once, so a single
-# user message always parks the query in input-required and puts one approval
-# card in front of the tester. The tool itself is served by mock-llm in the
-# cluster, so approving it needs no outbound network.
+# Both agents run on the suite's shared mock model, which is scripted to answer
+# a rollout request with a single call to hitl-protected-action (see
+# ../mock-llm-values.yaml). So one user message always parks the query in
+# input-required and puts one approval card in front of the tester. The tool
+# itself is served by mock-llm too, so approving it needs no outbound network.
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
 metadata:
@@ -48,7 +49,7 @@ spec:
     Once you receive the tool result, reply with a single short sentence
     saying what happened.
   modelRef:
-    name: hitl-gateway-model
+    name: test-model-mock
   tools:
     - type: http
       name: hitl-protected-action
@@ -78,7 +79,7 @@ spec:
     Once you receive the tool result, reply with a single short sentence
     saying what happened.
   modelRef:
-    name: hitl-gateway-model
+    name: test-model-mock
   tools:
     - type: http
       name: hitl-protected-action
