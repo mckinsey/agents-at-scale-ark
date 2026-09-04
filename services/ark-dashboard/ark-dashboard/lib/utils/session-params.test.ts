@@ -28,8 +28,8 @@ describe('buildUrlWithoutNewSessionParams', () => {
       'participant=agent-1&type=agent&conversationId=c-1&namespace=demo',
     );
 
-    expect(buildUrlWithoutNewSessionParams(params, '/session-history')).toBe(
-      '/session-history?namespace=demo',
+    expect(buildUrlWithoutNewSessionParams(params, '/sessions')).toBe(
+      '/sessions?namespace=demo',
     );
   });
 
@@ -38,14 +38,14 @@ describe('buildUrlWithoutNewSessionParams', () => {
       'participant=agent-1&type=agent&conversationId=c-1',
     );
 
-    expect(buildUrlWithoutNewSessionParams(params, '/session-history')).toBe(
-      '/session-history',
+    expect(buildUrlWithoutNewSessionParams(params, '/sessions')).toBe(
+      '/sessions',
     );
   });
 
   it('returns a bare path when there are no params', () => {
-    expect(buildUrlWithoutNewSessionParams(null, '/session-history')).toBe(
-      '/session-history',
+    expect(buildUrlWithoutNewSessionParams(null, '/sessions')).toBe(
+      '/sessions',
     );
   });
 });

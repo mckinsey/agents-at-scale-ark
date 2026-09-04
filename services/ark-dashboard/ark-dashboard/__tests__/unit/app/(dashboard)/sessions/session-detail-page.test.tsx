@@ -208,6 +208,6 @@ describe('SessionDetailPage', () => {
 
     await user.click(screen.getByText('Back to all sessions'));
 
-    expect(mockPush).toHaveBeenCalledWith('/session-history?namespace=demo');
+    expect(mockPush).toHaveBeenCalledWith('/sessions?namespace=demo');
   });
 });
