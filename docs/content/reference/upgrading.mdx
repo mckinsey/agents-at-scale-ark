@@ -52,7 +52,11 @@ To move resources between storage backends within one cluster (etcd to PostgreSQ
 ark export -o ark-export.yaml
 ```
 
-This captures `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, and `a2aservers`. The export removes Kubernetes runtime metadata, status, ownership references, finalizers, and the last-applied annotation. It includes application Secrets but omits Helm release records, service account token Secrets, MCPServer-generated Tools, and A2AServer-generated Agents. The destination controllers regenerate those child resources with valid ownership.
+This captures `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, and `a2aservers`, plus the Argo workflow resources the dashboard treats as first-class: `clusterworkflowtemplates`, `workflowtemplates`, and `cronworkflows`. The export removes Kubernetes runtime metadata, status, ownership references, finalizers, and the last-applied annotation. It includes application Secrets but omits Helm release records, service account token Secrets, MCPServer-generated Tools, and A2AServer-generated Agents. The destination controllers regenerate those child resources with valid ownership.
+
+If the Argo CRDs are not installed on the source cluster, those types are warned and skipped rather than failing the export.
+
+`clusterworkflowtemplates` are cluster-scoped, so they are only included in a cluster-wide export. When you scope the export to a namespace with `-n`, they are skipped — a namespace-scoped export captures that namespace's resources, not the cluster-wide templates shared across tenants.
 
 Useful flags:
 
@@ -60,7 +64,7 @@ Useful flags:
 - `-t, --types <types>` — comma-separated list of resource types (e.g. `-t models,agents,teams`)
 
 <Callout type="warning">
-Not included in the default export: `queries`, `memories`, `executionengines`, `a2atasks`, and any non-Ark CRDs such as Argo `WorkflowTemplate`. Back those up separately with `kubectl get <kind> -A -o yaml` if you need them on the destination.
+Not included in the default export: `queries`, `memories`, `executionengines`, `a2atasks`, and Argo `Workflow` instances (the running executions, as opposed to `WorkflowTemplate`s). These are runtime, status-bearing resources; back them up separately with `kubectl get <kind> -A -o yaml` if you need them, though restoring them onto a fresh cluster recreates a historical record rather than re-running anything.
 </Callout>
 
 #### 2. Install Ark on the destination cluster
