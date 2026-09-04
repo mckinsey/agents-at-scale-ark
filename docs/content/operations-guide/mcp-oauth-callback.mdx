@@ -5,7 +5,7 @@ description: Configuring ark-api as the OAuth callback target for MCP server aut
 
 # MCP OAuth Callback
 
-When a user authorizes an MCP server with `ark mcp auth login`, the IdP redirects the browser back to ark-api with the authorization code. ark-api exchanges the code for tokens, writes the result to the MCPServer's referenced Secret, and stamps the parent MCPServer with an annotation that records who triggered the flow.
+When a user authorizes an MCP server with `ark mcp auth login`, the IdP redirects the browser back to ark-api with the authorization code. ark-api exchanges the code for tokens and writes the result to the MCPServer's referenced Secret.
 
 The redirect target is a single externally reachable URL that ark-api must own. This page covers configuring `ARK_API_PUBLIC_CALLBACK_URL` for both public ingress and air-gapped clusters.
 
@@ -87,7 +87,7 @@ The dashboard MCP servers page (`/mcp`) drives the same ark-api OAuth flow as th
 
 ## RBAC
 
-ark-api needs `get/create/patch/update/delete` on Secrets in every namespace it serves, plus `get/update` on `mcpservers` (for reading `status.authorization` and stamping auth annotations). The chart applies these rules automatically; see `services/ark-api/chart/templates/rbac.yaml`.
+ark-api needs `get/create/patch/update/delete` on Secrets in every namespace it serves, plus `get/update` on `mcpservers` (for reading `status.authorization`, provisioning `spec.authorization.tokenSecretRef`, and clearing legacy auth annotations). The chart applies these rules automatically; see `services/ark-api/chart/templates/rbac.yaml`.
 
 ## Callback URL changes
 
@@ -95,22 +95,17 @@ If you change `ARK_API_PUBLIC_CALLBACK_URL` after servers have been authorized, 
 
 ## Verifying
 
-A successful login leaves two visible side-effects on the MCPServer:
+A successful login is reflected in the MCPServer's `status.authorization.state`:
 
 ```bash
-kubectl get mcpserver notion-mcp -o jsonpath='{.metadata.annotations}'
+kubectl get mcpserver notion-mcp -o jsonpath='{.status.authorization.state}'
 ```
 
-```json
-{
-  "ark.mckinsey.com/mcp-auth-authorized-by": "cli",
-  "ark.mckinsey.com/mcp-auth-authorized-at": "2026-05-19T14:32:11Z"
-}
+```
+Authorized
 ```
 
-`authorized-by` records who triggered the flow: `cli` for CLI logins (and any unauthenticated in-cluster caller), or the authenticated user's resolved identity for dashboard-initiated flows (captured from ark-api's impersonation middleware at `auth/start` time).
-
-The referenced Secret holds the token material; ark-api never logs token bodies, refresh tokens, client secrets, or PKCE verifiers.
+ark-api does not record the identity of the caller who triggered the flow. The referenced Secret holds the token material; ark-api never logs token bodies, refresh tokens, client secrets, or PKCE verifiers.
 
 ## External executor header-resolution workaround
 
@@ -140,9 +135,8 @@ This workaround becomes unnecessary once the `mcp-auth-sdk-header-resolution` ca
 
 ## Known limitations
 
-- **Single-user token model.** Only one set of tokens is stored per MCPServer. In multi-user clusters the last login wins; the `authorized-by` annotation surfaces who last authorized.
+- **Single-user token model.** Only one set of tokens is stored per MCPServer. In multi-user clusters the last login wins.
 - **No chainsaw e2e tests.** End-to-end tests are blocked on a TLS-capable mock MCP server. This is tracked as a follow-up.
-- **MCPServer delete+recreate.** Deleting and recreating an MCPServer leaves stale `authorized-by` / `authorized-at` annotations on the old resource. The new resource starts clean.
 
 ## Related
 
