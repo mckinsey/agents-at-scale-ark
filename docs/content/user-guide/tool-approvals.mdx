@@ -1,0 +1,92 @@
+---
+title: Human-in-the-loop tool approvals
+description: Require a human to approve specific tool calls before an agent executes them, and respond to pending approvals from the dashboard or the Ark CLI
+---
+
+# Human-in-the-loop tool approvals
+
+Some tool calls are risky — writing files, sending email, deploying resources. Ark lets you mark individual tools on an agent as approval-required, so the agent pauses before calling them and waits for a human decision. You configure approval per tool on the agent, and respond to pending approvals from the dashboard or the Ark CLI.
+
+Approval is configured on an agent's `spec.tools` entries. For the full field reference, see [Tool approval](/reference/resources/agent#tool-approval) in the agent reference; to create and attach tools, see [Add tools and MCP servers](/user-guide/tools).
+
+## How it works
+
+When an agent decides to call a tool whose `approval.required` is `true`, Ark does not execute the tool immediately. Instead:
+
+1. The query pauses in the `input-required` phase.
+2. Ark records the pending tool call and waits for a human decision.
+3. On **approve**, the tool executes and the query resumes. On **reject**, the tool is not executed and the agent handles the rejection.
+4. If no decision arrives within `timeout`, the `onTimeout` action applies: `reject` fails the query, `proceed` executes the tool anyway.
+
+Only the tools you mark require approval; all other tools on the agent run normally.
+
+## Configure approval
+
+### Via dashboard
+
+1. Open the agent in the dashboard — **Create agent** or an existing agent.
+2. Select the tools the agent should use in the **Tools** field.
+3. In the **Tool approvals** section below, turn on **Require approval** for a tool.
+4. Optionally set **Timeout** (for example, `5m`) and **On timeout** (`reject` or `proceed`).
+5. Save the agent.
+
+### Via kubectl
+
+Add an `approval` block to the tool entry in the agent's `spec.tools`:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: hitl-agent
+spec:
+  description: Agent with an approval-required tool
+  prompt: You are a file management assistant. Call the appropriate tool when asked.
+  tools:
+    - type: mcp
+      name: file-gateway-read-text-file
+
+    - type: mcp
+      name: file-gateway-write-file
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
+```
+
+Apply it with `kubectl apply -f hitl-agent.yaml`. A complete example ships at `samples/agents/hitl-agent.yaml`.
+
+### Approval fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `required` | boolean | No | Whether human approval is required before executing this tool. Defaults to `false`. |
+| `timeout` | duration | No | How long to wait for a decision (for example, `30s`, `5m`, `1h`). Omit to wait indefinitely. |
+| `onTimeout` | enum | No | Action when `timeout` elapses: `reject` (fail the query) or `proceed` (execute the tool). Defaults to `reject`. |
+
+## Respond to a pending approval
+
+### Via dashboard
+
+Open the query's conversation. When it is waiting on an approval, the pending tool call is shown with **Approve** and **Reject** buttons. Choosing one submits the decision and the query resumes.
+
+### Via the Ark CLI
+
+List the tool calls awaiting a decision, then approve or reject one by task name:
+
+```bash
+# List pending approvals in the current namespace
+ark approvals list
+
+# Approve or reject a pending tool call
+ark approvals approve <task-name>
+ark approvals reject <task-name>
+```
+
+Use `-n, --namespace <namespace>` to target a namespace, and `-o json` to get machine-readable output from `list`. See [Use the Ark CLI](/user-guide/ark-cli) for CLI setup.
+
+## Related
+
+- [Creating and managing agents](/user-guide/agents)
+- [Add tools and MCP servers](/user-guide/tools)
+- [Tool approval reference](/reference/resources/agent#tool-approval)
