@@ -15,10 +15,11 @@ import (
 type AdmissionStorage struct {
 	*registry.GenericStorage
 	validator *validation.Validator
+	lookup    validation.ArkConfigLookup
 }
 
-func NewAdmissionStorage(inner *registry.GenericStorage, validator *validation.Validator) *AdmissionStorage {
-	return &AdmissionStorage{GenericStorage: inner, validator: validator}
+func NewAdmissionStorage(inner *registry.GenericStorage, validator *validation.Validator, lookup validation.ArkConfigLookup) *AdmissionStorage {
+	return &AdmissionStorage{GenericStorage: inner, validator: validator, lookup: lookup}
 }
 
 // Create order matters: PrepareForCreate, then Ark defaulting/validation, then the generic
@@ -28,7 +29,7 @@ func (s *AdmissionStorage) Create(ctx context.Context, obj runtime.Object, creat
 	if err := registry.PrepareForCreate(ctx, obj); err != nil {
 		return nil, err
 	}
-	validation.ApplyDefaults(ctx, obj, nil)
+	validation.ApplyDefaults(ctx, obj, s.lookup)
 	warnings, err := s.validator.Validate(ctx, obj)
 	if err != nil {
 		return nil, err
@@ -44,7 +45,7 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 	// Each closure runs Ark's defaulting/validation, then chains to the generic
 	// validating-admission callback.
 	admissionCreate := func(ctx context.Context, obj runtime.Object) error {
-		validation.ApplyDefaults(ctx, obj, nil)
+		validation.ApplyDefaults(ctx, obj, s.lookup)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)
@@ -58,7 +59,7 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 		return nil
 	}
 	admissionUpdate := func(ctx context.Context, obj, old runtime.Object) error {
-		validation.ApplyDefaults(ctx, obj, nil)
+		validation.ApplyDefaults(ctx, obj, s.lookup)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)

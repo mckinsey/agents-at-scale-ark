@@ -43,11 +43,19 @@ func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 type ResourceConfig struct {
-	Kind         string
-	Resource     string
-	SingularName string
-	NewFunc      func() runtime.Object
-	NewListFunc  func() runtime.Object
+	Kind          string
+	Resource      string
+	SingularName  string
+	ClusterScoped bool
+	NewFunc       func() runtime.Object
+	NewListFunc   func() runtime.Object
+}
+
+func (c ResourceConfig) namespace(ctx context.Context) string {
+	if c.ClusterScoped {
+		return ""
+	}
+	return getNamespace(ctx)
 }
 
 type GenericStorage struct {
@@ -88,7 +96,7 @@ func (s *GenericStorage) NewList() runtime.Object {
 }
 
 func (s *GenericStorage) NamespaceScoped() bool {
-	return true
+	return !s.config.ClusterScoped
 }
 
 func (s *GenericStorage) GetSingularName() string {
@@ -97,7 +105,7 @@ func (s *GenericStorage) GetSingularName() string {
 
 func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	start := time.Now()
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
@@ -113,7 +121,7 @@ func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.G
 
 func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	start := time.Now()
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 	opts := storage.ListOptions{}
 	if options != nil {
 		if options.LabelSelector != nil {
@@ -183,6 +191,9 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 	if err != nil {
 		metrics.RecordStorageOperation("create", s.config.Kind, "error")
 		return nil, fmt.Errorf("failed to access object metadata: %w", err)
+	}
+	if s.config.ClusterScoped {
+		accessor.SetNamespace("")
 	}
 
 	// `obj` is passed live, not copied: AdmissionStorage may run Ark's defaulting inside this
@@ -262,7 +273,7 @@ func (s *GenericStorage) createWithGeneratedName(ctx context.Context, obj runtim
 
 func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	start := time.Now()
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
@@ -341,7 +352,7 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 
 func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	start := time.Now()
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
@@ -473,7 +484,7 @@ func (s *GenericStorage) refreshForDeletion(ctx, sctx context.Context, namespace
 }
 
 func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 	opts := storage.WatchOptions{}
 	if options != nil {
 		if options.LabelSelector != nil {
