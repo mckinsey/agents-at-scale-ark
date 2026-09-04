@@ -8,6 +8,7 @@ import {
   buildUrlWithoutNewSessionParams,
   hasNewSessionParams,
 } from '@/lib/utils/session-params';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConversationsTab } from '@/components/sessions-conversations/conversations-tab';
@@ -23,6 +24,7 @@ export default function SessionDetailPage() {
   const params = useParams();
   const session_id = params.session_id as string;
   const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -43,8 +45,8 @@ export default function SessionDetailPage() {
   }, [searchParams, router, pathname]);
 
   const handleBackToSessions = useCallback(() => {
-    router.push(buildUrlWithoutNewSessionParams(searchParams, '/sessions'));
-  }, [router, searchParams]);
+    push('/sessions');
+  }, [push]);
 
   // Skip API call for new sessions (avoid 404 errors)
   const { data: backendSession, isLoading, isError } = useGetSession(session_id, {

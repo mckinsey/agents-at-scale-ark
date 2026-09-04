@@ -46,6 +46,26 @@ def _parse_audiences(value):
     return parts[0] if len(parts) == 1 else parts
 
 
+def _validate_audience_config(raw):
+    """Fail closed when a configured audience has content but no usable value.
+
+    An unset audience (``None``, empty, or whitespace-only) intentionally
+    leaves ``aud`` verification off. A value with content that still yields no
+    audiences — e.g. ``","`` from templating ``join "," <empty-list>`` — is a
+    misconfiguration that must raise rather than silently disable ``aud``
+    verification (which would accept tokens minted for any audience of the same
+    issuer). ``None`` when raw is unset/whitespace-only, otherwise the value.
+    """
+    if raw is None or raw.strip() == "":
+        return
+    if _parse_audiences(raw) is None:
+        raise TokenValidationError(
+            f"OIDC_APPLICATION_ID is set to {raw!r} but contains no usable "
+            f"audiences. Leave it unset to disable audience verification, or "
+            f"provide one or more comma-separated audiences."
+        )
+
+
 class TokenValidator:
     """Validates JWT tokens using JWKS."""
     
@@ -75,6 +95,7 @@ class TokenValidator:
         """
         issuer = os.getenv("OIDC_ISSUER_URL")
         audience = os.getenv("OIDC_APPLICATION_ID")
+        _validate_audience_config(audience)
         jwks_url = os.getenv("OIDC_JWKS_URL") or None
         if not jwks_url and issuer:
             jwks_url = self._discover_jwks_url(issuer)

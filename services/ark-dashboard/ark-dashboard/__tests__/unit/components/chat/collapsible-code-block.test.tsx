@@ -6,6 +6,7 @@ import { CollapsibleCodeBlock } from '@/components/chat/collapsible-code-block';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useRouter: () => ({
     push: vi.fn(),
   }),

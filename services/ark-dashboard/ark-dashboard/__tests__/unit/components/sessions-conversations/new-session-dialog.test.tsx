@@ -7,6 +7,15 @@ import { agentsService } from '@/lib/services/agents';
 import { teamsService } from '@/lib/services/teams';
 import { toolsService } from '@/lib/services/tools';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/agents');
 vi.mock('@/lib/services/teams');
 vi.mock('@/lib/services/tools');
@@ -51,7 +60,7 @@ describe('NewSessionDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(agentsService.getAll).mockResolvedValue(mockAgents as any);
+    vi.mocked(agentsService.list).mockResolvedValue(mockAgents as any);
     vi.mocked(teamsService.getAll).mockResolvedValue(mockTeams as any);
     vi.mocked(toolsService.getAll).mockResolvedValue(mockTools as any);
   });
@@ -80,7 +89,7 @@ describe('NewSessionDialog', () => {
       },
     });
 
-    vi.mocked(agentsService.getAll).mockReturnValue(new Promise(() => {})); // Never resolves
+    vi.mocked(agentsService.list).mockReturnValue(new Promise(() => {})); // Never resolves
     vi.mocked(teamsService.getAll).mockReturnValue(new Promise(() => {}));
     vi.mocked(toolsService.getAll).mockReturnValue(new Promise(() => {}));
 

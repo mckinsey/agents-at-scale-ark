@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
 
+from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.extensions.query import (
     QUERY_EXTENSION_URI,
     QUERY_EXTENSION_METADATA_KEY,
@@ -12,6 +13,7 @@ from ark_sdk.extensions.query import (
     QueryTargetRef,
     extract_query_ref,
     resolve_query,
+    _query_impersonation,
     _resolve_value_source,
     _parse_go_duration_to_seconds,
     _resolve_from_query,
@@ -392,6 +394,90 @@ class TestOverrideAuthorization(unittest.IsolatedAsyncioTestCase):
         self.assertIn("is not a member or selector of team", str(ctx.exception))
 
 
+class TestQueryImpersonation(unittest.TestCase):
+    def test_declared_service_account(self):
+        query = SimpleNamespace(spec=SimpleNamespace(service_account="tenant-a"))
+        self.assertEqual(
+            _query_impersonation(query, "team-ns"),
+            ImpersonationConfig(username="system:serviceaccount:team-ns:tenant-a"),
+        )
+
+    def test_service_account_from_dict_spec(self):
+        query = SimpleNamespace(spec={"serviceAccount": "tenant-b"})
+        self.assertEqual(
+            _query_impersonation(query, "ns"),
+            ImpersonationConfig(username="system:serviceaccount:ns:tenant-b"),
+        )
+
+    def test_absent_service_account_is_none(self):
+        query = SimpleNamespace(spec=SimpleNamespace(service_account=None))
+        self.assertIsNone(_query_impersonation(query, "ns"))
+
+    def test_empty_service_account_is_none(self):
+        query = SimpleNamespace(spec=SimpleNamespace(service_account=""))
+        self.assertIsNone(_query_impersonation(query, "ns"))
+
+    def test_non_string_service_account_is_none(self):
+        query = SimpleNamespace(spec=SimpleNamespace(service_account=["tenant-a"]))
+        self.assertIsNone(_query_impersonation(query, "ns"))
+
+
+class TestResolveQueryImpersonation(unittest.IsolatedAsyncioTestCase):
+    def _mocks(self, service_account):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "my-query"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "my-agent"
+        mock_query.spec.parameters = None
+        mock_query.spec.service_account = service_account
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "my-agent", "labels": {}}
+        mock_agent.spec.prompt = "You are helpful"
+        mock_agent.spec.description = "Test agent"
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        return mock_ctx
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_resolution_runs_as_declared_service_account(self, mock_with_client, mock_init_k8s):
+        mock_with_client.return_value = self._mocks("tenant-a")
+
+        request = await resolve_query(QueryRef(name="my-query", namespace="default"), "hello")
+
+        self.assertEqual(request.agent.name, "my-agent")
+        # The Query itself is read with the pod identity — spec.serviceAccount is
+        # only knowable from it.
+        self.assertNotIn("impersonation", mock_with_client.call_args_list[0].kwargs)
+        self.assertEqual(
+            mock_with_client.call_args_list[-1].kwargs["impersonation"],
+            ImpersonationConfig(username="system:serviceaccount:default:tenant-a"),
+        )
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_no_service_account_keeps_pod_identity(self, mock_with_client, mock_init_k8s):
+        mock_with_client.return_value = self._mocks(None)
+
+        request = await resolve_query(QueryRef(name="my-query", namespace="default"), "hello")
+
+        self.assertEqual(request.agent.name, "my-agent")
+        self.assertIsNone(mock_with_client.call_args_list[-1].kwargs["impersonation"])
+
+
 class TestResolveValueSource(unittest.IsolatedAsyncioTestCase):
     async def test_direct_value_from_dict(self):
         vs = {"value": "direct-val"}
@@ -430,7 +516,25 @@ class TestResolveValueSource(unittest.IsolatedAsyncioTestCase):
         result = await _resolve_value_source(vs, "test-ns")
 
         self.assertEqual(result, "my-secret-key")
-        mock_secret_cls.assert_called_with(namespace="test-ns")
+        mock_secret_cls.assert_called_with(namespace="test-ns", impersonation=None)
+
+    @patch("ark_sdk.extensions.query.SecretClient")
+    async def test_secret_read_uses_declared_service_account(self, mock_secret_cls):
+        mock_sc = AsyncMock()
+        encoded_val = base64.b64encode(b"scoped-secret").decode()
+        mock_sc.get_secret_value = AsyncMock(return_value={"value": encoded_val})
+        mock_secret_cls.return_value = mock_sc
+
+        impersonation = ImpersonationConfig(
+            username="system:serviceaccount:test-ns:tenant-a"
+        )
+        vs = {"valueFrom": {"secretKeyRef": {"name": "s1", "key": "k1"}}}
+        result = await _resolve_value_source(vs, "test-ns", impersonation)
+
+        self.assertEqual(result, "scoped-secret")
+        mock_secret_cls.assert_called_with(
+            namespace="test-ns", impersonation=impersonation
+        )
 
     @patch("ark_sdk.extensions.query.SecretClient")
     async def test_secret_key_ref_from_dict(self, mock_secret_cls):
@@ -742,6 +846,14 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         tool.name = name
         return tool
 
+    def _make_params_partial_agent_tool(self, name):
+        tool = MagicMock()
+        tool.name = name
+        tool.partial = SimpleNamespace(
+            name=None, parameters=[SimpleNamespace(name="units", value="metric")]
+        )
+        return tool
+
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")
     async def test_single_server_multiple_tools(self, mock_with_client, mock_init_k8s):
@@ -880,10 +992,128 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         mock_with_client.return_value = mock_ctx
 
         ref = QueryRef(name="q1", namespace="default")
-        request = await resolve_query(ref, "hi")
+        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+            request = await resolve_query(ref, "hi")
 
         self.assertEqual(len(request.mcpServers), 1)
         self.assertEqual(request.mcpServers[0].name, "github-mcp")
+        self.assertEqual(request.mcpServers[0].tools, ["search"])
+
+        message = "\n".join(log.output)
+        self.assertIn("a1", message)
+        self.assertIn("weather-api (http)", message)
+        self.assertIn("only mcp tools", message)
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_no_drop_warning_when_all_tools_are_mcp(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [self._make_agent_tool("github-mcp-search")]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(return_value=self._make_tool_crd("mcp", "github-mcp", "search"))
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=self._make_mcp_server_crd("http://github:8080/mcp"))
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        with self.assertNoLogs("ark_sdk.extensions.query", level="WARNING"):
+            request = await resolve_query(ref, "hi")
+
+        self.assertEqual(len(request.mcpServers), 1)
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_tool_with_unreadable_type_is_not_reported(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [self._make_agent_tool("typeless")]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(return_value=self._make_tool_crd(None))
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        with self.assertNoLogs("ark_sdk.extensions.query", level="WARNING"):
+            request = await resolve_query(ref, "hi")
+
+        self.assertEqual(request.mcpServers, [])
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_partial_with_only_preset_parameters_still_reaches_the_executor(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [self._make_params_partial_agent_tool("weather-mcp")]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(return_value=self._make_tool_crd("mcp", "github-mcp", "search"))
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=self._make_mcp_server_crd())
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        with self.assertNoLogs("ark_sdk.extensions.query", level="WARNING"):
+            request = await resolve_query(ref, "hi")
+
+        mock_ark.tools.a_get.assert_awaited_once_with("weather-mcp", "default")
+        self.assertEqual(len(request.mcpServers), 1)
         self.assertEqual(request.mcpServers[0].tools, ["search"])
 
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)

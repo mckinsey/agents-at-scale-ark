@@ -20,7 +20,8 @@ from ..executor import (
     Model,
     Parameter,
 )
-from ..k8s import SecretClient
+from ..impersonation import ImpersonationConfig
+from ..k8s import SecretClient, apply_impersonation_headers
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,20 @@ def _extract_target(ref_data: dict) -> Optional[QueryTargetRef]:
     return QueryTargetRef(type=target_type, name=target_name)
 
 
+def _query_impersonation(query: Any, namespace: str) -> Optional[ImpersonationConfig]:
+    """Impersonation for the Query's declared spec.serviceAccount, if it has one.
+
+    Matches the username format the controller uses for the same field, so both
+    sides of the A2A boundary resolve resources as the same identity.
+    """
+    service_account = _get_attr_or_key(query.spec, "service_account", "serviceAccount")
+    if not isinstance(service_account, str) or not service_account:
+        return None
+    return ImpersonationConfig(
+        username=f"system:serviceaccount:{namespace}:{service_account}"
+    )
+
+
 async def resolve_query(
     query_ref: QueryRef,
     user_input: str,
@@ -144,15 +159,24 @@ async def resolve_query(
 
     Resolution chain: Query CRD → Agent CRD → Model CRD + MCPServer CRDs → ExecutionEngineRequest.
     Only a QueryRef crosses A2A — all resources are resolved locally from the cluster.
+
+    Resolution runs as the Query's spec.serviceAccount when it declares one, and as
+    the executor's pod service account otherwise. The Query itself is always read
+    with the pod's identity, since spec.serviceAccount is only knowable from it.
     """
     from ..client import V1_ALPHA1, with_ark_client
     from ..k8s import init_k8s
     await init_k8s()
     async with with_ark_client(query_ref.namespace, V1_ALPHA1) as ark:
         query = await ark.queries.a_get(query_ref.name, query_ref.namespace)
+
+    impersonation = _query_impersonation(query, query_ref.namespace)
+    async with with_ark_client(
+        query_ref.namespace, V1_ALPHA1, impersonation=impersonation
+    ) as ark:
         return await _resolve_from_query(
             ark, query, query_ref.namespace, user_input, conversation_id,
-            target_override=query_ref.target,
+            target_override=query_ref.target, impersonation=impersonation,
         )
 
 
@@ -163,6 +187,7 @@ async def _resolve_from_query(
     user_input: str,
     conversation_id: str = "",
     target_override: Optional[QueryTargetRef] = None,
+    impersonation: Optional[ImpersonationConfig] = None,
 ) -> ExecutionEngineRequest:
     # An explicit target from the caller wins over the Query's own target: the
     # caller is dispatching one member of a team, whose Query targets the team.
@@ -189,11 +214,11 @@ async def _resolve_from_query(
         await _authorize_override(ark, query, namespace, target_name)
 
     agent = await ark.agents.a_get(target_name, namespace)
-    agent_config = await _build_agent_config(ark, agent, query, namespace)
-    mcp_servers = await _build_mcp_servers(ark, agent, namespace)
+    agent_config = await _build_agent_config(ark, agent, query, namespace, impersonation)
+    mcp_servers = await _build_mcp_servers(ark, agent, namespace, impersonation)
 
     query_annotations = query.metadata.get("annotations", {}) if query.metadata else {}
-    execution_engine_annotations = await _resolve_execution_engine_annotations(agent, namespace)
+    execution_engine_annotations = await _resolve_execution_engine_annotations(agent, namespace, impersonation)
 
     raw_ttl = getattr(query.spec, "ttl", None)
     message_ttl_seconds = _parse_go_duration_to_seconds(raw_ttl) if isinstance(raw_ttl, str) else None
@@ -263,7 +288,11 @@ async def _team_reaches_agent(ark: Any, namespace: str, team_name: str, agent_na
     return False
 
 
-async def _resolve_execution_engine_annotations(agent, namespace: str) -> dict[str, str]:
+async def _resolve_execution_engine_annotations(
+    agent,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> dict[str, str]:
     ee_ref = getattr(agent.spec, "execution_engine", None) or getattr(agent.spec, "executionEngine", None)
     if not ee_ref:
         return {}
@@ -271,17 +300,23 @@ async def _resolve_execution_engine_annotations(agent, namespace: str) -> dict[s
     if not ee_name:
         raise ValueError(f"ExecutionEngine reference on agent '{agent.metadata.get('name')}' has no name")
     from ..client import V1_PREALPHA1, with_ark_client
-    async with with_ark_client(namespace, V1_PREALPHA1) as prealpha_ark:
+    async with with_ark_client(namespace, V1_PREALPHA1, impersonation=impersonation) as prealpha_ark:
         ee = await prealpha_ark.executionengines.a_get(ee_name, namespace)
         return ee.metadata.get("annotations", {}) if ee.metadata else {}
 
 
-async def _build_agent_config(ark: Any, agent: Any, query: Any, namespace: str) -> AgentConfig:
+async def _build_agent_config(
+    ark: Any,
+    agent: Any,
+    query: Any,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> AgentConfig:
     spec = agent.spec
     model = Model(name="", type="", config={})
 
     if spec.model_ref:
-        model = await _resolve_model(ark, spec.model_ref, namespace)
+        model = await _resolve_model(ark, spec.model_ref, namespace, impersonation)
 
     parameters = _resolve_parameters(spec.parameters, query.spec.parameters)
 
@@ -329,13 +364,17 @@ def _extract_value_source_refs(vs: Any) -> tuple[Optional[str], Any, Any]:
     return None, secret_ref, cm_ref
 
 
-async def _resolve_secret_ref(secret_ref: Any, namespace: str) -> str:
+async def _resolve_secret_ref(
+    secret_ref: Any,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> str:
     ref_name = _get_attr_or_key(secret_ref, "name")
     ref_key = _get_attr_or_key(secret_ref, "key")
     if not (ref_name and ref_key):
         return ""
     try:
-        sc = SecretClient(namespace=namespace)
+        sc = SecretClient(namespace=namespace, impersonation=impersonation)
         result = await sc.get_secret_value(ref_name, ref_key)
         return base64.b64decode(result["value"]).decode("utf-8")
     except Exception as e:
@@ -343,14 +382,18 @@ async def _resolve_secret_ref(secret_ref: Any, namespace: str) -> str:
         return ""
 
 
-async def _resolve_configmap_ref(cm_ref: Any, namespace: str) -> str:
+async def _resolve_configmap_ref(
+    cm_ref: Any,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> str:
     ref_name = _get_attr_or_key(cm_ref, "name")
     ref_key = _get_attr_or_key(cm_ref, "key")
     if not (ref_name and ref_key):
         return ""
     try:
         async with create_api_client() as api:
-            v1 = client.CoreV1Api(api)
+            v1 = client.CoreV1Api(apply_impersonation_headers(api, impersonation))
             cm = await v1.read_namespaced_config_map(name=ref_name, namespace=namespace)
             return (cm.data or {}).get(ref_key, "")
     except Exception as e:
@@ -358,36 +401,49 @@ async def _resolve_configmap_ref(cm_ref: Any, namespace: str) -> str:
         return ""
 
 
-async def _resolve_value_source(vs: Any, namespace: str) -> str:
+async def _resolve_value_source(
+    vs: Any,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> str:
     direct_value, secret_ref, cm_ref = _extract_value_source_refs(vs)
     if direct_value:
         return direct_value
     if secret_ref:
-        result = await _resolve_secret_ref(secret_ref, namespace)
+        result = await _resolve_secret_ref(secret_ref, namespace, impersonation)
         if result:
             return result
     if cm_ref:
-        return await _resolve_configmap_ref(cm_ref, namespace)
+        return await _resolve_configmap_ref(cm_ref, namespace, impersonation)
     return ""
 
 
-async def _resolve_provider_config(provider_config_obj: Any, namespace: str) -> dict[str, Any]:
+async def _resolve_provider_config(
+    provider_config_obj: Any,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> dict[str, Any]:
     config = {}
     api_key_vs = getattr(provider_config_obj, "api_key", None) or getattr(provider_config_obj, "apiKey", None)
     if api_key_vs:
-        config["apiKey"] = await _resolve_value_source(api_key_vs, namespace)
+        config["apiKey"] = await _resolve_value_source(api_key_vs, namespace, impersonation)
     base_url_vs = getattr(provider_config_obj, "base_url", None) or getattr(provider_config_obj, "baseUrl", None)
     if base_url_vs:
-        config["baseUrl"] = await _resolve_value_source(base_url_vs, namespace)
+        config["baseUrl"] = await _resolve_value_source(base_url_vs, namespace, impersonation)
     api_version_vs = getattr(provider_config_obj, "api_version", None) or getattr(provider_config_obj, "apiVersion", None)
     if api_version_vs:
-        config["apiVersion"] = await _resolve_value_source(api_version_vs, namespace)
+        config["apiVersion"] = await _resolve_value_source(api_version_vs, namespace, impersonation)
     if hasattr(provider_config_obj, "properties") and provider_config_obj.properties:
         config["properties"] = provider_config_obj.properties
     return config
 
 
-async def _resolve_model(ark: Any, model_ref: Any, namespace: str) -> Model:
+async def _resolve_model(
+    ark: Any,
+    model_ref: Any,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> Model:
     model_name = model_ref.name
     model_namespace = getattr(model_ref, "namespace", None) or namespace
 
@@ -400,14 +456,14 @@ async def _resolve_model(ark: Any, model_ref: Any, namespace: str) -> Model:
     model_spec = model_crd.spec
     resolved_name = model_name
     if model_spec.model:
-        resolved_name = await _resolve_value_source(model_spec.model, model_namespace) or model_name
+        resolved_name = await _resolve_value_source(model_spec.model, model_namespace, impersonation) or model_name
 
     provider = getattr(model_spec, "provider", "unknown")
     config = {}
     if model_spec.config:
         provider_config_obj = getattr(model_spec.config, provider, None) or getattr(model_spec.config, "openai", None)
         if provider_config_obj:
-            config = await _resolve_provider_config(provider_config_obj, model_namespace)
+            config = await _resolve_provider_config(provider_config_obj, model_namespace, impersonation)
 
     return Model(name=resolved_name, type=provider, config={provider: config} if config else {})
 
@@ -455,7 +511,12 @@ def _resolve_parameters(
     return resolved
 
 
-async def _resolve_mcp_server(ark: Any, server_name: str, namespace: str) -> Optional[MCPServerConfig]:
+async def _resolve_mcp_server(
+    ark: Any,
+    server_name: str,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> Optional[MCPServerConfig]:
     server_namespace = namespace
     try:
         server_crd = await ark.mcpservers.a_get(server_name, server_namespace)
@@ -464,7 +525,7 @@ async def _resolve_mcp_server(ark: Any, server_name: str, namespace: str) -> Opt
         return None
 
     spec = server_crd.spec
-    url = await _resolve_value_source(spec.address, server_namespace)
+    url = await _resolve_value_source(spec.address, server_namespace, impersonation)
     if not url:
         logger.warning(f"MCPServer '{server_name}' has no resolvable address")
         return None
@@ -475,7 +536,7 @@ async def _resolve_mcp_server(ark: Any, server_name: str, namespace: str) -> Opt
             header_name = _get_attr_or_key(header, "name")
             header_value_source = _get_attr_or_key(header, "value")
             if header_name and header_value_source:
-                resolved = await _resolve_value_source(header_value_source, server_namespace)
+                resolved = await _resolve_value_source(header_value_source, server_namespace, impersonation)
                 if resolved:
                     headers[header_name] = resolved
 
@@ -492,11 +553,17 @@ async def _resolve_mcp_server(ark: Any, server_name: str, namespace: str) -> Opt
     )
 
 
-async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPServerConfig]:
+async def _build_mcp_servers(
+    ark: Any,
+    agent: Any,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = None,
+) -> list[MCPServerConfig]:
     if not agent.spec.tools:
         return []
 
     server_tools: dict[str, list[str]] = {}
+    dropped: list[str] = []
     for agent_tool in agent.spec.tools:
         tool_name = getattr(agent_tool, "name", None)
         if not tool_name:
@@ -506,7 +573,10 @@ async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPSe
             tool_crd = await ark.tools.a_get(tool_name, namespace)
             tool_spec = tool_crd.spec
 
-            if getattr(tool_spec, "type", None) != "mcp":
+            tool_type = getattr(tool_spec, "type", None)
+            if tool_type != "mcp":
+                if tool_type:
+                    dropped.append(f"{tool_name} ({tool_type})")
                 continue
 
             mcp_ref = getattr(tool_spec, "mcp", None)
@@ -527,9 +597,16 @@ async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPSe
         except Exception as e:
             logger.warning(f"Failed to resolve tool '{tool_name}': {e}")
 
+    if dropped:
+        agent_name = agent.metadata.get("name", "unknown") if agent.metadata else "unknown"
+        logger.warning(
+            f"Agent '{agent_name}': this executor receives only mcp tools; these "
+            f"tools were not available to the agent: {', '.join(dropped)}"
+        )
+
     servers: list[MCPServerConfig] = []
     for server_name, tool_names in server_tools.items():
-        server_config = await _resolve_mcp_server(ark, server_name, namespace)
+        server_config = await _resolve_mcp_server(ark, server_name, namespace, impersonation)
         if server_config:
             server_config.tools = tool_names
             servers.append(server_config)

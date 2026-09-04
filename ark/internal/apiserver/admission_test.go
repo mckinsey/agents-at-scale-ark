@@ -55,8 +55,8 @@ func (f *fakeBackend) Update(_ context.Context, kind, ns, name string, obj runti
 	return nil
 }
 
-func (f *fakeBackend) List(context.Context, string, string, storage.ListOptions) ([]runtime.Object, string, error) {
-	return nil, "", nil
+func (f *fakeBackend) List(context.Context, string, string, storage.ListOptions) ([]runtime.Object, string, int64, error) {
+	return nil, "", 0, nil
 }
 
 func (f *fakeBackend) UpdateStatus(context.Context, string, string, string, runtime.Object) error {
