@@ -191,6 +191,7 @@ type PostgreSQLBackend struct {
 	// reject too-old resume points without a DB round-trip.
 	cachedPurgeFloor atomic.Int64
 	walOnce          sync.Once
+	notifyOnce       sync.Once
 }
 
 var connValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
@@ -575,10 +576,13 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 	var rv, generation int64
 	var createdAt time.Time
 	err = p.db.QueryRowContext(ctx, `
-		INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references)
-		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb)
-		RETURNING resource_version, generation, created_at
-	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON).Scan(&rv, &generation, &createdAt)
+		WITH ins AS (
+			INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references)
+			VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb)
+			RETURNING resource_version, generation, created_at
+		)
+		SELECT resource_version, generation, created_at, pg_notify($11, $1) FROM ins
+	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, notifyChannel).Scan(&rv, &generation, &createdAt, new(sql.NullString))
 	if err != nil {
 		if pgErr, ok := err.(*pq.Error); ok && pgErr.Code == "23505" {
 			return storage.ErrAlreadyExists
@@ -911,10 +915,10 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 			WHERE kind = $8 AND namespace = $9 AND name = $10 AND resource_version = $11 AND deleted_at IS NULL
 			RETURNING resource_version, generation, uid, created_at
 		)
-		SELECT resource_version, generation, uid, created_at, true FROM upd
+		SELECT resource_version, generation, uid, created_at, true, pg_notify($12, $8) FROM upd
 		UNION ALL
-		SELECT 0, 0, '', NOW(), false WHERE NOT EXISTS (SELECT 1 FROM upd)
-	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, deletionTS, kind, namespace, name, rv).Scan(&newRV, &newGen, &uid, &createdAt, &updated)
+		SELECT 0, 0, '', NOW(), false, NULL WHERE NOT EXISTS (SELECT 1 FROM upd)
+	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, deletionTS, kind, namespace, name, rv, notifyChannel).Scan(&newRV, &newGen, &uid, &createdAt, &updated, new(sql.NullString))
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
@@ -971,10 +975,10 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 			WHERE kind = $2 AND namespace = $3 AND name = $4 AND resource_version = $5 AND deleted_at IS NULL
 			RETURNING resource_version
 		)
-		SELECT resource_version, true FROM upd
+		SELECT resource_version, true, pg_notify($6, $2) FROM upd
 		UNION ALL
-		SELECT 0, false WHERE NOT EXISTS (SELECT 1 FROM upd)
-	`, statusJSON, kind, namespace, name, rv).Scan(&newRV, &updated)
+		SELECT 0, false, NULL WHERE NOT EXISTS (SELECT 1 FROM upd)
+	`, statusJSON, kind, namespace, name, rv, notifyChannel).Scan(&newRV, &updated, new(sql.NullString))
 	if err != nil {
 		return fmt.Errorf("failed to update resource status: %w", err)
 	}
@@ -992,18 +996,20 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 }
 
 func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name string) error {
-	result, err := p.db.ExecContext(ctx, `
-		UPDATE resources
-		SET deleted_at = NOW(), resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
-		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL
-	`, kind, namespace, name)
+	err := p.db.QueryRowContext(ctx, `
+		WITH del AS (
+			UPDATE resources
+			SET deleted_at = NOW(), resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
+			WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL
+			RETURNING resource_version
+		)
+		SELECT pg_notify($4, $1) FROM del
+	`, kind, namespace, name, notifyChannel).Scan(new(sql.NullString))
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return storage.ErrNotFound
+		}
 		return fmt.Errorf("failed to delete resource: %w", err)
-	}
-
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
-		return storage.ErrNotFound
 	}
 
 	return nil

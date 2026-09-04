@@ -58,6 +58,28 @@ var (
 		},
 		[]string{"kind"},
 	)
+
+	notifyReceivedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ark_apiserver_notify_received_total",
+			Help: "Number of cross-replica change notifications received by the LISTEN loop",
+		},
+		[]string{"kind"},
+	)
+
+	notifyListenerConnected = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "ark_apiserver_notify_listener_connected",
+			Help: "1 while the cross-replica notify listener holds an active LISTEN connection, 0 otherwise",
+		},
+	)
+
+	notifyListenerReconnectsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "ark_apiserver_notify_listener_reconnects_total",
+			Help: "Number of times the notify listener lost its connection and retried",
+		},
+	)
 )
 
 func init() {
@@ -67,4 +89,7 @@ func init() {
 	prometheus.MustRegister(broadcasterEventsDropped)
 	prometheus.MustRegister(watcherRelistFailures)
 	prometheus.MustRegister(broadcasterActiveWatchers)
+	prometheus.MustRegister(notifyReceivedTotal)
+	prometheus.MustRegister(notifyListenerConnected)
+	prometheus.MustRegister(notifyListenerReconnectsTotal)
 }
