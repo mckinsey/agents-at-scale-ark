@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
-import type { Agent } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services';
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
@@ -15,7 +15,7 @@ vi.mock('@/providers/NamespaceProvider', () => ({
 }));
 
 const mockCopy = vi.fn();
-const mockGetAll = vi.fn();
+const mockList = vi.fn();
 
 vi.mock('copy-to-clipboard', () => ({
   default: (text: string) => {
@@ -26,13 +26,17 @@ vi.mock('copy-to-clipboard', () => ({
 
 vi.mock('@/lib/services', () => ({
   agentsService: {
-    getAll: (...args: unknown[]) => mockGetAll(...args),
+    list: (...args: unknown[]) => mockList(...args),
   },
 }));
 
-const mockAgents: Agent[] = [
-  { id: '1', name: 'test-agent', description: 'Test agent' } as Agent,
-  { id: '2', name: 'another-agent', description: 'Another agent' } as Agent,
+const mockAgents: AgentListItem[] = [
+  { id: '1', name: 'test-agent', description: 'Test agent' } as AgentListItem,
+  {
+    id: '2',
+    name: 'another-agent',
+    description: 'Another agent',
+  } as AgentListItem,
 ];
 
 const mockOnOpenChange = vi.fn();
@@ -49,7 +53,7 @@ const renderLoaded = async () => {
 describe('AgentsAPIDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetAll.mockResolvedValue(mockAgents);
+    mockList.mockResolvedValue(mockAgents);
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: { origin: 'http://localhost:3000' },
@@ -72,13 +76,13 @@ describe('AgentsAPIDialog', () => {
     renderDialog(false);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(mockGetAll).not.toHaveBeenCalled();
+    expect(mockList).not.toHaveBeenCalled();
   });
 
   it('fetches agents and selects the first one by default', async () => {
     await renderLoaded();
 
-    expect(mockGetAll).toHaveBeenCalled();
+    expect(mockList).toHaveBeenCalled();
     expect(screen.getByRole('combobox')).toHaveTextContent('test-agent');
   });
 
@@ -209,7 +213,7 @@ describe('AgentsAPIDialog', () => {
   });
 
   it('handles an empty agents list', async () => {
-    mockGetAll.mockResolvedValue([]);
+    mockList.mockResolvedValue([]);
     renderDialog(true);
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
