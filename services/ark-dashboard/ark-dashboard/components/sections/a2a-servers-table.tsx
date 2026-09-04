@@ -37,14 +37,28 @@ const COL = {
 
 const EMPTY = '—';
 
-function TruncatedCell({ value }: Readonly<{ value?: string | null }>) {
+interface TruncatedCellProps {
+  readonly value?: string | null;
+  readonly href: string;
+}
+
+function TruncatedCell({ value, href }: Readonly<TruncatedCellProps>) {
+  const link = (
+    <NamespacedLink
+      href={href}
+      tabIndex={-1}
+      className="text-fg-primary block w-full truncate">
+      {value || EMPTY}
+    </NamespacedLink>
+  );
+
   if (!value) {
-    return <span className="text-fg-primary">{EMPTY}</span>;
+    return link;
   }
 
   return (
     <TruncatedTooltip label={value} contentClassName="max-w-[420px] break-all">
-      <span className="text-fg-primary block w-full truncate">{value}</span>
+      {link}
     </TruncatedTooltip>
   );
 }
@@ -63,6 +77,7 @@ function A2AServerTableRow({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const name = server.name || 'Unnamed Server';
+  const detailHref = `/a2a/${encodeURIComponent(server.name)}`;
 
   return (
     <>
@@ -71,20 +86,22 @@ function A2AServerTableRow({
           <span aria-hidden className={rowHoverOverlayClass} />
           <TruncatedTooltip label={name}>
             <NamespacedLink
-              href={`/a2a/${encodeURIComponent(server.name)}`}
+              href={detailHref}
               className="text-fg-primary block w-full truncate after:absolute after:inset-0 after:content-['']">
               {name}
             </NamespacedLink>
           </TruncatedTooltip>
         </TableCell>
-        <TableCell size="small">
-          <TruncatedCell value={server.description} />
+        <TableCell size="small" className="relative z-10">
+          <TruncatedCell value={server.description} href={detailHref} />
         </TableCell>
-        <TableCell size="small" className={COL.address}>
-          <TruncatedCell value={server.address} />
+        <TableCell size="small" className={cn(COL.address, 'relative z-10')}>
+          <TruncatedCell value={server.address} href={detailHref} />
         </TableCell>
-        <TableCell size="small" className={COL.statusMessage}>
-          <TruncatedCell value={server.status_message} />
+        <TableCell
+          size="small"
+          className={cn(COL.statusMessage, 'relative z-10')}>
+          <TruncatedCell value={server.status_message} href={detailHref} />
         </TableCell>
         <TableCell size="small" className={COL.status}>
           <A2AServerStatus ready={server.ready} />
