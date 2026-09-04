@@ -247,6 +247,11 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 	}
 
 	r.RegisterTool(toolDef, executor)
+	// Keyed by the exposed name so lookups match the tool name the model calls, which
+	// differs from the CRD name for partial tools.
+	if tool.Spec.Approval != nil {
+		r.toolApproval[toolDef.Name] = tool.Spec.Approval
+	}
 	return nil
 }
 

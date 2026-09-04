@@ -1,0 +1,47 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    name: test-model
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [{"id": "gpt-4.1-mini", "object": "model", "owned_by": "openai"}]
+        }
+
+  # Catch-all for model probes and anything unmatched.
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  # First call: the model "follows" the injected instruction and asks to run the
+  # enumeration command. Because the tool is gated, the executor holds this call for
+  # approval and the query halts at input-required — there is never a second model call.
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'COMPLIANCE-AGENT-WITH-APPROVAL')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_exec",
+                "type": "function",
+                "function": {
+                  "name": "run-command",
+                  "arguments": "{\"command\": \"id && uname -a && env\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }

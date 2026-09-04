@@ -679,6 +679,11 @@ func (r *MCPServerReconciler) createOrUpdateSingleTool(ctx context.Context, tool
 		return false, fmt.Errorf("failed to get tool %s: %w", toolName, err)
 	}
 
+	// Approval is operator-owned, not discovered from the MCP server, so carry it
+	// across the rebuild. Without this the wholesale spec assignment below silently
+	// drops a human-approval gate on the next reconcile.
+	tool.Spec.Approval = existingTool.Spec.Approval
+
 	// Check if spec actually changed
 	toolSpecJSON, _ := json.Marshal(tool.Spec)
 	existingSpecJSON, _ := json.Marshal(existingTool.Spec)

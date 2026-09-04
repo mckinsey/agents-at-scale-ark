@@ -1,0 +1,97 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: prompt-injection-approval
+spec:
+  description: >
+    Reproduces pentest scenario 1 (indirect prompt injection running a bash command).
+    The model is driven to call a command-execution tool that is gated by human
+    approval; the query must halt at input-required and hold the call rather than
+    execute it. The ungated negative control (tool runs when not gated) is covered
+    deterministically by the Go unit test TestScenario1_UngatedExecToolRunsBothCommands.
+  timeouts:
+    apply: 30s
+    assert: 120s
+  steps:
+  - name: setup-rbac
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+  - name: wait-for-model
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    catch:
+    - script:
+        content: kubectl get model -n $NAMESPACE -o yaml 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: deploy-tool-and-agent
+    try:
+    - apply:
+        file: manifests/a02-command-tool.yaml
+    - apply:
+        file: manifests/a03-gated-agent.yaml
+    catch:
+    - events: {}
+
+  # The gate: the model asks to run the command, but because the tool is gated the
+  # query must stop at input-required and hold the call. Reaching input-required means
+  # the tool call was intercepted before execution — the command never ran.
+  - name: gated-query-halts-for-approval
+    try:
+    - apply:
+        file: manifests/a05-gated-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: gated-query
+        timeout: 90s
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: input-required
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: gated-query
+          status:
+            phase: input-required
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: gated-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

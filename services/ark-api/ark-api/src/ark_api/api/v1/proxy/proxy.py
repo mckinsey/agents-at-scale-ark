@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/proxy", tags=["proxy"])
 
 PROXY_TIMEOUT = float(os.getenv('PROXY_TIMEOUT', '10.0'))
+PROXY_MAX_UPLOAD_BYTES = int(os.getenv('PROXY_MAX_UPLOAD_BYTES', str(1024 * 1024)))
 
 # CRD configuration
 VERSION_A2A = "v1prealpha1"
@@ -103,6 +104,28 @@ async def _get_mcp_server_address(mcp_server_name: str,
         logger.error(f"Failed to resolve MCP server '{mcp_server_name}': {e}")
         raise HTTPException(status_code=400, detail=f"Invalid resource mcp {mcp_server_name}")
 
+async def _read_body_capped(request: Request, max_bytes: int) -> bytes:
+    """Read the request body, refusing anything over max_bytes.
+
+    The Content-Length check rejects an honest oversized upload before a byte is
+    buffered; the running total then covers a chunked or understated request, where
+    the header cannot be trusted.
+    """
+    detail = f"Upload exceeds the maximum allowed size of {max_bytes} bytes"
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > max_bytes:
+        raise HTTPException(status_code=413, detail=detail)
+
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail=detail)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 async def _proxy_request(
     target_url: str,
     request: Request,
@@ -128,6 +151,10 @@ async def _proxy_request(
         "connection", "keep-alive", "proxy-authenticate",
         "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"   
     ]
+    # Response-only: httpx decodes the body, so the upstream encoding and length no
+    # longer describe it. Dropping both lets Starlette recompute the length.
+    # Not applied to the request, where content-encoding still describes the body we forward.
+    resp_ignore_headers = ["content-encoding", "content-length"]
     
     
     for header_name, header_value in request.headers.items():
@@ -139,13 +166,16 @@ async def _proxy_request(
     if headers_to_forward:
         headers.update(headers_to_forward)
     
-    body = await request.body()
-    if file_gateway_server and file_gateway_path and is_file_gateway_upload(
-        file_gateway_server, request.method, file_gateway_path
-    ):
-        content_type = request.headers.get("content-type")
-        body = sanitize_file_gateway_upload(body, content_type)
-        headers["content-length"] = str(len(body))
+    is_upload = bool(
+        file_gateway_server
+        and file_gateway_path
+        and is_file_gateway_upload(file_gateway_server, request.method, file_gateway_path)
+    )
+    if is_upload:
+        body = await _read_body_capped(request, PROXY_MAX_UPLOAD_BYTES)
+        body = sanitize_file_gateway_upload(body, request.headers.get("content-type"))
+    else:
+        body = await request.body()
 
     timeout = httpx.Timeout(
         timeout=PROXY_TIMEOUT,
@@ -165,6 +195,7 @@ async def _proxy_request(
             response_headers = {
                 key: value for key, value in response.headers.items()
                 if key.lower() not in hop_by_hop_headers
+                and key.lower() not in resp_ignore_headers
             }
             # Only a 2xx body is the file; sanitizing a JSON error would mask its status.
             if (
@@ -185,8 +216,7 @@ async def _proxy_request(
                 content=response_content,
                 status_code=response.status_code,
                 headers=response_headers,
-                media_type=response_headers.get("content-type")
-                or response.headers.get("content-type"),
+                media_type=response_headers.get("content-type"),
             )
         except httpx.RequestError as e:
             logger.error(f"Proxy request failed: {e}")
@@ -254,14 +284,7 @@ async def proxy_server(
         additional_headers = {}
 
     logger.info(f"Forwarding at {request.method} {resource_url}")
-    file_gateway_server = server_name if resource == Resource.SERVICES else None
-    return await _proxy_request(
-        resource_url,
-        request,
-        additional_headers,
-        file_gateway_server=file_gateway_server,
-        file_gateway_path="",
-    )
+    return await _proxy_request(resource_url, request, additional_headers)
 
 
 @router.options("/{resource}/{server_name}/{path:path}")

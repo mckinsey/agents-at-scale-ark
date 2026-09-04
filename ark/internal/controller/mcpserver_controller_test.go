@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -253,5 +254,66 @@ var _ = Describe("MCPServer Controller", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "referenced-by-nothing", Namespace: "default"},
 		}
 		Expect(controllerReconciler.mapConfigMapToMCPServers(ctx, configMap)).To(BeEmpty())
+	})
+
+	It("preserves an operator-set approval gate across tool rediscovery", func() {
+		const toolName = "mcp-tool-with-approval"
+
+		controllerReconciler := &MCPServerReconciler{
+			Client:   k8sClient,
+			Scheme:   k8sClient.Scheme(),
+			Eventing: eventnoop.NewProvider(),
+		}
+
+		By("storing a discovered tool that an operator has gated")
+		gated := &arkv1alpha1.Tool{
+			ObjectMeta: metav1.ObjectMeta{Name: toolName, Namespace: "default"},
+			Spec: arkv1alpha1.ToolSpec{
+				Type:        "mcp",
+				Description: "write a file",
+				MCP: &arkv1alpha1.MCPToolRef{
+					MCPServerRef: arkv1alpha1.MCPServerRef{Name: "fg", Namespace: "default"},
+					ToolName:     "file-gateway-write-file",
+				},
+				Approval: &arkv1alpha1.ToolApprovalConfig{
+					Required:  true,
+					OnTimeout: "reject",
+					Timeout:   &metav1.Duration{Duration: 5 * time.Minute},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, gated)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, gated)).To(Succeed()) })
+
+		By("rediscovering the tool, which rebuilds the spec without any approval block")
+		rediscovered := &arkv1alpha1.Tool{
+			ObjectMeta: metav1.ObjectMeta{Name: toolName, Namespace: "default"},
+			Spec: arkv1alpha1.ToolSpec{
+				Type:        "mcp",
+				Description: "write a file, now with a new description",
+				MCP: &arkv1alpha1.MCPToolRef{
+					MCPServerRef: arkv1alpha1.MCPServerRef{Name: "fg", Namespace: "default"},
+					ToolName:     "file-gateway-write-file",
+				},
+			},
+		}
+		_, err := controllerReconciler.createOrUpdateSingleTool(ctx, rediscovered, toolName, "fg")
+		Expect(err).NotTo(HaveOccurred())
+
+		By("keeping the gate while still applying the discovered change")
+		stored := &arkv1alpha1.Tool{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: toolName, Namespace: "default"}, stored)).To(Succeed())
+		Expect(stored.Spec.Description).To(Equal("write a file, now with a new description"))
+		Expect(stored.Spec.Approval).NotTo(BeNil())
+		Expect(stored.Spec.Approval.Required).To(BeTrue())
+		Expect(stored.Spec.Approval.OnTimeout).To(Equal("reject"))
+		Expect(stored.Spec.Approval.Timeout.Duration).To(Equal(5 * time.Minute))
+
+		By("reporting no change when only the carried-over approval would differ")
+		unchanged := rediscovered.DeepCopy()
+		unchanged.Spec.Approval = nil
+		updated, err := controllerReconciler.createOrUpdateSingleTool(ctx, unchanged, toolName, "fg")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated).To(BeFalse())
 	})
 })
