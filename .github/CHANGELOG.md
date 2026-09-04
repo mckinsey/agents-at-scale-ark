@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.1.69-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.68...v0.1.69-rc) (2026-09-04)
+
+
+### Features
+
+* a2a tasks qbds update ([#3319](https://github.com/mckinsey/agents-at-scale-ark/issues/3319)) ([6637674](https://github.com/mckinsey/agents-at-scale-ark/commit/6637674cc1aa4ab837cbc2977d0a62113ad17547))
+* add marketplace install feat for Ark resources spec ([#3035](https://github.com/mckinsey/agents-at-scale-ark/issues/3035)) ([38658b2](https://github.com/mckinsey/agents-at-scale-ark/commit/38658b22ad94c9331518767ea6a6a3f2578568d0))
+* api keys QBDS update ([#3326](https://github.com/mckinsey/agents-at-scale-ark/issues/3326)) ([8e964ed](https://github.com/mckinsey/agents-at-scale-ark/commit/8e964ed1abfecb4f9ba731a276e734f34d8bde79))
+* **ark-api:** expose the MCP server address source ([#3188](https://github.com/mckinsey/agents-at-scale-ark/issues/3188)) ([f6ea1cf](https://github.com/mckinsey/agents-at-scale-ark/commit/f6ea1cfbc9f7699820b1996d0183103b20ad9402))
+* configurations feature integration ([#3242](https://github.com/mckinsey/agents-at-scale-ark/issues/3242)) ([0df80b8](https://github.com/mckinsey/agents-at-scale-ark/commit/0df80b818d87e78d1096594fc0c8e438ab18cb5c))
+* **controller:** instrument broker event-emitter drops and latency ([#3265](https://github.com/mckinsey/agents-at-scale-ark/issues/3265)) ([1ad7a7a](https://github.com/mckinsey/agents-at-scale-ark/commit/1ad7a7ac120fc85930d71aa8386042e6c0352663))
+* events qbds update ([#3148](https://github.com/mckinsey/agents-at-scale-ark/issues/3148)) ([159a486](https://github.com/mckinsey/agents-at-scale-ark/commit/159a486b73b7fca438e00d4972169be2cf19a9d2))
+* make ark-broker mandatory and drop its experimental feature flag ([#3273](https://github.com/mckinsey/agents-at-scale-ark/issues/3273)) ([76db1b1](https://github.com/mckinsey/agents-at-scale-ark/commit/76db1b1bd62d226d1aa272d000244fdd2307df44))
+* **sdk:** let executors stream tool calls to the broker ([#3266](https://github.com/mckinsey/agents-at-scale-ark/issues/3266)) ([476933d](https://github.com/mckinsey/agents-at-scale-ark/commit/476933d81f05caefbe7086fd759471c9fed01fda))
+
+
+### Bug Fixes
+
+* address CVEs from issue [#3379](https://github.com/mckinsey/agents-at-scale-ark/issues/3379) ([#3380](https://github.com/mckinsey/agents-at-scale-ark/issues/3380)) ([9d9b790](https://github.com/mckinsey/agents-at-scale-ark/commit/9d9b7901db113cd2dac53fb2b0bbe5473d529af7))
+* **apiserver:** raise the postgres floor to 15 and enforce it at startup ([#3169](https://github.com/mckinsey/agents-at-scale-ark/issues/3169)) ([a702de6](https://github.com/mckinsey/agents-at-scale-ark/commit/a702de68391ee183f67a62d6eab654d2d43f7361))
+* **apiserver:** scope Secret/ConfigMap access to least privilege ([#2685](https://github.com/mckinsey/agents-at-scale-ark/issues/2685)) ([#3250](https://github.com/mckinsey/agents-at-scale-ark/issues/3250)) ([62a8741](https://github.com/mckinsey/agents-at-scale-ark/commit/62a874163ecf6899a2bc0cda7fb7b9e701b206dd))
+* **ark-api,ark-sdk:** enforce user impersonation on remaining routes ([#3176](https://github.com/mckinsey/agents-at-scale-ark/issues/3176)) ([234854d](https://github.com/mckinsey/agents-at-scale-ark/commit/234854d3be0776ca56600875288e0dc1b3639b4e))
+* **ark-api:** stop storing authenticating user identity on MCP auth ([#3030](https://github.com/mckinsey/agents-at-scale-ark/issues/3030)) ([1240235](https://github.com/mckinsey/agents-at-scale-ark/commit/124023525af78e47747180a8bd365b9a7ca234d5))
+* **ark-broker:** cascade Query deletion to the sessions read model ([#3261](https://github.com/mckinsey/agents-at-scale-ark/issues/3261)) ([ed917ba](https://github.com/mckinsey/agents-at-scale-ark/commit/ed917ba7f726414722c986b79ab978a208051e4f))
+* **ark-sdk:** apply impersonation headers on read paths ([#3175](https://github.com/mckinsey/agents-at-scale-ark/issues/3175)) ([d2aedbd](https://github.com/mckinsey/agents-at-scale-ark/commit/d2aedbd41f9b3a9330551b8b47f62196c89d99b9)), closes [#3174](https://github.com/mckinsey/agents-at-scale-ark/issues/3174)
+* **ark-sdk:** resolve queries as the ServiceAccount named in spec.serviceAccount ([#3353](https://github.com/mckinsey/agents-at-scale-ark/issues/3353)) ([6c31369](https://github.com/mckinsey/agents-at-scale-ark/commit/6c313694ffc433c44ee38cb22d8a05d8cb13ec25))
+* **broker:** persist in-memory streams asynchronously rather than blocking the hot path ([#3272](https://github.com/mckinsey/agents-at-scale-ark/issues/3272)) ([293a762](https://github.com/mckinsey/agents-at-scale-ark/commit/293a762606e5a027cfb4eda2ca2a281668ef961a))
+* bump js-yaml to 4.3.2/3.15.2 for GHSA-2883-xcg3-v3hh (XRAY-1062554) ([#3313](https://github.com/mckinsey/agents-at-scale-ark/issues/3313)) ([c97561f](https://github.com/mckinsey/agents-at-scale-ark/commit/c97561f13251554949c124c776eef37c909266c1))
+* bump sharp to 0.35.4 for libheif RCE (XRAY-1063124) ([#3315](https://github.com/mckinsey/agents-at-scale-ark/issues/3315)) ([d5829f4](https://github.com/mckinsey/agents-at-scale-ark/commit/d5829f4d9185f80bc7520ec9178609dfcb1bd0e4))
+* **ci:** cache openapi-generator JAR to avoid Maven Central rate limits ([#3229](https://github.com/mckinsey/agents-at-scale-ark/issues/3229)) ([f7164b3](https://github.com/mckinsey/agents-at-scale-ark/commit/f7164b36ec74126645d62fbd3e539c434252d537))
+* CVEs 84292 84394 fast uri ([#3347](https://github.com/mckinsey/agents-at-scale-ark/issues/3347)) ([bb0bfe5](https://github.com/mckinsey/agents-at-scale-ark/commit/bb0bfe5a45f3dfd33b4cf21f12494823881e4898))
+* **dashboard:** disable save on invalid workflow YAML ([#3230](https://github.com/mckinsey/agents-at-scale-ark/issues/3230)) ([f247915](https://github.com/mckinsey/agents-at-scale-ark/commit/f247915a8fbda7d8295cbb2c722a9af36b2221ca)), closes [#3077](https://github.com/mckinsey/agents-at-scale-ark/issues/3077)
+* **dashboard:** highlight nested sidebar items on the active route ([#3292](https://github.com/mckinsey/agents-at-scale-ark/issues/3292)) ([630dfd2](https://github.com/mckinsey/agents-at-scale-ark/commit/630dfd21a1c3050d39f6be375423ff7cea773a32)), closes [#3003](https://github.com/mckinsey/agents-at-scale-ark/issues/3003)
+* **dashboard:** list pages N+1 fan-out to ark-api ([#3330](https://github.com/mckinsey/agents-at-scale-ark/issues/3330)) ([f062337](https://github.com/mckinsey/agents-at-scale-ark/commit/f06233753220c975bb902b4691a70624d609bb74))
+* **dashboard:** make MCP server description optional ([#3342](https://github.com/mckinsey/agents-at-scale-ark/issues/3342)) ([7e00825](https://github.com/mckinsey/agents-at-scale-ark/commit/7e00825b182d8a88e399adbf865624d8adb02de4)), closes [#3341](https://github.com/mckinsey/agents-at-scale-ark/issues/3341)
+* **dashboard:** return 502/504 instead of 500 when ark-api proxy fetch fails ([#3328](https://github.com/mckinsey/agents-at-scale-ark/issues/3328)) ([053a3a6](https://github.com/mckinsey/agents-at-scale-ark/commit/053a3a6b59428a40865c6b33ce2033d1ae5c24b9)), closes [#2582](https://github.com/mckinsey/agents-at-scale-ark/issues/2582)
+* **dashboard:** scope fetched and cached data by explicit namespace ([#3149](https://github.com/mckinsey/agents-at-scale-ark/issues/3149)) ([6eab730](https://github.com/mckinsey/agents-at-scale-ark/commit/6eab730e51e2dd86ad9e96dbe370ae14668c9300))
+* **dashboard:** scope URL query params by pathname and persist the ac… ([#3147](https://github.com/mckinsey/agents-at-scale-ark/issues/3147)) ([5d22971](https://github.com/mckinsey/agents-at-scale-ark/commit/5d2297154131df773dddf12991cff05069b1c94d))
+* **dashboard:** use MCP-appropriate placeholders in the MCP server form ([#3343](https://github.com/mckinsey/agents-at-scale-ark/issues/3343)) ([8263604](https://github.com/mckinsey/agents-at-scale-ark/commit/8263604a0a6846a3d2d17637dfc886e91e1083d6))
+* **deps:** bump fast-uri to 3.1.6 for CVE-2026-75899/75931/75975/76172 ([#3274](https://github.com/mckinsey/agents-at-scale-ark/issues/3274)) ([401c902](https://github.com/mckinsey/agents-at-scale-ark/commit/401c902c6a2c3179161dedac9092053ead3cbb9d)), closes [#3269](https://github.com/mckinsey/agents-at-scale-ark/issues/3269)
+* **deps:** bump golang.org/x/crypto to v0.56.0 for CVE-2026-56855 and CVE-2026-78662 ([#3373](https://github.com/mckinsey/agents-at-scale-ark/issues/3373)) ([af545a4](https://github.com/mckinsey/agents-at-scale-ark/commit/af545a4468b65baddb72b68eb92692099271f0d4))
+* don't misclassify completed external A2A tasks as HITL resumptions ([#3289](https://github.com/mckinsey/agents-at-scale-ark/issues/3289)) ([4ee7df0](https://github.com/mckinsey/agents-at-scale-ark/commit/4ee7df04e03d2e83e3223e6359ddc087e50b4eda)), closes [#3204](https://github.com/mckinsey/agents-at-scale-ark/issues/3204)
+* **executor:** forward team transcript to a2a members and drop duplicate selector input ([#3238](https://github.com/mckinsey/agents-at-scale-ark/issues/3238)) ([ed81ab9](https://github.com/mckinsey/agents-at-scale-ark/commit/ed81ab9f25a551e1b5ab8a0dcca4c6c264f35e2b))
+* **executors/completions:** A2A streaming surfaces cancellation cleanly ([#2201](https://github.com/mckinsey/agents-at-scale-ark/issues/2201)) ([560f30b](https://github.com/mckinsey/agents-at-scale-ark/commit/560f30b28d8bbbd8351058ff4f6fe492e9069e4d))
+* persist MemoryUnavailable and MemoryDegraded conditions on Query status ([#3277](https://github.com/mckinsey/agents-at-scale-ark/issues/3277)) ([722dfaf](https://github.com/mckinsey/agents-at-scale-ark/commit/722dfaff3626763b7e625cac792e962306d75d9c))
+* **postgresql:** emit resume-overlap rows as Modified, not Added ([#3262](https://github.com/mckinsey/agents-at-scale-ark/issues/3262)) ([7a617c1](https://github.com/mckinsey/agents-at-scale-ark/commit/7a617c16059b9aae8c2e86386b95762990c00655)), closes [#3246](https://github.com/mckinsey/agents-at-scale-ark/issues/3246)
+* **postgresql:** reject too-old watch resourceVersion with 410 ([#2680](https://github.com/mckinsey/agents-at-scale-ark/issues/2680) item 4) ([#3223](https://github.com/mckinsey/agents-at-scale-ark/issues/3223)) ([b7a207e](https://github.com/mckinsey/agents-at-scale-ark/commit/b7a207e6986411e4f115d9b75d935bca9a0b53dc))
+* refactor get agents and teams to use list  ([#3352](https://github.com/mckinsey/agents-at-scale-ark/issues/3352)) ([d1188e0](https://github.com/mckinsey/agents-at-scale-ark/commit/d1188e085addf300fe5077f2893618dd9eab387d)), closes [#3344](https://github.com/mckinsey/agents-at-scale-ark/issues/3344)
+* reliable ark-sdk wheel rebuilds  ([#3187](https://github.com/mckinsey/agents-at-scale-ark/issues/3187)) ([614b3aa](https://github.com/mckinsey/agents-at-scale-ark/commit/614b3aa1db187328760f07c8a0e9e9902533906e))
+* sanitize SVG uploads and force attachment downloads to prevent stored XSS ([#3291](https://github.com/mckinsey/agents-at-scale-ark/issues/3291)) ([182ab27](https://github.com/mckinsey/agents-at-scale-ark/commit/182ab2753f058fc34a9f3a51d3e75e4e2c3135a2))
+* upgrade Next.js to 16.3.3 (CVE-2026-75604) ([#3304](https://github.com/mckinsey/agents-at-scale-ark/issues/3304)) ([bc6daca](https://github.com/mckinsey/agents-at-scale-ark/commit/bc6daca3bb845e70ee99d871912883031ef99a51))
+* warn when a non-MCP tool is attached to an engine-backed agent ([#3300](https://github.com/mckinsey/agents-at-scale-ark/issues/3300)) ([0efc796](https://github.com/mckinsey/agents-at-scale-ark/commit/0efc7965f3e23554134e63b192bbeb9adab079b3))
+
+
+### Performance Improvements
+
+* **apiserver:** index the resource-version range queries on the PostgreSQL watch path ([#3033](https://github.com/mckinsey/agents-at-scale-ark/issues/3033)) ([1d17021](https://github.com/mckinsey/agents-at-scale-ark/commit/1d17021e84d9123f1fa63f03c266dbc911e03c53))
+
+
+### Documentation
+
+* add etcd/postgres storage backend migration procedure ([#3189](https://github.com/mckinsey/agents-at-scale-ark/issues/3189)) ([d861212](https://github.com/mckinsey/agents-at-scale-ark/commit/d8612123d9d84bc2b857c20857bc545b3a1e1e69))
+
 ## [0.1.68](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.68...v0.1.68) (2026-08-20)
 
 
