@@ -56,6 +56,8 @@ This captures `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, and
 
 If the Argo CRDs are not installed on the source cluster, those types are warned and skipped rather than failing the export.
 
+`clusterworkflowtemplates` are cluster-scoped, so they are only included in a cluster-wide export. When you scope the export to a namespace with `-n`, they are skipped — a namespace-scoped export captures that namespace's resources, not the cluster-wide templates shared across tenants.
+
 Useful flags:
 
 - `-n, --namespace <namespace>` — export from a single namespace

@@ -31,6 +31,11 @@ const RESOURCE_ORDER = [
 // rather than failing the whole export
 const OPTIONAL_RESOURCE_TYPES = new Set(ARGO_RESOURCE_TYPES);
 
+// cluster-scoped types have no namespace to filter on, so a namespace-scoped
+// export skips them rather than sweeping in cluster-wide resources shared across
+// tenants; they are captured by a cluster-wide export (no --namespace)
+const CLUSTER_SCOPED_TYPES = new Set(['clusterworkflowtemplates']);
+
 const SERVER_MANAGED_METADATA_FIELDS = [
   'resourceVersion',
   'uid',
@@ -175,6 +180,13 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
     for (const resourceType of resourceTypes) {
       if (!RESOURCE_ORDER.includes(resourceType)) {
         output.warning(`unknown resource type: ${resourceType}, skipping`);
+        continue;
+      }
+
+      if (options.namespace && CLUSTER_SCOPED_TYPES.has(resourceType)) {
+        output.info(
+          `skipping cluster-scoped ${resourceType} for namespace-scoped export`
+        );
         continue;
       }
 

@@ -92,6 +92,42 @@ describe('export command', () => {
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
   });
 
+  it('skips cluster-scoped types for a namespace-scoped export', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify(mockKubectlGetResponse),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-n',
+      'tenant-a',
+      '-o',
+      'test.yaml',
+    ]);
+
+    // clusterworkflowtemplates is cluster-scoped: never fetched when -n is set
+    expect(mockExeca).not.toHaveBeenCalledWith(
+      'kubectl',
+      expect.arrayContaining(['get', 'clusterworkflowtemplates']),
+      expect.any(Object)
+    );
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'skipping cluster-scoped clusterworkflowtemplates for namespace-scoped export'
+    );
+
+    // the namespaced Argo types are still fetched, scoped to the namespace
+    for (const resourceType of ['workflowtemplates', 'cronworkflows']) {
+      expect(mockExeca).toHaveBeenCalledWith(
+        'kubectl',
+        expect.arrayContaining(['get', resourceType, '-n', 'tenant-a']),
+        expect.any(Object)
+      );
+    }
+  });
+
   it('should export types specified in config in dependency order', async () => {
     mockExeca.mockResolvedValue({
       stdout: JSON.stringify(mockKubectlGetResponse),
