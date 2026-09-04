@@ -866,6 +866,15 @@ func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query)
 
 	log.Info("A2ATask status", "taskId", taskID, "phase", a2aTask.Status.Phase)
 
+	// Only HITL approval tasks are resumable. External A2A agent tasks (blocking or
+	// streaming) also reach PhaseCompleted and record their TaskID in query status, but
+	// they carry no approval metadata; resuming them fails with "no toolCalls in
+	// protocolMetadata". Distinguish by A2AServerRef, which approval tasks never set.
+	if !arka2a.IsHITLApprovalTask(&a2aTask) {
+		log.Info("A2ATask is an external A2A agent task, not a HITL resumption", "taskId", taskID)
+		return false, nil
+	}
+
 	// Check if task is completed (approval) or denied in a way the agent can react to
 	if a2aTask.Status.Phase == arka2a.PhaseCompleted {
 		log.Info("A2ATask completed, resuming", "taskId", taskID)
