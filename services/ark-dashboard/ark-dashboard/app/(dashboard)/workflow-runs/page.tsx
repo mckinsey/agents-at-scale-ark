@@ -1,16 +1,14 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
-
 import { PageHeader } from '@/components/common/page-header';
 import { SessionsSection } from '@/components/sections/sessions-section';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { mapArgoWorkflowsToSessions } from '@/lib/services/workflow-mapper';
 import { useWorkflows } from '@/lib/services/workflows-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export default function WorkflowRunsPage() {
-  const searchParams = useSearchParams();
-  const namespace = searchParams.get('namespace') || 'default';
+  const { namespace } = useNamespace();
   const { workflows } = useWorkflows(namespace);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);

@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import WorkflowRunsPage from '@/app/(dashboard)/workflow-runs/page';
 
-const mockUseSearchParams = vi.fn();
+const mockUseNamespace = vi.fn();
 
-vi.mock('next/navigation', () => ({
-  useSearchParams: () => mockUseSearchParams(),
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => mockUseNamespace(),
 }));
 
 vi.mock('@/components/common/page-header', () => ({
@@ -15,7 +15,9 @@ vi.mock('@/components/common/page-header', () => ({
 }));
 
 vi.mock('@/components/sections/sessions-section', () => ({
-  SessionsSection: () => <div data-testid="sessions-section">Sessions Section</div>,
+  SessionsSection: () => (
+    <div data-testid="sessions-section">Sessions Section</div>
+  ),
 }));
 
 const mockUseWorkflows = vi.fn();
@@ -36,50 +38,47 @@ const queryClient = new QueryClient({
   },
 });
 
+const renderPage = () =>
+  render(
+    <QueryClientProvider client={queryClient}>
+      <WorkflowRunsPage />
+    </QueryClientProvider>,
+  );
+
 describe('WorkflowRunsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseWorkflows.mockReturnValue({ workflows: [] });
+    mockUseNamespace.mockReturnValue({
+      namespace: 'test-namespace',
+      isNamespaceResolved: true,
+      isPending: false,
+      readOnlyMode: false,
+    });
   });
 
-  it('should use namespace from URL search params', () => {
-    mockUseSearchParams.mockReturnValue({
-      get: (key: string) => (key === 'namespace' ? 'test-namespace' : null),
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <WorkflowRunsPage />
-      </QueryClientProvider>,
-    );
+  it('should use the namespace resolved by the provider', () => {
+    renderPage();
 
     expect(mockUseWorkflows).toHaveBeenCalledWith('test-namespace');
   });
 
-  it('should use default namespace when not provided in URL', () => {
-    mockUseSearchParams.mockReturnValue({
-      get: () => null,
+  it('should not fall back to an assumed namespace before one resolves', () => {
+    mockUseNamespace.mockReturnValue({
+      namespace: '',
+      isNamespaceResolved: false,
+      isPending: true,
+      readOnlyMode: false,
     });
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <WorkflowRunsPage />
-      </QueryClientProvider>,
-    );
+    renderPage();
 
-    expect(mockUseWorkflows).toHaveBeenCalledWith('default');
+    expect(mockUseWorkflows).toHaveBeenCalledWith('');
+    expect(mockUseWorkflows).not.toHaveBeenCalledWith('default');
   });
 
   it('should render page header and sessions section', () => {
-    mockUseSearchParams.mockReturnValue({
-      get: () => null,
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <WorkflowRunsPage />
-      </QueryClientProvider>,
-    );
+    renderPage();
 
     expect(screen.getByTestId('page-header')).toBeInTheDocument();
     expect(screen.getByTestId('sessions-section')).toBeInTheDocument();
