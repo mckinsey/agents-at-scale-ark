@@ -10,6 +10,7 @@ import { A2AServersTable } from '@/components/sections/a2a-servers-table';
 import {
   LearnMoreButton,
   ResourceEmptyState,
+  ResourceErrorState,
 } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import { DOCS_URLS } from '@/lib/constants/docs';
@@ -74,7 +75,8 @@ export function A2AServersSection() {
     });
   };
 
-  const isEmpty = !isLoading && a2aServers.length === 0;
+  const hasError = Boolean(error);
+  const isEmpty = !isLoading && !hasError && a2aServers.length === 0;
 
   return (
     <div className="content-shell flex h-full w-full flex-col">
@@ -97,7 +99,15 @@ export function A2AServersSection() {
         </div>
       )}
 
-      {isEmpty && (
+      {!showLoading && hasError && (
+        <ResourceErrorState
+          className="mt-5"
+          title="Couldn't load A2A servers"
+          description={errorDescription(error)}
+        />
+      )}
+
+      {!showLoading && isEmpty && (
         <ResourceEmptyState
           icon={<Dns className="size-full" />}
           title="No A2A server yet"
@@ -118,7 +128,7 @@ export function A2AServersSection() {
         />
       )}
 
-      {!isLoading && !isEmpty && (
+      {!showLoading && !hasError && !isEmpty && (
         <div className="mt-5 min-h-0 flex-1 overflow-auto">
           <A2AServersTable servers={a2aServers} onDelete={handleDelete} />
         </div>

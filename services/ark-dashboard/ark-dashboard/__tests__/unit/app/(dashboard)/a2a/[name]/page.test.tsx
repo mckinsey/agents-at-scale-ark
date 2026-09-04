@@ -74,12 +74,12 @@ describe('A2AServerPage', () => {
     );
   });
 
-  it('renders the Identify card', () => {
+  it('renders the Identity card', () => {
     vi.mocked(useA2AServer).mockReturnValue(hookResult({ data: server }));
 
     render(<A2AServerPage />);
 
-    expect(screen.getByText('Identify')).toBeInTheDocument();
+    expect(screen.getByText('Identity')).toBeInTheDocument();
     expect(screen.getByText('Name')).toBeInTheDocument();
     expect(screen.getByText('ID')).toBeInTheDocument();
     expect(

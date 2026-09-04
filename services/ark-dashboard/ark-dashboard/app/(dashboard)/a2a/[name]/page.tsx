@@ -19,6 +19,13 @@ import { useA2AServer } from '@/lib/services/a2a-servers-hooks';
 
 const EMPTY = '—';
 
+function formatCondition(value?: boolean | null): string {
+  if (value === null || value === undefined) {
+    return EMPTY;
+  }
+  return value ? 'True' : 'False';
+}
+
 export default function A2AServerPage() {
   const params = useParams();
   const name = params.name as string;
@@ -98,7 +105,7 @@ export default function A2AServerPage() {
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto">
         <div className="flex flex-none flex-col gap-3 lg:flex-row">
-          <DetailCard title="Identify">
+          <DetailCard title="Identity">
             <DetailRow label="Name" value={server.name || EMPTY} />
             <DetailRow label="ID" value={server.id || EMPTY} />
             <DetailRow
@@ -122,12 +129,12 @@ export default function A2AServerPage() {
             />
             <DetailRow
               label="Ready"
-              value={status.ready ? 'True' : 'False'}
+              value={formatCondition(status.ready)}
               tooltip="Ready condition reported by the A2AServer resource"
             />
             <DetailRow
               label="Discovering"
-              value={status.discovering ? 'True' : 'False'}
+              value={formatCondition(status.discovering)}
               tooltip="Whether Ark is currently probing the agent card endpoints"
             />
             <DetailRow

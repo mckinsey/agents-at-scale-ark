@@ -39,11 +39,15 @@ function stringify(
   replacer?: (key: string, value: unknown) => unknown,
 ) {
   try {
-    if (
-      typeof value === 'string' &&
-      !(replacer && looksLikeJsonDocument(value))
-    ) {
-      return value;
+    if (typeof value === 'string') {
+      if (!(replacer && looksLikeJsonDocument(value))) {
+        return value;
+      }
+      try {
+        return JSON.stringify(JSON.parse(value), replacer, space) ?? value;
+      } catch {
+        return value;
+      }
     }
     return JSON.stringify(value, replacer, space) ?? String(value);
   } catch {
