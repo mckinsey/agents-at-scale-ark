@@ -1,11 +1,12 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
   useCreateConfiguration,
+  useGetAllConfigurations,
   useGetConfiguration,
   useUpdateConfiguration,
 } from '@/lib/services/configurations-hooks';
@@ -41,6 +42,16 @@ export function useConfigurationForm({
 
   const { data: configuration, isLoading } = useGetConfiguration(
     isEdit ? configurationName : undefined,
+  );
+
+  const { data: allConfigurations } = useGetAllConfigurations();
+  const aliasOptions = useMemo(
+    () =>
+      (allConfigurations ?? [])
+        .map(item => item.name)
+        .filter(name => name !== configurationName)
+        .sort((a, b) => a.localeCompare(b)),
+    [allConfigurations, configurationName],
   );
 
   const { reset } = form;
@@ -86,5 +97,6 @@ export function useConfigurationForm({
     loading: isEdit && isLoading,
     saving: createConfiguration.isPending || updateConfiguration.isPending,
     onSubmit,
+    aliasOptions,
   };
 }

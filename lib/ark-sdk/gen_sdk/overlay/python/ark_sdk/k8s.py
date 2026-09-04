@@ -14,11 +14,13 @@ from kubernetes import client as sync_client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
 
-from ark_sdk.annotations import ARK_ANNOTATION_PREFIX, filter_ark_annotations
-from ark_sdk.labels import (
-    ARK_RESOURCE_TYPE_LABEL,
-    CONFIGURATION_LABEL_SELECTOR,
+from ark_sdk.annotations import (
+    ARK_ANNOTATION_PREFIX,
+    ARK_RESOURCE_TYPE_ANNOTATION,
     CONFIGURATION_RESOURCE_TYPE,
+    filter_ark_annotations,
+)
+from ark_sdk.labels import (
     labels_to_tags,
     strip_tag_labels,
     tags_to_labels,
@@ -377,7 +379,6 @@ class ConfigurationClient:
     ) -> Tuple[Dict[str, str], Dict[str, str]]:
         """Build the labels and annotations this feature owns, preserving all others."""
         k8s_labels = strip_tag_labels(existing_labels)
-        k8s_labels[ARK_RESOURCE_TYPE_LABEL] = CONFIGURATION_RESOURCE_TYPE
         k8s_labels.update(tags_to_labels(labels))
 
         annotations = {
@@ -385,6 +386,7 @@ class ConfigurationClient:
             for key, value in (existing_annotations or {}).items()
             if key not in (DESCRIPTION_ANNOTATION, ALIAS_ANNOTATION)
         }
+        annotations[ARK_RESOURCE_TYPE_ANNOTATION] = CONFIGURATION_RESOURCE_TYPE
         if description:
             annotations[DESCRIPTION_ANNOTATION] = description
         if alias:
@@ -395,27 +397,28 @@ class ConfigurationClient:
     async def _read_configuration(self, v1, name: str):
         """Read a ConfigMap, refusing any that Ark does not own as a configuration."""
         config_map = await v1.read_namespaced_config_map(name=name, namespace=self.namespace)
-        labels = config_map.metadata.labels or {}
-        if labels.get(ARK_RESOURCE_TYPE_LABEL) != CONFIGURATION_RESOURCE_TYPE:
+        annotations = config_map.metadata.annotations or {}
+        if annotations.get(ARK_RESOURCE_TYPE_ANNOTATION) != CONFIGURATION_RESOURCE_TYPE:
             raise ApiException(status=404, reason=f"Configuration '{name}' not found")
         return config_map
 
     async def list_configurations(self, label_selector: Optional[str] = None):
         """List all configurations in namespace."""
-        selector = CONFIGURATION_LABEL_SELECTOR
-        if label_selector:
-            selector = f"{selector},{label_selector}"
-
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             config_maps = await v1.list_namespaced_config_map(
                 namespace=self.namespace,
-                label_selector=selector
+                label_selector=label_selector
             )
 
-            items = [self._to_configuration(config_map) for config_map in config_maps.items]
+            items = [
+                self._to_configuration(config_map)
+                for config_map in config_maps.items
+                if (config_map.metadata.annotations or {}).get(ARK_RESOURCE_TYPE_ANNOTATION)
+                == CONFIGURATION_RESOURCE_TYPE
+            ]
             return {"items": items, "count": len(items)}
 
     async def get_configuration(self, name: str):

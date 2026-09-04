@@ -3,7 +3,6 @@
 import { useId } from 'react';
 
 import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
-import { Info } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,13 +16,9 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
+import { AliasField } from './alias-field';
 import { LabelsField } from './labels-field';
 import { type ConfigurationFormProps } from './types';
 import { useConfigurationForm } from './use-configuration-form';
@@ -44,11 +39,12 @@ export function ConfigurationForm({
   const { readOnlyMode } = useNamespace();
   const nameFieldId = useId();
   const valueFieldId = useId();
-  const { form, isEdit, loading, saving, onSubmit } = useConfigurationForm({
-    mode,
-    configurationName,
-    onSuccess,
-  });
+  const { form, isEdit, loading, saving, onSubmit, aliasOptions } =
+    useConfigurationForm({
+      mode,
+      configurationName,
+      onSuccess,
+    });
 
   const isDisabled = saving || loading || readOnlyMode;
   const heading = isEdit ? 'Edit configuration' : 'New configuration';
@@ -168,34 +164,15 @@ export function ConfigurationForm({
               control={form.control}
               name="alias"
               render={({ field, fieldState }) => (
-                <FieldSet className="gap-2">
-                  <FieldTitle className="flex items-center gap-1.5">
-                    Alias
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="What is an alias?"
-                          className="text-fg-secondary hover:text-fg-primary">
-                          <Info className="size-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-72">
-                        A shorter label shown alongside the name in lists.
-                        Display only — resources still reference the
-                        configuration by its name.
-                      </TooltipContent>
-                    </Tooltip>
-                  </FieldTitle>
-                  <Input
-                    variant="inline"
-                    placeholder="e.g., github-mcp"
-                    disabled={isDisabled}
-                    aria-invalid={!!fieldState.error}
-                    {...field}
-                  />
-                  <FieldError>{fieldState.error?.message}</FieldError>
-                </FieldSet>
+                <AliasField
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  options={aliasOptions}
+                  disabled={isDisabled}
+                  invalid={!!fieldState.error}
+                  error={fieldState.error?.message}
+                />
               )}
             />
 
