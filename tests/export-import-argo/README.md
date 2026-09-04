@@ -16,8 +16,14 @@ alongside Ark-native resources.
 ## Not covered
 - The "Argo CRDs not installed" warn-and-skip path is covered by the ark-cli
   unit tests (`tools/ark-cli/src/commands/export/index.spec.ts`); it cannot be
-  exercised deterministically here because Argo CRDs are cluster-scoped and this
-  suite runs in parallel with other tests that may install them.
+  exercised deterministically here because the Argo CRDs are cluster-scoped.
+
+## Isolation
+- Runs with `concurrent: false`. It installs the argo-workflows chart (whose
+  Argo CRDs are cluster-scoped and Helm-owned) and creates a cluster-scoped
+  `ClusterWorkflowTemplate`. Running it alongside `argo-ark-query`, which also
+  installs the chart, collides on the shared CRD ownership metadata. Serializing
+  keeps each Argo install in its own window.
 
 ## Requirements
 - Installs the argo-workflows chart in single-namespace mode to register the

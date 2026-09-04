@@ -9,6 +9,7 @@ spec:
     Argo resources (ClusterWorkflowTemplate, WorkflowTemplate, CronWorkflow),
     exports them, deletes the originals, and re-imports, asserting every kind is
     captured in dependency order and lands back on the cluster.
+  concurrent: false
   timeouts:
     apply: 60s
     assert: 120s
