@@ -20,24 +20,17 @@ export type MemoryUpdateRequest = components['schemas']['MemoryUpdateRequest'];
 // For UI compatibility, we'll map the API response to include an id field
 export type Memory = MemoryDetailResponse & { id: string };
 
+// List-response shape, no detail-only fields (#2581)
+export type MemoryListItem = MemoryResponse & { id: string };
+
 // CRUD Operations
 export const memoriesService = {
-  // Get all memories
-  async getAll(namespace: string): Promise<Memory[]> {
+  async getAll(namespace: string): Promise<MemoryListItem[]> {
     const items = await fetchAllPages<MemoryResponse>(`/api/v1/memories`, {
       namespace,
     });
 
-    // Map the response items to include id for UI compatibility
-    const memories = await Promise.all(
-      items.map(async item => {
-        // Fetch detailed info for each memory to get full data
-        const detailed = await memoriesService.getByName(namespace, item.name);
-        return detailed!;
-      }),
-    );
-
-    return memories;
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get a single memory by name
