@@ -102,6 +102,32 @@ You can run the same hooks across the repository at any time:
 pre-commit run --all-files
 ```
 
+### Developer Certificate of Origin
+
+We require that all contributions comply with the [Developer Certificate of Origin (DCO)](https://developercertificate.org/). This certifies that the contributor wrote or otherwise has the right to submit their contribution.
+
+All commits must be signed off by including a `Signed-off-by` line in the commit message:
+```
+This is my commit message
+
+Signed-off-by: Random J Developer <random@developer.example.org>
+```
+
+The sign-off can be added automatically to your commit message using the `-s` option:
+```bash
+git commit -s -m "This is my commit message"
+```
+
+To avoid needing to remember the `-s` flag on every commit, you might like to set up a [git alias](https://git-scm.com/book/en/v2/Git-Basics-Git-Aliases) for `git commit -s`. Alternatively, run `make sign-off` to set up a [`commit-msg` Git hook](https://git-scm.com/docs/githooks#_commit_msg). The hook signs off all commits created in the Ark repository, including merge commits.
+
+If only the latest unpushed commit is missing a sign-off, amend it:
+
+```bash
+git commit --amend --signoff --no-edit
+```
+
+For pushed or multiple unsigned commits, follow the "Rebase the branch" instructions on the DCO GitHub Check. Rebasing rewrites commit history, so coordinate with collaborators before updating a shared branch and only sign off commits that you have the right to submit.
+
 ## Guidelines for contributing developers
 
 Note that any contributions you make will be under the Agents At Scale [license](./LICENSE).

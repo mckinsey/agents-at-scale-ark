@@ -79,3 +79,19 @@ clean:
 status: # HELP: Show status of localhost-gateway installation
 	@helm list -n ark-system -f "localhost-gateway|nginx-gateway-fabric"
 	@helm get metadata localhost-gateway -n ark-system 2>/dev/null || echo "localhost-gateway not installed"
+
+.PHONY: sign-off
+sign-off: # HELP: install a commit hook that adds the DCO sign-off
+	@test ! -e .git/hooks/commit-msg || { \
+		echo ".git/hooks/commit-msg already exists; not overwriting it"; \
+		exit 1; \
+	}
+	@printf '%s\n' \
+		'#!/bin/sh' \
+		'name=$$(git config user.name)' \
+		'email=$$(git config user.email)' \
+		'test -n "$$name" -a -n "$$email" || { echo "Git user name and email are required" >&2; exit 1; }' \
+		'git interpret-trailers --if-exists addIfDifferent --trailer "Signed-off-by: $$name <$$email>" --in-place "$$1"' \
+		> .git/hooks/commit-msg
+	@chmod +x .git/hooks/commit-msg
+	@echo "Installed .git/hooks/commit-msg"
