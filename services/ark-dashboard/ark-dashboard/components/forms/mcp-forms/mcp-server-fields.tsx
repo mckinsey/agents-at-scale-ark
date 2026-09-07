@@ -67,7 +67,7 @@ export function McpServerFields({
               <Input
                 variant="inline"
                 {...field}
-                placeholder="e.g., gpt-4-turbo"
+                placeholder="e.g., github-remote-mcp"
                 disabled={nameDisabled}
                 aria-invalid={!!fieldState.error}
               />
@@ -132,6 +132,8 @@ export function McpServerFields({
               deleteRow={deleteRow}
               nameError={headerErrors[row.key]?.nameError}
               valueError={headerErrors[row.key]?.valueError}
+              namePlaceholder="e.g., Authorization"
+              valuePlaceholder="e.g., Bearer token"
             />
           ))}
           <Button
