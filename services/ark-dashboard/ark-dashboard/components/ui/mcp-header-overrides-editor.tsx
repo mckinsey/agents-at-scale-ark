@@ -1,24 +1,12 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { Add, Info, OpenInNew, Trash, VpnKey, Warning } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
-import {
-  COLUMN_LABEL_CLASS,
-  LabeledField,
-} from '@/components/ui/labeled-field';
-import {
-  GHOST_TRIGGER,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectItemText,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { COLUMN_LABEL_CLASS } from '@/components/ui/labeled-field';
 import {
   Tooltip,
   TooltipContent,
@@ -29,7 +17,6 @@ import { useMcpServerHeaders } from '@/lib/hooks/use-mcp-server-headers';
 import { cn } from '@/lib/utils';
 import {
   type McpHeaderRow,
-  type McpHeaderSource,
   type McpOverrideGroup,
   addHeaderRow,
   countHeaders,
@@ -44,18 +31,18 @@ import { McpServerSelect } from './mcp-server-select';
 const HEADERS_TOOLTIP_TEXT =
   'Header overrides are added to every call this agent makes to a matching MCP server. Use a secret for tokens so the value is never stored on the agent itself. A query can override any header set here.';
 
-const SOURCE_ITEMS: { value: McpHeaderSource; label: string }[] = [
-  { value: 'secretKeyRef', label: 'Secret' },
-  { value: 'value', label: 'Plain value' },
-  { value: 'queryParameterRef', label: 'Query parameter' },
-  { value: 'configMapKeyRef', label: 'ConfigMap' },
-];
-
-const inputClass =
-  'text-fg-primary placeholder:text-fg-secondary min-w-0 flex-1 bg-transparent text-sm leading-4 tracking-[-0.112px] outline-none disabled:cursor-not-allowed disabled:opacity-50';
-
 const underlineClass =
   'focus-within:border-b-stroke-status-focus flex h-10 min-w-0 items-center border-b border-white/[0.16]';
+
+function describeStoredOverride(header: McpHeaderRow): string {
+  if (header.source === 'configMapKeyRef') {
+    return `ConfigMap · ${header.configMapName}/${header.configMapKey}`;
+  }
+  if (header.source === 'queryParameterRef') {
+    return `Query parameter · ${header.queryParameterName}`;
+  }
+  return 'Plain value';
+}
 
 export interface McpHeaderOverridesEditorProps {
   readonly groups: McpOverrideGroup[];
@@ -72,10 +59,9 @@ export function McpHeaderOverridesEditor({
   disabled,
   className,
 }: McpHeaderOverridesEditorProps) {
-  const { options, secretNames, loaded: secretsLoaded } = useMcpSecretOptions();
+  const { options, loaded: secretsLoaded } = useMcpSecretOptions();
   const { headerNamesByServer, allHeaderNames } =
     useMcpServerHeaders(serverNames);
-  const [advancedRows, setAdvancedRows] = useState<Record<string, boolean>>({});
 
   const declaredNamesFor = useCallback(
     (header: McpHeaderRow) =>
@@ -83,16 +69,6 @@ export function McpHeaderOverridesEditor({
         ? (headerNamesByServer[header.serverName] ?? [])
         : allHeaderNames,
     [headerNamesByServer, allHeaderNames],
-  );
-
-  const revealAdvanced = useCallback((headerId: string) => {
-    setAdvancedRows(prev => ({ ...prev, [headerId]: true }));
-  }, []);
-
-  const isAdvanced = useCallback(
-    (header: McpHeaderRow) =>
-      header.source !== 'secretKeyRef' || advancedRows[header.id] === true,
-    [advancedRows],
   );
 
   const updateHeader = useCallback(
@@ -144,193 +120,6 @@ export function McpHeaderOverridesEditor({
       ),
     [groups],
   );
-
-  const secretItems = useMemo(
-    () => secretNames.map(name => ({ value: name, label: name })),
-    [secretNames],
-  );
-
-  const renderValueFields = (group: McpOverrideGroup, header: McpHeaderRow) => {
-    if (header.source === 'secretKeyRef') {
-      const keyItems = options
-        .filter(option => option.secretName === header.secretName)
-        .map(option => ({ value: option.secretKey, label: option.secretKey }));
-      const secretMissing =
-        secretsLoaded &&
-        !!header.secretName &&
-        !secretNames.includes(header.secretName);
-
-      return (
-        <>
-          <LabeledField id={`mcp-${header.id}-secret-name`} label="Secret">
-            <Select
-              items={secretItems}
-              value={header.secretName || undefined}
-              onValueChange={value =>
-                updateHeader(group.id, header.id, {
-                  secretName: String(value),
-                  secretKey: '',
-                })
-              }
-              disabled={disabled}>
-              <SelectTrigger
-                id={`mcp-${header.id}-secret-name`}
-                className={cn(GHOST_TRIGGER, 'h-10 w-full min-w-0')}>
-                <SelectValue placeholder="Select secret" />
-              </SelectTrigger>
-              <SelectContent className="bg-fill-onsurface-ui-2">
-                {secretItems.map(item => (
-                  <SelectItem key={item.value} value={item.value}>
-                    <SelectItemText>{item.label}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </LabeledField>
-
-          <LabeledField id={`mcp-${header.id}-secret-key`} label="Key in secret">
-            <Select
-              items={keyItems}
-              value={header.secretKey || undefined}
-              onValueChange={value =>
-                updateHeader(group.id, header.id, { secretKey: String(value) })
-              }
-              disabled={disabled || !header.secretName}>
-              <SelectTrigger
-                id={`mcp-${header.id}-secret-key`}
-                className={cn(GHOST_TRIGGER, 'h-10 w-full min-w-0')}>
-                <SelectValue placeholder="Select key" />
-              </SelectTrigger>
-              <SelectContent className="bg-fill-onsurface-ui-2">
-                {keyItems.map(item => (
-                  <SelectItem key={item.value} value={item.value}>
-                    <SelectItemText>{item.label}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </LabeledField>
-
-          {secretMissing && (
-            <span className="text-status-error col-span-2 inline-flex items-center gap-1 text-xs">
-              <IconShell size="sm" className="text-status-error">
-                <Warning />
-              </IconShell>
-              Secret &ldquo;{header.secretName}&rdquo; not found in this
-              namespace
-            </span>
-          )}
-        </>
-      );
-    }
-
-    if (header.source === 'value') {
-      const sensitive = isSensitiveHeaderName(header.name);
-      return (
-        <>
-          <LabeledField
-            id={`mcp-${header.id}-value`}
-            label="Value"
-            className="col-span-2">
-            <div className={underlineClass}>
-              <input
-                id={`mcp-${header.id}-value`}
-                type="text"
-                value={header.value}
-                onChange={event =>
-                  updateHeader(group.id, header.id, {
-                    value: event.target.value,
-                  })
-                }
-                placeholder="Header value"
-                disabled={disabled}
-                className={inputClass}
-              />
-            </div>
-          </LabeledField>
-          {sensitive && (
-            <span className="text-status-warning col-span-2 inline-flex items-center gap-1 text-xs">
-              <IconShell size="sm" className="text-status-warning">
-                <Warning />
-              </IconShell>
-              Stored in plain text on the agent. Use a secret for credentials.
-            </span>
-          )}
-        </>
-      );
-    }
-
-    if (header.source === 'queryParameterRef') {
-      return (
-        <>
-          <LabeledField
-            id={`mcp-${header.id}-query-parameter`}
-            label="Query parameter name"
-            className="col-span-2">
-            <div className={underlineClass}>
-              <input
-                id={`mcp-${header.id}-query-parameter`}
-                type="text"
-                value={header.queryParameterName}
-                onChange={event =>
-                  updateHeader(group.id, header.id, {
-                    queryParameterName: event.target.value,
-                  })
-                }
-                placeholder="parameter_name"
-                disabled={disabled}
-                className={inputClass}
-              />
-            </div>
-          </LabeledField>
-          <span className="text-fg-tertiary col-span-2 text-xs">
-            Value comes from a query parameter at run time.
-          </span>
-        </>
-      );
-    }
-
-    return (
-      <>
-        <LabeledField id={`mcp-${header.id}-configmap-name`} label="ConfigMap">
-          <div className={underlineClass}>
-            <input
-              id={`mcp-${header.id}-configmap-name`}
-              type="text"
-              value={header.configMapName}
-              onChange={event =>
-                updateHeader(group.id, header.id, {
-                  configMapName: event.target.value,
-                })
-              }
-              placeholder="ConfigMap name"
-              disabled={disabled}
-              className={inputClass}
-            />
-          </div>
-        </LabeledField>
-        <LabeledField
-          id={`mcp-${header.id}-configmap-key`}
-          label="Key in ConfigMap">
-          <div className={underlineClass}>
-            <input
-              id={`mcp-${header.id}-configmap-key`}
-              type="text"
-              value={header.configMapKey}
-              onChange={event =>
-                updateHeader(group.id, header.id, {
-                  configMapKey: event.target.value,
-                })
-              }
-              placeholder="Key"
-              disabled={disabled}
-              className={inputClass}
-            />
-          </div>
-        </LabeledField>
-      </>
-    );
-  };
 
   return (
     <div className={cn('flex flex-col gap-5', className)}>
@@ -445,31 +234,7 @@ export function McpHeaderOverridesEditor({
                 </div>
 
                 <div className="flex min-w-0 flex-1 items-center">
-                  {isAdvanced(header) ? (
-                    <Select
-                      items={SOURCE_ITEMS}
-                      value={header.source}
-                      onValueChange={value =>
-                        updateHeader(group.id, header.id, {
-                          source: String(value) as McpHeaderSource,
-                        })
-                      }
-                      disabled={disabled}>
-                      <SelectTrigger
-                        id={`mcp-${header.id}-source`}
-                        aria-label="Header override"
-                        className={cn(GHOST_TRIGGER, 'h-10 w-full min-w-0')}>
-                        <SelectValue placeholder="Select source" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-fill-onsurface-ui-2">
-                        {SOURCE_ITEMS.map(item => (
-                          <SelectItem key={item.value} value={item.value}>
-                            <SelectItemText>{item.label}</SelectItemText>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
+                  {header.source === 'secretKeyRef' ? (
                     <HeaderOverrideSelect
                       hideLabel
                       id={`mcp-${header.id}-override`}
@@ -485,9 +250,14 @@ export function McpHeaderOverridesEditor({
                           secretKey,
                         })
                       }
-                      onSelectAdvanced={() => revealAdvanced(header.id)}
                       className="w-full"
                     />
+                  ) : (
+                    <div className={cn(underlineClass, 'w-full')}>
+                      <span className="text-fg-secondary min-w-0 truncate text-sm">
+                        {describeStoredOverride(header)}
+                      </span>
+                    </div>
                   )}
                 </div>
 
@@ -503,11 +273,16 @@ export function McpHeaderOverridesEditor({
                 </div>
               </div>
 
-              {isAdvanced(header) && (
-                <div className="grid grid-cols-2 items-start gap-3">
-                  {renderValueFields(group, header)}
-                </div>
-              )}
+              {header.source === 'value' &&
+                isSensitiveHeaderName(header.name) && (
+                  <span className="text-status-warning inline-flex items-center gap-1 text-xs">
+                    <IconShell size="sm" className="text-status-warning">
+                      <Warning />
+                    </IconShell>
+                    Stored in plain text on the agent. Use a secret for
+                    credentials.
+                  </span>
+                )}
             </div>
           ))}
 

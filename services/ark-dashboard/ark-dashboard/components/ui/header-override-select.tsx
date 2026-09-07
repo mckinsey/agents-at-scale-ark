@@ -20,10 +20,6 @@ import {
 } from '@/lib/hooks/use-mcp-secret-options';
 import { cn } from '@/lib/utils';
 
-export const ADVANCED_OPTION_VALUE = '__advanced__';
-
-const ADVANCED_OPTION_LABEL = 'Advanced…';
-
 export interface HeaderOverrideSelectProps {
   readonly id: string;
   readonly options: McpSecretOption[];
@@ -32,7 +28,6 @@ export interface HeaderOverrideSelectProps {
   readonly secretKey: string;
   readonly disabled?: boolean;
   readonly onSelectSecret: (secretName: string, secretKey: string) => void;
-  readonly onSelectAdvanced: () => void;
   readonly className?: string;
   readonly hideLabel?: boolean;
 }
@@ -45,18 +40,15 @@ export function HeaderOverrideSelect({
   secretKey,
   disabled,
   onSelectSecret,
-  onSelectAdvanced,
   className,
   hideLabel,
 }: HeaderOverrideSelectProps) {
   const items = useMemo(
-    () => [
-      ...options.map(option => ({
+    () =>
+      options.map(option => ({
         value: option.value,
         label: option.label,
       })),
-      { value: ADVANCED_OPTION_VALUE, label: ADVANCED_OPTION_LABEL },
-    ],
     [options],
   );
 
@@ -66,10 +58,6 @@ export function HeaderOverrideSelect({
   const isMissing = loaded && hasSelection && !isKnown;
 
   const handleChange = (next: string) => {
-    if (next === ADVANCED_OPTION_VALUE) {
-      onSelectAdvanced();
-      return;
-    }
     const option = options.find(item => item.value === next);
     if (option) onSelectSecret(option.secretName, option.secretKey);
   };
