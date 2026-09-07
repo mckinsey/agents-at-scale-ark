@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { retryQueryHandler } from '@/lib/utils/query-retry';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { A2AServersService } from './a2a-servers';
@@ -14,6 +15,7 @@ export function useListA2AServers() {
     queryKey: [A2A_SERVERS_QUERY_KEY, namespace],
     queryFn: () => A2AServersService.getAll(namespace),
     enabled: Boolean(namespace),
+    retry: retryQueryHandler,
   });
 }
 
@@ -24,6 +26,7 @@ export function useA2AServer(name: string) {
     queryKey: [A2A_SERVERS_QUERY_KEY, name, namespace],
     queryFn: () => A2AServersService.get(namespace, name),
     enabled: Boolean(name && namespace),
+    retry: retryQueryHandler,
   });
 }
 
