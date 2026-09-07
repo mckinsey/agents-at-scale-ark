@@ -24,7 +24,7 @@ from .core.config import setup_logging
 from .auth.middleware import AuthMiddleware
 from .auth.constants import AuthMode
 from .auth.config import get_public_routes
-from .middleware import ReadOnlyMiddleware
+from .middleware import CacheControlMiddleware, ReadOnlyMiddleware
 from .openapi.security import add_security_to_openapi
 from .api.v1.a2a_gateway import get_a2a_manager
 from ark_sdk.k8s import init_k8s
@@ -235,8 +235,11 @@ async def session_aware_middleware(request: Request, call_next):
     logger.info(
         f"Response: {request.method} {request.url.path} - {session_info} - Status: {response.status_code} - Time: {process_time:.3f}s"
     )
-    
+
     return response
+
+
+app.add_middleware(CacheControlMiddleware)
 
 
 # Custom exception handler for validation errors
