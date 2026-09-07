@@ -8,7 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
-from helpers.k8s import DEFAULT_NAMESPACE
+from shared.k8s import DEFAULT_NAMESPACE
 from pages.models_page import MOCK_LLM_MODEL_NAME
 
 logger = logging.getLogger(__name__)

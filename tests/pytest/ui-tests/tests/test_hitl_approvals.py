@@ -12,7 +12,7 @@ import pytest
 from playwright.sync_api import Page
 
 from conftest import get_resource, list_resources, wait_for_resource
-from helpers.k8s import apply_yaml, delete_resource
+from shared.k8s import apply_yaml, delete_resource
 from pages.a2a_tasks_page import A2ATasksPage
 from pages.hitl_approvals_page import HitlApprovalsPage
 from pages.sessions_page import SessionsPage
