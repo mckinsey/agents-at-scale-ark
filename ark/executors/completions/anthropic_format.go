@@ -144,6 +144,16 @@ func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthr
 		}
 	}
 
+	merged := make([]collectedMessage, 0, len(collected))
+	for _, m := range collected {
+		if n := len(merged); n > 0 && merged[n-1].role == m.role {
+			merged[n-1].text = merged[n-1].text + "\n\n" + m.text
+			continue
+		}
+		merged = append(merged, m)
+	}
+	collected = merged
+
 	cacheIndex := -1
 	if len(collected) >= 2 {
 		cacheIndex = len(collected) - 2

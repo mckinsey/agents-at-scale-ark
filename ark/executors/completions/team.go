@@ -332,7 +332,7 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 
 func teamMemberHistory(history []Message, userInput Message, turns []Message, turn int) []Message {
 	if turn == 0 {
-		return history
+		return slices.Clone(history)
 	}
 
 	result := slices.Clone(history)

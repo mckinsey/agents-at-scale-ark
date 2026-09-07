@@ -295,3 +295,40 @@ func TestConvertMessagesToAnthropicPreservesAgentName(t *testing.T) {
 		assert.Equal(t, json.RawMessage(`"plain reply"`), result[1].Content)
 	})
 }
+
+func TestConvertMessagesToAnthropicMergesConsecutiveRoles(t *testing.T) {
+	t.Run("tool transcript after a user turn stays alternating", func(t *testing.T) {
+		toolCallAssistant := Message{OfAssistant: &openai.ChatCompletionAssistantMessageParam{}}
+		toolCallAssistant.OfAssistant.Name = openai.String("agent1")
+
+		messages := []Message{
+			NewUserMessage("what is the weather?"),
+			toolCallAssistant,
+			ToolMessage("sunny, 20C", "call_1"),
+			addAgentNameToMessages([]Message{NewAssistantMessage("It is sunny.")}, "agent1")[0],
+			NewUserMessage("It is your turn, agent2."),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.NotEmpty(t, result)
+		for i := 1; i < len(result); i++ {
+			assert.NotEqual(t, result[i-1].Role, result[i].Role, "consecutive same-role messages at %d", i)
+		}
+	})
+
+	t.Run("merges consecutive tool results into one user turn", func(t *testing.T) {
+		messages := []Message{
+			NewUserMessage("compare them"),
+			ToolMessage("first", "call_1"),
+			ToolMessage("second", "call_2"),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.Len(t, result, 1)
+		assert.Equal(t, "user", result[0].Role)
+		assert.Contains(t, string(result[0].Content), "first")
+		assert.Contains(t, string(result[0].Content), "second")
+	})
+}
