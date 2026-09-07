@@ -915,8 +915,24 @@ jobs:
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - name: Deploy ark-api
+      - name: Deploy ark services (Argo in parallel)
         run: |
+          # Argo has no install-time dependency on ark-api/ark-dashboard, so run
+          # its dependency-update + install in the background, overlapping the
+          # serial ark-api + ark-dashboard installs (~70s) which fully hide
+          # Argo's ~47s. ark-api and ark-dashboard stay serial (they share the
+          # default namespace/gateway and are quick).
+          (
+            helm dependency update services/argo-workflows/chart >/dev/null
+            helm upgrade --install argo-workflows services/argo-workflows/chart \
+              --namespace default \
+              --create-namespace \
+              --set minio.enabled=false \
+              --wait \
+              --timeout=5m
+          ) &
+          ARGO_PID=$!
+
           helm upgrade --install ark-api services/ark-api/chart \
             --namespace default \
             --create-namespace \
@@ -926,8 +942,6 @@ jobs:
             --wait \
             --timeout=5m
 
-      - name: Deploy ark-dashboard
-        run: |
           helm upgrade --install ark-dashboard services/ark-dashboard/chart \
             --namespace default \
             --create-namespace \
@@ -937,26 +951,16 @@ jobs:
             --wait \
             --timeout=5m
 
+          if ! wait "$ARGO_PID"; then
+            echo "Argo Workflows install failed" >&2
+            exit 1
+          fi
+
       - name: Wait for services to be ready
         run: |
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-broker -n default --timeout=120s
-
-      - name: Update Argo Workflows dependencies
-        run: |
-          cd services/argo-workflows/chart
-          helm dependency update
-          cd ../../..
-
-      - name: Deploy Argo Workflows
-        run: |
-          helm upgrade --install argo-workflows services/argo-workflows/chart \
-            --namespace default \
-            --create-namespace \
-            --set minio.enabled=false \
-            --wait \
-            --timeout=5m
 
       - name: Wait for Argo Workflows to be ready
         run: |
