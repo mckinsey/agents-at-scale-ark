@@ -105,12 +105,40 @@ func assistantMessageName(msg Message) string {
 	return ""
 }
 
-func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthropicSystemBlock) {
-	type collectedMessage struct {
-		role string
-		text string
+type collectedMessage struct {
+	role string
+	text string
+}
+
+func anthropicTurnFor(msg Message, content, role string) collectedMessage {
+	msgRole := role
+	if role == RoleTool {
+		msgRole = RoleUser
 	}
 
+	text := content
+	if role == RoleAssistant {
+		if name := assistantMessageName(msg); name != "" {
+			text = fmt.Sprintf("%s: %s", name, content)
+		}
+	}
+
+	return collectedMessage{role: msgRole, text: text}
+}
+
+func mergeConsecutiveRoles(collected []collectedMessage) []collectedMessage {
+	merged := make([]collectedMessage, 0, len(collected))
+	for _, m := range collected {
+		if n := len(merged); n > 0 && merged[n-1].role == m.role {
+			merged[n-1].text = merged[n-1].text + "\n\n" + m.text
+			continue
+		}
+		merged = append(merged, m)
+	}
+	return merged
+}
+
+func collectAnthropicTurns(messages []Message) ([]collectedMessage, []anthropicSystemBlock) {
 	var collected []collectedMessage
 	var systemBlocks []anthropicSystemBlock
 
@@ -130,29 +158,15 @@ func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthr
 				},
 			}
 		case RoleUser, RoleAssistant, RoleTool:
-			msgRole := role
-			if role == RoleTool {
-				msgRole = RoleUser
-			}
-			text := content
-			if role == RoleAssistant {
-				if name := assistantMessageName(msg); name != "" {
-					text = fmt.Sprintf("%s: %s", name, content)
-				}
-			}
-			collected = append(collected, collectedMessage{role: msgRole, text: text})
+			collected = append(collected, anthropicTurnFor(msg, content, role))
 		}
 	}
 
-	merged := make([]collectedMessage, 0, len(collected))
-	for _, m := range collected {
-		if n := len(merged); n > 0 && merged[n-1].role == m.role {
-			merged[n-1].text = merged[n-1].text + "\n\n" + m.text
-			continue
-		}
-		merged = append(merged, m)
-	}
-	collected = merged
+	return mergeConsecutiveRoles(collected), systemBlocks
+}
+
+func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthropicSystemBlock) {
+	collected, systemBlocks := collectAnthropicTurns(messages)
 
 	cacheIndex := -1
 	if len(collected) >= 2 {
