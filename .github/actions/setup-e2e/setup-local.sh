@@ -125,6 +125,31 @@ if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
   echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
 fi
 
+# The Postgres backend (ark-storage-dev) has no cert-manager dependency — its
+# TLS is a Helm-generated self-signed cert — so install it in the background
+# now, concurrently with the cert-manager install below, and join before the
+# apiserver (which consumes Postgres) needs it. Hides ~26s of serial setup.
+PG_SETUP_PID=""
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  echo "=== Installing PostgreSQL (ark-storage-dev, background) ==="
+  (
+    helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
+      --namespace ark-system \
+      --create-namespace \
+      --set ssl.enabled=true \
+      --wait --timeout=120s
+    kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
+    kubectl -n ark-system get secret ark-storage-dev-tls -o json | \
+      python3 -c "
+import sys, json
+s = json.load(sys.stdin)
+out = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': s['metadata']['name'], 'namespace': 'default'}, 'type': s['type'], 'data': s['data']}
+print(json.dumps(out))
+" | kubectl apply -f -
+  ) &
+  PG_SETUP_PID=$!
+fi
+
 # Install cert-manager if not present
 echo "=== Installing cert-manager ==="
 if ! helm list -n cert-manager | grep -q cert-manager; then
@@ -176,25 +201,12 @@ data:
 BROKER_CM_EOF
 fi
 
-if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
-  echo "=== Installing PostgreSQL (ark-storage-dev) ==="
-  helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
-    --namespace ark-system \
-    --create-namespace \
-    --set ssl.enabled=true \
-    --wait --timeout=120s
-
-  echo "=== Waiting for PostgreSQL Pod Readiness ==="
-  kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
-
-  echo "=== Copying ark-storage-dev TLS secret to default namespace ==="
-  kubectl -n ark-system get secret ark-storage-dev-tls -o json | \
-    python3 -c "
-import sys, json
-s = json.load(sys.stdin)
-out = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': s['metadata']['name'], 'namespace': 'default'}, 'type': s['type'], 'data': s['data']}
-print(json.dumps(out))
-" | kubectl apply -f -
+if [ -n "${PG_SETUP_PID}" ]; then
+  echo "=== Waiting for background PostgreSQL setup ==="
+  if ! wait "${PG_SETUP_PID}"; then
+    echo "ERROR: background PostgreSQL setup failed" >&2
+    exit 1
+  fi
 fi
 
 BROKER_PID=""
