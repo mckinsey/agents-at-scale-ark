@@ -295,7 +295,7 @@ func TestConvertMessagesToAnthropicPreservesAgentName(t *testing.T) {
 		assert.Equal(t, json.RawMessage(`"plain reply"`), result[1].Content)
 	})
 
-	t.Run("a solo agent does not label its own turns", func(t *testing.T) {
+	t.Run("an agent is not labelled to itself but keeps its name for the dashboard", func(t *testing.T) {
 		agent := &Agent{Name: "weather-agent"}
 		choice := openai.ChatCompletionChoice{
 			Message: openai.ChatCompletionMessage{Role: RoleAssistant, Content: "Let me check."},
@@ -304,11 +304,24 @@ func TestConvertMessagesToAnthropicPreservesAgentName(t *testing.T) {
 		msg := agent.processAssistantMessage(choice)
 
 		require.NotNil(t, msg.OfAssistant)
-		assert.Empty(t, msg.OfAssistant.Name.Value, "team members are named by the team, so a solo agent must not prefix its own history")
+		assert.Equal(t, "weather-agent", msg.OfAssistant.Name.Value, "the stored message keeps the name so the dashboard can label the sender")
 
-		result, _ := convertMessagesToAnthropic([]Message{NewUserMessage("weather?"), msg})
+		sent := withoutOwnAgentName([]Message{NewUserMessage("weather?"), msg}, agent.Name)
+		result, _ := convertMessagesToAnthropic(sent)
 		require.Len(t, result, 2)
 		assert.Equal(t, json.RawMessage(`"Let me check."`), result[1].Content)
+
+		assert.Equal(t, "weather-agent", msg.OfAssistant.Name.Value, "suppressing the name for the model must not strip it from the stored message")
+	})
+
+	t.Run("another member's name survives suppression", func(t *testing.T) {
+		other := addAgentNameToMessages([]Message{NewAssistantMessage("here is the code")}, "agent1")[0]
+
+		sent := withoutOwnAgentName([]Message{other, NewUserMessage("review it")}, "agent2")
+		result, _ := convertMessagesToAnthropic(sent)
+
+		require.Len(t, result, 2)
+		assert.Contains(t, string(result[0].Content), "agent1: here is the code")
 	})
 }
 
