@@ -346,7 +346,7 @@ func memberTurnInput(userInput Message, member TeamMember, turn int) Message {
 	}
 
 	return NewUserMessage(fmt.Sprintf(
-		"It is your turn, %s. Respond to the conversation above according to your own instructions. Do not repeat work another member has already done.",
+		"It is your turn, %s. Respond to the conversation above according to your own instructions.",
 		member.GetName(),
 	))
 }

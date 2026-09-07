@@ -294,6 +294,22 @@ func TestConvertMessagesToAnthropicPreservesAgentName(t *testing.T) {
 		require.Len(t, result, 2)
 		assert.Equal(t, json.RawMessage(`"plain reply"`), result[1].Content)
 	})
+
+	t.Run("a solo agent does not label its own turns", func(t *testing.T) {
+		agent := &Agent{Name: "weather-agent"}
+		choice := openai.ChatCompletionChoice{
+			Message: openai.ChatCompletionMessage{Role: RoleAssistant, Content: "Let me check."},
+		}
+
+		msg := agent.processAssistantMessage(choice)
+
+		require.NotNil(t, msg.OfAssistant)
+		assert.Empty(t, msg.OfAssistant.Name.Value, "team members are named by the team, so a solo agent must not prefix its own history")
+
+		result, _ := convertMessagesToAnthropic([]Message{NewUserMessage("weather?"), msg})
+		require.Len(t, result, 2)
+		assert.Equal(t, json.RawMessage(`"Let me check."`), result[1].Content)
+	})
 }
 
 func TestConvertMessagesToAnthropicMergesConsecutiveRoles(t *testing.T) {
@@ -315,6 +331,23 @@ func TestConvertMessagesToAnthropicMergesConsecutiveRoles(t *testing.T) {
 		for i := 1; i < len(result); i++ {
 			assert.NotEqual(t, result[i-1].Role, result[i].Role, "consecutive same-role messages at %d", i)
 		}
+	})
+
+	t.Run("no cache breakpoint lands on a merged block", func(t *testing.T) {
+		messages := []Message{
+			NewUserMessage("write then review"),
+			addAgentNameToMessages([]Message{NewAssistantMessage("draft")}, "agent1")[0],
+			addAgentNameToMessages([]Message{NewAssistantMessage("review")}, "agent2")[0],
+			NewUserMessage("It is your turn, agent3."),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.Len(t, result, 3)
+		assert.Equal(t, "assistant", result[1].Role)
+		assert.Equal(t, json.RawMessage(`"agent1: draft\n\nagent2: review"`), result[1].Content)
+		assert.NotContains(t, string(result[1].Content), "cache_control",
+			"a merged block's content changes between requests, so it must not anchor the cache prefix")
 	})
 
 	t.Run("merges consecutive tool results into one user turn", func(t *testing.T) {

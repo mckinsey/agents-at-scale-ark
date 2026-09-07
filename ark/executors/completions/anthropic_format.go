@@ -106,8 +106,9 @@ func assistantMessageName(msg Message) string {
 }
 
 type collectedMessage struct {
-	role string
-	text string
+	role   string
+	text   string
+	merged bool
 }
 
 func anthropicTurnFor(msg Message, content, role string) collectedMessage {
@@ -131,6 +132,7 @@ func mergeConsecutiveRoles(collected []collectedMessage) []collectedMessage {
 	for _, m := range collected {
 		if n := len(merged); n > 0 && merged[n-1].role == m.role {
 			merged[n-1].text = merged[n-1].text + "\n\n" + m.text
+			merged[n-1].merged = true
 			continue
 		}
 		merged = append(merged, m)
@@ -169,7 +171,7 @@ func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthr
 	collected, systemBlocks := collectAnthropicTurns(messages)
 
 	cacheIndex := -1
-	if len(collected) >= 2 {
+	if len(collected) >= 2 && !collected[len(collected)-2].merged {
 		cacheIndex = len(collected) - 2
 	}
 
