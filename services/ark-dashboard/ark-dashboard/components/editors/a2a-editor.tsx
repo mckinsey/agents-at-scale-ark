@@ -28,7 +28,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   namespace: string;
-  onSave: (config: A2AServerConfiguration) => void;
+  onSave: (config: A2AServerConfiguration) => void | Promise<void>;
 };
 
 const formSchema = z.object({
@@ -63,7 +63,7 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
     }
   }, [open, form]);
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     const config: A2AServerConfiguration = {
       name: values.name,
       namespace,
@@ -76,8 +76,7 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
       },
     };
 
-    onSave(config);
-    onOpenChange(false);
+    await onSave(config);
   };
 
   return (

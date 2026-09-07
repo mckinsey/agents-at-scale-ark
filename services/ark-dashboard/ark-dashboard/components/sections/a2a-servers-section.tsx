@@ -57,19 +57,18 @@ export function A2AServersSection() {
     });
   };
 
-  const handleSave = (config: A2AServerConfiguration) => {
-    createServer.mutate(config, {
-      onSuccess: () => {
-        toast.success('A2A Server Created', {
-          description: `Successfully created ${config.name}`,
-        });
-        setA2aEditorOpen(false);
-      },
-      onError: err =>
-        toast.error('Failed to Create A2A Server', {
-          description: errorDescription(err),
-        }),
-    });
+  const handleSave = async (config: A2AServerConfiguration) => {
+    try {
+      await createServer.mutateAsync(config);
+      toast.success('A2A Server Created', {
+        description: `Successfully created ${config.name}`,
+      });
+      setA2aEditorOpen(false);
+    } catch (err) {
+      toast.error('Failed to Create A2A Server', {
+        description: errorDescription(err),
+      });
+    }
   };
 
   const hasServers = a2aServers.length > 0;
@@ -77,6 +76,7 @@ export function A2AServersSection() {
   const loadFailed = hasError && !hasServers;
   const refreshFailed = hasError && hasServers;
   const isEmpty = !isLoading && !hasError && !hasServers;
+  const showHeaderAction = !isLoading && !isEmpty;
 
   return (
     <div className="content-shell flex h-full w-full flex-col">
@@ -85,11 +85,11 @@ export function A2AServersSection() {
         title="A2A servers"
         description="Register servers that host agents via the A2A protocol"
         actions={
-          isEmpty ? undefined : (
+          showHeaderAction ? (
             <Button onClick={openAddEditor} disabled={readOnlyMode}>
               Create A2A server
             </Button>
-          )
+          ) : undefined
         }
       />
 

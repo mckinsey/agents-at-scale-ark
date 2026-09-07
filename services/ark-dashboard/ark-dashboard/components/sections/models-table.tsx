@@ -169,7 +169,7 @@ export function ModelsTable({ models, onDelete }: Readonly<ModelsTableProps>) {
   return (
     <Table
       aria-label="Models"
-      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[1008px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>

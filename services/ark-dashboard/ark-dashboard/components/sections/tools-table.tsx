@@ -162,7 +162,7 @@ export function ToolsTable({
   return (
     <Table
       aria-label="Tools"
-      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[800px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>
