@@ -5,6 +5,7 @@ export const DOCS_URLS = {
   root: `${ARK_DOCS}/`,
   a2aTasks: `${ARK_DOCS}/reference/resources/a2atask/`,
   agents: `${ARK_DOCS}/user-guide/agents/`,
+  apiKeys: `${ARK_DOCS}/developer-guide/authentication/#api-key-authentication`,
   configurations: `${ARK_DOCS}/user-guide/configurations/`,
   events: `${ARK_DOCS}/developer-guide/logging-and-events/`,
   fileGateway: `${MARKETPLACE_DOCS}/services/file-gateway/`,
