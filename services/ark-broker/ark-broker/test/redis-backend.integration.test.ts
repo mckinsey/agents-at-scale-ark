@@ -61,7 +61,7 @@ function consumeSSE(
 }
 
 describeIntegration('redis chunk backend — HTTP parity', () => {
-  const {client, connectionUrl} = useRedisContainer();
+  const {client, connectionUrl, onStop} = useRedisContainer();
   let app: Express;
 
   beforeAll(() => {
@@ -70,12 +70,17 @@ describeIntegration('redis chunk backend — HTTP parity', () => {
       REDIS_URL: connectionUrl(),
     });
     const redis = createRedis(config, logger);
+    const chunks = createChunkStream(config, logger, redis);
+    onStop(async () => {
+      chunks.close?.();
+      await redis.quit();
+    });
     app = buildApp({
       config,
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
-      chunkStream: createChunkStream(config, logger, redis),
+      chunkStream: chunks,
       eventStream: createEventStream(config, logger),
       sessionsStorage: createSessionsStorage(config, logger),
       redis,
