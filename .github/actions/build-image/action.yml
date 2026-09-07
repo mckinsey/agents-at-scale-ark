@@ -33,10 +33,6 @@ inputs:
   build-args:
     description: 'Additional build arguments (multiline string)'
     required: false
-  cache-mode:
-    description: 'buildx gha cache export mode: min (final image layers only) or max (all stages)'
-    required: false
-    default: 'min'
 
 runs:
   using: 'composite'
@@ -75,4 +71,4 @@ runs:
         cache-from: |
           type=gha,scope=${{ inputs.image }}
         cache-to: |
-          type=gha,mode=${{ inputs.cache-mode }},scope=${{ inputs.image }}
+          type=gha,mode=min,scope=${{ inputs.image }}
