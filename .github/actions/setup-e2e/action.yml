@@ -35,7 +35,7 @@ inputs:
     required: false
     default: 'etcd'
   prefetch-test-images:
-    description: 'Pre-pull chainsaw test images (mock-llm, curl, mockserver, hurl, python)'
+    description: 'Pre-pull chainsaw test images (mock-llm, curl, mockserver, hurl, python, Argo)'
     required: false
     default: 'false'
   install-broker:
