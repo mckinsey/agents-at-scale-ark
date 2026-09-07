@@ -64,6 +64,10 @@ func ResolveHeaderValueV1PreAlpha1(ctx context.Context, k8sClient client.Client,
 }
 
 func ResolveFromSecret(ctx context.Context, k8sClient client.Client, secretRef *corev1.SecretKeySelector, namespace string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	secret := &corev1.Secret{}
 	secretKey := types.NamespacedName{
 		Name:      secretRef.Name,
@@ -83,6 +87,10 @@ func ResolveFromSecret(ctx context.Context, k8sClient client.Client, secretRef *
 }
 
 func ResolveFromConfigMap(ctx context.Context, k8sClient client.Client, configMapRef *corev1.ConfigMapKeySelector, namespace string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	configMap := &corev1.ConfigMap{}
 	configMapKey := types.NamespacedName{
 		Name:      configMapRef.Name,
