@@ -27,7 +27,7 @@ export function DetailBreadcrumb({
     <nav
       aria-label="Breadcrumb"
       className={cn(
-        'flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]',
+        'label-regular-primary flex items-center gap-1',
         className,
       )}>
       <NamespacedLink

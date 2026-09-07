@@ -117,10 +117,6 @@ describe('A2AServersTable', () => {
 
     expect(screen.getByText('Available')).toBeInTheDocument();
     expect(screen.getByText('Unavailable')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Available' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('img', { name: 'Unavailable' }),
-    ).toBeInTheDocument();
   });
 
   it('falls back to a dash for a missing description', () => {

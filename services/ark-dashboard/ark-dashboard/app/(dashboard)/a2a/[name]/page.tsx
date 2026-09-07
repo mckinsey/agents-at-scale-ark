@@ -28,7 +28,7 @@ function formatCondition(value?: boolean | null): string {
 
 export default function A2AServerPage() {
   const params = useParams();
-  const name = params.name as string;
+  const name = decodeURIComponent(params.name as string);
 
   const { data: server, isLoading, error } = useA2AServer(name);
 

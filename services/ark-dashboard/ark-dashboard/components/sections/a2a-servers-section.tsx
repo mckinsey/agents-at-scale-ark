@@ -39,9 +39,6 @@ export function A2AServersSection() {
   useEffect(() => {
     if (!error) return;
     console.error('Failed to load A2A servers:', error);
-    toast.error('Failed to Load A2A Servers', {
-      description: errorDescription(error),
-    });
   }, [error]);
 
   const openAddEditor = useCallback(() => setA2aEditorOpen(true), []);
@@ -75,8 +72,11 @@ export function A2AServersSection() {
     });
   };
 
+  const hasServers = a2aServers.length > 0;
   const hasError = Boolean(error);
-  const isEmpty = !isLoading && !hasError && a2aServers.length === 0;
+  const loadFailed = hasError && !hasServers;
+  const refreshFailed = hasError && hasServers;
+  const isEmpty = !isLoading && !hasError && !hasServers;
 
   return (
     <div className="content-shell flex h-full w-full flex-col">
@@ -99,11 +99,19 @@ export function A2AServersSection() {
         </div>
       )}
 
-      {!showLoading && hasError && (
+      {!showLoading && loadFailed && (
         <ResourceErrorState
           className="mt-5"
           title="Couldn't load A2A servers"
           description={errorDescription(error)}
+        />
+      )}
+
+      {!showLoading && refreshFailed && (
+        <ResourceErrorState
+          className="mt-5"
+          title="Couldn't refresh A2A servers"
+          description="Showing the last loaded version."
         />
       )}
 
@@ -128,7 +136,7 @@ export function A2AServersSection() {
         />
       )}
 
-      {!showLoading && !hasError && !isEmpty && (
+      {!showLoading && hasServers && (
         <div className="mt-5 min-h-0 flex-1 overflow-auto">
           <A2AServersTable servers={a2aServers} onDelete={handleDelete} />
         </div>

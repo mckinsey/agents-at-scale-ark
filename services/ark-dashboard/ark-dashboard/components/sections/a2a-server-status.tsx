@@ -22,7 +22,7 @@ export function A2AServerStatus({ ready }: Readonly<A2AServerStatusProps>) {
 
   return (
     <span className="inline-flex items-center gap-2">
-      <StatusBadge variant={variant} role="img" aria-label={label} />
+      <StatusBadge variant={variant} aria-hidden />
       <span className="label-regular-primary text-fg-primary">{label}</span>
     </span>
   );

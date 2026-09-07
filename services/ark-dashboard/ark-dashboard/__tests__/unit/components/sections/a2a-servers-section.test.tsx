@@ -199,17 +199,46 @@ describe('A2AServersSection', () => {
     });
   });
 
-  it('should show error toast when loading fails', async () => {
+  it('should show an inline error state when the first load fails', async () => {
     const error = new Error('Failed to fetch');
     vi.mocked(A2AServersService.getAll).mockRejectedValue(error);
 
     renderSection();
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('Failed to Load A2A Servers', {
-        description: 'Failed to fetch',
-      });
+      expect(
+        screen.getByText("Couldn't load A2A servers"),
+      ).toBeInTheDocument();
     });
+    expect(screen.getByText('Failed to fetch')).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the loaded list visible when a refetch fails', async () => {
+    vi.mocked(A2AServersService.getAll).mockResolvedValueOnce(mockServers);
+    vi.mocked(A2AServersService.delete).mockResolvedValue();
+    vi.mocked(A2AServersService.getAll).mockRejectedValue(
+      new Error('Refresh failed'),
+    );
+
+    renderSection();
+
+    await waitFor(() => {
+      expect(screen.getByText('test-server-1')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getAllByText('Delete')[0]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Couldn't refresh A2A servers"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('a2a-servers-table')).toBeInTheDocument();
+    expect(
+      screen.queryByText("Couldn't load A2A servers"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('No A2A server yet')).not.toBeInTheDocument();
   });
 
   it('should handle delete successfully', async () => {

@@ -99,7 +99,6 @@ describe('A2AServerPage', () => {
 
     expect(screen.getByText('All Status')).toBeInTheDocument();
     expect(screen.getByText('Available')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Available' })).toBeInTheDocument();
     expect(screen.getByText('True')).toBeInTheDocument();
     expect(screen.getByText('False')).toBeInTheDocument();
   });

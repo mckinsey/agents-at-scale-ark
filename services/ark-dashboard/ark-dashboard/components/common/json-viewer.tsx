@@ -98,9 +98,9 @@ export function JsonViewer({
       <div className="absolute top-2 right-4 z-10 flex gap-1">
         <Button
           variant="ghost"
-          size="sm"
+          size="xs"
           onClick={handleCopy}
-          className="h-7 gap-1 px-2 text-xs">
+          className="h-7 gap-1 px-2">
           <IconShell size="sm">
             {copied ? <Check /> : <ContentCopy />}
           </IconShell>
@@ -108,9 +108,9 @@ export function JsonViewer({
         </Button>
         <Button
           variant="ghost"
-          size="sm"
+          size="xs"
           onClick={handleDownload}
-          className="h-7 gap-1 px-2 text-xs">
+          className="h-7 gap-1 px-2">
           <IconShell size="sm">
             <SaveAlt />
           </IconShell>
@@ -119,14 +119,14 @@ export function JsonViewer({
         {tooBig && (
           <Button
             variant="ghost"
-            size="sm"
+            size="xs"
             onClick={() => setExpanded(v => !v)}
-            className="h-7 px-2 text-xs">
+            className="h-7 px-2">
             {expanded ? 'Show less' : 'Load full'}
           </Button>
         )}
       </div>
-      <pre className="bg-muted/30 min-h-0 flex-1 overflow-auto p-4 pt-10 font-mono text-xs break-words whitespace-pre-wrap">
+      <pre className="paragraph-code-text bg-muted/30 min-h-0 flex-1 overflow-auto p-4 pt-10 break-words whitespace-pre-wrap">
         {shown}
       </pre>
     </div>
