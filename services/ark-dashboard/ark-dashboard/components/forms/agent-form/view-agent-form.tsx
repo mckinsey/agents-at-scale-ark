@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { McpHeaderOverridesEditor } from '@/components/ui/mcp-header-overrides-editor';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
 import {
   Select,
@@ -73,12 +74,15 @@ export function ViewAgentForm({
     toolsLoading,
     unavailableTools,
     parameters,
+    mcpOverrideGroups,
+    mcpServerNames,
     isExperimentalExecutionEngineEnabled,
     hasChanges,
   } = state;
 
   const {
     setParameters,
+    setMcpOverrideGroups,
     handleToolToggle,
     handleDeleteTool,
     isToolSelected,
@@ -306,6 +310,15 @@ export function ViewAgentForm({
                             </FieldDescription>
                           )}
                         </FieldSet>
+                      )}
+
+                      {!isA2A && (
+                        <McpHeaderOverridesEditor
+                          groups={mcpOverrideGroups}
+                          onChange={setMcpOverrideGroups}
+                          serverNames={mcpServerNames}
+                          disabled={isDisabled}
+                        />
                       )}
 
                       {isA2A && (

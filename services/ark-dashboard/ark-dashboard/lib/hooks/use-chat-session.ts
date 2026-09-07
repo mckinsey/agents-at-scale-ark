@@ -23,9 +23,10 @@ import {
   type TeamAgentParameters,
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
+import { useQueryMcpHeaders } from '@/lib/hooks/use-query-mcp-headers';
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
-import type { ChatResponse } from '@/lib/services/chat';
+import type { ChatResponse, QueryOverride } from '@/lib/services/chat';
 import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
@@ -316,6 +317,8 @@ export function useChatSession({
     toApiParameters,
   } = useAgentQueryParameters(name, type);
 
+  const mcpHeaders = useQueryMcpHeaders(name, type);
+
   useEffect(() => {
     return () => {
       if (stopPollingRef.current) {
@@ -348,7 +351,11 @@ export function useChatSession({
   } | null>(null);
 
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+    async (
+      userMessage: string,
+      apiParameters?: ApiQueryParameter[],
+      apiOverrides?: QueryOverride[],
+    ) => {
       chatStreamAbortControllerRef.current = new AbortController();
 
       const messageArray = buildChatMessages(chatMessages, userMessage);
@@ -429,6 +436,7 @@ export function useChatSession({
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
           apiParameters,
+          apiOverrides,
         );
 
       queryName = streamQueryName;
@@ -809,7 +817,11 @@ export function useChatSession({
   );
 
   const handlePollChatResponse = useCallback(
-    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+    async (
+      userMessage: string,
+      apiParameters?: ApiQueryParameter[],
+      apiOverrides?: QueryOverride[],
+    ) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
@@ -821,6 +833,7 @@ export function useChatSession({
         undefined,
         queryTimeout,
         apiParameters,
+        apiOverrides,
       );
 
       lastQueryName.current = query.name;
@@ -981,6 +994,7 @@ export function useChatSession({
       }
 
       const apiParameters = toApiParameters();
+      const apiOverrides = mcpHeaders.toApiOverrides();
 
       trackEvent({
         name: 'chat_message_sent',
@@ -1001,10 +1015,18 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage, apiParameters);
+          await handleStreamChatResponse(
+            userMessage,
+            apiParameters,
+            apiOverrides,
+          );
           await ensureConversationId();
         } else {
-          await handlePollChatResponse(userMessage, apiParameters);
+          await handlePollChatResponse(
+            userMessage,
+            apiParameters,
+            apiOverrides,
+          );
         }
       } catch (err) {
         console.error('Error sending message:', err);
@@ -1048,6 +1070,7 @@ export function useChatSession({
       name,
       resumeAutoScroll,
       toApiParameters,
+      mcpHeaders,
       type,
       updateChatMessages,
     ],
@@ -1241,5 +1264,6 @@ export function useChatSession({
     removeParameterRow,
     canAddParameterRow,
     missingParameters,
+    mcpHeaders,
   };
 }

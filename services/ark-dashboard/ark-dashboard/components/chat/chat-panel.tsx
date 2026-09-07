@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { Autorenew, Build, Info, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { ChatMcpHeaderFields } from '@/components/ui/chat-mcp-header-fields';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -67,6 +68,7 @@ export function ChatPanel({
     removeParameterRow,
     canAddParameterRow,
     missingParameters,
+    mcpHeaders,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -173,6 +175,17 @@ export function ChatPanel({
             )}
           </div>
         )}
+        <div className="px-4 pt-4">
+          <ChatMcpHeaderFields
+            agentHeaders={mcpHeaders.agentHeaders}
+            rows={mcpHeaders.queryRows}
+            serverNames={mcpHeaders.serverNames}
+            onAddRow={mcpHeaders.addRow}
+            onUpdateRow={mcpHeaders.updateRow}
+            onRemoveRow={mcpHeaders.removeRow}
+            disabled={isProcessing}
+          />
+        </div>
         <div className="flex flex-col gap-2 px-4 py-3">
           <Textarea
             ref={inputRef}

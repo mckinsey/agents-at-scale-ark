@@ -4,6 +4,7 @@ import * as z from 'zod';
 import type { Parameter } from '@/components/ui/parameter-editor';
 import type { Agent, AgentTool, Model, Skill, Tool } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+import type { McpOverrideGroup } from '@/lib/utils/mcp-header-overrides';
 
 export const agentFormSchema = z.object({
   name: kubernetesNameSchema,
@@ -35,12 +36,15 @@ export interface AgentFormState {
   selectedTools: AgentTool[];
   unavailableTools: Tool[];
   parameters: Parameter[];
+  mcpOverrideGroups: McpOverrideGroup[];
+  mcpServerNames: string[];
   isExperimentalExecutionEngineEnabled: boolean;
   hasChanges: boolean;
 }
 
 export interface AgentFormActions {
   setParameters: (params: Parameter[]) => void;
+  setMcpOverrideGroups: (groups: McpOverrideGroup[]) => void;
   handleToolToggle: (tool: Tool, checked: boolean) => void;
   handleDeleteTool: (tool: Tool) => void;
   isToolSelected: (toolName: string) => boolean;

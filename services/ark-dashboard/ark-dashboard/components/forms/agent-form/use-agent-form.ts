@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from '@/components/ui/sonner';
 
@@ -25,6 +25,14 @@ import {
   toolsService,
 } from '@/lib/services';
 import { GET_ALL_AGENTS_QUERY_KEY } from '@/lib/services/agents-hooks';
+import {
+  type McpOverrideGroup,
+  groupsToOverrides,
+  mcpServerNamesFromTools,
+  overrideGroupsEqual,
+  overridesToGroups,
+  reconcileServerGroups,
+} from '@/lib/utils/mcp-header-overrides';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
@@ -66,6 +74,12 @@ export function useAgentForm({
   );
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [initialParameters, setInitialParameters] = useState<Parameter[]>([]);
+  const [mcpOverrideGroups, setMcpOverrideGroups] = useState<
+    McpOverrideGroup[]
+  >([]);
+  const [initialMcpOverrideGroups, setInitialMcpOverrideGroups] = useState<
+    McpOverrideGroup[]
+  >([]);
 
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
@@ -122,6 +136,9 @@ export function useAgentForm({
           );
           setParameters(transformedParams);
           setInitialParameters(transformedParams);
+          const transformedOverrides = overridesToGroups(agentData.overrides);
+          setMcpOverrideGroups(transformedOverrides);
+          setInitialMcpOverrideGroups(transformedOverrides);
 
           form.reset({
             name: agentData.name,
@@ -169,6 +186,22 @@ export function useAgentForm({
     return transformFormParametersToApi(parameters);
   }, [parameters]);
 
+  const mapMcpOverridesToApi = useCallback(
+    () => groupsToOverrides(mcpOverrideGroups),
+    [mcpOverrideGroups],
+  );
+
+  const mcpServerNames = useMemo(() => {
+    const selectedNames = new Set(selectedTools.map(tool => tool.name));
+    return mcpServerNamesFromTools(
+      availableTools.filter(tool => selectedNames.has(tool.name)),
+    );
+  }, [selectedTools, availableTools]);
+
+  useEffect(() => {
+    setMcpOverrideGroups(prev => reconcileServerGroups(prev, mcpServerNames));
+  }, [mcpServerNames]);
+
   const onSubmit = useCallback(
     async (values: AgentFormValues) => {
       setSaving(true);
@@ -194,6 +227,9 @@ export function useAgentForm({
             prompt: values.prompt || undefined,
             tools: selectedTools,
             parameters: mapParametersToApi(),
+            overrides: mapMcpOverridesToApi().length
+              ? mapMcpOverridesToApi()
+              : undefined,
           };
 
           await agentsService.create(createData);
@@ -223,6 +259,7 @@ export function useAgentForm({
             prompt: agent.isA2A ? undefined : values.prompt || null,
             tools: agent.isA2A ? undefined : selectedTools,
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
+            overrides: agent.isA2A ? undefined : mapMcpOverridesToApi(),
           };
 
           const updated = await agentsService.update(agent.name, updateData);
@@ -237,6 +274,7 @@ export function useAgentForm({
           form.reset(values);
           setInitialTools(selectedTools);
           setInitialParameters(parameters);
+          setInitialMcpOverrideGroups(mcpOverrideGroups);
         }
 
         onSuccessRef.current?.();
@@ -254,6 +292,8 @@ export function useAgentForm({
       selectedTools,
       parameters,
       mapParametersToApi,
+      mcpOverrideGroups,
+      mapMcpOverridesToApi,
       queryClient,
       namespace,
       form,
@@ -292,8 +332,16 @@ export function useAgentForm({
     [parameters, initialParameters],
   );
 
+  const hasMcpOverridesChanged = useCallback(
+    () => !overrideGroupsEqual(mcpOverrideGroups, initialMcpOverrideGroups),
+    [mcpOverrideGroups, initialMcpOverrideGroups],
+  );
+
   const hasChanges =
-    form.formState.isDirty || hasToolsChanged() || hasParametersChanged();
+    form.formState.isDirty ||
+    hasToolsChanged() ||
+    hasParametersChanged() ||
+    hasMcpOverridesChanged();
 
   return {
     form,
@@ -309,11 +357,14 @@ export function useAgentForm({
       selectedTools,
       unavailableTools,
       parameters,
+      mcpOverrideGroups,
+      mcpServerNames,
       isExperimentalExecutionEngineEnabled,
       hasChanges,
     },
     actions: {
       setParameters,
+      setMcpOverrideGroups,
       handleToolToggle,
       handleDeleteTool,
       isToolSelected,

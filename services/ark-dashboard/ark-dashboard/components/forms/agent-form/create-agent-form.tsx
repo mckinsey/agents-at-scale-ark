@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { McpHeaderOverridesEditor } from '@/components/ui/mcp-header-overrides-editor';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
 import {
   Select,
@@ -52,9 +53,17 @@ export function CreateAgentForm({
     toolsLoading,
     unavailableTools,
     parameters,
+    mcpOverrideGroups,
+    mcpServerNames,
   } = state;
 
-  const { setParameters, handleToolToggle, isToolSelected, onSubmit } = actions;
+  const {
+    setParameters,
+    setMcpOverrideGroups,
+    handleToolToggle,
+    isToolSelected,
+    onSubmit,
+  } = actions;
 
   const promptValue = form.watch('prompt') || '';
   const isDisabled = form.formState.isSubmitting;
@@ -108,9 +117,9 @@ export function CreateAgentForm({
       <Form {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex min-h-0 flex-1 items-start gap-20 overflow-hidden pb-2 pl-px">
+          className="flex min-h-0 flex-1 items-start gap-10 overflow-hidden pb-2 pl-px">
           {/* Left column — form fields (576px) */}
-          <div className="flex max-h-full min-h-0 w-[576px] flex-col gap-6 overflow-y-auto">
+          <div className="flex max-h-full min-h-0 w-[576px] min-w-0 flex-col gap-6 overflow-y-auto">
             <FormField
               control={form.control}
               name="name"
@@ -185,17 +194,6 @@ export function CreateAgentForm({
               }}
             />
 
-            <FieldSet className="gap-2">
-              <FieldTitle>Tools</FieldTitle>
-              <ToolsMultiSelect
-                availableTools={availableTools}
-                isToolSelected={isToolSelected}
-                onToggle={handleToolToggle}
-                toolsLoading={toolsLoading}
-                disabled={isDisabled}
-              />
-            </FieldSet>
-
             <FormField
               control={form.control}
               name="prompt"
@@ -211,10 +209,28 @@ export function CreateAgentForm({
                 />
               )}
             />
+
+            <FieldSet className="gap-2">
+              <FieldTitle>Tools</FieldTitle>
+              <ToolsMultiSelect
+                availableTools={availableTools}
+                isToolSelected={isToolSelected}
+                onToggle={handleToolToggle}
+                toolsLoading={toolsLoading}
+                disabled={isDisabled}
+              />
+            </FieldSet>
+
+            <McpHeaderOverridesEditor
+              groups={mcpOverrideGroups}
+              onChange={setMcpOverrideGroups}
+              serverNames={mcpServerNames}
+              disabled={isDisabled}
+            />
           </div>
 
-          {/* Right column — Variables panel (figma 4257:26496, 464px fixed) */}
-          <div className="bg-surface-primary flex max-h-full min-h-0 w-[464px] flex-none flex-col overflow-y-auto p-5">
+          {/* Right column — Variables panel (figma 4257:26496, 560px fixed) */}
+          <div className="bg-surface-primary flex max-h-full min-h-0 w-[560px] flex-none flex-col gap-8 overflow-y-auto p-5">
             <ParameterEditor
               parameters={parameters}
               onChange={setParameters}
