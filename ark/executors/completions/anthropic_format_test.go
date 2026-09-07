@@ -49,7 +49,7 @@ func TestConvertMessagesToAnthropic(t *testing.T) {
 		result, _ := convertMessagesToAnthropic(messages)
 		require.Len(t, result, 3)
 
-		var blocks []anthropicMessageContent
+		var blocks []anthropicContentBlock
 		require.NoError(t, json.Unmarshal(result[1].Content, &blocks))
 		require.Len(t, blocks, 1)
 		assert.Equal(t, "Hello!", blocks[0].Text)

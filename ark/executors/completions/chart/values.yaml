@@ -88,9 +88,22 @@ podAnnotations: {}
 # the retry of transient MCP tool-call errors (HTTP 429/500/502/503/504 and
 # requests that never reached the server). A tool call gives up after the
 # attempt count or the wall-clock budget, whichever hits first.
+#
+# ARK_TOOL_IMAGE_* bound the images a tool can put in front of the model.
+# MAX_BYTES is per decoded image and MAX_PER_TOOL_CALL is how many one tool
+# result may carry, both applied where the tool result arrives.
+# MAX_BYTES_PER_TURN is the cumulative budget across every tool call in one
+# turn, and MAX_BYTES_PER_REQUEST bounds every image in an outbound request
+# including the ones replayed from earlier turns - without it a conversation
+# accumulates images without limit. An image over any of these is dropped and
+# the text says why, so the model is told rather than left guessing.
 env:
   ARK_MCP_TOOL_CALL_MAX_ATTEMPTS: "3"
   ARK_MCP_TOOL_CALL_RETRY_BUDGET_SECONDS: "30"
+  ARK_TOOL_IMAGE_MAX_BYTES: "5242880"
+  ARK_TOOL_IMAGE_MAX_PER_TOOL_CALL: "4"
+  ARK_TOOL_IMAGE_MAX_BYTES_PER_TURN: "15728640"
+  ARK_TOOL_IMAGE_MAX_BYTES_PER_REQUEST: "15728640"
 
 # Static replica count, exposed so per-tenant deployments can scale independently of the
 # central install. Ignored when autoscaling.enabled is true (the HPA owns the count).

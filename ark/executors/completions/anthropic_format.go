@@ -7,6 +7,36 @@ import (
 )
 
 func extractMessageContent(msg Message) (string, string) {
+	text, _, role := extractMessageParts(msg)
+	return text, role
+}
+
+func extractMessageParts(msg Message) (string, []ToolResultImage, string) {
+	openaiMsg := openai.ChatCompletionMessageParamUnion(msg)
+
+	if userMsg := openaiMsg.OfUser; userMsg != nil {
+		if parts := userMsg.Content.OfArrayOfContentParts; len(parts) > 0 {
+			var text string
+			var images []ToolResultImage
+			for _, part := range parts {
+				switch {
+				case part.OfText != nil:
+					text += part.OfText.Text
+				case part.OfImageURL != nil:
+					if image, ok := imageFromDataURL(part.OfImageURL.ImageURL.URL); ok {
+						images = append(images, image)
+					}
+				}
+			}
+			return text, images, RoleUser
+		}
+	}
+
+	text, role := extractMessageString(msg)
+	return text, nil, role
+}
+
+func extractMessageString(msg Message) (string, string) {
 	openaiMsg := openai.ChatCompletionMessageParamUnion(msg)
 
 	if systemMsg := openaiMsg.OfSystem; systemMsg != nil {
@@ -46,10 +76,17 @@ type anthropicSystemBlock struct {
 	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
-type anthropicMessageContent struct {
+type anthropicContentBlock struct {
 	Type         string                 `json:"type"`
-	Text         string                 `json:"text"`
+	Text         string                 `json:"text,omitempty"`
+	Source       *anthropicImageSource  `json:"source,omitempty"`
 	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
+}
+
+type anthropicImageSource struct {
+	Type      string `json:"type"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
 }
 
 type anthropicMessage struct {
@@ -98,16 +135,17 @@ type anthropicContent struct {
 
 func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthropicSystemBlock) {
 	type collectedMessage struct {
-		role string
-		text string
+		role   string
+		text   string
+		images []ToolResultImage
 	}
 
 	var collected []collectedMessage
 	var systemBlocks []anthropicSystemBlock
 
 	for _, msg := range messages {
-		content, role := extractMessageContent(msg)
-		if content == "" {
+		content, images, role := extractMessageParts(msg)
+		if content == "" && len(images) == 0 {
 			continue
 		}
 
@@ -125,7 +163,7 @@ func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthr
 			if role == RoleTool {
 				msgRole = RoleUser
 			}
-			collected = append(collected, collectedMessage{role: msgRole, text: content})
+			collected = append(collected, collectedMessage{role: msgRole, text: content, images: images})
 		}
 	}
 
@@ -136,21 +174,39 @@ func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthr
 
 	result := make([]anthropicMessage, len(collected))
 	for i, m := range collected {
-		if i == cacheIndex {
-			block := []anthropicMessageContent{
-				{
-					Type:         "text",
-					Text:         m.text,
-					CacheControl: &anthropicCacheControl{Type: "ephemeral"},
-				},
-			}
-			result[i] = anthropicMessage{Role: m.role, Content: mustMarshalRaw(block)}
-		} else {
-			result[i] = anthropicMessage{Role: m.role, Content: mustMarshalRaw(m.text)}
+		result[i] = anthropicMessage{
+			Role:    m.role,
+			Content: renderAnthropicContent(m.text, m.images, i == cacheIndex),
 		}
 	}
 
 	return result, systemBlocks
+}
+
+func renderAnthropicContent(text string, images []ToolResultImage, cached bool) json.RawMessage {
+	if len(images) == 0 && !cached {
+		return mustMarshalRaw(text)
+	}
+
+	blocks := make([]anthropicContentBlock, 0, len(images)+1)
+	for _, image := range images {
+		blocks = append(blocks, anthropicContentBlock{
+			Type: "image",
+			Source: &anthropicImageSource{
+				Type:      "base64",
+				MediaType: image.MediaType,
+				Data:      image.B64,
+			},
+		})
+	}
+	if text != "" || len(blocks) == 0 {
+		blocks = append(blocks, anthropicContentBlock{Type: "text", Text: text})
+	}
+	if cached {
+		blocks[len(blocks)-1].CacheControl = &anthropicCacheControl{Type: "ephemeral"}
+	}
+
+	return mustMarshalRaw(blocks)
 }
 
 func convertAnthropicResponse(response anthropicResponse) *openai.ChatCompletion {

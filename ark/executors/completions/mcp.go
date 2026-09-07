@@ -13,8 +13,16 @@ import (
 )
 
 type MCPExecutor struct {
-	MCPClient *arkmcp.MCPClient
-	ToolName  string
+	MCPClient   *arkmcp.MCPClient
+	ToolName    string
+	ImagePolicy *imagePolicy
+}
+
+func (m *MCPExecutor) imagePolicy() *imagePolicy {
+	if m.ImagePolicy != nil {
+		return m.ImagePolicy
+	}
+	return defaultImagePolicy()
 }
 
 func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
@@ -50,14 +58,30 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, e
 		return ToolResult{ID: call.ID, Name: call.Function.Name, Content: ""}, err
 	}
 	log.V(2).Info("tool call response", "tool", m.ToolName, "response", response)
+	content, images := m.collectContent(ctx, response.Content)
+	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: content, Images: images}, nil
+}
+
+func (m *MCPExecutor) collectContent(ctx context.Context, contents []mcpsdk.Content) (string, []ToolResultImage) {
+	admitter := m.imagePolicy().NewToolResultAdmitter()
 	var result strings.Builder
-	for _, content := range response.Content {
-		if textContent, ok := content.(*mcpsdk.TextContent); ok {
-			result.WriteString(textContent.Text)
-		} else {
+	var images []ToolResultImage
+	for _, content := range contents {
+		switch typed := content.(type) {
+		case *mcpsdk.TextContent:
+			result.WriteString(typed.Text)
+		case *mcpsdk.ImageContent:
+			image, note, ok := admitter.Admit(ctx, m.ToolName, typed.MIMEType, typed.Data)
+			if !ok {
+				result.WriteString(note)
+				continue
+			}
+			images = append(images, image)
+			result.WriteString(imageReturnedNote(image.MediaType, image.Bytes))
+		default:
 			jsonBytes, _ := json.MarshalIndent(content, "", "  ")
 			result.WriteString(string(jsonBytes))
 		}
 	}
-	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: result.String()}, nil
+	return result.String(), images
 }

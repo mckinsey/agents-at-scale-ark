@@ -1,8 +1,6 @@
 package completions
 
 import (
-	"os"
-	"strconv"
 	"time"
 
 	arkmcp "mckinsey.com/ark/internal/mcp"
@@ -16,15 +14,8 @@ const (
 )
 
 func mcpToolCallRetryConfig() arkmcp.RetryConfig {
-	cfg := arkmcp.RetryConfig{
-		MaxAttempts: defaultMCPMaxAttempts,
-		Budget:      defaultMCPRetryBudgetSecs * time.Second,
+	return arkmcp.RetryConfig{
+		MaxAttempts: envInt(mcpMaxAttemptsEnv, defaultMCPMaxAttempts),
+		Budget:      time.Duration(envInt(mcpRetryBudgetSecondsEnv, defaultMCPRetryBudgetSecs)) * time.Second,
 	}
-	if v, err := strconv.Atoi(os.Getenv(mcpMaxAttemptsEnv)); err == nil && v > 0 {
-		cfg.MaxAttempts = v
-	}
-	if v, err := strconv.Atoi(os.Getenv(mcpRetryBudgetSecondsEnv)); err == nil && v > 0 {
-		cfg.Budget = time.Duration(v) * time.Second
-	}
-	return cfg
 }
