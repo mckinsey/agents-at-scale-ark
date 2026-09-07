@@ -86,6 +86,23 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
   sudo k3s crictl pull "${REGISTRY}/ark-broker:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
   IMAGE_PULL_PIDS+=($!)
 fi
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  # The Postgres backend installs ark-storage-dev (postgres:16-alpine) and the
+  # broker migration job during serial --wait helm installs. Prefetch so the
+  # pulls overlap the cert-manager/gateway setup that runs first, rather than
+  # blocking pod readiness. The aggregated apiserver reuses the already-prefetched
+  # ark-controller image.
+  for img in \
+    docker.io/postgres:16-alpine \
+    docker.io/alpine:3; do
+    sudo k3s crictl pull "$img" > /dev/null 2>&1 &
+    IMAGE_PULL_PIDS+=($!)
+  done
+  if [ "${INSTALL_BROKER}" = "true" ]; then
+    sudo k3s crictl pull "${REGISTRY}/ark-broker-migrate:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
+    IMAGE_PULL_PIDS+=($!)
+  fi
+fi
 if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
   echo "=== Pre-pulling test images (background) ==="
   # Argo image tags track the argo-workflows chart (services/argo-workflows/chart,
