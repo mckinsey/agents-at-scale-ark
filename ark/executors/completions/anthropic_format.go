@@ -2,6 +2,7 @@ package completions
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/openai/openai-go"
 )
@@ -96,6 +97,14 @@ type anthropicContent struct {
 	Input map[string]interface{} `json:"input,omitempty"`
 }
 
+func assistantMessageName(msg Message) string {
+	openaiMsg := openai.ChatCompletionMessageParamUnion(msg)
+	if assistantMsg := openaiMsg.OfAssistant; assistantMsg != nil {
+		return assistantMsg.Name.Value
+	}
+	return ""
+}
+
 func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthropicSystemBlock) {
 	type collectedMessage struct {
 		role string
@@ -125,7 +134,13 @@ func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthr
 			if role == RoleTool {
 				msgRole = RoleUser
 			}
-			collected = append(collected, collectedMessage{role: msgRole, text: content})
+			text := content
+			if role == RoleAssistant {
+				if name := assistantMessageName(msg); name != "" {
+					text = fmt.Sprintf("%s: %s", name, content)
+				}
+			}
+			collected = append(collected, collectedMessage{role: msgRole, text: text})
 		}
 	}
 

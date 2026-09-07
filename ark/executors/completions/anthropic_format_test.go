@@ -270,3 +270,28 @@ func TestExtractMessageContent(t *testing.T) {
 		assert.Equal(t, "assistant", role)
 	})
 }
+
+func TestConvertMessagesToAnthropicPreservesAgentName(t *testing.T) {
+	t.Run("prefixes assistant content with agent name", func(t *testing.T) {
+		messages := addAgentNameToMessages([]Message{NewAssistantMessage("here is the code")}, "agent1")
+		messages = append(messages, NewUserMessage("review it"))
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.Len(t, result, 2)
+		assert.Equal(t, "assistant", result[0].Role)
+		assert.Contains(t, string(result[0].Content), "agent1: here is the code")
+	})
+
+	t.Run("leaves unnamed assistant content unchanged", func(t *testing.T) {
+		messages := []Message{
+			NewUserMessage("hi"),
+			NewAssistantMessage("plain reply"),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.Len(t, result, 2)
+		assert.Equal(t, json.RawMessage(`"plain reply"`), result[1].Content)
+	})
+}
