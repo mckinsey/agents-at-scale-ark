@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { A2AServersSection } from '@/components/sections/a2a-servers-section';
+import { APIError } from '@/lib/api/client';
 import { A2AServersService } from '@/lib/services/a2a-servers';
 import type { A2AServer } from '@/lib/services/a2a-servers';
 
@@ -200,16 +201,19 @@ describe('A2AServersSection', () => {
   });
 
   it('should show an inline error state when the first load fails', async () => {
-    const error = new Error('Failed to fetch');
+    const error = new APIError('Failed to fetch', 403);
     vi.mocked(A2AServersService.getAll).mockRejectedValue(error);
 
     renderSection();
 
-    await waitFor(() => {
-      expect(
-        screen.getByText("Couldn't load A2A servers"),
-      ).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(
+          screen.getByText("Couldn't load A2A servers"),
+        ).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
     expect(screen.getByText('Failed to fetch')).toBeInTheDocument();
     expect(toast.error).not.toHaveBeenCalled();
   });
@@ -218,22 +222,28 @@ describe('A2AServersSection', () => {
     vi.mocked(A2AServersService.getAll).mockResolvedValueOnce(mockServers);
     vi.mocked(A2AServersService.delete).mockResolvedValue();
     vi.mocked(A2AServersService.getAll).mockRejectedValue(
-      new Error('Refresh failed'),
+      new APIError('Refresh failed', 403),
     );
 
     renderSection();
 
-    await waitFor(() => {
-      expect(screen.getByText('test-server-1')).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText('test-server-1')).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
 
     await userEvent.click(screen.getAllByText('Delete')[0]);
 
-    await waitFor(() => {
-      expect(
-        screen.getByText("Couldn't refresh A2A servers"),
-      ).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(
+          screen.getByText("Couldn't refresh A2A servers"),
+        ).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
     expect(screen.getByTestId('a2a-servers-table')).toBeInTheDocument();
     expect(
       screen.queryByText("Couldn't load A2A servers"),

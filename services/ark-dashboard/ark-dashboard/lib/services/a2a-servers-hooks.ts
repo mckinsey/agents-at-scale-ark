@@ -4,14 +4,18 @@ import { retryQueryHandler } from '@/lib/utils/query-retry';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { A2AServersService } from './a2a-servers';
-import type { A2AServerConfiguration } from './a2a-servers';
+import type {
+  A2AServer,
+  A2AServerConfiguration,
+  A2AServerDetail,
+} from './a2a-servers';
 
 export const A2A_SERVERS_QUERY_KEY = 'a2a-servers';
 
 export function useListA2AServers() {
   const { namespace } = useNamespace();
 
-  return useQuery({
+  return useQuery<A2AServer[], Error>({
     queryKey: [A2A_SERVERS_QUERY_KEY, namespace],
     queryFn: () => A2AServersService.getAll(namespace),
     enabled: Boolean(namespace),
@@ -22,7 +26,7 @@ export function useListA2AServers() {
 export function useA2AServer(name: string) {
   const { namespace } = useNamespace();
 
-  return useQuery({
+  return useQuery<A2AServerDetail, Error>({
     queryKey: [A2A_SERVERS_QUERY_KEY, name, namespace],
     queryFn: () => A2AServersService.get(namespace, name),
     enabled: Boolean(name && namespace),
