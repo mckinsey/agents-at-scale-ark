@@ -11,11 +11,18 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import Page
 
-from conftest import get_resource, list_resources, wait_for_resource
-from shared.k8s import apply_yaml, delete_resource
 from pages.a2a_tasks_page import A2ATasksPage
 from pages.hitl_approvals_page import HitlApprovalsPage
 from pages.sessions_page import SessionsPage
+from shared.ark import a2a_task_name, query_for_session
+from shared.k8s import (
+    apply_yaml,
+    delete_resource,
+    get_condition,
+    get_resource,
+    list_resources,
+    wait_for_phase,
+)
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 AGENTS_FIXTURE = FIXTURES_DIR / "hitl-approval-agents.yaml"
@@ -34,47 +41,6 @@ TASK_PHASE_FAILED = "failed"
 
 # Long enough for the executor to finish the turn after a decision is taken.
 QUERY_SETTLE_TIMEOUT_S = 120
-
-
-def _phase_reached(kind: str, name: str, phase: str, timeout_s: int = 120) -> tuple[bool, str]:
-    """Watch a resource until status.phase reaches the wanted value."""
-    return wait_for_resource(
-        kind, name, "jsonpath={.status.phase}=" + phase, timeout_s=timeout_s
-    )
-
-
-def _approval_task_name(query: dict) -> str:
-    """The A2ATask the dashboard drives an approval through, per the query."""
-    response = (query.get("status") or {}).get("response") or {}
-    task_id = (response.get("a2a") or {}).get("taskId") or ""
-    assert task_id, (
-        f"query {query['metadata']['name']} carries no A2A task id, so no approval "
-        f"was raised; status was {query.get('status')}"
-    )
-    return f"a2a-task-{task_id}"
-
-
-def _query_for_session(session_id: str) -> dict:
-    """The most recent query the dashboard created for a session."""
-    matching = [
-        query
-        for query in list_resources("queries")
-        if (query.get("spec") or {}).get("sessionId") == session_id
-    ]
-    assert matching, f"no query was created for session {session_id}"
-    return max(matching, key=lambda query: query["metadata"]["creationTimestamp"])
-
-
-def _completed_condition(task: dict) -> dict:
-    conditions = (task.get("status") or {}).get("conditions") or []
-    completed = [
-        condition for condition in conditions if condition.get("type") == "Completed"
-    ]
-    assert completed, (
-        f"task {task['metadata']['name']} has no Completed condition; "
-        f"conditions were {conditions}"
-    )
-    return completed[0]
 
 
 def _start_rollout_conversation(page: Page, agent_name: str) -> str:
@@ -132,12 +98,12 @@ class TestHitlApprovalJourneys:
             f"the card should show the version that was asked for, but showed {arguments!r}"
         )
 
-        query = _query_for_session(session_id)
+        query = query_for_session(session_id)
         assert query["status"]["phase"] == PHASE_INPUT_REQUIRED, (
             "the query should be parked awaiting input, but was in phase "
             f"{query['status']['phase']}"
         )
-        task = get_resource("a2atask", _approval_task_name(query))
+        task = get_resource("a2atask", a2a_task_name(query))
         assert task["status"]["phase"] == PHASE_INPUT_REQUIRED, (
             "the approval task should be awaiting input, but was in phase "
             f"{task['status']['phase']}"
@@ -150,24 +116,25 @@ class TestHitlApprovalJourneys:
         session_id = _start_rollout_conversation(page, APPROVAL_AGENT)
 
         approvals.wait_for_approval_request()
-        query = _query_for_session(session_id)
-        task_name = _approval_task_name(query)
+        query = query_for_session(session_id)
+        task_name = a2a_task_name(query)
 
         approvals.approve()
         assert approvals.wait_for_decision_recorded(), (
             "the card should stop offering a decision once one is submitted"
         )
 
-        granted, message = _phase_reached("a2atask", task_name, TASK_PHASE_COMPLETED)
+        granted, message = wait_for_phase("a2atask", task_name, TASK_PHASE_COMPLETED)
         assert granted, f"approval task never completed after approving: {message}"
 
-        condition = _completed_condition(get_resource("a2atask", task_name))
+        condition = get_condition(get_resource("a2atask", task_name), "Completed")
         assert condition["reason"] == "ApprovalGranted", (
             f"approving should record ApprovalGranted, got {condition['reason']}"
         )
 
-        finished, message = _phase_reached(
-            "query", query["metadata"]["name"], PHASE_DONE, QUERY_SETTLE_TIMEOUT_S
+        finished, message = wait_for_phase(
+            "query", query["metadata"]["name"], PHASE_DONE,
+            timeout_s=QUERY_SETTLE_TIMEOUT_S,
         )
         assert finished, f"query never finished after the tool was approved: {message}"
 
@@ -178,19 +145,19 @@ class TestHitlApprovalJourneys:
         session_id = _start_rollout_conversation(page, APPROVAL_AGENT)
 
         approvals.wait_for_approval_request()
-        query = _query_for_session(session_id)
-        task_name = _approval_task_name(query)
+        query = query_for_session(session_id)
+        task_name = a2a_task_name(query)
 
         approvals.reject()
         assert approvals.wait_for_decision_recorded(), (
             "the card should stop offering a decision once one is submitted"
         )
 
-        refused, message = _phase_reached("a2atask", task_name, TASK_PHASE_FAILED)
+        refused, message = wait_for_phase("a2atask", task_name, TASK_PHASE_FAILED)
         assert refused, f"approval task never failed after rejecting: {message}"
 
         task = get_resource("a2atask", task_name)
-        condition = _completed_condition(task)
+        condition = get_condition(task, "Completed")
         assert condition["reason"] == "ApprovalRejected", (
             f"rejecting should record ApprovalRejected, got {condition['reason']}"
         )
@@ -201,8 +168,9 @@ class TestHitlApprovalJourneys:
 
         # A rejection is handed back to the agent as a tool error rather than
         # failing the query, so the human still gets an answer.
-        finished, message = _phase_reached(
-            "query", query["metadata"]["name"], PHASE_DONE, QUERY_SETTLE_TIMEOUT_S
+        finished, message = wait_for_phase(
+            "query", query["metadata"]["name"], PHASE_DONE,
+            timeout_s=QUERY_SETTLE_TIMEOUT_S,
         )
         assert finished, f"query never answered after the tool was rejected: {message}"
 
@@ -217,8 +185,8 @@ class TestHitlApprovalJourneys:
             "a live approval should offer both Approve and Reject"
         )
 
-        query = _query_for_session(session_id)
-        task_name = _approval_task_name(query)
+        query = query_for_session(session_id)
+        task_name = a2a_task_name(query)
 
         assert approvals.wait_for_expiry_notice(), (
             "an approval left unanswered should tell the human it expired"
@@ -227,10 +195,10 @@ class TestHitlApprovalJourneys:
             "an expired approval must not still offer a decision"
         )
 
-        lapsed, message = _phase_reached("a2atask", task_name, TASK_PHASE_FAILED)
+        lapsed, message = wait_for_phase("a2atask", task_name, TASK_PHASE_FAILED)
         assert lapsed, f"approval task never failed after the window closed: {message}"
 
-        condition = _completed_condition(get_resource("a2atask", task_name))
+        condition = get_condition(get_resource("a2atask", task_name), "Completed")
         assert condition["reason"] == "ApprovalTimeoutRejected", (
             "letting the window close should record ApprovalTimeoutRejected, got "
             f"{condition['reason']}"
@@ -244,7 +212,7 @@ class TestHitlApprovalJourneys:
         session_id = _start_rollout_conversation(page, APPROVAL_AGENT)
 
         approvals.wait_for_approval_request()
-        task_name = _approval_task_name(_query_for_session(session_id))
+        task_name = a2a_task_name(query_for_session(session_id))
 
         tasks.navigate_to_tasks_tab()
         status = tasks.wait_for_task_status(task_name, "Input required")
