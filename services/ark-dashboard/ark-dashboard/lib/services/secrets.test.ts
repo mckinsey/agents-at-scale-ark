@@ -24,9 +24,9 @@ describe('secretsService.get', () => {
       keys: ['accessKeyId', 'secretAccessKey'],
     });
 
-    const secret = await secretsService.get('aws-credentials');
+    const secret = await secretsService.get('default', 'aws-credentials');
 
-    expect(mockGet).toHaveBeenCalledWith('/api/v1/secrets/aws-credentials');
+    expect(mockGet).toHaveBeenCalledWith('/api/v1/secrets/aws-credentials', { params: { namespace: 'default' } });
     expect(secret.keys).toEqual(['accessKeyId', 'secretAccessKey']);
   });
 });

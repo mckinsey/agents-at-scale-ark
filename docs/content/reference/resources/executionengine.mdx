@@ -5,7 +5,7 @@ description: "ExecutionEngine CRD reference — address resolution, A2A dispatch
 
 # ExecutionEngine
 
-An `ExecutionEngine` defines a pluggable, external runtime that executes agents (and teams) via the A2A protocol, instead of Ark's built-in completions executor. An `Agent` opts in through `spec.executionEngine: {name, namespace}`; agents that leave it unset run on the default executor, which needs no `ExecutionEngine` resource. Downstream engine implementations — such as the Claude Agent SDK and LangChain executors — live in the [Ark marketplace](https://github.com/mckinsey/agents-at-scale-marketplace). This resource is served under **`ark.mckinsey.com/v1prealpha1`** (note: `v1prealpha1`, not `v1alpha1`) and is namespaced.
+An `ExecutionEngine` defines a pluggable, external runtime that executes agents via the A2A protocol, instead of Ark's built-in completions executor. Teams are orchestrated by the completions executor, which fans out to the engine one member at a time. An `Agent` opts in through `spec.executionEngine: {name, namespace}`; agents that leave it unset run on the default executor, which needs no `ExecutionEngine` resource. Downstream engine implementations — such as the Claude Agent SDK and LangChain executors — live in the [Ark marketplace](https://github.com/mckinsey/agents-at-scale-marketplace). This resource is served under **`ark.mckinsey.com/v1prealpha1`** (note: `v1prealpha1`, not `v1alpha1`) and is namespaced.
 
 ## Spec
 

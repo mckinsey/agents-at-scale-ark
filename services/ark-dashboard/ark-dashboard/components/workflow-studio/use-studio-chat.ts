@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import type { ToolCallData } from '@/components/chat/tool-call';
 import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { chatService } from '@/lib/services/chat';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import type { ConversationMessage } from '@/lib/services/conversations';
 import { studioChatHistoryService } from '@/lib/services/studio-chat-history';
 import type {
@@ -238,6 +239,7 @@ export function useStudioChat({
   resumeConversation,
   timeout,
 }: UseStudioChatParams): UseStudioChatReturn {
+  const { namespace } = useNamespace();
   const [messages, setMessages] = useState<StudioChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -342,6 +344,7 @@ export function useStudioChat({
       try {
         const activeSessionId = sessionId ?? fallbackSessionIdRef.current;
         const { chunks } = await chatService.startStreamChatResponse(
+          namespace,
           dispatchInput,
           'agent',
           ARGO_MAKE_AUTHOR_AGENT_NAME,
@@ -409,6 +412,7 @@ export function useStudioChat({
       isStreaming,
       draftYaml,
       lastAgentYaml,
+      namespace,
       setBuilding,
       sessionId,
       timeout,

@@ -38,10 +38,12 @@ var sharedA2ABaseTransport = &http.Transport{
 }
 
 var (
-	sharedA2ASendTransport = otelhttp.NewTransport(sharedA2ABaseTransport,
+	sharedA2ASendTransport = otelhttp.NewTransport(
+		sharedA2ABaseTransport,
 		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string { return "a2a.send" }),
 	)
-	sharedA2ADiscoverTransport = otelhttp.NewTransport(sharedA2ABaseTransport,
+	sharedA2ADiscoverTransport = otelhttp.NewTransport(
+		sharedA2ABaseTransport,
 		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string { return "a2a.discover" }),
 	)
 	sharedA2ASendClient = &http.Client{
@@ -114,6 +116,7 @@ const (
 
 type A2AResponse struct {
 	Content   string
+	Messages  []string
 	ContextID string
 	TaskID    string
 }
@@ -222,7 +225,7 @@ func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aCli
 		return nil, fmt.Errorf("A2A server call failed: %w", err)
 	}
 
-	response, err := extractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, obj)
+	response, err := ExtractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, obj)
 	if err != nil {
 		if a2aRecorder != nil {
 			a2aRecorder.A2AResponseParseError(ctx, fmt.Sprintf("Failed to parse A2A response: %v", err))
@@ -244,7 +247,7 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 	return httpClient.Do(req)
 }
 
-func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, obj client.Object) (*A2AResponse, error) {
+func ExtractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, obj client.Object) (*A2AResponse, error) {
 	log := logf.FromContext(ctx)
 	if result == nil {
 		return nil, fmt.Errorf("result is nil")
@@ -255,6 +258,9 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 		text := ExtractTextFromParts(r.Parts)
 		response := &A2AResponse{
 			Content: text,
+		}
+		if text != "" {
+			response.Messages = []string{text}
 		}
 		if r.ContextID != nil && *r.ContextID != "" {
 			response.ContextID = *r.ContextID
@@ -275,6 +281,7 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 
 		response := &A2AResponse{
 			Content:   text,
+			Messages:  TaskReplyTexts(r),
 			ContextID: r.ContextID,
 			TaskID:    r.ID,
 		}
@@ -292,7 +299,7 @@ func ExtractTextFromTask(task *protocol.Task) (string, error) {
 
 	switch task.Status.State {
 	case TaskStateCompleted:
-		return extractAgentTextFromHistory(task.History), nil
+		return strings.Join(TaskReplyTexts(task), "\n"), nil
 
 	case TaskStateFailed:
 		errorMsg := "task failed"
@@ -300,6 +307,9 @@ func ExtractTextFromTask(task *protocol.Task) (string, error) {
 			errorMsg = ExtractTextFromParts(task.Status.Message.Parts)
 		}
 		return "", fmt.Errorf("%s", errorMsg)
+
+	case TaskStateInputRequired:
+		return "", fmt.Errorf("task %s is in state '%s': human-in-the-loop approval is not supported for an agent invoked over A2A by the executor, which cannot forward the approval request", task.ID, TaskStateInputRequired)
 
 	default:
 		return "", fmt.Errorf("task in state '%s' (expected %s or %s)", task.Status.State, TaskStateCompleted, TaskStateFailed)
@@ -320,6 +330,49 @@ func extractAgentTextFromHistory(history []protocol.Message) string {
 		}
 	}
 	return text.String()
+}
+
+func TaskReplyTexts(task *protocol.Task) []string {
+	if texts := ArtifactTexts(task.Artifacts); len(texts) > 0 {
+		return texts
+	}
+	if task.Status.Message != nil {
+		if text := ExtractTextFromParts(task.Status.Message.Parts); text != "" {
+			return []string{text}
+		}
+	}
+	if text := extractAgentTextFromHistory(task.History); text != "" {
+		return []string{text}
+	}
+	return nil
+}
+
+func ArtifactTexts(artifacts []protocol.Artifact) []string {
+	order := make([]string, 0, len(artifacts))
+	byKey := make(map[string]string)
+	for i := range artifacts {
+		text := ExtractTextFromParts(artifacts[i].Parts)
+		if text == "" {
+			continue
+		}
+		key := artifactKey(artifacts[i])
+		if _, seen := byKey[key]; !seen {
+			order = append(order, key)
+		}
+		byKey[key] = text
+	}
+	texts := make([]string, 0, len(order))
+	for _, key := range order {
+		texts = append(texts, byKey[key])
+	}
+	return texts
+}
+
+func artifactKey(artifact protocol.Artifact) string {
+	if artifact.Name != nil && *artifact.Name != "" {
+		return "name:" + *artifact.Name
+	}
+	return "id:" + artifact.ArtifactID
 }
 
 func ExtractTextFromParts(parts []protocol.Part) string {

@@ -457,5 +457,213 @@ class TestAPIKeyNamespaceScoping(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result_b)
 
 
+class TestAPIKeyOwnershipScoping(unittest.IsolatedAsyncioTestCase):
+    """Test that created_by is recorded and used to scope list/get/delete."""
+
+    @patch('ark_api.services.api_keys.get_context')
+    def setUp(self, mock_get_context):
+        mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
+        self.service = APIKeyService()
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_create_api_key_records_created_by(self, mock_v1_api, mock_api_client):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.metadata.uid = "test-uid-123"
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        request = APIKeyCreateRequest(name="Test API Key")
+        await self.service.create_api_key(request, created_by="alice@example.com")
+
+        secret_body = mock_api_instance.create_namespaced_secret.call_args[1]["body"]
+        annotation_data = json.loads(secret_body.metadata.annotations[API_KEY_ANNOTATION])
+        self.assertEqual(annotation_data["createdBy"], "alice@example.com")
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_last_used_update_preserves_created_by(self, mock_v1_api, mock_api_client):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        secret_key = "sk-ark-test-secret"
+        hashed = self.service._hash_secret_key(secret_key)
+
+        mock_secret = Mock()
+        mock_secret.type = "ark.mckinsey.com/api-key"
+        mock_secret.metadata.uid = "test-uid-123"
+        mock_secret.metadata.annotations = {
+            API_KEY_ANNOTATION: json.dumps({
+                "name": "Test Key",
+                "createdAt": "2024-01-01T00:00:00+00:00",
+                "createdBy": "alice@example.com"
+            })
+        }
+        mock_secret.data = {
+            "public_key": base64.b64encode(b"pk-ark-test").decode(),
+            "secret_key_hash": base64.b64encode(hashed.encode()).decode(),
+            "is_active": base64.b64encode(b"true").decode()
+        }
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+        mock_api_instance.patch_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        await self.service.verify_api_key("pk-ark-test", secret_key)
+
+        patched_secret = mock_api_instance.patch_namespaced_secret.call_args[1]["body"]
+        annotation_data = json.loads(patched_secret.metadata.annotations[API_KEY_ANNOTATION])
+        self.assertEqual(annotation_data["createdBy"], "alice@example.com")
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_list_api_keys_scoped_to_creator(self, mock_v1_api, mock_api_client):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        def make_secret(uid, name, created_by):
+            secret = Mock()
+            secret.metadata.uid = uid
+            secret.metadata.annotations = {
+                API_KEY_ANNOTATION: json.dumps({
+                    "name": name,
+                    "createdAt": "2024-01-01T00:00:00+00:00",
+                    "createdBy": created_by
+                })
+            }
+            secret.data = {
+                "public_key": base64.b64encode(f"pk-ark-{uid}".encode()).decode(),
+                "is_active": base64.b64encode(b"true").decode()
+            }
+            return secret
+
+        mock_response = Mock()
+        mock_response.items = [
+            make_secret("alice-key", "Alice Key", "alice@example.com"),
+            make_secret("bob-key", "Bob Key", "bob@example.com"),
+        ]
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.list_namespaced_secret = AsyncMock(return_value=mock_response)
+
+        result = await self.service.list_api_keys(created_by="alice@example.com")
+
+        self.assertEqual(result.count, 1)
+        self.assertEqual(result.items[0].name, "Alice Key")
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_get_api_key_by_public_key_denies_other_creator(self, mock_v1_api, mock_api_client):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.type = "ark.mckinsey.com/api-key"
+        mock_secret.metadata.uid = "test-uid"
+        mock_secret.metadata.annotations = {
+            API_KEY_ANNOTATION: json.dumps({
+                "name": "Test Key",
+                "createdAt": "2024-01-01T00:00:00+00:00",
+                "createdBy": "alice@example.com"
+            })
+        }
+        mock_secret.data = {
+            "public_key": base64.b64encode(b"pk-ark-test").decode(),
+            "secret_key_hash": base64.b64encode(b"hash").decode(),
+            "is_active": base64.b64encode(b"true").decode()
+        }
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        owned = await self.service.get_api_key_by_public_key("pk-ark-test", created_by="alice@example.com")
+        self.assertIsNotNone(owned)
+
+        not_owned = await self.service.get_api_key_by_public_key("pk-ark-test", created_by="bob@example.com")
+        self.assertIsNone(not_owned)
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_delete_api_key_denies_other_creator(self, mock_v1_api, mock_api_client):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.metadata.annotations = {
+            API_KEY_ANNOTATION: json.dumps({
+                "name": "Test Key",
+                "createdAt": "2024-01-01T00:00:00+00:00",
+                "createdBy": "alice@example.com"
+            })
+        }
+        mock_secret.string_data = {}
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+        mock_api_instance.patch_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.service.delete_api_key("pk-ark-test", created_by="bob@example.com")
+
+        self.assertFalse(result)
+        mock_api_instance.patch_namespaced_secret.assert_not_called()
+
+        result = await self.service.delete_api_key("pk-ark-test", created_by="alice@example.com")
+        self.assertTrue(result)
+        mock_api_instance.patch_namespaced_secret.assert_called_once()
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_get_api_key_by_public_key_reports_created_by(self, mock_v1_api, mock_api_client):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.type = "ark.mckinsey.com/api-key"
+        mock_secret.metadata.uid = "test-uid"
+        mock_secret.metadata.annotations = {
+            API_KEY_ANNOTATION: json.dumps({
+                "name": "Test Key",
+                "createdAt": "2024-01-01T00:00:00+00:00",
+                "createdBy": "alice@example.com"
+            })
+        }
+        mock_secret.data = {
+            "public_key": base64.b64encode(b"pk-ark-test").decode(),
+            "secret_key_hash": base64.b64encode(b"hash").decode(),
+            "is_active": base64.b64encode(b"true").decode()
+        }
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.service.get_api_key_by_public_key("pk-ark-test")
+        self.assertEqual(result["created_by"], "alice@example.com")
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_get_api_key_by_public_key_reports_no_creator_for_legacy_key(self, mock_v1_api, mock_api_client):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.type = "ark.mckinsey.com/api-key"
+        mock_secret.metadata.uid = "test-uid"
+        mock_secret.metadata.annotations = {
+            API_KEY_ANNOTATION: json.dumps({
+                "name": "Test Key",
+                "createdAt": "2024-01-01T00:00:00+00:00"
+            })
+        }
+        mock_secret.data = {
+            "public_key": base64.b64encode(b"pk-ark-test").decode(),
+            "secret_key_hash": base64.b64encode(b"hash").decode(),
+            "is_active": base64.b64encode(b"true").decode()
+        }
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.service.get_api_key_by_public_key("pk-ark-test")
+        self.assertIsNone(result["created_by"])
+
+
 if __name__ == '__main__':
     unittest.main()

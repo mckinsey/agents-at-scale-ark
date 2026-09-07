@@ -2,11 +2,8 @@
 
 import { useState } from 'react';
 
-import {
-  ChevronLeft,
-  CollapseContent,
-  ExpandContent,
-} from '@/components/icons';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
+import { CollapseContent, ExpandContent } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -99,24 +96,11 @@ export function ToolForm({
   const header = isViewing ? (
     <header className="flex flex-none flex-col gap-4">
       <div className="flex items-center justify-between">
-        <nav
-          aria-label="Breadcrumb"
-          className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-          <NamespacedLink
-            href="/tools"
-            className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-            <IconShell size="sm" className="opacity-100">
-              <ChevronLeft />
-            </IconShell>
-            Tools
-          </NamespacedLink>
-          <span aria-hidden="true" className="text-fg-secondary">
-            /
-          </span>
-          <span aria-current="page" className="text-fg-secondary">
-            {displayName}
-          </span>
-        </nav>
+        <DetailBreadcrumb
+          backHref="/tools"
+          backLabel="Tools"
+          current={displayName}
+        />
         <NamespacedLink href="/tools">
           <Button variant="outline">Back</Button>
         </NamespacedLink>
@@ -126,22 +110,11 @@ export function ToolForm({
   ) : (
     <header className="flex flex-none flex-col gap-4">
       <div className="flex items-center justify-between">
-        <nav
-          aria-label="Breadcrumb"
-          className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-          <ChevronLeft className="size-4 text-fg-disabled" />
-          <NamespacedLink
-            href="/tools"
-            className="text-fg-disabled transition-colors hover:text-fg-secondary">
-            Tools
-          </NamespacedLink>
-          <span aria-hidden="true" className="text-fg-secondary">
-            /
-          </span>
-          <span aria-current="page" className="text-fg-secondary">
-            Create tool
-          </span>
-        </nav>
+        <DetailBreadcrumb
+          backHref="/tools"
+          backLabel="Tools"
+          current="Create tool"
+        />
         <div className="flex items-center gap-2">
           {cancelHref ? (
             <NamespacedLink href={cancelHref}>
@@ -167,7 +140,7 @@ export function ToolForm({
   );
 
   return (
-    <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
+    <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
       {header}
 
       <Form {...form}>

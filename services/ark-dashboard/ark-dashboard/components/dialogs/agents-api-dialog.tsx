@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { type Agent, agentsService } from '@/lib/services';
+import { type AgentListItem, agentsService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { getBashSnippet } from './code-snippets/bash-snippet';
 import { getGoSnippet } from './code-snippets/go-snippet';
@@ -41,7 +42,8 @@ export function AgentsAPIDialog({
   open,
   onOpenChange,
 }: Readonly<AgentsAPIDialogProps>) {
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const { namespace } = useNamespace();
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [copiedEndpoint, setCopiedEndpoint] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [userSelectedAgent, setUserSelectedAgent] = useState<string | null>(
@@ -52,8 +54,8 @@ export function AgentsAPIDialog({
 
   useEffect(() => {
     if (!open) return;
-    agentsService.getAll().then(setAgents).catch(console.error);
-  }, [open]);
+    agentsService.list(namespace).then(setAgents).catch(console.error);
+  }, [namespace, open]);
 
   const selectedAgent = (() => {
     if (userSelectedAgent && agents.some(a => a.name === userSelectedAgent)) {

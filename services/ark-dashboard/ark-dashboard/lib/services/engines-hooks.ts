@@ -1,22 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
+import { useNamespace } from '@/providers/NamespaceProvider';
+
 import { executionEnginesService } from './engines';
 
 export const GET_ALL_EXECUTION_ENGINES_QUERY_KEY = 'get-all-execution-engines';
 
 export const useGetAllExecutionEngines = () => {
+  const { namespace } = useNamespace();
+
   return useQuery({
-    queryKey: [GET_ALL_EXECUTION_ENGINES_QUERY_KEY],
-    queryFn: executionEnginesService.getAll,
+    queryKey: [GET_ALL_EXECUTION_ENGINES_QUERY_KEY, namespace],
+    queryFn: () => executionEnginesService.getAll(namespace),
+    enabled: Boolean(namespace),
   });
 };
 
 export const useDeleteExecutionEngine = () => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
-    mutationFn: (name: string) => executionEnginesService.delete(name),
+    mutationFn: (name: string) =>
+      executionEnginesService.delete(namespace, name),
     onSuccess: (_result, name) => {
       toast.success('Execution Engine Deleted', {
         description: `Successfully deleted ${name}`,

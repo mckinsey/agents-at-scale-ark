@@ -5,6 +5,7 @@ from pages.agents_page import AgentsPage
 from pages.teams_page import TeamsPage
 from pages.sessions_page import SessionsPage
 from conftest import MOCK_LLM_MODEL_NAME
+from urllib.parse import urlparse
 
 
 logger = logging.getLogger(__name__)
@@ -290,8 +291,11 @@ class TestSessionsAndConversations:
             "Create button should be disabled when no participant is selected"
 
         sessions.cancel_session_dialog()
-        assert page.url == initial_url, \
-            "URL should not change after canceling session dialog"
+        # The dashboard writes the resolved namespace into the URL, so the query
+        # string may gain ?namespace= between the two reads. Cancel must not
+        # change the route; compare paths rather than whole URLs.
+        assert urlparse(page.url).path == urlparse(initial_url).path, \
+            "Route should not change after canceling session dialog"
         assert not sessions.is_visible(sessions.SESSION_DIALOG, timeout=3000), \
             "Dialog should close after clicking Cancel"
 

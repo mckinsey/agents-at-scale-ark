@@ -252,3 +252,31 @@ func TestCallToolHonorsRetryAfter(t *testing.T) {
 	require.GreaterOrEqual(t, time.Since(start), 900*time.Millisecond)
 	require.Equal(t, 2, server.toolCalls())
 }
+
+func TestCallToolTimeoutBoundsWholeRetrySequence(t *testing.T) {
+	server := newFlakyMCPServer(t, -1, http.StatusTooManyRequests, "")
+	cfg := RetryConfig{MaxAttempts: 50, Budget: time.Minute, BaseDelay: 20 * time.Millisecond, MaxDelay: 40 * time.Millisecond}
+	client, err := NewMCPClient(context.Background(), server.URL, nil, httpTransport, 5*time.Second, MCPSettings{},
+		WithToolCallRetry(cfg), WithToolCallTimeout(200*time.Millisecond))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Client.Close() })
+
+	start := time.Now()
+	_, err = client.CallTool(context.Background(), echoParams())
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	require.Less(t, elapsed, 30*time.Second, "toolCallTimeout must bound the retry sequence, not just one attempt")
+	require.Less(t, server.toolCalls(), cfg.MaxAttempts, "the sequence must stop before exhausting the attempt budget")
+}
+
+func TestCallToolWithoutTimeoutRunsFullRetrySequence(t *testing.T) {
+	server := newFlakyMCPServer(t, 2, http.StatusTooManyRequests, "")
+	client := newRetryTestClient(t, server.URL, fastRetryConfig())
+
+	result, err := client.CallTool(context.Background(), echoParams())
+
+	require.NoError(t, err, "an unset toolCallTimeout must leave retry behaviour untouched")
+	require.NotNil(t, result)
+	require.Equal(t, 3, server.toolCalls())
+}

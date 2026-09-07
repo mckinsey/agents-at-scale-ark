@@ -3,9 +3,12 @@
 import { PlugConnect } from '@/components/icons';
 import { McpServersTable } from '@/components/sections/mcp-servers-table';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { mcpServersService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function McpServersSection() {
+  const { namespace } = useNamespace();
   return (
     <ResourceListSection
       icon={<PlugConnect />}
@@ -14,7 +17,7 @@ export function McpServersSection() {
       subtitle="Add and manage all your MCPs"
       createHref="/mcp/new"
       createLabel="Add MCP"
-      learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/"
+      learnMoreUrl={DOCS_URLS.tools}
       entityLabel="MCP Server"
       entityPluralLabel="MCP servers"
       emptyTitle="No MCP Servers Yet"
@@ -24,8 +27,8 @@ export function McpServersSection() {
           <p>Get started by adding your first MCP Server.</p>
         </>
       }
-      loadItems={() => mcpServersService.getAll()}
-      deleteItem={id => mcpServersService.delete(id)}
+      loadItems={() => mcpServersService.getAll(namespace)}
+      deleteItem={id => mcpServersService.delete(namespace, id)}
       renderTable={(servers, onDelete, reload) => (
         <McpServersTable
           servers={servers}

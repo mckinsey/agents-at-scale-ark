@@ -23,27 +23,29 @@ func DiscoverTargetEndpoints(ctx context.Context, k8sClient client.Client) ([]Ta
 		return nil, nil
 	}
 
-	secretList := &corev1.SecretList{}
-	if err := k8sClient.List(ctx, secretList, scopedListOptions()...); err != nil {
-		return nil, fmt.Errorf("failed to list Secrets: %w", err)
-	}
-
 	endpoints := make([]TargetEndpoint, 0)
 
-	for _, secret := range secretList.Items {
-		if secret.Name != otelSecretName {
-			continue
+	for _, opts := range scopedListOptionSets() {
+		secretList := &corev1.SecretList{}
+		if err := k8sClient.List(ctx, secretList, opts...); err != nil {
+			return nil, fmt.Errorf("failed to list Secrets: %w", err)
 		}
 
-		endpoint := parseTargetSecret(&secret)
-		if endpoint == nil {
-			continue
+		for _, secret := range secretList.Items {
+			if secret.Name != otelSecretName {
+				continue
+			}
+
+			endpoint := parseTargetSecret(&secret)
+			if endpoint == nil {
+				continue
+			}
+
+			endpoint.Namespace = secret.Namespace
+			endpoints = append(endpoints, *endpoint)
+
+			log.Info("discovered OTEL endpoint", "namespace", secret.Namespace, "endpoint", endpoint.Endpoint)
 		}
-
-		endpoint.Namespace = secret.Namespace
-		endpoints = append(endpoints, *endpoint)
-
-		log.Info("discovered OTEL endpoint", "namespace", secret.Namespace, "endpoint", endpoint.Endpoint)
 	}
 
 	return endpoints, nil

@@ -116,7 +116,10 @@ export type ChatSession = {
 };
 
 export const chatService = {
-  async createQuery(query: QueryCreateRequest): Promise<QueryDetailResponse> {
+  async createQuery(
+    namespace: string,
+    query: QueryCreateRequest,
+  ): Promise<QueryDetailResponse> {
     // Normalize target type to lowercase
     const normalizedQuery = {
       ...query,
@@ -131,6 +134,7 @@ export const chatService = {
     const response = await apiClient.post<QueryDetailResponse>(
       `/api/v1/queries/`,
       normalizedQuery,
+      { params: { namespace } },
     );
 
     const inputContent =
@@ -152,10 +156,14 @@ export const chatService = {
     return response;
   },
 
-  async getQuery(queryName: string): Promise<QueryDetailResponse | null> {
+  async getQuery(
+    namespace: string,
+    queryName: string,
+  ): Promise<QueryDetailResponse | null> {
     try {
       return await apiClient.get<QueryDetailResponse>(
         `/api/v1/queries/${queryName}`,
+        { params: { namespace } },
       );
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {
@@ -165,16 +173,20 @@ export const chatService = {
     }
   },
 
-  async getA2ATask(taskId: string) {
-    return await a2aTasksService.get(taskId);
+  async getA2ATask(namespace: string, taskId: string) {
+    return await a2aTasksService.get(namespace, taskId);
   },
 
-  async listQueries(): Promise<QueryListResponse> {
-    const response = await apiClient.get<QueryListResponse>(`/api/v1/queries/`);
+  async listQueries(namespace: string): Promise<QueryListResponse> {
+    const response = await apiClient.get<QueryListResponse>(
+      `/api/v1/queries/`,
+      { params: { namespace } },
+    );
     return response;
   },
 
   async updateQuery(
+    namespace: string,
     queryName: string,
     updates: QueryUpdateRequest,
   ): Promise<QueryDetailResponse | null> {
@@ -182,6 +194,7 @@ export const chatService = {
       const response = await apiClient.put<QueryDetailResponse>(
         `/api/v1/queries/${queryName}`,
         updates,
+        { params: { namespace } },
       );
       return response;
     } catch (error) {
@@ -192,9 +205,11 @@ export const chatService = {
     }
   },
 
-  async deleteQuery(queryName: string): Promise<boolean> {
+  async deleteQuery(namespace: string, queryName: string): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/queries/${queryName}`);
+      await apiClient.delete(`/api/v1/queries/${queryName}`, {
+        params: { namespace },
+      });
       return true;
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {
@@ -205,6 +220,7 @@ export const chatService = {
   },
 
   async submitChatQuery(
+    namespace: string,
     input: string,
     targetType: string,
     targetName: string,
@@ -236,11 +252,14 @@ export const chatService = {
       };
     }
 
-    return await this.createQuery(queryRequest);
+    return await this.createQuery(namespace, queryRequest);
   },
 
-  async getChatHistory(sessionId: string): Promise<QueryDetailResponse[]> {
-    const response = await this.listQueries();
+  async getChatHistory(
+    namespace: string,
+    sessionId: string,
+  ): Promise<QueryDetailResponse[]> {
+    const response = await this.listQueries(namespace);
 
     return response.items
       .filter(item => item.name.startsWith('chat-query-'))
@@ -265,9 +284,12 @@ export const chatService = {
       });
   },
 
-  async getQueryResult(queryName: string): Promise<ChatResponse> {
+  async getQueryResult(
+    namespace: string,
+    queryName: string,
+  ): Promise<ChatResponse> {
     try {
-      const query = await this.getQuery(queryName);
+      const query = await this.getQuery(namespace, queryName);
 
       if (!query || !query.status) {
         return { status: 'unknown', terminal: false };
@@ -320,6 +342,7 @@ export const chatService = {
   },
 
   async streamQueryStatus(
+    namespace: string,
     queryName: string,
     onUpdate: (status: QueryDetailResponse['status']) => void,
     pollInterval: number = 1000,
@@ -329,7 +352,7 @@ export const chatService = {
     const poll = async () => {
       while (!stopped) {
         try {
-          const query = await this.getQuery(queryName);
+          const query = await this.getQuery(namespace, queryName);
           if (query && query.status) {
             onUpdate(query.status);
 
@@ -397,6 +420,7 @@ export const chatService = {
   },
 
   async startStreamChatResponse(
+    namespace: string,
     input: string,
     targetType: string,
     targetName: string,
@@ -410,6 +434,7 @@ export const chatService = {
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
   }> {
     const query = await this.submitChatQuery(
+      namespace,
       input,
       targetType,
       targetName,
@@ -474,6 +499,7 @@ export const chatService = {
   },
 
   async *streamChatResponse(
+    namespace: string,
     input: string,
     targetType: string,
     targetName: string,
@@ -483,6 +509,7 @@ export const chatService = {
     abortSignal?: AbortSignal,
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     const { chunks } = await this.startStreamChatResponse(
+      namespace,
       input,
       targetType,
       targetName,
@@ -494,7 +521,14 @@ export const chatService = {
     yield* chunks;
   },
 
-  async cancelQuery(queryName: string): Promise<QueryDetailResponse> {
-    return await apiClient.patch(`/api/v1/queries/${queryName}/cancel`);
+  async cancelQuery(
+    namespace: string,
+    queryName: string,
+  ): Promise<QueryDetailResponse> {
+    return await apiClient.patch(
+      `/api/v1/queries/${queryName}/cancel`,
+      undefined,
+      { params: { namespace } },
+    );
   },
 };

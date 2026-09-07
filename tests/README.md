@@ -28,6 +28,9 @@ End-to-end tests for Agents at Scale (ARK) using Chainsaw testing framework.
 - **`team-sequential/`** - Sequential team workflows
 - **`team-round-robin/`** - Round-robin with terminate tool
 
+#### Execution Engine Tests
+- **`execution-engine-team/`** - Sequential team whose members run on a named ExecutionEngine
+
 #### Validation Tests
 - **`admission-failures/`** - Comprehensive admission controller validation
 
@@ -37,7 +40,7 @@ End-to-end tests for Agents at Scale (ARK) using Chainsaw testing framework.
 |---------------|---------------|-------------------|-----------------|
 | **Memory** | 0 | 1+ | 🔴 **No Coverage** |
 | **MCPServer** | 0 | 3+ | 🔴 **No Coverage** |
-| **ExecutionEngine** | 0 | 3+ | 🔴 **No Coverage** |
+| **ExecutionEngine** | 1 | 3+ | 🟡 **Partial Coverage** |
 | **Team Strategies** | 2/4 | 4+ | 🟡 **Partial Coverage** |
 | **Model Providers** | 1/3 | 8+ | 🟡 **Partial Coverage** |
 
@@ -73,6 +76,7 @@ End-to-end tests for Agents at Scale (ARK) using Chainsaw testing framework.
 
 #### LangChain Engine Tests
 - [ ] **`execution-engine-langchain/`** - LangChain agent execution
+- [ ] **`execution-engine-echo/`** - ark-sdk echo engine proving `target` resolution end to end
 - [ ] **`langchain-tool-integration/`** - Tool chain workflows
 
 ### Phase 4: Enhanced Model & Query Coverage (Weeks 8-9)
@@ -195,5 +199,5 @@ When adding new tests:
 
 - **Tests Implemented**: 15+ test scenarios
 - **Resource Types Covered**: 6/9 (67%)
-- **Critical Gaps**: Memory, MCP, ExecutionEngine
+- **Critical Gaps**: Memory, MCP
 - **Next Priority**: Phase 1 (Memory, MCP integration)

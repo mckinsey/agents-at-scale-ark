@@ -3,9 +3,12 @@
 import { Memory } from '@/components/icons';
 import { ModelsTable } from '@/components/sections/models-table';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { modelsService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function ModelsSection() {
+  const { namespace } = useNamespace();
   return (
     <ResourceListSection
       icon={<Memory />}
@@ -13,7 +16,7 @@ export function ModelsSection() {
       subtitle="Add and manage all your models"
       createHref="/models/new"
       createLabel="Add model"
-      learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/models/"
+      learnMoreUrl={DOCS_URLS.models}
       entityLabel="Model"
       entityPluralLabel="models"
       emptyTitle="No models yet"
@@ -23,8 +26,8 @@ export function ModelsSection() {
           <p>Get started by adding your first model.</p>
         </>
       }
-      loadItems={() => modelsService.getAll()}
-      deleteItem={id => modelsService.deleteById(id)}
+      loadItems={() => modelsService.list(namespace)}
+      deleteItem={id => modelsService.deleteById(namespace, id)}
       renderTable={(models, onDelete) => (
         <ModelsTable models={models} onDelete={onDelete} />
       )}

@@ -1,98 +1,154 @@
-import { RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+'use client';
+
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
+import { SortableColumnHeader } from '@/components/common/sortable-column-header';
+import { Autorenew, PlaylistAddCheck } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+  LearnMoreButton,
+  ResourceEmptyState,
+  ResourceErrorState,
+} from '@/components/sections/resource-list-states';
+import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  rowHoverOverlayClass,
+} from '@/components/ui/table';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
+import { DOCS_URLS } from '@/lib/constants/docs';
+import { timestampValue, useValueSort } from '@/lib/hooks/use-value-sort';
 import { type A2ATask } from '@/lib/services/a2a-tasks';
 import { useListA2ATasks } from '@/lib/services/a2a-tasks-hooks';
+import { cn } from '@/lib/utils';
+import { formatAge } from '@/lib/utils/time';
 
-import { StatusDot } from './status-dot';
-import { mapTaskPhaseToVariant } from './utils';
+import { TaskStatus } from './task-status';
 
-function DataTable({ data }: { data: A2ATask[] }) {
-  const { push } = useNamespacedNavigation();
-  const Icon =
-    DASHBOARD_SECTIONS['tasks']?.icon || DASHBOARD_SECTIONS['a2a']?.icon;
+const SKELETON_ROWS = [1, 2, 3, 4, 5];
+
+const getCreatedTime = (task: A2ATask) =>
+  timestampValue(task.creationTimestamp);
+
+function TasksTableSkeleton() {
+  return (
+    <div
+      className="mt-5 flex flex-col gap-1"
+      aria-busy="true"
+      aria-label="Loading A2A tasks">
+      {SKELETON_ROWS.map(row => (
+        <Skeleton key={row} className="h-[60px] w-full" />
+      ))}
+    </div>
+  );
+}
+
+function TaskRow({ task }: { readonly task: A2ATask }) {
+  const href = `/tasks/${encodeURIComponent(task.name)}`;
 
   return (
-    <div className="overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
-            <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+    <TableRow className="relative isolate cursor-pointer transition-colors">
+      <TableCell size="small" className="w-[110px]">
+        {formatAge(task.creationTimestamp)}
+      </TableCell>
+
+      <TableCell size="small" className="w-[180px]">
+        <span aria-hidden className={rowHoverOverlayClass} />
+        <TruncatedTooltip label={task.taskId}>
+          <NamespacedLink
+            href={href}
+            className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
+            {task.taskId}
+          </NamespacedLink>
+        </TruncatedTooltip>
+      </TableCell>
+
+      <TableCell size="small" className="relative z-10">
+        <TruncatedTooltip label={task.name}>
+          <NamespacedLink
+            href={href}
+            tabIndex={-1}
+            className="text-fg-primary block w-full truncate">
+            {task.name}
+          </NamespacedLink>
+        </TruncatedTooltip>
+      </TableCell>
+
+      <TableCell size="small" className="relative z-10 w-[180px]">
+        <TruncatedTooltip label={task.agentRef?.name || '—'}>
+          <NamespacedLink
+            href={href}
+            tabIndex={-1}
+            className="text-fg-primary block w-full truncate">
+            {task.agentRef?.name || '—'}
+          </NamespacedLink>
+        </TruncatedTooltip>
+      </TableCell>
+
+      <TableCell size="small" className="relative z-10 w-[180px]">
+        <TruncatedTooltip label={task.queryRef?.name || '—'}>
+          <NamespacedLink
+            href={href}
+            tabIndex={-1}
+            className="text-fg-primary block w-full truncate">
+            {task.queryRef?.name || '—'}
+          </NamespacedLink>
+        </TruncatedTooltip>
+      </TableCell>
+
+      <TableCell size="small" className="relative z-10 w-[160px]">
+        <TaskStatus phase={task.phase} />
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function TasksTable({ data }: { readonly data: A2ATask[] }) {
+  const {
+    sortDirection,
+    toggleSortDirection,
+    sortedItems: sortedTasks,
+  } = useValueSort(data, getCreatedTime);
+
+  return (
+    <div className="mt-5 min-h-0 flex-1 overflow-auto">
+      <Table className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+        <TableHeader>
+          <TableRow>
+            <TableHead size="small" className="w-[110px]">
+              <SortableColumnHeader
+                label="Created"
+                sortDirection={sortDirection}
+                onToggle={toggleSortDirection}
+              />
+            </TableHead>
+            <TableHead size="small" className="w-[180px]">
               Task ID
-            </th>
-            <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-              Name
-            </th>
-            <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-              Phase
-            </th>
-            <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+            </TableHead>
+            <TableHead size="small">Name</TableHead>
+            <TableHead size="small" className="w-[180px]">
               Agent
-            </th>
-            <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+            </TableHead>
+            <TableHead size="small" className="w-[180px]">
               Query
-            </th>
-            <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-              Created
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.length ? (
-            data.map(task => (
-              <tr
-                key={task.name}
-                onClick={() => push(`/tasks/${task.name}`)}
-                className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30">
-                <td className="px-3 py-3 font-mono text-sm text-gray-900 dark:text-gray-100">
-                  {task.taskId}
-                </td>
-                <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                  {task.name}
-                </td>
-                <td className="px-3 py-3 text-center text-gray-900 dark:text-gray-100">
-                  <StatusDot variant={mapTaskPhaseToVariant(task.phase)} />
-                </td>
-                <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                  {task.agentRef?.name || '-'}
-                </td>
-                <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                  {task.queryRef?.name || '-'}
-                </td>
-                <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                  {task.creationTimestamp
-                    ? new Date(task.creationTimestamp).toLocaleString()
-                    : '-'}
-                </td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td
-                colSpan={6}
-                className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">{Icon && <Icon />}</EmptyMedia>
-                    <EmptyTitle>No A2A Tasks Found</EmptyTitle>
-                    <EmptyDescription>
-                      No Agent-to-Agent tasks have been created yet.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            </TableHead>
+            <TableHead size="small" className="w-[160px]">
+              Status
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sortedTasks.map(task => (
+            <TaskRow key={task.name} task={task} />
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -108,48 +164,71 @@ export function A2ATasksSection() {
 
   const tasks = tasksData?.items || [];
 
+  const refreshButton = (
+    <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+      <IconShell size="sm">
+        <Autorenew className={cn(isFetching && 'animate-spin')} />
+      </IconShell>
+      Refresh
+    </Button>
+  );
+
+  const header = (
+    <ResourcePageHeader
+      icon={<PlaylistAddCheck />}
+      title={
+        tasksData === undefined ? 'A2A tasks' : `A2A tasks (${tasksData.count})`
+      }
+      description="Manage agent-to-agent messaging, and collaboration"
+      actions={refreshButton}
+    />
+  );
+
   if (loading) {
     return (
-      <div className="flex flex-1 flex-col">
-        <main className="flex-1 overflow-auto p-4">
-          <div className="py-8 text-center">Loading tasks...</div>
-        </main>
+      <div className="content-shell flex h-full w-full flex-col">
+        {header}
+        <TasksTableSkeleton />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-1 flex-col">
-        <main className="flex-1 overflow-auto p-4">
-          <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-600">
-            <p className="font-medium">Error loading tasks</p>
-            <p className="mt-1 text-sm">
-              {error instanceof Error ? error.message : String(error)}
-            </p>
-          </div>
-        </main>
+      <div className="content-shell flex h-full w-full flex-col">
+        {header}
+        <ResourceErrorState
+          className="mt-5"
+          title="Couldn't load A2A tasks"
+          description={error instanceof Error ? error.message : String(error)}
+        />
+      </div>
+    );
+  }
+
+  if (!tasks.length) {
+    return (
+      <div className="content-shell flex h-full w-full flex-col">
+        {header}
+        <ResourceEmptyState
+          icon={<PlaylistAddCheck />}
+          title="No A2A task yet"
+          description={
+            <>
+              <p className="mb-2">You haven&apos;t added any A2A task yet.</p>
+              <p>Get started to see A2A.</p>
+            </>
+          }
+          actions={<LearnMoreButton href={DOCS_URLS.a2aTasks} />}
+        />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <main className="mt-3 flex-1 overflow-auto">
-        <div className="mb-4 flex items-center justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isFetching}>
-            <RefreshCw
-              className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`}
-            />
-            Refresh
-          </Button>
-        </div>
-        <DataTable data={tasks} />
-      </main>
+    <div className="content-shell flex h-full w-full flex-col">
+      {header}
+      <TasksTable data={tasks} />
     </div>
   );
 }

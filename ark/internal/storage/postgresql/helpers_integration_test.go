@@ -1,0 +1,54 @@
+//go:build integration
+// +build integration
+
+/* Copyright 2025. McKinsey & Company */
+
+package postgresql
+
+import (
+	"os"
+	"strconv"
+	"testing"
+	"time"
+)
+
+// withFastRelist shortens the broadcaster relist ticker for the duration of a
+// test. Cross-replica tests rely on the safety-net relist (replica B has no WAL
+// consumer), which defaults to 120s; overriding it keeps those tests fast.
+// Safe because integration tests run sequentially (no t.Parallel).
+func withFastRelist(t *testing.T, d time.Duration) {
+	t.Helper()
+	old := relistInterval
+	relistInterval = d
+	t.Cleanup(func() { relistInterval = old })
+}
+
+func testConfig(t *testing.T) Config {
+	t.Helper()
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		t.Skip("POSTGRES_HOST not set, skipping integration test")
+	}
+	port := 5432
+	if p := os.Getenv("POSTGRES_PORT"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil {
+			port = parsed
+		}
+	}
+	user := os.Getenv("POSTGRES_USER")
+	if user == "" {
+		user = "postgres"
+	}
+	db := os.Getenv("POSTGRES_DB")
+	if db == "" {
+		db = "ark"
+	}
+	return Config{
+		Host:     host,
+		Port:     port,
+		Database: db,
+		User:     user,
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		SSLMode:  "disable",
+	}
+}

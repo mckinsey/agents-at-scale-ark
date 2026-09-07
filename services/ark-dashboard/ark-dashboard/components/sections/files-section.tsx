@@ -6,6 +6,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { MultiTabPreviewDialog } from '@/components/file-preview/multi-tab-preview-dialog';
 import {
@@ -18,7 +19,10 @@ import {
   SaveAlt,
   Trash,
 } from '@/components/icons';
-import { ResourceEmptyState } from '@/components/sections/resource-list-states';
+import {
+  LearnMoreButton,
+  ResourceEmptyState,
+} from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -47,7 +51,9 @@ import {
   rowHoverOverlayClass,
 } from '@/components/ui/table';
 import { useMultiFilePreview } from '@/hooks/use-multi-file-preview';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { filesService } from '@/lib/services/files';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import { useGetFilesCount } from '@/lib/services/files-count-hooks';
 import {
   useDeleteDirectory,
@@ -55,9 +61,6 @@ import {
   useListFiles,
 } from '@/lib/services/files-hooks';
 import type { DirectoryItem, FileItem } from '@/lib/types/files';
-
-const FILE_GATEWAY_DOCS_URL =
-  'https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/';
 
 const MENU_CONTENT_CLASS =
   'w-[211px] rounded-none border-0 bg-surface-bg-tertiary';
@@ -111,6 +114,7 @@ function RowActionsMenu({ children }: Readonly<{ children: React.ReactNode }>) {
 }
 
 export function FilesSection() {
+  const { namespace } = useNamespace();
   const [prefix, setPrefix] = useAtom(filesBrowserPrefixAtom);
   const [uploading, setUploading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -216,7 +220,7 @@ export function FilesSection() {
           <span>
             Maximum allowed is 1MB, see the{' '}
             <a
-              href="https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/#file-size-limitations"
+              href={DOCS_URLS.fileGatewaySizeLimits}
               target="_blank"
               rel="noopener noreferrer"
               className="underline">
@@ -253,7 +257,7 @@ export function FilesSection() {
         type: pendingFile.type,
       });
 
-      await filesService.upload(renamedFile, prefix);
+      await filesService.upload(namespace, renamedFile, prefix);
 
       toast.success('File Uploaded Successfully');
       setPendingFile(null);
@@ -321,7 +325,7 @@ export function FilesSection() {
   };
 
   const handleDownload = (key: string) => {
-    filesService.download(key);
+    filesService.download(namespace, key);
   };
 
   const handleCopySuccess = (path: string) => {
@@ -334,7 +338,7 @@ export function FilesSection() {
     if (!nextToken) return;
 
     try {
-      const moreData = await filesService.list({
+      const moreData = await filesService.list(namespace, {
         prefix,
         max_keys: 100,
         continuation_token: nextToken,
@@ -366,31 +370,23 @@ export function FilesSection() {
 
   return (
     <div className="content-shell flex h-full w-full flex-col gap-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <IconShell size="default" variant="primary">
-              <InsertDriveFile />
-            </IconShell>
-            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-              {pageTitle}
-            </h1>
-          </div>
-          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-            Manage datasets, documents, and assets used by agents
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => loadFiles()}>
-            <Autorenew className="h-4 w-4" />
-            Refresh
-          </Button>
-          <Button onClick={handleDropZoneClick}>
-            <Add className="h-4 w-4" />
-            Add file
-          </Button>
-        </div>
-      </div>
+      <ResourcePageHeader
+        icon={<InsertDriveFile />}
+        title={pageTitle}
+        description="Manage datasets, documents, and assets used by agents"
+        actions={
+          <>
+            <Button variant="outline" onClick={() => loadFiles()}>
+              <Autorenew className="h-4 w-4" />
+              Refresh
+            </Button>
+            <Button onClick={handleDropZoneClick}>
+              <Add className="h-4 w-4" />
+              Add file
+            </Button>
+          </>
+        }
+      />
 
       <input
         ref={fileInputRef}
@@ -446,14 +442,7 @@ export function FilesSection() {
               <p>Upload your first file to get started.</p>
             </>
           }
-          actions={
-            <a
-              href={FILE_GATEWAY_DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer">
-              <Button variant="outline">Learn more</Button>
-            </a>
-          }
+          actions={<LearnMoreButton href={DOCS_URLS.fileGateway} />}
         />
       )}
 

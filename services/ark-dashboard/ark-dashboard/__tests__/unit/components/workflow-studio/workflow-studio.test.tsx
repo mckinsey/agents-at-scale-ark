@@ -79,6 +79,10 @@ const validYaml = [
   '  name: placeholder',
   'spec:',
   '  entrypoint: main',
+  '  templates:',
+  '    - name: main',
+  '      container:',
+  '        image: busybox',
 ].join('\n');
 
 const dagYaml = [
@@ -144,8 +148,9 @@ describe('WorkflowStudio', () => {
         expect(workflowTemplatesService.save).toHaveBeenCalledTimes(1);
       });
 
-      const [savedYaml, savedMode] = vi.mocked(workflowTemplatesService.save)
-        .mock.calls[0];
+      const [, savedYaml, savedMode] = vi.mocked(
+        workflowTemplatesService.save,
+      ).mock.calls[0];
       expect(savedMode).toBe('create');
       expect(savedYaml).toContain('name: my-workflow');
       expect(savedYaml).not.toContain('placeholder');
@@ -182,7 +187,7 @@ describe('WorkflowStudio', () => {
       await waitFor(() => {
         expect(workflowTemplatesService.save).toHaveBeenCalledTimes(1);
       });
-      expect(vi.mocked(workflowTemplatesService.save).mock.calls[0][1]).toBe(
+      expect(vi.mocked(workflowTemplatesService.save).mock.calls[0][2]).toBe(
         'update',
       );
     });
@@ -229,7 +234,7 @@ describe('WorkflowStudio', () => {
       await waitFor(() => {
         expect(workflowTemplatesService.save).toHaveBeenCalledTimes(1);
       });
-      expect(vi.mocked(workflowTemplatesService.save).mock.calls[0][1]).toBe(
+      expect(vi.mocked(workflowTemplatesService.save).mock.calls[0][2]).toBe(
         'update',
       );
       expect(workflowTemplatesService.nameExists).not.toHaveBeenCalled();
@@ -390,8 +395,17 @@ describe('WorkflowStudio', () => {
       URL.createObjectURL = vi.fn(() => 'blob:mock');
       URL.revokeObjectURL = vi.fn();
 
+      const manifestWithoutDag = [
+        'apiVersion: argoproj.io/v1alpha1',
+        'kind: WorkflowTemplate',
+        'metadata:',
+        '  name: placeholder',
+        'spec:',
+        '  entrypoint: main',
+      ].join('\n');
+
       render(<WorkflowStudio mode="new" initialName="my-workflow" />);
-      enterYaml(validYaml);
+      enterYaml(manifestWithoutDag);
 
       fireEvent.click(screen.getByTestId('studio-download'));
       fireEvent.click(screen.getByTestId('studio-download-diagram'));
@@ -430,7 +444,7 @@ describe('WorkflowStudio', () => {
         expect(workflowTemplatesService.save).toHaveBeenCalledTimes(1);
       });
 
-      const [savedYaml] = vi.mocked(workflowTemplatesService.save).mock
+      const [, savedYaml] = vi.mocked(workflowTemplatesService.save).mock
         .calls[0];
       expect(savedYaml).toContain('workflows.argoproj.io/title: My Title');
       expect(savedYaml).toContain(
@@ -489,18 +503,20 @@ describe('WorkflowStudio', () => {
       expect(screen.getByTestId('studio-save')).toBeDisabled();
     });
 
-    it('blocks save with a toast when the YAML is invalid', async () => {
+    it('disables save when the YAML fails to parse', () => {
       render(<WorkflowStudio mode="new" initialName="my-workflow" />);
       enterYaml('foo: bar: baz');
 
-      fireEvent.click(screen.getByTestId('studio-save'));
+      expect(screen.getByTestId('studio-yaml-banner')).toBeInTheDocument();
+      expect(screen.getByTestId('studio-save')).toBeDisabled();
+    });
 
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalled();
-      });
-      const message = vi.mocked(toast.error).mock.calls[0][0];
-      expect(String(message)).toContain('Fix the YAML before saving');
-      expect(workflowTemplatesService.save).not.toHaveBeenCalled();
+    it('disables save when the YAML is not a valid WorkflowTemplate', () => {
+      render(<WorkflowStudio mode="new" initialName="my-workflow" />);
+      enterYaml('foo: bar');
+
+      expect(screen.getByTestId('studio-yaml-banner')).toBeInTheDocument();
+      expect(screen.getByTestId('studio-save')).toBeDisabled();
     });
   });
 });

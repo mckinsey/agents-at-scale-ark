@@ -62,8 +62,9 @@ subjects:
 ---
 # ConfigMaps + Secrets read access is required cluster-wide because the apiserver
 # resolves Query/Agent/Model parameter references via valueFrom.configMapKeyRef and
-# valueFrom.secretKeyRef at admission time. Without this, parameter resolution
-# blocks on a controller-runtime informer that can't sync, and POSTs time out.
+# valueFrom.secretKeyRef at admission time. The apiserver reads them by name through the
+# uncached reader (mgr.GetAPIReader), so it only needs get, not list or watch. Without
+# list/watch the ServiceAccount cannot enumerate or dump Secrets it was never pointed at.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -73,7 +74,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["configmaps", "secrets"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -89,3 +90,85 @@ subjects:
   - kind: ServiceAccount
     name: {{ .Values.serviceAccountName }}
     namespace: {{ .Release.Namespace }}
+{{- if .Values.policy.cel.enabled }}
+---
+# The ValidatingAdmissionPolicy admission plugin watches policy objects from the
+# host kube-apiserver to enforce CEL policy on Ark resources in apiserver mode.
+# Without this the plugin's informers cannot sync and policy enforcement is inert.
+# Namespaces are needed so the plugin can evaluate a binding's namespaceSelector
+# (and CEL that references namespaceObject); without it selector-scoped bindings
+# silently never match.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-apiserver-admission-policy
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+  {{- /* paramKind policies need list/watch on the param resource or the informer never
+    syncs and the policy silently never matches. The parameter-resolution role above is
+    get-only, so a ConfigMap/Secret paramKind must add its own list/watch rule here via
+    policy.extraParamRules, scoped as narrowly as the deployment allows. */}}
+  {{- with .Values.policy.extraParamRules }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ark-apiserver-admission-policy
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-apiserver-admission-policy
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if .Values.policy.thirdPartyWebhooks.enabled }}
+---
+# The webhook admission plugins watch the webhook configurations from the host kube-apiserver to
+# know which webhooks to call for a given resource. Without this the managers' informers cannot
+# sync, and — as with the policy plugin — upstream does not degrade: every write stalls and is
+# then rejected. Read-only: the apiserver never writes these objects.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-apiserver-admission-webhooks
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch"]
+  # Webhook matching evaluates namespaceSelector, so the namespace informer is load-bearing here
+  # too. Granted independently of the policy role: third-party webhooks can run with
+  # policy.cel.enabled=false, and then nothing else would grant it.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ark-apiserver-admission-webhooks
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-apiserver-admission-webhooks
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

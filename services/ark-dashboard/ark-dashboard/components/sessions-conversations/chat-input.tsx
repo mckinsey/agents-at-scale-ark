@@ -217,7 +217,7 @@ export function ChatInput({
                 size="icon-sm"
                 aria-pressed={showToolCalls}
                 aria-label={
-                  showToolCalls ? 'Disable tool calls' : 'Activate tool calls'
+                  showToolCalls ? 'Hide tool calls' : 'Show tool calls'
                 }
                 onClick={() => onShowToolCallsChange(!showToolCalls)}
                 className="relative">
@@ -227,13 +227,13 @@ export function ChatInput({
                 <span
                   className={cn(
                     'absolute -right-0.5 -top-0.5 size-2 rounded-full',
-                    showToolCalls ? 'bg-status-success' : 'bg-status-error',
+                    showToolCalls ? 'bg-status-success' : 'bg-fg-disabled',
                   )}
                 />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {showToolCalls ? 'Disable tool calls' : 'Activate tool calls'}
+              {showToolCalls ? 'Hide tool calls' : 'Show tool calls'}
             </TooltipContent>
           </Tooltip>
 

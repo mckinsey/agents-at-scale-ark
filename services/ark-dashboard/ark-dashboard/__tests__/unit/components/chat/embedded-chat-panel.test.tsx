@@ -9,6 +9,15 @@ import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { chatService } from '@/lib/services/chat';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/chat', () => ({
   chatService: {
     streamChatResponse: vi.fn(),

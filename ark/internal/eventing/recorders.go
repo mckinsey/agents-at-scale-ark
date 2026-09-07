@@ -60,6 +60,8 @@ type MCPServerRecorder interface {
 	AuthorizationRequired(ctx context.Context, obj runtime.Object, reason string)
 	TokenRejected(ctx context.Context, obj runtime.Object, reason string)
 	AuthorizationSecretUnresolvable(ctx context.Context, obj runtime.Object, reason string)
+	TokenAcquisitionFailed(ctx context.Context, obj runtime.Object, reason string)
+	TokenAcquired(ctx context.Context, obj runtime.Object, reason string)
 }
 
 type TeamRecorder interface {

@@ -63,6 +63,10 @@ spec:
                 description: |-
                   ConversationId is sent as A2A ContextID when dispatching to execution engines.
                   Engines use it for conversation threading (e.g., memory lookup, session management).
+                  Deliberately unconstrained beyond MinLength: status.conversationId accepts
+                  arbitrary engine-generated IDs and those are reused here for follow-up queries,
+                  so any character-set or length rule added here breaks that round-trip.
+                  Engines that map it to a filesystem path must validate it at the path join.
                 minLength: 1
                 type: string
               input:

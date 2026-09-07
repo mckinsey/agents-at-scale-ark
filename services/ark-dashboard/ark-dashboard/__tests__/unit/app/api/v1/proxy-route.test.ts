@@ -313,6 +313,80 @@ describe('app/api/v1/[...proxy]/route', () => {
     });
   });
 
+  describe('backend failure handling', () => {
+    it('returns a structured 502 when the backend fetch throws (e.g. ECONNREFUSED)', async () => {
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      const cause = new TypeError('fetch failed');
+      mockFetch.mockRejectedValueOnce(cause);
+
+      const response = await GET(
+        makeRequest('/api/v1/agents'),
+        makeContext(['agents']),
+      );
+
+      expect(response.status).toBe(502);
+      const body = await response.json();
+      expect(body).toEqual({
+        error: 'backend unavailable',
+        detail: 'fetch failed',
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        '[proxy] ark-api request failed',
+        expect.objectContaining({
+          target: 'http://ark-api:80/v1/agents',
+          method: 'GET',
+          timedOut: false,
+          cause,
+        }),
+      );
+      consoleError.mockRestore();
+    });
+
+    it('returns 504 when the request exceeds ARK_API_PROXY_TIMEOUT_MS', async () => {
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      process.env.ARK_API_PROXY_TIMEOUT_MS = '1';
+      // Never resolve on its own; reject only once the combined abort fires.
+      mockFetch.mockImplementationOnce(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject((init.signal as AbortSignal).reason),
+            );
+          }),
+      );
+
+      const response = await GET(
+        makeRequest('/api/v1/agents'),
+        makeContext(['agents']),
+      );
+
+      expect(response.status).toBe(504);
+      const body = await response.json();
+      expect(body.error).toBe('backend timeout');
+      expect(consoleError).toHaveBeenCalledWith(
+        '[proxy] ark-api request failed',
+        expect.objectContaining({ timedOut: true }),
+      );
+      delete process.env.ARK_API_PROXY_TIMEOUT_MS;
+      consoleError.mockRestore();
+    });
+
+    it('rethrows (does not return 502) when the client aborted the request', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const request = makeRequest('/api/v1/agents');
+      Object.defineProperty(request, 'signal', { value: controller.signal });
+      const cause = new DOMException('aborted', 'AbortError');
+      mockFetch.mockRejectedValueOnce(cause);
+
+      await expect(GET(request, makeContext(['agents']))).rejects.toBe(cause);
+    });
+  });
+
   describe('response passthrough', () => {
     it('forwards the backend status code', async () => {
       mockFetch.mockResolvedValueOnce(makeBackendResponse({ status: 422 }));

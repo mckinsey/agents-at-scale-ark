@@ -19,6 +19,7 @@ vi.mock('@/providers/NamespaceProvider', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useParams: vi.fn(() => ({ id: 'my-flow' })),
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }));

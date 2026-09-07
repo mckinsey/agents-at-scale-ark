@@ -6,7 +6,6 @@ package postgresql
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -28,22 +27,7 @@ func rvInt(t *testing.T, s string) int64 {
 
 func newTestBackend(t *testing.T) *PostgreSQLBackend {
 	t.Helper()
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set")
-	}
-	port := 5432
-	if p := os.Getenv("POSTGRES_PORT"); p != "" {
-		fmt.Sscanf(p, "%d", &port)
-	}
-	backend, err := New(Config{
-		Host:     host,
-		Port:     port,
-		Database: "ark",
-		User:     "postgres",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}, &integrationMockConverter{})
+	backend, err := New(testConfig(t), &integrationMockConverter{})
 	if err != nil {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
@@ -408,14 +392,12 @@ drained:
 	wg.Wait()
 
 	want := int(created.Load())
-	var events []watch.Event
 	seen := make(map[string]bool)
 	deadline := time.After(45 * time.Second)
 	for len(seen) < want {
 		select {
 		case ev := <-w.ResultChan():
 			if ev.Type == watch.Added {
-				events = append(events, ev)
 				seen[ev.Object.(*integrationTestObject).Metadata.Name] = true
 			}
 		case <-deadline:
@@ -424,31 +406,17 @@ drained:
 	}
 collected:
 
-	t.Logf("Created %d resources from %d concurrent writers, received %d events", want, writers, len(events))
+	t.Logf("Created %d resources from %d concurrent writers, received %d events", want, writers, len(seen))
 
 	if len(seen) < want {
 		t.Errorf("%d of %d resources never delivered under concurrent writes", want-len(seen), want)
-	}
-
-	// Check version ordering
-	outOfOrder := 0
-	for i := 1; i < len(events); i++ {
-		prev := events[i-1].Object.(*integrationTestObject).Metadata.ResourceVersion
-		curr := events[i].Object.(*integrationTestObject).Metadata.ResourceVersion
-		if rvInt(t, curr) <= rvInt(t, prev) {
-			outOfOrder++
-		}
-	}
-	if outOfOrder > 0 {
-		t.Errorf("%d out-of-order events detected", outOfOrder)
-	} else {
-		t.Log("All events arrived in resourceVersion order")
 	}
 
 	backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 }
 
 func TestWatch_CrossReplicaDelivery(t *testing.T) {
+	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaA.StartWALConsumer()
@@ -505,10 +473,11 @@ drained:
 
 	t.Logf("Created %d resources on replica A, waiting for replica B watcher...", count)
 
-	// Replica B has no WAL consumer; its only signal is the broadcaster's 120s
-	// safety-net relist, so the deadline must exceed one tick.
+	// Replica B has no WAL consumer; its only signal is the broadcaster's
+	// safety-net relist (shortened via withFastRelist), so the deadline must
+	// exceed one tick.
 	received := 0
-	deadline := time.After(150 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for received < count {
 		select {
 		case ev := <-w.ResultChan():
@@ -531,6 +500,7 @@ timeout:
 }
 
 func TestWatch_CrossReplicaBurst(t *testing.T) {
+	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaA.StartWALConsumer()
@@ -590,7 +560,7 @@ drained2:
 	t.Logf("Created %d/%d resources on replica A, waiting for replica B...", actual, count)
 
 	seen := make(map[string]bool)
-	deadline := time.After(150 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for len(seen) < actual {
 		select {
 		case ev := <-w.ResultChan():
@@ -621,6 +591,7 @@ timeout2:
 }
 
 func TestWatch_CrossReplicaDelete(t *testing.T) {
+	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaA.StartWALConsumer()
@@ -664,7 +635,7 @@ func TestWatch_CrossReplicaDelete(t *testing.T) {
 	}
 
 	gotDelete := false
-	deadline := time.After(150 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for {
 		select {
 		case ev := <-w.ResultChan():

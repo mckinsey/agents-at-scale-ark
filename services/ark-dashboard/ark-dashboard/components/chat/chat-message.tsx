@@ -18,6 +18,7 @@ import type { ToolApprovalRequest } from '@/lib/types/chat-message';
 import { cn } from '@/lib/utils';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 import { parseDurationToMs } from '@/lib/utils/time';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant' | 'system';
@@ -35,7 +36,6 @@ interface ChatMessageProps {
     cached_tokens: number;
   };
   approvalRequest?: ToolApprovalRequest;
-  namespace?: string;
   pollAfterApproval?: () => Promise<void>;
   defaultCodeCollapsed?: boolean;
   constrainWidth?: boolean;
@@ -170,16 +170,15 @@ function ApprovalMessage({
   isUser,
   className,
   queryName,
-  namespace,
   pollAfterApproval,
 }: Readonly<{
   approvalRequest: ToolApprovalRequest;
   isUser: boolean;
   className?: string;
   queryName?: string;
-  namespace: string;
   pollAfterApproval?: () => Promise<void>;
 }>) {
+  const { namespace } = useNamespace();
   const taskDecision = approvalRequest.taskId
     ? getSubmittedTaskDecisions().get(approvalRequest.taskId)
     : undefined;
@@ -453,7 +452,6 @@ export function ChatMessage({
   sender,
   tokenUsage,
   approvalRequest,
-  namespace = 'default',
   pollAfterApproval,
   defaultCodeCollapsed,
   constrainWidth,
@@ -468,7 +466,6 @@ export function ChatMessage({
         isUser={isUser}
         className={className}
         queryName={queryName}
-        namespace={namespace}
         pollAfterApproval={pollAfterApproval}
       />
     );

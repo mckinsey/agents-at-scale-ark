@@ -49,16 +49,22 @@ function toExecutionEngine(resource: ExecutionEngineK8sResource): ExecutionEngin
 }
 
 export const executionEnginesService = {
-  async getAll(): Promise<ExecutionEngine[]> {
-    const response =
-      await apiClient.get<ExecutionEngineK8sListResponse>(RESOURCE_PATH);
+  async getAll(namespace: string): Promise<ExecutionEngine[]> {
+    const response = await apiClient.get<ExecutionEngineK8sListResponse>(
+      RESOURCE_PATH,
+      { params: { namespace } },
+    );
     return response.items.map(toExecutionEngine);
   },
 
-  async getByName(name: string): Promise<ExecutionEngine | null> {
+  async getByName(
+    namespace: string,
+    name: string,
+  ): Promise<ExecutionEngine | null> {
     try {
       const response = await apiClient.get<ExecutionEngineK8sResource>(
         `${RESOURCE_PATH}/${name}`,
+        { params: { namespace } },
       );
       return toExecutionEngine(response);
     } catch {
@@ -66,9 +72,11 @@ export const executionEnginesService = {
     }
   },
 
-  async delete(name: string): Promise<boolean> {
+  async delete(namespace: string, name: string): Promise<boolean> {
     try {
-      await apiClient.delete(`${RESOURCE_PATH}/${name}`);
+      await apiClient.delete(`${RESOURCE_PATH}/${name}`, {
+        params: { namespace },
+      });
       return true;
     } catch {
       return false;

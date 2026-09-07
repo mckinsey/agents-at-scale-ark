@@ -8,31 +8,12 @@ package postgresql
 import (
 	"database/sql"
 	"fmt"
-	"os"
-	"strconv"
 	"testing"
 	"time"
 )
 
 func TestWALConsumerManualStart_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	port := 5432
-	if p := os.Getenv("POSTGRES_PORT"); p != "" {
-		port, _ = strconv.Atoi(p)
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     port,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	checker, err := sql.Open("postgres", fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",

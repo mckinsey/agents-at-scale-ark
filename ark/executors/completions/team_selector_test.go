@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
@@ -903,6 +904,27 @@ func TestLoadSelectorAgent_WithMock(t *testing.T) {
 	assert.Equal(t, mockSelector, agent)
 }
 
+func TestLoadSelectorAgentRejectsEngineBackedAgentWithTools(t *testing.T) {
+	agentCRD := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "picker", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Prompt:          "pick one",
+			Tools:           []arkv1alpha1.AgentTool{{Type: "custom", Name: "delete-everything"}},
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		},
+	}
+	team := &Team{
+		Namespace: "default",
+		Client:    engineTestClient(t, agentCRD),
+		Selector:  &arkv1alpha1.TeamSelectorSpec{Agent: "picker"},
+	}
+
+	_, err := team.loadSelectorAgent(context.Background())
+
+	require.Error(t, err, "ClearTools is local, so a remote selector would keep tools it is told it does not have")
+	assert.Contains(t, err.Error(), "remove the tools")
+}
+
 func TestLoadSelectorAgent_RequiresSelectorSpec(t *testing.T) {
 	team := &Team{
 		Selector: nil,
@@ -1263,4 +1285,361 @@ func TestRegisterSelectNextSpeakerTool_WithRealAgent(t *testing.T) {
 
 	toolType := agent.Tools.GetToolType(BuiltinToolSelectNextSpeaker)
 	assert.Equal(t, ToolTypeBuiltin, toolType)
+}
+
+func TestMatchSelectedName(t *testing.T) {
+	candidates := []string{"researcher", "analyst", "analyst-senior"}
+
+	tests := []struct {
+		name     string
+		response string
+		want     string
+		wantErr  bool
+	}{
+		{name: "exact match", response: "researcher", want: "researcher"},
+		{name: "surrounding whitespace is trimmed", response: "  analyst\n", want: "analyst"},
+		{name: "case insensitive", response: "Researcher", want: "researcher"},
+		{name: "name embedded in prose", response: "I pick researcher for this.", want: "researcher"},
+		{name: "longer candidate wins over its own prefix", response: "analyst-senior", want: "analyst-senior"},
+		{name: "prose naming the longer candidate", response: "Let's ask analyst-senior next.", want: "analyst-senior"},
+		{name: "no match", response: "nobody", wantErr: true},
+		{name: "empty response", response: "", wantErr: true},
+		{name: "ambiguous mention of two candidates", response: "either researcher or analyst", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := matchSelectedName(tt.response, candidates)
+			if tt.wantErr {
+				require.Error(t, err)
+				var invalidAgentErr *InvalidAgentError
+				assert.True(t, errors.As(err, &invalidAgentErr), "no match must surface as InvalidAgentError")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func newEngineSelectorTeam(reply string) (*Team, *mockSelectorAgent) {
+	members := []TeamMember{
+		&mockTeamMember{name: "researcher"},
+		&mockTeamMember{name: "analyst"},
+	}
+	team := &Team{Members: members}
+	selector := newMockSelectorAgent()
+	selector.executionEngine = &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"}
+	selector.returnText = reply
+	team.selectorAgent = selector
+	return team, selector
+}
+
+func TestSelectMember_EngineBackedSelectorTextMatching(t *testing.T) {
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name  string
+		reply string
+		want  string
+	}{
+		{name: "exact", reply: "analyst", want: "analyst"},
+		{name: "case insensitive", reply: "Researcher", want: "researcher"},
+		{name: "unique substring", reply: "The next speaker should be analyst.", want: "analyst"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			team, selector := newEngineSelectorTeam(tt.reply)
+
+			member, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst", "researcher, analyst", nil)
+			require.NoError(t, err)
+			require.NotNil(t, member)
+			assert.Equal(t, tt.want, member.GetName())
+
+			assert.Empty(t, selector.capturedOptions.ToolChoice, "an engine cannot be forced to call a local tool")
+			assert.Empty(t, selector.GetToolRegistry().GetToolDefinitions(), "select-next-speaker must not be registered for an engine selector")
+		})
+	}
+}
+
+func TestSelectMember_EngineBackedSelectorNoMatch(t *testing.T) {
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+
+	team, _ := newEngineSelectorTeam("I have no idea")
+
+	member, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst", "researcher, analyst", nil)
+	require.Error(t, err)
+	assert.Nil(t, member)
+
+	var invalidAgentErr *InvalidAgentError
+	assert.True(t, errors.As(err, &invalidAgentErr))
+}
+
+func TestSelectMember_LocalSelectorStillUsesTool(t *testing.T) {
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+
+	members := []TeamMember{&mockTeamMember{name: "selected"}}
+	team := &Team{Members: members}
+	selector := newMockSelectorAgent()
+	team.selectorAgent = selector
+
+	_, err = team.selectMember(context.Background(), []Message{}, tmpl, "selected", "selected", members)
+	require.NoError(t, err)
+
+	assert.Equal(t, ToolChoiceRequired, selector.capturedOptions.ToolChoice)
+	require.Len(t, selector.GetToolRegistry().GetToolDefinitions(), 1)
+	assert.Equal(t, BuiltinToolSelectNextSpeaker, selector.GetToolRegistry().GetToolDefinitions()[0].Name)
+}
+
+func TestSelectMember_EngineBackedSelectorTerminates(t *testing.T) {
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+	enabled := true
+
+	t.Run("terminate token ends the run", func(t *testing.T) {
+		team, selector := newEngineSelectorTeam(engineTerminateToken)
+		team.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}
+
+		member, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst", "researcher, analyst", nil)
+		require.Error(t, err)
+		assert.Nil(t, member)
+		assert.True(t, IsTerminateTeam(err), "an engine selector must be able to end the run, not just loop to maxTurns")
+
+		system := selector.capturedHistory[0].OfSystem.Content.OfString.String()
+		assert.Contains(t, system, engineTerminateToken,
+			"the selector must be told how to terminate")
+		assert.NotContains(t, system, "terminate tool",
+			"an engine cannot call a tool, so it must not be told to")
+	})
+
+	t.Run("lowercase and padded token still terminates", func(t *testing.T) {
+		team, _ := newEngineSelectorTeam("  terminate\n")
+		team.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}
+
+		_, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst", "researcher, analyst", nil)
+		require.Error(t, err)
+		assert.True(t, IsTerminateTeam(err))
+	})
+
+	t.Run("terminate token is not special when the tool is disabled", func(t *testing.T) {
+		team, _ := newEngineSelectorTeam(engineTerminateToken)
+
+		_, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst", "researcher, analyst", nil)
+		require.Error(t, err)
+		assert.False(t, IsTerminateTeam(err))
+		var invalidAgentErr *InvalidAgentError
+		assert.True(t, errors.As(err, &invalidAgentErr))
+	})
+
+	t.Run("a name still selects when terminate is enabled", func(t *testing.T) {
+		team, _ := newEngineSelectorTeam("analyst")
+		team.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}
+
+		member, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst", "researcher, analyst", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "analyst", member.GetName())
+	})
+
+	t.Run("a member named terminate is selectable", func(t *testing.T) {
+		team, selector := newEngineSelectorTeam("terminate")
+		team.Members = append(team.Members, &mockTeamMember{name: "terminate"})
+		team.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}
+
+		member, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst, terminate", "researcher, analyst, terminate", nil)
+		require.NoError(t, err, "naming a member must route to it, not silently end the run")
+		require.NotNil(t, member)
+		assert.Equal(t, "terminate", member.GetName())
+
+		system := selector.capturedHistory[0].OfSystem.Content.OfString.String()
+		assert.Contains(t, system, engineTerminateFallbackToken,
+			"the selector must be asked for a token that cannot be a member name")
+	})
+
+	t.Run("a team with a member named terminate can still terminate", func(t *testing.T) {
+		team, _ := newEngineSelectorTeam(engineTerminateFallbackToken + ": all done")
+		team.Members = append(team.Members, &mockTeamMember{name: "terminate"})
+		team.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}
+
+		_, err := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst, terminate", "researcher, analyst, terminate", nil)
+		require.Error(t, err)
+
+		var withResponse *TerminateTeamWithResponse
+		require.True(t, errors.As(err, &withResponse))
+		assert.Equal(t, "all done", withResponse.Response)
+	})
+}
+
+func TestParseEngineTerminate(t *testing.T) {
+	tests := []struct {
+		name         string
+		reply        string
+		token        string
+		wantResponse string
+		wantTerm     bool
+	}{
+		{name: "bare token", reply: "TERMINATE", wantTerm: true},
+		{name: "padded and lowercase", reply: "  terminate\n", wantTerm: true},
+		{name: "colon payload", reply: "TERMINATE: the answer is 42", wantResponse: "the answer is 42", wantTerm: true},
+		{name: "whitespace payload", reply: "TERMINATE the answer is 42", wantResponse: "the answer is 42", wantTerm: true},
+		{name: "text after the token is preserved verbatim", reply: "Terminate - all done", wantResponse: "- all done", wantTerm: true},
+		{name: "a hyphenated member name is not a termination", reply: "terminate-agent", wantTerm: false},
+		{name: "a name merely starting with the token is not a termination", reply: "terminated-agent", wantTerm: false},
+		{name: "a plain name is not a termination", reply: "researcher", wantTerm: false},
+		{name: "empty reply", reply: "", wantTerm: false},
+		{
+			name:  "the member name is not the token once the fallback is in use",
+			reply: "terminate", token: engineTerminateFallbackToken, wantTerm: false,
+		},
+		{
+			name:  "the fallback token terminates",
+			reply: "TERMINATE_TEAM", token: engineTerminateFallbackToken, wantTerm: true,
+		},
+		{
+			name:  "the fallback token carries a payload",
+			reply: "terminate_team: all done", token: engineTerminateFallbackToken,
+			wantResponse: "all done", wantTerm: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			token := tt.token
+			if token == "" {
+				token = engineTerminateToken
+			}
+			response, terminated := parseEngineTerminate(tt.reply, token)
+			assert.Equal(t, tt.wantTerm, terminated)
+			assert.Equal(t, tt.wantResponse, response)
+		})
+	}
+}
+
+func TestEngineTerminateTokenAvoidsMemberNameCollision(t *testing.T) {
+	assert.Equal(t, engineTerminateToken, engineTerminateTokenFor([]string{"researcher", "analyst"}))
+	assert.Equal(t, engineTerminateFallbackToken, engineTerminateTokenFor([]string{"researcher", "terminate"}))
+	assert.Equal(t, engineTerminateToken, engineTerminateTokenFor([]string{"terminate-agent", "terminated"}),
+		"only an exact name collides; the parser already rejects these as terminations")
+}
+
+func TestSelectMember_EngineSelectorTerminateCarriesResponse(t *testing.T) {
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+	enabled := true
+
+	team, _ := newEngineSelectorTeam("TERMINATE: everything the user asked has been covered")
+	team.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}
+
+	_, err = team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst", "researcher, analyst", nil)
+	require.Error(t, err)
+
+	var withResponse *TerminateTeamWithResponse
+	require.True(t, errors.As(err, &withResponse), "an engine selector's closing answer must reach the user, as a local selector's does")
+	assert.Equal(t, "everything the user asked has been covered", withResponse.Response)
+}
+
+func TestEngineTerminateResponseReachesTranscriptWithoutToken(t *testing.T) {
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+	enabled := true
+
+	team, _ := newEngineSelectorTeam("TERMINATE: the quarterly figures are in the attached summary")
+	team.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}
+
+	_, selErr := team.selectMember(context.Background(), []Message{}, tmpl, "researcher, analyst", "researcher, analyst", nil)
+	require.Error(t, selErr)
+
+	var newMessages []Message
+	shouldTerminate, returnErr := team.handleMemberSelectionError(context.Background(), selErr, &newMessages)
+	require.NoError(t, returnErr)
+	assert.True(t, shouldTerminate)
+
+	final := extractAssistantText(newMessages)
+	assert.Equal(t, "the quarterly figures are in the attached summary", final)
+	assert.NotContains(t, final, engineTerminateToken, "the control token must never surface to the user")
+}
+
+func TestEngineSelectorPicksMemberNamedLikeTheTerminateToken(t *testing.T) {
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+	enabled := true
+
+	members := []TeamMember{
+		&mockTeamMember{name: "terminate-agent"},
+		&mockTeamMember{name: "analyst"},
+	}
+	team := &Team{Members: members, Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "sel", EnableTerminateTool: &enabled}}
+	selector := newMockSelectorAgent()
+	selector.executionEngine = &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"}
+	selector.returnText = "terminate-agent"
+	team.selectorAgent = selector
+
+	member, err := team.selectMember(context.Background(), []Message{}, tmpl, "terminate-agent, analyst", "terminate-agent, analyst", nil)
+	require.NoError(t, err, "a valid member name must not be read as a termination command")
+	require.NotNil(t, member)
+	assert.Equal(t, "terminate-agent", member.GetName())
+}
+
+func TestContainsWholeName(t *testing.T) {
+	tests := []struct {
+		name     string
+		haystack string
+		needle   string
+		want     bool
+	}{
+		{name: "exact", haystack: "analyst", needle: "analyst", want: true},
+		{name: "surrounded by spaces", haystack: "pick analyst next", needle: "analyst", want: true},
+		{name: "sentence-ending period", haystack: "the next speaker should be analyst.", needle: "analyst", want: true},
+		{name: "inside a longer word is not a match", haystack: "run the analysis now", needle: "ana", want: false},
+		{name: "substring of another name is not a match", haystack: "use agent-2", needle: "agent", want: false},
+		{name: "the longer name itself matches", haystack: "use agent-2", needle: "agent-2", want: true},
+		{name: "prefix of a word is not a match", haystack: "bananas", needle: "ana", want: false},
+		{name: "absent", haystack: "nobody here", needle: "analyst", want: false},
+		{name: "an unnamed member matches nothing", haystack: "pick analyst next", needle: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, containsWholeName(tt.haystack, tt.needle))
+		})
+	}
+}
+
+func TestMatchSelectedNameRejectsPartialWords(t *testing.T) {
+	_, err := matchSelectedName("let us run the analysis first", []string{"ana", "researcher"})
+	require.Error(t, err)
+	var invalidAgentErr *InvalidAgentError
+	assert.True(t, errors.As(err, &invalidAgentErr))
+}
+
+func TestTerminatePromptForHonoursCustomPrompt(t *testing.T) {
+	const custom = "Stop as soon as the customer's billing question is fully answered."
+
+	t.Run("engine-backed keeps the configured prompt and adds the mechanism", func(t *testing.T) {
+		team := &Team{Selector: &arkv1alpha1.TeamSelectorSpec{TerminatePrompt: custom}}
+		got := team.terminatePromptFor(true, engineTerminateToken)
+		assert.Contains(t, got, custom, "the author's terminate condition must not be discarded")
+		assert.Contains(t, got, engineTerminateToken)
+		assert.NotContains(t, got, "terminate tool", "an engine has no tools to call")
+	})
+
+	t.Run("local keeps the configured prompt unchanged", func(t *testing.T) {
+		team := &Team{Selector: &arkv1alpha1.TeamSelectorSpec{TerminatePrompt: custom}}
+		assert.Equal(t, custom, team.terminatePromptFor(false, engineTerminateToken))
+	})
+
+	t.Run("engine-backed default mentions no tool", func(t *testing.T) {
+		team := &Team{Selector: &arkv1alpha1.TeamSelectorSpec{}}
+		got := team.terminatePromptFor(true, engineTerminateToken)
+		assert.NotContains(t, got, "terminate tool")
+		assert.Contains(t, got, engineTerminateToken)
+	})
+
+	t.Run("local default is unchanged", func(t *testing.T) {
+		team := &Team{Selector: &arkv1alpha1.TeamSelectorSpec{}}
+		assert.Equal(t, defaultTerminatePrompt, team.terminatePromptFor(false, engineTerminateToken))
+	})
 }

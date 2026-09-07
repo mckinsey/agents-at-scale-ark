@@ -24,6 +24,7 @@ interface ChatMessageListProps {
   debugMode: boolean;
   isProcessing: boolean;
   processingPhase?: string;
+  statusText?: string;
   isWaitingForApprovalResponse: boolean;
   error: string | null;
   viewMode?: 'text' | 'markdown';
@@ -139,6 +140,7 @@ export function ChatMessageList({
   debugMode,
   isProcessing,
   processingPhase,
+  statusText,
   isWaitingForApprovalResponse,
   error,
   viewMode = 'markdown',
@@ -443,10 +445,14 @@ export function ChatMessageList({
                   className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"
                   style={{ animationDelay: '0.2s' }}></div>
               </div>
-              {processingPhase === 'provisioning' && (
-                <span className="text-fg-secondary text-xs">
-                  Preparing new workspace...
-                </span>
+              {statusText ? (
+                <span className="text-fg-secondary text-xs">{statusText}</span>
+              ) : (
+                processingPhase === 'provisioning' && (
+                  <span className="text-fg-secondary text-xs">
+                    Preparing new workspace...
+                  </span>
+                )
               )}
             </div>
           </div>

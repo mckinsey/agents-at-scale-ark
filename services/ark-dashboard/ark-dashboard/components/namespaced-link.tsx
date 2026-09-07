@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { forwardRef, type ComponentProps, type MouseEvent } from 'react';
 
 import { useNavigationGuardContext } from '@/lib/hooks/use-navigation-guard';
+import { buildScopedPath } from '@/lib/utils/param-scope';
 
 type NamespacedLinkProps = ComponentProps<typeof Link>;
 
@@ -20,6 +21,7 @@ function isModifiedEvent(event: MouseEvent<HTMLAnchorElement>): boolean {
 
 const NamespacedLink = forwardRef<HTMLAnchorElement, NamespacedLinkProps>(
   function NamespacedLink({ href, onClick, target, ...props }, ref) {
+    const pathname = usePathname();
     const searchParams = useSearchParams();
     const guard = useNavigationGuardContext();
     const hrefString = typeof href === 'string' ? href : href.pathname ?? '';
@@ -39,18 +41,7 @@ const NamespacedLink = forwardRef<HTMLAnchorElement, NamespacedLinkProps>(
       );
     }
 
-    const [pathname, pathQuery] = hrefString.split('?');
-    const merged = new URLSearchParams(searchParams?.toString() ?? '');
-
-    if (pathQuery) {
-      const pathParams = new URLSearchParams(pathQuery);
-      for (const [key, value] of pathParams) {
-        merged.set(key, value);
-      }
-    }
-
-    const queryString = merged.toString();
-    const fullHref = queryString ? `${pathname}?${queryString}` : pathname;
+    const fullHref = buildScopedPath(hrefString, searchParams, pathname);
 
     const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
       onClick?.(event);

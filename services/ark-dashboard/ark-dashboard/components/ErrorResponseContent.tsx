@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { Event } from '@/lib/services/events';
 import { eventsService } from '@/lib/services/events';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface ErrorResponseContentProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,6 +14,7 @@ export function ErrorResponseContent({
   query,
   viewMode,
 }: ErrorResponseContentProps) {
+  const { namespace } = useNamespace();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -20,7 +22,7 @@ export function ErrorResponseContent({
     const loadEvents = async () => {
       try {
         // Try to get events for this specific query
-        const eventData = await eventsService.getAll({
+        const eventData = await eventsService.getAll(namespace, {
           name: query.name,
         });
         setEvents(eventData.items);
@@ -30,7 +32,7 @@ export function ErrorResponseContent({
           console.log(
             'No events found for query, trying to get recent error events',
           );
-          const recentEvents = await eventsService.getAll({
+          const recentEvents = await eventsService.getAll(namespace, {
             type: 'Warning',
           });
           setEvents(recentEvents.items);
@@ -47,7 +49,7 @@ export function ErrorResponseContent({
     if (query.name) {
       loadEvents();
     }
-  }, [query.name]);
+  }, [namespace, query.name]);
 
   const getErrorDetails = () => {
     // Find error events - look for ToolCallError, QueryResolveError, etc.

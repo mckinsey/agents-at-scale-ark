@@ -58,7 +58,7 @@ export const A2AServersSection = forwardRef<
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await A2AServersService.getAll();
+      const data = await A2AServersService.getAll(namespace);
       setA2AServers(data);
     } catch (error) {
       console.error('Failed to load A2A servers:', error);
@@ -88,7 +88,7 @@ export const A2AServersSection = forwardRef<
       if (!server) {
         throw new Error('A2A Server not found');
       }
-      await A2AServersService.delete(id);
+      await A2AServersService.delete(namespace, id);
       toast.success('A2A Server Deleted', {
         description: `Successfully deleted ${server.name}`,
       });
@@ -105,7 +105,7 @@ export const A2AServersSection = forwardRef<
 
   const handleSave = async (config: A2AServerConfiguration) => {
     try {
-      await A2AServersService.create(config);
+      await A2AServersService.create(namespace, config);
       toast.success('A2A Server Created', {
         description: `Successfully created ${config.name}`,
       });

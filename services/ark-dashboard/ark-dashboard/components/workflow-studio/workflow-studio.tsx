@@ -340,7 +340,13 @@ export function WorkflowStudio({
     }
   };
 
-  const canSave = studio.isDirty && !studio.building && !studio.saving;
+  const validation =
+    studio.draftYaml.trim() === ''
+      ? { ok: true as const }
+      : validateWorkflowYaml(studio.draftYaml);
+
+  const canSave =
+    studio.isDirty && !studio.building && !studio.saving && validation.ok;
 
   const persisted =
     studio.mode === 'edit' || studio.lastSavedYaml.trim() !== '';
@@ -357,6 +363,7 @@ export function WorkflowStudio({
   ) => {
     try {
       const workflow = await workflowTemplatesService.run(
+        namespace,
         studio.workflowName,
         parameters,
         runName,
@@ -370,11 +377,6 @@ export function WorkflowStudio({
       throw error;
     }
   };
-
-  const validation =
-    studio.draftYaml.trim() === ''
-      ? { ok: true as const }
-      : validateWorkflowYaml(studio.draftYaml);
 
   const handleSave = async () => {
     await studio.save();

@@ -6,6 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { filesService } from '@/lib/services/files';
 import { useGetFilesCount } from '@/lib/services/files-count-hooks';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/files', () => ({
   filesService: {
     list: vi.fn(),
@@ -45,7 +54,7 @@ describe('files-count-hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toBe(50);
-      expect(filesService.list).toHaveBeenCalledWith({
+      expect(filesService.list).toHaveBeenCalledWith('default', {
         prefix: '',
         max_keys: 1000,
       });
@@ -77,16 +86,16 @@ describe('files-count-hooks', () => {
 
       expect(result.current.data).toBe(2500);
       expect(filesService.list).toHaveBeenCalledTimes(3);
-      expect(filesService.list).toHaveBeenNthCalledWith(1, {
+      expect(filesService.list).toHaveBeenNthCalledWith(1, 'default', {
         prefix: '',
         max_keys: 1000,
       });
-      expect(filesService.list).toHaveBeenNthCalledWith(2, {
+      expect(filesService.list).toHaveBeenNthCalledWith(2, 'default', {
         prefix: '',
         max_keys: 1000,
         continuation_token: 'token1',
       });
-      expect(filesService.list).toHaveBeenNthCalledWith(3, {
+      expect(filesService.list).toHaveBeenNthCalledWith(3, 'default', {
         prefix: '',
         max_keys: 1000,
         continuation_token: 'token2',

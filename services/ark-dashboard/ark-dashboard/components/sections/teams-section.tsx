@@ -3,9 +3,12 @@
 import { Group } from '@/components/icons';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
 import { TeamsTable } from '@/components/sections/teams-table';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { teamsService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function TeamsSection() {
+  const { namespace } = useNamespace();
   return (
     <ResourceListSection
       icon={<Group />}
@@ -13,7 +16,7 @@ export function TeamsSection() {
       subtitle="Create and manage teams of agents"
       createHref="/teams/new"
       createLabel="Create team"
-      learnMoreUrl="https://mckinsey.github.io/agents-at-scale-ark/user-guide/teams/"
+      learnMoreUrl={DOCS_URLS.teams}
       entityLabel="Team"
       entityPluralLabel="teams"
       emptyTitle="No teams yet"
@@ -23,8 +26,8 @@ export function TeamsSection() {
           <p>Get started by creating your first team.</p>
         </>
       }
-      loadItems={() => teamsService.getAll()}
-      deleteItem={id => teamsService.deleteById(id)}
+      loadItems={() => teamsService.getAll(namespace)}
+      deleteItem={id => teamsService.deleteById(namespace, id)}
       renderTable={(teams, onDelete) => (
         <TeamsTable teams={teams} onDelete={onDelete} />
       )}

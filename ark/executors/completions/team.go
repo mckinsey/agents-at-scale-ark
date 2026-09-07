@@ -19,6 +19,7 @@ type SelectorAgentInterface interface {
 	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error)
 	FullName() string
 	GetToolRegistry() *ToolRegistry
+	GetExecutionEngine() *arkv1alpha1.ExecutionEngineRef
 }
 
 type Team struct {

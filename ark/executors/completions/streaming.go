@@ -24,6 +24,8 @@ import (
 	"mckinsey.com/ark/internal/common"
 )
 
+const finishReasonStop = "stop"
+
 // StreamMetadata contains ARK-specific metadata for streaming chunks
 type StreamMetadata struct {
 	Query          string             `json:"query,omitempty"`
@@ -261,6 +263,44 @@ func StreamApprovalResponse(
 
 	if err := eventStream.StreamChunk(ctx, approvalResponse); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to stream approval response event")
+	}
+}
+
+type A2AStatusEvent struct {
+	Type      string `json:"type"`
+	TaskID    string `json:"taskId,omitempty"`
+	State     string `json:"state,omitempty"`
+	Message   string `json:"message,omitempty"`
+	AgentName string `json:"agentName,omitempty"`
+}
+
+func StreamA2AStatus(ctx context.Context, eventStream EventStreamInterface, taskID, state, message, agentName string) {
+	if eventStream == nil {
+		return
+	}
+
+	statusEvent := A2AStatusEvent{
+		Type:      "a2a_status",
+		TaskID:    taskID,
+		State:     state,
+		Message:   message,
+		AgentName: agentName,
+	}
+
+	if err := eventStream.StreamChunk(ctx, statusEvent); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to stream a2a status event")
+	}
+}
+
+func StreamContentBoundary(ctx context.Context, eventStream EventStreamInterface, completionID, modelID string) {
+	if eventStream == nil {
+		return
+	}
+	chunk := NewContentChunk(completionID, modelID, "")
+	chunk.Choices[0].FinishReason = finishReasonStop
+	chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
+	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to send A2A content boundary chunk")
 	}
 }
 

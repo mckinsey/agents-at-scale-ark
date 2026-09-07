@@ -20,7 +20,6 @@ interface RequestOptions extends RequestInit {
 class APIClient {
   private baseURL: string;
   private defaultHeaders: HeadersInit;
-  private defaultParams: Record<string, string> = {};
 
   constructor(baseURL: string, defaultHeaders: HeadersInit = {}) {
     this.baseURL = baseURL;
@@ -30,21 +29,8 @@ class APIClient {
     };
   }
 
-  setDefaultParam(key: string, value: string | undefined) {
-    if (value === undefined) {
-      delete this.defaultParams[key];
-    } else {
-      this.defaultParams[key] = value;
-    }
-  }
-
-  getDefaultParams(): Record<string, string> {
-    return { ...this.defaultParams };
-  }
-
   buildUrl(endpoint: string, params?: Record<string, string | number | boolean>): string {
-    const mergedParams = { ...this.defaultParams, ...params };
-    return this.buildRequestUrl(endpoint, mergedParams);
+    return this.buildRequestUrl(endpoint, params);
   }
 
   private buildRequestUrl(
@@ -222,9 +208,8 @@ class APIClient {
   ): Promise<T> {
     const { params, headers, ...requestOptions } = options;
     const method = requestOptions.method || 'GET';
-    const mergedParams = { ...this.defaultParams, ...params };
 
-    const url = this.buildRequestUrl(endpoint, mergedParams, method);
+    const url = this.buildRequestUrl(endpoint, params, method);
 
     try {
       const response = await fetch(url, {

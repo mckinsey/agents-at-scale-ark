@@ -15,7 +15,7 @@ import type {
   AgentTool,
   AgentUpdateRequest,
   ExecutionEngine,
-  Model,
+  ModelListItem,
   Tool,
 } from '@/lib/services';
 import {
@@ -33,6 +33,11 @@ import {
   transformAgentParametersToForm,
   transformFormParametersToApi,
 } from './utils';
+
+const EXISTING_AGENT_MODES: ReadonlySet<AgentFormMode> = new Set([
+  AgentFormMode.EDIT,
+  AgentFormMode.VIEW,
+]);
 
 interface UseAgentFormOptions {
   mode: AgentFormMode;
@@ -55,7 +60,7 @@ export function useAgentForm({
   );
   const [saving, setSaving] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<ModelListItem[]>([]);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
@@ -84,20 +89,21 @@ export function useAgentForm({
   });
 
   useEffect(() => {
+    const isExistingAgent = EXISTING_AGENT_MODES.has(mode);
+
     const loadData = async () => {
       try {
-        if (
-          (mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW) &&
-          agentName
-        ) {
+        const enginesPromise = isExperimentalExecutionEngineEnabled
+          ? executionEnginesService.getAll(namespace)
+          : Promise.resolve([]);
+
+        if (isExistingAgent && agentName) {
           const [agentData, modelsData, toolsData, enginesData] =
             await Promise.all([
-              agentsService.getByName(agentName),
-              modelsService.getAll(),
-              toolsService.getAll(),
-              isExperimentalExecutionEngineEnabled
-                ? executionEnginesService.getAll()
-                : Promise.resolve([]),
+              agentsService.getByName(namespace, agentName),
+              modelsService.list(namespace),
+              toolsService.getAll(namespace),
+              enginesPromise,
             ]);
 
           if (!agentData) {
@@ -133,27 +139,22 @@ export function useAgentForm({
           });
         } else {
           const [modelsData, toolsData, enginesData] = await Promise.all([
-            modelsService.getAll(),
-            toolsService.getAll(),
-            isExperimentalExecutionEngineEnabled
-              ? executionEnginesService.getAll()
-              : Promise.resolve([]),
+            modelsService.list(namespace),
+            toolsService.getAll(namespace),
+            enginesPromise,
           ]);
           setModels(modelsData);
           setAvailableTools(toolsData);
           setExecutionEngines(enginesData);
         }
       } catch (error) {
-        toast.error(
-          `Failed to load ${mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW ? 'agent' : 'data'}`,
-          {
-            description:
-              error instanceof Error
-                ? error.message
-                : 'An unexpected error occurred',
-          },
-        );
-        if (mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW) {
+        toast.error(`Failed to load ${isExistingAgent ? 'agent' : 'data'}`, {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
+        });
+        if (isExistingAgent) {
           onSuccessRef.current?.();
         }
       } finally {
@@ -196,35 +197,46 @@ export function useAgentForm({
             parameters: mapParametersToApi(),
           };
 
-          await agentsService.create(createData);
+          await agentsService.create(namespace, createData);
           queryClient.invalidateQueries({
             queryKey: [GET_ALL_AGENTS_QUERY_KEY],
           });
         } else if (agent) {
           const updateData: AgentUpdateRequest = {
-            description: values.description || undefined,
-            modelRef:
-              !agent.isA2A &&
-              values.selectedModelName &&
-              values.selectedModelName !== '' &&
-              values.selectedModelName !== '__none__'
+            description: values.description || null,
+            modelRef: agent.isA2A
+              ? undefined
+              : values.selectedModelName &&
+                  values.selectedModelName !== '' &&
+                  values.selectedModelName !== '__none__'
                 ? {
                     name: values.selectedModelName,
                     namespace: values.selectedModelNamespace || undefined,
                   }
-                : undefined,
+                : null,
             executionEngine:
-              !agent.isA2A &&
-              values.executionEngineName &&
-              values.executionEngineName !== '__none__'
-                ? { name: values.executionEngineName }
-                : undefined,
-            prompt: !agent.isA2A ? values.prompt || undefined : undefined,
+              agent.isA2A || !isExperimentalExecutionEngineEnabled
+                ? undefined
+                : values.executionEngineName &&
+                    values.executionEngineName !== '__none__'
+                  ? { name: values.executionEngineName }
+                  : null,
+            prompt: agent.isA2A ? undefined : values.prompt || null,
             tools: agent.isA2A ? undefined : selectedTools,
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
           };
 
-          await agentsService.update(agent.name, updateData);
+          const updated = await agentsService.update(
+            namespace,
+            agent.name,
+            updateData,
+          );
+          if (!updated) {
+            toast.error('Unable to update agent', {
+              description: 'Agent not found',
+            });
+            return;
+          }
           toast.success('Agent updated successfully');
 
           form.reset(values);
@@ -250,6 +262,7 @@ export function useAgentForm({
       queryClient,
       namespace,
       form,
+      isExperimentalExecutionEngineEnabled,
     ],
   );
 

@@ -35,13 +35,13 @@ describe('useWorkflow', () => {
   it('fetches the workflow using the default namespace and refresh interval', async () => {
     vi.mocked(workflowsService.get).mockResolvedValue(terminalWorkflow);
 
-    const { result } = renderHook(() => useWorkflow('wf-1'));
+    const { result } = renderHook(() => useWorkflow('default', 'wf-1'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(workflowsService.get).toHaveBeenCalledWith('wf-1', 'default');
+    expect(workflowsService.get).toHaveBeenCalledWith('default', 'wf-1');
     expect(result.current.workflow).toEqual(terminalWorkflow);
     expect(result.current.error).toBeNull();
   });

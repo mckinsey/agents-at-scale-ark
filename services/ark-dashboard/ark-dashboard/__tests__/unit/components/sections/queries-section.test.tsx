@@ -6,6 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueriesSection } from '@/components/sections/queries-section';
 import { queriesService } from '@/lib/services/queries';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/queries', () => ({
   queriesService: {
     cancel: vi.fn(),
@@ -203,7 +212,7 @@ describe('QueriesSection', () => {
     fireEvent.click(screen.getByText('Cancel'));
 
     await waitFor(() => {
-      expect(queriesService.cancel).toHaveBeenCalledWith('q-running');
+      expect(queriesService.cancel).toHaveBeenCalledWith('default', 'q-running');
       expect(refetch).toHaveBeenCalled();
     });
   });
@@ -252,7 +261,7 @@ describe('QueriesSection', () => {
       screen.getByRole('button', { name: /delete query/i }),
     );
 
-    expect(queriesService.delete).toHaveBeenCalledWith('q-1');
+    expect(queriesService.delete).toHaveBeenCalledWith('default', 'q-1');
     expect(refetch).toHaveBeenCalled();
   });
 });

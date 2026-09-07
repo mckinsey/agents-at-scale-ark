@@ -72,7 +72,7 @@ describe('ArkApiClient', () => {
       const agents = await client.getAgents();
 
       expect(agents).toEqual(mockAgents);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/agents');
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/agents?limit=100');
     });
 
     it('returns empty array when no items', async () => {
@@ -128,6 +128,30 @@ describe('ArkApiClient', () => {
         expect((error as Error).cause).toBe('string error');
       }
     });
+
+    it('follows continue_token across pages', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({items: [{name: 'a1'}], continue_token: 'tok-1'}),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({items: [{name: 'a2'}], continue_token: 'tok-2'}),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({items: [{name: 'a3'}], continue_token: null}),
+        });
+
+      const agents = await client.getAgents();
+
+      expect(agents).toEqual([{name: 'a1'}, {name: 'a2'}, {name: 'a3'}]);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockFetch).toHaveBeenNthCalledWith(1, 'http://localhost:8080/v1/agents?limit=100');
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://localhost:8080/v1/agents?limit=100&continue=tok-1');
+      expect(mockFetch).toHaveBeenNthCalledWith(3, 'http://localhost:8080/v1/agents?limit=100&continue=tok-2');
+    });
   });
 
   describe('getModels', () => {
@@ -141,7 +165,7 @@ describe('ArkApiClient', () => {
       const models = await client.getModels();
 
       expect(models).toEqual(mockModels);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/models');
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/models?limit=100');
     });
 
     it('throws error with cause on HTTP failure', async () => {
@@ -185,7 +209,7 @@ describe('ArkApiClient', () => {
       const tools = await client.getTools();
 
       expect(tools).toEqual(mockTools);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/tools');
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/tools?limit=100');
     });
 
     it('throws error with cause on HTTP failure', async () => {
@@ -229,7 +253,7 @@ describe('ArkApiClient', () => {
       const teams = await client.getTeams();
 
       expect(teams).toEqual(mockTeams);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/teams');
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/teams?limit=100');
     });
 
     it('throws error with cause on HTTP failure', async () => {

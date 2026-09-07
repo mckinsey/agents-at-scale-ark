@@ -12,11 +12,11 @@ from ark_api.utils.streaming_support import check_streaming_support
 class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
 
     async def test_non_agent_target_returns_true(self):
-        result = await check_streaming_support("model", "gpt-4", "default")
+        result = await check_streaming_support("model", "gpt-4", "default", impersonation=None)
         self.assertTrue(result)
 
     async def test_team_target_returns_true(self):
-        result = await check_streaming_support("team", "my-team", "default")
+        result = await check_streaming_support("team", "my-team", "default", impersonation=None)
         self.assertTrue(result)
 
     @patch("ark_api.utils.streaming_support.with_ark_client")
@@ -27,7 +27,7 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
         mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
         mock_with_ark_client.return_value.__aenter__.return_value = mock_client
 
-        result = await check_streaming_support("agent", "test-agent", "default")
+        result = await check_streaming_support("agent", "test-agent", "default", impersonation=None)
         self.assertTrue(result)
 
     @patch("ark_api.utils.streaming_support.with_ark_client")
@@ -40,7 +40,7 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
         mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
         mock_with_ark_client.return_value.__aenter__.return_value = mock_client
 
-        result = await check_streaming_support("agent", "test-agent", "default")
+        result = await check_streaming_support("agent", "test-agent", "default", impersonation=None)
         self.assertTrue(result)
 
     @patch("ark_api.utils.streaming_support.with_ark_client")
@@ -70,11 +70,11 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
                 ctx.__aenter__.return_value = mock_prealpha1_client
             return ctx
 
-        mock_with_ark_client.side_effect = lambda ns, v: (
+        mock_with_ark_client.side_effect = lambda ns, v, impersonation=None: (
             _make_ctx(mock_v1alpha1_client) if v == "v1alpha1" else _make_ctx(mock_prealpha1_client)
         )
 
-        result = await check_streaming_support("agent", "test-agent", "default")
+        result = await check_streaming_support("agent", "test-agent", "default", impersonation=None)
         self.assertFalse(result)
 
     @patch("ark_api.utils.streaming_support.with_ark_client")
@@ -95,11 +95,11 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
         }
         mock_prealpha1_client.executionengines.a_get = AsyncMock(return_value=mock_engine)
 
-        mock_with_ark_client.side_effect = lambda ns, v: (
+        mock_with_ark_client.side_effect = lambda ns, v, impersonation=None: (
             _make_ctx(mock_v1alpha1_client) if v == "v1alpha1" else _make_ctx(mock_prealpha1_client)
         )
 
-        result = await check_streaming_support("agent", "test-agent", "default")
+        result = await check_streaming_support("agent", "test-agent", "default", impersonation=None)
         self.assertTrue(result)
 
     @patch("ark_api.utils.streaming_support.with_ark_client")
@@ -118,11 +118,11 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
         }
         mock_prealpha1_client.executionengines.a_get = AsyncMock(return_value=mock_engine)
 
-        mock_with_ark_client.side_effect = lambda ns, v: (
+        mock_with_ark_client.side_effect = lambda ns, v, impersonation=None: (
             _make_ctx(mock_v1alpha1_client) if v == "v1alpha1" else _make_ctx(mock_prealpha1_client)
         )
 
-        result = await check_streaming_support("agent", "test-agent", "default")
+        result = await check_streaming_support("agent", "test-agent", "default", impersonation=None)
         self.assertFalse(result)
 
     @patch("ark_api.utils.streaming_support.with_ark_client")
@@ -131,7 +131,7 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
         mock_client.agents.a_get = AsyncMock(side_effect=Exception("not found"))
         mock_with_ark_client.return_value.__aenter__.return_value = mock_client
 
-        result = await check_streaming_support("agent", "missing-agent", "default")
+        result = await check_streaming_support("agent", "missing-agent", "default", impersonation=None)
         self.assertTrue(result)
 
     @patch("ark_api.utils.streaming_support.with_ark_client")
@@ -151,12 +151,12 @@ class TestCheckStreamingSupport(unittest.IsolatedAsyncioTestCase):
         mock_prealpha1_client.executionengines.a_get = AsyncMock(return_value=mock_engine)
 
         calls = []
-        mock_with_ark_client.side_effect = lambda ns, v: (
+        mock_with_ark_client.side_effect = lambda ns, v, impersonation=None: (
             calls.append((ns, v)) or
             _make_ctx(mock_v1alpha1_client) if v == "v1alpha1" else _make_ctx(mock_prealpha1_client)
         )
 
-        result = await check_streaming_support("agent", "test-agent", "default")
+        result = await check_streaming_support("agent", "test-agent", "default", impersonation=None)
         self.assertFalse(result)
         engine_call = [c for c in calls if c[1] == "v1prealpha1"]
         if engine_call:

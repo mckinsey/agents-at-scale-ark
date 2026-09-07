@@ -12,6 +12,26 @@
     "namespace": {
       "type": "string",
       "description": "Kubernetes namespace of the Ark Query resource."
+    },
+    "target": {
+      "type": "object",
+      "description": "Optional override naming the resource to execute. Sent when dispatching a single team member, whose Query targets the team rather than the member. When absent, the engine uses the Query's own spec.target.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Kind of the target resource. Only 'agent' is currently sent."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the target resource, in the Query's namespace."
+        }
+      },
+      "required": ["type", "name"],
+      "additionalProperties": false
+    },
+    "conversationId": {
+      "type": "string",
+      "description": "Optional conversation scope for the sub-request, sent only alongside 'target'. Each team member receives its own value, so an engine keying per-conversation state on it does not share one bucket across members. When absent, the engine falls back to the message's contextId."
     }
   },
   "required": ["name", "namespace"],

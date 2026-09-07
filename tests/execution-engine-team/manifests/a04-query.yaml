@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: engine-team-query
+spec:
+  input: Hello from an engine-backed team!
+  target:
+    type: team
+    name: engine-team

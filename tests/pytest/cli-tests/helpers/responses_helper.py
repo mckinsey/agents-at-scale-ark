@@ -357,6 +357,36 @@ def submit_query(name: str, input_text: str, agent_name: str,
     return True
 
 
+def _evaluate_query_status(status: dict) -> Optional[tuple]:
+    phase = status.get("phase", "")
+    if phase == "done":
+        content = status.get("response", {}).get("content", "") or ""
+        if not content.strip():
+            conv = status.get("conversationId") or ""
+            detail = (
+                f"empty_response conversationId={conv!r}" if conv
+                else "empty_response"
+            )
+            return False, None, detail
+        return True, content, phase
+    if phase in ("error", "submit_failed"):
+        return False, None, phase
+    return None
+
+
+def _fetch_query_status(name: str, namespace: str) -> dict:
+    result = subprocess.run(
+        ["kubectl", "get", "query", name, "-n", namespace, "-o", "json"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return {}
+    try:
+        return json.loads(result.stdout).get("status", {})
+    except json.JSONDecodeError:
+        return {}
+
+
 def poll_query(name: str, namespace: str,
                timeout: int = ARK_TIMEOUT) -> tuple:
     proc = subprocess.Popen(
@@ -372,6 +402,11 @@ def poll_query(name: str, namespace: str,
             remaining = deadline - time.time()
             ready = select.select([proc.stdout], [], [], min(remaining, 5.0))[0]
             if not ready:
+                # Watch is alive but silent; a delivered event can be missed on
+                # a stalled connection, so poll current state as a safety net.
+                terminal = _evaluate_query_status(_fetch_query_status(name, namespace))
+                if terminal is not None:
+                    return terminal
                 continue
             line = proc.stdout.readline()
             if not line:
@@ -380,20 +415,9 @@ def poll_query(name: str, namespace: str,
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            status = event.get("object", {}).get("status", {})
-            phase  = status.get("phase", "")
-            if phase == "done":
-                content = status.get("response", {}).get("content", "") or ""
-                if not content.strip():
-                    conv = status.get("conversationId") or ""
-                    detail = (
-                        f"empty_response conversationId={conv!r}" if conv
-                        else "empty_response"
-                    )
-                    return False, None, detail
-                return True, content, phase
-            if phase in ("error", "submit_failed"):
-                return False, None, phase
+            terminal = _evaluate_query_status(event.get("object", {}).get("status", {}))
+            if terminal is not None:
+                return terminal
     finally:
         proc.terminate()
         try:

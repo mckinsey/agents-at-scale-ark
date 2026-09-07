@@ -5,6 +5,7 @@ import { ChatMessage } from '@/components/chat/chat-message';
 import { submitApproval } from '@/lib/services/a2a-task-approvals';
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useRouter: () => ({
     push: vi.fn(),
   }),
@@ -13,6 +14,15 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/lib/services/a2a-task-approvals', () => ({
   submitApproval: vi.fn(),
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'test-namespace',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
 }));
 
 describe('ChatMessage', () => {
@@ -288,7 +298,6 @@ describe('ChatMessage', () => {
           content=""
           approvalRequest={approvalRequest}
           queryName="q-1"
-          namespace="default"
           pollAfterApproval={pollAfterApproval}
         />,
       );
@@ -298,7 +307,7 @@ describe('ChatMessage', () => {
       await waitFor(() =>
         expect(submitApproval).toHaveBeenCalledWith(
           'a2a-task-task-123',
-          'default',
+          'test-namespace',
           'approved',
         ),
       );
@@ -313,7 +322,6 @@ describe('ChatMessage', () => {
           content=""
           approvalRequest={approvalRequest}
           queryName="q-1"
-          namespace="default"
           pollAfterApproval={pollAfterApproval}
         />,
       );
@@ -323,7 +331,7 @@ describe('ChatMessage', () => {
       await waitFor(() =>
         expect(submitApproval).toHaveBeenCalledWith(
           'a2a-task-task-123',
-          'default',
+          'test-namespace',
           'rejected',
         ),
       );

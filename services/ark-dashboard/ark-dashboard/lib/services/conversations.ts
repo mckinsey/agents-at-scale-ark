@@ -99,6 +99,7 @@ export const conversationsService = {
 
 
   async sendMessage(params: {
+    namespace: string;
     conversationId: string;
     message: string;
     sessionId: string;
@@ -111,6 +112,7 @@ export const conversationsService = {
       : params.agentName;
 
     await chatService.submitChatQuery(
+      params.namespace,
       params.message,
       params.participantType || 'agent',
       targetName,

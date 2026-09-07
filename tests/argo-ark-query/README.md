@@ -6,6 +6,7 @@ Validates the `ark-query` `WorkflowTemplate` shipped in the argo-workflows chart
 - The `ark-query` `WorkflowTemplate` is present after the argo-workflows chart is installed.
 - A workflow step referencing `templateRef: {name: ark-query, template: query}` submits a Query against an **agent** target and returns `response`, `phase`, `conversation-id`, and `query-json` on success.
 - The same template against a **team** target returns the final assistant message.
+- The same template against a **tool** target executes the tool directly (no agent) and returns the tool's response, with the created Query's `spec.target.type` serialized as `tool`.
 - A forced query `error` marks the Argo node Failed while `phase` / `response` / `query-json` outputs remain readable.
 - Input-validation failures mark the node Failed and write the error to the `response` output:
   - target without `type/name` form, unknown target type, empty target name.

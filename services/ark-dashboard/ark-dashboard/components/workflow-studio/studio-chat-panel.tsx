@@ -20,6 +20,8 @@ import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { PromptEditorDialog } from './prompt-editor-dialog';
 import { StudioChatDisabledBanner } from './studio-chat-disabled-banner';
 import { StudioChatGate } from './studio-chat-gate';
+import { StudioExperimentalNotice } from './studio-experimental-notice';
+import { useExperimentalNotice } from './use-experimental-notice';
 import { type UseStudioChatReturn } from './use-studio-chat';
 
 const SUGGESTION_PROMPTS = [
@@ -93,11 +95,15 @@ export function StudioChatPanel({
   unverifiable,
 }: Readonly<StudioChatPanelProps>) {
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
-  const composerDisabled = chat.composerDisabled || gated;
-  const inputDisabled = chat.inputDisabled || gated;
+  const experimentalNotice = useExperimentalNotice();
+  const noticeBlocking = experimentalNotice.visible;
+  const composerDisabled = chat.composerDisabled || gated || noticeBlocking;
+  const inputDisabled = chat.inputDisabled || gated || noticeBlocking;
   const notInstalled = !unverifiable && (agentMissing || mcpMissing);
   const installedNotReady =
     !unverifiable && !notInstalled && (agentNotReady || mcpNotReady);
+  const showExperimentalNotice = noticeBlocking && !unverifiable;
+  const showGate = unverifiable || (notInstalled && !showExperimentalNotice);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -121,7 +127,7 @@ export function StudioChatPanel({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {(unverifiable || notInstalled) && (
+      {showGate && (
         <StudioChatGate
           agentMissing={agentMissing}
           agentNotReady={agentNotReady}
@@ -131,7 +137,11 @@ export function StudioChatPanel({
         />
       )}
 
-      {installedNotReady && (
+      {showExperimentalNotice && (
+        <StudioExperimentalNotice onDismiss={experimentalNotice.dismiss} />
+      )}
+
+      {installedNotReady && !showExperimentalNotice && (
         <StudioChatDisabledBanner
           agentNotReady={agentNotReady}
           mcpNotReady={mcpNotReady}

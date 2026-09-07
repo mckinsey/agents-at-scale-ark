@@ -12,6 +12,15 @@ import FloatingChat from '@/components/floating-chat';
 import type { QueryDetailResponse } from '@/lib/services';
 import { chatService } from '@/lib/services';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 // Mock Next.js router - used by ChatMessage component
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -774,6 +783,7 @@ describe('FloatingChat', () => {
 
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+          'default',
           'Test message',
           'agent',
           'Test Agent',
@@ -787,7 +797,7 @@ describe('FloatingChat', () => {
 
       // Should call getQueryResult
       await waitFor(() => {
-        expect(chatService.getQueryResult).toHaveBeenCalledWith('query-123');
+        expect(chatService.getQueryResult).toHaveBeenCalledWith('default', 'query-123');
       });
 
       // Should eventually show the response
@@ -903,6 +913,7 @@ describe('FloatingChat', () => {
 
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+          'default',
           'Test message',
           'agent',
           'Test Agent',

@@ -3,9 +3,13 @@
 package controller
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/aws/smithy-go"
@@ -14,6 +18,24 @@ import (
 
 	completions "mckinsey.com/ark/executors/completions"
 )
+
+const (
+	maxProbeErrorLength       = 256
+	maxSeparatorCleanupPasses = 8
+)
+
+var volatileTokenPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(^|[\s",{])"?(?:trace|correlation|request|activity|client-request)[ _-]?id"?\s*[:=]\s*"?[^",}\s]*"?`),
+	regexp.MustCompile(`(?i)(^|[\s",{])"?timestamp"?\s*[:=]\s*"?\d{4}-\d{2}-\d{2}[ t]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:z|[+-]\d{2}:?\d{2})?"?`),
+	regexp.MustCompile(`(?i)(^|\s)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`),
+	regexp.MustCompile(`(?i)(^|\s)[0-9a-f]{16,}\b`),
+}
+
+var separatorCleanupPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`([{\[])\s*,\s*`),
+	regexp.MustCompile(`,\s*([}\]])`),
+	regexp.MustCompile(`,\s*(,)`),
+}
 
 type ProbeResult struct {
 	Available     bool
@@ -49,7 +71,8 @@ func extractStableError(err error, timeout time.Duration) string {
 
 	var openaiErr *openai.Error
 	if errors.As(err, &openaiErr) {
-		return fmt.Sprintf("%s (%d)", openaiErr.Message, openaiErr.StatusCode)
+		message := cmp.Or(openaiErr.Message, http.StatusText(openaiErr.StatusCode), "unknown error")
+		return fmt.Sprintf("%s (%d)", message, openaiErr.StatusCode)
 	}
 
 	var httpErr *smithyhttp.ResponseError
@@ -65,5 +88,36 @@ func extractStableError(err error, timeout time.Duration) string {
 		return "Probe canceled (connection error)"
 	}
 
-	return "Probe failed (unknown error)"
+	return fmt.Sprintf("Probe failed (%s)", stabilizeProbeError(err))
+}
+
+func cleanupSeparators(msg string) string {
+	for range maxSeparatorCleanupPasses {
+		cleaned := msg
+		for _, pattern := range separatorCleanupPatterns {
+			cleaned = pattern.ReplaceAllString(cleaned, "${1}")
+		}
+		if cleaned == msg {
+			break
+		}
+		msg = cleaned
+	}
+	return msg
+}
+
+func stabilizeProbeError(err error) string {
+	msg := err.Error()
+	for _, pattern := range volatileTokenPatterns {
+		msg = pattern.ReplaceAllString(msg, "${1}")
+	}
+	msg = cleanupSeparators(msg)
+	msg = strings.Join(strings.Fields(msg), " ")
+	msg = strings.TrimRight(msg, " ,;:-")
+	if msg == "" {
+		return "unknown error"
+	}
+	if runes := []rune(msg); len(runes) > maxProbeErrorLength {
+		return strings.TrimSpace(string(runes[:maxProbeErrorLength])) + "..."
+	}
+	return msg
 }

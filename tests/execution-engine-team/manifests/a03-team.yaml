@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: engine-team
+spec:
+  description: Sequential team whose members all run on a named execution engine
+  strategy: sequential
+  members:
+  - name: engine-member-a
+    type: agent
+  - name: engine-member-b
+    type: agent

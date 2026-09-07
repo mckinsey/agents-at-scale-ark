@@ -3,16 +3,19 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Autorenew, DatabaseSearch } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { QueriesSection } from '@/components/sections/queries-section';
 import {
+  LearnMoreButton,
   ResourceEmptyState,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Pagination } from '@/components/ui/pagination';
+import { DOCS_URLS } from '@/lib/constants/docs';
 import { useListQueries } from '@/lib/services/queries-hooks';
 import {
   DEFAULT_PAGE_SIZE,
@@ -22,8 +25,6 @@ import {
 
 const PAGE_SIZE_OPTIONS = [10, 15, 25, 50, 100];
 const SEARCH_DEBOUNCE_MS = 400;
-const QUERY_DOCS_URL =
-  'https://mckinsey.github.io/agents-at-scale-ark/user-guide/queries/';
 
 export default function QueriesPage() {
   const router = useRouter();
@@ -104,35 +105,27 @@ export default function QueriesPage() {
 
   return (
     <div className="flex min-h-0 w-full content-shell flex-1 flex-col">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <IconShell size="default" variant="primary">
-              <DatabaseSearch />
-            </IconShell>
-            <h1 className="text-fg-primary text-2xl leading-8 tracking-[-0.096px]">
-              {total > 0 ? `Query logs (${total})` : 'Query logs'}
-            </h1>
-          </div>
-          <p className="text-fg-secondary text-sm leading-5 tracking-[-0.028px]">
-            Monitor query activity, execution time, status, and errors
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            onClick={() => refetch()}
-            disabled={isFetching}>
-            <IconShell size="sm">
-              <Autorenew />
-            </IconShell>
-            Refresh
-          </Button>
-          <NamespacedLink href="/query/new">
-            <Button>Create query</Button>
-          </NamespacedLink>
-        </div>
-      </div>
+      <ResourcePageHeader
+        icon={<DatabaseSearch />}
+        title={total > 0 ? `Query logs (${total})` : 'Query logs'}
+        description="Monitor query activity, execution time, status, and errors"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isFetching}>
+              <IconShell size="sm">
+                <Autorenew />
+              </IconShell>
+              Refresh
+            </Button>
+            <NamespacedLink href="/query/new">
+              <Button>Create query</Button>
+            </NamespacedLink>
+          </>
+        }
+      />
 
       {isEmpty ? (
         <ResourceEmptyState
@@ -144,11 +137,7 @@ export default function QueriesPage() {
               <p>Get started by creating your query to see results.</p>
             </>
           }
-          actions={
-            <a href={QUERY_DOCS_URL} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline">Learn more</Button>
-            </a>
-          }
+          actions={<LearnMoreButton href={DOCS_URLS.queries} />}
         />
       ) : (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">

@@ -25,11 +25,12 @@ type MCPSettings struct {
 }
 
 type MCPClient struct {
-	URL        string
-	Headers    map[string]string
-	Client     *mcpsdk.ClientSession
-	retry      RetryConfig
-	serverName string
+	URL             string
+	Headers         map[string]string
+	Client          *mcpsdk.ClientSession
+	retry           RetryConfig
+	toolCallTimeout time.Duration
+	serverName      string
 }
 
 type Option func(*MCPClient)
@@ -37,6 +38,12 @@ type Option func(*MCPClient)
 func WithToolCallRetry(cfg RetryConfig) Option {
 	return func(c *MCPClient) {
 		c.retry = cfg
+	}
+}
+
+func WithToolCallTimeout(timeout time.Duration) Option {
+	return func(c *MCPClient) {
+		c.toolCallTimeout = timeout
 	}
 }
 
@@ -57,6 +64,8 @@ var (
 	ErrConnectionRetryFailed = "context timeout while retrying MCP client creation for server"
 	ErrUnsupportedTransport  = "unsupported transport type"
 )
+
+var ErrToolCallTimeout = errors.New("mcp tool call timeout")
 
 // UnauthorizedError indicates the MCP server responded with HTTP 401. It
 // carries the WWW-Authenticate header so callers can perform RFC 9728

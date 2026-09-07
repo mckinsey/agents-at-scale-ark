@@ -6,6 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventsService } from '@/lib/services/events';
 import { useGetEventsCount } from '@/lib/services/events-hooks';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/events', () => ({
   eventsService: {
     getAll: vi.fn(),
@@ -44,7 +53,7 @@ describe('events-hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toBe(42);
-      expect(eventsService.getAll).toHaveBeenCalledWith({
+      expect(eventsService.getAll).toHaveBeenCalledWith('default', {
         limit: 1,
         page: 1,
       });

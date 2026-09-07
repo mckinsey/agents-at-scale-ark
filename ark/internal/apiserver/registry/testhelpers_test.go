@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -54,29 +56,39 @@ func (m *mockBackend) Get(ctx context.Context, kind, namespace, name string) (ru
 	key := m.key(kind, namespace, name)
 	obj, ok := m.objects[key]
 	if !ok {
-		return nil, errors.New("not found")
+		// The sentinel, matching the PostgreSQL backend: callers distinguish a genuine
+		// miss from a storage failure, and a plain error would make them indistinguishable.
+		return nil, storage.ErrNotFound
 	}
 	return obj, nil
 }
 
-func (m *mockBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
+func (m *mockBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, int64, error) {
 	if m.err != nil {
-		return nil, "", m.err
+		return nil, "", 0, m.err
 	}
 	if opts.FieldSelector != "" {
-		return nil, "", fmt.Errorf("%w: field selector %q not yet implemented", storage.ErrInvalidRequest, opts.FieldSelector)
+		return nil, "", 0, fmt.Errorf("%w: field selector %q not yet implemented", storage.ErrInvalidRequest, opts.FieldSelector)
 	}
 	var result []runtime.Object
 	prefix := kind + "/"
 	if namespace != "" {
 		prefix = kind + "/" + namespace + "/"
 	}
+	// listRV is the numeric max over stored objects: this in-memory fake has no
+	// purge floor, so the head revision is simply the highest item RV.
+	var listRV int64
 	for key, obj := range m.objects {
 		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
 			result = append(result, obj)
+			if objMeta, err := meta.Accessor(obj); err == nil {
+				if n, perr := strconv.ParseInt(objMeta.GetResourceVersion(), 10, 64); perr == nil && n > listRV {
+					listRV = n
+				}
+			}
 		}
 	}
-	return result, "", nil
+	return result, "", listRV, nil
 }
 
 func (m *mockBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {

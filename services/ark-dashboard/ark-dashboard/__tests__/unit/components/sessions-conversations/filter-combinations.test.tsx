@@ -5,6 +5,15 @@ import { SessionsTable } from '@/components/sessions-conversations/sessions-tabl
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import type { PaginatedSessions } from '@/lib/services/broker-sessions';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/broker-sessions-hooks');
 vi.mock('@/components/ui/sonner');
 vi.mock('@/components/sessions-conversations/session-table-row', () => ({

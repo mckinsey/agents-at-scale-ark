@@ -90,6 +90,23 @@ func (c *MCPClient) CallTool(ctx context.Context, params *mcpsdk.CallToolParams)
 		return nil, errors.New("MCP client session not initialized")
 	}
 
+	if c.toolCallTimeout <= 0 {
+		return c.callToolWithRetry(ctx, params)
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, c.toolCallTimeout)
+	defer cancel()
+
+	result, err := c.callToolWithRetry(callCtx, params)
+	if err != nil && callCtx.Err() != nil && ctx.Err() == nil {
+		return nil, fmt.Errorf("%w: tool %q on MCP server %s exceeded the configured spec.toolCallTimeout of %s: %w",
+			ErrToolCallTimeout, params.Name, c.URL, c.toolCallTimeout, err)
+	}
+
+	return result, err
+}
+
+func (c *MCPClient) callToolWithRetry(ctx context.Context, params *mcpsdk.CallToolParams) (*mcpsdk.CallToolResult, error) {
 	log := logf.FromContext(ctx)
 	cfg := c.retry.withDefaults()
 	label := c.serverLabel()

@@ -22,7 +22,28 @@ const (
 type walStreamState struct {
 	relations        map[uint32]*pglogrepl.RelationMessage
 	lastWriteLSN     pglogrepl.LSN
+	serverWALEnd     pglogrepl.LSN
 	lastStatusUpdate time.Time
+}
+
+// newWALStreamState seeds the stream at the slot's resume point: until the first
+// keepalive arrives the consumer would otherwise report 0/0, contributing nothing
+// toward advancing the slot.
+func newWALStreamState(resumeLSN pglogrepl.LSN) *walStreamState {
+	return &walStreamState{
+		relations:        make(map[uint32]*pglogrepl.RelationMessage),
+		lastWriteLSN:     resumeLSN,
+		lastStatusUpdate: time.Now(),
+	}
+}
+
+// ackLSN is the position reported in standby status updates. ark_cdc publishes only
+// the resources table, but WAL is cluster-wide, so acking just our own writes pins
+// every segment produced by unrelated tables. The server's keepalive end position is
+// safe to ack because handleWALMessage decodes each XLogData synchronously inside the
+// receive loop: when a keepalive arrives there is no undecoded backlog behind it.
+func (s *walStreamState) ackLSN() pglogrepl.LSN {
+	return max(s.lastWriteLSN, s.serverWALEnd)
 }
 
 func (p *PostgreSQLBackend) handleWALMessage(conn *pgconn.PgConn, rawMsg pgproto3.BackendMessage, state *walStreamState) error {
@@ -42,8 +63,9 @@ func (p *PostgreSQLBackend) handleWALMessage(conn *pgconn.PgConn, rawMsg pgproto
 			klog.Errorf("WAL parse keepalive: %v", err)
 			return nil
 		}
+		state.serverWALEnd = msg.ServerWALEnd
 		if msg.ReplyRequested {
-			if err := p.sendStandbyStatus(conn, state.lastWriteLSN); err != nil {
+			if err := p.sendStandbyStatus(conn, state.ackLSN()); err != nil {
 				return fmt.Errorf("standby status reply: %w", err)
 			}
 			state.lastStatusUpdate = time.Now()

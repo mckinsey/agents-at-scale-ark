@@ -178,7 +178,6 @@ The admission webhook (`ark/internal/validation/team.go`) enforces these rules a
 - `members[]` not empty.
 - Each `members[i].name` references an existing Agent or Team in the same namespace.
 - `members[i].name != metadata.name` (no self-reference).
-- No mixed teams — all member agents must share an execution-engine kind (all internal or all external; not mixed).
 - `strategy` is one of the supported values (or a deprecated one — see [Deprecated strategies and migration](#deprecated-strategies-and-migration)).
 - `sequential`: `maxTurns` required iff `loops: true`.
 - `selector`: `selector.agent` required and resolvable; `maxTurns` required; `loops` not allowed; if `graph` is set, every edge endpoint must be a member.

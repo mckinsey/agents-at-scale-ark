@@ -3,12 +3,14 @@ package broker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
@@ -252,6 +254,80 @@ func TestEmitStructured_DropsEventWhenSemaphoreFull(t *testing.T) {
 	e.EmitStructured(context.Background(), query, corev1.EventTypeNormal, "QueryExecutionStart", "msg", nil)
 
 	assert.False(t, called, "event should be dropped when semaphore is full")
+}
+
+func TestEmitStructured_IncrementsDroppedCounterWhenSemaphoreFull(t *testing.T) {
+	e := newTestEmitter(map[string]string{"sem-full-ns": "http://unused"})
+	e.sem = semaphore.NewWeighted(0)
+	query := newTestQuery("sem-full-ns")
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonSemaphoreFull))
+	e.EmitStructured(context.Background(), query, corev1.EventTypeNormal, "QueryExecutionStart", "msg", nil)
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonSemaphoreFull))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnBadStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	e := newTestEmitter(map[string]string{"bad-status-ns": srv.URL})
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonBadStatus))
+	e.sendEvent(context.Background(), "bad-status-ns", Event{Reason: "QueryExecutionStart"})
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonBadStatus))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnHTTPError(t *testing.T) {
+	e := newTestEmitter(map[string]string{"http-err-ns": "http://127.0.0.1:1"})
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonHTTPError))
+	e.sendEvent(context.Background(), "http-err-ns", Event{Reason: "QueryExecutionStart"})
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonHTTPError))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnEndpointError(t *testing.T) {
+	e := &BrokerEventEmitter{
+		httpClient: &http.Client{},
+		sem:        semaphore.NewWeighted(64),
+		resolveEndpoint: func(_ context.Context, _ string) (string, error) {
+			return "", errors.New("resolve failed")
+		},
+	}
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonEndpointError))
+	e.sendEvent(context.Background(), "endpoint-err-ns", Event{Reason: "QueryExecutionStart"})
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonEndpointError))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnMarshalError(t *testing.T) {
+	e := newTestEmitter(map[string]string{"marshal-err-ns": "http://broker.local"})
+	badEvent := Event{Reason: "QueryExecutionStart", Data: map[string]interface{}{"bad": make(chan int)}}
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonMarshalError))
+	e.sendEvent(context.Background(), "marshal-err-ns", badEvent)
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonMarshalError))
+
+	assert.Equal(t, float64(1), after-before)
+}
+
+func TestSendEvent_IncrementsDroppedCounterOnRequestError(t *testing.T) {
+	e := newTestEmitter(map[string]string{"request-err-ns": "http://\x7f"})
+
+	before := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonRequestError))
+	e.sendEvent(context.Background(), "request-err-ns", Event{Reason: "QueryExecutionStart"})
+	after := testutil.ToFloat64(emitDroppedTotal.WithLabelValues(dropReasonRequestError))
+
+	assert.Equal(t, float64(1), after-before)
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

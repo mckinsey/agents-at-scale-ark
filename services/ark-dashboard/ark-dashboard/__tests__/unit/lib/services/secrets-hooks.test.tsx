@@ -15,6 +15,15 @@ import {
 } from '@/lib/services/secrets-hooks';
 import { toast } from '@/components/ui/sonner';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/secrets', () => ({
   secretsService: {
     getAll: vi.fn(),
@@ -102,7 +111,7 @@ describe('secrets-hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(secretsService.get).toHaveBeenCalledWith('aws-credentials');
+      expect(secretsService.get).toHaveBeenCalledWith('default', 'aws-credentials');
       expect(result.current.data?.keys).toEqual([
         'accessKeyId',
         'secretAccessKey',
@@ -161,6 +170,7 @@ describe('secrets-hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(secretsService.create).toHaveBeenCalledWith(
+        'default',
         'test-secret',
         'password123',
       );
@@ -255,6 +265,7 @@ describe('secrets-hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(secretsService.update).toHaveBeenCalledWith(
+        'default',
         'updated-secret',
         'newpassword123',
       );
@@ -348,7 +359,7 @@ describe('secrets-hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(secretsService.delete).toHaveBeenCalledWith('delete-me');
+      expect(secretsService.delete).toHaveBeenCalledWith('default', 'delete-me');
       expect(toast.success).toHaveBeenCalledWith('Secret deleted successfully');
       expect(onSuccess).toHaveBeenCalled();
     });
@@ -364,7 +375,7 @@ describe('secrets-hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(secretsService.delete).toHaveBeenCalledWith('delete-me');
+      expect(secretsService.delete).toHaveBeenCalledWith('default', 'delete-me');
       expect(toast.success).toHaveBeenCalled();
     });
 

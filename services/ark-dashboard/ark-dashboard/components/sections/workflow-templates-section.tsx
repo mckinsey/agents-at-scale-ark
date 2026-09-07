@@ -77,7 +77,7 @@ export const WorkflowTemplatesSection = forwardRef<
   const fetchFlows = useCallback(async () => {
     try {
       setLoading(true);
-      const fetchedTemplates = await workflowTemplatesService.list();
+      const fetchedTemplates = await workflowTemplatesService.list(namespace);
       setTemplates(fetchedTemplates);
       setArgoInstalled(true);
       onArgoInstalledChange?.(true);
@@ -90,7 +90,7 @@ export const WorkflowTemplatesSection = forwardRef<
     } finally {
       setLoading(false);
     }
-  }, [onArgoInstalledChange]);
+  }, [namespace, onArgoInstalledChange]);
 
   useEffect(() => {
     fetchFlows();
@@ -104,6 +104,7 @@ export const WorkflowTemplatesSection = forwardRef<
     ) => {
       try {
         const workflow = await workflowTemplatesService.run(
+          namespace,
           flowId,
           parameters,
           workflowName,
@@ -120,13 +121,13 @@ export const WorkflowTemplatesSection = forwardRef<
         throw error;
       }
     },
-    [],
+    [namespace],
   );
 
   const handleDeleteWorkflow = useCallback(
     async (flowId: string) => {
       try {
-        await workflowTemplatesService.delete(flowId);
+        await workflowTemplatesService.delete(namespace, flowId);
         toast.success('Workflow template deleted', {
           description: `Deleted workflow template: ${flowId}`,
         });
@@ -141,7 +142,7 @@ export const WorkflowTemplatesSection = forwardRef<
         });
       }
     },
-    [fetchFlows],
+    [namespace, fetchFlows],
   );
 
   if (showLoading) {

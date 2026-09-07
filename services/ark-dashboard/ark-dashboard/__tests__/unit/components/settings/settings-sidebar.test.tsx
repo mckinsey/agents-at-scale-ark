@@ -10,6 +10,7 @@ import type { SettingPage } from '@/components/settings/settings-types';
 import { SettingsSidebar } from '@/components/settings/settings-sidebar';
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useRouter: vi.fn(),
   useSearchParams: vi.fn(),
 }));

@@ -5,11 +5,13 @@ import { useMemo, useState } from 'react';
 import { Check, ContentCopy, SaveAlt } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
+import { cn } from '@/lib/utils';
 
 interface JsonViewerProps {
   readonly value: unknown;
   readonly fileName?: string;
   readonly maxPreviewBytes?: number;
+  readonly className?: string;
 }
 
 function safePretty(value: unknown, space = 2) {
@@ -31,6 +33,7 @@ export function JsonViewer({
   value,
   fileName = 'response',
   maxPreviewBytes = 50_000,
+  className,
 }: JsonViewerProps) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -62,7 +65,7 @@ export function JsonViewer({
   };
 
   return (
-    <div className="relative">
+    <div className={cn('relative flex min-h-0 flex-col', className)}>
       <div className="absolute top-2 right-4 z-10 flex gap-1">
         <Button
           variant="ghost"
@@ -94,7 +97,7 @@ export function JsonViewer({
           </Button>
         )}
       </div>
-      <pre className="bg-muted/30 overflow-auto p-4 pt-10 font-mono text-xs break-words whitespace-pre-wrap">
+      <pre className="bg-muted/30 min-h-0 flex-1 overflow-auto p-4 pt-10 font-mono text-xs break-words whitespace-pre-wrap">
         {shown}
       </pre>
     </div>

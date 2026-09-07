@@ -5,6 +5,7 @@ import {buildApp} from './server.js';
 import {createMessageStream} from './brokers/stream/message-stream-factory.js';
 import {createChunkStream} from './brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from './brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from './brokers/sessions/sessions-storage-factory.js';
 import {createDb} from './db/db.js';
 import {createRedis} from './redis/redis.js';
 
@@ -30,10 +31,12 @@ const main = async (): Promise<void> => {
   logger.info({backend: config.backends.message}, 'message backend');
   logger.info({backend: config.backends.chunk}, 'chunk backend');
   logger.info({backend: config.backends.event}, 'event backend');
+  logger.info({backend: config.backends.sessions}, 'sessions backend');
 
   const needsDb =
     config.backends.message === 'postgres' ||
-    config.backends.event === 'postgres';
+    config.backends.event === 'postgres' ||
+    config.backends.sessions === 'postgres';
   const db = needsDb ? createDb(config, logger) : undefined;
 
   const redis =
@@ -42,6 +45,16 @@ const main = async (): Promise<void> => {
   const messageStream = createMessageStream(config, logger, db);
   const chunkStream = createChunkStream(config, logger, redis);
   const eventStream = createEventStream(config, logger, db);
+  const sessionsStorage = createSessionsStorage(config, logger, db);
+
+  // Bounded streaming load off disk must finish before the server accepts
+  // traffic, so replay cursors are correct from the first request.
+  await Promise.all([
+    messageStream.init?.(),
+    chunkStream.init?.(),
+    eventStream.init?.(),
+  ]);
+
   const {app, brokers} = buildApp({
     config,
     logger,
@@ -49,10 +62,12 @@ const main = async (): Promise<void> => {
     messageStream,
     chunkStream,
     eventStream,
+    sessionsStorage,
     db,
     redis,
   });
   const {memory, chunks, traces, events, sessions} = brokers;
+  await traces.init();
 
   const server = app.listen(config.server.port, config.server.host, () => {
     logger.info(
@@ -65,14 +80,18 @@ const main = async (): Promise<void> => {
 
   const gracefulShutdown = async (): Promise<void> => {
     logger.info('shutting down gracefully');
-    sessions.save();
+    messageStream.close?.();
+    chunkStream.close?.();
+    eventStream.close?.();
+    traces.close();
     const results = await Promise.allSettled([
       memory.save(),
       chunks.save(),
       traces.save(),
       events.save(),
+      sessions.save(),
     ]);
-    const brokerNames = ['memory', 'chunks', 'traces', 'events'];
+    const brokerNames = ['memory', 'chunks', 'traces', 'events', 'sessions'];
     results.forEach((result, idx) => {
       if (result.status === 'rejected') {
         logger.error(

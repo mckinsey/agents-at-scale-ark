@@ -20,23 +20,20 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 rules:
-  # Core resources for Helm releases and events.
-  # MCP auth endpoints (/api/v1/mcp-servers/{name}/auth/start|callback|logout)
-  # write OAuth tokens to the Secret named in spec.authorization.tokenSecretRef
-  # and require get/create/update/patch/delete on secrets in the served
-  # namespaces. list/watch are not required for the auth endpoints.
+  # Events for Helm releases. Secrets writes serve the MCP auth endpoints, which
+  # store OAuth tokens in spec.authorization.tokenSecretRef.
   - apiGroups: [""]
     resources: ["secrets", "events"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
-  # Permission to read configmaps to load ark-config-streaming configuration
+
+  # Read ark-config-streaming, write export history and marketplace sources, and
+  # manage the configmaps backing Ark configurations (/v1/configurations).
+  # Cannot be narrowed here - no label selector, and resourceNames cannot
+  # restrict create. Limited instead by the marker check in ConfigurationClient
+  # and, when enabled, configMapPolicy.
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list"]
-  # Permission to write export history to a dedicated configmap
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    resourceNames: ["ark-export-metadata"]
-    verbs: ["update", "patch"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
   # Permission to read services to get the address of the configured streaming service
   - apiGroups: [""]
     resources: ["services"]

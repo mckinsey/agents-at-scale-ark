@@ -1,0 +1,47 @@
+{{- if .Values.audit.enabled }}
+{{- $levels := list "None" "Metadata" "Request" "RequestResponse" }}
+{{- if not (has .Values.audit.level $levels) }}
+{{- fail (printf "audit.level must be one of %v, got %q — the apiserver rejects an unknown level while loading the policy and would crashloop" $levels .Values.audit.level) }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-apiserver-audit-policy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+data:
+  # Mounted at /etc/ark/audit/policy.yaml; set .Values.audit.policy for a custom policy.
+  policy.yaml: |
+    {{- if .Values.audit.policy }}
+    {{- .Values.audit.policy | nindent 4 }}
+    {{- else }}
+    apiVersion: audit.k8s.io/v1
+    kind: Policy
+    # One record per request instead of two.
+    omitStages:
+      - RequestReceived
+    rules:
+      # Continuous kubelet/aggregation-layer background traffic with no audit value.
+      - level: None
+        nonResourceURLs:
+          - /healthz*
+          - /readyz*
+          - /livez*
+          - /metrics
+          - /version
+          - /openapi*
+          - /apis*
+      {{- with .Values.audit.excludeReadsByUsers }}
+      # Controller reconcile reads are continuous background traffic. Writes by the same
+      # identity still fall through to the catch-all below.
+      - level: None
+        users:
+          {{- toYaml . | nindent 10 }}
+        verbs: ["get", "list", "watch"]
+      {{- end }}
+      # Only ark.mckinsey.com is served here, so this covers Ark operations on both the
+      # proxied and direct service paths.
+      - level: {{ .Values.audit.level }}
+    {{- end }}
+{{- end }}

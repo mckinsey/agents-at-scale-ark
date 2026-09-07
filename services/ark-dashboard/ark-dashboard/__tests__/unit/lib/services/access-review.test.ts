@@ -21,7 +21,7 @@ describe('accessReviewService', () => {
     it('should POST the params and return allowed=true', async () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce({ allowed: true });
 
-      const result = await accessReviewService.check({
+      const result = await accessReviewService.check('default', {
         group: 'argoproj.io',
         resource: 'workflowtemplates',
         verb: 'create',
@@ -33,15 +33,14 @@ describe('accessReviewService', () => {
           group: 'argoproj.io',
           resource: 'workflowtemplates',
           verb: 'create',
-        },
-      );
+        }, { params: { namespace: 'default' } });
       expect(result).toBe(true);
     });
 
     it('should return allowed=false', async () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce({ allowed: false });
 
-      const result = await accessReviewService.check({
+      const result = await accessReviewService.check('default', {
         group: 'argoproj.io',
         resource: 'workflowtemplates',
         verb: 'update',
@@ -54,7 +53,7 @@ describe('accessReviewService', () => {
       vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('forbidden'));
 
       await expect(
-        accessReviewService.check({
+        accessReviewService.check('default', {
           group: 'argoproj.io',
           resource: 'workflowtemplates',
           verb: 'create',

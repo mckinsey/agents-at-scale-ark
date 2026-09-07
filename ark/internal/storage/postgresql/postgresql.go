@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -28,6 +29,12 @@ import (
 )
 
 const jsonNull = "null"
+
+// relistLookbackRVs is how far below the relist cursor a re-query reaches to catch
+// rows whose txn committed out of resource_version order (BIGSERIAL assigns rv at
+// statement time, visibility follows commit time); seenRVs dedups the overlap.
+// Shared by the per-watcher relist and the per-kind broadcaster so they can't drift.
+const relistLookbackRVs int64 = 500
 
 // fieldPredicate is a validated (column, op, value) triple derived from a client-
 // supplied field selector. columns come from supportedFieldColumns (never client
@@ -180,7 +187,10 @@ type PostgreSQLBackend struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	cachedRV     atomic.Int64
-	walOnce      sync.Once
+	// cachedPurgeFloor mirrors the persisted watch_purge_floor so Watch() can
+	// reject too-old resume points without a DB round-trip.
+	cachedPurgeFloor atomic.Int64
+	walOnce          sync.Once
 }
 
 var connValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
@@ -192,7 +202,30 @@ func quoteConnValue(v string) string {
 const (
 	connectTimeoutSeconds = 10
 	startupPingTimeout    = 30 * time.Second
+
+	// The backend depends on PG15+ server behaviour (pg_current_snapshot
+	// pagination, pg_replication_slots.wal_status) and only majors in community
+	// support are tested in CI, so older servers are rejected at startup.
+	minServerVersionNum = 150000
 )
+
+func checkServerVersion(ctx context.Context, db *sql.DB) error {
+	var (
+		versionNum int
+		version    string
+	)
+	err := db.QueryRowContext(ctx,
+		"SELECT current_setting('server_version_num')::int, current_setting('server_version')").
+		Scan(&versionNum, &version)
+	if err != nil {
+		return fmt.Errorf("failed to read server version: %w", err)
+	}
+	if versionNum < minServerVersionNum {
+		return fmt.Errorf("PostgreSQL %s is not supported: the storage backend requires PostgreSQL %d or newer",
+			version, minServerVersionNum/10000)
+	}
+	return nil
+}
 
 func buildConnString(cfg Config) string {
 	parts := []string{
@@ -247,6 +280,11 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	if err := db.PingContext(pingCtx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	if err := checkServerVersion(pingCtx, db); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -339,6 +377,13 @@ func (p *PostgreSQLBackend) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_resources_labels ON resources USING GIN(labels);
 	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version);
 	CREATE INDEX IF NOT EXISTS idx_resources_deleted ON resources(deleted_at) WHERE deleted_at IS NOT NULL;
+	CREATE INDEX IF NOT EXISTS idx_resources_kind_rv ON resources(kind, resource_version);
+	CREATE INDEX IF NOT EXISTS idx_resources_rv ON resources(resource_version);
+
+	CREATE TABLE IF NOT EXISTS storage_metadata (
+		key TEXT PRIMARY KEY,
+		value BIGINT NOT NULL
+	);
 
 	DROP TRIGGER IF EXISTS resource_change_trigger ON resources;
 	DROP FUNCTION IF EXISTS notify_resource_change();
@@ -371,6 +416,7 @@ func (p *PostgreSQLBackend) refreshBookmarkLoop() {
 	defer ticker.Stop()
 
 	p.refreshCachedRV()
+	p.refreshPurgeFloor()
 
 	for {
 		select {
@@ -378,6 +424,7 @@ func (p *PostgreSQLBackend) refreshBookmarkLoop() {
 			return
 		case <-ticker.C:
 			p.refreshCachedRV()
+			p.refreshPurgeFloor()
 		}
 	}
 }
@@ -398,9 +445,83 @@ func (p *PostgreSQLBackend) cleanupLoop() {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			_, _ = p.db.ExecContext(p.ctx, `DELETE FROM resources WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '5 minutes'`)
+			p.purgeExpired()
 		}
 	}
+}
+
+// purgeExpired hard-deletes tombstones past the retention window and advances the
+// persisted watch_purge_floor to the highest purged resource_version. The floor is
+// stored (not in-memory) and merged with GREATEST because cleanupLoop runs in every
+// replica; a per-pod floor would diverge and reset on restart. A watch resuming from
+// an RV below the floor can no longer observe those tombstones, so Watch() rejects it
+// with a 410.
+func (p *PostgreSQLBackend) purgeExpired() {
+	const q = `
+	WITH purged AS (
+		DELETE FROM resources
+		WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '5 minutes'
+		RETURNING resource_version
+	), floor AS (
+		SELECT COALESCE(MAX(resource_version), 0) AS rv FROM purged
+	)
+	INSERT INTO storage_metadata (key, value)
+	SELECT 'watch_purge_floor', rv FROM floor WHERE rv > 0
+	ON CONFLICT (key) DO UPDATE SET value = GREATEST(storage_metadata.value, EXCLUDED.value)
+	RETURNING value`
+	var floor int64
+	err := p.db.QueryRowContext(p.ctx, q).Scan(&floor)
+	if err != nil {
+		// ErrNoRows is the normal "nothing aged out this run" case; anything else
+		// means the floor was not persisted and watchers may keep accepting a
+		// too-old resume until a later run succeeds — worth a log line.
+		if !errors.Is(err, sql.ErrNoRows) {
+			klog.Warningf("purgeExpired: failed to persist watch_purge_floor: %v", err)
+		}
+		return
+	}
+	p.storePurgeFloor(floor)
+}
+
+// storePurgeFloor advances the cached floor monotonically. Concurrent refreshers
+// (refreshBookmarkLoop and purgeExpired) may race, so never let the cache regress.
+func (p *PostgreSQLBackend) storePurgeFloor(floor int64) {
+	for {
+		cur := p.cachedPurgeFloor.Load()
+		if floor <= cur || p.cachedPurgeFloor.CompareAndSwap(cur, floor) {
+			return
+		}
+	}
+}
+
+// refreshPurgeFloor pulls the persisted floor into the in-memory mirror. It runs
+// on the 10s bookmark tick, so a replica that did not perform the purge itself
+// picks up a floor raised elsewhere within that window; until it does, it may
+// still accept a resume just below the new floor. That is the pre-existing
+// behavior for those 10s and is safe — the tombstones are not yet gone locally.
+func (p *PostgreSQLBackend) refreshPurgeFloor() {
+	var floor int64
+	err := p.db.QueryRowContext(p.ctx, `SELECT value FROM storage_metadata WHERE key = 'watch_purge_floor'`).Scan(&floor)
+	if err != nil {
+		// ErrNoRows simply means no purge has happened yet; leave the mirror as is.
+		if !errors.Is(err, sql.ErrNoRows) {
+			klog.Warningf("refreshPurgeFloor: failed to read watch_purge_floor: %v", err)
+		}
+		return
+	}
+	p.storePurgeFloor(floor)
+}
+
+// checkResourceVersionNotExpired rejects a watch resume from below the purge floor
+// with a 410-equivalent: tombstones at or below the floor have been hard-deleted, so
+// resuming from before it would silently miss those deletions. A concrete floor of N
+// means everything through N may be gone; startRV == floor is still safe (the client
+// already holds the object at floor), so the comparison is strict.
+func (p *PostgreSQLBackend) checkResourceVersionNotExpired(startRV int64) error {
+	if floor := p.cachedPurgeFloor.Load(); startRV > 0 && startRV < floor {
+		return fmt.Errorf("%w: resourceVersion %d is older than purge floor %d", storage.ErrResourceExpired, startRV, floor)
+	}
+	return nil
 }
 
 func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -493,6 +614,9 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 type listContinueToken struct {
 	Snapshot string `json:"s"`
 	Cursor   int64  `json:"c"`
+	// HeadRV pins the list resourceVersion (store head at page 1) so every page
+	// of a paginated list reports the same RV. Omitted on legacy tokens.
+	HeadRV int64 `json:"h,omitempty"`
 }
 
 func encodeListContinueToken(tok listContinueToken) string {
@@ -525,40 +649,51 @@ func decodeListContinueToken(s string) (listContinueToken, error) {
 // pg_current_snapshot() and the continue token carries it forward so later
 // pages filter to rows visible in that snapshot, keeping the paginated view
 // consistent under concurrent inserts.
-func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
+func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, int64, error) {
 	var contTok listContinueToken
 	if opts.Continue != "" {
 		var err error
 		contTok, err = decodeListContinueToken(opts.Continue)
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
 	}
 
 	query, args, err := p.buildListQuery(kind, namespace, opts, contTok)
 	if err != nil {
-		return nil, "", err
+		return nil, "", 0, err
 	}
 
 	rows, err := p.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to query resources: %w", err)
+		return nil, "", 0, fmt.Errorf("failed to query resources: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	firstPage := contTok.Snapshot == ""
 	objects, resourceVersions, pageSnapshot, err := p.scanListRows(rows, kind, firstPage)
 	if err != nil {
-		return nil, "", err
+		return nil, "", 0, err
 	}
 
 	if firstPage && pageSnapshot == "" {
 		if err := p.db.QueryRowContext(ctx, "SELECT pg_current_snapshot()::text").Scan(&pageSnapshot); err != nil {
-			return nil, "", fmt.Errorf("failed to capture pg_current_snapshot: %w", err)
+			return nil, "", 0, fmt.Errorf("failed to capture pg_current_snapshot: %w", err)
 		}
 	}
 	if !firstPage {
 		pageSnapshot = contTok.Snapshot
+	}
+
+	// Pin the list resourceVersion to the store head at page 1 and carry it
+	// forward, so every page reports the same RV and a resuming watch is never
+	// below the purge floor. Legacy tokens (HeadRV == 0) recompute here.
+	listRV := contTok.HeadRV
+	if listRV == 0 {
+		listRV, err = p.headResourceVersion(ctx, pageSnapshot)
+		if err != nil {
+			return nil, "", 0, err
+		}
 	}
 
 	var continueToken string
@@ -568,10 +703,32 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		continueToken = encodeListContinueToken(listContinueToken{
 			Snapshot: pageSnapshot,
 			Cursor:   resourceVersions[len(resourceVersions)-1],
+			HeadRV:   listRV,
 		})
 	}
 
-	return objects, continueToken, nil
+	return objects, continueToken, listRV, nil
+}
+
+// headResourceVersion returns the store head revision as of snapshot: the max
+// resource_version committed in that snapshot, lifted to the purge floor. The
+// floor term recovers the head when the highest-RV row has itself been purged
+// (e.g. the newest object was deleted and its tombstone hard-deleted), where a
+// plain MAX over surviving rows would fall back below the floor and 410 every
+// resume. GREATEST stays within [floor, true head], so a watch resuming from it
+// is at or above the floor yet never skips a committed change.
+func (p *PostgreSQLBackend) headResourceVersion(ctx context.Context, snapshot string) (int64, error) {
+	var maxRV int64
+	err := p.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(resource_version), 0) FROM resources
+		 WHERE pg_visible_in_snapshot(xmin::text::xid8, $1::pg_snapshot)`, snapshot).Scan(&maxRV)
+	if err != nil {
+		return 0, fmt.Errorf("failed to compute list resourceVersion: %w", err)
+	}
+	if floor := p.cachedPurgeFloor.Load(); floor > maxRV {
+		return floor, nil
+	}
+	return maxRV, nil
 }
 
 func (p *PostgreSQLBackend) buildListQuery(kind, namespace string, opts storage.ListOptions, contTok listContinueToken) (string, []interface{}, error) {
@@ -863,6 +1020,25 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		return nil, err
 	}
 
+	// resourceVersion resume semantics: "" and "0" ("Start at Any") replay all
+	// current state then stream; a concrete RV ("Start at Exact") delivers only
+	// deltas after it, rather than re-adding every object on reconnect. See #2680.
+	var startRV int64
+	if opts.ResourceVersion != "" && opts.ResourceVersion != "0" {
+		// ParseUint (not ParseInt) so a signed value like "-5" or "+100" is rejected
+		// rather than parsed: a negative startRV would slip past every resume floor
+		// and silently degrade to replay-all. Matches setListItems' rv parsing.
+		rv, perr := strconv.ParseUint(opts.ResourceVersion, 10, 63)
+		if perr != nil {
+			return nil, fmt.Errorf("%w: invalid resourceVersion %q", storage.ErrInvalidRequest, opts.ResourceVersion)
+		}
+		startRV = int64(rv)
+	}
+
+	if err := p.checkResourceVersionNotExpired(startRV); err != nil {
+		return nil, err
+	}
+
 	w := &postgresWatcher{
 		outCh:      make(chan watch.Event, 100),
 		inputCh:    make(chan *changeRow, 256),
@@ -874,7 +1050,9 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		ctx:        ctx,
 		done:       make(chan struct{}),
 		seenRVs:    make(map[string]int64),
+		startRV:    startRV,
 	}
+	w.lastSeenRV.Store(startRV)
 
 	// The broadcaster is a shared per-kind singleton that outlives any single
 	// Watch request; its relist deliberately uses the backend lifetime context
@@ -1013,9 +1191,11 @@ func (p *PostgreSQLBackend) nudgeAllWatchers() {
 	}
 }
 
+const maxResourceVersionQuery = `SELECT MAX(resource_version) FROM resources`
+
 func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 	var rv sql.NullInt64
-	err := p.db.QueryRowContext(p.ctx, `SELECT MAX(resource_version) FROM resources`).Scan(&rv)
+	err := p.db.QueryRowContext(p.ctx, maxResourceVersionQuery).Scan(&rv)
 	if err != nil {
 		return 0, err
 	}
@@ -1043,6 +1223,10 @@ type postgresWatcher struct {
 	stopped    atomic.Bool
 	closed     sync.Once
 	lastSeenRV atomic.Int64
+	// startRV is the client-supplied resume point. Relists floor at resumeFloor()
+	// (a lookback window below it) so out-of-order commits are recovered; seenRVs
+	// then dedups within the session. Zero means replay all current state.
+	startRV int64
 	// behind is set by the broadcaster when this watcher's inputCh is full and a row
 	// was dropped; run() then does a private catch-up relist to recover it.
 	behind          atomic.Bool
@@ -1130,19 +1314,19 @@ func (w *postgresWatcher) recoverIfBehind() {
 // seenRVs and deep-copied so the broadcaster's shared object is never mutated.
 // Returns false if the watcher is shutting down.
 func (w *postgresWatcher) forwardRow(row *changeRow) bool {
+	// The shared broadcaster fans out its whole relist window to every subscriber;
+	// a resuming watcher drops rows below its resume floor rather than re-emit state
+	// the client already has. The floor sits a lookback window below startRV (not at
+	// startRV) so an out-of-order commit just under the resume point is recovered
+	// rather than silently lost; seenRVs dedups the small overlap the client saw.
+	if row.rv <= w.resumeFloor() {
+		return true
+	}
 	uidNew := !w.hasSeenUID(row.uid)
 	if w.markSeen(row.uid, row.rv) {
 		return true
 	}
-	var eventType watch.EventType
-	switch {
-	case row.deleted:
-		eventType = watch.Deleted
-	case uidNew:
-		eventType = watch.Added
-	default:
-		eventType = watch.Modified
-	}
+	eventType := w.resumeEventType(row.rv, row.deleted, uidNew)
 	w.advanceRV(row.rv)
 	select {
 	case w.outCh <- watch.Event{Type: eventType, Object: row.obj.DeepCopyObject()}:
@@ -1210,6 +1394,35 @@ func (w *postgresWatcher) hasSeenUID(uid string) bool {
 	return ok
 }
 
+// resumeEventType picks the event type for a forwarded row. Rows in the resume
+// overlap (rv <= startRV) are emitted as Modified, not Added, so a resuming client
+// resyncs state it already holds instead of seeing phantom creations; a genuinely
+// missed row here is still delivered (an informer applies Modified as an add), so
+// nothing is lost. startRV is 0 when replaying all state. See #3246.
+func (w *postgresWatcher) resumeEventType(rv int64, deleted, uidNew bool) watch.EventType {
+	switch {
+	case deleted:
+		return watch.Deleted
+	case rv <= w.startRV:
+		return watch.Modified
+	case uidNew:
+		return watch.Added
+	default:
+		return watch.Modified
+	}
+}
+
+// resumeFloor is the lowest resource_version this watcher will (re-)emit: a full
+// lookback window below the client's resume point. forwardRow and buildRelistQuery
+// share it so their boundaries can't drift. Zero (no resume) leaves the floor at 0,
+// preserving replay-all.
+func (w *postgresWatcher) resumeFloor() int64 {
+	if floor := w.startRV - relistLookbackRVs; floor > 0 {
+		return floor
+	}
+	return 0
+}
+
 // pruneSeen drops seenRVs entries far below the current cursor, bounding memory.
 func (w *postgresWatcher) pruneSeen() {
 	pruneFloor := w.lastSeenRV.Load() - 5000
@@ -1226,10 +1439,13 @@ func (w *postgresWatcher) pruneSeen() {
 }
 
 func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
-	const lookback int64 = 500
-	queryFromRV := w.lastSeenRV.Load() - lookback
-	if queryFromRV < 0 {
-		queryFromRV = 0
+	// Look back a lookback window from the cursor tip to catch rows whose txn was
+	// still in-flight near it; seenRVs dedups the overlap. Never dip below the
+	// resume floor — that is the lowest rv this watcher will (re-)emit. On the first
+	// relist lastSeenRV == startRV, so this already resolves to resumeFloor().
+	queryFromRV := w.lastSeenRV.Load() - relistLookbackRVs
+	if floor := w.resumeFloor(); queryFromRV < floor {
+		queryFromRV = floor
 	}
 
 	query := `
@@ -1268,15 +1484,7 @@ func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, sp
 	if err != nil {
 		return true
 	}
-	var eventType watch.EventType
-	switch {
-	case deletedAt.Valid:
-		eventType = watch.Deleted
-	case uidNew:
-		eventType = watch.Added
-	default:
-		eventType = watch.Modified
-	}
+	eventType := w.resumeEventType(rv, deletedAt.Valid, uidNew)
 	w.advanceRV(rv)
 	select {
 	case w.outCh <- watch.Event{Type: eventType, Object: obj}:
@@ -1298,7 +1506,10 @@ func (w *postgresWatcher) relist() error {
 	// visibility depends on COMMIT time. Two concurrent INSERTs can commit in the
 	// opposite order from rv assignment, so a strict `rv > lastSeenRV` cursor can skip
 	// past an in-flight rv permanently. Mitigation: re-query with a lookback window,
-	// then dedup by (uid, rv) using w.seenRVs to avoid double-emitting.
+	// then dedup by (uid, rv) using w.seenRVs to avoid double-emitting. On a fresh
+	// resume seenRVs is empty, so rows within the lookback window that the client
+	// already holds are re-emitted once as Added — idempotent for a reflector, and
+	// far less than the whole-table replay this resume path exists to avoid.
 	query, args := w.buildRelistQuery()
 	rows, err := w.backend.db.QueryContext(w.ctx, query, args...)
 	if err != nil {

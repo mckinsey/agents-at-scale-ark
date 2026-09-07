@@ -16,10 +16,11 @@ export type ServerConfig = Readonly<{
 }>;
 
 export type LimitsConfig = Readonly<{
-  maxMessages: number;
-  maxChunks: number;
-  maxSpans: number;
-  maxEvents: number;
+  messageMaxBytes: number;
+  eventMaxBytes: number;
+  chunkMaxBytes: number;
+  traceMaxBytes: number;
+  chunkTtlSeconds: number;
 }>;
 
 export type PersistenceConfig = Readonly<{
@@ -36,12 +37,16 @@ export type EventBackend = 'memory' | 'postgres';
 
 export type ChunkBackend = 'memory' | 'redis';
 
+export type SessionsBackend = 'memory' | 'postgres';
+
 export type BackendsConfig = Readonly<{
   message: MessageBackend;
   messageVisibilityTtlSeconds: number;
   event: EventBackend;
   eventVisibilityTtlSeconds: number;
   chunk: ChunkBackend;
+  sessions: SessionsBackend;
+  sessionsVisibilityTtlSeconds: number;
 }>;
 
 export type DatabaseConfig = Readonly<{

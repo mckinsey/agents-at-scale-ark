@@ -1,6 +1,14 @@
 # Argo Workflows configuration. This is config for the actual Argo workflows
 # chart from Argo itself, which is a dependency of our own chart.
 argo-workflows:
+  # We ship a pinned, immutable Argo release tag, so IfNotPresent is the
+  # correct policy: the digest never changes, and cached (or prefetched)
+  # images start without a per-pod registry round-trip - which matters
+  # because the executor image runs in every workflow pod. Set this to
+  # Always only if you point the images at a mutable tag (e.g. latest).
+  images:
+    pullPolicy: IfNotPresent
+
   # Single namespace mode. Suitable for development and does not require
   # cluster roles.
   singleNamespace: false

@@ -109,25 +109,32 @@ export interface WorkflowStats {
 export type WorkflowTemplateSaveMode = 'create' | 'update';
 
 export const workflowTemplatesService = {
-  async list(): Promise<WorkflowTemplate[]> {
+  async list(namespace: string): Promise<WorkflowTemplate[]> {
     const response = await apiClient.get<WorkflowTemplateList>(
       '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate',
-      { params: { labelSelector: `${ARK_LABELS.DASHBOARD_HIDDEN}!=true` } },
+      {
+        params: {
+          namespace,
+          labelSelector: `${ARK_LABELS.DASHBOARD_HIDDEN}!=true`,
+        },
+      },
     );
     return response.items;
   },
 
-  async get(name: string): Promise<WorkflowTemplate> {
+  async get(namespace: string, name: string): Promise<WorkflowTemplate> {
     const response = await apiClient.get<WorkflowTemplate>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/${name}`,
+      { params: { namespace } },
     );
     return response;
   },
 
-  async getYaml(name: string): Promise<string> {
+  async getYaml(namespace: string, name: string): Promise<string> {
     const response = await apiClient.get<string>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/${name}`,
       {
+        params: { namespace },
         headers: {
           Accept: 'application/yaml',
         },
@@ -137,6 +144,7 @@ export const workflowTemplatesService = {
   },
 
   async run(
+    namespace: string,
     templateName: string,
     parameters?: Record<string, string>,
     workflowName?: string,
@@ -168,6 +176,7 @@ export const workflowTemplatesService = {
       const response = await apiClient.post<Workflow>(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow',
         workflow,
+        { params: { namespace } },
       );
       return response;
     } catch (error) {
@@ -204,6 +213,7 @@ export const workflowTemplatesService = {
   },
 
   async save(
+    namespace: string,
     yamlText: string,
     mode: WorkflowTemplateSaveMode,
   ): Promise<WorkflowTemplate> {
@@ -230,6 +240,7 @@ export const workflowTemplatesService = {
       return apiClient.post<WorkflowTemplate>(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate',
         resource,
+        { params: { namespace } },
       );
     }
 
@@ -249,39 +260,45 @@ export const workflowTemplatesService = {
     return apiClient.put<WorkflowTemplate>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/${String(name)}`,
       resource,
+      { params: { namespace } },
     );
   },
 
-  async nameExists(name: string): Promise<boolean> {
-    const templates = await workflowTemplatesService.list();
+  async nameExists(namespace: string, name: string): Promise<boolean> {
+    const templates = await workflowTemplatesService.list(namespace);
     return templates.some(template => template.metadata.name === name);
   },
 
-  async canCreate(): Promise<boolean> {
-    return accessReviewService.check({
+  async canCreate(namespace: string): Promise<boolean> {
+    return accessReviewService.check(namespace, {
       group: 'argoproj.io',
       resource: 'workflowtemplates',
       verb: 'create',
     });
   },
 
-  async canUpdate(): Promise<boolean> {
-    return accessReviewService.check({
+  async canUpdate(namespace: string): Promise<boolean> {
+    return accessReviewService.check(namespace, {
       group: 'argoproj.io',
       resource: 'workflowtemplates',
       verb: 'update',
     });
   },
 
-  async delete(name: string): Promise<void> {
+  async delete(namespace: string, name: string): Promise<void> {
     await apiClient.delete(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/${name}`,
+      { params: { namespace } },
     );
   },
 
-  async getStats(templateName: string): Promise<WorkflowStats> {
+  async getStats(
+    namespace: string,
+    templateName: string,
+  ): Promise<WorkflowStats> {
     const response = await apiClient.get<WorkflowList>(
       '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow',
+      { params: { namespace } },
     );
 
     const oneDayAgo = new Date();

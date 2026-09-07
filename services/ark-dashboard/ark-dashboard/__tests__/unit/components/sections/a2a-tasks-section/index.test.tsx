@@ -51,7 +51,7 @@ describe('A2ATasksSection', () => {
         <A2ATasksSection />
       </MockRouter>,
     );
-    expect(screen.getByText('Loading tasks...')).toBeInTheDocument();
+    expect(screen.getByLabelText('Loading A2A tasks')).toBeInTheDocument();
   });
 
   it('renders error state correctly', () => {
@@ -69,14 +69,15 @@ describe('A2ATasksSection', () => {
         <A2ATasksSection />
       </MockRouter>,
     );
-    expect(screen.getByText('Error loading tasks')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText("Couldn't load A2A tasks")).toBeInTheDocument();
     expect(screen.getByText('Failed to fetch')).toBeInTheDocument();
   });
 
   it('renders empty state correctly', () => {
     mockUseListA2ATasks.mockReturnValue({
       isPending: false,
-      data: { items: [] },
+      data: { items: [], count: 0 },
       error: null,
       refetch: vi.fn(),
       isFetching: false,
@@ -87,10 +88,13 @@ describe('A2ATasksSection', () => {
         <A2ATasksSection />
       </MockRouter>,
     );
-    expect(screen.getByText('No A2A Tasks Found')).toBeInTheDocument();
+    expect(screen.getByText('No A2A task yet')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /learn more/i }),
+    ).toBeInTheDocument();
   });
 
-  it('renders tasks correctly', () => {
+  it('renders tasks in the designed column order', () => {
     const tasks = [
       {
         taskId: 'task-1',
@@ -112,7 +116,7 @@ describe('A2ATasksSection', () => {
 
     mockUseListA2ATasks.mockReturnValue({
       isPending: false,
-      data: { items: tasks },
+      data: { items: tasks, count: tasks.length },
       error: null,
       refetch: vi.fn(),
       isFetching: false,
@@ -124,31 +128,103 @@ describe('A2ATasksSection', () => {
       </MockRouter>,
     );
 
+    const headers = screen.getAllByRole('columnheader');
+    expect(headers.map(h => h.textContent?.trim())).toEqual([
+      'Created',
+      'Task ID',
+      'Name',
+      'Agent',
+      'Query',
+      'Status',
+    ]);
+
     const rows = screen.getAllByRole('row');
     expect(rows.length).toBe(3);
 
-    const [id1, name1, _phase1, agentRef1, queryRef1, creationTimestamp1] =
-      within(rows[1]).getAllByRole('cell');
+    // Newest first by default, so Task-1 (with a timestamp) sorts above Task-2.
+    const [created1, id1, name1, agent1, query1, status1] = within(
+      rows[1],
+    ).getAllByRole('cell');
+    expect(created1.textContent).toBeDefined();
     expect(id1.textContent).toEqual('task-1');
     expect(name1.textContent).toEqual('Task-1');
-    expect(agentRef1.textContent).toEqual('Agent-1');
-    expect(queryRef1.textContent).toEqual('Query-1');
-    expect(creationTimestamp1.textContent).toBeDefined();
+    expect(agent1.textContent).toEqual('Agent-1');
+    expect(query1.textContent).toEqual('Query-1');
+    expect(status1.textContent).toEqual('Completed');
 
-    const [id2, name2, _phase2, agentRef2, queryRef2, creationTimestamp2] =
-      within(rows[2]).getAllByRole('cell');
+    const [created2, id2, , , , status2] = within(rows[2]).getAllByRole('cell');
+    expect(created2.textContent).toEqual('-');
     expect(id2.textContent).toEqual('task-2');
-    expect(name2.textContent).toEqual('Task-2');
-    expect(agentRef2.textContent).toEqual('Agent-1');
-    expect(queryRef2.textContent).toEqual('Query-2');
-    expect(creationTimestamp2.textContent).toEqual('-');
+    expect(status2.textContent).toEqual('Pending');
+  });
+
+  it('shows the task count in the page title', () => {
+    mockUseListA2ATasks.mockReturnValue({
+      isPending: false,
+      data: { items: [], count: 5 },
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    render(
+      <MockRouter>
+        <A2ATasksSection />
+      </MockRouter>,
+    );
+
+    expect(screen.getByText('A2A tasks (5)')).toBeInTheDocument();
+  });
+
+  it('toggles the created sort order', async () => {
+    const tasks = [
+      {
+        taskId: 'older',
+        name: 'Older',
+        phase: 'completed',
+        agentRef: { name: 'Agent-1' },
+        queryRef: { name: 'Query-1' },
+        creationTimestamp: '2023-01-01T00:00:00Z',
+      },
+      {
+        taskId: 'newer',
+        name: 'Newer',
+        phase: 'completed',
+        agentRef: { name: 'Agent-2' },
+        queryRef: { name: 'Query-2' },
+        creationTimestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    mockUseListA2ATasks.mockReturnValue({
+      isPending: false,
+      data: { items: tasks, count: tasks.length },
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    render(
+      <MockRouter>
+        <A2ATasksSection />
+      </MockRouter>,
+    );
+
+    const firstTaskId = () =>
+      within(screen.getAllByRole('row')[1]).getAllByRole('cell')[1].textContent;
+
+    expect(firstTaskId()).toEqual('newer');
+
+    await userEvent.click(screen.getByRole('button', { name: /sort by/i }));
+
+    expect(firstTaskId()).toEqual('older');
   });
 
   it('calls refetch when refresh button is clicked', async () => {
     const mockRefetch = vi.fn();
     mockUseListA2ATasks.mockReturnValue({
       isPending: false,
-      data: { items: [] },
+      data: { items: [], count: 0 },
       error: null,
       refetch: mockRefetch,
       isFetching: false,
@@ -180,7 +256,7 @@ describe('A2ATasksSection', () => {
 
     mockUseListA2ATasks.mockReturnValue({
       isPending: false,
-      data: { items: tasks },
+      data: { items: tasks, count: tasks.length },
       error: null,
       refetch: vi.fn(),
       isFetching: false,
@@ -192,9 +268,9 @@ describe('A2ATasksSection', () => {
       </MockRouter>,
     );
 
-    const taskRow = screen.getByText('Task 1');
-    await userEvent.click(taskRow);
-
-    expect(mockPush).toHaveBeenCalledWith('/tasks/Task 1');
+    expect(screen.getAllByRole('link', { name: 'Task 1' })[0]).toHaveAttribute(
+      'href',
+      expect.stringContaining('/tasks/Task%201'),
+    );
   });
 });

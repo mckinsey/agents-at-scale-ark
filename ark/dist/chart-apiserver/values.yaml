@@ -76,6 +76,57 @@ extraEnv: {}
 certManager:
   enabled: true
 
+# Apiserver audit log, written as JSON to stdout. On by default. Produced in-process, so it
+# covers the direct service path too, which never transits the main kube-apiserver.
+audit:
+  enabled: true
+  # Catch-all level: None | Metadata | Request | RequestResponse. Request and
+  # RequestResponse include bodies, so Query `.spec.input` reaches your log pipeline.
+  level: Metadata
+  # Reads (get/list/watch) by these users are dropped. The controller's reconcile loops poll
+  # continuously, so auditing their reads buries operator- and user-driven records without
+  # adding anything; their writes are still recorded. Set to [] to audit everything.
+  excludeReadsByUsers:
+    - system:serviceaccount:ark-system:ark-controller
+  # Full audit.k8s.io/v1 Policy YAML. Overrides `level` and the default exclusions.
+  policy: ""
+
+# Admission enforcement — the supported enforcement point in apiserver mode, since the
+# kube-apiserver runs no webhook chain on aggregated resources. Two independent mechanisms, each
+# with the same two knobs: `enabled` wires it, `required` makes it a startup precondition rather
+# than best-effort. Setting `required` on a mechanism whose `enabled` is false is rejected.
+policy:
+  cel:
+    # false: never wire CEL enforcement, and drop the cluster-wide policy/namespace watches and
+    # their RBAC. For deployments that do not want the apiserver reading cluster-scoped policy
+    # objects. Ark's in-process validation and audit are unaffected.
+    enabled: true
+    # false: start anyway if CEL enforcement cannot be wired (older host, failed discovery,
+    # missing RBAC), and log why. true: fail startup instead of serving unenforced.
+    required: false
+  thirdPartyWebhooks:
+    # true: run the webhook admission plugins, so ValidatingWebhookConfiguration and
+    # MutatingWebhookConfiguration objects registered by Kyverno, OPA/Gatekeeper and similar fire
+    # on Ark resources — including on the direct service path.
+    #
+    # Off by default, because it changes the write path: every matching webhook becomes a
+    # synchronous call, and a webhook with failurePolicy=Fail couples Ark writes to that engine's
+    # availability. Requires the controller chart at storage.backend=postgresql, which stops
+    # rendering Ark's own webhook configurations — otherwise Ark's validation runs twice, once
+    # in-process and once over the webhook.
+    enabled: false
+    # false: start anyway if the webhook plugins cannot be wired (missing RBAC on the webhook
+    # configuration watches), and log why. true: fail startup instead of serving unenforced —
+    # set this where an external engine such as Kyverno is a compliance control on Ark resources.
+    required: false
+  # Extra RBAC for policies using `paramKind`; the plugin needs read access to the param
+  # resource or its informer never syncs. ConfigMaps/Secrets are already granted.
+  #   extraParamRules:
+  #     - apiGroups: ["mycorp.example.com"]
+  #       resources: ["policysettings"]
+  #       verbs: ["get", "list", "watch"]
+  extraParamRules: []
+
 networkPolicy:
   enabled: false
   extraIngressFrom: []

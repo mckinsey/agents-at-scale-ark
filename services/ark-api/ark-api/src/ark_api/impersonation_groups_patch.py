@@ -8,7 +8,8 @@ its name. Group-based RBAC therefore silently fails for any user in more than
 one group.
 
 The comma-join lives in ark_sdk's hand-written overlay — ``client.py``
-(``_build_headers``) and ``k8s.py`` (``SecretClient``) — not in generated code.
+(``_build_headers``) and ``k8s.py`` (``apply_impersonation_headers``) — not in
+generated code.
 Fixing it there is the right long-term home, but it can't emit repeated headers
 on its own: both clients funnel headers through a plain ``dict`` (``default_headers``
 / per-call ``header_params``), which cannot hold two values for the same name. The

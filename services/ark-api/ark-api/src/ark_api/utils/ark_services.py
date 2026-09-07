@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 import base64
 
 from pyhelm3 import Client
+from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.k8s import SecretClient
 logger = logging.getLogger(__name__)
 
@@ -106,25 +107,27 @@ def get_chart_description(release_data: Dict[str, Any]) -> str:
 
 async def get_headers(resource_spec: dict,
     output: dict[str, str],
-    namespace: Optional[str]=None) -> None:
+    namespace: Optional[str]=None,
+    impersonation: Optional[ImpersonationConfig]=None) -> None:
     if resource_spec and "headers" in resource_spec:
         for header in resource_spec["headers"]:
             if "value" in header:
                 if "value" in header["value"]:
                     # Header value stored as direct
-                    output[header["name"]] = header["value"]["value"] 
+                    output[header["name"]] = header["value"]["value"]
                 elif "valueFrom" in header["value"]:
                     if "secretKeyRef" in header["value"]["valueFrom"]:
                         secret_name = header["value"]["valueFrom"]["secretKeyRef"].get("name", "")
                         secret_key = header["value"]["valueFrom"]["secretKeyRef"].get("key", "")
-                        output[header["name"]] = await get_secret(secret_name, secret_key, namespace)
-                        
-                    
-    
-async def get_secret(secret_name: str, 
+                        output[header["name"]] = await get_secret(secret_name, secret_key, namespace, impersonation)
+
+
+
+async def get_secret(secret_name: str,
     secret_key: str,
-    namespace: Optional[str]=None) -> str:
-    client = SecretClient(namespace=namespace)
+    namespace: Optional[str]=None,
+    impersonation: Optional[ImpersonationConfig]=None) -> str:
+    client = SecretClient(namespace=namespace, impersonation=impersonation)
     result = await client.get_secret_value(secret_name, secret_key)
     secret_val = ""
     if "type" in result and "value" in result:

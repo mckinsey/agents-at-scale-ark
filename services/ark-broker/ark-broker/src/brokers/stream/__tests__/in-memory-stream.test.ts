@@ -1,4 +1,4 @@
-import {mkdtempSync, rmSync} from 'fs';
+import {mkdtempSync, rmSync, statSync} from 'fs';
 import {join} from 'path';
 import {tmpdir} from 'os';
 import {InMemoryStream} from '../in-memory-stream.js';
@@ -196,13 +196,14 @@ describe('InMemoryStream — persistence', () => {
 
   it('saves and reloads items with timestamps rehydrated as Date', async () => {
     const path = join(tmpDir, 'store.json');
-    const stream = new InMemoryStream<string>(silentLogger, 'test', path);
+    const stream = new InMemoryStream<string>(silentLogger, 'test', {path});
 
     await stream.append('hello');
     await stream.append('world');
     await stream.save();
 
-    const reloaded = new InMemoryStream<string>(silentLogger, 'test', path);
+    const reloaded = new InMemoryStream<string>(silentLogger, 'test', {path});
+    await reloaded.init();
     const all = await reloaded.all();
 
     expect(all).toHaveLength(2);
@@ -215,59 +216,122 @@ describe('InMemoryStream — persistence', () => {
 
   it('resumes sequence numbering after reload', async () => {
     const path = join(tmpDir, 'store.json');
-    const stream = new InMemoryStream<string>(silentLogger, 'test', path);
+    const stream = new InMemoryStream<string>(silentLogger, 'test', {path});
 
     await stream.append('a');
     await stream.append('b');
     await stream.save();
 
-    const reloaded = new InMemoryStream<string>(silentLogger, 'test', path);
+    const reloaded = new InMemoryStream<string>(silentLogger, 'test', {path});
+    await reloaded.init();
     const c = await reloaded.append('c');
     expect(c.sequenceNumber).toBe(3);
   });
 
   it('starts fresh when no file exists', async () => {
     const path = join(tmpDir, 'nonexistent.json');
-    const stream = new InMemoryStream<string>(silentLogger, 'test', path);
+    const stream = new InMemoryStream<string>(silentLogger, 'test', {path});
+    await stream.init();
     expect(await stream.all()).toHaveLength(0);
     expect(await stream.getCurrentSequence()).toBe(0);
   });
 });
 
-describe('InMemoryStream — maxItems eviction', () => {
-  it('retains only the most recent maxItems items', async () => {
-    const stream = new InMemoryStream<string>(
-      silentLogger,
-      'test',
-      undefined,
-      3
-    );
-
+describe('InMemoryStream — TTL eviction', () => {
+  it('evicts items past their ttl on maintain, regardless of completion', async () => {
+    const stream = new InMemoryStream<string>(silentLogger, 'test', {
+      ttlSeconds: 1,
+    });
     await stream.append('a');
     await stream.append('b');
-    await stream.append('c');
-    await stream.append('d');
+    expect(await stream.all()).toHaveLength(2);
 
-    const all = await stream.all();
-    expect(all).toHaveLength(3);
-    expect(all.map((i) => i.data)).toEqual(['b', 'c', 'd']);
+    stream.maintain(Date.now() + 2000);
+    expect(await stream.all()).toHaveLength(0);
   });
 
-  it('subscriber still fires for items that get evicted', async () => {
-    const stream = new InMemoryStream<string>(
-      silentLogger,
-      'test',
-      undefined,
-      2
+  it('skips expired items on read even before a sweep runs', async () => {
+    const stream = new InMemoryStream<string>(silentLogger, 'test', {
+      ttlSeconds: 0.001,
+    });
+    await stream.append('a');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await stream.all()).toHaveLength(0);
+  });
+});
+
+describe('InMemoryStream — byte-budget eviction', () => {
+  it('evicts oldest until under maxBytes on maintain, keeping most recent', async () => {
+    const stream = new InMemoryStream<string>(silentLogger, 'test', {
+      maxBytes: 3000,
+    });
+    for (let i = 0; i < 10; i++) await stream.append('x'.repeat(1000));
+
+    stream.maintain();
+    const all = await stream.all();
+    const bytes = all.reduce(
+      (n, it) => n + Buffer.byteLength(JSON.stringify(it)),
+      0
     );
-    const received: string[] = [];
-    stream.subscribe((item) => received.push(item.data as string));
+    expect(bytes).toBeLessThanOrEqual(3000);
+    expect(all.length).toBeGreaterThanOrEqual(1);
+    expect(all.at(-1)!.sequenceNumber).toBe(10);
+  });
+});
+
+describe('InMemoryStream — compact-on-load', () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'in-memory-stream-compact-'));
+  });
+  afterEach(() => {
+    rmSync(tmpDir, {recursive: true, force: true});
+  });
+
+  it('loads an oversized file within the byte budget and rewrites it smaller', async () => {
+    const path = join(tmpDir, 'store.json');
+    const writer = new InMemoryStream<string>(silentLogger, 'test', {path});
+    for (let i = 0; i < 5000; i++) await writer.append('y'.repeat(200));
+    await writer.save();
+    const bigSize = statSync(path).size;
+    expect(bigSize).toBeGreaterThan(500_000);
+
+    const reloaded = new InMemoryStream<string>(silentLogger, 'test', {
+      path,
+      maxBytes: 20_000,
+    });
+    await reloaded.init();
+    reloaded.close();
+
+    const all = await reloaded.all();
+    const bytes = all.reduce(
+      (n, it) => n + Buffer.byteLength(JSON.stringify(it)),
+      0
+    );
+    expect(bytes).toBeLessThanOrEqual(20_000);
+    expect(statSync(path).size).toBeLessThan(bigSize);
+  });
+});
+
+describe('InMemoryStream — close stops the sweep timer', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('stops age-based eviction after close()', async () => {
+    jest.useFakeTimers();
+    const stream = new InMemoryStream<string>(silentLogger, 'test', {
+      ttlSeconds: 1,
+    });
+    await stream.init();
 
     await stream.append('a');
-    await stream.append('b');
-    await stream.append('c');
+    jest.advanceTimersByTime(1500);
+    expect(stream.cachedItemCount()).toBe(0);
 
-    expect(received).toEqual(['a', 'b', 'c']);
-    expect((await stream.all()).map((i) => i.data)).toEqual(['b', 'c']);
+    await stream.append('b');
+    stream.close();
+    jest.advanceTimersByTime(5000);
+    expect(stream.cachedItemCount()).toBe(1);
   });
 });

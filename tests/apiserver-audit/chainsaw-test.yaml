@@ -1,0 +1,181 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: apiserver-audit
+  labels:
+    postgresql: "true"
+spec:
+  description: >
+    In apiserver mode the aggregated apiserver emits its own Kubernetes audit
+    trail (JSON on stdout). This test proves create/update/delete of an Ark
+    resource each produce an audit record, and that a create issued over the
+    direct service path (which never transits the main kube-apiserver) is also
+    audited — closing the "invisible direct path" gap from #2684.
+
+  steps:
+    # --- proxied path: create/update/delete are audited -------------------
+    - name: create-agent-proxied
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: audit-proxied-agent
+              spec:
+                prompt: You are a helpful assistant.
+
+    - name: assert-create-audited
+      try:
+        - script:
+            timeout: 90s
+            content: |
+              set -eu
+              for i in $(seq 1 40); do
+                if kubectl logs -n ark-system deployment/ark-apiserver --tail=-1 2>/dev/null \
+                  | grep '"apiVersion":"audit.k8s.io/v1"' \
+                  | grep '"name":"audit-proxied-agent"' \
+                  | grep -q '"verb":"create"'; then
+                  echo "OK create of audit-proxied-agent is audited"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "FAIL no create audit record for audit-proxied-agent"
+              exit 1
+
+    - name: update-and-assert-audited
+      try:
+        - script:
+            timeout: 90s
+            content: |
+              set -eu
+              kubectl annotate agent audit-proxied-agent -n $NAMESPACE audit-test=touched --overwrite
+              for i in $(seq 1 40); do
+                if kubectl logs -n ark-system deployment/ark-apiserver --tail=-1 2>/dev/null \
+                  | grep '"apiVersion":"audit.k8s.io/v1"' \
+                  | grep '"name":"audit-proxied-agent"' \
+                  | grep -Eq '"verb":"(update|patch)"'; then
+                  echo "OK update of audit-proxied-agent is audited"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "FAIL no update audit record for audit-proxied-agent"
+              exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+
+    - name: delete-and-assert-audited
+      try:
+        - script:
+            timeout: 90s
+            content: |
+              set -eu
+              kubectl delete agent audit-proxied-agent -n $NAMESPACE
+              for i in $(seq 1 40); do
+                if kubectl logs -n ark-system deployment/ark-apiserver --tail=-1 2>/dev/null \
+                  | grep '"apiVersion":"audit.k8s.io/v1"' \
+                  | grep '"name":"audit-proxied-agent"' \
+                  | grep -q '"verb":"delete"'; then
+                  echo "OK delete of audit-proxied-agent is audited"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "FAIL no delete audit record for audit-proxied-agent"
+              exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+
+    # --- direct service path: create is audited too -----------------------
+    - name: rbac-for-direct-create
+      try:
+        - apply:
+            resource:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: Role
+              metadata:
+                name: apiserver-audit-writer
+              rules:
+                - apiGroups: ["ark.mckinsey.com"]
+                  resources: ["agents"]
+                  verbs: ["create", "get", "list"]
+        - apply:
+            resource:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: apiserver-audit-writer
+              subjects:
+                - kind: ServiceAccount
+                  name: default
+                  namespace: ($namespace)
+              roleRef:
+                kind: Role
+                name: apiserver-audit-writer
+                apiGroup: rbac.authorization.k8s.io
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: auditcurl
+              spec:
+                containers:
+                  - name: curl
+                    image: curlimages/curl:8.11.1
+                    command: ["sleep", "300"]
+                restartPolicy: Never
+                terminationGracePeriodSeconds: 0
+        - wait:
+            apiVersion: v1
+            kind: Pod
+            name: auditcurl
+            timeout: 120s
+            for:
+              condition:
+                name: Ready
+                value: 'True'
+
+    - name: create-agent-direct-and-assert-audited
+      try:
+        - script:
+            timeout: 120s
+            content: |
+              set -eu
+              TOKEN=$(kubectl create token default -n $NAMESPACE)
+              URL="https://ark-apiserver.ark-system.svc.cluster.local:6443/apis/ark.mckinsey.com/v1alpha1/namespaces/${NAMESPACE}/agents"
+              BODY='{"apiVersion":"ark.mckinsey.com/v1alpha1","kind":"Agent","metadata":{"name":"audit-direct-agent","namespace":"'"$NAMESPACE"'"},"spec":{"prompt":"hi"}}'
+              CODE=$(kubectl exec auditcurl -n $NAMESPACE -- \
+                curl -sk -o /dev/null -w '%{http_code}' \
+                -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+                -d "$BODY" "$URL")
+              echo "direct create returned HTTP $CODE"
+              case "$CODE" in
+                201) echo "OK agent created via direct service path" ;;
+                *) echo "FAIL expected 201 from direct create, got $CODE"; exit 1 ;;
+              esac
+              # The direct path never transits the main kube-apiserver, so an audit
+              # record for this name can only come from the aggregated apiserver itself.
+              for i in $(seq 1 40); do
+                if kubectl logs -n ark-system deployment/ark-apiserver --tail=-1 2>/dev/null \
+                  | grep '"apiVersion":"audit.k8s.io/v1"' \
+                  | grep '"name":"audit-direct-agent"' \
+                  | grep -q '"verb":"create"'; then
+                  echo "OK direct-path create is audited by the aggregated apiserver"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "FAIL direct-path create of audit-direct-agent was not audited"
+              exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      catch:
+        - events: {}
+        - podLogs:
+            name: auditcurl

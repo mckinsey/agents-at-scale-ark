@@ -35,6 +35,9 @@ spec:
             - "--completions-addr={{ .Values.completions.addr }}"
             - "--max-concurrent-queries={{ .Values.controllerManager.maxConcurrentQueries }}"
             - "--max-concurrent-reconciles={{ .Values.controllerManager.maxConcurrentReconciles }}"
+            {{- if and .Values.metrics.enable .Values.certmanager.enable }}
+            - "--metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs"
+            {{- end }}
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag | default .Chart.AppVersion }}
@@ -44,6 +47,10 @@ spec:
             value: "ark-controller"
           - name: ARK_MEMORY_HTTP_TIMEOUT_SECONDS
             value: "30"
+          {{- with .Values.controllerManager.watchNamespaces }}
+          - name: ARK_WATCH_NAMESPACES
+            value: {{ join "," . | quote }}
+          {{- end }}
           {{- if .Values.telemetry.tenantRouting.otelDiscovery }}
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"

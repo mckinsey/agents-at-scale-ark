@@ -560,9 +560,13 @@ func encodePrimaryKeepalive(serverWALEnd uint64, replyRequested bool) []byte {
 }
 
 func encodeXLogData(walStart uint64, walData []byte) []byte {
+	return encodeXLogDataWithEnd(walStart, 0, walData)
+}
+
+func encodeXLogDataWithEnd(walStart, serverWALEnd uint64, walData []byte) []byte {
 	buf := []byte{pglogrepl.XLogDataByteID}
 	buf = appendUint64(buf, walStart)
-	buf = appendUint64(buf, 0)
+	buf = appendUint64(buf, serverWALEnd)
 	buf = appendUint64(buf, 0)
 	buf = append(buf, walData...)
 	return buf

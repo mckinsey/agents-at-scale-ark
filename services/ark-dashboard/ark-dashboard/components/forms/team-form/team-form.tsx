@@ -3,13 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
 import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 import { YamlViewer } from '@/components/common/yaml-viewer';
-import { ChevronLeft } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
-import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
@@ -30,7 +29,7 @@ import { useTeamForm } from './use-team-form';
 
 export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { push } = useNamespacedNavigation();
-  const { readOnlyMode } = useNamespace();
+  const { namespace, readOnlyMode } = useNamespace();
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
@@ -42,12 +41,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     if (isViewing) {
       setTeamsLoading(true);
       teamsService
-        .getAll()
+        .getAll(namespace)
         .then(teams => setAllTeams(teams))
         .catch(console.error)
         .finally(() => setTeamsLoading(false));
     }
-  }, [isViewing]);
+  }, [namespace, isViewing]);
 
   const { form, state, actions } = useTeamForm({
     mode,
@@ -73,12 +72,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
 
   const fetchTeamYaml = useCallback(async (name: string) => {
     try {
-      const raw = await teamsService.getRawResource(name);
+      const raw = await teamsService.getRawResource(namespace, name);
       setTeamYaml(toKubernetesYaml(raw));
     } catch {
       setTeamYaml('');
     }
-  }, []);
+  }, [namespace]);
 
   useEffect(() => {
     if (team?.name && showYaml) {
@@ -157,34 +156,19 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
 
   if (isCreating) {
     return (
-      <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
+      <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">
           <div className="flex items-center justify-between">
-            <nav
-              aria-label="Breadcrumb"
-              className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-              <NamespacedLink
-                href="/teams"
-                className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-                <IconShell size="sm" className="opacity-100">
-                  <ChevronLeft />
-                </IconShell>
-                Teams
-              </NamespacedLink>
-              <span aria-hidden="true" className="text-fg-secondary">
-                /
-              </span>
-              <span aria-current="page" className="text-fg-secondary">
-                Create team
-              </span>
-            </nav>
+            <DetailBreadcrumb
+              backHref="/teams"
+              backLabel="Teams"
+              current="Create team"
+            />
             <div className="flex items-center gap-2">
               <NamespacedLink href="/teams">
                 <Button variant="outline">Cancel</Button>
               </NamespacedLink>
-              <Button
-                onClick={form.handleSubmit(onSubmit)}
-                disabled={saving}>
+              <Button onClick={form.handleSubmit(onSubmit)} disabled={saving}>
                 {saving && <Spinner className="mr-2 h-4 w-4" />}
                 Create
               </Button>
@@ -200,7 +184,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             onSubmit={form.handleSubmit(onSubmit)}
             className="flex min-h-0 flex-1 flex-col">
             <ScrollArea type="scroll" className="h-0 min-h-0 flex-1">
-              <div className="flex w-full max-w-[576px] flex-col gap-6 pb-6 pl-px pr-2">
+              <div className="flex w-full max-w-[576px] flex-col gap-6 pr-2 pb-6 pl-px">
                 {formSections}
               </div>
             </ScrollArea>

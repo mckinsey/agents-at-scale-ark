@@ -81,13 +81,43 @@ spec:
             curl -sS http://ark-dashboard-prefixed:3000/tenant-a)
           echo "$BODY" | grep -q '<title>Ark Dashboard</title>'
 
-          # Every emitted /_next/ reference must be prefixed with /tenant-a.
-          # Scrub /tenant-a/_next/... first, then anything matching /_next/ is unprefixed.
-          UNPREFIXED=$(printf '%s' "$BODY" | sed 's|/tenant-a/_next/[^"\\ ]*||g' | grep -c '/_next/' || true)
-          if [ "$UNPREFIXED" != "0" ]; then
-            echo "FAIL: $UNPREFIXED unprefixed /_next/ reference(s) found in HTML"
+          # Every /_next/ asset must be prefixed with /tenant-a and must resolve.
+          # Only src/href attributes are scanned; the inlined RSC payload splits
+          # URLs across self.__next_f.push() boundaries at arbitrary offsets.
+          ASSETS=$(printf '%s' "$BODY" \
+            | grep -oE '(src|href)="[^"]*/_next/[^"]*"' \
+            | sed 's/^[a-z]*="//; s/"$//' \
+            | sort -u)
+          if [ -z "$ASSETS" ]; then
+            echo "FAIL: no /_next/ asset references found in HTML"
             exit 1
           fi
+          echo "found $(printf '%s\n' "$ASSETS" | wc -l | tr -d ' ') distinct /_next/ asset(s)"
+
+          UNPREFIXED=0
+          for URL in $ASSETS; do
+            case "$URL" in
+              /tenant-a/_next/*) ;;
+              *)
+                echo "FAIL: asset not prefixed with /tenant-a: $URL"
+                UNPREFIXED=1
+                ;;
+            esac
+          done
+          [ "$UNPREFIXED" = "0" ]
+
+          printf '%s\n' "$ASSETS" | kubectl exec -i -n $NAMESPACE dashboard-probe -- sh -c '
+            RC=0
+            while IFS= read -r URL; do
+              [ -n "$URL" ] || continue
+              CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://ark-dashboard-prefixed:3000$URL")
+              if [ "$CODE" != "200" ]; then
+                echo "FAIL: $URL -> $CODE"
+                RC=1
+              fi
+            done
+            exit $RC
+          '
 
           # No sentinel residue
           if echo "$BODY" | grep -q '__ark_base_path__'; then

@@ -35,7 +35,7 @@ export function useAuthorAgentGate(): AuthorAgentGate {
 
     setLoading(true);
 
-    getAuthorAgentPreflight(ARGO_MAKE_AUTHOR_AGENT_NAME)
+    getAuthorAgentPreflight(namespace, ARGO_MAKE_AUTHOR_AGENT_NAME)
       .then(result => {
         if (cancelled || tokenRef.current !== token) {
           return;

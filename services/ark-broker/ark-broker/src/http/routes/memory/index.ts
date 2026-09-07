@@ -83,7 +83,7 @@ export function createMemoryRouter(
           'received messages'
         );
 
-        await memory.addMessages(
+        const persisted = await memory.addMessages(
           conversation_id,
           query_id,
           messages,
@@ -92,7 +92,11 @@ export function createMemoryRouter(
         await memory.save();
 
         if (sessions && conversation_id) {
-          sessions.applyMessage(conversation_id, query_id);
+          await sessions.applyMessage(
+            conversation_id,
+            query_id,
+            persisted.at(-1)?.sequenceNumber
+          );
         }
 
         res.status(200).send();

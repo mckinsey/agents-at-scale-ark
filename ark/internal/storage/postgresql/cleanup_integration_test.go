@@ -8,31 +8,12 @@ package postgresql
 import (
 	"context"
 	"database/sql"
-	"os"
-	"strconv"
 	"testing"
 	"time"
 )
 
 func TestDropReplicationArtifacts_Integration(t *testing.T) {
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set, skipping integration test")
-	}
-
-	port := 5432
-	if p := os.Getenv("POSTGRES_PORT"); p != "" {
-		port, _ = strconv.Atoi(p)
-	}
-
-	cfg := Config{
-		Host:     host,
-		Port:     port,
-		Database: "ark",
-		User:     "ark",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}
+	cfg := testConfig(t)
 
 	ctx := context.Background()
 	checker, err := sql.Open("postgres", cleanupConnString(cfg))
@@ -62,6 +43,8 @@ func TestDropReplicationArtifacts_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
+	defer func() { _ = backend.Close() }()
+	backend.StartWALConsumer()
 
 	deadline := time.Now().Add(15 * time.Second)
 	for slotCount() == 0 {

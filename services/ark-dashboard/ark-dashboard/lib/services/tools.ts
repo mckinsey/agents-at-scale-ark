@@ -1,5 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 
 // Tool interface for UI compatibility
 export interface Tool {
@@ -27,12 +28,6 @@ export interface ToolDetail {
     type: string;
   };
   status?: Record<string, unknown>;
-}
-
-// Tool list response
-interface ToolListResponse {
-  items: Tool[];
-  count: number;
 }
 
 // Fields shared by tool create and update used to build the tool spec
@@ -77,21 +72,26 @@ function buildToolSpec({
 // Service for tool operations
 export const toolsService = {
   // Get all tools in a namespace
-  async getAll(): Promise<Tool[]> {
-    const response = await apiClient.get<ToolListResponse>(`/api/v1/tools`);
-    return response.items.map(item => ({ ...item, id: item.name }));
+  async getAll(namespace: string): Promise<Tool[]> {
+    const items = await fetchAllPages<Omit<Tool, 'id'>>(`/api/v1/tools`, {
+      namespace,
+    });
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get detailed tool information including schema
-  async getDetail(toolName: string): Promise<ToolDetail> {
+  async getDetail(namespace: string, toolName: string): Promise<ToolDetail> {
     const response = await apiClient.get<ToolDetail>(
       `/api/v1/tools/${toolName}`,
+      { params: { namespace } },
     );
     return response;
   },
 
-  async delete(identifier: string): Promise<void> {
-    await apiClient.delete(`/api/v1/tools/${identifier}`);
+  async delete(namespace: string, identifier: string): Promise<void> {
+    await apiClient.delete(`/api/v1/tools/${identifier}`, {
+      params: { namespace },
+    });
 
     trackEvent({
       name: 'tool_deleted',
@@ -103,20 +103,22 @@ export const toolsService = {
 
   // Create a new tool
   async create(
+    namespace: string,
     tool: ToolSpecInput & {
       name: string;
       annotations?: Record<string, string>;
-      namespace?: string;
     },
   ): Promise<void> {
-    const { name, type, annotations, namespace } = tool;
+    const { name, type, annotations } = tool;
     const payload = {
       name,
-      namespace: namespace || 'default',
+      namespace,
       annotations,
       spec: buildToolSpec(tool),
     };
-    await apiClient.post(`/api/v1/tools`, payload);
+    await apiClient.post(`/api/v1/tools`, payload, {
+      params: { namespace },
+    });
 
     trackEvent({
       name: 'tool_created',

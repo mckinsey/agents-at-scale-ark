@@ -85,15 +85,21 @@ export function createEventsRouter(
       const {ttl_seconds: ttlSeconds, ...event}: PostEventBody = parse.data;
 
       try {
-        await events.addEvent(event as unknown as EventData, ttlSeconds);
+        const persisted = await events.addEvent(
+          event as unknown as EventData,
+          ttlSeconds
+        );
         await events.save();
 
-        sessions.applyEvent({
-          ...event.data,
-          _reason: (event as Record<string, unknown>)['reason'] as
-            | string
-            | undefined,
-        });
+        await sessions.applyEvent(
+          {
+            ...event.data,
+            _reason: (event as Record<string, unknown>)['reason'] as
+              | string
+              | undefined,
+          },
+          persisted.sequenceNumber
+        );
 
         res.status(201).json({status: 'success'});
       } catch (error) {

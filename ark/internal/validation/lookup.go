@@ -64,7 +64,7 @@ func (l *WebhookLookup) GetArkConfig(ctx context.Context) (*arkv1alpha1.ArkConfi
 
 type StorageLookup struct {
 	Backend   storage.Backend
-	K8sClient client.Client
+	K8sClient client.Reader
 }
 
 func (l *StorageLookup) GetResource(ctx context.Context, kind, namespace, name string) (runtime.Object, error) {

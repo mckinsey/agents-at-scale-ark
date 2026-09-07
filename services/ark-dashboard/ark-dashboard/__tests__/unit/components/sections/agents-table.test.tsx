@@ -14,6 +14,7 @@ vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
   useSearchParams: () => new URLSearchParams(),
 }));
 
