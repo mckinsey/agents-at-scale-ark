@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from 'react';
 
-import { Add, Info, OpenInNew, Trash, VpnKey, Warning } from '@/components/icons';
+import { Add, Info, OpenInNew, Trash, VpnKey } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -13,7 +13,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useMcpSecretOptions } from '@/lib/hooks/use-mcp-secret-options';
-import { useMcpServerHeaders } from '@/lib/hooks/use-mcp-server-headers';
 import { cn } from '@/lib/utils';
 import {
   type McpHeaderRow,
@@ -21,7 +20,6 @@ import {
   addHeaderRow,
   countHeaders,
   describeScope,
-  isSensitiveHeaderName,
 } from '@/lib/utils/mcp-header-overrides';
 
 import { HeaderNameField } from './header-name-field';
@@ -60,16 +58,6 @@ export function McpHeaderOverridesEditor({
   className,
 }: McpHeaderOverridesEditorProps) {
   const { options, loaded: secretsLoaded } = useMcpSecretOptions();
-  const { headerNamesByServer, allHeaderNames } =
-    useMcpServerHeaders(serverNames);
-
-  const declaredNamesFor = useCallback(
-    (header: McpHeaderRow) =>
-      header.serverName
-        ? (headerNamesByServer[header.serverName] ?? [])
-        : allHeaderNames,
-    [headerNamesByServer, allHeaderNames],
-  );
 
   const updateHeader = useCallback(
     (groupId: string, headerId: string, updates: Partial<McpHeaderRow>) => {
@@ -198,91 +186,77 @@ export function McpHeaderOverridesEditor({
           </div>
 
           {rows.map(({ group, header }) => (
-            <div key={header.id} className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <div className="flex min-w-0 flex-1 items-center">
-                  {group.matchLabels.length > 0 ? (
-                    <div className={cn(underlineClass, 'w-full')}>
-                      <span className="text-fg-secondary min-w-0 truncate text-sm">
-                        {describeScope(group)}
-                      </span>
-                    </div>
-                  ) : (
-                    <McpServerSelect
-                      id={`mcp-${header.id}-server`}
-                      serverNames={serverNames}
-                      value={header.serverName}
-                      disabled={disabled}
-                      onChange={serverName =>
-                        updateHeader(group.id, header.id, { serverName })
-                      }
-                    />
-                  )}
-                </div>
-
-                <div className="flex min-w-0 flex-1 items-center">
-                  <HeaderNameField
-                    id={`mcp-${header.id}-name`}
-                    value={header.name}
-                    suggestions={declaredNamesFor(header)}
+            <div key={header.id} className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-1 items-center">
+                {group.matchLabels.length > 0 ? (
+                  <div className={cn(underlineClass, 'w-full')}>
+                    <span className="text-fg-secondary min-w-0 truncate text-sm">
+                      {describeScope(group)}
+                    </span>
+                  </div>
+                ) : (
+                  <McpServerSelect
+                    id={`mcp-${header.id}-server`}
+                    serverNames={serverNames}
+                    value={header.serverName}
                     disabled={disabled}
-                    onChange={name =>
-                      updateHeader(group.id, header.id, { name })
+                    onChange={serverName =>
+                      updateHeader(group.id, header.id, { serverName })
+                    }
+                  />
+                )}
+              </div>
+
+              <div className="flex min-w-0 flex-1 items-center">
+                <HeaderNameField
+                  id={`mcp-${header.id}-name`}
+                  value={header.name}
+                  disabled={disabled}
+                  onChange={name =>
+                    updateHeader(group.id, header.id, { name })
+                  }
+                  className="w-full"
+                />
+              </div>
+
+              <div className="flex min-w-0 flex-1 items-center">
+                {header.source === 'secretKeyRef' ? (
+                  <HeaderOverrideSelect
+                    hideLabel
+                    id={`mcp-${header.id}-override`}
+                    options={options}
+                    loaded={secretsLoaded}
+                    secretName={header.secretName}
+                    secretKey={header.secretKey}
+                    disabled={disabled}
+                    onSelectSecret={(secretName, secretKey) =>
+                      updateHeader(group.id, header.id, {
+                        source: 'secretKeyRef',
+                        secretName,
+                        secretKey,
+                      })
                     }
                     className="w-full"
                   />
-                </div>
-
-                <div className="flex min-w-0 flex-1 items-center">
-                  {header.source === 'secretKeyRef' ? (
-                    <HeaderOverrideSelect
-                      hideLabel
-                      id={`mcp-${header.id}-override`}
-                      options={options}
-                      loaded={secretsLoaded}
-                      secretName={header.secretName}
-                      secretKey={header.secretKey}
-                      disabled={disabled}
-                      onSelectSecret={(secretName, secretKey) =>
-                        updateHeader(group.id, header.id, {
-                          source: 'secretKeyRef',
-                          secretName,
-                          secretKey,
-                        })
-                      }
-                      className="w-full"
-                    />
-                  ) : (
-                    <div className={cn(underlineClass, 'w-full')}>
-                      <span className="text-fg-secondary min-w-0 truncate text-sm">
-                        {describeStoredOverride(header)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex h-10 w-8 shrink-0 items-center justify-center border-b border-white/[0.16]">
-                  <button
-                    type="button"
-                    onClick={() => removeHeader(group.id, header.id)}
-                    disabled={disabled}
-                    aria-label="Remove header override"
-                    className="text-fg-secondary hover:text-status-error transition-colors disabled:cursor-not-allowed disabled:opacity-50">
-                    <Trash className="size-4" />
-                  </button>
-                </div>
+                ) : (
+                  <div className={cn(underlineClass, 'w-full')}>
+                    <span className="text-fg-secondary min-w-0 truncate text-sm">
+                      {describeStoredOverride(header)}
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {header.source === 'value' &&
-                isSensitiveHeaderName(header.name) && (
-                  <span className="text-status-warning inline-flex items-center gap-1 text-xs">
-                    <IconShell size="sm" className="text-status-warning">
-                      <Warning />
-                    </IconShell>
-                    Stored in plain text on the agent. Use a secret for
-                    credentials.
-                  </span>
-                )}
+              <div className="flex h-10 w-8 shrink-0 items-center justify-center border-b border-white/[0.16]">
+                <button
+                  type="button"
+                  onClick={() => removeHeader(group.id, header.id)}
+                  disabled={disabled}
+                  aria-label="Remove header override"
+                  className="text-fg-secondary hover:text-status-error transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+                  <Trash className="size-4" />
+                </button>
+              </div>
             </div>
           ))}
 

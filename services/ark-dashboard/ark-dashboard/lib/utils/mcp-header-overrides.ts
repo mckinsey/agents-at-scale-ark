@@ -47,21 +47,6 @@ export interface McpOverrideGroup {
   serverName?: string;
 }
 
-const SENSITIVE_HEADER_NAMES = new Set([
-  'authorization',
-  'proxy-authorization',
-  'cookie',
-  'set-cookie',
-  'x-api-key',
-  'x-auth-token',
-  'x-access-token',
-  'api-key',
-]);
-
-export function isSensitiveHeaderName(name: string): boolean {
-  return SENSITIVE_HEADER_NAMES.has(name.trim().toLowerCase());
-}
-
 export function createHeaderRow(
   source: McpHeaderSource = 'secretKeyRef',
   serverName?: string,

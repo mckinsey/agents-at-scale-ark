@@ -1,7 +1,5 @@
 'use client';
 
-import { useId } from 'react';
-
 import { cn } from '@/lib/utils';
 
 const inputClass =
@@ -13,7 +11,6 @@ const underlineClass =
 export interface HeaderNameFieldProps {
   readonly id: string;
   readonly value: string;
-  readonly suggestions?: string[];
   readonly disabled?: boolean;
   readonly onChange: (name: string) => void;
   readonly className?: string;
@@ -22,14 +19,10 @@ export interface HeaderNameFieldProps {
 export function HeaderNameField({
   id,
   value,
-  suggestions = [],
   disabled,
   onChange,
   className,
 }: HeaderNameFieldProps) {
-  const listId = `${useId()}-header-names`;
-  const hasSuggestions = suggestions.length > 0;
-
   return (
     <div className={cn(underlineClass, className)}>
       <input
@@ -41,16 +34,8 @@ export function HeaderNameField({
         placeholder="Header-Name"
         disabled={disabled}
         autoComplete="off"
-        list={hasSuggestions ? listId : undefined}
         className={inputClass}
       />
-      {hasSuggestions && (
-        <datalist id={listId}>
-          {suggestions.map(name => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
-      )}
     </div>
   );
 }

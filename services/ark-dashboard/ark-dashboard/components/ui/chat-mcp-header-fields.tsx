@@ -15,7 +15,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useMcpSecretOptions } from '@/lib/hooks/use-mcp-secret-options';
-import { useMcpServerHeaders } from '@/lib/hooks/use-mcp-server-headers';
 import type { AgentHeaderSummary } from '@/lib/hooks/use-query-mcp-headers';
 import { cn } from '@/lib/utils';
 import type { McpHeaderRow } from '@/lib/utils/mcp-header-overrides';
@@ -45,21 +44,6 @@ export function ChatMcpHeaderFields({
   const [expanded, setExpanded] = useState(false);
 
   const { options, loaded: secretsLoaded } = useMcpSecretOptions(expanded);
-
-  const { headerNamesByServer, allHeaderNames } = useMcpServerHeaders(
-    serverNames,
-    expanded,
-  );
-
-  const declaredNamesFor = (row: McpHeaderRow) => {
-    const fromServer = row.serverName
-      ? (headerNamesByServer[row.serverName] ?? [])
-      : allHeaderNames;
-    const fromAgent = agentHeaders
-      .map(header => header.name)
-      .filter(name => !!name);
-    return Array.from(new Set([...fromAgent, ...fromServer]));
-  };
 
   const effectiveCount =
     agentHeaders.filter(header => !header.shadowed).length + rows.length;
@@ -173,7 +157,6 @@ export function ChatMcpHeaderFields({
                     <HeaderNameField
                       id={`mcp-${row.id}-name`}
                       value={row.name}
-                      suggestions={declaredNamesFor(row)}
                       disabled={disabled}
                       onChange={name => onUpdateRow(row.id, { name })}
                       className="w-full"
