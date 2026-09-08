@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { storedIsMarketplaceEnabledAtom } from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
-import type { SettingPage } from '@/components/settings/settings-types';
 import { SettingsSidebar } from '@/components/settings/settings-sidebar';
+import type { SettingPage } from '@/components/settings/settings-types';
 
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/'),
@@ -49,7 +49,7 @@ describe('SettingsSidebar', () => {
 
   it('should render all menu items', () => {
     renderWithStore();
-    expect(screen.getByText('Queries')).toBeInTheDocument();
+    expect(screen.getByText('Queries settings')).toBeInTheDocument();
     expect(screen.getByText('Experimental features')).toBeInTheDocument();
   });
 
@@ -80,9 +80,11 @@ describe('SettingsSidebar', () => {
     const user = userEvent.setup();
     renderWithStore();
 
-    await user.click(screen.getByText('Queries'));
+    await user.click(screen.getByText('Queries settings'));
 
-    expect(mockReplace).toHaveBeenCalledWith('/settings/queries?namespace=demo');
+    expect(mockReplace).toHaveBeenCalledWith(
+      '/settings/queries?namespace=demo',
+    );
   });
 
   it('should navigate to entry URL preserving namespace when close button is clicked after soft navigation', async () => {

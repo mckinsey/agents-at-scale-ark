@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { storedQueryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { QueriesSettings } from '@/components/settings/queries-settings';
 import { arkConfigService } from '@/lib/services/arkconfig';
 
@@ -31,9 +33,23 @@ const renderWithClient = () => {
   );
 };
 
+const renderWithStore = (store: ReturnType<typeof createStore>) => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <Provider store={store}>
+        <QueriesSettings />
+      </Provider>
+    </QueryClientProvider>,
+  );
+};
+
 describe('QueriesSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    globalThis.localStorage.clear();
   });
 
   it('renders current queryTTL from the API', async () => {
@@ -110,5 +126,55 @@ describe('QueriesSettings', () => {
       name: /reset to default/i,
     });
     expect(resetButton).toBeDisabled();
+  });
+
+  it('saves the query timeout to the stored atom', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: null,
+      exists: false,
+    });
+    vi.mocked(arkConfigService.update).mockResolvedValue({
+      queryTTL: null,
+      exists: true,
+    });
+
+    const store = createStore();
+    renderWithStore(store);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query timeout/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText(/query timeout/i), {
+      target: { value: '7' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(store.get(storedQueryTimeoutSettingAtom)).toBe('7m');
+    });
+  });
+
+  it('rejects a non-positive query timeout before saving', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: null,
+      exists: false,
+    });
+
+    const store = createStore();
+    renderWithStore(store);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query timeout/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText(/query timeout/i), {
+      target: { value: '0' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/greater than zero/i);
+    expect(arkConfigService.update).not.toHaveBeenCalled();
+    expect(store.get(storedQueryTimeoutSettingAtom)).not.toBe('0m');
   });
 });

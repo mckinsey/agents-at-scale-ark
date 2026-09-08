@@ -1,13 +1,14 @@
 'use client';
 
 import { useAtomValue } from 'jotai';
-import { X } from 'lucide-react';
 
 import {
   isExperimentalExecutionEngineEnabledAtom,
   isMarketplaceEnabledAtom,
 } from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
+import { Close } from '@/components/icons';
+import { IconActionButton } from '@/components/ui/icon-action-button';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { cn } from '@/lib/utils';
 
@@ -52,44 +53,40 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
   };
 
   return (
-    <div className="bg-sidebar flex w-64 flex-col">
-      <div className="flex items-center justify-between px-6 py-8">
-        <h2 className="text-md text-sidebar-foreground">Settings</h2>
-        <button
-          onClick={handleClose}
-          className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-md p-2 transition-all duration-200 hover:scale-110"
-          aria-label="Close settings">
-          <X className="h-5 w-5" />
-        </button>
+    <div className="bg-sidebar border-stroke-active-inverse flex w-64 flex-col border-r-2">
+      <div className="flex flex-col justify-center px-6 pt-10 pb-4">
+        <div className="flex h-8 items-center justify-between pl-3">
+          <h2 className="headings-h4-semibold text-fg-secondary">Settings</h2>
+          <IconActionButton label="Close settings" onClick={handleClose}>
+            <Close />
+          </IconActionButton>
+        </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-6">
+      <div className="flex-1 overflow-y-auto px-6 pt-3 pb-6">
+        <div className="flex flex-col gap-6">
           {visibleSections.map(section => (
-            <div key={section.sectionKey} className="space-y-2">
+            <div key={section.sectionKey} className="flex flex-col gap-1">
               {section.sectionLabel && (
-                <div className="text-sidebar-foreground px-2 text-xs">
+                <div className="text-fg-tertiary label-small-primary px-3">
                   {section.sectionLabel}
                 </div>
               )}
-              <div className="space-y-1 pl-2">
-                {section.items.map(item => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.key}
-                      onClick={() => handleSettingClick(item.key)}
-                      className={cn(
-                        'text-sidebar-foreground flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors',
-                        'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer',
-                        activePage === item.key &&
-                          'bg-sidebar-accent text-sidebar-accent-foreground',
-                      )}>
-                      <Icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              {section.items.map(item => (
+                <button
+                  key={item.key}
+                  onClick={() => handleSettingClick(item.key)}
+                  aria-current={activePage === item.key ? 'page' : undefined}
+                  className={cn(
+                    'paragraph-regular-primary flex w-full cursor-pointer items-center py-2 pr-2 pl-3 text-left transition-colors',
+                    'hover:bg-stateslayer-overlay-hover',
+                    'focus-visible:ring-stroke-status-focus focus-visible:ring-1 focus-visible:outline-none',
+                    activePage === item.key
+                      ? 'text-fg-primary'
+                      : 'text-fg-secondary',
+                  )}>
+                  <span className="truncate">{item.label}</span>
+                </button>
+              ))}
             </div>
           ))}
         </div>

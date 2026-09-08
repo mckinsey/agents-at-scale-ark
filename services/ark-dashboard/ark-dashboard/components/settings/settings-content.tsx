@@ -2,12 +2,11 @@
 
 import { Suspense, useMemo } from 'react';
 
-import type { SettingPage } from './settings-types';
-
 import { ExecutionEnginesSettings } from './execution-engines-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
 import { ManageMarketplaceSettings } from './manage-marketplace-settings';
 import { QueriesSettings } from './queries-settings';
+import type { SettingPage } from './settings-types';
 
 type SettingsContentProps = {
   activePage: SettingPage;
@@ -22,7 +21,7 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
   const pageConfigs: Record<SettingPage, PageConfig> = useMemo(
     () => ({
       queries: {
-        title: 'Queries',
+        title: 'Queries settings',
         component: <QueriesSettings />,
       },
       'experimental-features': {
@@ -45,20 +44,24 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
 
   return (
     <div className="bg-sidebar flex flex-1 flex-col overflow-hidden">
-      <div className="px-8 py-8">
-        <h1 className="text-md text-sidebar-foreground font-semibold">
-          {config.title}
-        </h1>
+      <div className="px-8 pt-10">
+        <div className="mx-auto w-full max-w-[1600px]">
+          <h1 className="headings-h2-regular text-fg-primary">
+            {config.title}
+          </h1>
+        </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        <Suspense
-          fallback={
-            <div className="flex h-32 items-center justify-center">
-              <div className="text-muted-foreground">Loading...</div>
-            </div>
-          }>
-          {config.component}
-        </Suspense>
+      <div className="flex-1 overflow-y-auto px-8 pt-5 pb-6">
+        <div className="mx-auto w-full max-w-[1600px]">
+          <Suspense
+            fallback={
+              <div className="flex h-32 items-center justify-center">
+                <div className="text-muted-foreground">Loading...</div>
+              </div>
+            }>
+            {config.component}
+          </Suspense>
+        </div>
       </div>
     </div>
   );

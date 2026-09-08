@@ -37,7 +37,7 @@ describe('ExperimentalFeaturesDialog component', () => {
     });
 
     const streamingFeature =
-      screen.getAllByText('Chat Streaming')[0].parentElement?.parentElement;
+      screen.getAllByText('Chat streaming')[0].parentElement?.parentElement;
     expect(streamingFeature).toBeDefined();
     await userEvent.click(within(streamingFeature!).getByRole('switch'));
 
@@ -59,8 +59,10 @@ describe('ExperimentalFeaturesDialog component', () => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
       });
 
-      expect(screen.getByText('Query Timeout')).toBeInTheDocument();
-      expect(screen.getByText('Default timeout for query execution')).toBeInTheDocument();
+      expect(screen.getByText('Query timeout')).toBeInTheDocument();
+      expect(
+        screen.getByText('Default timeout for query execution'),
+      ).toBeInTheDocument();
     });
 
     it('should display Queries section', async () => {
@@ -93,8 +95,8 @@ describe('ExperimentalFeaturesDialog component', () => {
       });
 
       // The select component should be present
-      expect(screen.getByText('Query Timeout')).toBeInTheDocument();
-      
+      expect(screen.getByText('Query timeout')).toBeInTheDocument();
+
       // Verify default value is in localStorage
       const storedValue = localStorage.getItem(QUERY_TIMEOUT_SETTING_KEY);
       // Default might not be set yet, or should be '5m'
