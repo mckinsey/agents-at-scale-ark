@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
-import { SecretEditor } from '@/components/editors';
 import { Shield } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import {
   LearnMoreButton,
   ResourceEmptyState,
@@ -16,44 +16,19 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Model, modelsService } from '@/lib/services';
-import {
-  useCreateSecret,
-  useDeleteSecret,
-  useGetAllSecrets,
-  useUpdateSecret,
-} from '@/lib/services/secrets-hooks';
-import type { Secret } from '@/lib/services/secrets';
+import { useDeleteSecret, useGetAllSecrets } from '@/lib/services/secrets-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function SecretsSection() {
   const { readOnlyMode, namespace } = useNamespace();
+  const { push } = useNamespacedNavigation();
   const [models, setModels] = useState<Model[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [secretEditorOpen, setSecretEditorOpen] = useState(false);
-  const [editingSecret, setEditingSecret] = useState<Secret | null>(null);
 
-  const {
-    data: secrets = [],
-    isLoading: secretsLoading,
-  } = useGetAllSecrets();
-
-  const createSecretMutation = useCreateSecret({
-    onSuccess: () => {
-      setSecretEditorOpen(false);
-      setEditingSecret(null);
-    },
-  });
-
-  const updateSecretMutation = useUpdateSecret({
-    onSuccess: () => {
-      setSecretEditorOpen(false);
-      setEditingSecret(null);
-    },
-  });
-
+  const { data: secrets = [], isLoading: secretsLoading } = useGetAllSecrets();
   const deleteSecretMutation = useDeleteSecret();
-
   const showLoading = useDelayedLoading(secretsLoading);
 
   useEffect(() => {
@@ -76,20 +51,6 @@ export function SecretsSection() {
     return secrets.filter(secret => secret.name.toLowerCase().includes(q));
   }, [secrets, searchQuery]);
 
-  const handleOpenAddEditor = () => {
-    setEditingSecret(null);
-    setSecretEditorOpen(true);
-  };
-
-  const handleSaveSecret = (name: string, password: string) => {
-    const existingSecret = secrets.find(s => s.name === name);
-    if (existingSecret) {
-      updateSecretMutation.mutate({ name, password });
-    } else {
-      createSecretMutation.mutate({ name, password });
-    }
-  };
-
   const handleDeleteSecret = (id: string) => {
     const secret = secrets.find(s => s.id === id);
     if (!secret) {
@@ -100,19 +61,19 @@ export function SecretsSection() {
 
   const isEmpty = !secretsLoading && secrets.length === 0;
 
+  const createButton = (
+    <NamespacedLink href="/secrets/new">
+      <Button disabled={readOnlyMode}>Add secret</Button>
+    </NamespacedLink>
+  );
+
   return (
     <div className="flex h-full w-full content-shell flex-col">
       <ResourcePageHeader
         icon={<Shield className="size-full" />}
         title="Secrets"
         description="Create and manage secrets for models and services"
-        actions={
-          !isEmpty && (
-            <Button onClick={handleOpenAddEditor} disabled={readOnlyMode}>
-              Add secret
-            </Button>
-          )
-        }
+        actions={!isEmpty && createButton}
       />
 
       {showLoading && (
@@ -132,9 +93,7 @@ export function SecretsSection() {
           }
           actions={
             <>
-              <Button onClick={handleOpenAddEditor} disabled={readOnlyMode}>
-                Add secret
-              </Button>
+              {createButton}
               <LearnMoreButton href={DOCS_URLS.root} />
             </>
           }
@@ -156,29 +115,13 @@ export function SecretsSection() {
               <SecretsTable
                 secrets={filteredSecrets}
                 models={models}
-                onEdit={secretToEdit => {
-                  setEditingSecret(secretToEdit);
-                  setSecretEditorOpen(true);
-                }}
+                onEdit={secret => push(`/secrets/${secret.name}`)}
                 onDelete={handleDeleteSecret}
               />
             </ScrollArea>
           )}
         </div>
       )}
-
-      <SecretEditor
-        open={secretEditorOpen}
-        onOpenChange={open => {
-          setSecretEditorOpen(open);
-          if (!open) {
-            setEditingSecret(null);
-          }
-        }}
-        secret={editingSecret}
-        onSave={handleSaveSecret}
-        existingSecrets={secrets}
-      />
     </div>
   );
 }

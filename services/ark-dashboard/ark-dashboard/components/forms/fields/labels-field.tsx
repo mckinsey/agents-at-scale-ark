@@ -6,7 +6,7 @@ import { FieldDescription, FieldError } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Tag } from '@/components/ui/tag';
 
-import { validateLabelDraft } from './types';
+import { validateLabelDraft } from './label-validation';
 
 interface LabelsFieldProps {
   value: string[];
@@ -16,7 +16,11 @@ interface LabelsFieldProps {
   onDraftTouched?: () => void;
   error?: string;
   disabled?: boolean;
+  description?: string;
 }
+
+const DEFAULT_DESCRIPTION =
+  "Labels group related resources. Letters, digits, '-', '_' and '.' only.";
 
 export function LabelsField({
   value,
@@ -26,6 +30,7 @@ export function LabelsField({
   onDraftTouched,
   error,
   disabled,
+  description = DEFAULT_DESCRIPTION,
 }: Readonly<LabelsFieldProps>) {
   const addLabel = () => {
     const label = draft.trim();
@@ -85,10 +90,7 @@ export function LabelsField({
           onDraftTouched?.();
         }}
       />
-      <FieldDescription>
-        Labels group related configurations. Letters, digits, &apos;-&apos;,
-        &apos;_&apos; and &apos;.&apos; only.
-      </FieldDescription>
+      <FieldDescription>{description}</FieldDescription>
       <FieldError>{error}</FieldError>
     </>
   );

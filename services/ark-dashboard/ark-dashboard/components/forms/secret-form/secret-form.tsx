@@ -3,7 +3,6 @@
 import { useId } from 'react';
 
 import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
-import { Info } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,19 +15,14 @@ import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
+import { AliasField } from '../fields/alias-field';
 import { LabelsField } from '../fields/labels-field';
-import { type ConfigurationFormProps } from './types';
-import { useConfigurationForm } from './use-configuration-form';
+import { type SecretFormProps } from './types';
+import { useSecretForm } from './use-secret-form';
 
-const SKELETON_FIELDS = ['name', 'value', 'description', 'alias'];
+const SKELETON_FIELDS = ['name', 'password', 'description', 'alias'];
 
 const RequiredMarker = () => (
   <span aria-hidden="true" className="text-fg-secondary">
@@ -36,22 +30,23 @@ const RequiredMarker = () => (
   </span>
 );
 
-export function ConfigurationForm({
+export function SecretForm({
   mode,
-  configurationName,
+  secretName,
   onSuccess,
-}: Readonly<ConfigurationFormProps>) {
+}: Readonly<SecretFormProps>) {
   const { readOnlyMode } = useNamespace();
   const nameFieldId = useId();
-  const valueFieldId = useId();
-  const { form, isEdit, loading, saving, onSubmit } = useConfigurationForm({
-    mode,
-    configurationName,
-    onSuccess,
-  });
+  const passwordFieldId = useId();
+  const { form, isEdit, loading, saving, onSubmit, aliasOptions } =
+    useSecretForm({
+      mode,
+      secretName,
+      onSuccess,
+    });
 
   const isDisabled = saving || loading || readOnlyMode;
-  const heading = isEdit ? 'Edit configuration' : 'New configuration';
+  const heading = isEdit ? 'Edit secret' : 'New secret';
 
   if (loading) {
     return (
@@ -73,12 +68,12 @@ export function ConfigurationForm({
       <header className="flex flex-none flex-col gap-4">
         <div className="flex items-center justify-between">
           <DetailBreadcrumb
-            backHref="/configurations"
-            backLabel="Configurations"
+            backHref="/secrets"
+            backLabel="Secrets"
             current={heading}
           />
           <div className="flex items-center gap-2">
-            <NamespacedLink href="/configurations">
+            <NamespacedLink href="/secrets">
               <Button variant="outline">Cancel</Button>
             </NamespacedLink>
             <Button onClick={form.handleSubmit(onSubmit)} disabled={isDisabled}>
@@ -106,15 +101,15 @@ export function ConfigurationForm({
                   <Input
                     id={nameFieldId}
                     variant="inline"
-                    placeholder="e.g., github-mcp-url"
+                    placeholder="e.g., api-key-production"
                     disabled={isDisabled || isEdit}
                     aria-invalid={!!fieldState.error}
                     aria-describedby={`${nameFieldId}-description`}
                     {...field}
                   />
                   <FieldDescription id={`${nameFieldId}-description`}>
-                    Resources reference the configuration by this name. It
-                    cannot be changed after creation.
+                    Resources reference the secret by this name. It cannot be
+                    changed after creation.
                   </FieldDescription>
                   <FieldError>{fieldState.error?.message}</FieldError>
                 </FieldSet>
@@ -123,24 +118,23 @@ export function ConfigurationForm({
 
             <FormField
               control={form.control}
-              name="value"
+              name="password"
               render={({ field, fieldState }) => (
                 <FieldSet className="gap-2">
                   <FieldTitle>
-                    Value <RequiredMarker />
+                    Value {!isEdit && <RequiredMarker />}
                   </FieldTitle>
-                  <Textarea
-                    id={valueFieldId}
-                    rows={4}
-                    placeholder="e.g., https://api.githubcopilot.com/mcp/"
+                  <Input
+                    id={passwordFieldId}
+                    type="password"
+                    variant="inline"
+                    placeholder={
+                      isEdit ? 'Leave blank to keep unchanged' : 'Enter the secret token'
+                    }
                     disabled={isDisabled}
                     aria-invalid={!!fieldState.error}
-                    aria-describedby={`${valueFieldId}-description`}
                     {...field}
                   />
-                  <FieldDescription id={`${valueFieldId}-description`}>
-                    Stored in plain text. Use a Secret for anything sensitive.
-                  </FieldDescription>
                   <FieldError>{fieldState.error?.message}</FieldError>
                 </FieldSet>
               )}
@@ -154,7 +148,7 @@ export function ConfigurationForm({
                   <FieldTitle>Description</FieldTitle>
                   <Input
                     variant="inline"
-                    placeholder="e.g., GitHub remote MCP endpoint"
+                    placeholder="e.g., Production API key"
                     disabled={isDisabled}
                     aria-invalid={!!fieldState.error}
                     {...field}
@@ -168,34 +162,15 @@ export function ConfigurationForm({
               control={form.control}
               name="alias"
               render={({ field, fieldState }) => (
-                <FieldSet className="gap-2">
-                  <FieldTitle className="flex items-center gap-1.5">
-                    Alias
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="What is an alias?"
-                          className="text-fg-secondary hover:text-fg-primary">
-                          <Info className="size-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-72">
-                        A shorter label shown alongside the name in lists.
-                        Display only — resources still reference the
-                        configuration by its name.
-                      </TooltipContent>
-                    </Tooltip>
-                  </FieldTitle>
-                  <Input
-                    variant="inline"
-                    placeholder="e.g., github-mcp"
-                    disabled={isDisabled}
-                    aria-invalid={!!fieldState.error}
-                    {...field}
-                  />
-                  <FieldError>{fieldState.error?.message}</FieldError>
-                </FieldSet>
+                <AliasField
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  options={aliasOptions}
+                  disabled={isDisabled}
+                  invalid={!!fieldState.error}
+                  error={fieldState.error?.message}
+                />
               )}
             />
 
