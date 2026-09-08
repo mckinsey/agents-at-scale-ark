@@ -8,8 +8,9 @@ export const labelSchema = z
   .max(LABEL_MAX_LENGTH, {
     message: `Label must be ${LABEL_MAX_LENGTH} characters or less`,
   })
-  .regex(/^[a-zA-Z0-9]+$/, {
-    message: 'Use only letters and digits',
+  .regex(/^[a-zA-Z0-9]([-_.a-zA-Z0-9]*[a-zA-Z0-9])?$/, {
+    message:
+      "Use letters, digits, '-', '_' or '.', starting and ending with a letter or digit",
   });
 
 export const validateLabelDraft = (
