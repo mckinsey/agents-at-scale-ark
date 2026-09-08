@@ -37,7 +37,8 @@ interface AliasFieldProps {
   readonly invalid?: boolean;
   readonly error?: string;
   readonly placeholder?: string;
-  readonly emptyText?: string;
+  readonly emptyMessage?: string;
+  readonly noMatchMessage?: string;
 }
 
 export function AliasField({
@@ -48,8 +49,9 @@ export function AliasField({
   disabled,
   invalid,
   error,
-  placeholder = 'e.g., github-mcp',
-  emptyText = 'No existing resources',
+  placeholder = 'Search aliases',
+  emptyMessage = 'No aliases available',
+  noMatchMessage = 'No aliases match your search',
 }: AliasFieldProps) {
   return (
     <FieldSet className="gap-2">
@@ -93,7 +95,9 @@ export function AliasField({
           </InputGroup>
         </ComboboxAnchor>
         <ComboboxContent>
-          <ComboboxEmpty>{emptyText}</ComboboxEmpty>
+          <ComboboxEmpty>
+            {options.length === 0 ? emptyMessage : noMatchMessage}
+          </ComboboxEmpty>
           <ComboboxList>
             {(item: string) => (
               <ComboboxItem key={item} value={item}>

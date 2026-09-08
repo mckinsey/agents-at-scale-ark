@@ -167,6 +167,7 @@ export function SecretForm({
                   onChange={field.onChange}
                   onBlur={field.onBlur}
                   options={aliasOptions}
+                  placeholder="e.g., api-key"
                   disabled={isDisabled}
                   invalid={!!fieldState.error}
                   error={fieldState.error?.message}
