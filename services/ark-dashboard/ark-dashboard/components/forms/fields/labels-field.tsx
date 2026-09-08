@@ -1,8 +1,15 @@
 'use client';
 
 import { type KeyboardEvent } from 'react';
+import type { Control, FieldPath, FieldValues } from 'react-hook-form';
 
-import { FieldDescription, FieldError } from '@/components/ui/field';
+import {
+  FieldDescription,
+  FieldError,
+  FieldSet,
+  FieldTitle,
+} from '@/components/ui/field';
+import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Tag } from '@/components/ui/tag';
 
@@ -93,5 +100,46 @@ export function LabelsField({
       <FieldDescription>{description}</FieldDescription>
       <FieldError>{error}</FieldError>
     </>
+  );
+}
+
+export interface FormLabelsFieldProps<TFieldValues extends FieldValues> {
+  control: Control<TFieldValues>;
+  labelsName: FieldPath<TFieldValues>;
+  labelDraftName: FieldPath<TFieldValues>;
+  disabled?: boolean;
+}
+
+export function FormLabelsField<TFieldValues extends FieldValues>({
+  control,
+  labelsName,
+  labelDraftName,
+  disabled,
+}: Readonly<FormLabelsFieldProps<TFieldValues>>) {
+  return (
+    <FormField
+      control={control}
+      name={labelsName}
+      render={({ field }) => (
+        <FieldSet className="gap-2">
+          <FieldTitle>Labels</FieldTitle>
+          <FormField
+            control={control}
+            name={labelDraftName}
+            render={({ field: draftField, fieldState }) => (
+              <LabelsField
+                value={field.value as string[]}
+                onChange={field.onChange as (labels: string[]) => void}
+                draft={draftField.value as string}
+                onDraftChange={draftField.onChange as (draft: string) => void}
+                onDraftTouched={draftField.onBlur}
+                error={fieldState.error?.message}
+                disabled={disabled}
+              />
+            )}
+          />
+        </FieldSet>
+      )}
+    />
   );
 }

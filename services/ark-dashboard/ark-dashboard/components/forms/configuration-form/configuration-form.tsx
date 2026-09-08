@@ -3,12 +3,7 @@
 import { useId } from 'react';
 
 import { Info } from '@/components/icons';
-import {
-  FieldDescription,
-  FieldError,
-  FieldSet,
-  FieldTitle,
-} from '@/components/ui/field';
+import { FieldDescription, FieldError, FieldSet, FieldTitle } from '@/components/ui/field';
 import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,7 +14,8 @@ import {
 } from '@/components/ui/tooltip';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { LabelsField } from '../fields/labels-field';
+import { FormLabelsField } from '../fields/labels-field';
+import { FormTextField } from '../fields/text-field';
 import { RequiredMarker, ResourceFormShell } from '../resource-form-shell';
 import { type ConfigurationFormProps } from './types';
 import { useConfigurationForm } from './use-configuration-form';
@@ -54,30 +50,15 @@ export function ConfigurationForm({
       saving={saving}
       submitDisabled={loading || readOnlyMode}
       skeletonFields={SKELETON_FIELDS}>
-      <FormField
+      <FormTextField
         control={form.control}
         name="name"
-        render={({ field, fieldState }) => (
-          <FieldSet className="gap-2">
-            <FieldTitle>
-              Name <RequiredMarker />
-            </FieldTitle>
-            <Input
-              id={nameFieldId}
-              variant="inline"
-              placeholder="e.g., github-mcp-url"
-              disabled={isDisabled || isEdit}
-              aria-invalid={!!fieldState.error}
-              aria-describedby={`${nameFieldId}-description`}
-              {...field}
-            />
-            <FieldDescription id={`${nameFieldId}-description`}>
-              Resources reference the configuration by this name. It cannot
-              be changed after creation.
-            </FieldDescription>
-            <FieldError>{fieldState.error?.message}</FieldError>
-          </FieldSet>
-        )}
+        id={nameFieldId}
+        label="Name"
+        placeholder="e.g., github-mcp-url"
+        description="Resources reference the configuration by this name. It cannot be changed after creation."
+        required
+        disabled={isDisabled || isEdit}
       />
 
       <FormField
@@ -105,22 +86,12 @@ export function ConfigurationForm({
         )}
       />
 
-      <FormField
+      <FormTextField
         control={form.control}
         name="description"
-        render={({ field, fieldState }) => (
-          <FieldSet className="gap-2">
-            <FieldTitle>Description</FieldTitle>
-            <Input
-              variant="inline"
-              placeholder="e.g., GitHub remote MCP endpoint"
-              disabled={isDisabled}
-              aria-invalid={!!fieldState.error}
-              {...field}
-            />
-            <FieldError>{fieldState.error?.message}</FieldError>
-          </FieldSet>
-        )}
+        label="Description"
+        placeholder="e.g., GitHub remote MCP endpoint"
+        disabled={isDisabled}
       />
 
       <FormField
@@ -158,29 +129,11 @@ export function ConfigurationForm({
         )}
       />
 
-      <FormField
+      <FormLabelsField
         control={form.control}
-        name="labels"
-        render={({ field }) => (
-          <FieldSet className="gap-2">
-            <FieldTitle>Labels</FieldTitle>
-            <FormField
-              control={form.control}
-              name="labelDraft"
-              render={({ field: draftField, fieldState }) => (
-                <LabelsField
-                  value={field.value}
-                  onChange={field.onChange}
-                  draft={draftField.value}
-                  onDraftChange={draftField.onChange}
-                  onDraftTouched={draftField.onBlur}
-                  error={fieldState.error?.message}
-                  disabled={isDisabled}
-                />
-              )}
-            />
-          </FieldSet>
-        )}
+        labelsName="labels"
+        labelDraftName="labelDraft"
+        disabled={isDisabled}
       />
     </ResourceFormShell>
   );

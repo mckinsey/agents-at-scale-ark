@@ -2,19 +2,13 @@
 
 import { useId } from 'react';
 
-import {
-  FieldDescription,
-  FieldError,
-  FieldSet,
-  FieldTitle,
-} from '@/components/ui/field';
 import { FormField } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { AliasField } from '../fields/alias-field';
-import { LabelsField } from '../fields/labels-field';
-import { RequiredMarker, ResourceFormShell } from '../resource-form-shell';
+import { FormLabelsField } from '../fields/labels-field';
+import { FormTextField } from '../fields/text-field';
+import { ResourceFormShell } from '../resource-form-shell';
 import { type SecretFormProps } from './types';
 import { useSecretForm } from './use-secret-form';
 
@@ -49,47 +43,23 @@ export function SecretForm({
       saving={saving}
       submitDisabled={loading || readOnlyMode}
       skeletonFields={SKELETON_FIELDS}>
-      <FormField
+      <FormTextField
         control={form.control}
         name="name"
-        render={({ field, fieldState }) => (
-          <FieldSet className="gap-2">
-            <FieldTitle>
-              Name <RequiredMarker />
-            </FieldTitle>
-            <Input
-              id={nameFieldId}
-              variant="inline"
-              placeholder="e.g., api-key-production"
-              disabled={isDisabled || isEdit}
-              aria-invalid={!!fieldState.error}
-              aria-describedby={`${nameFieldId}-description`}
-              {...field}
-            />
-            <FieldDescription id={`${nameFieldId}-description`}>
-              Secret names cannot be changed after creation
-            </FieldDescription>
-            <FieldError>{fieldState.error?.message}</FieldError>
-          </FieldSet>
-        )}
+        id={nameFieldId}
+        label="Name"
+        placeholder="e.g., api-key-production"
+        description="Secret names cannot be changed after creation"
+        required
+        disabled={isDisabled || isEdit}
       />
 
-      <FormField
+      <FormTextField
         control={form.control}
         name="description"
-        render={({ field, fieldState }) => (
-          <FieldSet className="gap-2">
-            <FieldTitle>Description</FieldTitle>
-            <Input
-              variant="inline"
-              placeholder="e.g., API key used by the production models"
-              disabled={isDisabled}
-              aria-invalid={!!fieldState.error}
-              {...field}
-            />
-            <FieldError>{fieldState.error?.message}</FieldError>
-          </FieldSet>
-        )}
+        label="Description"
+        placeholder="e.g., API key used by the production models"
+        disabled={isDisabled}
       />
 
       <FormField
@@ -109,50 +79,23 @@ export function SecretForm({
         )}
       />
 
-      <FormField
+      <FormTextField
         control={form.control}
         name="password"
-        render={({ field, fieldState }) => (
-          <FieldSet className="gap-2">
-            <FieldTitle>Value {!isEdit && <RequiredMarker />}</FieldTitle>
-            <Input
-              id={passwordFieldId}
-              type="password"
-              variant="inline"
-              autoComplete="new-password"
-              placeholder="Enter the secret value"
-              disabled={isDisabled}
-              aria-invalid={!!fieldState.error}
-              {...field}
-            />
-            <FieldError>{fieldState.error?.message}</FieldError>
-          </FieldSet>
-        )}
+        id={passwordFieldId}
+        label="Value"
+        type="password"
+        autoComplete="new-password"
+        placeholder="Enter the secret value"
+        required={!isEdit}
+        disabled={isDisabled}
       />
 
-      <FormField
+      <FormLabelsField
         control={form.control}
-        name="labels"
-        render={({ field }) => (
-          <FieldSet className="gap-2">
-            <FieldTitle>Labels</FieldTitle>
-            <FormField
-              control={form.control}
-              name="labelDraft"
-              render={({ field: draftField, fieldState }) => (
-                <LabelsField
-                  value={field.value}
-                  onChange={field.onChange}
-                  draft={draftField.value}
-                  onDraftChange={draftField.onChange}
-                  onDraftTouched={draftField.onBlur}
-                  error={fieldState.error?.message}
-                  disabled={isDisabled}
-                />
-              )}
-            />
-          </FieldSet>
-        )}
+        labelsName="labels"
+        labelDraftName="labelDraft"
+        disabled={isDisabled}
       />
     </ResourceFormShell>
   );
