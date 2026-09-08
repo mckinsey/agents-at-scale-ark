@@ -13,10 +13,13 @@ install: # install localhost-gateway with Gateway API CRDs and nginx-gateway-fab
 	# ARK installs Gateway API CRDs by default, this is normally a no-op
 	@echo "Installing Gateway API CRDs..."
 	@kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
-	@echo "Installing nginx-gateway-fabric CRDs..."
-	@kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml
 	@echo "Updating helm dependencies..."
-	@helm dependency update ./chart
+	@helm dependency build ./chart
+	@echo "Installing nginx-gateway-fabric CRDs from chart dependency..."
+	@CRD_TMP=$$(mktemp -d); \
+		tar -xzf ./chart/charts/nginx-gateway-fabric-*.tgz -C "$$CRD_TMP" nginx-gateway-fabric/crds; \
+		kubectl apply -f "$$CRD_TMP/nginx-gateway-fabric/crds/"; \
+		rm -rf "$$CRD_TMP"
 	@echo "Installing localhost-gateway..."
 	@kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	@helm upgrade --install $(CHART_NAME) ./chart \
@@ -67,7 +70,8 @@ uninstall: # remove localhost-gateway and nginx-gateway-fabric CRDs
 	@echo "Uninstalling localhost-gateway..."
 	@helm uninstall $(CHART_NAME) -n $(NAMESPACE) 2>/dev/null || echo "Chart not installed or already removed"
 	@echo "Removing nginx-gateway-fabric CRDs..."
-	@kubectl delete -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml 2>/dev/null || echo "nginx-gateway-fabric CRDs not found or already removed"
+	@CRDS=$$(kubectl get crd -o name 2>/dev/null | grep '\.gateway\.nginx\.org$$' || true); \
+		if [ -n "$$CRDS" ]; then echo "$$CRDS" | xargs kubectl delete; else echo "nginx-gateway-fabric CRDs not found or already removed"; fi
 	@echo "localhost-gateway uninstalled"
 
 .PHONY: status
