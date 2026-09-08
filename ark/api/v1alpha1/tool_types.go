@@ -108,6 +108,10 @@ type ToolSpec struct {
 	// This field is required only if Type = "builtin".
 	// +kubebuilder:validation:Optional
 	Builtin *BuiltinToolRef `json:"builtin,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Approval configuration applied to every agent that uses this tool. An agent may
+	// tighten it but not remove it; see AgentTool.Approval for the per-agent override.
+	Approval *ToolApprovalConfig `json:"approval,omitempty"`
 }
 
 type HTTPSpec struct {

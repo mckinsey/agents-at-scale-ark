@@ -325,6 +325,27 @@ spec:
                       description: Approval configuration for human-in-the-loop tool
                         execution
                       properties:
+                        argumentMatches:
+                          description: |-
+                            ArgumentMatches narrows approval to calls whose arguments match one of these patterns.
+                            Empty means approval applies to every call of this tool.
+                          items:
+                            properties:
+                              argument:
+                                description: Argument is the JSON field name in the
+                                  tool call arguments to inspect (e.g. "path").
+                                minLength: 1
+                                type: string
+                              pattern:
+                                description: Pattern is a regular expression; approval
+                                  is required when the argument value matches.
+                                minLength: 1
+                                type: string
+                            required:
+                            - argument
+                            - pattern
+                            type: object
+                          type: array
                         onTimeout:
                           default: reject
                           description: 'OnTimeout specifies the action to take when
@@ -339,6 +360,7 @@ spec:
                             required before executing this tool
                           type: boolean
                         timeout:
+                          default: 5m
                           description: Timeout specifies how long to wait for approval
                             before timing out
                           type: string

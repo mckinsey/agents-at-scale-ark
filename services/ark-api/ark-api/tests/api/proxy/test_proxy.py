@@ -9,6 +9,15 @@ from fastapi.testclient import TestClient
 
 os.environ["AUTH_MODE"] = "open"
 
+
+def _byte_stream(*chunks: bytes):
+    """Build a request.stream() stand-in; AsyncMock is not an async iterator."""
+    async def stream():
+        for chunk in chunks:
+            yield chunk
+    return stream
+
+
 class TestInternalProxy(unittest.TestCase):
     """Test cases for internal proxy functionality."""
 
@@ -35,7 +44,7 @@ class TestInternalProxy(unittest.TestCase):
         self.assertEqual(headers, {})
 
 
-class TestProxyRequestFunction(unittest.TestCase):
+class TestProxyRequestFunction(unittest.IsolatedAsyncioTestCase):
     """Test cases for _proxy_request function."""
 
     @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
@@ -106,6 +115,274 @@ class TestProxyRequestFunction(unittest.TestCase):
         call_args = mock_http_client.request.call_args
         self.assertEqual(call_args.kwargs["method"], "GET")
         self.assertIsNone(call_args.kwargs["content"])
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_proxy_request_drops_decoded_encoding_and_length(self, mock_httpx_client):
+        """httpx decodes the body, so the upstream encoding and length must not be forwarded."""
+        from ark_api.api.v1.proxy.proxy import _proxy_request
+        from fastapi import Request
+
+        decoded = b'{"result": "success"}' * 20
+
+        mock_request = AsyncMock(spec=Request)
+        mock_request.method = "GET"
+        mock_request.headers = {"accept-encoding": "gzip"}
+        mock_request.query_params = {}
+        mock_request.body = AsyncMock(return_value=b'')
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = decoded
+        mock_response.headers = {
+            "content-type": "application/json",
+            "content-encoding": "gzip",
+            "content-length": "42",
+        }
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        result = await _proxy_request("http://test-service:8080", mock_request)
+
+        self.assertNotIn("content-encoding", result.headers)
+        self.assertEqual(result.headers["content-length"], str(len(decoded)))
+        self.assertEqual(result.headers["content-type"], "application/json")
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_proxy_request_upload_forwards_sanitized_body_without_stale_length(
+        self, mock_httpx_client
+    ):
+        """Sanitizing changes the body length; httpx must derive content-length from it."""
+        from ark_api.api.v1.proxy.proxy import _proxy_request
+        from fastapi import Request
+
+        boundary = "X"
+        svg = (
+            b'<svg xmlns="http://www.w3.org/2000/svg">'
+            b"<script>alert(1)</script><path d=\"M0 0h1v1H0z\"/>"
+            b"</svg>"
+        )
+        original = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="file"; filename="icon.svg"\r\n'
+            "Content-Type: image/svg+xml\r\n\r\n"
+        ).encode() + svg + f"\r\n--{boundary}--\r\n".encode()
+
+        mock_request = AsyncMock(spec=Request)
+        mock_request.method = "POST"
+        mock_request.headers = {
+            "content-type": f"multipart/form-data; boundary={boundary}",
+            "content-length": str(len(original)),
+        }
+        mock_request.query_params = {}
+        mock_request.body = AsyncMock(return_value=original)
+        mock_request.stream = _byte_stream(original)
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b"{}"
+        mock_response.headers = {"content-type": "application/json"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        await _proxy_request(
+            "http://file-gateway:8080",
+            mock_request,
+            file_gateway_server="file-gateway",
+            file_gateway_path="files",
+        )
+
+        call_args = mock_http_client.request.call_args
+        sent_body = call_args.kwargs["content"]
+        self.assertNotIn(b"<script", sent_body)
+        self.assertNotEqual(sent_body, original)
+        # The stale incoming length must not be forwarded; httpx sets it from content=.
+        self.assertNotIn("content-length", {k.lower() for k in call_args.kwargs["headers"]})
+
+    def _upload_request(self, body: bytes, declared_length=None, chunks=None):
+        from fastapi import Request
+
+        mock_request = AsyncMock(spec=Request)
+        mock_request.method = "POST"
+        headers = {"content-type": "multipart/form-data; boundary=B"}
+        if declared_length is not None:
+            headers["content-length"] = str(declared_length)
+        mock_request.headers = headers
+        mock_request.query_params = {}
+        mock_request.body = AsyncMock(return_value=body)
+        mock_request.stream = Mock(
+            side_effect=_byte_stream(*(chunks if chunks is not None else [body]))
+        )
+        return mock_request
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_upload_over_limit_rejected_before_reading_body(self, mock_httpx_client):
+        """An honest oversized Content-Length is refused without buffering or forwarding."""
+        from fastapi import HTTPException
+        from ark_api.api.v1.proxy.proxy import PROXY_MAX_UPLOAD_BYTES, _proxy_request
+
+        oversized = PROXY_MAX_UPLOAD_BYTES + 1
+        mock_request = self._upload_request(b"", declared_length=oversized)
+
+        with self.assertRaises(HTTPException) as ctx:
+            await _proxy_request(
+                "http://file-gateway:8080",
+                mock_request,
+                file_gateway_server="file-gateway",
+                file_gateway_path="files",
+            )
+
+        self.assertEqual(ctx.exception.status_code, 413)
+        mock_request.stream.assert_not_called()
+        mock_httpx_client.assert_not_called()
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_upload_over_limit_rejected_when_header_understates(self, mock_httpx_client):
+        """A chunked or lying Content-Length is caught by the running total instead."""
+        from fastapi import HTTPException
+        from ark_api.api.v1.proxy.proxy import PROXY_MAX_UPLOAD_BYTES, _proxy_request
+
+        chunk = b"a" * 64_000
+        chunks = [chunk] * ((PROXY_MAX_UPLOAD_BYTES // len(chunk)) + 2)
+        mock_request = self._upload_request(b"", chunks=chunks)
+
+        with self.assertRaises(HTTPException) as ctx:
+            await _proxy_request(
+                "http://file-gateway:8080",
+                mock_request,
+                file_gateway_server="file-gateway",
+                file_gateway_path="files",
+            )
+
+        self.assertEqual(ctx.exception.status_code, 413)
+        mock_httpx_client.assert_not_called()
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_upload_within_limit_is_forwarded(self, mock_httpx_client):
+        """The cap must not disturb a normal upload."""
+        from ark_api.api.v1.proxy.proxy import _proxy_request
+
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\n\r\n'
+            b"\x89PNG\r\n\x1a\n\r\n--B--\r\n"
+        )
+        mock_request = self._upload_request(body, declared_length=len(body))
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b"{}"
+        mock_response.headers = {"content-type": "application/json"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        result = await _proxy_request(
+            "http://file-gateway:8080",
+            mock_request,
+            file_gateway_server="file-gateway",
+            file_gateway_path="files",
+        )
+
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(mock_http_client.request.call_args.kwargs["content"], body)
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_non_upload_traffic_is_not_capped(self, mock_httpx_client):
+        """A2A and MCP payloads must stay unbounded; only file-gateway uploads are capped."""
+        from fastapi import Request
+        from ark_api.api.v1.proxy.proxy import PROXY_MAX_UPLOAD_BYTES, _proxy_request
+
+        big = b"x" * (PROXY_MAX_UPLOAD_BYTES + 1024)
+        mock_request = AsyncMock(spec=Request)
+        mock_request.method = "POST"
+        mock_request.headers = {
+            "content-type": "application/json",
+            "content-length": str(len(big)),
+        }
+        mock_request.query_params = {}
+        mock_request.body = AsyncMock(return_value=big)
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b"{}"
+        mock_response.headers = {"content-type": "application/json"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        result = await _proxy_request("http://a2a-server:8080", mock_request)
+
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(mock_http_client.request.call_args.kwargs["content"], big)
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_disguised_upload_rejected_with_400(self, mock_httpx_client):
+        """HTML stored under a .png name never reaches the file gateway."""
+        from fastapi import HTTPException
+        from ark_api.api.v1.proxy.proxy import _proxy_request
+
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="file"; filename="report.png"\r\n'
+            b"Content-Type: image/png\r\n\r\n"
+            b"<html><script>alert(document.domain)</script></html>\r\n--B--\r\n"
+        )
+        mock_request = self._upload_request(body, declared_length=len(body))
+
+        with self.assertRaises(HTTPException) as ctx:
+            await _proxy_request(
+                "http://file-gateway:8080",
+                mock_request,
+                file_gateway_server="file-gateway",
+                file_gateway_path="files",
+            )
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        mock_httpx_client.assert_not_called()
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_proxy_request_forwards_request_content_encoding(self, mock_httpx_client):
+        """The request body is passed through as-is, so its encoding header must survive."""
+        from ark_api.api.v1.proxy.proxy import _proxy_request
+        from fastapi import Request
+
+        mock_request = AsyncMock(spec=Request)
+        mock_request.method = "POST"
+        mock_request.headers = {
+            "content-type": "application/octet-stream",
+            "content-encoding": "gzip",
+        }
+        mock_request.query_params = {}
+        mock_request.body = AsyncMock(return_value=b"\x1f\x8b compressed")
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b"{}"
+        mock_response.headers = {"content-type": "application/json"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        await _proxy_request("http://test-service:8080", mock_request)
+
+        sent_headers = mock_http_client.request.call_args.kwargs["headers"]
+        self.assertEqual(sent_headers.get("content-encoding"), "gzip")
+
 
 class TestA2AProxyEndpoint(unittest.TestCase):
     """Test cases for the /proxy/a2a endpoint."""
@@ -469,6 +746,54 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         """Set up test client."""
         from ark_api.main import app
         self.client = TestClient(app)
+
+    def _upload(self, filename, content, content_type="application/octet-stream"):
+        """POST a real multipart upload through the ASGI stack."""
+        with self._mock_service_lookup():
+            return self.client.post(
+                "/v1/proxy/services/file-gateway-api/files",
+                files={"file": (filename, content, content_type)},
+                data={"prefix": "uploads"},
+            )
+
+    @patch('httpx.AsyncClient.request')
+    def test_upload_route_rejects_oversized_file(self, mock_request):
+        """Exercises the real request.stream() read, not a mock."""
+        from ark_api.api.v1.proxy.proxy import PROXY_MAX_UPLOAD_BYTES
+
+        response = self._upload("big.bin", b"a" * (PROXY_MAX_UPLOAD_BYTES + 1))
+
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("exceeds the maximum", response.json()["detail"])
+        mock_request.assert_not_called()
+
+    @patch('httpx.AsyncClient.request')
+    def test_upload_route_rejects_html_disguised_as_png(self, mock_request):
+        response = self._upload(
+            "report.png",
+            b"<html><script>alert(document.domain)</script></html>",
+            "image/png",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("content is html", response.json()["detail"])
+        mock_request.assert_not_called()
+
+    @patch('httpx.AsyncClient.request')
+    def test_upload_route_forwards_normal_file(self, mock_request):
+        """A well-formed upload still reaches the gateway with its bytes intact."""
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.content = b'{"ok": true}'
+        mock_request.return_value = mock_response
+
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+        response = self._upload("photo.png", png, "image/png")
+
+        self.assertEqual(response.status_code, 200)
+        mock_request.assert_called_once()
+        self.assertIn(png, mock_request.call_args.kwargs["content"])
 
     @patch('httpx.AsyncClient.request')
     def test_proxy_get_request_success(self, mock_request):

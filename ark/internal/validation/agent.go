@@ -102,23 +102,7 @@ func validateAgentTool(index int, tool arkv1alpha1.AgentTool) error {
 }
 
 func validateToolApprovalConfig(index int, tool arkv1alpha1.AgentTool) error {
-	if tool.Approval == nil {
-		return nil
-	}
-
-	approval := tool.Approval
-
-	// Validate timeout is positive if specified
-	if approval.Timeout != nil && approval.Timeout.Duration <= 0 {
-		return fmt.Errorf("tool[%d]: approval.timeout must be a positive duration", index)
-	}
-
-	// Validate onTimeout enum
-	if approval.OnTimeout != "" && approval.OnTimeout != "reject" && approval.OnTimeout != "proceed" {
-		return fmt.Errorf("tool[%d]: approval.onTimeout must be 'reject' or 'proceed'", index)
-	}
-
-	return nil
+	return ValidateApprovalConfig(tool.Approval, fmt.Sprintf("tool[%d]: ", index))
 }
 
 func isValidBuiltInTool(name string) bool {

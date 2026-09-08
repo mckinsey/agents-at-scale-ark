@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -99,7 +100,7 @@ func TestRequiresApproval(t *testing.T) {
 				approvalRequiredTools: tt.approvalMap,
 			}
 
-			config := agent.requiresApproval(tt.toolName)
+			config := agent.requiresApproval(tt.toolName, "{}")
 
 			if tt.expectConfig {
 				require.NotNil(t, config, "Expected approval config but got nil")
@@ -468,4 +469,236 @@ func TestAgentExecute_EmitsBareAgentNameInOperationData(t *testing.T) {
 	data, ok := rec.starts["AgentExecution"]
 	require.True(t, ok, "AgentExecution Start event should have been recorded")
 	assert.Equal(t, "my-agent", data["agent"], "expected bare Name, not FullName")
+}
+
+func approvalConfig(required bool, timeout, onTimeout string) *arkv1alpha1.ToolApprovalConfig {
+	config := &arkv1alpha1.ToolApprovalConfig{Required: required, OnTimeout: onTimeout}
+	if timeout != "" {
+		duration, err := time.ParseDuration(timeout)
+		if err != nil {
+			panic(err)
+		}
+		config.Timeout = &metav1.Duration{Duration: duration}
+	}
+	return config
+}
+
+func registryWithToolApproval(name string, config *arkv1alpha1.ToolApprovalConfig) *ToolRegistry {
+	registry := &ToolRegistry{toolApproval: map[string]*arkv1alpha1.ToolApprovalConfig{}}
+	if config != nil {
+		registry.toolApproval[name] = config
+	}
+	return registry
+}
+
+func TestBuildApprovalMapToolLevelOnly(t *testing.T) {
+	agentTools := []arkv1alpha1.AgentTool{{Type: "mcp", Name: "write-file"}}
+	registry := registryWithToolApproval("write-file", approvalConfig(true, "5m", "reject"))
+
+	approvalMap := buildApprovalMap(agentTools, registry)
+
+	require.Contains(t, approvalMap, "write-file")
+	assert.True(t, approvalMap["write-file"].Required)
+	assert.Equal(t, 5*time.Minute, approvalMap["write-file"].Timeout.Duration)
+}
+
+func TestBuildApprovalMapAgentLevelOnly(t *testing.T) {
+	agentTools := []arkv1alpha1.AgentTool{
+		{Type: "mcp", Name: "write-file", Approval: approvalConfig(true, "30s", "proceed")},
+	}
+	registry := registryWithToolApproval("write-file", nil)
+
+	approvalMap := buildApprovalMap(agentTools, registry)
+
+	require.Contains(t, approvalMap, "write-file")
+	assert.Equal(t, 30*time.Second, approvalMap["write-file"].Timeout.Duration)
+	assert.Equal(t, "proceed", approvalMap["write-file"].OnTimeout)
+}
+
+func TestBuildApprovalMapAgentCannotDropToolGate(t *testing.T) {
+	// A tool marked risky stays gated even if the agent's reference says otherwise.
+	agentTools := []arkv1alpha1.AgentTool{
+		{Type: "mcp", Name: "write-file", Approval: approvalConfig(false, "", "")},
+	}
+	registry := registryWithToolApproval("write-file", approvalConfig(true, "5m", "reject"))
+
+	approvalMap := buildApprovalMap(agentTools, registry)
+
+	require.Contains(t, approvalMap, "write-file")
+	assert.True(t, approvalMap["write-file"].Required)
+}
+
+func TestBuildApprovalMapAgentOverridesTimeout(t *testing.T) {
+	agentTools := []arkv1alpha1.AgentTool{
+		{Type: "mcp", Name: "write-file", Approval: approvalConfig(false, "30s", "proceed")},
+	}
+	registry := registryWithToolApproval("write-file", approvalConfig(true, "5m", "reject"))
+
+	approvalMap := buildApprovalMap(agentTools, registry)
+
+	require.Contains(t, approvalMap, "write-file")
+	assert.Equal(t, 30*time.Second, approvalMap["write-file"].Timeout.Duration)
+	assert.Equal(t, "proceed", approvalMap["write-file"].OnTimeout)
+}
+
+func TestBuildApprovalMapToolLevelDoesNotMutateSource(t *testing.T) {
+	toolConfig := approvalConfig(true, "5m", "reject")
+	agentTools := []arkv1alpha1.AgentTool{
+		{Type: "mcp", Name: "write-file", Approval: approvalConfig(false, "30s", "proceed")},
+	}
+	registry := registryWithToolApproval("write-file", toolConfig)
+
+	buildApprovalMap(agentTools, registry)
+
+	assert.Equal(t, 5*time.Minute, toolConfig.Timeout.Duration)
+	assert.Equal(t, "reject", toolConfig.OnTimeout)
+}
+
+func TestBuildApprovalMapSkipsUngatedTools(t *testing.T) {
+	agentTools := []arkv1alpha1.AgentTool{
+		{Type: "mcp", Name: "list-directory"},
+		{Type: "mcp", Name: "read-text-file", Approval: approvalConfig(false, "5m", "reject")},
+	}
+	registry := registryWithToolApproval("write-file", approvalConfig(true, "5m", "reject"))
+
+	approvalMap := buildApprovalMap(agentTools, registry)
+
+	assert.Empty(t, approvalMap)
+}
+
+func TestBuildApprovalMapUsesExposedNameForPartialTools(t *testing.T) {
+	// A partial tool is exposed under agentTool.Name while the CRD keeps its own name,
+	// and requiresApproval is called with the exposed name the model saw.
+	agentTools := []arkv1alpha1.AgentTool{{
+		Type:    "mcp",
+		Name:    "write-report",
+		Partial: &arkv1alpha1.ToolPartial{Name: "file-gateway-write-file"},
+	}}
+	registry := registryWithToolApproval("write-report", approvalConfig(true, "5m", "reject"))
+
+	approvalMap := buildApprovalMap(agentTools, registry)
+
+	require.Contains(t, approvalMap, "write-report")
+	assert.NotContains(t, approvalMap, "file-gateway-write-file")
+}
+
+func TestRequiresApprovalUsesMergedMap(t *testing.T) {
+	agent := &Agent{approvalRequiredTools: buildApprovalMap(
+		[]arkv1alpha1.AgentTool{{Type: "mcp", Name: "write-file"}},
+		registryWithToolApproval("write-file", approvalConfig(true, "5m", "reject")),
+	)}
+
+	assert.NotNil(t, agent.requiresApproval("write-file", "{}"))
+	assert.Nil(t, agent.requiresApproval("list-directory", "{}"))
+}
+
+func TestHandleApprovalRequiredWithNilTimeout(t *testing.T) {
+	// Timeout is optional, so an Agent applied before it had a default stores nil.
+	// Dereferencing it here used to panic the request goroutine.
+	handler := newTestHandler()
+	state := &executionState{conversationId: "conv-1"}
+	approvalErr := &ApprovalRequiredError{
+		ToolCalls: []ToolCall{{ID: "call-1", Function: openai.ChatCompletionMessageToolCallFunction{Name: "write-file"}}},
+		Config:    &arkv1alpha1.ToolApprovalConfig{Required: true, OnTimeout: "reject"},
+		Context:   &ExecutionContext{AgentName: "writer"},
+	}
+
+	result := handler.handleApprovalRequired(context.Background(), state, approvalErr)
+
+	require.NotNil(t, result)
+	task, ok := result.Result.(*protocol.Task)
+	require.True(t, ok)
+	assert.Equal(t, "", task.Metadata["timeout"])
+	assert.Equal(t, "reject", task.Metadata["onTimeout"])
+}
+
+func TestHandleApprovalRequiredWithTimeout(t *testing.T) {
+	handler := newTestHandler()
+	state := &executionState{conversationId: "conv-1"}
+	approvalErr := &ApprovalRequiredError{
+		ToolCalls: []ToolCall{{ID: "call-1", Function: openai.ChatCompletionMessageToolCallFunction{Name: "write-file"}}},
+		Config:    approvalConfig(true, "5m", "reject"),
+		Context:   &ExecutionContext{AgentName: "writer"},
+	}
+
+	result := handler.handleApprovalRequired(context.Background(), state, approvalErr)
+
+	task, ok := result.Result.(*protocol.Task)
+	require.True(t, ok)
+	assert.Equal(t, "5m0s", task.Metadata["timeout"])
+}
+
+func sensitivePathConfig() *arkv1alpha1.ToolApprovalConfig {
+	return &arkv1alpha1.ToolApprovalConfig{
+		Required:  true,
+		OnTimeout: "reject",
+		ArgumentMatches: []arkv1alpha1.ArgumentMatch{
+			{Argument: "path", Pattern: `^/var/run/secrets|^/proc/`},
+		},
+	}
+}
+
+func TestRequiresApprovalGatesMatchingArgument(t *testing.T) {
+	agent := &Agent{approvalRequiredTools: map[string]*arkv1alpha1.ToolApprovalConfig{
+		"file-gateway-read-file": sensitivePathConfig(),
+	}}
+
+	got := agent.requiresApproval(
+		"file-gateway-read-file",
+		`{"path":"/var/run/secrets/kubernetes.io/serviceaccount/token"}`,
+	)
+	assert.NotNil(t, got, "sensitive path must be gated")
+}
+
+func TestRequiresApprovalSkipsNonMatchingArgument(t *testing.T) {
+	agent := &Agent{approvalRequiredTools: map[string]*arkv1alpha1.ToolApprovalConfig{
+		"file-gateway-read-file": sensitivePathConfig(),
+	}}
+
+	got := agent.requiresApproval("file-gateway-read-file", `{"path":"/uploads/report.md"}`)
+	assert.Nil(t, got, "a normal document read must stay automatic")
+}
+
+func TestRequiresApprovalWithoutMatchersGatesEveryCall(t *testing.T) {
+	agent := &Agent{approvalRequiredTools: map[string]*arkv1alpha1.ToolApprovalConfig{
+		"run-command": approvalConfig(true, "5m", "reject"),
+	}}
+
+	assert.NotNil(t, agent.requiresApproval("run-command", `{"command":"ls"}`))
+	assert.NotNil(t, agent.requiresApproval("run-command", `{"command":"rm -rf /"}`))
+}
+
+func TestRequiresApprovalFailsClosedOnUnparseableArguments(t *testing.T) {
+	agent := &Agent{approvalRequiredTools: map[string]*arkv1alpha1.ToolApprovalConfig{
+		"file-gateway-read-file": sensitivePathConfig(),
+	}}
+
+	got := agent.requiresApproval("file-gateway-read-file", "not json")
+	assert.NotNil(t, got, "a gated tool with unparseable arguments must be held, not waved through")
+}
+
+func TestMergeArgumentMatchesGateAllWinsOverMatchers(t *testing.T) {
+	fromTool := sensitivePathConfig()
+	fromAgent := approvalConfig(true, "5m", "reject") // Required, no matchers -> gate all
+
+	merged := mergeApprovalConfig(fromTool, fromAgent)
+
+	require.NotNil(t, merged)
+	assert.Empty(t, merged.ArgumentMatches, "a Required side with no matchers must widen the gate to all calls")
+}
+
+func TestMergeArgumentMatchesUnionsBothSides(t *testing.T) {
+	fromTool := &arkv1alpha1.ToolApprovalConfig{
+		Required:        true,
+		ArgumentMatches: []arkv1alpha1.ArgumentMatch{{Argument: "path", Pattern: "^/proc/"}},
+	}
+	fromAgent := &arkv1alpha1.ToolApprovalConfig{
+		Required:        true,
+		ArgumentMatches: []arkv1alpha1.ArgumentMatch{{Argument: "path", Pattern: "^/var/run/secrets"}},
+	}
+
+	merged := mergeApprovalConfig(fromTool, fromAgent)
+
+	require.NotNil(t, merged)
+	assert.Len(t, merged.ArgumentMatches, 2, "matchers from both sides must be unioned")
 }

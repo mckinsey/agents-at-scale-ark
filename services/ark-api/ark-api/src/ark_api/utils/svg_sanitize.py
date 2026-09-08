@@ -26,7 +26,6 @@ DANGEROUS_LOCAL_NAMES = frozenset({
     "animate",
     "animatetransform",
     "animatemotion",
-    "style",
 })
 
 # Well under sys.getrecursionlimit(), which ET.tostring() consumes when serializing.
@@ -34,10 +33,14 @@ MAX_SVG_DEPTH = 256
 
 EVENT_HANDLER_ATTR = re.compile(r"^on[a-z]+", re.I)
 HREF_SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*:", re.I)
-UNSAFE_STYLE = re.compile(r"expression\s*\(|javascript:", re.I)
+UNSAFE_STYLE = re.compile(r"expression\s*\(|javascript:|@import", re.I)
+# Only the url( opener is matched; the target is scanned for so the cost stays linear.
+CSS_URL_OPEN = re.compile(r"url\s*\(", re.I)
+# Embedded rasters are inert as paint values; SVG-in-data-URI is a document, so it is excluded.
+SAFE_DATA_URL = re.compile(r"^data:image/(?!svg\+xml)[a-z0-9.+-]+[;,]", re.I)
 # Browsers drop these before parsing a scheme, so "java&#9;script:" runs as "javascript:".
 URL_IGNORED_CHARS = re.compile(r"[\x00-\x1f\x7f]")
-FILENAME_ATTR = re.compile(r'filename="([^"]+)"', re.I)
+FILENAME_ATTR = re.compile(r"""filename\s*=\s*(?:"([^"]*)"|'([^']*)'|([^;\r\n]*))""", re.I)
 CONTENT_TYPE_ATTR = re.compile(r"content-type:\s*([^\r\n]+)", re.I)
 
 
@@ -83,18 +86,60 @@ def is_svg_payload(filename: str | None, content_type: str | None, content: byte
 
 
 def _is_safe_href(value: str) -> bool:
-    """Allow only same-document fragment refs and scheme-less relative paths.
+    """Allow same-document fragment refs, scheme-less relative paths, inline rasters.
 
-    Anything with a URL scheme (javascript:, data:, http:, ...) or a
-    protocol-relative prefix (//) is treated as unsafe and stripped, which blocks
-    both script execution and external resource loading (data exfiltration).
+    Anything with a URL scheme (javascript:, http:, ...) or a protocol-relative
+    prefix (//) is treated as unsafe and stripped, which blocks both script
+    execution and external resource loading (data exfiltration). An inline
+    data:image/* payload defeats neither -- it cannot execute and is self-contained,
+    so it has no egress channel -- and is allowed; data:image/svg+xml is a document
+    rather than a raster, so it stays blocked. Governs CSS url() targets too.
     """
-    stripped = URL_IGNORED_CHARS.sub("", value).strip()
+    # Browsers fold backslashes to slashes for special schemes, so "\\evil.com"
+    # would resolve as "//evil.com" against an https base.
+    stripped = URL_IGNORED_CHARS.sub("", value).replace("\\", "/").strip()
     if not stripped or stripped.startswith("#"):
         return True
     if stripped.startswith("//"):
         return False
+    if SAFE_DATA_URL.match(stripped):
+        return True
     return not HREF_SCHEME.match(stripped)
+
+
+def _css_url_targets(css: str):
+    """Yield each url() target; None for an unterminated url( so callers fail closed.
+
+    Scanned rather than matched with a single regex: a pattern that has to find the
+    closing paren from every url( start is quadratic on unbalanced input, and this
+    runs synchronously in the request handler. Each find resumes past the previous
+    close paren, so the whole pass is linear.
+    """
+    pos = 0
+    while (match := CSS_URL_OPEN.search(css, pos)) is not None:
+        end = css.find(")", match.end())
+        if end == -1:
+            yield None
+            return
+        yield css[match.end() : end].strip().strip("\"'")
+        pos = end + 1
+
+
+def _has_unsafe_css(value: str) -> bool:
+    """Reject CSS that executes script, imports, or pulls in an external reference.
+
+    url() targets are held to the same policy as href: fragments and scheme-less
+    relative paths are allowed, anything with a scheme or a protocol-relative
+    prefix is not. CSS escapes are not decoded, so an escaped scheme
+    (url(\\68 ttp://...)) still reaches the browser as an external fetch.
+    """
+    cleaned = URL_IGNORED_CHARS.sub("", value)
+    if UNSAFE_STYLE.search(cleaned):
+        return True
+    return any(
+        target is None or not _is_safe_href(target)
+        for target in _css_url_targets(cleaned)
+    )
 
 
 def _sanitize_attributes(elem: ET.Element) -> None:
@@ -105,13 +150,11 @@ def _sanitize_attributes(elem: ET.Element) -> None:
         if EVENT_HANDLER_ATTR.match(local_attr):
             del elem.attrib[attr]
             continue
-        if local_attr in ("href", "xlink:href") or attr_lower.endswith("}href"):
+        if local_attr == "href":
             if not _is_safe_href(elem.attrib[attr]):
                 del elem.attrib[attr]
             continue
-        if local_attr == "style" and UNSAFE_STYLE.search(
-            URL_IGNORED_CHARS.sub("", elem.attrib[attr])
-        ):
+        if local_attr == "style" and _has_unsafe_css(elem.attrib[attr]):
             del elem.attrib[attr]
 
 
@@ -122,6 +165,11 @@ def _sanitize_element(root: ET.Element) -> None:
         elem, depth = stack.pop()
         if depth > MAX_SVG_DEPTH:
             raise ValueError(f"SVG nesting exceeds {MAX_SVG_DEPTH} levels")
+        # Checked on the popped element, not on children, so a root <style> is covered
+        # by the same pass. Kept so legitimate stylesheets still paint; cleared wholesale
+        # when any rule is unsafe, matching how an unsafe style= drops the whole attribute.
+        if _local_name(elem.tag) == "style" and _has_unsafe_css(elem.text or ""):
+            elem.text = ""
         # list() snapshots: removing from a live element skips the next sibling.
         for child in list(elem):  # NOSONAR - iterating a snapshot while mutating
             if _local_name(child.tag) in DANGEROUS_LOCAL_NAMES:

@@ -196,6 +196,7 @@ func (h *HTTPExecutor) resolveRequestBody(ctx context.Context, httpSpec *arkv1al
 type ToolRegistry struct {
 	tools             map[string]ToolDefinition
 	executors         map[string]ToolExecutor
+	toolApproval      map[string]*arkv1alpha1.ToolApprovalConfig
 	mcpPool           *arkmcp.MCPClientPool
 	mcpSettings       map[string]arkmcp.MCPSettings
 	telemetryRecorder telemetry.ToolRecorder
@@ -206,11 +207,21 @@ func NewToolRegistry(mcpSettings map[string]arkmcp.MCPSettings, telemetryRecorde
 	return &ToolRegistry{
 		tools:             make(map[string]ToolDefinition),
 		executors:         make(map[string]ToolExecutor),
+		toolApproval:      make(map[string]*arkv1alpha1.ToolApprovalConfig),
 		mcpPool:           arkmcp.NewMCPClientPool(arkmcp.WithToolCallRetry(mcpToolCallRetryConfig())),
 		mcpSettings:       mcpSettings,
 		telemetryRecorder: telemetryRecorder,
 		eventingRecorder:  eventingRecorder,
 	}
+}
+
+// ToolApproval returns the approval config declared on the Tool CRD, keyed by the
+// name the agent exposes to the model.
+func (tr *ToolRegistry) ToolApproval(exposedName string) *arkv1alpha1.ToolApprovalConfig {
+	if tr == nil || tr.toolApproval == nil {
+		return nil
+	}
+	return tr.toolApproval[exposedName]
 }
 
 func (tr *ToolRegistry) RegisterTool(def ToolDefinition, executor ToolExecutor) {
@@ -221,11 +232,13 @@ func (tr *ToolRegistry) RegisterTool(def ToolDefinition, executor ToolExecutor) 
 func (tr *ToolRegistry) RemoveTool(name string) {
 	delete(tr.tools, name)
 	delete(tr.executors, name)
+	delete(tr.toolApproval, name)
 }
 
 func (tr *ToolRegistry) ClearTools() {
 	clear(tr.tools)
 	clear(tr.executors)
+	clear(tr.toolApproval)
 }
 
 func (tr *ToolRegistry) GetToolDefinitions() []ToolDefinition {

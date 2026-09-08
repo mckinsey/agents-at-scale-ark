@@ -3,6 +3,7 @@ package validation
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -282,6 +283,40 @@ func (v *Validator) ValidateValueSource(ctx context.Context, vs *arkv1alpha1.Val
 			return fmt.Errorf("%s: %w", fieldName, err)
 		}
 	}
+	return nil
+}
+
+// ValidateApprovalConfig checks a tool approval block. Shared by the Agent path, where
+// approval sits on the agent's tool reference, and the Tool path, where it applies to
+// every agent using that tool.
+func ValidateApprovalConfig(approval *arkv1alpha1.ToolApprovalConfig, contextPrefix string) error {
+	if approval == nil {
+		return nil
+	}
+
+	// Validate timeout is positive if specified
+	if approval.Timeout != nil && approval.Timeout.Duration <= 0 {
+		return fmt.Errorf("%sapproval.timeout must be a positive duration", contextPrefix)
+	}
+
+	// Validate onTimeout enum
+	if approval.OnTimeout != "" && approval.OnTimeout != "reject" && approval.OnTimeout != "proceed" {
+		return fmt.Errorf("%sapproval.onTimeout must be 'reject' or 'proceed'", contextPrefix)
+	}
+
+	// Validate argument matchers: each needs a field name and a compilable pattern.
+	for i, matcher := range approval.ArgumentMatches {
+		if matcher.Argument == "" {
+			return fmt.Errorf("%sapproval.argumentMatches[%d].argument must not be empty", contextPrefix, i)
+		}
+		if matcher.Pattern == "" {
+			return fmt.Errorf("%sapproval.argumentMatches[%d].pattern must not be empty", contextPrefix, i)
+		}
+		if _, err := regexp.Compile(matcher.Pattern); err != nil {
+			return fmt.Errorf("%sapproval.argumentMatches[%d].pattern is not a valid regular expression: %w", contextPrefix, i, err)
+		}
+	}
+
 	return nil
 }
 

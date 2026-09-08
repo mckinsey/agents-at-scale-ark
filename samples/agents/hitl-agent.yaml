@@ -18,8 +18,13 @@ spec:
 
     Just call the appropriate tool when requested. The system will automatically handle approval if needed.
   tools:
+    # Every tool that changes the filesystem requires approval; reads do not.
     - type: mcp
       name: file-gateway-create-directory
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
 
     - type: mcp
       name: file-gateway-write-file
@@ -30,15 +35,16 @@ spec:
 
     - type: mcp
       name: file-gateway-move-file
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
 
     - type: mcp
       name: file-gateway-read-text-file
 
     - type: mcp
       name: file-gateway-list-directory
-
-    - type: mcp
-      name: file-gateway-create-directory
 
     - type: mcp
       name: file-gateway-list-allowed-directories
