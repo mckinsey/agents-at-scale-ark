@@ -209,7 +209,7 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
-	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
+	if obj.Spec.Cancel && !isTerminalPhase(obj.Status.Phase) {
 		r.cleanupExistingOperation(req.NamespacedName)
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{}, err

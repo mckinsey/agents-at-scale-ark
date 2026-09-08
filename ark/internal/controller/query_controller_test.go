@@ -591,6 +591,47 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 		})
 	})
 
+	Context("spec.cancel on a terminal query", func() {
+		var (
+			ctx context.Context
+			r   *QueryReconciler
+		)
+		BeforeEach(func() {
+			ctx = context.Background()
+			r = &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		})
+
+		reconcile := func(q *arkv1alpha1.Query) *arkv1alpha1.Query {
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
+			_, _ = r.handleQueryExecution(ctx, req, *q)
+			out := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, out)).To(Succeed())
+			return out
+		}
+
+		DescribeTable(
+			"cancel does not overwrite a terminal phase",
+			func(name, phase, wantReason string) {
+				q := newTimeoutQuery(name).seed(ctx, k8sClient, "")
+				Expect(r.updateStatus(ctx, q, phase)).To(Succeed())
+
+				refetched := &arkv1alpha1.Query{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: q.Name, Namespace: q.Namespace}, refetched)).To(Succeed())
+				terminalRV := refetched.ResourceVersion
+
+				refetched.Spec.Cancel = true
+				after := reconcile(refetched)
+
+				Expect(after.Status.Phase).To(Equal(phase), "terminal phase must be preserved")
+				Expect(after.ResourceVersion).To(Equal(terminalRV), "no status write should be issued when cancelling a terminal query")
+				Expect(findCompletedCondition(after).Reason).To(Equal(wantReason), "condition reason must not be clobbered to QueryCanceled")
+			},
+			Entry("done stays done", "cancel-done", statusDone, "QuerySucceeded"),
+			Entry("error stays error", "cancel-error", statusError, "QueryErrored"),
+			Entry("canceled stays canceled", "cancel-canceled", statusCanceled, "QueryCanceled"),
+		)
+	})
+
 	Context("safety-net requeue", func() {
 		It("arms a bounded requeue for an in-flight op without spawning a duplicate", func() {
 			r := &QueryReconciler{
