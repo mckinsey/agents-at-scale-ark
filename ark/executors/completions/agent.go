@@ -172,7 +172,7 @@ func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, e
 	a.Model.OutputSchema = a.OutputSchema
 	a.Model.SchemaName = fmt.Sprintf("%.64s", fmt.Sprintf("namespace-%s-agent-%s", a.Namespace, a.Name))
 
-	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools, toolChoice)
+	response, err := a.Model.ChatCompletion(ctx, withoutOwnAgentName(agentMessages, a.Name), eventStream, 1, tools, toolChoice)
 	if err != nil {
 		return nil, fmt.Errorf("agent %s execution failed: %w", a.FullName(), err)
 	}
@@ -192,6 +192,21 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 	}
 
 	return assistantMessage
+}
+
+func withoutOwnAgentName(messages []Message, agentName string) []Message {
+	result := make([]Message, len(messages))
+	copy(result, messages)
+	for i := range result {
+		assistant := result[i].OfAssistant
+		if assistant == nil || assistant.Name.Value != agentName {
+			continue
+		}
+		clone := *assistant
+		clone.Name = param.Opt[string]{}
+		result[i].OfAssistant = &clone
+	}
+	return result
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
