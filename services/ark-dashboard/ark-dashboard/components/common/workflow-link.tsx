@@ -9,7 +9,7 @@ interface WorkflowLinkProps {
 
 export function WorkflowLink({ workflowName }: WorkflowLinkProps) {
   const { push } = useNamespacedNavigation();
-  const sessionsUrl = `/sessions?workflowName=${encodeURIComponent(workflowName)}`;
+  const sessionsUrl = `/workflow-runs?workflowName=${encodeURIComponent(workflowName)}`;
 
   return (
     <a

@@ -166,6 +166,40 @@ check_absent   "servicemonitor drops cert refs without certmanager" 'metrics-ser
 all_nometrics="$(render_chart --set metrics.enable=false)"
 check_absent "no servicemonitor when metrics disabled" 'kind: ServiceMonitor' "$all_nometrics"
 
+# --- chart-apiserver: metrics endpoint gating ---
+
+APISERVER_CHART_DIR="$ARK_DIR/dist/chart-apiserver"
+
+render_apiserver() {
+    helm template test-release "$APISERVER_CHART_DIR" \
+        --api-versions "$PROM_CAP" \
+        --set postgresql.host=pg \
+        --set postgresql.user=ark \
+        --set postgresql.passwordSecretName=pg-secret \
+        "$@"
+}
+
+echo ""
+echo "Validating chart value rendering for chart-apiserver..."
+
+# Metrics are opt-in; the default render must not serve, expose or scrape anything.
+as_default="$(render_apiserver)"
+check_contains "apiserver metrics disabled by default" '--metrics-bind-address=0' "$as_default"
+check_absent   "no metrics-secure flag by default"     '--metrics-secure'         "$as_default"
+check_absent   "no metrics port by default"            'name: metrics'            "$as_default"
+check_absent   "no apiserver servicemonitor by default" 'kind: ServiceMonitor'    "$as_default"
+
+as_metrics="$(render_apiserver --set metrics.enabled=true)"
+check_contains "apiserver metrics enabled binds :8443" '--metrics-bind-address=:8443' "$as_metrics"
+check_contains "apiserver metrics secure by default"   '--metrics-secure=true'        "$as_metrics"
+check_contains "apiserver metrics port exposed"        'name: metrics'                "$as_metrics"
+check_absent   "apiserver servicemonitor still gated"  'kind: ServiceMonitor'         "$as_metrics"
+
+as_sm="$(render_apiserver --set metrics.enabled=true --set metrics.serviceMonitor.enabled=true)"
+check_contains "apiserver servicemonitor renders when enabled" 'kind: ServiceMonitor'     "$as_sm"
+check_contains "apiserver servicemonitor scrapes https"        'scheme: https'            "$as_sm"
+check_contains "apiserver servicemonitor skips verify"         'insecureSkipVerify: true' "$as_sm"
+
 echo ""
 if [[ "$FAILED" -eq 0 ]]; then
     echo -e "${GREEN}All chart value checks passed${NC}"
