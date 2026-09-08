@@ -61,8 +61,8 @@ import { SecretFormMode } from '@/components/forms/secret-form/types';
 const field = (name: string) => screen.getByPlaceholderText(name);
 
 const NAME_FIELD = 'e.g., api-key-production';
-const VALUE_FIELD = 'Enter the secret token';
-const DESCRIPTION_FIELD = 'e.g., Production API key';
+const VALUE_FIELD = 'Enter the secret value';
+const DESCRIPTION_FIELD = 'e.g., API key used by the production models';
 const ALIAS_FIELD = 'e.g., api-key';
 const LABEL_FIELD = 'Type a label and press Enter';
 

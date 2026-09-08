@@ -22,7 +22,7 @@ import { LabelsField } from '../fields/labels-field';
 import { type SecretFormProps } from './types';
 import { useSecretForm } from './use-secret-form';
 
-const SKELETON_FIELDS = ['name', 'password', 'description', 'alias'];
+const SKELETON_FIELDS = ['name', 'description', 'alias', 'password'];
 
 const RequiredMarker = () => (
   <span aria-hidden="true" className="text-fg-secondary">
@@ -108,33 +108,8 @@ export function SecretForm({
                     {...field}
                   />
                   <FieldDescription id={`${nameFieldId}-description`}>
-                    Resources reference the secret by this name. It cannot be
-                    changed after creation.
+                    Secret names cannot be changed after creation
                   </FieldDescription>
-                  <FieldError>{fieldState.error?.message}</FieldError>
-                </FieldSet>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field, fieldState }) => (
-                <FieldSet className="gap-2">
-                  <FieldTitle>
-                    Value {!isEdit && <RequiredMarker />}
-                  </FieldTitle>
-                  <Input
-                    id={passwordFieldId}
-                    type="password"
-                    variant="inline"
-                    placeholder={
-                      isEdit ? 'Leave blank to keep unchanged' : 'Enter the secret token'
-                    }
-                    disabled={isDisabled}
-                    aria-invalid={!!fieldState.error}
-                    {...field}
-                  />
                   <FieldError>{fieldState.error?.message}</FieldError>
                 </FieldSet>
               )}
@@ -148,7 +123,7 @@ export function SecretForm({
                   <FieldTitle>Description</FieldTitle>
                   <Input
                     variant="inline"
-                    placeholder="e.g., Production API key"
+                    placeholder="e.g., API key used by the production models"
                     disabled={isDisabled}
                     aria-invalid={!!fieldState.error}
                     {...field}
@@ -172,6 +147,29 @@ export function SecretForm({
                   invalid={!!fieldState.error}
                   error={fieldState.error?.message}
                 />
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field, fieldState }) => (
+                <FieldSet className="gap-2">
+                  <FieldTitle>
+                    Value {!isEdit && <RequiredMarker />}
+                  </FieldTitle>
+                  <Input
+                    id={passwordFieldId}
+                    type="password"
+                    variant="inline"
+                    autoComplete="new-password"
+                    placeholder="Enter the secret value"
+                    disabled={isDisabled}
+                    aria-invalid={!!fieldState.error}
+                    {...field}
+                  />
+                  <FieldError>{fieldState.error?.message}</FieldError>
+                </FieldSet>
               )}
             />
 
