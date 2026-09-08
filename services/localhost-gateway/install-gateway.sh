@@ -26,11 +26,14 @@ echo "=== Starting localhost-gateway installation at $(date) ==="
 echo "Installing Gateway API CRDs..."
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 
-echo "Installing nginx-gateway-fabric CRDs..."
-kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml
-
 echo "Updating helm dependencies..."
-(cd "${LOCALHOST_GATEWAY_SERVICE_DIR}/chart" && helm dependency update)
+(cd "${LOCALHOST_GATEWAY_SERVICE_DIR}/chart" && helm dependency build)
+
+echo "Installing nginx-gateway-fabric CRDs from chart dependency..."
+CRD_TMP="$(mktemp -d)"
+tar -xzf "${LOCALHOST_GATEWAY_SERVICE_DIR}"/chart/charts/nginx-gateway-fabric-*.tgz -C "${CRD_TMP}" nginx-gateway-fabric/crds
+kubectl apply -f "${CRD_TMP}/nginx-gateway-fabric/crds/"
+rm -rf "${CRD_TMP}"
 
 echo "Installing localhost-gateway..."
 kubectl create namespace "${LOCALHOST_GATEWAY_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
