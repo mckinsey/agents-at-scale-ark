@@ -92,6 +92,18 @@ export default {
     title: 'Manage tenants and namespaces',
     href: '/operations-guide/tenant-namespace-management'
   },
+  'postgres-storage': {
+    title: 'Use the PostgreSQL storage backend',
+    href: '/operations-guide/postgres-storage-backend'
+  },
+  monitoring: {
+    title: 'Monitor with Prometheus and Grafana',
+    href: '/operations-guide/monitoring'
+  },
+  'disaster-recovery': {
+    title: 'Back up and recover Ark',
+    href: '/operations-guide/disaster-recovery'
+  },
   'operate-marketplace': {
     title: 'Marketplace',
     href: '/operations-guide/marketplace'
@@ -99,6 +111,22 @@ export default {
   provisioning: {
     title: 'Cloud deployments',
     href: '/operations-guide/provisioning'
+  },
+
+  '---operate-integrations': { type: 'separator', title: 'Integrations' },
+  'mcp-oauth-callback': {
+    title: 'Configure the MCP OAuth callback',
+    href: '/operations-guide/mcp-oauth-callback'
+  },
+
+  '---operate-security': { type: 'separator', title: 'Security and assurance' },
+  'audit-trail': {
+    title: 'Audit who changed a resource',
+    href: '/operations-guide/audit-trail'
+  },
+  'model-url-security': {
+    title: 'Secure model base URLs',
+    href: '/operations-guide/model-url-security'
   }
 }
 
