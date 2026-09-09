@@ -630,6 +630,32 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			Entry("error stays error", "cancel-error", statusError, "QueryErrored"),
 			Entry("canceled stays canceled", "cancel-canceled", statusCanceled, "QueryCanceled"),
 		)
+
+		It("does not clobber a query that reached done after the reconcile snapshot was taken", func() {
+			q := newTimeoutQuery("cancel-refetch-race").seed(ctx, k8sClient, "")
+			q.Status.Response = &arkv1alpha1.Response{
+				Target:  arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+				Content: "the completed answer",
+				Phase:   statusDone,
+			}
+			Expect(r.updateStatus(ctx, q, statusDone)).To(Succeed())
+
+			persisted := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: q.Name, Namespace: q.Namespace}, persisted)).To(Succeed())
+			terminalRV := persisted.ResourceVersion
+
+			staleSnapshot := persisted.DeepCopy()
+			staleSnapshot.Status.Phase = statusRunning
+			staleSnapshot.Spec.Cancel = true
+
+			after := reconcile(staleSnapshot)
+
+			Expect(after.Status.Phase).To(Equal(statusDone), "refetched terminal phase must win over the stale running snapshot")
+			Expect(after.ResourceVersion).To(Equal(terminalRV), "cancel must issue no status write once the refetch sees a terminal phase")
+			Expect(after.Status.Response).NotTo(BeNil())
+			Expect(after.Status.Response.Phase).To(Equal(statusDone), "the completed response must not be stranded under a canceled phase")
+			Expect(findCompletedCondition(after).Reason).To(Equal("QuerySucceeded"), "condition reason must not be clobbered to QueryCanceled")
+		})
 	})
 
 	Context("safety-net requeue", func() {

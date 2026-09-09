@@ -1088,6 +1088,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	// The executor needs the taskID to detect this is a resumption after approval
 	// and clears it after processing (handler.go).
 	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
+		if status == statusCanceled && isTerminalPhase(q.Status.Phase) {
+			return false
+		}
 		saved.restoreOnto(q)
 		q.Status.Phase = status
 		r.setConditionForPhase(q, status)
