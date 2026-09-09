@@ -2,6 +2,7 @@
 
 import { Suspense, useMemo } from 'react';
 
+import { AddMarketplaceButton } from './add-marketplace-dialog';
 import { ExecutionEnginesSettings } from './execution-engines-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
 import { ManageMarketplaceSettings } from './manage-marketplace-settings';
@@ -15,6 +16,7 @@ type SettingsContentProps = {
 type PageConfig = {
   title: string;
   component: React.ReactNode;
+  action?: React.ReactNode;
 };
 
 export function SettingsContent({ activePage }: SettingsContentProps) {
@@ -35,6 +37,7 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
       'manage-marketplace': {
         title: 'Manage marketplace',
         component: <ManageMarketplaceSettings />,
+        action: <AddMarketplaceButton />,
       },
     }),
     [],
@@ -45,10 +48,11 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
   return (
     <div className="bg-sidebar flex flex-1 flex-col overflow-hidden">
       <div className="px-8 pt-10">
-        <div className="mx-auto w-full max-w-[1600px]">
+        <div className="mx-auto flex w-full max-w-[1600px] items-start justify-between gap-4">
           <h1 className="headings-h2-regular text-fg-primary">
             {config.title}
           </h1>
+          {config.action}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-8 pt-5 pb-6">
