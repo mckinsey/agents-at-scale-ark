@@ -34,6 +34,11 @@ controllerManager:
     env:
       ARK_MODEL_PROBE_TIMEOUT_SECONDS: "60"
       ARK_A2A_DISCOVERY_TIMEOUT: "30"
+      # Fraction of the container memory limit used as the Go soft memory
+      # limit (GOMEMLIMIT), read from the cgroup at startup. Makes GC run
+      # before the hard cap so a burst working-set spike does not OOMKill
+      # the controller. Set to "off" to disable.
+      AUTOMEMLIMIT: "0.9"
     resources:
       limits:
         cpu: 500m

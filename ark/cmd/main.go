@@ -19,6 +19,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/record"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -127,6 +128,12 @@ func main() {
 	}
 
 	setupLog.Info("starting ark controller", "version", Version, "commit", GitCommit, "role", result.role)
+
+	if limit, err := memlimit.Set(); err != nil {
+		setupLog.Error(err, "failed to configure GOMEMLIMIT from cgroup memory limit")
+	} else {
+		setupLog.Info("configured GOMEMLIMIT", "bytes", limit)
+	}
 
 	if result.role == RolePostgresCleanup {
 		runPostgresCleanup()
