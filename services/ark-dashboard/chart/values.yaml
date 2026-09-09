@@ -57,10 +57,6 @@ app:
       value: ""  # Space-separated OAuth scopes; defaults to "openid email profile". Add "offline_access" for refresh tokens (e.g. Dex).
     - name: SESSION_MAX_AGE
       value: ""
-    - name: NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS
-      value: "600000" #10 mins
-    - name: NEXT_PUBLIC_FALLBACK_INACTIVITY_TIMEOUT
-      value: "1800000" #30 mins
     - name: AUTH_MODE
       value: "open"
     # Base URL of the Argo UI that "Open in Argo" links point at. Defaults to the
