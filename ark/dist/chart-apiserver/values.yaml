@@ -71,9 +71,8 @@ containerSecurityContext:
 
 terminationGracePeriodSeconds: 10
 
-# AUTOMEMLIMIT sets GOMEMLIMIT to this fraction of the container memory limit
-# (read from the cgroup at startup), so GC runs before the hard cap and the
-# apiserver is not OOMKilled under load. Set to "off" to disable.
+# AUTOMEMLIMIT sets GOMEMLIMIT to this fraction of the container memory limit.
+# Set to "off" to disable.
 extraEnv:
   AUTOMEMLIMIT: "0.9"
 
