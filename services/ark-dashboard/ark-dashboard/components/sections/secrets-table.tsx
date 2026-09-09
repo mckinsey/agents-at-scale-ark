@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Edit, Trash } from '@/components/icons';
+import { LabelsCell, TagOverflowList } from '@/components/sections/labels-cell';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
   Table,
@@ -14,13 +15,7 @@ import {
   TableRow,
   rowHoverOverlayClass,
 } from '@/components/ui/table';
-import { Tag } from '@/components/ui/tag';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import type { Model } from '@/lib/services/models';
 import type { Secret } from '@/lib/services/secrets';
 import { cn } from '@/lib/utils';
@@ -34,7 +29,6 @@ interface SecretsTableProps {
 }
 
 const MAX_VISIBLE_MODELS = 3;
-const MAX_VISIBLE_LABELS = 3;
 
 const COL = {
   name: 'w-[280px]',
@@ -56,46 +50,6 @@ function NameCell({ secret }: Readonly<{ secret: Secret }>) {
             Alias: {secret.alias}
           </span>
         </TruncatedTooltip>
-      )}
-    </div>
-  );
-}
-
-function LabelsCell({ labels }: Readonly<{ labels: readonly string[] }>) {
-  if (labels.length === 0) {
-    return <span className="text-fg-secondary text-sm leading-5">-</span>;
-  }
-
-  const visible = labels.slice(0, MAX_VISIBLE_LABELS);
-  const overflow = labels.length - visible.length;
-
-  return (
-    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
-      {visible.map(label => (
-        <Tag
-          key={label}
-          variant="primary"
-          size="sm"
-          className="max-w-[120px] overflow-hidden"
-          title={label}>
-          <span className="truncate">{label}</span>
-        </Tag>
-      ))}
-      {overflow > 0 && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Tag variant="primary" size="sm" className="shrink-0">
-              +{overflow}
-            </Tag>
-          </TooltipTrigger>
-          <TooltipContent>
-            <div className="flex flex-col gap-1">
-              {labels.slice(MAX_VISIBLE_LABELS).map(label => (
-                <span key={label}>{label}</span>
-              ))}
-            </div>
-          </TooltipContent>
-        </Tooltip>
       )}
     </div>
   );
@@ -151,42 +105,14 @@ function SecretStatus({ inUse }: Readonly<{ inUse: boolean }>) {
 }
 
 function ModelsInUse({ models }: Readonly<{ models: readonly Model[] }>) {
-  if (models.length === 0) {
-    return <span className="text-fg-secondary text-sm leading-5">-</span>;
-  }
-
-  const visible = models.slice(0, MAX_VISIBLE_MODELS);
-  const overflow = models.length - visible.length;
-
   return (
-    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
-      {visible.map(model => (
-        <Tag
-          key={model.id}
-          variant="primary"
-          size="sm"
-          className="max-w-[180px] overflow-hidden"
-          title={model.name}>
-          <span className="truncate">{model.name}</span>
-        </Tag>
-      ))}
-      {overflow > 0 && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Tag variant="primary" size="sm" className="shrink-0">
-              +{overflow}
-            </Tag>
-          </TooltipTrigger>
-          <TooltipContent>
-            <div className="flex flex-col gap-1">
-              {models.slice(MAX_VISIBLE_MODELS).map(model => (
-                <span key={model.id}>{model.name}</span>
-              ))}
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      )}
-    </div>
+    <TagOverflowList
+      items={models}
+      maxVisible={MAX_VISIBLE_MODELS}
+      getKey={model => model.id}
+      getLabel={model => model.name}
+      tagClassName="max-w-[180px] overflow-hidden"
+    />
   );
 }
 

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { Edit, Trash } from '@/components/icons';
+import { LabelsCell } from '@/components/sections/labels-cell';
 import { ConfigurationDeleteDialog } from '@/components/sections/configuration-delete-dialog';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
@@ -14,13 +15,7 @@ import {
   TableRow,
   rowHoverOverlayClass,
 } from '@/components/ui/table';
-import { Tag } from '@/components/ui/tag';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import type { Configuration } from '@/lib/services/configurations';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -29,8 +24,6 @@ interface ConfigurationsTableProps {
   readonly onEdit: (configuration: Configuration) => void;
   readonly onDelete: (name: string) => void;
 }
-
-const MAX_VISIBLE_LABELS = 3;
 
 const TOOLTIP_MAX_CHARACTERS = 600;
 const TOOLTIP_MAX_LINES = 12;
@@ -90,46 +83,6 @@ function ValueCell({ value }: Readonly<{ value: string }>) {
         {trimmed.replaceAll(/\s+/g, ' ')}
       </span>
     </TruncatedTooltip>
-  );
-}
-
-function LabelsCell({ labels }: Readonly<{ labels: readonly string[] }>) {
-  if (labels.length === 0) {
-    return <span className="text-fg-secondary text-sm leading-5">-</span>;
-  }
-
-  const visible = labels.slice(0, MAX_VISIBLE_LABELS);
-  const overflow = labels.length - visible.length;
-
-  return (
-    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
-      {visible.map(label => (
-        <Tag
-          key={label}
-          variant="primary"
-          size="sm"
-          className="max-w-[120px] overflow-hidden"
-          title={label}>
-          <span className="truncate">{label}</span>
-        </Tag>
-      ))}
-      {overflow > 0 && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Tag variant="primary" size="sm" className="shrink-0">
-              +{overflow}
-            </Tag>
-          </TooltipTrigger>
-          <TooltipContent>
-            <div className="flex flex-col gap-1">
-              {labels.slice(MAX_VISIBLE_LABELS).map(label => (
-                <span key={label}>{label}</span>
-              ))}
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      )}
-    </div>
   );
 }
 
