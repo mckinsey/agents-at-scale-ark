@@ -9,12 +9,13 @@ import { SIGNIN_PATH } from '@/lib/constants/auth';
 import { useConditionalInterval } from './useConditionalInterval';
 import { useWindowFocus } from './useWindowFocus';
 
-//Typically an access_token lives for 30 mins
-//Make sure that it gets refreshed before it would expire
+//Backstop only: the proxy refreshes server-side before every ark-api call.
+//Keep this below the shortest access-token lifetime we support (5 mins).
+//NEXT_PUBLIC_* is inlined at build time, so this cannot be set at runtime.
 const tokenRefreshIntervalFromEnv = parseInt(
   process.env.NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS || '',
 );
-const defaultTokenRefreshInterval = 10 * 60 * 1000; //10mins
+const defaultTokenRefreshInterval = 4 * 60 * 1000; //4mins
 const tokenRefreshInterval = isNaN(tokenRefreshIntervalFromEnv)
   ? defaultTokenRefreshInterval
   : tokenRefreshIntervalFromEnv;
