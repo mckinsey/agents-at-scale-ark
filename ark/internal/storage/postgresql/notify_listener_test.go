@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"k8s.io/apimachinery/pkg/runtime"
 	"mckinsey.com/ark/internal/storage"
@@ -63,11 +65,15 @@ func TestHandleNotification_EmptyPayloadIgnored(t *testing.T) {
 func TestHandleNotification_UnknownKindIsNoop(t *testing.T) {
 	backend, bcs := newTestBackendWithBroadcasters("Agent")
 	defer backend.cancel()
+	series := testutil.CollectAndCount(notifyReceivedTotal)
 
 	backend.handleNotification("NoSuchKind")
 
 	if nudged(bcs["Agent"]) {
 		t.Error("unknown kind should not nudge other broadcasters")
+	}
+	if got := testutil.CollectAndCount(notifyReceivedTotal); got != series {
+		t.Errorf("unknown kind minted a metric series: %d -> %d", series, got)
 	}
 }
 

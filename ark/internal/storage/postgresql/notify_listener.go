@@ -36,9 +36,13 @@ func (p *PostgreSQLBackend) startNotifyListener() {
 		default:
 		}
 
+		started := time.Now()
 		err := p.runNotifyListener()
 		if p.ctx.Err() != nil {
 			return
+		}
+		if time.Since(started) > maxBackoff {
+			backoff = time.Second
 		}
 
 		klog.Errorf("notify listener disconnected, retrying in %v: %v", backoff, err)
@@ -85,9 +89,12 @@ func (p *PostgreSQLBackend) runNotifyListener() error {
 }
 
 func (p *PostgreSQLBackend) handleNotification(kind string) {
-	if kind == "" {
+	p.mu.RLock()
+	b := p.broadcasters[kind]
+	p.mu.RUnlock()
+	if b == nil {
 		return
 	}
 	notifyReceivedTotal.WithLabelValues(kind).Inc()
-	p.nudgeKind(kind)
+	b.nudge()
 }
