@@ -188,7 +188,7 @@ describe('ConfigurationForm', () => {
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/already been added/i)).toBeInTheDocument();
+      expect(screen.getByText(/label already added/i)).toBeInTheDocument();
     });
     expect(mockCreateMutateAsync).not.toHaveBeenCalled();
   });

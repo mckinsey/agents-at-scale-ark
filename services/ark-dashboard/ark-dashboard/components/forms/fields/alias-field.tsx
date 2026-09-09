@@ -72,7 +72,7 @@ export function AliasField({
               <Info className="size-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent className="max-w-72">
+          <TooltipContent side="right" align="center" className="max-w-72">
             {ALIAS_TOOLTIP_TEXT}
           </TooltipContent>
         </Tooltip>

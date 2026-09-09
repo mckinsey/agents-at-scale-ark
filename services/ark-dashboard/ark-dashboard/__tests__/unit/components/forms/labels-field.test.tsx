@@ -93,7 +93,7 @@ describe('LabelsField', () => {
     await user.type(screen.getByRole('textbox'), 'mcp{Enter}');
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByText(/already been added/i)).toBeInTheDocument();
+    expect(screen.getByText(/label already added/i)).toBeInTheDocument();
   });
 
   it('ignores an empty submission', async () => {

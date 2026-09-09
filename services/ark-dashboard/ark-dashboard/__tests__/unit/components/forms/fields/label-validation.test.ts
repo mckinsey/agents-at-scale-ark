@@ -58,7 +58,7 @@ describe('validateLabelDraft', () => {
   });
 
   it('flags a duplicate label', () => {
-    expect(validateLabelDraft('mcp', ['mcp'])).toMatch(/already been added/);
+    expect(validateLabelDraft('mcp', ['mcp'])).toMatch(/label already added/i);
   });
 
   it('flags an invalid label', () => {
@@ -69,7 +69,7 @@ describe('validateLabelDraft', () => {
 
   it('trims the draft before checking for duplicates', () => {
     expect(validateLabelDraft('  mcp  ', ['mcp'])).toMatch(
-      /already been added/,
+      /label already added/i,
     );
   });
 });

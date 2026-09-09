@@ -25,6 +25,7 @@ export interface ResourceFormShellProps<TFieldValues extends FieldValues> {
   backHref: string;
   backLabel: string;
   heading: string;
+  breadcrumbCurrent?: string;
   submitLabel: string;
   onSubmit: SubmitHandler<TFieldValues>;
   loading?: boolean;
@@ -39,6 +40,7 @@ export function ResourceFormShell<TFieldValues extends FieldValues>({
   backHref,
   backLabel,
   heading,
+  breadcrumbCurrent,
   submitLabel,
   onSubmit,
   loading = false,
@@ -71,7 +73,7 @@ export function ResourceFormShell<TFieldValues extends FieldValues>({
           <DetailBreadcrumb
             backHref={backHref}
             backLabel={backLabel}
-            current={heading}
+            current={breadcrumbCurrent ?? heading}
           />
           <div className="flex items-center gap-2">
             <NamespacedLink href={backHref}>

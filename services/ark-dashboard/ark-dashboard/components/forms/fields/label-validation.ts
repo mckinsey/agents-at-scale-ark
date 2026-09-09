@@ -31,7 +31,7 @@ export const validateLabelDraft = (
     return null;
   }
   if (labels.includes(label)) {
-    return `"${label}" has already been added`;
+    return 'Label already added';
   }
   const parsed = labelSchema.safeParse(label);
   return parsed.success ? null : parsed.error.issues[0].message;

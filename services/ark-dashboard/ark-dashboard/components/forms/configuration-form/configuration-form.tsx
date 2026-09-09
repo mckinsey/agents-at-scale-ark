@@ -42,6 +42,7 @@ export function ConfigurationForm({
       backHref="/configurations"
       backLabel="Configurations"
       heading={isEdit ? 'Edit configuration' : 'New configuration'}
+      breadcrumbCurrent={isEdit ? 'Edit configuration' : 'Create configuration'}
       submitLabel={isEdit ? 'Save' : 'Create'}
       onSubmit={onSubmit}
       loading={loading}

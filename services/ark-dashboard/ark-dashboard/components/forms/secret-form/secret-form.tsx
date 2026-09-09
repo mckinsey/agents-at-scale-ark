@@ -37,6 +37,7 @@ export function SecretForm({
       backHref="/secrets"
       backLabel="Secrets"
       heading={isEdit ? 'Edit secret' : 'New secret'}
+      breadcrumbCurrent={isEdit ? 'Edit secret' : 'Create secret'}
       submitLabel={isEdit ? 'Save' : 'Create'}
       onSubmit={onSubmit}
       loading={loading}
