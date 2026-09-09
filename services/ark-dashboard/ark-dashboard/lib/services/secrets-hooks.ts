@@ -63,7 +63,7 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
         [GET_ALL_SECRETS_QUERY_KEY, namespace],
         (old: Secret[] | undefined): Secret[] => [
           ...(old ?? []),
-          { id: newSecret.name, name: newSecret.name },
+          { id: newSecret.name, name: newSecret.name, labels: [] },
         ],
       );
       // Return a result with the snapshotted value
