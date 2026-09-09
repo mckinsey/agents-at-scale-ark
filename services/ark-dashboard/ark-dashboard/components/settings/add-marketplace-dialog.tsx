@@ -392,15 +392,11 @@ export function AddMarketplaceDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            size="lg"
             onClick={() => handleOpenChange(false)}
             disabled={createSource.isPending}>
             Cancel
           </Button>
-          <Button
-            size="lg"
-            onClick={handleAddSource}
-            disabled={createSource.isPending}>
+          <Button onClick={handleAddSource} disabled={createSource.isPending}>
             {createSource.isPending ? 'Adding…' : 'Add'}
           </Button>
         </DialogFooter>
