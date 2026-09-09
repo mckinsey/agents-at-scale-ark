@@ -15,6 +15,7 @@ import {
   rowHoverOverlayClass,
 } from '@/components/ui/table';
 import { Tag } from '@/components/ui/tag';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import {
   Tooltip,
   TooltipContent,
@@ -33,13 +34,72 @@ interface SecretsTableProps {
 }
 
 const MAX_VISIBLE_MODELS = 3;
+const MAX_VISIBLE_LABELS = 3;
 
 const COL = {
   name: 'w-[280px]',
   usedBy: 'w-[120px]',
+  labels: 'w-[220px]',
   status: 'w-[140px]',
   action: 'w-[100px]',
 };
+
+function NameCell({ secret }: Readonly<{ secret: Secret }>) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <TruncatedTooltip label={secret.name}>
+        <span className="text-fg-primary block truncate">{secret.name}</span>
+      </TruncatedTooltip>
+      {secret.alias && (
+        <TruncatedTooltip label={secret.alias}>
+          <span className="text-fg-secondary block truncate text-xs">
+            Alias: {secret.alias}
+          </span>
+        </TruncatedTooltip>
+      )}
+    </div>
+  );
+}
+
+function LabelsCell({ labels }: Readonly<{ labels: readonly string[] }>) {
+  if (labels.length === 0) {
+    return <span className="text-fg-secondary text-sm leading-5">-</span>;
+  }
+
+  const visible = labels.slice(0, MAX_VISIBLE_LABELS);
+  const overflow = labels.length - visible.length;
+
+  return (
+    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+      {visible.map(label => (
+        <Tag
+          key={label}
+          variant="primary"
+          size="sm"
+          className="max-w-[120px] overflow-hidden"
+          title={label}>
+          <span className="truncate">{label}</span>
+        </Tag>
+      ))}
+      {overflow > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Tag variant="primary" size="sm" className="shrink-0">
+              +{overflow}
+            </Tag>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="flex flex-col gap-1">
+              {labels.slice(MAX_VISIBLE_LABELS).map(label => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
 
 function modelUsesSecret(model: Model, secretName: string): boolean {
   const config = model.config;
@@ -155,11 +215,9 @@ function SecretTableRow({
   return (
     <>
       <TableRow className="relative isolate transition-colors">
-        <TableCell size="small">
+        <TableCell size="small" className={COL.name}>
           <span aria-hidden className={rowHoverOverlayClass} />
-          <span className="text-fg-primary block truncate" title={secret.name}>
-            {secret.name}
-          </span>
+          <NameCell secret={secret} />
         </TableCell>
         <TableCell size="small" className={COL.usedBy}>
           <span className="text-fg-secondary block truncate">
@@ -168,6 +226,9 @@ function SecretTableRow({
         </TableCell>
         <TableCell size="small">
           <ModelsInUse models={usingModels} />
+        </TableCell>
+        <TableCell size="small" className={COL.labels}>
+          <LabelsCell labels={secret.labels} />
         </TableCell>
         <TableCell size="small" className={COL.status}>
           <SecretStatus inUse={isInUse} />
@@ -226,6 +287,9 @@ export function SecretsTable({
             Used by
           </TableHead>
           <TableHead size="small">Models in use</TableHead>
+          <TableHead size="small" className={COL.labels}>
+            Labels
+          </TableHead>
           <TableHead size="small" className={COL.status}>
             Status
           </TableHead>

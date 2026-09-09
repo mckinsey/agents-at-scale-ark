@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LabelsField } from '@/components/forms/configuration-form/labels-field';
-import { validateLabelDraft } from '@/components/forms/configuration-form/types';
+import { LabelsField } from '@/components/forms/fields/labels-field';
+import { validateLabelDraft } from '@/components/forms/fields/label-validation';
 
 const onChange = vi.fn();
 
