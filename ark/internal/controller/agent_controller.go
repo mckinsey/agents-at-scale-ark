@@ -20,8 +20,8 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
-	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/validation"
 )
 
 const (
@@ -104,14 +104,8 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 	}
 
 	// Check the status of the agent's model. Some agents (such as A2A agents) have a 'nil' model, and their status is not associated with model availability.
-	switch {
-	case !agentRequiresModel(agent):
-	case agent.Spec.ModelRef != nil:
-		if ok, msg := r.checkModelDependency(ctx, agent); !ok {
-			return false, "ModelNotFound", msg
-		}
-	default:
-		return false, "ModelNotConfigured", "Agent has no model configured; the default executor requires a model"
+	if ok, reason, msg := r.checkModel(ctx, agent); !ok {
+		return false, reason, msg
 	}
 
 	// Check execution engine dependency
@@ -130,17 +124,36 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 	return true, "Available", "All dependencies are available"
 }
 
-// agentRequiresModel reports whether the agent needs a model to run. A2A agents
-// (model is external) and agents delegating to an ExecutionEngine are exempt.
-func agentRequiresModel(agent *arkv1alpha1.Agent) bool {
-	if _, isA2A := agent.Annotations[annotations.A2AServerName]; isA2A {
-		return false
+// checkModel resolves the agent's model and reports the condition reason to use
+// when it cannot be used. An agent whose modelRef was injected by the mutating
+// webhook has no model of its own, so a missing default is reported as
+// ModelNotConfigured rather than sending operators looking for a Model resource
+// they never referenced.
+func (r *AgentReconciler) checkModel(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string, string) {
+	if !validation.AgentRequiresModel(agent) {
+		return true, "", ""
 	}
-	return agent.Spec.ExecutionEngine == nil
+
+	if agent.Spec.ModelRef == nil {
+		return false, "ModelNotConfigured", "Agent has no model configured; the default executor requires a model"
+	}
+
+	ok, notFound, msg := r.checkModelDependency(ctx, agent)
+	switch {
+	case ok:
+		return true, "", ""
+	case notFound && validation.HasDefaultedModelRef(agent):
+		return false, "ModelNotConfigured", fmt.Sprintf(
+			"Agent has no model configured and no '%s' model exists in namespace '%s'; the default executor requires a model",
+			validation.DefaultModelName, agent.Namespace)
+	default:
+		return false, "ModelNotFound", msg
+	}
 }
 
-// checkModelDependency validates model dependency
-func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
+// checkModelDependency validates model dependency, reporting separately whether
+// the referenced model was absent rather than merely unavailable.
+func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (ok, notFound bool, message string) {
 	modelName := agent.Spec.ModelRef.Name
 	modelNamespace := agent.Namespace
 
@@ -153,19 +166,19 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 	if err := r.Get(ctx, modelKey, &model); err != nil {
 		if errors.IsNotFound(err) {
 			msg := fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace)
-			return false, msg
+			return false, true, msg
 		}
-		return false, fmt.Sprintf("Error checking model: %v", err)
+		return false, false, fmt.Sprintf("Error checking model: %v", err)
 	}
 
 	// Check if model is available
 	modelCondition := meta.FindStatusCondition(model.Status.Conditions, "ModelAvailable")
 	if modelCondition == nil || modelCondition.Status != metav1.ConditionTrue {
 		msg := fmt.Sprintf("Model '%s' is not available", modelName)
-		return false, msg
+		return false, false, msg
 	}
 
-	return true, ""
+	return true, false, ""
 }
 
 // checkToolDependencies validates tool dependencies

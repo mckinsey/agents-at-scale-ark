@@ -52,6 +52,12 @@ const (
 	LocalhostGatewayPort = ARKPrefix + "localhost-gateway-port"
 )
 
+// Defaulting annotations - record fields the mutating webhook populated so
+// controllers can tell an injected value from one the user supplied.
+const (
+	DefaultedModelRef = ARKPrefix + "defaulted-model-ref"
+)
+
 // Event annotations
 const (
 	EventData = ARKPrefix + "event-data"
