@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
@@ -11,6 +11,7 @@ import {
   useUpdateSecret,
 } from '@/lib/services/secrets-hooks';
 
+import { useAliasOptions } from '../fields/use-alias-options';
 import {
   SecretFormMode,
   createSecretFormSchema,
@@ -45,14 +46,7 @@ export function useSecretForm({
   );
 
   const { data: allSecrets } = useGetAllSecrets();
-  const aliasOptions = useMemo(
-    () =>
-      (allSecrets ?? [])
-        .map(item => item.name)
-        .filter(name => name !== secretName)
-        .sort((a, b) => a.localeCompare(b)),
-    [allSecrets, secretName],
-  );
+  const aliasOptions = useAliasOptions(allSecrets, secretName);
 
   const { reset } = form;
   useEffect(() => {

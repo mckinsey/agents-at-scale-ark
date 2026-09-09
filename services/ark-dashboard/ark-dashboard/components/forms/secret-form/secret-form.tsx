@@ -2,10 +2,9 @@
 
 import { useId } from 'react';
 
-import { FormField } from '@/components/ui/form';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { AliasField } from '../fields/alias-field';
+import { FormAliasField } from '../fields/alias-field';
 import { FormLabelsField } from '../fields/labels-field';
 import { FormTextField } from '../fields/text-field';
 import { ResourceFormShell } from '../resource-form-shell';
@@ -63,21 +62,12 @@ export function SecretForm({
         disabled={isDisabled}
       />
 
-      <FormField
+      <FormAliasField
         control={form.control}
         name="alias"
-        render={({ field, fieldState }) => (
-          <AliasField
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            options={aliasOptions}
-            placeholder="e.g., api-key"
-            disabled={isDisabled}
-            invalid={!!fieldState.error}
-            error={fieldState.error?.message}
-          />
-        )}
+        options={aliasOptions}
+        placeholder="e.g., api-key"
+        disabled={isDisabled}
       />
 
       <FormTextField

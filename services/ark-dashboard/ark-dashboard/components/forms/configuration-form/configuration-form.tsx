@@ -7,7 +7,7 @@ import { FormField } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { AliasField } from '../fields/alias-field';
+import { FormAliasField } from '../fields/alias-field';
 import { FormLabelsField } from '../fields/labels-field';
 import { FormTextField } from '../fields/text-field';
 import { RequiredMarker, ResourceFormShell } from '../resource-form-shell';
@@ -68,20 +68,11 @@ export function ConfigurationForm({
         disabled={isDisabled}
       />
 
-      <FormField
+      <FormAliasField
         control={form.control}
         name="alias"
-        render={({ field, fieldState }) => (
-          <AliasField
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            options={aliasOptions}
-            disabled={isDisabled}
-            invalid={!!fieldState.error}
-            error={fieldState.error?.message}
-          />
-        )}
+        options={aliasOptions}
+        disabled={isDisabled}
       />
 
       <FormField

@@ -1,5 +1,7 @@
 'use client';
 
+import type { Control, FieldPath, FieldValues } from 'react-hook-form';
+
 import { Info } from '@/components/icons';
 import {
   Combobox,
@@ -18,6 +20,7 @@ import {
   FieldSet,
   FieldTitle,
 } from '@/components/ui/field';
+import { FormField } from '@/components/ui/form';
 import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
 import {
   Tooltip,
@@ -119,5 +122,46 @@ export function AliasField({
       </FieldDescription>
       <FieldError>{error}</FieldError>
     </FieldSet>
+  );
+}
+
+export interface FormAliasFieldProps<
+  TFieldValues extends FieldValues,
+  TName extends FieldPath<TFieldValues>,
+> {
+  control: Control<TFieldValues>;
+  name: TName;
+  options: readonly string[];
+  placeholder?: string;
+  disabled?: boolean;
+}
+
+export function FormAliasField<
+  TFieldValues extends FieldValues,
+  TName extends FieldPath<TFieldValues>,
+>({
+  control,
+  name,
+  options,
+  placeholder,
+  disabled,
+}: Readonly<FormAliasFieldProps<TFieldValues, TName>>) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <AliasField
+          value={field.value}
+          onChange={field.onChange}
+          onBlur={field.onBlur}
+          options={options}
+          placeholder={placeholder}
+          disabled={disabled}
+          invalid={!!fieldState.error}
+          error={fieldState.error?.message}
+        />
+      )}
+    />
   );
 }
