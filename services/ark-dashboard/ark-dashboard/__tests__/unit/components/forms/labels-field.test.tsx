@@ -73,7 +73,7 @@ describe('LabelsField', () => {
 
     expect(onChange).not.toHaveBeenCalled();
     expect(
-      screen.getByText(/starting and ending with a letter or digit/i),
+      screen.getByText(/use only letters and digits/i),
     ).toBeInTheDocument();
   });
 
