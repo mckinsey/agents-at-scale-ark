@@ -30,7 +30,12 @@ export function A2AServersSection() {
   const { namespace, readOnlyMode } = useNamespace();
   const [a2aEditorOpen, setA2aEditorOpen] = useState(false);
 
-  const { data: a2aServers = [], isLoading, error } = useListA2AServers();
+  const {
+    data: a2aServers = [],
+    isLoading,
+    error,
+    dataUpdatedAt,
+  } = useListA2AServers();
   const showLoading = useDelayedLoading(isLoading);
 
   const createServer = useCreateA2AServer();
@@ -43,18 +48,18 @@ export function A2AServersSection() {
 
   const openAddEditor = useCallback(() => setA2aEditorOpen(true), []);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const server = a2aServers.find(s => s.id === id);
-    deleteServer.mutate(id, {
-      onSuccess: () =>
-        toast.success('A2A Server Deleted', {
-          description: `Successfully deleted ${server?.name ?? id}`,
-        }),
-      onError: err =>
-        toast.error('Failed to Delete A2A Server', {
-          description: errorDescription(err),
-        }),
-    });
+    try {
+      await deleteServer.mutateAsync(id);
+      toast.success('A2A Server Deleted', {
+        description: `Successfully deleted ${server?.name ?? id}`,
+      });
+    } catch (err) {
+      toast.error('Failed to Delete A2A Server', {
+        description: errorDescription(err),
+      });
+    }
   };
 
   const handleSave = async (config: A2AServerConfiguration) => {
@@ -73,9 +78,10 @@ export function A2AServersSection() {
 
   const hasServers = a2aServers.length > 0;
   const hasError = Boolean(error);
-  const loadFailed = hasError && !hasServers;
-  const refreshFailed = hasError && hasServers;
-  const isEmpty = !isLoading && !hasError && !hasServers;
+  const hasLoadedOnce = dataUpdatedAt > 0;
+  const loadFailed = hasError && !hasLoadedOnce;
+  const refreshFailed = hasError && hasLoadedOnce;
+  const isEmpty = !isLoading && !loadFailed && !hasServers;
   const showHeaderAction = !isLoading && !isEmpty;
 
   return (

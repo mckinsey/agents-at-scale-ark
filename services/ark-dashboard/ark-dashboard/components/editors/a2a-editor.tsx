@@ -79,8 +79,15 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
     await onSave(config);
   };
 
+  const handleOpenChange = (next: boolean) => {
+    if (!next && form.formState.isSubmitting) {
+      return;
+    }
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[586px]">
         <DialogHeader>
           <DialogTitle>Create new A2A server</DialogTitle>

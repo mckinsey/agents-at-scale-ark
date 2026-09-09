@@ -251,6 +251,40 @@ describe('A2AServersSection', () => {
     expect(screen.queryByText('No A2A server yet')).not.toBeInTheDocument();
   });
 
+  it('keeps the empty state when a refetch of an empty list fails', async () => {
+    vi.mocked(A2AServersService.getAll).mockResolvedValueOnce([]);
+    vi.mocked(A2AServersService.getAll).mockRejectedValue(
+      new APIError('Refresh failed', 403),
+    );
+    vi.mocked(A2AServersService.create).mockResolvedValue({
+      id: 'new-id',
+      name: 'new-server',
+      namespace: 'default',
+    });
+
+    renderSection();
+
+    await waitFor(() => {
+      expect(screen.getByText('No A2A server yet')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByText('Save'));
+
+    await waitFor(
+      () => {
+        expect(
+          screen.getByText("Couldn't refresh A2A servers"),
+        ).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
+    expect(screen.getByText('No A2A server yet')).toBeInTheDocument();
+    expect(
+      screen.queryByText("Couldn't load A2A servers"),
+    ).not.toBeInTheDocument();
+  });
+
   it('should handle delete successfully', async () => {
     vi.mocked(A2AServersService.getAll).mockResolvedValue(mockServers);
     vi.mocked(A2AServersService.delete).mockResolvedValue();
@@ -292,6 +326,50 @@ describe('A2AServersSection', () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('Failed to Delete A2A Server', {
         description: 'Delete failed',
+      });
+    });
+  });
+
+  it('reports both results when two deletes overlap', async () => {
+    vi.mocked(A2AServersService.getAll).mockResolvedValue(mockServers);
+
+    let rejectFirst: (error: Error) => void = () => {};
+    let resolveSecond: () => void = () => {};
+    vi.mocked(A2AServersService.delete)
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectFirst = reject;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            resolveSecond = () => resolve();
+          }),
+      );
+
+    renderSection();
+
+    await waitFor(() => {
+      expect(screen.getByText('test-server-1')).toBeInTheDocument();
+    });
+
+    const deleteButtons = screen.getAllByText('Delete');
+    await userEvent.click(deleteButtons[0]);
+    await userEvent.click(deleteButtons[1]);
+
+    expect(A2AServersService.delete).toHaveBeenCalledTimes(2);
+
+    rejectFirst(new Error('Forbidden'));
+    resolveSecond();
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to Delete A2A Server', {
+        description: 'Forbidden',
+      });
+      expect(toast.success).toHaveBeenCalledWith('A2A Server Deleted', {
+        description: 'Successfully deleted test-server-2',
       });
     });
   });

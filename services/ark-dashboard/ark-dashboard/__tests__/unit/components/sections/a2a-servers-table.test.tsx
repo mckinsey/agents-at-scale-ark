@@ -119,6 +119,22 @@ describe('A2AServersTable', () => {
     expect(screen.getByText('Unavailable')).toBeInTheDocument();
   });
 
+  it.each([
+    { label: 'null', ready: null },
+    { label: 'missing', ready: undefined },
+  ])('shows Unknown when readiness is $label', ({ ready }) => {
+    render(
+      <A2AServersTable
+        servers={[{ ...servers[0], ready }]}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
+    expect(screen.queryByText('Available')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unavailable')).not.toBeInTheDocument();
+  });
+
   it('falls back to a dash for a missing description', () => {
     render(<A2AServersTable servers={[servers[1]]} onDelete={vi.fn()} />);
 
