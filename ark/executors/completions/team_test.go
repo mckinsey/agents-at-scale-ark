@@ -217,6 +217,41 @@ func TestExecuteSequential_ForwardsTranscriptToMembers(t *testing.T) {
 	assert.Contains(t, rendered, "the capital is Paris", "the second member must see the first member's output")
 }
 
+func TestExecuteSequential_SecondMemberGetsNeutralTurnCue(t *testing.T) {
+	var secondMemberInput Message
+	var secondMemberHistory []Message
+
+	members := []TeamMember{
+		&execMockTeamMember{
+			name: "m1",
+			execFunc: func(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+				return &ExecutionResult{Messages: []Message{NewAssistantMessage("the capital is Paris")}}, nil
+			},
+		},
+		&execMockTeamMember{
+			name: "m2",
+			execFunc: func(_ context.Context, input Message, history []Message, _ MemoryInterface, _ EventStreamInterface, _ ExecuteOptions) (*ExecutionResult, error) {
+				secondMemberInput = input
+				secondMemberHistory = history
+				return &ExecutionResult{Messages: []Message{NewAssistantMessage("population is 2.1m")}}, nil
+			},
+		},
+	}
+
+	team := newTestTeam(members, "sequential", false, nil)
+	_, err := team.Execute(context.Background(), NewUserMessage("tell me about France"), nil, nil, nil, ExecuteOptions{})
+	require.NoError(t, err)
+
+	require.NotNil(t, secondMemberInput.OfUser, "the second member must be given a trailing user turn, not a prefill")
+	cue := secondMemberInput.OfUser.Content.OfString.Value
+	assert.Contains(t, cue, "m2", "the turn cue must name the member whose turn it is")
+	assert.NotContains(t, cue, "Do not repeat work", "the cue must not instruct members to skip work another member did")
+
+	rendered := renderEngineInput(secondMemberInput, secondMemberHistory)
+	assert.Contains(t, rendered, "tell me about France", "the original request must stay in the transcript")
+	assert.Contains(t, rendered, "the capital is Paris", "the second member must see the first member's output")
+}
+
 func TestMakeTeam_EngineMemberNeedsNoModel(t *testing.T) {
 	agent := &arkv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{Name: "engine-member", Namespace: "default"},

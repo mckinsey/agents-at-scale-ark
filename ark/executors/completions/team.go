@@ -90,7 +90,6 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 		return t.executeSequentialWithLoops(ctx, userInput, history)
 	}
 
-	messages := slices.Clone(history)
 	var newMessages []Message
 
 	for i, member := range t.Members {
@@ -107,7 +106,8 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", i, t.Name), operationData)
 
-		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, i)
+		memberHistory := teamMemberHistory(history, userInput, newMessages, i)
+		signal, err := t.executeMemberAndAccumulate(turnCtx, member, memberTurnInput(userInput, member, i), &memberHistory, &newMessages, i)
 
 		if len(newMessages) > 0 {
 			t.telemetryRecorder.RecordTurnOutput(turnSpan, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
@@ -133,7 +133,6 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 }
 
 func (t *Team) executeSequentialWithLoops(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	messages := slices.Clone(history)
 	var newMessages []Message
 
 	messageCount := 0
@@ -161,7 +160,8 @@ func (t *Team) executeSequentialWithLoops(ctx context.Context, userInput Message
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", messageCount, t.Name), operationData)
 
-		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, messageCount)
+		memberHistory := teamMemberHistory(history, userInput, newMessages, messageCount)
+		signal, err := t.executeMemberAndAccumulate(turnCtx, member, memberTurnInput(userInput, member, messageCount), &memberHistory, &newMessages, messageCount)
 
 		if len(newMessages) > 0 {
 			t.telemetryRecorder.RecordTurnOutput(turnSpan, ExtractLastAssistantMessageContent(newMessages), len(newMessages))
@@ -328,6 +328,27 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 	default:
 		return nil, fmt.Errorf("unsupported member type %s for member %s in team %s", memberSpec.Type, memberSpec.Name, teamName)
 	}
+}
+
+func teamMemberHistory(history []Message, userInput Message, turns []Message, turn int) []Message {
+	if turn == 0 {
+		return slices.Clone(history)
+	}
+
+	result := slices.Clone(history)
+	result = append(result, userInput)
+	return append(result, turns...)
+}
+
+func memberTurnInput(userInput Message, member TeamMember, turn int) Message {
+	if turn == 0 {
+		return userInput
+	}
+
+	return NewUserMessage(fmt.Sprintf(
+		"It is your turn, %s. Respond to the conversation above according to your own instructions.",
+		member.GetName(),
+	))
 }
 
 func addAgentNameToMessages(messages []Message, agentName string) []Message {
