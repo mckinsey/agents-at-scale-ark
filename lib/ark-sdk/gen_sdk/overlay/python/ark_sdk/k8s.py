@@ -24,6 +24,8 @@ from ark_sdk.labels import (
     labels_to_tags,
     strip_tag_labels,
     tags_to_labels,
+    validate_tag,
+    validate_updated_tags,
 )
 from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
 
@@ -444,7 +446,7 @@ class ConfigurationClient:
             v1 = client.CoreV1Api(api)
 
             k8s_labels, annotations = self._build_labels_and_annotations(
-                description, alias, labels
+                description, alias, [validate_tag(tag) for tag in (labels or [])]
             )
             config_map = client.V1ConfigMap(
                 api_version="v1",
@@ -481,10 +483,11 @@ class ConfigurationClient:
             v1 = client.CoreV1Api(api)
 
             existing = await self._read_configuration(v1, name)
+            existing_tags = labels_to_tags(existing.metadata.labels)
             k8s_labels, annotations = self._build_labels_and_annotations(
                 description,
                 alias,
-                labels,
+                validate_updated_tags(labels or [], existing_tags),
                 existing_labels=existing.metadata.labels,
                 existing_annotations=existing.metadata.annotations,
             )
