@@ -13,7 +13,9 @@ from ark_sdk.labels import (
     labels_to_tags,
     strip_tag_labels,
     tags_to_labels,
+    validate_legacy_tag,
     validate_tag,
+    validate_updated_tags,
 )
 
 MARKER_ANNOTATIONS = {ARK_RESOURCE_TYPE_ANNOTATION: CONFIGURATION_RESOURCE_TYPE}
@@ -86,6 +88,24 @@ class TestLabelHelpers(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             validate_tag("a" * 100)
         self.assertIn("too long", str(context.exception))
+
+    def test_validate_legacy_tag_accepts_hyphenated_tags(self):
+        self.assertEqual(validate_legacy_tag("mcp-servers"), "mcp-servers")
+
+    def test_validate_legacy_tag_rejects_spaces(self):
+        with self.assertRaises(ValueError):
+            validate_legacy_tag("mcp servers")
+
+    def test_validate_updated_tags_keeps_unchanged_legacy_tag(self):
+        """A tag already on the resource is grandfathered even if not alphanumeric."""
+        result = validate_updated_tags(["mcp-servers", "prod"], existing_tags=["mcp-servers"])
+        self.assertEqual(result, ["mcp-servers", "prod"])
+
+    def test_validate_updated_tags_rejects_new_non_alphanumeric_tag(self):
+        """A tag that isn't already on the resource must be alphanumeric-only."""
+        with self.assertRaises(ValueError) as context:
+            validate_updated_tags(["mcp-servers"], existing_tags=[])
+        self.assertIn("mcp-servers", str(context.exception))
 
 
 class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
@@ -300,6 +320,43 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
             "ark.mckinsey.com/label.mcp": "true",
             "ark.mckinsey.com/managed-by": "ark-api",
         })
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_keeps_pre_existing_legacy_tag_untouched(self, mock_v1_api, mock_api_client):
+        """A tag created before the alphanumeric-only rule survives an update that doesn't touch it."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+
+        existing = _config_map(labels={"ark.mckinsey.com/label.mcp-servers": "true"})
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_config_map = AsyncMock(return_value=existing)
+        mock_api_instance.replace_namespaced_config_map = AsyncMock(return_value=_config_map())
+
+        await self.client.update_configuration(
+            name="github-mcp-url", value="v", labels=["mcp-servers"]
+        )
+
+        body = mock_api_instance.replace_namespaced_config_map.call_args.kwargs["body"]
+        self.assertEqual(body.metadata.labels, {
+            "ark.mckinsey.com/label.mcp-servers": "true",
+        })
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_rejects_new_non_alphanumeric_tag(self, mock_v1_api, mock_api_client):
+        """Adding a genuinely new tag must still satisfy the alphanumeric-only rule."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+
+        existing = _config_map(labels={})
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_config_map = AsyncMock(return_value=existing)
+
+        with self.assertRaises(ValueError):
+            await self.client.update_configuration(
+                name="github-mcp-url", value="v", labels=["mcp-servers"]
+            )
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
