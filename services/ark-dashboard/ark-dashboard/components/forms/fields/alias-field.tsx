@@ -26,7 +26,13 @@ import {
 } from '@/components/ui/tooltip';
 
 export const ALIAS_TOOLTIP_TEXT =
-  'Use this as an alternative name, useful when you need to deploy this same resources with different name in another namespace.';
+  'use this as an alternative name, useful when you need to deploy this same resources with different name in another namespace';
+
+const FILLED_TRIGGER_CLASS =
+  'has-[[data-slot=input-group-control]:focus-visible]:bg-fill-onsurface-ui-3 data-[open=true]:bg-fill-onsurface-ui-3';
+
+const TRIGGER_ICON_CLASS =
+  '[&_[data-slot=combobox-trigger-icon]]:transition-transform [&_[data-slot=combobox-trigger-icon]]:duration-200 data-[popup-open]:[&_[data-slot=combobox-trigger-icon]]:rotate-180';
 
 interface AliasFieldProps {
   readonly value: string;
@@ -61,7 +67,7 @@ export function AliasField({
           <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label="What is an alias?"
+              aria-label="About alias"
               className="text-fg-secondary hover:text-fg-primary">
               <Info className="size-4" />
             </button>
@@ -80,7 +86,7 @@ export function AliasField({
         }
         disabled={disabled}>
         <ComboboxAnchor>
-          <InputGroup>
+          <InputGroup className={FILLED_TRIGGER_CLASS}>
             <ComboboxInput
               variant="inline"
               placeholder={placeholder}
@@ -89,8 +95,8 @@ export function AliasField({
               onBlur={onBlur}
             />
             <InputGroupAddon align="inline-end">
-              <ComboboxClear />
-              <ComboboxTrigger />
+              <ComboboxClear aria-label="Clear alias" />
+              <ComboboxTrigger className={TRIGGER_ICON_CLASS} />
             </InputGroupAddon>
           </InputGroup>
         </ComboboxAnchor>
@@ -108,7 +114,8 @@ export function AliasField({
         </ComboboxContent>
       </Combobox>
       <FieldDescription>
-        Shown instead of the name in lists. Pick from existing names.
+        Shown instead of the name in lists. Pick from existing names —
+        typing filters the list.
       </FieldDescription>
       <FieldError>{error}</FieldError>
     </FieldSet>

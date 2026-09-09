@@ -27,7 +27,7 @@ interface LabelsFieldProps {
 }
 
 const DEFAULT_DESCRIPTION =
-  'Labels group related resources. Letters and digits only.';
+  'Optional. Press Enter to add a label — letters and numbers only';
 
 export function LabelsField({
   value,
@@ -76,7 +76,7 @@ export function LabelsField({
             <Tag
               key={label}
               variant="primary"
-              size="sm"
+              size="xs"
               disabled={disabled}
               onRemove={() => removeLabel(label)}>
               {label}
@@ -86,7 +86,7 @@ export function LabelsField({
       )}
       <Input
         variant="inline"
-        placeholder="Type a label and press Enter"
+        placeholder="e.g., production"
         value={draft}
         disabled={disabled}
         aria-invalid={!!error}

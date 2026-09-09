@@ -64,7 +64,7 @@ const NAME_FIELD = 'e.g., api-key-production';
 const VALUE_FIELD = 'Enter the secret value';
 const DESCRIPTION_FIELD = 'e.g., API key used by the production models';
 const ALIAS_FIELD = 'e.g., api-key';
-const LABEL_FIELD = 'Type a label and press Enter';
+const LABEL_FIELD = 'e.g., production';
 
 describe('SecretForm', () => {
   beforeEach(() => {

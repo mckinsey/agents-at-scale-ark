@@ -24,6 +24,9 @@ export function ConfigurationForm({
   const { readOnlyMode } = useNamespace();
   const nameFieldId = useId();
   const valueFieldId = useId();
+  const valueLabelId = useId();
+  const valueHintId = useId();
+  const valueErrorId = useId();
   const { form, isEdit, loading, saving, onSubmit, aliasOptions } =
     useConfigurationForm({
       mode,
@@ -50,42 +53,17 @@ export function ConfigurationForm({
         name="name"
         id={nameFieldId}
         label="Name"
-        placeholder="e.g., github-mcp-url"
-        description="Resources reference the configuration by this name. It cannot be changed after creation."
+        placeholder="e.g., mcp-server-url"
+        description="Configuration names cannot be changed after creation"
         required
         disabled={isDisabled || isEdit}
-      />
-
-      <FormField
-        control={form.control}
-        name="value"
-        render={({ field, fieldState }) => (
-          <FieldSet className="gap-2">
-            <FieldTitle>
-              Value <RequiredMarker />
-            </FieldTitle>
-            <Textarea
-              id={valueFieldId}
-              rows={4}
-              placeholder="e.g., https://api.githubcopilot.com/mcp/"
-              disabled={isDisabled}
-              aria-invalid={!!fieldState.error}
-              aria-describedby={`${valueFieldId}-description`}
-              {...field}
-            />
-            <FieldDescription id={`${valueFieldId}-description`}>
-              Stored in plain text. Use a Secret for anything sensitive.
-            </FieldDescription>
-            <FieldError>{fieldState.error?.message}</FieldError>
-          </FieldSet>
-        )}
       />
 
       <FormTextField
         control={form.control}
         name="description"
         label="Description"
-        placeholder="e.g., GitHub remote MCP endpoint"
+        placeholder="e.g., Base URL of the MCP server for this environment"
         disabled={isDisabled}
       />
 
@@ -98,11 +76,43 @@ export function ConfigurationForm({
             onChange={field.onChange}
             onBlur={field.onBlur}
             options={aliasOptions}
-            placeholder="e.g., github-mcp"
             disabled={isDisabled}
             invalid={!!fieldState.error}
             error={fieldState.error?.message}
           />
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="value"
+        render={({ field, fieldState }) => (
+          <FieldSet className="gap-2">
+            <FieldTitle id={valueLabelId}>
+              Value <RequiredMarker />
+            </FieldTitle>
+            <Textarea
+              id={valueFieldId}
+              placeholder="e.g., https://mcp.example.com"
+              disabled={isDisabled}
+              aria-labelledby={valueLabelId}
+              aria-required="true"
+              aria-invalid={!!fieldState.error}
+              aria-describedby={
+                fieldState.error
+                  ? `${valueHintId} ${valueErrorId}`
+                  : valueHintId
+              }
+              className="focus-visible:bg-fill-onsurface-ui-3 max-h-[480px] min-h-[160px] resize-y overflow-auto font-mono"
+              {...field}
+            />
+            <FieldDescription id={valueHintId}>
+              Supports multiple lines — YAML, JSON or plain text.
+            </FieldDescription>
+            <FieldError id={valueErrorId}>
+              {fieldState.error?.message}
+            </FieldError>
+          </FieldSet>
         )}
       />
 

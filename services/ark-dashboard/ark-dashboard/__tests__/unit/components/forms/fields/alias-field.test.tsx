@@ -85,7 +85,7 @@ describe('AliasField', () => {
     renderField();
 
     expect(
-      screen.getByRole('button', { name: 'What is an alias?' }),
+      screen.getByRole('button', { name: 'About alias' }),
     ).toBeInTheDocument();
     expect(ALIAS_TOOLTIP_TEXT).toMatch(/alternative name/i);
   });
