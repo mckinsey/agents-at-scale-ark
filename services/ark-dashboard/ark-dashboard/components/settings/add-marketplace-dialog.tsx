@@ -114,6 +114,7 @@ export function AddMarketplaceDialog({
 
   const fieldId = useId();
   const urlFieldId = `${fieldId}-url`;
+  const urlGroupLabelId = `${fieldId}-url-group-label`;
   const displayFieldId = `${fieldId}-display`;
   const schemeFieldId = `${fieldId}-scheme`;
   const credentialFieldId = `${fieldId}-credential`;
@@ -196,7 +197,11 @@ export function AddMarketplaceDialog({
 
         <div className="flex flex-col gap-6">
           <FieldSet className="gap-2">
-            <FieldLabel htmlFor={urlFieldId}>Marketplace JSON URL</FieldLabel>
+            <FieldLabel
+              id={urlGroupLabelId}
+              htmlFor={urlMode === 'custom' ? urlFieldId : undefined}>
+              Marketplace JSON URL
+            </FieldLabel>
             <div className="flex gap-2">
               {URL_MODE_OPTIONS.map(option => (
                 <Button
@@ -223,7 +228,10 @@ export function AddMarketplaceDialog({
               />
             )}
             {urlMode === 'ado' && (
-              <div className="border-stroke-divider flex flex-col gap-4 border p-3">
+              <div
+                role="group"
+                aria-labelledby={urlGroupLabelId}
+                className="border-stroke-divider flex flex-col gap-4 border p-3">
                 <div className="grid grid-cols-2 gap-4">
                   <FieldSet className="gap-2">
                     <FieldLabel htmlFor="ado-org">Organization</FieldLabel>

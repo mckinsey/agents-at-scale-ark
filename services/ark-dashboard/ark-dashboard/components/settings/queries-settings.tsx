@@ -2,6 +2,7 @@
 
 import { useAtom } from 'jotai';
 import { useEffect, useId, useState } from 'react';
+import { toast } from 'sonner';
 
 import { storedQueryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { ErrorIcon, Info } from '@/components/icons';
@@ -29,6 +30,9 @@ import {
 
 const TTL_PATTERN = /^\d+(\.\d+)?(ns|us|µs|ms|s|m|h)$/;
 const DEFAULT_QUERY_TIMEOUT_MINUTES = 5;
+const DEFAULT_QUERY_TIMEOUT = `${DEFAULT_QUERY_TIMEOUT_MINUTES}m`;
+const TIMEOUT_ERROR_MESSAGE =
+  'Use a whole number of minutes greater than zero.';
 
 function validate(value: string): string | null {
   if (value.trim() === '') return null;
@@ -41,7 +45,7 @@ function validate(value: string): string | null {
 function validateTimeout(value: string): string | null {
   if (value.trim() === '') return null;
   if (!/^\d+$/.test(value.trim()) || Number(value) <= 0) {
-    return 'Use a whole number of minutes greater than zero.';
+    return TIMEOUT_ERROR_MESSAGE;
   }
   return null;
 }
@@ -64,6 +68,7 @@ export function QueriesSettings() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [timeoutInput, setTimeoutInput] = useState<string>('');
   const [timeoutError, setTimeoutError] = useState<string | null>(null);
+  const [timeoutBadInput, setTimeoutBadInput] = useState(false);
 
   useEffect(() => {
     setInput(data?.queryTTL ?? '');
@@ -101,11 +106,15 @@ export function QueriesSettings() {
     );
   }
 
+  const hasExisting = data?.exists ?? false;
+
   const handleSave = () => {
     const trimmed = input.trim();
     const trimmedTimeout = timeoutInput.trim();
     const validation = validate(trimmed);
-    const timeoutValidation = validateTimeout(trimmedTimeout);
+    const timeoutValidation = timeoutBadInput
+      ? TIMEOUT_ERROR_MESSAGE
+      : validateTimeout(trimmedTimeout);
 
     setLocalError(validation);
     setTimeoutError(timeoutValidation);
@@ -113,24 +122,40 @@ export function QueriesSettings() {
       return;
     }
 
-    setStoredTimeout(
-      trimmedTimeout === ''
-        ? `${DEFAULT_QUERY_TIMEOUT_MINUTES}m`
-        : `${trimmedTimeout}m`,
+    const nextTimeout =
+      trimmedTimeout === '' ? DEFAULT_QUERY_TIMEOUT : `${trimmedTimeout}m`;
+
+    if (trimmed === (data?.queryTTL ?? '')) {
+      setStoredTimeout(nextTimeout);
+      toast.success('Settings saved');
+      return;
+    }
+
+    updateMutation.mutate(
+      { queryTTL: trimmed === '' ? null : trimmed },
+      { onSuccess: () => setStoredTimeout(nextTimeout) },
     );
-    updateMutation.mutate({ queryTTL: trimmed === '' ? null : trimmed });
   };
 
   const handleReset = () => {
     setLocalError(null);
     setTimeoutError(null);
+    setTimeoutBadInput(false);
     setInput('');
-    setStoredTimeout(`${DEFAULT_QUERY_TIMEOUT_MINUTES}m`);
-    clearMutation.mutate();
+
+    if (!hasExisting) {
+      setStoredTimeout(DEFAULT_QUERY_TIMEOUT);
+      toast.success('Defaults cleared');
+      return;
+    }
+
+    clearMutation.mutate(undefined, {
+      onSuccess: () => setStoredTimeout(DEFAULT_QUERY_TIMEOUT),
+    });
   };
 
   const isSaving = updateMutation.isPending || clearMutation.isPending;
-  const hasExisting = data?.exists ?? false;
+  const isTimeoutModified = storedTimeout !== DEFAULT_QUERY_TIMEOUT;
 
   return (
     <div className="flex max-w-[600px] flex-col gap-6">
@@ -139,10 +164,15 @@ export function QueriesSettings() {
         <Input
           id={timeoutFieldId}
           type="number"
+          min={1}
+          step={1}
           variant="inline"
           placeholder="e.g. 5"
           value={timeoutInput}
-          onChange={e => setTimeoutInput(e.target.value)}
+          onChange={e => {
+            setTimeoutInput(e.target.value);
+            setTimeoutBadInput(Boolean(e.target.validity?.badInput));
+          }}
           aria-invalid={!!timeoutError}
           aria-describedby={timeoutDescriptionId}
         />
@@ -176,7 +206,7 @@ export function QueriesSettings() {
           type="button"
           variant="outline"
           onClick={handleReset}
-          disabled={isSaving || !hasExisting}>
+          disabled={isSaving || (!hasExisting && !isTimeoutModified)}>
           {clearMutation.isPending ? 'Clearing...' : 'Reset to default'}
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>

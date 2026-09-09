@@ -35,17 +35,24 @@ const COL = {
   action: 'w-[80px]',
 };
 
-const PHASE_CONFIG: Record<
-  ExecutionEnginePhase,
-  { label: string; dotClass: string }
-> = {
+interface PhaseConfig {
+  label: string;
+  dotClass: string;
+}
+
+const PHASE_CONFIG: Record<ExecutionEnginePhase, PhaseConfig> = {
   ready: { label: 'Ready', dotClass: 'bg-status-success' },
   running: { label: 'Running', dotClass: 'bg-status-warning' },
   error: { label: 'Error', dotClass: 'bg-status-error' },
 };
 
+const UNKNOWN_PHASE_CONFIG: PhaseConfig = {
+  label: 'Unknown',
+  dotClass: 'bg-fg-tertiary',
+};
+
 function EngineStatus({ engine }: Readonly<{ engine: ExecutionEngine }>) {
-  const config = PHASE_CONFIG[engine.phase];
+  const config = PHASE_CONFIG[engine.phase] ?? UNKNOWN_PHASE_CONFIG;
 
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
