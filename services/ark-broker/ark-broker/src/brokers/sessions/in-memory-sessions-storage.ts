@@ -85,6 +85,7 @@ export class InMemorySessionsStorage implements SessionsStorage {
         this.dirty = false;
       }
     }, 2000);
+    this.saveTimer.unref();
   }
 
   async applyEvent(eventData: Partial<SessionEventData>): Promise<void> {

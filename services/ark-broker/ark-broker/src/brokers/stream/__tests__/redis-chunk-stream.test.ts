@@ -1,3 +1,5 @@
+import {once} from 'node:events';
+import type Redis from 'ioredis';
 import {createLogger} from '@ark-broker/logging/logger';
 import {
   useRedisContainer,
@@ -42,6 +44,19 @@ describeIntegration('RedisChunkStream — with TLS + auth', () => {
 
 describeIntegration('RedisChunkStream — redis-specific', () => {
   const {client} = useRedisContainer();
+
+  const connectionCount = async (): Promise<number> => {
+    const list = (await client().client('LIST')) as string;
+    return list.trim().split('\n').length;
+  };
+
+  const waitForConnections = async (expected: number): Promise<void> => {
+    const deadline = Date.now() + 3000;
+    while ((await connectionCount()) !== expected && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(await connectionCount()).toBe(expected);
+  };
 
   it('dual-write: appending creates both per-query and all keys', async () => {
     const stream = new RedisChunkStream(client(), logger, PREFIX, TTL);
@@ -136,5 +151,49 @@ describeIntegration('RedisChunkStream — redis-specific', () => {
     }
 
     expect(received).toEqual(['qa', 'qb']);
+    stream.close();
+  });
+
+  describe('subscriber connections', () => {
+    let stream: RedisChunkStream;
+    let before: number;
+
+    beforeEach(async () => {
+      stream = new RedisChunkStream(client(), logger, PREFIX, TTL);
+      before = await connectionCount();
+    });
+
+    afterEach(() => {
+      stream.close();
+    });
+
+    it('unsubscribe disconnects the subscriber connection', async () => {
+      const unsub = stream.subscribeToQuery('q1', () => {});
+      await waitForConnections(before + 1);
+
+      unsub();
+      await waitForConnections(before);
+    });
+
+    it('close() disconnects every subscriber connection', async () => {
+      stream.subscribeToQuery('q1', () => {});
+      stream.subscribeToQuery('q2', () => {});
+      stream.subscribeAll(() => {});
+      await waitForConnections(before + 3);
+
+      stream.close();
+      await waitForConnections(before);
+    });
+
+    it('unsubscribe before ready defers the disconnect until the handshake completes', async () => {
+      const duplicate = jest.spyOn(client(), 'duplicate');
+      stream.subscribeToQuery('q1', () => {})();
+      const sub = duplicate.mock.results[0].value as Redis;
+      duplicate.mockRestore();
+
+      await once(sub, 'ready');
+      await once(sub, 'end');
+      expect(await connectionCount()).toBe(before);
+    }, 10_000);
   });
 });
