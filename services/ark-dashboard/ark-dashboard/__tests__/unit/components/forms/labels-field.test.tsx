@@ -55,14 +55,15 @@ describe('LabelsField', () => {
     expect(onChange).toHaveBeenCalledWith(['mcp']);
   });
 
-  it('adds the pending label on blur so it is not silently lost', async () => {
+  it('does not silently commit the pending label on blur', async () => {
     const user = userEvent.setup();
     renderField();
 
     await user.type(screen.getByRole('textbox'), 'mcp');
     await user.tab();
 
-    expect(onChange).toHaveBeenCalledWith(['mcp']);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox')).toHaveValue('mcp');
   });
 
   it('rejects a label Kubernetes would refuse as a label key segment', async () => {
