@@ -43,6 +43,43 @@ export interface Team {
   status?: string;
 }
 
+export interface A2ATaskListItem {
+  name: string;
+  namespace: string;
+  taskId: string;
+  phase?: string | null;
+}
+
+export interface A2ATaskDetail {
+  name: string;
+  namespace: string;
+  taskId: string;
+  agentRef?: { name?: string };
+  status?: {
+    phase?: string | null;
+    protocolMetadata?: Record<string, string> | null;
+    startTime?: string | null;
+  };
+}
+
+export interface ApprovalSubmissionResult {
+  name: string;
+  namespace: string;
+  taskId: string;
+  decision: string;
+}
+
+/** HTTP error from an ark-api call, carrying the response status code. */
+export class ArkApiHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ArkApiHttpError';
+    this.status = status;
+  }
+}
+
 export class ArkApiClient {
   private baseUrl: string;
 
@@ -274,5 +311,51 @@ export class ArkApiClient {
       throw new Error(`Failed to get query: ${response.status}`);
     }
     return (await response.json()) as Record<string, unknown>;
+  }
+
+  async listA2ATasks(namespace?: string): Promise<A2ATaskListItem[]> {
+    const path = namespace
+      ? `/v1/a2a-tasks?namespace=${encodeURIComponent(namespace)}`
+      : '/v1/a2a-tasks';
+    return this.fetchAllPages<A2ATaskListItem>(path);
+  }
+
+  async getA2ATask(name: string, namespace?: string): Promise<A2ATaskDetail> {
+    const url = new URL(`${this.baseUrl}/v1/a2a-tasks/${encodeURIComponent(name)}`);
+    if (namespace) url.searchParams.set('namespace', namespace);
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new ArkApiHttpError(
+        `Failed to get a2a-task '${name}' (${response.status})`,
+        response.status
+      );
+    }
+    return (await response.json()) as A2ATaskDetail;
+  }
+
+  async submitApproval(
+    name: string,
+    decision: 'approved' | 'rejected',
+    namespace?: string
+  ): Promise<ApprovalSubmissionResult> {
+    const url = new URL(
+      `${this.baseUrl}/v1/a2a-tasks/${encodeURIComponent(name)}/approval`
+    );
+    if (namespace) url.searchParams.set('namespace', namespace);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({decision}),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new ArkApiHttpError(
+        text || `Approval submission failed (${response.status})`,
+        response.status
+      );
+    }
+    return (await response.json()) as ApprovalSubmissionResult;
   }
 }

@@ -33,6 +33,10 @@ spec:
       name: my-http-tool                        # required (minLength 1) unless type is built-in
     - type: mcp
       name: my-mcp-tool
+      approval:                                 # optional; require human approval before this tool runs
+        required: true
+        timeout: 5m                             # optional; wait indefinitely if unset
+        onTimeout: reject                       # reject | proceed (default reject)
 
   parameters:                                   # values for {{.name}} templating in prompt
     - name: api_endpoint
@@ -82,6 +86,10 @@ spec:
 | `spec.tools[].description` | string | no | Description of the tool as exposed to the model. |
 | `spec.tools[].functions[]` | list | no | Preconfigured function values (`name` + `value` or `valueFrom`) passed to the tool. |
 | `spec.tools[].partial` | object | no | Overrides the tool's exposed name and preconfigures/hides parameters from the model. See [Partial tools](#partial-tools). |
+| `spec.tools[].approval` | object | no | Requires human approval before this tool executes. See [Tool approval](#tool-approval). |
+| `spec.tools[].approval.required` | boolean | no | Whether human approval is required before executing this tool. Defaults to `false`. |
+| `spec.tools[].approval.timeout` | duration | no | How long to wait for a decision (e.g. `30s`, `5m`). Waits indefinitely if unset. |
+| `spec.tools[].approval.onTimeout` | enum (`reject`, `proceed`) | no | Action when `timeout` elapses: `reject` fails the query, `proceed` executes the tool. Defaults to `reject`. |
 | `spec.parameters[]` | list | no | Template values substituted into `spec.prompt`. Each entry has a `name` (minLength 1) and either a `value` or `valueFrom` (`configMapKeyRef`, `secretKeyRef`, `serviceRef`, `queryParameterRef`). `value` and `valueFrom` are mutually exclusive. |
 | `spec.outputSchema` | JSON schema | no | JSON schema for structured output. Preserves unknown fields — supply any valid JSON Schema object. |
 | `spec.overrides[]` | list | no | HTTP header overrides applied when the agent calls its model or an MCP server. See [Overrides](#overrides). |
@@ -118,6 +126,26 @@ spec:
       name: research-agent            # another Agent in this namespace
     - type: team
       name: review-team               # a Team in this namespace
+```
+
+### Tool approval
+
+Mark a tool with `approval.required: true` to pause the query in the `input-required` phase before that tool runs, until a human approves or rejects the call. `timeout` bounds the wait; when it elapses, `onTimeout` decides whether to fail the query (`reject`) or run the tool anyway (`proceed`). Respond to pending approvals from the dashboard or with `ark approvals`. See [Human-in-the-loop tool approvals](/user-guide/tool-approvals) for the task-oriented guide.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: hitl-agent
+spec:
+  prompt: You are a file management assistant. Call the appropriate tool when asked.
+  tools:
+    - type: mcp
+      name: file-gateway-write-file
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
 ```
 
 ## Overrides

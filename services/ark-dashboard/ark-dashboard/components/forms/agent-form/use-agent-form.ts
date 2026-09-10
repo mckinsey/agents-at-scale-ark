@@ -17,6 +17,7 @@ import type {
   ExecutionEngine,
   ModelListItem,
   Tool,
+  ToolApprovalConfig,
 } from '@/lib/services';
 import {
   agentsService,
@@ -285,11 +286,30 @@ export function useAgentForm({
     [selectedTools],
   );
 
+  const getToolApproval = useCallback(
+    (toolName: string) =>
+      selectedTools.find(t => t.name === toolName)?.approval ?? undefined,
+    [selectedTools],
+  );
+
+  const setToolApproval = useCallback(
+    (toolName: string, approval: ToolApprovalConfig | undefined) => {
+      setSelectedTools(prev =>
+        prev.map(t => (t.name === toolName ? { ...t, approval } : t)),
+      );
+    },
+    [],
+  );
+
   const hasToolsChanged = useCallback(() => {
     if (selectedTools.length !== initialTools.length) return true;
-    const selectedNames = selectedTools.map(t => t.name).sort();
-    const initialNames = initialTools.map(t => t.name).sort();
-    return selectedNames.some((name, i) => name !== initialNames[i]);
+    const normalize = (tools: AgentTool[]) =>
+      [...tools]
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map(t => `${t.name}:${JSON.stringify(t.approval ?? null)}`);
+    const selected = normalize(selectedTools);
+    const initial = normalize(initialTools);
+    return selected.some((entry, i) => entry !== initial[i]);
   }, [selectedTools, initialTools]);
 
   const hasParametersChanged = useCallback(
@@ -322,6 +342,8 @@ export function useAgentForm({
       handleToolToggle,
       handleDeleteTool,
       isToolSelected,
+      getToolApproval,
+      setToolApproval,
       onSubmit,
     },
   };
