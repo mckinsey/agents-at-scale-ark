@@ -12,7 +12,7 @@ import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
-    namespace: 'default',
+    namespace: 'tenant-alpha',
     isNamespaceResolved: true,
     isPending: false,
     readOnlyMode: false,
@@ -950,6 +950,30 @@ describe('SessionsSection', () => {
 
       const loadingText = screen.queryByText(/updating/i);
       expect(loadingText).toBeInTheDocument();
+    });
+  });
+
+  describe('Namespace scoping', () => {
+    it('lists workflows from the active namespace, not a hardcoded default', () => {
+      render(<SessionsSection />);
+
+      expect(useWorkflows).toHaveBeenCalledWith(
+        'tenant-alpha',
+        expect.any(Object),
+      );
+      expect(useWorkflows).not.toHaveBeenCalledWith(
+        'default',
+        expect.anything(),
+      );
+    });
+
+    it('fetches workflow detail from the active namespace', () => {
+      render(<SessionsSection />);
+
+      expect(useWorkflow).toHaveBeenCalledWith(
+        'tenant-alpha',
+        expect.any(String),
+      );
     });
   });
 });

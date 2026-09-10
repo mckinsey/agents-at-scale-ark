@@ -121,3 +121,54 @@ describe('mapArgoWorkflowsToSessions', () => {
     expect(sessions[1].startedAt).toBe('2024-01-02T00:00:00Z');
   });
 });
+
+describe('pod step namespace', () => {
+  function makePodWorkflow(namespace: string | undefined): ArgoWorkflow {
+    return makeWorkflow({
+      metadata: {
+        name: 'wf-1',
+        namespace,
+        creationTimestamp: '2024-01-01T00:00:00Z',
+        uid: 'uid-1',
+      },
+      status: {
+        phase: 'Succeeded',
+        startedAt: '2024-01-01T00:00:00Z',
+        finishedAt: '2024-01-01T00:01:00Z',
+        nodes: {
+          'wf-1': {
+            id: 'wf-1',
+            name: 'wf-1',
+            displayName: 'wf-1',
+            type: 'DAG',
+            phase: 'Succeeded',
+            children: ['wf-1-task-a'],
+          },
+          'wf-1-task-a': {
+            id: 'wf-1-task-a',
+            name: 'wf-1.task-a',
+            displayName: 'task-a',
+            type: 'Pod',
+            phase: 'Succeeded',
+            boundaryID: 'wf-1',
+            startedAt: '2024-01-01T00:00:05Z',
+            finishedAt: '2024-01-01T00:00:20Z',
+          },
+        },
+      },
+    } as Partial<ArgoWorkflow>);
+  }
+
+  it("carries the workflow's own namespace onto pod step details", () => {
+    const session = mapArgoWorkflowToSession(makePodWorkflow('tenant-alpha'));
+
+    expect(session.namespace).toBe('tenant-alpha');
+    expect(session.steps[0].detail?.namespace).toBe('tenant-alpha');
+  });
+
+  it('leaves the pod step namespace unset rather than assuming default', () => {
+    const session = mapArgoWorkflowToSession(makePodWorkflow(undefined));
+
+    expect(session.steps[0].detail?.namespace).toBeUndefined();
+  });
+});

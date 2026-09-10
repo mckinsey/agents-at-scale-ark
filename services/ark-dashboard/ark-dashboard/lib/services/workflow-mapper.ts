@@ -135,7 +135,7 @@ function buildNodeDetail(
   if (node.type === 'Pod' && node.id) {
     detail.workflowName = workflowName;
     detail.nodeId = node.id;
-    detail.namespace = workflowNamespace || 'default';
+    detail.namespace = workflowNamespace;
 
     if (node.podName) {
       detail.podName = node.podName;
