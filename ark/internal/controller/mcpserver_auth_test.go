@@ -212,7 +212,7 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationDiscoveryFailed))
 	})
 
-	It("populates authorization state even when auth server metadata fetch fails", func() {
+	It("surfaces state=DiscoveryFailed when auth server metadata yields no usable endpoints", func() {
 		srv := fakeMCPServerWithOpts(fakeMCPServerOpts{compliant: true, brokenAuthServer: true})
 		defer srv.Close()
 
@@ -242,16 +242,37 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
 
 		Expect(out.Status.Authorization).NotTo(BeNil())
-		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateRequired))
-		Expect(out.Status.Authorization.Resource).To(Equal(srv.URL + "/mcp"))
-		Expect(out.Status.Authorization.ResourceName).To(Equal("Fake MCP (Test)"))
-		Expect(out.Status.Authorization.AuthorizationServers).To(ConsistOf(srv.URL))
+		// Required would offer the dashboard an Authenticate button that
+		// ark-api rejects with 422, since auth/start needs both endpoints.
+		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateDiscoveryFailed))
 		Expect(out.Status.Authorization.AuthorizationEndpoint).To(BeEmpty())
 		Expect(out.Status.Authorization.TokenEndpoint).To(BeEmpty())
 
 		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
 		Expect(avail).NotTo(BeNil())
-		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationRequired))
+		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationDiscoveryFailed))
+	})
+
+	It("keeps state=Required for a machine-managed server whose AS advertises no authorization_endpoint", func() {
+		srv := newMachineMCPServer(machineMCPOpts{advertiseClientCredentials: true})
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-cc-no-authz-endpoint"
+		createMachineMCPServer(ctx, name, srv.URL+"/mcp", srv.privateKey)
+
+		r := newMachineReconciler()
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+
+		// client_credentials has no browser redirect, so a missing
+		// authorization_endpoint is normal and must not be downgraded to
+		// DiscoveryFailed — the controller mints the token itself.
+		Expect(out.Status.Authorization).NotTo(BeNil())
+		Expect(out.Status.Authorization.State).NotTo(Equal(arkv1alpha1.MCPServerAuthorizationStateDiscoveryFailed))
+		Expect(out.Status.Authorization.AuthorizationEndpoint).To(BeEmpty())
+		Expect(out.Status.Authorization.TokenEndpoint).To(Equal(srv.URL + "/token"))
 	})
 
 	It("surfaces state=DiscoveryFailed when the server returns 401 without a usable WWW-Authenticate header", func() {
@@ -789,3 +810,127 @@ func mux401Toggling(expected *string) *http.ServeMux {
 	})
 	return mux
 }
+
+var _ = Describe("MCPServer Controller — header authorization recovery", func() {
+	ctx := context.Background()
+
+	It("clears status.authorization when a mistyped Authorization header is corrected", func() {
+		const token = "valid-pat-token"
+		srv := fakeAuthorizedMCPServer(token)
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-repro-3075"
+
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+				Headers: []arkv1alpha1.Header{
+					{Name: "Authorisation", Value: arkv1alpha1.HeaderValue{Value: "Bearer " + token}},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+
+		r := &MCPServerReconciler{
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
+		}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+		Expect(out.Status.Authorization).NotTo(BeNil(), "typo header should leave server Unauthenticated")
+		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateRequired))
+
+		out.Spec.Headers = []arkv1alpha1.Header{
+			{Name: "Authorization", Value: arkv1alpha1.HeaderValue{Value: "Bearer " + token}},
+		}
+		Expect(k8sClient.Update(ctx, out)).To(Succeed())
+
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		fixed := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, fixed)).To(Succeed())
+
+		avail := findCondition(fixed.Status.Conditions, MCPServerAvailable)
+		Expect(avail).NotTo(BeNil())
+		Expect(avail.Status).To(Equal(metav1.ConditionTrue), "server should become Available after header fix")
+
+		Expect(fixed.Status.Authorization).To(BeNil(),
+			"status.authorization must be cleared so the dashboard shows Active, not Unauthenticated")
+	})
+})
+
+var _ = Describe("MCPServer Controller — status persistence on re-poll", func() {
+	ctx := context.Background()
+
+	It("persists a refreshed expiresAt from the Secret even when no condition changes", func() {
+		const token = "rotating-access-token"
+		srv := fakeAuthorizedMCPServer(token)
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-refresh-expiry"
+		const secretName = "mcp-auth-refresh-expiry-secret"
+		firstExpiry := time.Now().Add(1 * time.Hour).UTC().Truncate(time.Second)
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+			Data: map[string][]byte{
+				"access_token": []byte(token),
+				"expires_at":   []byte(firstExpiry.Format(time.RFC3339)),
+			},
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, secret) })
+
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+
+		r := &MCPServerReconciler{
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
+		}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+		Expect(out.Status.Authorization).NotTo(BeNil())
+		Expect(out.Status.Authorization.ExpiresAt).NotTo(BeNil())
+		Expect(out.Status.Authorization.ExpiresAt.Time.Equal(firstExpiry)).To(BeTrue())
+
+		secondExpiry := firstExpiry.Add(2 * time.Hour)
+		out.Spec.Timeout = "5s"
+		refreshed := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: "default"}, refreshed)).To(Succeed())
+		refreshed.Data["expires_at"] = []byte(secondExpiry.Format(time.RFC3339))
+		Expect(k8sClient.Update(ctx, refreshed)).To(Succeed())
+
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		after := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, after)).To(Succeed())
+		Expect(after.Status.Authorization).NotTo(BeNil())
+		Expect(after.Status.Authorization.ExpiresAt).NotTo(BeNil())
+		Expect(after.Status.Authorization.ExpiresAt.Time.Equal(secondExpiry)).To(BeTrue(),
+			"a refreshed expiresAt must be persisted even when Available/Discovering are unchanged")
+	})
+})
