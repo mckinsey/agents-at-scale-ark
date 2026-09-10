@@ -216,6 +216,49 @@ describe('MarketplaceItemCard', () => {
     expect(screen.getByText('ark install test')).toBeInTheDocument();
   });
 
+  it('opens command dialog without a click when autoOpenInstall is set', async () => {
+    mockMutateAsync.mockResolvedValue({
+      status: 'command',
+      helmCommand: 'helm install auto',
+      arkCommand: 'ark install auto',
+    });
+
+    renderWithProviders(
+      <MarketplaceItemCard item={makeItem()} autoOpenInstall />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('ark install auto')).toBeInTheDocument();
+    });
+    expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    expect(mockMutateAsync).toHaveBeenCalledWith('test-item');
+  });
+
+  it('does not auto open the command dialog for installed items', async () => {
+    renderWithProviders(
+      <MarketplaceItemCard
+        item={makeItem({ status: 'installed' })}
+        autoOpenInstall
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /installed/i })).toBeDisabled();
+    });
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('does not auto open the command dialog for demo items', async () => {
+    renderWithProviders(
+      <MarketplaceItemCard item={makeItem({ type: 'demo' })} autoOpenInstall />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /view/i })).toBeInTheDocument();
+    });
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
   it('opens command dialog on error with command status', async () => {
     mockMutateAsync.mockRejectedValue({
       data: {
