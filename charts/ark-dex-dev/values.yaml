@@ -1,0 +1,76 @@
+image:
+  repository: ghcr.io/dexidp/dex
+  tag: v2.45.1
+
+# Service name is fixed rather than derived from the release name: the issuer URL
+# below embeds it, and both the browser and the in-cluster pods must reach Dex at
+# that exact URL. Renaming the release would silently break token validation.
+service:
+  name: dex
+  port: 5556
+
+# Issuer URL, used verbatim as the `iss` claim and as the discovery base.
+# `dex.default.svc.cluster.local` resolves in-cluster via CoreDNS and, on the
+# developer machine, via an /etc/hosts entry pointing at the port-forward — the
+# same URL works from both sides. A *.127.0.0.1.nip.io host cannot: nip.io
+# resolves to 127.0.0.1, which inside a pod is the pod itself.
+issuer: http://dex.default.svc.cluster.local:5556/dex
+
+# OAuth client for the dashboard. clientId must match ark-api's
+# OIDC_APPLICATION_ID: Dex sets the token's `aud` to the client id.
+client:
+  id: ark-dashboard
+  secret: ark-dashboard-dev-secret
+  # providerId in the dashboard fixes the callback path to
+  # /api/auth/callback/<providerId>, so these must stay in sync.
+  redirectURIs:
+    - http://dashboard.default.127.0.0.1.nip.io:8080/api/auth/callback/dex
+    - http://127.0.0.1.nip.io:8080/api/auth/callback/dex
+
+# Hardcoded users. Both share the same password; the bcrypt hashes differ only by
+# salt. Dex enforces a minimum bcrypt cost of 10.
+#
+# Dex's static password store has no groups field, so these identities carry no
+# `groups` claim and RBAC binds them by username (email) — see templates/rbac.yaml.
+users:
+  password: arkdev123
+  admin:
+    email: admin@ark.local
+    username: admin
+    userID: ark-dev-admin
+    hash: "$2y$10$PG/DEtGxkzg7y5Fai80sFuZC56pH.95WrAnr/XYrVX/TvBNPCV5/S"
+  viewer:
+    email: viewer@ark.local
+    username: viewer
+    userID: ark-dev-viewer
+    hash: "$2y$10$K7/2psZvb9qJRT06KLenuew5UeGlWadaDQr0HDfWTTssWk7bnpSei"
+
+# How long Dex keeps a refresh token stable. Inside this window Dex does not
+# rotate at all: repeated refreshes return the same token, so two concurrent
+# refreshes cannot leave one caller holding a dead one. The first refresh after
+# the window closes rotates, and the token it supersedes stays claimable for one
+# further window.
+#
+# Dex's default is 0, which rotates on every single use. Three minutes is a
+# development convenience: it also means the token rotates at most once every
+# three minutes and a leaked one stays replayable that long, so this is not a
+# value to carry into a real deployment.
+refreshTokens:
+  reuseInterval: "3m"
+
+rbac:
+  create: true
+  # Role installed by charts/ark-tenant, bound to the admin user on top of the
+  # Ark-resource ClusterRole so "full access" also covers secrets, configmaps and
+  # pods in the namespace. Skipped when the Role is absent (ENABLE_ARK_TENANT=false):
+  # a RoleBinding to a missing Role grants nothing, it does not error.
+  arkTenantRoleName: ark-tenant-role
+  bindArkTenantRole: true
+
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"

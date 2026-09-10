@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ark-dex-dev
+description: Dex OIDC provider with hardcoded users for Ark development
+type: application
+version: 0.1.0
+appVersion: "2.45.1"
