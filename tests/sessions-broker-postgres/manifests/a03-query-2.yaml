@@ -7,6 +7,9 @@ spec:
   target:
     type: agent
     name: sessions-postgres-agent-b
+  memory:
+    name: default
+    namespace: default
   sessionId: ($namespace)
   conversationId: e2e-sessions-broker-postgres-conv-2
   ttl: "1h0m0s"

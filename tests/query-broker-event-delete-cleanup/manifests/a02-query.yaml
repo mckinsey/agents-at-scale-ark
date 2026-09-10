@@ -7,4 +7,7 @@ spec:
   target:
     type: agent
     name: event-delete-cleanup-agent
+  memory:
+    name: default
+    namespace: default
   ttl: "1h0m0s"
