@@ -173,7 +173,7 @@ httpRoute:
 # (see samples/marketplace/authenticated-source-rbac.yaml).
 marketplaceSources:
   - name: agents-at-scale-marketplace
-    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
+    url: https://github.com/mckinsey/agents-at-scale-marketplace/releases/download/v0.1.43/marketplace.json
     displayName: "Ark Marketplace"
   # - name: internal-mirror
   #   url: https://internal.example.com/marketplace.json

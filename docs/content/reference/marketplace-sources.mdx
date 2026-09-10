@@ -25,7 +25,7 @@ metadata:
   namespace: team-a
 data:
   agents-at-scale-marketplace: |
-    {"url":"https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json","displayName":"Ark Marketplace"}
+    {"url":"https://github.com/mckinsey/agents-at-scale-marketplace/releases/download/v0.1.43/marketplace.json","displayName":"Ark Marketplace"}
   internal-mirror: |
     {"url":"https://internal.example.com/marketplace.json","auth":{"scheme":"bearer","secretRef":"marketplace-source-internal-mirror-auth"}}
 ```
@@ -59,8 +59,9 @@ server-side:
 The credential is never returned by the API and never logged. The aggregator
 reads the Secret **under the requesting user's identity** (impersonation), so a
 user who cannot read the Secret cannot fetch with it — the source reports an
-`auth_error` for them. Credentialed fetches keep the SSRF guard and never follow
-redirects or send the header to another host.
+`auth_error` for them. Credentialed fetches keep the SSRF guard on every redirect
+hop and never send the header to another host: the `Authorization` header is
+dropped as soon as a redirect leaves the configured origin.
 
 ## RBAC
 
@@ -123,7 +124,7 @@ entries with `name`, `url`, optional `displayName`, and optional `namespace`
 ```yaml
 marketplaceSources:
   - name: agents-at-scale-marketplace
-    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
+    url: https://github.com/mckinsey/agents-at-scale-marketplace/releases/download/v0.1.43/marketplace.json
     displayName: "Ark Marketplace"
   - name: internal-mirror
     url: https://internal.example.com/marketplace.json

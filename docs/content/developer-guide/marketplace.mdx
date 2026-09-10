@@ -124,6 +124,7 @@ Pick the scheme your host expects — **Bearer / token** for GitHub-style hosts,
 The URL must return the raw manifest bytes, not an HTML file-viewer page.
 
 - **GitHub** — open the file and click **Raw**, then copy the address: `https://raw.githubusercontent.com/<org>/<repo>/<branch>/marketplace.json` (private repos need a **Bearer / token** credential).
+- **GitHub release asset** — `https://github.com/<org>/<repo>/releases/download/<tag>/marketplace.json`, or `.../releases/latest/download/marketplace.json` to always track the latest release. These URLs redirect to a CDN host; ark-api follows the redirect.
 - **Azure DevOps Repos** — there is no "Raw" button. Don't build the URL by hand — use the [Azure DevOps](#azure-devops) mode: enter the organization, project, repository, branch, and path, and the dashboard builds and URL-encodes the fetch URL for you, with a preview before you save. Use a PAT scoped to **Code: Read**; the **Azure DevOps** mode auto-selects **HTTP Basic** auth for you.
 
 ## `marketplace.json` schema

@@ -11,13 +11,15 @@ import httpx
 
 from ...models.marketplace_sources import AuthScheme
 
+MAX_REDIRECTS = 5
+
 
 class SourceBlockedError(Exception):
     """The source host resolved to a non-routable/blocked address (SSRF guard)."""
 
 
 class SourceRedirectError(Exception):
-    """The source responded with a redirect; credentialed fetches never follow."""
+    """The source redirect chain could not be followed safely."""
 
 
 async def resolve_safe_ip(host: str, port: int) -> Optional[str]:
@@ -57,18 +59,17 @@ def build_auth_header(scheme: AuthScheme, value: str) -> dict[str, str]:
     return {"Authorization": f"Basic {token}"}
 
 
-async def fetch_manifest(
+def _origin(url: str) -> tuple[str, str, int]:
+    parsed = urlparse(url)
+    return parsed.scheme, (parsed.hostname or ""), (parsed.port or 443)
+
+
+async def _get_pinned(
     http_client: httpx.AsyncClient,
     url: str,
-    *,
-    auth_header: Optional[dict[str, str]] = None,
-) -> object:
-    """Fetch a manifest with the SSRF guard applied and the IP pinned.
-
-    The Authorization header reaches only the configured host: the request targets the
-    validated IP with the original Host/SNI, and a redirect is an error (never followed).
-    Raises SourceBlockedError, SourceRedirectError, or httpx/JSON errors for callers to map.
-    """
+    auth_header: Optional[dict[str, str]],
+) -> httpx.Response:
+    """GET one URL against a validated IP, keeping the original Host/SNI."""
     parsed = urlparse(url)
     host = parsed.hostname
     port = parsed.port or 443
@@ -81,12 +82,46 @@ async def fetch_manifest(
         headers.update(auth_header)
 
     ip_url = httpx.URL(url).copy_with(host=safe_ip)
-    response = await http_client.get(
+    return await http_client.get(
         ip_url,
         headers=headers,
         extensions={"sni_hostname": host},
     )
-    if response.is_redirect:
-        raise SourceRedirectError("redirects are not followed")
-    response.raise_for_status()
-    return response.json()
+
+
+async def fetch_manifest(
+    http_client: httpx.AsyncClient,
+    url: str,
+    *,
+    auth_header: Optional[dict[str, str]] = None,
+) -> object:
+    """Fetch a manifest with the SSRF guard applied and the IP pinned.
+
+    Redirects are followed one hop at a time so every hop is re-validated: the target
+    must be https, its host must pass the SSRF guard, and the Authorization header is
+    dropped as soon as the origin changes, so a credential only ever reaches the
+    configured host. Raises SourceBlockedError, SourceRedirectError, or httpx/JSON
+    errors for callers to map.
+    """
+    current = url
+    origin = _origin(url)
+    header = auth_header
+
+    for _ in range(MAX_REDIRECTS + 1):
+        response = await _get_pinned(http_client, current, header)
+        if not response.is_redirect:
+            response.raise_for_status()
+            return response.json()
+
+        location = response.headers.get("location")
+        if not location:
+            raise SourceRedirectError("redirect is missing a location")
+        current = str(httpx.URL(current).join(location))
+        next_origin = _origin(current)
+        if next_origin[0] != "https":
+            raise SourceRedirectError("redirect target must be an https URL")
+        if next_origin != origin:
+            header = None
+            origin = next_origin
+
+    raise SourceRedirectError("too many redirects")

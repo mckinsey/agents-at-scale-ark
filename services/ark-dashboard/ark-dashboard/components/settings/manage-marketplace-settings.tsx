@@ -16,7 +16,7 @@ import {
 } from '@/lib/services/marketplace-hooks';
 
 const PUBLIC_MARKETPLACE_URL =
-  'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
+  'https://github.com/mckinsey/agents-at-scale-marketplace/releases/download/v0.1.43/marketplace.json';
 
 type SchemeChoice = 'none' | MarketplaceAuthScheme;
 

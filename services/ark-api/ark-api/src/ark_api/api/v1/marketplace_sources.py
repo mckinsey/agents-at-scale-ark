@@ -125,10 +125,8 @@ async def _validate_source(url: str, auth_header: Optional[dict[str, str]]) -> N
             await fetch_manifest(http_client, url, auth_header=auth_header)
         except SourceBlockedError:
             raise HTTPException(status_code=400, detail="source host is not allowed")
-        except SourceRedirectError:
-            raise HTTPException(
-                status_code=400, detail="source returned a redirect, which is not followed"
-            )
+        except SourceRedirectError as e:
+            raise HTTPException(status_code=400, detail=f"source redirect failed: {e}")
         except httpx.HTTPStatusError as e:
             raise HTTPException(
                 status_code=400,

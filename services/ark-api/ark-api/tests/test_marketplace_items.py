@@ -46,9 +46,10 @@ def _secret(value):
 
 
 class _FakeResponse:
-    def __init__(self, payload, is_redirect=False):
+    def __init__(self, payload, is_redirect=False, location=None):
         self._payload = payload
         self.is_redirect = is_redirect
+        self.headers = {"location": location} if location else {}
 
     def raise_for_status(self):
         return None
@@ -363,18 +364,139 @@ class TestMarketplaceItemsAuth(unittest.TestCase):
             response = client.get("/v1/namespaces/team-a/marketplace-items")
         self.assertEqual(response.json()[0]["error"]["code"], "auth_error")
 
-    def test_credentialed_redirect_not_followed(self):
+    def test_credentialed_cross_host_redirect_drops_the_credential(self):
         mock_core = _make_core(
             [("a", "https://a.test/m.json", None, {"scheme": "bearer", "secretRef": "sec-a"})],
             secrets={"sec-a": "tok"},
         )
+        recorded: list = []
+
+        async def _fake_resolve(host, port):
+            return host
+
+        class _Client:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get(self, url, headers=None, extensions=None):
+                recorded.append({"url": str(url), "headers": headers})
+                if "a.test" in str(url):
+                    return _FakeResponse(
+                        None, is_redirect=True, location="https://cdn.test/m.json"
+                    )
+                return _FakeResponse({"items": [{"name": "x"}]})
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(f"{MODULE}.get_impersonating_api_client", _fake_api_client)
+            )
+            stack.enter_context(patch(f"{MODULE}.client.CoreV1Api", return_value=mock_core))
+            stack.enter_context(
+                patch(f"{MODULE}.httpx.AsyncClient", lambda *a, **k: _Client())
+            )
+            stack.enter_context(patch(f"{FETCH}.resolve_safe_ip", _fake_resolve))
+            response = client.get("/v1/namespaces/team-a/marketplace-items")
+
+        self.assertEqual(response.json()[0]["items"], [{"name": "x"}])
+        self.assertIn("Authorization", recorded[0]["headers"])
+        self.assertNotIn(
+            "Authorization",
+            recorded[1]["headers"],
+            "credential must not follow a cross-host redirect",
+        )
+
+    def test_same_origin_redirect_keeps_the_credential(self):
+        mock_core = _make_core(
+            [("a", "https://a.test/m.json", None, {"scheme": "bearer", "secretRef": "sec-a"})],
+            secrets={"sec-a": "tok"},
+        )
+        recorded: list = []
+
+        async def _fake_resolve(host, port):
+            return host
+
+        class _Client:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get(self, url, headers=None, extensions=None):
+                recorded.append({"url": str(url), "headers": headers})
+                if str(url).endswith("/m.json"):
+                    return _FakeResponse(None, is_redirect=True, location="/latest.json")
+                return _FakeResponse({"items": []})
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(f"{MODULE}.get_impersonating_api_client", _fake_api_client)
+            )
+            stack.enter_context(patch(f"{MODULE}.client.CoreV1Api", return_value=mock_core))
+            stack.enter_context(
+                patch(f"{MODULE}.httpx.AsyncClient", lambda *a, **k: _Client())
+            )
+            stack.enter_context(patch(f"{FETCH}.resolve_safe_ip", _fake_resolve))
+            response = client.get("/v1/namespaces/team-a/marketplace-items")
+
+        self.assertEqual(response.json()[0]["items"], [])
+        self.assertEqual(recorded[1]["url"], "https://a.test/latest.json")
+        self.assertIn("Authorization", recorded[1]["headers"])
+
+    def test_redirect_to_blocked_host_is_rejected(self):
+        mock_core = _make_core([("a", "https://a.test/m.json", None)])
+
+        async def _fake_resolve(host, port):
+            return None if host == "metadata.internal" else host
 
         async def get_impl(url):
-            return _FakeResponse({"items": []}, is_redirect=True)
+            if "a.test" in url:
+                return _FakeResponse(
+                    None, is_redirect=True, location="https://metadata.internal/m.json"
+                )
+            return _FakeResponse({"items": []})
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(f"{MODULE}.get_impersonating_api_client", _fake_api_client)
+            )
+            stack.enter_context(patch(f"{MODULE}.client.CoreV1Api", return_value=mock_core))
+            stack.enter_context(
+                patch(f"{MODULE}.httpx.AsyncClient", lambda *a, **k: _FakeAsyncClient(get_impl))
+            )
+            stack.enter_context(patch(f"{FETCH}.resolve_safe_ip", _fake_resolve))
+            response = client.get("/v1/namespaces/team-a/marketplace-items")
+
+        self.assertEqual(response.json()[0]["error"]["code"], "network_error")
+        self.assertEqual(
+            response.json()[0]["error"]["message"], "source host is not allowed"
+        )
+
+    def test_redirect_to_plain_http_is_rejected(self):
+        mock_core = _make_core([("a", "https://a.test/m.json", None)])
+
+        async def get_impl(url):
+            return _FakeResponse(None, is_redirect=True, location="http://a.test/m.json")
 
         with _patch(mock_core, get_impl):
             response = client.get("/v1/namespaces/team-a/marketplace-items")
         self.assertEqual(response.json()[0]["error"]["code"], "network_error")
+
+    def test_redirect_loop_is_capped(self):
+        mock_core = _make_core([("a", "https://a.test/m.json", None)])
+        calls = {"n": 0}
+
+        async def get_impl(url):
+            calls["n"] += 1
+            return _FakeResponse(None, is_redirect=True, location="https://a.test/m.json")
+
+        with _patch(mock_core, get_impl):
+            response = client.get("/v1/namespaces/team-a/marketplace-items")
+        self.assertEqual(response.json()[0]["error"]["message"], "too many redirects")
+        self.assertEqual(calls["n"], 6)
 
     def test_credentialed_blocked_host_not_fetched(self):
         mock_core = _make_core(
