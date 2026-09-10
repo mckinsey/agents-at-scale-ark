@@ -288,7 +288,7 @@ class SecretClient:
             v1 = client.CoreV1Api(api)
 
             k8s_labels, annotations = _build_labels_and_annotations(
-                description, alias, labels
+                description, alias, [validate_tag(tag) for tag in (labels or [])]
             )
             secret = client.V1Secret(
                 api_version="v1",
@@ -309,7 +309,7 @@ class SecretClient:
                 "name": created_secret.metadata.name,
                 "id": str(created_secret.metadata.uid),
                 "type": created_secret.type,
-                "secret_length": self.calculate_secret_length(validated_data),
+                "secret_length": self.calculate_secret_length(created_secret.data or {}),
                 "annotations": filter_ark_annotations(created_secret.metadata.annotations),
                 **_to_secret_metadata(created_secret.metadata),
             }
@@ -364,7 +364,14 @@ class SecretClient:
         alias: Optional[str] = None,
         labels: Optional[List[str]] = None,
     ):
-        """Update an existing secret. Omitting string_data leaves its value unchanged."""
+        """Update an existing secret.
+
+        string_data is the one partial field: omit it to leave the secret's
+        value unchanged. description, alias and labels are a full replace,
+        same contract as ConfigurationClient.update_configuration - omitting
+        any of them clears it, so callers must send the complete desired
+        state for those fields on every call.
+        """
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
@@ -378,10 +385,11 @@ class SecretClient:
             if string_data is not None:
                 existing_secret.string_data = self.validate_and_encode_token(string_data)
 
+            existing_tags = labels_to_tags(existing_secret.metadata.labels)
             k8s_labels, annotations = _build_labels_and_annotations(
                 description,
                 alias,
-                labels,
+                validate_updated_tags(labels or [], existing_tags),
                 existing_labels=existing_secret.metadata.labels,
                 existing_annotations=existing_secret.metadata.annotations,
             )

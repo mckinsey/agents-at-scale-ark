@@ -75,7 +75,10 @@ class SecretUpdateRequest(BaseModel):
     @field_validator("labels")
     @classmethod
     def _validate_labels(cls, value: List[str]) -> List[str]:
-        return [validate_tag(label) for label in value]
+        # A tag pre-dating the alphanumeric-only rule may still be sent back
+        # unchanged here; SecretClient.update_secret enforces the current
+        # rule on anything that isn't already on the resource.
+        return [validate_legacy_tag(label) for label in value]
 
 
 class SecretDetailResponse(BaseModel):
