@@ -243,21 +243,22 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.labels = {}
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "dGVzdC10b2tlbg=="}  # base64 encoded "test-token"
-        
+
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
-        
+
         # Test the method
         result = await self.client.create_secret(
             name="test-secret",
             string_data={"token": "test-token"}
         )
-        
+
         # Assert response
         self.assertEqual(result["name"], "test-secret")
         self.assertEqual(result["id"], "uuid-12345")
         self.assertEqual(result["type"], "Opaque")
-        self.assertEqual(result["secret_length"], 10)  # length of "test-token"
+        # base64 length, consistent with get_secret/update_secret
+        self.assertEqual(result["secret_length"], len("dGVzdC10b2tlbg=="))
         self.assertEqual(result["annotations"], {"ark.mckinsey.com/dashboard-icon": "icons/gemini.png"})
 
     @patch('ark_sdk.k8s.ApiClient')
@@ -273,6 +274,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
         mock_secret.metadata.labels = {}
         mock_secret.type = "Opaque"
+        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}
 
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
@@ -302,9 +304,23 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         # Test validation directly
         with self.assertRaises(ValueError) as context:
             self.client.validate_and_encode_token({})
-        
+
         # Assert response
         self.assertEqual(str(context.exception), "Secret data cannot be empty")
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_create_secret_rejects_invalid_label(self, mock_v1_api, mock_api_client):
+        """A direct SDK caller (bypassing the FastAPI model) still gets a clear error."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        with self.assertRaises(ValueError):
+            await self.client.create_secret(
+                name="test-secret",
+                string_data={"token": "test-token"},
+                labels=["has space"],
+            )
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
@@ -322,6 +338,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         }
         mock_secret.metadata.labels = {"ark.mckinsey.com/label.prod": "true"}
         mock_secret.type = "Opaque"
+        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}
 
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
@@ -453,6 +470,50 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         body = mock_api_instance.replace_namespaced_secret.call_args.kwargs["body"]
         self.assertEqual(body.metadata.annotations, {"ark.mckinsey.com/description": "updated description"})
         self.assertEqual(result["description"], "updated description")
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_secret_keeps_legacy_label(self, mock_v1_api, mock_api_client):
+        """A label pre-dating the alphanumeric-only rule stays updatable if sent back unchanged."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        existing_secret = Mock()
+        existing_secret.metadata.name = "test-secret"
+        existing_secret.metadata.uid = "uuid-12345"
+        existing_secret.metadata.labels = {"ark.mckinsey.com/label.my-key": "true"}
+        existing_secret.metadata.annotations = {}
+        existing_secret.type = "Opaque"
+        existing_secret.data = {"token": "b2xkLXRva2Vu"}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=existing_secret)
+        mock_api_instance.replace_namespaced_secret = AsyncMock(return_value=existing_secret)
+
+        result = await self.client.update_secret(name="test-secret", labels=["my-key"])
+
+        self.assertEqual(result["labels"], ["my-key"])
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_secret_rejects_new_non_alphanumeric_label(self, mock_v1_api, mock_api_client):
+        """A brand-new label must still satisfy the alphanumeric-only rule."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        existing_secret = Mock()
+        existing_secret.metadata.name = "test-secret"
+        existing_secret.metadata.uid = "uuid-12345"
+        existing_secret.metadata.labels = {}
+        existing_secret.metadata.annotations = {}
+        existing_secret.type = "Opaque"
+        existing_secret.data = {"token": "b2xkLXRva2Vu"}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=existing_secret)
+
+        with self.assertRaises(ValueError):
+            await self.client.update_secret(name="test-secret", labels=["my-key"])
 
     def test_update_secret_invalid_fields(self):
         """Test updating secret with invalid fields - adapted from ark-api test."""
