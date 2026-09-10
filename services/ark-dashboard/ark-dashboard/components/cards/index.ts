@@ -1,5 +1,4 @@
 export { TeamCard } from './team-card';
-export { A2AServerCard } from './a2a-server-card';
 export { ToolCard } from './tool-card';
 export { HomepageModelsCard } from './homepage-models-card';
 export { HomepageAgentsCard } from './homepage-agents-card';

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { TokenManager } from '@/lib/auth/token-manager';
+import { TokenManager, TokenRefreshError } from '@/lib/auth/token-manager';
 import { openidConfigManager } from '@/lib/auth/openid-config-manager';
 import type { JWT } from '@auth/core/jwt';
 
@@ -118,8 +118,11 @@ describe('TokenManager', () => {
       });
 
       await expect(TokenManager.getNewAccessToken(mockToken)).rejects.toThrow(
-        'OIDC config does not provide a token endpoint'
+        TokenRefreshError
       );
+      await expect(
+        TokenManager.getNewAccessToken(mockToken)
+      ).rejects.toMatchObject({ code: 'no_token_endpoint' });
     });
 
     it('should throw error when token refresh request fails', async () => {
@@ -134,7 +137,16 @@ describe('TokenManager', () => {
         json: () => Promise.resolve(mockErrorResponse)
       });
 
-      await expect(TokenManager.getNewAccessToken(mockToken)).rejects.toEqual(mockErrorResponse);
+      const caught: unknown = await TokenManager.getNewAccessToken(
+        mockToken
+      ).catch((error: unknown) => error);
+
+      expect(caught).toBeInstanceOf(TokenRefreshError);
+      if (caught instanceof TokenRefreshError) {
+        expect(caught.code).toBe('invalid_grant');
+        expect(caught.isInvalidGrant).toBe(true);
+        expect(caught.cause).toEqual(mockErrorResponse);
+      }
     });
 
     it('should handle network errors during token refresh', async () => {
