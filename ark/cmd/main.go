@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -130,7 +131,11 @@ func main() {
 	setupLog.Info("starting ark controller", "version", Version, "commit", GitCommit, "role", result.role)
 
 	if limit, err := memlimit.Set(); err != nil {
-		setupLog.Error(err, "failed to configure GOMEMLIMIT from cgroup memory limit")
+		if errors.Is(err, memlimit.ErrCgroupsNotSupported) || errors.Is(err, memlimit.ErrNoCgroup) {
+			setupLog.Info("GOMEMLIMIT not configured: no cgroup memory limit available", "reason", err.Error())
+		} else {
+			setupLog.Error(err, "failed to configure GOMEMLIMIT from cgroup memory limit")
+		}
 	} else {
 		setupLog.Info("configured GOMEMLIMIT", "bytes", limit)
 	}
