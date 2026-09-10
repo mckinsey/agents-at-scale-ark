@@ -367,6 +367,12 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Cache openapi-generator JAR
+        uses: actions/cache@v4
+        with:
+          path: lib/ark-sdk/.openapi-generator-cli
+          key: openapi-generator-jar-${{ hashFiles('lib/ark-sdk/openapitools.json') }}
+
       - run: make -j24 services-build-all
 
       - name: Check generated types are unchanged
@@ -508,6 +514,17 @@ jobs:
         with:
           version: "0.11.21"
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Cache openapi-generator JAR
+        uses: actions/cache@v4
+        with:
+          path: lib/ark-sdk/.openapi-generator-cli
+          key: openapi-generator-jar-${{ hashFiles('lib/ark-sdk/openapitools.json') }}
+
       - name: Build libraries
         run: make libs-build-all
 
@@ -559,8 +576,12 @@ jobs:
       - name: Deploy localhost-gateway
         run: |
           echo "=== Deploying localhost-gateway ==="
-          # Install nginx-gateway-fabric CRDs (not handled by setup-e2e)
-          kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml
+          helm dependency build services/localhost-gateway/chart
+          # Install nginx-gateway-fabric CRDs from the chart dependency
+          CRD_TMP=$(mktemp -d)
+          tar -xzf services/localhost-gateway/chart/charts/nginx-gateway-fabric-*.tgz -C "$CRD_TMP" nginx-gateway-fabric/crds
+          kubectl apply -f "$CRD_TMP/nginx-gateway-fabric/crds/"
+          rm -rf "$CRD_TMP"
           helm upgrade --install localhost-gateway services/localhost-gateway/chart \
             --namespace ark-system \
             --create-namespace \
@@ -1108,7 +1129,12 @@ jobs:
 
       - name: Deploy localhost-gateway
         run: |
-          kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml
+          helm dependency build services/localhost-gateway/chart
+          # Install nginx-gateway-fabric CRDs from the chart dependency
+          CRD_TMP=$(mktemp -d)
+          tar -xzf services/localhost-gateway/chart/charts/nginx-gateway-fabric-*.tgz -C "$CRD_TMP" nginx-gateway-fabric/crds
+          kubectl apply -f "$CRD_TMP/nginx-gateway-fabric/crds/"
+          rm -rf "$CRD_TMP"
           helm upgrade --install localhost-gateway services/localhost-gateway/chart \
             --namespace ark-system \
             --create-namespace \

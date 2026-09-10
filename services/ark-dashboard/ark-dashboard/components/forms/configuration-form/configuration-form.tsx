@@ -2,7 +2,7 @@
 
 import { useId } from 'react';
 
-import { ChevronLeft, Info } from '@/components/icons';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,13 +16,9 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
+import { AliasField } from './alias-field';
 import { LabelsField } from './labels-field';
 import { type ConfigurationFormProps } from './types';
 import { useConfigurationForm } from './use-configuration-form';
@@ -43,11 +39,12 @@ export function ConfigurationForm({
   const { readOnlyMode } = useNamespace();
   const nameFieldId = useId();
   const valueFieldId = useId();
-  const { form, isEdit, loading, saving, onSubmit } = useConfigurationForm({
-    mode,
-    configurationName,
-    onSuccess,
-  });
+  const { form, isEdit, loading, saving, onSubmit, aliasOptions } =
+    useConfigurationForm({
+      mode,
+      configurationName,
+      onSuccess,
+    });
 
   const isDisabled = saving || loading || readOnlyMode;
   const heading = isEdit ? 'Edit configuration' : 'New configuration';
@@ -56,8 +53,8 @@ export function ConfigurationForm({
     return (
       <div
         aria-hidden
-        className="flex w-full content-shell flex-1 flex-col gap-6 pt-16">
-        {SKELETON_FIELDS.map((field) => (
+        className="content-shell flex w-full flex-1 flex-col gap-6 pt-16">
+        {SKELETON_FIELDS.map(field => (
           <div key={field} className="flex w-[576px] flex-col gap-2">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-9 w-full" />
@@ -68,25 +65,14 @@ export function ConfigurationForm({
   }
 
   return (
-    <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
+    <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
       <header className="flex flex-none flex-col gap-4">
         <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <ChevronLeft className="size-4 text-white/30" />
-            <NamespacedLink
-              href="/configurations"
-              className="text-white/30 transition-colors hover:text-white/60">
-              Configurations
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-white/60">
-              /
-            </span>
-            <span aria-current="page" className="text-white/60">
-              {heading}
-            </span>
-          </nav>
+          <DetailBreadcrumb
+            backHref="/configurations"
+            backLabel="Configurations"
+            current={heading}
+          />
           <div className="flex items-center gap-2">
             <NamespacedLink href="/configurations">
               <Button variant="outline">Cancel</Button>
@@ -178,34 +164,15 @@ export function ConfigurationForm({
               control={form.control}
               name="alias"
               render={({ field, fieldState }) => (
-                <FieldSet className="gap-2">
-                  <FieldTitle className="flex items-center gap-1.5">
-                    Alias
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="What is an alias?"
-                          className="text-fg-secondary hover:text-fg-primary">
-                          <Info className="size-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-72">
-                        A shorter label shown alongside the name in lists.
-                        Display only — resources still reference the
-                        configuration by its name.
-                      </TooltipContent>
-                    </Tooltip>
-                  </FieldTitle>
-                  <Input
-                    variant="inline"
-                    placeholder="e.g., github-mcp"
-                    disabled={isDisabled}
-                    aria-invalid={!!fieldState.error}
-                    {...field}
-                  />
-                  <FieldError>{fieldState.error?.message}</FieldError>
-                </FieldSet>
+                <AliasField
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  options={aliasOptions}
+                  disabled={isDisabled}
+                  invalid={!!fieldState.error}
+                  error={fieldState.error?.message}
+                />
               )}
             />
 

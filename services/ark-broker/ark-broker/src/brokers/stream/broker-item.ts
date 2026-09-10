@@ -11,6 +11,9 @@ export interface BrokerItem<T> {
   /** Timestamp when the item was added. Serialized as ISO 8601 string in JSON. */
   timestamp: Date;
 
+  /** Epoch ms after which the item is evictable. Absent means it never expires. */
+  expiresAt?: number;
+
   /** The actual data payload */
   data: T;
 }

@@ -11,6 +11,15 @@ vi.mock('@/lib/auth/auth-config', () => ({
   SESSION_COOKIE_NAME: 'authjs.session-token',
 }));
 
+vi.mock('@/lib/auth/refresh-coordinator', () => ({
+  isAccessTokenExpiring: vi.fn(() => false),
+  refreshAccessToken: vi.fn(),
+}));
+
+vi.mock('@/lib/auth/session-cookie', () => ({
+  persistSessionToken: vi.fn(),
+}));
+
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
@@ -313,6 +322,80 @@ describe('app/api/v1/[...proxy]/route', () => {
     });
   });
 
+  describe('backend failure handling', () => {
+    it('returns a structured 502 when the backend fetch throws (e.g. ECONNREFUSED)', async () => {
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      const cause = new TypeError('fetch failed');
+      mockFetch.mockRejectedValueOnce(cause);
+
+      const response = await GET(
+        makeRequest('/api/v1/agents'),
+        makeContext(['agents']),
+      );
+
+      expect(response.status).toBe(502);
+      const body = await response.json();
+      expect(body).toEqual({
+        error: 'backend unavailable',
+        detail: 'fetch failed',
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        '[proxy] ark-api request failed',
+        expect.objectContaining({
+          target: 'http://ark-api:80/v1/agents',
+          method: 'GET',
+          timedOut: false,
+          cause,
+        }),
+      );
+      consoleError.mockRestore();
+    });
+
+    it('returns 504 when the request exceeds ARK_API_PROXY_TIMEOUT_MS', async () => {
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      process.env.ARK_API_PROXY_TIMEOUT_MS = '1';
+      // Never resolve on its own; reject only once the combined abort fires.
+      mockFetch.mockImplementationOnce(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject((init.signal as AbortSignal).reason),
+            );
+          }),
+      );
+
+      const response = await GET(
+        makeRequest('/api/v1/agents'),
+        makeContext(['agents']),
+      );
+
+      expect(response.status).toBe(504);
+      const body = await response.json();
+      expect(body.error).toBe('backend timeout');
+      expect(consoleError).toHaveBeenCalledWith(
+        '[proxy] ark-api request failed',
+        expect.objectContaining({ timedOut: true }),
+      );
+      delete process.env.ARK_API_PROXY_TIMEOUT_MS;
+      consoleError.mockRestore();
+    });
+
+    it('rethrows (does not return 502) when the client aborted the request', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const request = makeRequest('/api/v1/agents');
+      Object.defineProperty(request, 'signal', { value: controller.signal });
+      const cause = new DOMException('aborted', 'AbortError');
+      mockFetch.mockRejectedValueOnce(cause);
+
+      await expect(GET(request, makeContext(['agents']))).rejects.toBe(cause);
+    });
+  });
+
   describe('response passthrough', () => {
     it('forwards the backend status code', async () => {
       mockFetch.mockResolvedValueOnce(makeBackendResponse({ status: 422 }));
@@ -336,6 +419,117 @@ describe('app/api/v1/[...proxy]/route', () => {
       );
 
       expect(await response.text()).toBe('{"items":[]}');
+    });
+  });
+
+  describe('access token refresh', () => {
+    const staleToken = {
+      access_token: 'stale-access-token',
+      refresh_token: 'refresh-token-a',
+      expires_at: 1_700_000_000,
+    };
+    const refreshedToken = {
+      access_token: 'fresh-access-token',
+      refresh_token: 'refresh-token-b',
+      expires_at: 1_700_000_300,
+    };
+
+    async function mockSession(token: unknown) {
+      const { getToken } = await import('next-auth/jwt');
+      vi.mocked(getToken).mockResolvedValueOnce(
+        token as Awaited<ReturnType<typeof getToken>>,
+      );
+    }
+
+    function authorizationOfLastCall(): string | null {
+      const [, init] = mockFetch.mock.calls[0];
+      return ((init as RequestInit).headers as Headers).get('Authorization');
+    }
+
+    it('refreshes and forwards the new bearer when the access token is expiring', async () => {
+      const { isAccessTokenExpiring, refreshAccessToken } =
+        await import('@/lib/auth/refresh-coordinator');
+      await mockSession(staleToken);
+      vi.mocked(isAccessTokenExpiring).mockReturnValueOnce(true);
+      vi.mocked(refreshAccessToken).mockResolvedValueOnce(refreshedToken);
+      mockFetch.mockResolvedValueOnce(makeBackendResponse());
+
+      await GET(makeRequest('/api/v1/agents'), makeContext(['agents']));
+
+      expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+      expect(authorizationOfLastCall()).toBe('Bearer fresh-access-token');
+    });
+
+    it('persists the refreshed session so the spent refresh token is not replayed', async () => {
+      const { isAccessTokenExpiring, refreshAccessToken } =
+        await import('@/lib/auth/refresh-coordinator');
+      const { persistSessionToken } = await import('@/lib/auth/session-cookie');
+      await mockSession(staleToken);
+      vi.mocked(isAccessTokenExpiring).mockReturnValueOnce(true);
+      vi.mocked(refreshAccessToken).mockResolvedValueOnce(refreshedToken);
+      mockFetch.mockResolvedValueOnce(makeBackendResponse());
+
+      await GET(makeRequest('/api/v1/agents'), makeContext(['agents']));
+
+      expect(persistSessionToken).toHaveBeenCalledWith(refreshedToken);
+    });
+
+    it('does not refresh while the access token is still valid', async () => {
+      const { isAccessTokenExpiring, refreshAccessToken } =
+        await import('@/lib/auth/refresh-coordinator');
+      const { persistSessionToken } = await import('@/lib/auth/session-cookie');
+      await mockSession({ ...staleToken, access_token: 'still-valid' });
+      vi.mocked(isAccessTokenExpiring).mockReturnValueOnce(false);
+      mockFetch.mockResolvedValueOnce(makeBackendResponse());
+
+      await GET(makeRequest('/api/v1/agents'), makeContext(['agents']));
+
+      expect(refreshAccessToken).not.toHaveBeenCalled();
+      expect(persistSessionToken).not.toHaveBeenCalled();
+      expect(authorizationOfLastCall()).toBe('Bearer still-valid');
+    });
+
+    it('still proxies with the stale bearer when the refresh fails', async () => {
+      const { isAccessTokenExpiring, refreshAccessToken } =
+        await import('@/lib/auth/refresh-coordinator');
+      const { persistSessionToken } = await import('@/lib/auth/session-cookie');
+      const { TokenRefreshError } = await import('@/lib/auth/token-manager');
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      await mockSession(staleToken);
+      vi.mocked(isAccessTokenExpiring).mockReturnValueOnce(true);
+      vi.mocked(refreshAccessToken).mockRejectedValueOnce(
+        new TokenRefreshError('invalid_grant'),
+      );
+      mockFetch.mockResolvedValueOnce(makeBackendResponse());
+
+      const response = await GET(
+        makeRequest('/api/v1/agents'),
+        makeContext(['agents']),
+      );
+
+      expect(response.status).toBe(200);
+      expect(authorizationOfLastCall()).toBe('Bearer stale-access-token');
+      expect(persistSessionToken).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        expect.stringContaining('invalid_grant'),
+        expect.anything(),
+      );
+      consoleError.mockRestore();
+    });
+
+    it('does not attempt a refresh when there is no session (open mode)', async () => {
+      const { isAccessTokenExpiring, refreshAccessToken } =
+        await import('@/lib/auth/refresh-coordinator');
+      await mockSession(null);
+      mockFetch.mockResolvedValueOnce(makeBackendResponse());
+
+      await GET(makeRequest('/api/v1/agents'), makeContext(['agents']));
+
+      expect(isAccessTokenExpiring).not.toHaveBeenCalled();
+      expect(refreshAccessToken).not.toHaveBeenCalled();
+      expect(authorizationOfLastCall()).toBeNull();
     });
   });
 });

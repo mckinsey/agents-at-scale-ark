@@ -5,6 +5,7 @@ import { APIError } from '@/lib/api/client';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { configurationsService } from './configurations';
+import { createResourceErrorMessage } from './resource-error-message';
 import type {
   Configuration,
   ConfigurationCreateRequest,
@@ -75,13 +76,12 @@ export const useCreateConfiguration = (
       props?.onSuccess?.(data);
     },
     onError: (error, request) => {
-      const message =
-        error instanceof APIError && error.status === 409
-          ? `A Configuration with the name "${request.name}" already exists.`
-          : getErrorMessage(error);
-
       toast.error(`Failed to create Configuration: ${request.name}`, {
-        description: message,
+        description: createResourceErrorMessage(
+          error,
+          'Configuration',
+          request.name,
+        ),
       });
     },
     onSettled: () => {

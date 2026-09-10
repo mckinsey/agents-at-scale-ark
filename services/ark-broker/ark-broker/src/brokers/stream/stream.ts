@@ -13,6 +13,8 @@ export function hasScopingField(filter: Record<string, unknown>): boolean {
 }
 
 export interface Stream<T> {
+  init?(): Promise<void>;
+  close?(): void;
   append(data: T, ttlSeconds?: number): Promise<BrokerItem<T>>;
   all(): Promise<BrokerItem<T>[]>;
   filter(predicate: Predicate<T>): Promise<BrokerItem<T>[]>;

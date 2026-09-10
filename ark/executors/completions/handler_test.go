@@ -1038,6 +1038,25 @@ func TestCheckResumption(t *testing.T) {
 			expectPhase:      arka2a.PhaseFailed,
 		},
 		{
+			name: "no resumption - completed external agent task",
+			a2aTask: &arkv1alpha1.A2ATask{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "a2a-task-test-123",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.A2ATaskSpec{
+					A2AServerRef: &arkv1alpha1.A2AServerRef{
+						Name:      "external-agent-server",
+						Namespace: "default",
+					},
+				},
+				Status: arkv1alpha1.A2ATaskStatus{
+					Phase: arka2a.PhaseCompleted,
+				},
+			},
+			expectResumption: false,
+		},
+		{
 			name:             "no resumption - no task",
 			a2aTask:          nil,
 			expectResumption: false,

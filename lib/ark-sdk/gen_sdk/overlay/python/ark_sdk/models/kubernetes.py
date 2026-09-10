@@ -4,7 +4,7 @@ from typing import List, Dict, Optional
 from pydantic import BaseModel, field_validator
 
 from ..annotations import filter_ark_annotations
-from ..labels import validate_tag
+from ..labels import validate_legacy_tag, validate_tag
 
 
 class NamespaceResponse(BaseModel):
@@ -114,7 +114,10 @@ class ConfigurationUpdateRequest(BaseModel):
     @field_validator("labels")
     @classmethod
     def _validate_labels(cls, value: List[str]) -> List[str]:
-        return [validate_tag(label) for label in value]
+        # A tag pre-dating the alphanumeric-only rule may still be sent back
+        # unchanged here; ConfigurationClient.update_configuration enforces
+        # the current rule on anything that isn't already on the resource.
+        return [validate_legacy_tag(label) for label in value]
 
 
 class ConfigurationReference(BaseModel):

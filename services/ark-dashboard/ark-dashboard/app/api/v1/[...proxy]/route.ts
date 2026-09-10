@@ -3,6 +3,12 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { SESSION_COOKIE_NAME } from '@/lib/auth/auth-config';
+import {
+  isAccessTokenExpiring,
+  refreshAccessToken,
+} from '@/lib/auth/refresh-coordinator';
+import { persistSessionToken } from '@/lib/auth/session-cookie';
+import { TokenRefreshError } from '@/lib/auth/token-manager';
 
 interface RouteContext {
   params: Promise<{ proxy: string[] }>;
@@ -109,6 +115,11 @@ function backendBaseUrl(): string {
   return `${protocol}://${host}:${port}`;
 }
 
+function proxyTimeoutMs(): number {
+  const parsed = Number(process.env.ARK_API_PROXY_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30_000;
+}
+
 async function proxyToArkApi(
   request: NextRequest,
   proxyPath: string[],
@@ -120,11 +131,25 @@ async function proxyToArkApi(
   // cookie is absent and getToken returns null, so no Authorization header is
   // added — matching the prior in-process middleware (proxy.ts before commit
   // b16307122) so SSO deployments keep authenticating against ark-api.
-  const token = await getToken({
+  let token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,
     cookieName: SESSION_COOKIE_NAME,
   });
+
+  if (token && isAccessTokenExpiring(token)) {
+    try {
+      token = await refreshAccessToken(token);
+      await persistSessionToken(token);
+    } catch (error) {
+      const code =
+        error instanceof TokenRefreshError ? error.code : 'refresh_failed';
+      console.error(
+        `[proxy] access token refresh failed (${code})`,
+        error instanceof Error ? (error.cause ?? error.message) : error,
+      );
+    }
+  }
 
   const headers = new Headers(request.headers);
   headers.set('X-Forwarded-Prefix', '/api');
@@ -146,10 +171,14 @@ async function proxyToArkApi(
     headers.set('Authorization', `Bearer ${token.access_token}`);
   }
 
+  // Bound the backend call so a hung ark-api can't pile requests up in Node's
+  // queue and exhaust the dashboard process. Abort on either a client
+  // disconnect (request.signal) or the timeout, whichever fires first.
+  const timeoutSignal = AbortSignal.timeout(proxyTimeoutMs());
   const fetchOptions: BackendFetchOptions = {
     method: request.method,
     headers,
-    signal: request.signal,
+    signal: AbortSignal.any([request.signal, timeoutSignal]),
   };
 
   if (request.body && request.method !== 'GET' && request.method !== 'HEAD') {
@@ -157,7 +186,31 @@ async function proxyToArkApi(
     fetchOptions.duplex = 'half';
   }
 
-  const backendResponse = await fetch(targetUrl, fetchOptions);
+  let backendResponse: Response;
+  try {
+    backendResponse = await fetch(targetUrl, fetchOptions);
+  } catch (error) {
+    // The client went away; nothing to return to.
+    if (request.signal.aborted) {
+      throw error;
+    }
+    // Surface the real cause here so it isn't buried under auth.js's blanket
+    // JWTSessionError wrapper, which has nothing to do with the failure.
+    const timedOut = timeoutSignal.aborted;
+    console.error('[proxy] ark-api request failed', {
+      target: targetUrl,
+      method: request.method,
+      timedOut,
+      cause: error,
+    });
+    return NextResponse.json(
+      {
+        error: timedOut ? 'backend timeout' : 'backend unavailable',
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      { status: timedOut ? 504 : 502 },
+    );
+  }
 
   const responseHeaders = new Headers(backendResponse.headers);
   // Hop-by-hop and content-length headers can confuse Next.js's response

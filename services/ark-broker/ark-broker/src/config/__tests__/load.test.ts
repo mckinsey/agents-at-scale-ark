@@ -9,10 +9,11 @@ describe('loadConfig', () => {
     expect(cfg.server.port).toBe(8080);
     expect(cfg.server.host).toBe('0.0.0.0');
     expect(cfg.server.requestTimeoutMs).toBe(0);
-    expect(cfg.limits.maxMessages).toBe(0);
-    expect(cfg.limits.maxChunks).toBe(0);
-    expect(cfg.limits.maxSpans).toBe(0);
-    expect(cfg.limits.maxEvents).toBe(0);
+    expect(cfg.limits.messageMaxBytes).toBe(104857600);
+    expect(cfg.limits.eventMaxBytes).toBe(104857600);
+    expect(cfg.limits.chunkMaxBytes).toBe(33554432);
+    expect(cfg.limits.traceMaxBytes).toBe(33554432);
+    expect(cfg.limits.chunkTtlSeconds).toBe(3600);
     expect(cfg.persistence.memoryFilePath).toBeUndefined();
     expect(cfg.persistence.streamFilePath).toBeUndefined();
     expect(cfg.persistence.traceFilePath).toBeUndefined();
@@ -45,10 +46,10 @@ describe('loadConfig', () => {
       PORT: '9000',
       HOST: '127.0.0.1',
       REQUEST_TIMEOUT_MS: '5000',
-      MAX_MESSAGES: '100',
-      MAX_CHUNKS: '500',
-      MAX_SPANS: '50',
-      MAX_EVENTS: '200',
+      MESSAGE_MAX_BYTES: '1048576',
+      EVENT_MAX_BYTES: '2097152',
+      CHUNK_MAX_BYTES: '524288',
+      TRACE_MAX_BYTES: '262144',
       MEMORY_FILE_PATH: '/tmp/m.json',
       STREAM_FILE_PATH: '/tmp/s.json',
       TRACE_FILE_PATH: '/tmp/t.json',
@@ -61,10 +62,10 @@ describe('loadConfig', () => {
     expect(cfg.server.port).toBe(9000);
     expect(cfg.server.host).toBe('127.0.0.1');
     expect(cfg.server.requestTimeoutMs).toBe(5000);
-    expect(cfg.limits.maxMessages).toBe(100);
-    expect(cfg.limits.maxChunks).toBe(500);
-    expect(cfg.limits.maxSpans).toBe(50);
-    expect(cfg.limits.maxEvents).toBe(200);
+    expect(cfg.limits.messageMaxBytes).toBe(1048576);
+    expect(cfg.limits.eventMaxBytes).toBe(2097152);
+    expect(cfg.limits.chunkMaxBytes).toBe(524288);
+    expect(cfg.limits.traceMaxBytes).toBe(262144);
     expect(cfg.persistence.memoryFilePath).toBe('/tmp/m.json');
     expect(cfg.persistence.streamFilePath).toBe('/tmp/s.json');
     expect(cfg.persistence.traceFilePath).toBe('/tmp/t.json');
@@ -85,7 +86,7 @@ describe('loadConfig', () => {
   });
 
   it('rejects negative integers', () => {
-    expect(() => loadConfig({MAX_MESSAGES: '-1'})).toThrow();
+    expect(() => loadConfig({MESSAGE_MAX_BYTES: '-1'})).toThrow();
   });
 
   it('returns a frozen object at the top level and on each slice', () => {
@@ -310,6 +311,22 @@ describe('loadConfig', () => {
       expect(
         loadConfig({DATABASE_DEBUG_QUERIES: '1'}).database.debugQueries
       ).toBe(false);
+    });
+  });
+
+  describe('chunk TTL', () => {
+    it('CHUNK_TTL_SECONDS overrides the deprecated REDIS_STREAM_TTL_SECONDS alias', () => {
+      const cfg = loadConfig({
+        CHUNK_TTL_SECONDS: '900',
+        REDIS_STREAM_TTL_SECONDS: '7200',
+      });
+      expect(cfg.limits.chunkTtlSeconds).toBe(900);
+      expect(cfg.redis.streamTtlSeconds).toBe(900);
+    });
+
+    it('falls back to REDIS_STREAM_TTL_SECONDS when CHUNK_TTL_SECONDS is unset', () => {
+      const cfg = loadConfig({REDIS_STREAM_TTL_SECONDS: '7200'});
+      expect(cfg.limits.chunkTtlSeconds).toBe(7200);
     });
   });
 });

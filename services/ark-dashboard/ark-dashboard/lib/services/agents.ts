@@ -40,6 +40,9 @@ export type AgentDetailResponseWithA2A = AgentDetailResponse & {
 // For UI compatibility, we'll map the API response to include an id field
 export type Agent = AgentDetailResponseWithA2A & { id: string };
 
+// List-response shape, no detail-only fields (#2581)
+export type AgentListItem = AgentResponse & { id: string };
+
 // CRUD Operations
 export const agentsService = {
   // Get all agents
@@ -58,6 +61,14 @@ export const agentsService = {
     );
 
     return agents;
+  },
+
+  async list(namespace: string): Promise<AgentListItem[]> {
+    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`, {
+      namespace,
+    });
+
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get a single agent by name

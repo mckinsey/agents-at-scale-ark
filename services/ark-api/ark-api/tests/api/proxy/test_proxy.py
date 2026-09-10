@@ -579,6 +579,51 @@ class TestServicesProxyEndpoint(unittest.TestCase):
             self.assertNotIn("transfer-encoding", response_headers)
 
     @patch('httpx.AsyncClient.request')
+    def test_proxy_sanitizes_malicious_svg_download(self, mock_request):
+        """SVG downloads are sanitized and served with attachment disposition."""
+        malicious_svg = (
+            b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" '
+            b'onload="alert(1)"><script>alert(1)</script></svg>'
+        )
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_response.headers = {
+            "content-type": "image/svg+xml",
+            "content-length": str(len(malicious_svg)),
+        }
+        mock_response.content = malicious_svg
+        mock_request.return_value = mock_response
+
+        with self._mock_service_lookup():
+            response = self.client.get(
+                "/v1/proxy/services/file-gateway-api/files/payload.svg/download"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"<script", response.content.lower())
+        self.assertIn("attachment;", response.headers.get("content-disposition", ""))
+        self.assertIn("script-src 'none'", response.headers.get("content-security-policy", ""))
+
+    @patch('httpx.AsyncClient.request')
+    def test_proxy_svg_download_preserves_error_status(self, mock_request):
+        """A JSON error for a .svg path is passed through, not parsed as SVG."""
+        error_body = b'{"detail":"File not found: missing.svg"}'
+        mock_response = AsyncMock()
+        mock_response.status_code = 404
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.content = error_body
+        mock_request.return_value = mock_response
+
+        with self._mock_service_lookup():
+            response = self.client.get(
+                "/v1/proxy/services/file-gateway-api/files/missing.svg/download"
+            )
+
+        # Sanitizing the JSON body would surface a 400 and hide the real status.
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.content, error_body)
+
+    @patch('httpx.AsyncClient.request')
     def test_proxy_delete_request_success(self, mock_request):
         """Test DELETE request proxying to a service."""
         mock_response = AsyncMock()

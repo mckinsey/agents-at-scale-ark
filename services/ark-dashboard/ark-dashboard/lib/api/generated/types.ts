@@ -3721,17 +3721,24 @@ export interface components {
          */
         InputType: "user" | "messages";
         /**
+         * MCPServerAddressSource
+         * @description Read model for spec.address: reports both fields as stored.
+         *
+         *     MCPServerValueSource is the write model and its serializer collapses to
+         *     whichever of value/valueFrom is set, which would hide the origin here.
+         */
+        MCPServerAddressSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MCPServerValueFrom"] | null;
+        };
+        /**
          * MCPServerAuthorization
          * @description Authorization state of an MCPServer, for rendering state and expiry.
          *
-         *     Sourced from status.authorization and the mcp-auth-authorized-* annotations.
-         *     Never carries token or Secret material.
+         *     Sourced from status.authorization. Never carries token or Secret material.
          */
         MCPServerAuthorization: {
-            /** Authorizedat */
-            authorizedAt?: string | null;
-            /** Authorizedby */
-            authorizedBy?: string | null;
             /** Expiresat */
             expiresAt?: string | null;
             /**
@@ -3773,6 +3780,7 @@ export interface components {
         MCPServerDetailResponse: {
             /** Address */
             address?: string | null;
+            address_source?: components["schemas"]["MCPServerAddressSource"] | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;

@@ -26,7 +26,7 @@ import {
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
 import { getModelProviderDisplayName } from '@/lib/constants/model-types';
-import type { Model } from '@/lib/services';
+import type { ModelListItem } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -34,7 +34,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 import { OriginCell, OriginColumnHeader } from './origin-column';
 
 interface ModelsTableProps {
-  readonly models: readonly Model[];
+  readonly models: readonly ModelListItem[];
   readonly onDelete: (id: string) => void;
 }
 
@@ -70,7 +70,7 @@ const COL = {
 
 function ModelStatus({
   status,
-}: Readonly<{ status?: Model['available'] | null }>) {
+}: Readonly<{ status?: ModelListItem['available'] | null }>) {
   const value = status ?? 'Unknown';
   const config = STATUS_CONFIG[value];
   return (
@@ -84,7 +84,7 @@ function ModelStatus({
 }
 
 interface ModelTableRowProps {
-  readonly model: Model;
+  readonly model: ModelListItem;
   readonly onDelete: (id: string) => void;
 }
 
@@ -169,7 +169,7 @@ export function ModelsTable({ models, onDelete }: Readonly<ModelsTableProps>) {
   return (
     <Table
       aria-label="Models"
-      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[1008px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>

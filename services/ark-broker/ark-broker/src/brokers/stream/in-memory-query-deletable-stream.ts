@@ -1,5 +1,5 @@
 import type {Logger} from '@ark-broker/logging/logger.js';
-import {InMemoryStream} from './in-memory-stream.js';
+import {InMemoryStream, InMemoryStreamOptions} from './in-memory-stream.js';
 
 export abstract class InMemoryQueryDeletableStream<
   T,
@@ -8,10 +8,9 @@ export abstract class InMemoryQueryDeletableStream<
     logger: Logger,
     name: string,
     private readonly queryIdOf: (data: T) => string,
-    path?: string,
-    maxItems?: number
+    opts?: InMemoryStreamOptions
   ) {
-    super(logger, name, path, maxItems);
+    super(logger, name, opts);
   }
 
   async deleteByQuery(queryId: string): Promise<void> {
