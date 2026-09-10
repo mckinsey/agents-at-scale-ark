@@ -208,7 +208,7 @@ describe('ConfigurationForm', () => {
     });
 
     await user.clear(field(LABEL_FIELD));
-    await user.type(field(LABEL_FIELD), 'mcpservers');
+    await user.type(field(LABEL_FIELD), 'mcpservers{Enter}');
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
