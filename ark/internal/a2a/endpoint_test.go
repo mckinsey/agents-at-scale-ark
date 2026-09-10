@@ -205,6 +205,14 @@ func TestResolveEndpoint(t *testing.T) {
 			expectedRsn: ReasonCrossOriginNotAllow,
 		},
 		{
+			name:         "blank allowlist entries are skipped",
+			address:      address,
+			cardURL:      "https://weather.example.com/a2a/v1",
+			mode:         EndpointResolutionCardURL,
+			allowedHosts: []string{"", "   ", "weather.example.com"},
+			expectedURL:  "https://weather.example.com/a2a/v1",
+		},
+		{
 			name:         "card url on an allowed host is accepted",
 			address:      address,
 			cardURL:      "https://weather.example.com/a2a/v1",
