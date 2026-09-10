@@ -248,7 +248,7 @@ func (r *A2ATaskReconciler) createA2AClient(ctx context.Context, a2aTask *arkv1a
 		return nil, fmt.Errorf("unable to get A2AServer %v: %w", serverKey, err)
 	}
 
-	a2aServerAddress := a2aServer.Status.LastResolvedAddress
+	a2aServerAddress := arka2a.RPCEndpoint(&a2aServer)
 	if a2aServerAddress == "" {
 		return nil, fmt.Errorf("A2AServer %v has no resolved address", serverKey)
 	}

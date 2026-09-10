@@ -29,8 +29,9 @@ import (
 
 const (
 	// Condition types
-	A2AServerReady       = "Ready"
-	A2AServerDiscovering = "Discovering"
+	A2AServerReady            = "Ready"
+	A2AServerDiscovering      = "Discovering"
+	A2AServerEndpointOverride = "EndpointOverride"
 )
 
 type A2AServerReconciler struct {
@@ -114,6 +115,18 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
+	cardURL, err := arka2a.CardTransportURL(agentCard)
+	if err != nil {
+		if err := r.reconcileConditionsUnsupportedTransport(ctx, &a2aServer, err); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
+	}
+
+	if err := r.reconcileEndpoint(ctx, &a2aServer, resolvedAddress, cardURL); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Create/update agents and check if anything actually changed
 	agentsChanged, err := r.createAgentWithSkills(ctx, &a2aServer, agentCard)
 	if err != nil {
@@ -162,6 +175,46 @@ func (r *A2AServerReconciler) reconcileConditionsDiscoveryFailed(ctx context.Con
 	changed := r.reconcileCondition(a2aServer, A2AServerReady, metav1.ConditionFalse, "DiscoveryFailed", fmt.Sprintf("Server not ready due to discovery failure: %v", err))
 	if changed {
 		r.Eventing.A2aRecorder().AgentDiscoveryFailed(ctx, a2aServer, fmt.Sprintf("Failed to discover agents from A2A server %s: %v", resolvedAddress, err))
+		return r.updateStatusWithConditions(ctx, a2aServer)
+	}
+	return nil
+}
+
+// reconcileEndpoint resolves the endpoint Ark calls and persists it when it changes.
+func (r *A2AServerReconciler) reconcileEndpoint(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, resolvedAddress, cardURL string) error {
+	resolved := arka2a.ResolveEndpoint(resolvedAddress, cardURL, a2aServer.Spec.EndpointResolution, a2aServer.Spec.AllowedEndpointHosts)
+
+	conditionChanged := false
+	mode := a2aServer.Spec.EndpointResolution
+	switch {
+	case mode == "" || mode == arka2a.EndpointResolutionAddress:
+		conditionChanged = meta.RemoveStatusCondition(&a2aServer.Status.Conditions, A2AServerEndpointOverride)
+	case resolved.Reason == "":
+		conditionChanged = r.reconcileCondition(a2aServer, A2AServerEndpointOverride, metav1.ConditionTrue, "AgentCardEndpointApplied", resolved.Message)
+	default:
+		conditionChanged = r.reconcileCondition(a2aServer, A2AServerEndpointOverride, metav1.ConditionFalse, resolved.Reason, resolved.Message)
+		if resolved.Rejected != "" && a2aServer.Status.RejectedEndpoint != resolved.Rejected {
+			r.Eventing.A2aRecorder().EndpointOverrideRejected(ctx, a2aServer, resolved.Message)
+		}
+	}
+
+	endpointChanged := a2aServer.Status.LastResolvedEndpoint != resolved.URL || a2aServer.Status.RejectedEndpoint != resolved.Rejected
+	a2aServer.Status.LastResolvedEndpoint = resolved.URL
+	a2aServer.Status.RejectedEndpoint = resolved.Rejected
+
+	if endpointChanged || conditionChanged {
+		return r.updateStatusWithConditions(ctx, a2aServer)
+	}
+	return nil
+}
+
+// reconcileConditionsUnsupportedTransport updates conditions when the agent card declares no JSON-RPC interface
+func (r *A2AServerReconciler) reconcileConditionsUnsupportedTransport(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, err error) error {
+	message := fmt.Sprintf("Server not ready, Ark only speaks %s: %v", arka2a.TransportJSONRPC, err)
+	changed := r.reconcileCondition(a2aServer, A2AServerReady, metav1.ConditionFalse, "UnsupportedTransport", message)
+	changed = r.reconcileCondition(a2aServer, A2AServerDiscovering, metav1.ConditionFalse, "UnsupportedTransport", message) || changed
+	if changed {
+		r.Eventing.A2aRecorder().UnsupportedTransport(ctx, a2aServer, message)
 		return r.updateStatusWithConditions(ctx, a2aServer)
 	}
 	return nil
@@ -271,7 +324,7 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 
 	agentAnnotations := map[string]string{
 		annotations.A2AServerName:         a2aServer.Name,
-		annotations.A2AServerAddress:      a2aServer.Status.LastResolvedAddress,
+		annotations.A2AServerAddress:      arka2a.RPCEndpoint(a2aServer),
 		annotations.A2AServerSkills:       string(skillsJSON),
 		annotations.A2AStreamingSupported: strconv.FormatBool(streamingSupported),
 	}
