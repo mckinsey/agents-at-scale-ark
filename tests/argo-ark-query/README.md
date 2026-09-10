@@ -4,6 +4,7 @@ Validates the `ark-query` `WorkflowTemplate` shipped in the argo-workflows chart
 
 ## What it tests
 - The `ark-query` `WorkflowTemplate` is present after the argo-workflows chart is installed.
+- The workflow controller passes `--executor-image` with the non-root `argoexec` tag pinned to the controller's own version, so both removing `-nonroot` and letting the executor tag drift from the Argo subchart version fail the test.
 - A workflow step referencing `templateRef: {name: ark-query, template: query}` submits a Query against an **agent** target and returns `response`, `phase`, `conversation-id`, and `query-json` on success.
 - The same template against a **team** target returns the final assistant message.
 - The same template against a **tool** target executes the tool directly (no agent) and returns the tool's response, with the created Query's `spec.target.type` serialized as `tool`.
