@@ -118,6 +118,12 @@ export function AddMarketplaceDialog({
   const displayFieldId = `${fieldId}-display`;
   const schemeFieldId = `${fieldId}-scheme`;
   const credentialFieldId = `${fieldId}-credential`;
+  const adoOrgId = `${fieldId}-ado-org`;
+  const adoProjectId = `${fieldId}-ado-project`;
+  const adoRepoId = `${fieldId}-ado-repo`;
+  const adoBranchId = `${fieldId}-ado-branch`;
+  const adoPathId = `${fieldId}-ado-path`;
+  const adoUrlId = `${fieldId}-ado-url`;
 
   const [newSource, setNewSource] = useState<NewSourceForm>(EMPTY_FORM);
   const [urlMode, setUrlMode] = useState<UrlMode>('custom');
@@ -139,8 +145,17 @@ export function AddMarketplaceDialog({
   const handleUrlModeChange = (mode: UrlMode) => {
     setUrlMode(mode);
     setUrlError(null);
-    if (mode === 'ado' && newSource.scheme === 'none') {
-      setNewSource({ ...newSource, scheme: 'basic' });
+    setCredentialError(null);
+
+    if (mode === 'ado') {
+      if (newSource.scheme === 'none') {
+        setNewSource({ ...newSource, scheme: 'basic' });
+      }
+      return;
+    }
+
+    if (newSource.scheme === 'basic') {
+      setNewSource({ ...newSource, scheme: 'none', credential: '' });
     }
   };
 
@@ -209,6 +224,7 @@ export function AddMarketplaceDialog({
                   type="button"
                   variant={urlMode === option.value ? 'secondary' : 'outline'}
                   size="sm"
+                  aria-pressed={urlMode === option.value}
                   onClick={() => handleUrlModeChange(option.value)}>
                   {option.label}
                 </Button>
@@ -228,15 +244,14 @@ export function AddMarketplaceDialog({
               />
             )}
             {urlMode === 'ado' && (
-              <div
-                role="group"
+              <FieldSet
                 aria-labelledby={urlGroupLabelId}
                 className="border-stroke-divider flex flex-col gap-4 border p-3">
                 <div className="grid grid-cols-2 gap-4">
                   <FieldSet className="gap-2">
-                    <FieldLabel htmlFor="ado-org">Organization</FieldLabel>
+                    <FieldLabel htmlFor={adoOrgId}>Organization</FieldLabel>
                     <Input
-                      id="ado-org"
+                      id={adoOrgId}
                       variant="inline"
                       value={adoFields.org}
                       onChange={e => {
@@ -247,9 +262,9 @@ export function AddMarketplaceDialog({
                     />
                   </FieldSet>
                   <FieldSet className="gap-2">
-                    <FieldLabel htmlFor="ado-project">Project</FieldLabel>
+                    <FieldLabel htmlFor={adoProjectId}>Project</FieldLabel>
                     <Input
-                      id="ado-project"
+                      id={adoProjectId}
                       variant="inline"
                       value={adoFields.project}
                       onChange={e => {
@@ -260,9 +275,9 @@ export function AddMarketplaceDialog({
                     />
                   </FieldSet>
                   <FieldSet className="gap-2">
-                    <FieldLabel htmlFor="ado-repo">Repository</FieldLabel>
+                    <FieldLabel htmlFor={adoRepoId}>Repository</FieldLabel>
                     <Input
-                      id="ado-repo"
+                      id={adoRepoId}
                       variant="inline"
                       value={adoFields.repo}
                       onChange={e => {
@@ -273,9 +288,9 @@ export function AddMarketplaceDialog({
                     />
                   </FieldSet>
                   <FieldSet className="gap-2">
-                    <FieldLabel htmlFor="ado-branch">Branch</FieldLabel>
+                    <FieldLabel htmlFor={adoBranchId}>Branch</FieldLabel>
                     <Input
-                      id="ado-branch"
+                      id={adoBranchId}
                       variant="inline"
                       value={adoFields.branch}
                       onChange={e => {
@@ -285,9 +300,9 @@ export function AddMarketplaceDialog({
                     />
                   </FieldSet>
                   <FieldSet className="col-span-2 gap-2">
-                    <FieldLabel htmlFor="ado-path">Path</FieldLabel>
+                    <FieldLabel htmlFor={adoPathId}>Path</FieldLabel>
                     <Input
-                      id="ado-path"
+                      id={adoPathId}
                       variant="inline"
                       value={adoFields.path}
                       onChange={e => {
@@ -298,19 +313,18 @@ export function AddMarketplaceDialog({
                   </FieldSet>
                 </div>
                 <FieldSet className="gap-2">
-                  <FieldLabel htmlFor="ado-generated-url">
+                  <FieldLabel htmlFor={adoUrlId}>
                     Generated URL
                   </FieldLabel>
                   <Input
-                    id="ado-generated-url"
+                    id={adoUrlId}
                     variant="inline"
-                    value={
-                      adoUrl ?? 'Fill in organization, project and repository'
-                    }
+                    value={adoUrl ?? ''}
+                    placeholder="Fill in organization, project and repository"
                     readOnly
                   />
                 </FieldSet>
-              </div>
+              </FieldSet>
             )}
             <FieldError>{urlError}</FieldError>
             {urlError && (

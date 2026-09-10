@@ -2,6 +2,8 @@
 
 import { Suspense, useMemo } from 'react';
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 import { AddMarketplaceButton } from './add-marketplace-dialog';
 import { ExecutionEnginesSettings } from './execution-engines-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
@@ -12,6 +14,25 @@ import type { SettingPage } from './settings-types';
 type SettingsContentProps = {
   activePage: SettingPage;
 };
+
+const SKELETON_ROWS = ['first', 'second', 'third', 'fourth'];
+
+function SettingsPageSkeleton() {
+  return (
+    <div aria-hidden className="flex flex-col gap-4">
+      <Skeleton className="h-9 w-[280px]" />
+      <div className="flex flex-col gap-4 pt-2">
+        {SKELETON_ROWS.map(row => (
+          <div key={row} className="flex items-center gap-4">
+            <Skeleton className="h-5 w-[240px]" />
+            <Skeleton className="h-5 flex-1" />
+            <Skeleton className="h-5 w-[140px]" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 type PageConfig = {
   title: string;
@@ -31,7 +52,7 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
         component: <ExperimentalFeaturesSettings />,
       },
       'execution-engines': {
-        title: 'Execution Engines',
+        title: 'Execution engines',
         component: <ExecutionEnginesSettings />,
       },
       'manage-marketplace': {
@@ -57,12 +78,7 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
       </div>
       <div className="flex-1 overflow-y-auto px-8 pt-5 pb-6">
         <div className="mx-auto w-full max-w-[1600px]">
-          <Suspense
-            fallback={
-              <div className="flex h-32 items-center justify-center">
-                <div className="text-muted-foreground">Loading...</div>
-              </div>
-            }>
+          <Suspense fallback={<SettingsPageSkeleton />}>
             {config.component}
           </Suspense>
         </div>

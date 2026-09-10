@@ -4,11 +4,33 @@ import { Trash } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   useDeleteMarketplaceSource,
   useMarketplaceCanEdit,
   useMarketplaceSources,
 } from '@/lib/services/marketplace-hooks';
+
+const SKELETON_ROWS = ['first', 'second', 'third'];
+
+function MarketplaceSourcesSkeleton() {
+  return (
+    <div aria-hidden className="flex max-w-[600px] flex-col gap-2">
+      <Skeleton className="h-6 w-[200px]" />
+      <div className="flex flex-col gap-3">
+        {SKELETON_ROWS.map(row => (
+          <div
+            key={row}
+            className="border-stroke-divider flex flex-col gap-1 border p-3">
+            <Skeleton className="h-5 w-[160px]" />
+            <Skeleton className="h-5 w-[140px]" />
+            <Skeleton className="h-5 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function ManageMarketplaceSettings() {
   const { data: sources, isPending } = useMarketplaceSources();
@@ -18,11 +40,7 @@ export function ManageMarketplaceSettings() {
   const canEdit = permissions?.canEdit ?? false;
 
   if (isPending) {
-    return (
-      <p className="paragraph-regular-primary text-fg-secondary">
-        Loading marketplace sources…
-      </p>
-    );
+    return <MarketplaceSourcesSkeleton />;
   }
 
   const hasSources = Boolean(sources && sources.length > 0);

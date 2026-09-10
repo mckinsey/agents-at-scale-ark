@@ -124,17 +124,22 @@ export function QueriesSettings() {
 
     const nextTimeout =
       trimmedTimeout === '' ? DEFAULT_QUERY_TIMEOUT : `${trimmedTimeout}m`;
+    const ttlChanged = trimmed !== (data?.queryTTL ?? '');
+    const timeoutChanged = nextTimeout !== storedTimeout;
 
-    if (trimmed === (data?.queryTTL ?? '')) {
-      setStoredTimeout(nextTimeout);
+    if (!ttlChanged && !timeoutChanged) {
+      toast.info('No changes to save');
+      return;
+    }
+
+    setStoredTimeout(nextTimeout);
+
+    if (!ttlChanged) {
       toast.success('Settings saved');
       return;
     }
 
-    updateMutation.mutate(
-      { queryTTL: trimmed === '' ? null : trimmed },
-      { onSuccess: () => setStoredTimeout(nextTimeout) },
-    );
+    updateMutation.mutate({ queryTTL: trimmed === '' ? null : trimmed });
   };
 
   const handleReset = () => {
@@ -142,20 +147,23 @@ export function QueriesSettings() {
     setTimeoutError(null);
     setTimeoutBadInput(false);
     setInput('');
+    setTimeoutInput(`${DEFAULT_QUERY_TIMEOUT_MINUTES}`);
+    setStoredTimeout(DEFAULT_QUERY_TIMEOUT);
 
     if (!hasExisting) {
-      setStoredTimeout(DEFAULT_QUERY_TIMEOUT);
       toast.success('Defaults cleared');
       return;
     }
 
-    clearMutation.mutate(undefined, {
-      onSuccess: () => setStoredTimeout(DEFAULT_QUERY_TIMEOUT),
-    });
+    clearMutation.mutate(undefined);
   };
 
   const isSaving = updateMutation.isPending || clearMutation.isPending;
-  const isTimeoutModified = storedTimeout !== DEFAULT_QUERY_TIMEOUT;
+  const hasResettableState =
+    hasExisting ||
+    storedTimeout !== DEFAULT_QUERY_TIMEOUT ||
+    input.trim() !== '' ||
+    timeoutInput.trim() !== `${DEFAULT_QUERY_TIMEOUT_MINUTES}`;
 
   return (
     <div className="flex max-w-[600px] flex-col gap-6">
@@ -206,7 +214,7 @@ export function QueriesSettings() {
           type="button"
           variant="outline"
           onClick={handleReset}
-          disabled={isSaving || (!hasExisting && !isTimeoutModified)}>
+          disabled={isSaving || !hasResettableState}>
           {clearMutation.isPending ? 'Clearing...' : 'Reset to default'}
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>

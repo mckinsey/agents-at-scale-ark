@@ -146,7 +146,7 @@ function SelectContent({
   /**
    * Where to portal the popup. Pass the containing dialog's content element
    * when the select lives inside a modal dialog: a popup left in `<body>` sits
-   * outside the dialog's focus trap, so Radix pulls focus back and the
+   * outside the dialog's focus trap, so the dialog pulls focus back and the
    * selection never commits.
    */
   container?: SelectPrimitive.Portal.Props['container'];
@@ -162,11 +162,9 @@ function SelectContent({
         {...positionerProps}>
         <SelectPrimitive.Popup
           data-slot="select-content"
-          style={{ pointerEvents: 'auto' }}
           className={cn(
             'bg-stateslayer-overlay-active-inverse text-fg-primary',
             'relative overflow-hidden',
-            'pointer-events-auto',
             'shadow-elevation-1',
             'data-open:animate-in data-closed:animate-out',
             'data-closed:fade-out-0 data-open:fade-in-0',

@@ -8,6 +8,7 @@ import {
 } from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 import { Close } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { cn } from '@/lib/utils';
@@ -23,7 +24,7 @@ type SettingsSidebarProps = {
 };
 
 export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
-  const { push, replace } = useNamespacedNavigation();
+  const { push } = useNamespacedNavigation();
   const settingsEntryUrl = useAtomValue(settingsEntryUrlAtom);
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
@@ -41,10 +42,6 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
       item => !item.experimental || isExperimentalEnabled[item.key],
     ),
   }));
-
-  const handleSettingClick = (settingKey: SettingPage) => {
-    replace(`/settings/${settingKey}`);
-  };
 
   // settingsEntryUrl is captured from the in-app location the user came from,
   // so it may already carry a namespace query; push merges params and won't double it.
@@ -72,9 +69,10 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
                 </div>
               )}
               {section.items.map(item => (
-                <button
+                <NamespacedLink
                   key={item.key}
-                  onClick={() => handleSettingClick(item.key)}
+                  href={`/settings/${item.key}`}
+                  replace
                   aria-current={activePage === item.key ? 'page' : undefined}
                   className={cn(
                     'paragraph-regular-primary flex w-full cursor-pointer items-center py-2 pr-2 pl-3 text-left transition-colors',
@@ -85,7 +83,7 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
                       : 'text-fg-secondary',
                   )}>
                   <span className="truncate">{item.label}</span>
-                </button>
+                </NamespacedLink>
               ))}
             </div>
           ))}

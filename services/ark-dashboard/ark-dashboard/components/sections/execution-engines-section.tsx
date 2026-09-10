@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Settings, Trash } from '@/components/icons';
 import { IconActionButton } from '@/components/ui/icon-action-button';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -34,6 +35,26 @@ const COL = {
   status: 'w-[140px]',
   action: 'w-[80px]',
 };
+
+const SKELETON_ROWS = ['first', 'second', 'third', 'fourth', 'fifth'];
+
+function ExecutionEnginesSkeleton() {
+  return (
+    <div aria-hidden className="flex min-h-0 w-full flex-1 flex-col gap-2">
+      <div className="flex flex-col gap-4 pt-4">
+        {SKELETON_ROWS.map(row => (
+          <div key={row} className="flex items-center gap-4">
+            <Skeleton className="h-5 w-[200px]" />
+            <Skeleton className="h-5 flex-1" />
+            <Skeleton className="h-5 w-[260px]" />
+            <Skeleton className="h-5 w-[140px]" />
+            <Skeleton className="h-5 w-[80px]" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface PhaseConfig {
   label: string;
@@ -92,9 +113,9 @@ function EngineTableRow({ engine, onDelete }: EngineTableRowProps) {
           </TruncatedTooltip>
         </TableCell>
         <TableCell size="small" className="max-w-0">
-          <TruncatedTooltip label={engine.description ?? 'No description'}>
+          <TruncatedTooltip label={engine.description || 'No description'}>
             <span className="text-fg-secondary block w-full truncate">
-              {engine.description ?? 'No description'}
+              {engine.description || 'No description'}
             </span>
           </TruncatedTooltip>
         </TableCell>
@@ -151,13 +172,7 @@ export function ExecutionEnginesSection() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-fg-secondary paragraph-regular-primary py-8">
-          Loading...
-        </div>
-      </div>
-    );
+    return <ExecutionEnginesSkeleton />;
   }
 
   if (!engines || engines.length === 0) {

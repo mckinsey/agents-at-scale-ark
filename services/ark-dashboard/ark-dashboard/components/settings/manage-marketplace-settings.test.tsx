@@ -140,6 +140,48 @@ describe('ManageMarketplaceSettings', () => {
     expect(deleteMutate).toHaveBeenCalledWith('agents-at-scale-marketplace');
   });
 
+  it('sends the bearer scheme and credential when adding an authenticated source', async () => {
+    setup({ canEdit: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await openDialog(user);
+    await user.type(
+      screen.getByLabelText('Marketplace JSON URL'),
+      'https://priv.test/marketplace.json',
+    );
+
+    await user.click(screen.getByRole('combobox', { name: /authentication/i }));
+    await user.click(screen.getByRole('option', { name: /bearer\/token/i }));
+
+    await user.type(screen.getByLabelText('Token'), 'tok-123');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(createMutate).toHaveBeenCalledTimes(1);
+    expect(createMutate.mock.calls[0][0].auth).toEqual({
+      scheme: 'bearer',
+      credential: 'tok-123',
+    });
+  });
+
+  it('clears the Azure DevOps scheme when switching back to a custom URL', async () => {
+    setup({ canEdit: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await openDialog(user);
+    await user.click(screen.getByRole('button', { name: /^azure devops$/i }));
+    await user.click(screen.getByRole('button', { name: /^custom url$/i }));
+    await user.type(
+      screen.getByLabelText('Marketplace JSON URL'),
+      'https://new.test/marketplace.json',
+    );
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(createMutate).toHaveBeenCalledTimes(1);
+    expect(createMutate.mock.calls[0][0].auth).toBeUndefined();
+  });
+
   it('blocks an authenticated source with no credential', async () => {
     setup({ canEdit: true });
     const user = userEvent.setup();
