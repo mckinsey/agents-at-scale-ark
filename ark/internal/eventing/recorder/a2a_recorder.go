@@ -33,6 +33,14 @@ func (t *a2aRecorder) AgentDiscoveryFailed(ctx context.Context, obj runtime.Obje
 	t.emitter.EmitWarning(ctx, obj, "AgentDiscoveryFailed", reason)
 }
 
+func (t *a2aRecorder) EndpointOverrideRejected(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitWarning(ctx, obj, "EndpointOverrideRejected", reason)
+}
+
+func (t *a2aRecorder) UnsupportedTransport(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitWarning(ctx, obj, "UnsupportedTransport", reason)
+}
+
 func (t *a2aRecorder) TaskPollingFailed(ctx context.Context, obj runtime.Object, reason string) {
 	t.emitter.EmitWarning(ctx, obj, "TaskPollingFailed", reason)
 }

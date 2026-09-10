@@ -36,6 +36,14 @@ spec:
             key: token
   pollInterval: 1m                            # how often to poll the server; default '1m'
   timeout: 5m                                 # A2A agent execution timeout; inherits Query.spec.timeout when unset
+  # Which URL Ark calls for A2A requests: 'address' (default), 'cardPath', or
+  # 'cardUrl'. See "Endpoint resolution" below.
+  endpointResolution: cardPath
+  # Hosts the agent card may redirect requests to, used only when
+  # endpointResolution is 'cardUrl'. '*.' matches one level of subdomain.
+  allowedEndpointHosts:
+    - agents.example.com
+    - '*.a2a.example.com'
 ```
 
 ## Fields
@@ -47,6 +55,8 @@ spec:
 | `spec.description` | string | no | Human-readable description of the server. Propagated onto the Agent resources Ark creates. |
 | `spec.pollInterval` | duration | no | How often the controller polls the server for updates. Default `1m`. |
 | `spec.timeout` | duration | no | Timeout for A2A agent execution (`30s`, `5m`, `1h`). When unset, execution inherits the deadline from [`Query.spec.timeout`](/reference/resources/query#timeout), falling back to `5m` if the caller set no deadline. |
+| `spec.endpointResolution` | string | no | Which URL Ark calls for A2A requests. `address` (default) uses `spec.address` unchanged. `cardPath` keeps the scheme, host and port from `spec.address` and takes only the path from the agent card. `cardUrl` uses the agent card URL as written. See [Endpoint resolution](#endpoint-resolution). |
+| `spec.allowedEndpointHosts[]` | list of string | no | Hosts the agent card may redirect requests to when `endpointResolution` is `cardUrl`. The host of `spec.address` is always allowed. Entries are hostnames, optionally prefixed with `*.` to match one level of subdomain. Ignored in the other modes. |
 
 ## Discovery and created agents
 
@@ -74,6 +84,24 @@ spec:
     name: a2a                                 # no modelRef — the remote A2A server owns the model
 ```
 
+## Endpoint resolution
+
+The agent card the server returns carries its own `url` field, the endpoint the A2A spec says clients should send requests to. By default Ark ignores it and keeps calling `spec.address`, because a server's card commonly advertises a URL that is not reachable from inside the cluster (`http://localhost:8000`, a public ingress hostname, or a placeholder). `spec.endpointResolution` opts a single A2AServer into trusting the card:
+
+| Mode | Behaviour |
+| --- | --- |
+| `address` (default) | Requests go to `spec.address` unchanged. The card `url` is ignored. |
+| `cardPath` | Scheme, host and port come from `spec.address`, the path comes from the card. Use this when the server is correct about *where* its RPC endpoint sits but wrong about the hostname, which is the usual Kubernetes case. Query strings and fragments on the card URL are dropped. |
+| `cardUrl` | The card URL is used as written. Allowed only when its host matches the host of `spec.address`, or is listed in `spec.allowedEndpointHosts`. |
+
+`cardUrl` is the only mode that can move requests to a different host, and it is gated because `spec.headers` travel with the request: a card that repoints the endpoint would send your Secret-sourced credentials to whatever host it names. The card is refetched on every `spec.pollInterval`, so this is a standing delegation, not a one-time decision. `spec.allowedEndpointHosts` is therefore per-resource, so trusting one server does not trust the others.
+
+Rejected overrides never break a working server. Ark falls back to `spec.address`, sets the `EndpointOverride` condition to `False` with the reason (`CrossOriginNotAllowed`, `InvalidAgentCardURL`, `NoAgentCardURL`, or `InvalidAddress`), records the rejected URL in `status.rejectedEndpoint`, and emits an `EndpointOverrideRejected` warning event. When an override is applied, `EndpointOverride` is `True` with reason `AgentCardEndpointApplied`.
+
+### Transport
+
+Ark speaks JSON-RPC only. The endpoint it picks is the card's JSON-RPC interface: `url` when `preferredTransport` is `JSONRPC` or unset, otherwise the first `JSONRPC` entry in `additionalInterfaces`. A card that declares no JSON-RPC interface at all is a hard error, since Ark cannot talk to it: `Ready` goes `False` with reason `UnsupportedTransport`, an `UnsupportedTransport` warning event is emitted, and no Agent resources are created or updated for that server.
+
 ## Conversation context
 
 Ark does not hydrate conversation history into the message it sends a discovered agent: a query targeting one sends only that query's current input, even when memory is active. Threading is opt-in — set the `ark.mckinsey.com/a2a-context-id` annotation on the query and Ark forwards that value as the A2A `contextId`, so a server that keys state on it links successive calls. Without the annotation Ark sends no `contextId` and each call stands alone. `spec.conversationId` threads the completions executor and named execution engines; it does not reach A2AServer agents. See [A2A Queries → Stateful Messages](/developer-guide/queries/a2a-queries#stateful-messages) for a worked example.
@@ -93,7 +121,12 @@ status:
       status: "False"
       reason: DiscoveryComplete
       message: Agent discovery completed
+    - type: EndpointOverride                  # only present when endpointResolution != 'address'
+      status: "True"
+      reason: AgentCardEndpointApplied
+      message: Using agent card endpoint http://ark-agentcore-bridge.default.svc.cluster.local:80/rpc
   lastResolvedAddress: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent
+  lastResolvedEndpoint: http://ark-agentcore-bridge.default.svc.cluster.local:80/rpc
 ```
 
 ### Status fields
@@ -101,7 +134,9 @@ status:
 | Field | Description |
 | --- | --- |
 | `status.lastResolvedAddress` | The most recently resolved server address (after `spec.address` `valueFrom` resolution). |
-| `status.conditions[]` | Standard Kubernetes conditions. `Ready` indicates the server is reachable and operational; `Discovering` indicates agent discovery is in progress. |
+| `status.lastResolvedEndpoint` | The endpoint Ark actually sends A2A requests to. Equal to `lastResolvedAddress` in the default `address` mode. |
+| `status.rejectedEndpoint` | The agent card URL Ark refused to use, set when an override is rejected and cleared when it is not. |
+| `status.conditions[]` | Standard Kubernetes conditions. `Ready` indicates the server is reachable and operational; `Discovering` indicates agent discovery is in progress; `EndpointOverride` reports whether the agent card endpoint was applied, and appears only when `spec.endpointResolution` is not `address`. |
 
 ### Print columns
 
@@ -113,6 +148,7 @@ status:
 | `READY` | `Ready` condition status |
 | `DISCOVERING` | `Discovering` condition status |
 | `ADDRESS` | `.status.lastResolvedAddress` |
+| `ENDPOINT` | `.status.lastResolvedEndpoint` |
 | `AGE` | `.metadata.creationTimestamp` |
 
 ```bash
