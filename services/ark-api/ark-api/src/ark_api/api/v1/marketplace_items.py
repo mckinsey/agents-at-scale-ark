@@ -135,8 +135,8 @@ async def _fetch_source(
         manifest = await fetch_manifest(http_client, url, auth_header=auth_header)
     except SourceBlockedError:
         return _error_result(name, display_name, "source host is not allowed", "network_error")
-    except SourceRedirectError:
-        return _error_result(name, display_name, "redirects are not followed", "network_error")
+    except SourceRedirectError as e:
+        return _error_result(name, display_name, str(e), "network_error")
     except httpx.TimeoutException:
         return _error_result(name, display_name, "fetch timed out after 10s", "fetch_timeout")
     except httpx.HTTPStatusError as e:

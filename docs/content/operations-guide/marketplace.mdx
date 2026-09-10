@@ -16,7 +16,7 @@ The dashboard chart accepts a `marketplaceSources` values key. A `post-install,p
 ```yaml
 marketplaceSources:
   - name: agents-at-scale-marketplace
-    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
+    url: https://github.com/mckinsey/agents-at-scale-marketplace/releases/download/v0.1.43/marketplace.json
     displayName: "Ark Marketplace"
 ```
 
@@ -56,11 +56,11 @@ Give entries different `namespace` values. A single `helm install`/`helm upgrade
 ```yaml
 marketplaceSources:
   - name: agents-at-scale-marketplace
-    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
+    url: https://github.com/mckinsey/agents-at-scale-marketplace/releases/download/v0.1.43/marketplace.json
     displayName: "Ark Marketplace"
     namespace: team-a
   - name: agents-at-scale-marketplace
-    url: https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json
+    url: https://github.com/mckinsey/agents-at-scale-marketplace/releases/download/v0.1.43/marketplace.json
     displayName: "Ark Marketplace"
     namespace: team-b
   - name: internal-catalog
@@ -161,7 +161,7 @@ So user changes survive upgrades; only untouched seeded defaults track the chart
 ## Operational notes
 
 - **Source availability.** ark-api fetches each source concurrently with a 10s per-source timeout and a 30s aggregator deadline, and caches successful fetches for one hour. A failing source surfaces an inline error and does not block the others.
-- **Outbound restrictions.** Source URLs must be `https`. ark-api rejects non-routable hosts (loopback, link-local, multicast, reserved) and does not follow redirects — including for credentialed fetches, so a credential cannot be used to reach internal/metadata services or leaked to a redirect target. Private RFC-1918 hosts are allowed for internal mirrors.
+- **Outbound restrictions.** Source URLs must be `https`. ark-api rejects non-routable hosts (loopback, link-local, multicast, reserved). Redirects are followed up to 5 hops, and each hop is re-validated: the target must be `https` and must pass the same host check, so a redirect cannot be used to reach internal/metadata services. The `Authorization` header of a credentialed fetch is dropped as soon as the redirect leaves the configured origin, so a credential is never leaked to a redirect target. Private RFC-1918 hosts are allowed for internal mirrors.
 - **Items not appearing.** Check the source URL returns valid JSON with an `items` array, is reachable from the ark-api pod, and uses `https`. For an authenticated source, an `auth_error` means the credential Secret is missing, the user lacks `get` on it, or the upstream rejected it (401/403).
 
 ## Uninstall and cleanup
