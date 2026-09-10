@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelConfiguratorForm } from '@/components/forms/model-forms/model-configuration-form';
 import { ModelConfigurationFormContext } from '@/components/forms/model-forms/model-configuration-form-context';
 import type { FormValues } from '@/components/forms/model-forms/schema';
+import { useGetAllConfigurations } from '@/lib/services/configurations-hooks';
 import {
   useCreateSecret,
   useGetAllSecrets,
@@ -14,6 +15,11 @@ import {
 vi.mock('@/lib/services/secrets-hooks', () => ({
   useGetAllSecrets: vi.fn(),
   useCreateSecret: vi.fn(),
+}));
+
+vi.mock('@/lib/services/configurations-hooks', () => ({
+  useGetAllConfigurations: vi.fn(),
+  useCreateConfiguration: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
@@ -85,6 +91,11 @@ describe('ModelConfiguratorForm - AWS Bedrock', () => {
     vi.mocked(useCreateSecret).mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
+    } as never);
+    vi.mocked(useGetAllConfigurations).mockReturnValue({
+      data: [{ id: 'ai-gateway-url', name: 'ai-gateway-url' }],
+      isPending: false,
+      error: null,
     } as never);
   });
 

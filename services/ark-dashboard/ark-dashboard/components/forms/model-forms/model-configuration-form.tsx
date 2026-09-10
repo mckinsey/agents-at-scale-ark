@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import type { Control } from 'react-hook-form';
 import { useFormContext, useWatch } from 'react-hook-form';
-import { toast } from '@/components/ui/sonner';
 
 import { CreateResourceButton } from '@/components/forms/shared/create-resource-dialog';
 import {
@@ -31,23 +30,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
 import {
   AZURE_AUTH_METHOD_DISPLAY_NAMES,
-  getModelTypeDisplayName,
   MODEL_PROVIDER_DISPLAY_NAMES,
   SUPPORTED_MODEL_PROVIDERS,
+  getModelTypeDisplayName,
 } from '@/lib/constants/model-types';
-import type { Secret } from '@/lib/services';
+import type { Configuration, Secret } from '@/lib/services';
+import { useGetAllConfigurations } from '@/lib/services/configurations-hooks';
 import { useGetAllSecrets } from '@/lib/services/secrets-hooks';
 import type { KeysOfUnion } from '@/lib/types/utils';
 import { cn } from '@/lib/utils';
 
 import { useModelConfigurationForm } from './model-configuration-form-context';
 import type { FormValues } from './schema';
+import type { BaseUrlFieldState } from './utils';
 
 export function ModelConfiguratorForm() {
-  const { form, formId, onSubmit, provider, disabledFields } =
+  const { form, formId, onSubmit, provider, disabledFields, baseUrlState } =
     useModelConfigurationForm();
 
   const {
@@ -55,6 +57,12 @@ export function ModelConfiguratorForm() {
     isPending: isSecretsPending,
     error: secretsError,
   } = useGetAllSecrets();
+
+  const {
+    data: configurations,
+    isPending: isConfigurationsPending,
+    error: configurationsError,
+  } = useGetAllConfigurations();
 
   useEffect(() => {
     if (secretsError) {
@@ -66,6 +74,17 @@ export function ModelConfiguratorForm() {
       });
     }
   }, [secretsError]);
+
+  useEffect(() => {
+    if (configurationsError) {
+      toast.error('Failed to get configurations', {
+        description:
+          configurationsError instanceof Error
+            ? configurationsError.message
+            : 'An unexpected error occurred',
+      });
+    }
+  }, [configurationsError]);
 
   return (
     <Form {...form}>
@@ -156,6 +175,9 @@ export function ModelConfiguratorForm() {
           <OpenAISpecificFields
             isSecretsPending={isSecretsPending}
             secrets={secrets}
+            isConfigurationsPending={isConfigurationsPending}
+            configurations={configurations}
+            baseUrlState={baseUrlState}
             control={form.control}
           />
         )}
@@ -163,6 +185,9 @@ export function ModelConfiguratorForm() {
           <AzureSpecificFields
             isSecretsPending={isSecretsPending}
             secrets={secrets}
+            isConfigurationsPending={isConfigurationsPending}
+            configurations={configurations}
+            baseUrlState={baseUrlState}
             control={form.control}
           />
         )}
@@ -170,6 +195,9 @@ export function ModelConfiguratorForm() {
           <AWSBedrockSpecificFields
             isSecretsPending={isSecretsPending}
             secrets={secrets}
+            isConfigurationsPending={isConfigurationsPending}
+            configurations={configurations}
+            baseUrlState={baseUrlState}
             control={form.control}
           />
         )}
@@ -177,6 +205,9 @@ export function ModelConfiguratorForm() {
           <AnthropicSpecificFields
             isSecretsPending={isSecretsPending}
             secrets={secrets}
+            isConfigurationsPending={isConfigurationsPending}
+            configurations={configurations}
+            baseUrlState={baseUrlState}
             control={form.control}
           />
         )}
@@ -188,6 +219,9 @@ export function ModelConfiguratorForm() {
 type ProviderFieldsProps = {
   isSecretsPending: boolean;
   secrets?: Secret[];
+  isConfigurationsPending: boolean;
+  configurations?: Configuration[];
+  baseUrlState?: BaseUrlFieldState;
   control: Control<FormValues, unknown, FormValues>;
 };
 
@@ -253,27 +287,98 @@ function SecretSelectorField({
   );
 }
 
+const CLEAR_BASE_URL_VALUE = '__none__';
+
 function BaseUrlField({
   control,
   placeholder,
+  configurations,
+  isConfigurationsPending,
+  baseUrlState,
+  optional = false,
 }: {
   control: Control<FormValues, unknown, FormValues>;
   placeholder: string;
+  configurations?: Configuration[];
+  isConfigurationsPending: boolean;
+  baseUrlState?: BaseUrlFieldState;
+  optional?: boolean;
 }) {
+  const { setValue } = useFormContext<FormValues>();
+
   return (
     <FormField
       control={control}
       name="baseUrl"
       render={({ field, fieldState }) => (
         <FieldSet className="gap-2">
-          <FieldTitle>Base URL</FieldTitle>
-          <Input
-            variant="inline"
-            {...field}
-            value={field.value ?? ''}
-            placeholder={placeholder}
-            aria-invalid={!!fieldState.error}
-          />
+          <FieldTitle>Base URL{optional ? ' (Optional)' : ''}</FieldTitle>
+          {baseUrlState?.kind === 'literal' && (
+            <p className="text-sm">
+              This URL is currently stored in the model itself:{' '}
+              {baseUrlState.url}
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <Select
+              onValueChange={value =>
+                field.onChange(value === CLEAR_BASE_URL_VALUE ? '' : value)
+              }
+              value={(field.value as string) ?? ''}>
+              <SelectTrigger
+                className={cn(GHOST_TRIGGER, 'flex-1')}
+                aria-invalid={!!fieldState.error}>
+                <SelectValue placeholder={placeholder} />
+              </SelectTrigger>
+              <SelectContent className="bg-fill-onsurface-ui-2">
+                {isConfigurationsPending ? (
+                  <Spinner size="sm" className="mx-auto my-2" />
+                ) : (
+                  <>
+                    {optional && (
+                      <SelectItem value={CLEAR_BASE_URL_VALUE}>
+                        <SelectItemText>
+                          None (use the default endpoint)
+                        </SelectItemText>
+                      </SelectItem>
+                    )}
+                    {configurations?.map(configuration => (
+                      <SelectItem
+                        key={configuration.name}
+                        value={configuration.name}>
+                        <SelectItemText>{configuration.name}</SelectItemText>
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
+              </SelectContent>
+            </Select>
+            <CreateResourceButton
+              kind="configuration"
+              label={
+                baseUrlState?.kind === 'literal'
+                  ? 'Move to configuration'
+                  : 'Add New'
+              }
+              dialogTitle={
+                baseUrlState?.kind === 'literal'
+                  ? 'Move URL to a configuration'
+                  : undefined
+              }
+              defaultValue={
+                baseUrlState?.kind === 'literal' ? baseUrlState.url : undefined
+              }
+              onCreated={name =>
+                setValue('baseUrl', name, {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                })
+              }
+            />
+          </div>
+          {configurations?.length === 0 && (
+            <p className="text-sm">No configurations in this namespace.</p>
+          )}
           <FieldError>{fieldState.error?.message}</FieldError>
         </FieldSet>
       )}
@@ -284,6 +389,9 @@ function BaseUrlField({
 function OpenAISpecificFields({
   isSecretsPending,
   secrets,
+  isConfigurationsPending,
+  configurations,
+  baseUrlState,
   control,
 }: ProviderFieldsProps) {
   return (
@@ -296,7 +404,13 @@ function OpenAISpecificFields({
         label="API Key"
         placeholder="Select a secret"
       />
-      <BaseUrlField control={control} placeholder="https://api.openai.com/v1" />
+      <BaseUrlField
+        control={control}
+        placeholder="Select a configuration"
+        configurations={configurations}
+        isConfigurationsPending={isConfigurationsPending}
+        baseUrlState={baseUrlState}
+      />
     </>
   );
 }
@@ -307,6 +421,9 @@ function AzureSpecificFields({
   control,
   isSecretsPending,
   secrets,
+  isConfigurationsPending,
+  configurations,
+  baseUrlState,
 }: AzureSpecificFieldsProps) {
   const { initialAzureAuthMethod } = useModelConfigurationForm();
   const watchedAuthMethod = useWatch({
@@ -401,7 +518,13 @@ function AzureSpecificFields({
           )}
         </>
       )}
-      <BaseUrlField control={control} placeholder="https://your-resource.openai.azure.com/" />
+      <BaseUrlField
+        control={control}
+        placeholder="Select a configuration"
+        configurations={configurations}
+        isConfigurationsPending={isConfigurationsPending}
+        baseUrlState={baseUrlState}
+      />
       <FormField
         control={control}
         name="azureApiVersion"
@@ -439,6 +562,9 @@ function AWSBedrockSpecificFields({
   control,
   isSecretsPending,
   secrets,
+  isConfigurationsPending,
+  configurations,
+  baseUrlState,
 }: ProviderFieldsProps) {
   const { initialBedrockAuthMethod } = useModelConfigurationForm();
   const watchedAuthMethod = useWatch({
@@ -503,26 +629,13 @@ function AWSBedrockSpecificFields({
           />
         </>
       )}
-      <FormField
+      <BaseUrlField
         control={control}
-        name="baseUrl"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Base URL (Optional)</FormLabel>
-            <FormControl>
-              <Input
-                {...field}
-                value={field.value ?? ''}
-                placeholder="https://bedrock-runtime.us-east-1.amazonaws.com"
-              />
-            </FormControl>
-            <FormDescription>
-              Leave blank to use the default AWS Bedrock endpoint. Set this to
-              route through a gateway (e.g. an AI gateway fronting Bedrock).
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
+        placeholder="Select a configuration"
+        configurations={configurations}
+        isConfigurationsPending={isConfigurationsPending}
+        baseUrlState={baseUrlState}
+        optional
       />
       <FormField
         control={control}
@@ -565,6 +678,9 @@ function AWSBedrockSpecificFields({
 function AnthropicSpecificFields({
   isSecretsPending,
   secrets,
+  isConfigurationsPending,
+  configurations,
+  baseUrlState,
   control,
 }: ProviderFieldsProps) {
   return (
@@ -577,7 +693,13 @@ function AnthropicSpecificFields({
         label="API Key"
         placeholder="Select a secret"
       />
-      <BaseUrlField control={control} placeholder="https://api.anthropic.com" />
+      <BaseUrlField
+        control={control}
+        placeholder="Select a configuration"
+        configurations={configurations}
+        isConfigurationsPending={isConfigurationsPending}
+        baseUrlState={baseUrlState}
+      />
       <FormField
         control={control}
         name="anthropicVersion"
