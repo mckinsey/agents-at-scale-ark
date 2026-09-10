@@ -38,6 +38,7 @@ runs:
   using: 'composite'
   steps:
     - name: Set up QEMU
+      if: ${{ contains(inputs.platforms, ',') || contains(inputs.platforms, 'arm') }}
       uses: docker/setup-qemu-action@v3
       with:
         image: mirror.gcr.io/tonistiigi/binfmt:latest

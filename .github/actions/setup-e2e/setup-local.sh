@@ -86,20 +86,68 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
   sudo k3s crictl pull "${REGISTRY}/ark-broker:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
   IMAGE_PULL_PIDS+=($!)
 fi
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  # The Postgres backend installs ark-storage-dev (postgres:16-alpine) and the
+  # broker migration job during serial --wait helm installs. Prefetch so the
+  # pulls overlap the cert-manager/gateway setup that runs first, rather than
+  # blocking pod readiness. The aggregated apiserver reuses the already-prefetched
+  # ark-controller image.
+  for img in \
+    docker.io/postgres:16-alpine \
+    docker.io/alpine:3; do
+    sudo k3s crictl pull "$img" > /dev/null 2>&1 &
+    IMAGE_PULL_PIDS+=($!)
+  done
+  if [ "${INSTALL_BROKER}" = "true" ]; then
+    sudo k3s crictl pull "${REGISTRY}/ark-broker-migrate:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
+    IMAGE_PULL_PIDS+=($!)
+  fi
+fi
 if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
   echo "=== Pre-pulling test images (background) ==="
+  # Argo image tags track the argo-workflows chart (services/argo-workflows/chart,
+  # dep 0.45.26 -> Argo v3.7.2); bump these when that chart is upgraded.
   for img in \
     docker.io/curlimages/curl:latest \
     docker.io/mockserver/mockserver:5.15.0 \
     ghcr.io/orange-opensource/hurl:6.1.1 \
     docker.io/python:3.12-bookworm \
-    ghcr.io/dwmkerr/mock-llm:0.1.28; do
+    ghcr.io/dwmkerr/mock-llm:0.1.28 \
+    quay.io/argoproj/workflow-controller:v3.7.2 \
+    quay.io/argoproj/argocli:v3.7.2 \
+    quay.io/argoproj/argoexec:v3.7.2 \
+    docker.io/alpine/k8s:1.28.13; do
     sudo k3s crictl pull "$img" > /dev/null 2>&1 &
     IMAGE_PULL_PIDS+=($!)
   done
 fi
 if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
   echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
+fi
+
+# The Postgres backend (ark-storage-dev) has no cert-manager dependency — its
+# TLS is a Helm-generated self-signed cert — so install it in the background
+# now, concurrently with the cert-manager install below, and join before the
+# apiserver (which consumes Postgres) needs it. Hides ~26s of serial setup.
+PG_SETUP_PID=""
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  echo "=== Installing PostgreSQL (ark-storage-dev, background) ==="
+  (
+    helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
+      --namespace ark-system \
+      --create-namespace \
+      --set ssl.enabled=true \
+      --wait --timeout=120s
+    kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
+    kubectl -n ark-system get secret ark-storage-dev-tls -o json | \
+      python3 -c "
+import sys, json
+s = json.load(sys.stdin)
+out = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': s['metadata']['name'], 'namespace': 'default'}, 'type': s['type'], 'data': s['data']}
+print(json.dumps(out))
+" | kubectl apply -f -
+  ) &
+  PG_SETUP_PID=$!
 fi
 
 # Install cert-manager if not present
@@ -153,25 +201,12 @@ data:
 BROKER_CM_EOF
 fi
 
-if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
-  echo "=== Installing PostgreSQL (ark-storage-dev) ==="
-  helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
-    --namespace ark-system \
-    --create-namespace \
-    --set ssl.enabled=true \
-    --wait --timeout=120s
-
-  echo "=== Waiting for PostgreSQL Pod Readiness ==="
-  kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
-
-  echo "=== Copying ark-storage-dev TLS secret to default namespace ==="
-  kubectl -n ark-system get secret ark-storage-dev-tls -o json | \
-    python3 -c "
-import sys, json
-s = json.load(sys.stdin)
-out = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': s['metadata']['name'], 'namespace': 'default'}, 'type': s['type'], 'data': s['data']}
-print(json.dumps(out))
-" | kubectl apply -f -
+if [ -n "${PG_SETUP_PID}" ]; then
+  echo "=== Waiting for background PostgreSQL setup ==="
+  if ! wait "${PG_SETUP_PID}"; then
+    echo "ERROR: background PostgreSQL setup failed" >&2
+    exit 1
+  fi
 fi
 
 BROKER_PID=""
