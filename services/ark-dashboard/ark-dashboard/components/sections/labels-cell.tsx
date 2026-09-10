@@ -23,7 +23,7 @@ export function TagOverflowList<T>({
   tagClassName = 'max-w-[120px] overflow-hidden',
 }: Readonly<TagOverflowListProps<T>>) {
   if (items.length === 0) {
-    return <span className="text-fg-secondary text-sm leading-5">-</span>;
+    return <span className="text-fg-secondary label-regular-primary">-</span>;
   }
 
   const visible = items.slice(0, maxVisible);

@@ -25,8 +25,10 @@ export interface ResourceFormShellProps<TFieldValues extends FieldValues> {
   backHref: string;
   backLabel: string;
   heading: string;
+  subtitle?: ReactNode;
   breadcrumbCurrent?: string;
   submitLabel: string;
+  submittingLabel?: string;
   onSubmit: SubmitHandler<TFieldValues>;
   loading?: boolean;
   saving?: boolean;
@@ -40,8 +42,10 @@ export function ResourceFormShell<TFieldValues extends FieldValues>({
   backHref,
   backLabel,
   heading,
+  subtitle,
   breadcrumbCurrent,
   submitLabel,
+  submittingLabel,
   onSubmit,
   loading = false,
   saving = false,
@@ -81,11 +85,18 @@ export function ResourceFormShell<TFieldValues extends FieldValues>({
             </NamespacedLink>
             <Button onClick={submit} disabled={saving || submitDisabled}>
               {saving && <Spinner className="mr-2 h-4 w-4" />}
-              {submitLabel}
+              {saving && submittingLabel ? submittingLabel : submitLabel}
             </Button>
           </div>
         </div>
-        <h1 className="text-fg-primary text-xl leading-7">{heading}</h1>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-fg-primary headings-h3-regular">{heading}</h1>
+          {subtitle && (
+            <p className="text-fg-secondary paragraph-regular-primary">
+              {subtitle}
+            </p>
+          )}
+        </div>
       </header>
 
       <Form {...form}>

@@ -3,7 +3,8 @@
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { Edit, Trash } from '@/components/icons';
+import { Trash } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { LabelsCell, TagOverflowList } from '@/components/sections/labels-cell';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
@@ -24,7 +25,6 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 interface SecretsTableProps {
   readonly secrets: readonly Secret[];
   readonly models: readonly Model[];
-  readonly onEdit: (secret: Secret) => void;
   readonly onDelete: (id: string) => void;
 }
 
@@ -42,11 +42,16 @@ function NameCell({ secret }: Readonly<{ secret: Secret }>) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <TruncatedTooltip label={secret.name}>
-        <span className="text-fg-primary block truncate">{secret.name}</span>
+        <NamespacedLink
+          href={`/secrets/${encodeURIComponent(secret.name)}`}
+          title={secret.name}
+          className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
+          {secret.name}
+        </NamespacedLink>
       </TruncatedTooltip>
       {secret.alias && (
         <TruncatedTooltip label={secret.alias}>
-          <span className="text-fg-secondary block truncate text-xs">
+          <span className="text-fg-secondary label-small-primary block truncate">
             Alias: {secret.alias}
           </span>
         </TruncatedTooltip>
@@ -119,14 +124,12 @@ function ModelsInUse({ models }: Readonly<{ models: readonly Model[] }>) {
 interface SecretTableRowProps {
   readonly secret: Secret;
   readonly models: readonly Model[];
-  readonly onEdit: (secret: Secret) => void;
   readonly onDelete: (id: string) => void;
 }
 
 function SecretTableRow({
   secret,
   models,
-  onEdit,
   onDelete,
 }: Readonly<SecretTableRowProps>) {
   const { readOnlyMode } = useNamespace();
@@ -140,7 +143,7 @@ function SecretTableRow({
 
   return (
     <>
-      <TableRow className="relative isolate transition-colors">
+      <TableRow className="relative isolate cursor-pointer transition-colors">
         <TableCell size="small" className={COL.name}>
           <span aria-hidden className={rowHoverOverlayClass} />
           <NameCell secret={secret} />
@@ -159,16 +162,8 @@ function SecretTableRow({
         <TableCell size="small" className={COL.status}>
           <SecretStatus inUse={isInUse} />
         </TableCell>
-        <TableCell size="small" className={COL.action}>
+        <TableCell size="small" className={cn(COL.action, 'relative z-10')}>
           <div className="flex items-center justify-center gap-2">
-            <IconActionButton
-              label="Edit secret"
-              disabled={readOnlyMode}
-              onClick={() => {
-                if (!readOnlyMode) onEdit(secret);
-              }}>
-              <Edit />
-            </IconActionButton>
             <IconActionButton
               label="Delete secret"
               disabled={isInUse || readOnlyMode}
@@ -197,13 +192,12 @@ function SecretTableRow({
 export function SecretsTable({
   secrets,
   models,
-  onEdit,
   onDelete,
 }: Readonly<SecretsTableProps>) {
   return (
     <Table
       aria-label="Secrets"
-      className="min-w-[896px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[1136px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>
@@ -230,7 +224,6 @@ export function SecretsTable({
             key={secret.id}
             secret={secret}
             models={models}
-            onEdit={onEdit}
             onDelete={onDelete}
           />
         ))}

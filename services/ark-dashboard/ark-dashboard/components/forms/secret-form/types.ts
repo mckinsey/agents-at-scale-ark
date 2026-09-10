@@ -4,9 +4,9 @@ import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
 import {
   addLabelDraftIssue,
+  addLabelsListIssue,
   aliasSchema,
   descriptionSchema,
-  labelSchema,
 } from '../fields/label-validation';
 
 export const SecretFormMode = {
@@ -16,14 +16,17 @@ export const SecretFormMode = {
 
 export type SecretFormMode = (typeof SecretFormMode)[keyof typeof SecretFormMode];
 
-export function createSecretFormSchema(mode: SecretFormMode) {
+export function createSecretFormSchema(
+  mode: SecretFormMode,
+  getExistingLabels: () => readonly string[] = () => [],
+) {
   return z
     .object({
       name: kubernetesNameSchema,
       password: z.string(),
       description: descriptionSchema,
       alias: aliasSchema,
-      labels: z.array(labelSchema),
+      labels: z.array(z.string()),
       labelDraft: z.string(),
     })
     .superRefine((data, ctx) => {
@@ -35,6 +38,7 @@ export function createSecretFormSchema(mode: SecretFormMode) {
         });
       }
 
+      addLabelsListIssue(ctx, data, getExistingLabels());
       addLabelDraftIssue(ctx, data);
     });
 }

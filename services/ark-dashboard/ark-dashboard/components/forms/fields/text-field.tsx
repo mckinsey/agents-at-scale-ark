@@ -67,6 +67,7 @@ export function FormTextField<
             autoComplete={autoComplete}
             placeholder={placeholder}
             disabled={disabled}
+            aria-required={required}
             aria-invalid={!!fieldState.error}
             aria-describedby={descriptionId}
             {...field}

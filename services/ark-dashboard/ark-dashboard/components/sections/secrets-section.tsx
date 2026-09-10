@@ -16,14 +16,12 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Model, modelsService } from '@/lib/services';
 import { useDeleteSecret, useGetAllSecrets } from '@/lib/services/secrets-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function SecretsSection() {
   const { readOnlyMode, namespace } = useNamespace();
-  const { push } = useNamespacedNavigation();
   const [models, setModels] = useState<Model[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -61,9 +59,11 @@ export function SecretsSection() {
 
   const isEmpty = !secretsLoading && secrets.length === 0;
 
-  const createButton = (
+  const createButton = readOnlyMode ? (
+    <Button disabled>Add secret</Button>
+  ) : (
     <NamespacedLink href="/secrets/new">
-      <Button disabled={readOnlyMode}>Add secret</Button>
+      <Button>Add secret</Button>
     </NamespacedLink>
   );
 
@@ -115,7 +115,6 @@ export function SecretsSection() {
               <SecretsTable
                 secrets={filteredSecrets}
                 models={models}
-                onEdit={secret => push(`/secrets/${secret.name}`)}
                 onDelete={handleDeleteSecret}
               />
             </ScrollArea>

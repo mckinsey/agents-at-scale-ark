@@ -92,10 +92,7 @@ export function LabelsField({
         aria-invalid={!!error}
         onChange={event => onDraftChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        onBlur={() => {
-          addLabel();
-          onDraftTouched?.();
-        }}
+        onBlur={() => onDraftTouched?.()}
       />
       <FieldDescription>{description}</FieldDescription>
       <FieldError>{error}</FieldError>
@@ -120,20 +117,22 @@ export function FormLabelsField<TFieldValues extends FieldValues>({
     <FormField
       control={control}
       name={labelsName}
-      render={({ field }) => (
+      render={({ field, fieldState: labelsFieldState }) => (
         <FieldSet className="gap-2">
           <FieldTitle>Labels</FieldTitle>
           <FormField
             control={control}
             name={labelDraftName}
-            render={({ field: draftField, fieldState }) => (
+            render={({ field: draftField, fieldState: draftFieldState }) => (
               <LabelsField
                 value={field.value as string[]}
                 onChange={field.onChange as (labels: string[]) => void}
                 draft={draftField.value as string}
                 onDraftChange={draftField.onChange as (draft: string) => void}
                 onDraftTouched={draftField.onBlur}
-                error={fieldState.error?.message}
+                error={
+                  draftFieldState.error?.message ?? labelsFieldState.error?.message
+                }
                 disabled={disabled}
               />
             )}

@@ -55,3 +55,25 @@ export function addLabelDraftIssue(
     });
   }
 }
+
+export function addLabelsListIssue(
+  ctx: z.RefinementCtx,
+  data: { labels: string[] },
+  existingLabels: readonly string[],
+): void {
+  const existing = new Set(existingLabels);
+  for (const label of data.labels) {
+    if (existing.has(label)) {
+      continue;
+    }
+    const parsed = labelSchema.safeParse(label);
+    if (!parsed.success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `"${label}": ${parsed.error.issues[0].message}`,
+        path: ['labels'],
+      });
+      return;
+    }
+  }
+}

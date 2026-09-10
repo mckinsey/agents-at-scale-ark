@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
@@ -35,8 +35,12 @@ export function useSecretForm({
 }: Readonly<SecretFormProps>) {
   const isEdit = mode === SecretFormMode.EDIT;
 
+  const existingLabelsRef = useRef<readonly string[]>([]);
+
   const form = useForm<SecretFormValues>({
-    resolver: zodResolver(createSecretFormSchema(mode)),
+    resolver: zodResolver(
+      createSecretFormSchema(mode, () => existingLabelsRef.current),
+    ),
     mode: 'onTouched',
     defaultValues: EMPTY_VALUES,
   });
@@ -53,6 +57,7 @@ export function useSecretForm({
     if (!secret) {
       return;
     }
+    existingLabelsRef.current = secret.labels;
     reset({
       name: secret.name,
       password: '',
