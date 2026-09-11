@@ -16,7 +16,12 @@ import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 export const CONFIGURATION_VALUE_KEY = 'value';
 
 export type AddressMode =
-  | { kind: 'configuration'; originalName?: string; originalKey?: string }
+  | {
+      kind: 'configuration';
+      originalName?: string;
+      originalKey?: string;
+      literalUrl?: string;
+    }
   | { kind: 'service'; serviceRef: MCPServerServiceRef };
 
 export type UrlFieldState =
@@ -34,11 +39,13 @@ export type UrlFieldState =
     };
 
 export function createFormSchema(addressMode: AddressMode) {
+  const hasLiteralFallback =
+    addressMode.kind === 'configuration' && !!addressMode.literalUrl;
   return z.object({
     name: kubernetesNameSchema,
     description: z.string().optional(),
     configurationName:
-      addressMode.kind === 'service'
+      addressMode.kind === 'service' || hasLiteralFallback
         ? z.string()
         : z.string().min(1, 'URL is required'),
     transport: z.enum(['http', 'sse'], {
@@ -135,6 +142,9 @@ export function buildUpdateAddressMode(urlState: UrlFieldState): AddressMode {
       originalKey: urlState.configurationKey,
     };
   }
+  if (urlState.kind === 'literal') {
+    return { kind: 'configuration', literalUrl: urlState.url };
+  }
   return { kind: 'configuration' };
 }
 
@@ -145,7 +155,10 @@ export function buildAddress(
   if (addressMode.kind === 'service') {
     return { valueFrom: { serviceRef: addressMode.serviceRef } };
   }
-  const { originalName, originalKey } = addressMode;
+  const { originalName, originalKey, literalUrl } = addressMode;
+  if (!values.configurationName && literalUrl) {
+    return { value: literalUrl };
+  }
   const key =
     originalKey && values.configurationName === originalName
       ? originalKey

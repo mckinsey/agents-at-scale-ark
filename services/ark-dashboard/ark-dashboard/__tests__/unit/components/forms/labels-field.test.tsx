@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LabelsField } from '@/components/forms/configuration-form/labels-field';
-import { validateLabelDraft } from '@/components/forms/configuration-form/types';
+import { LabelsField } from '@/components/forms/fields/labels-field';
+import { validateLabelDraft } from '@/components/forms/fields/label-validation';
 
 const onChange = vi.fn();
 
@@ -55,14 +55,15 @@ describe('LabelsField', () => {
     expect(onChange).toHaveBeenCalledWith(['mcp']);
   });
 
-  it('adds the pending label on blur so it is not silently lost', async () => {
+  it('does not silently commit the pending label on blur', async () => {
     const user = userEvent.setup();
     renderField();
 
     await user.type(screen.getByRole('textbox'), 'mcp');
     await user.tab();
 
-    expect(onChange).toHaveBeenCalledWith(['mcp']);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox')).toHaveValue('mcp');
   });
 
   it('rejects a label Kubernetes would refuse as a label key segment', async () => {
@@ -93,7 +94,7 @@ describe('LabelsField', () => {
     await user.type(screen.getByRole('textbox'), 'mcp{Enter}');
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByText(/already been added/i)).toBeInTheDocument();
+    expect(screen.getByText(/label already added/i)).toBeInTheDocument();
   });
 
   it('ignores an empty submission', async () => {
