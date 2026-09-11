@@ -52,6 +52,11 @@ import (
 // after every denial, never terminating.
 const maxApprovalCascades = 3
 
+// defaultMaxImpersonatedClients bounds the impersonated-client cache so it
+// cannot grow without limit across many distinct service accounts. It is an
+// internal safety bound, not an operational tuning knob.
+const defaultMaxImpersonatedClients = 256
+
 const (
 	targetTypeAgent = "agent"
 	targetTypeTeam  = "team"
@@ -116,8 +121,10 @@ type QueryReconciler struct {
 	// default (1).
 	MaxConcurrentReconciles int
 
-	sem        *semaphore.Weighted
-	operations sync.Map
+	sem           *semaphore.Weighted
+	operations    sync.Map
+	saClients     *impersonatedClientCache
+	saClientsOnce sync.Once
 
 	// brokerEndpoint resolves the broker endpoint for a namespace, used by the
 	// finalizer's broker cleanups. Defaults to routing.ResolveBrokerEndpoint
@@ -1360,19 +1367,27 @@ func (r *QueryReconciler) deleteBrokerSessionQuery(ctx context.Context, query *a
 	return r.deleteBrokerQueryResource(ctx, query, common.QuerySessionsEndpointFmt, "session query", query.Name)
 }
 
+func (r *QueryReconciler) initImpersonatedClientCache() {
+	r.saClients = newImpersonatedClientCache(defaultMaxImpersonatedClients, r.buildImpersonatedClient)
+}
+
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
 	serviceAccount := query.Spec.ServiceAccount
 	if serviceAccount == "" {
 		return r.Client, nil
 	}
+	r.saClientsOnce.Do(r.initImpersonatedClientCache)
+	return r.saClients.get(query.Namespace, serviceAccount)
+}
 
+func (r *QueryReconciler) buildImpersonatedClient(namespace, serviceAccount string) (client.Client, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
 
 	cfg.Impersonate = rest.ImpersonationConfig{
-		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", query.Namespace, serviceAccount),
+		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, serviceAccount),
 	}
 
 	impersonatedClient, err := client.New(cfg, client.Options{
@@ -1380,7 +1395,7 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 		Mapper: r.RESTMapper(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", query.Namespace, serviceAccount, err)
+		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", namespace, serviceAccount, err)
 	}
 
 	return impersonatedClient, nil
