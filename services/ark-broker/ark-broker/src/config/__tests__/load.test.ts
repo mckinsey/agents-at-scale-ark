@@ -144,6 +144,35 @@ describe('loadConfig', () => {
       expect(cfg.database.statementTimeoutMs).toBe(60000);
     });
 
+    it('defaults reaper interval and batch size', () => {
+      const cfg = loadConfig({});
+
+      expect(cfg.database.reapIntervalSeconds).toBe(3600);
+      expect(cfg.database.reapBatchSize).toBe(10000);
+    });
+
+    it('honors custom reaper values', () => {
+      const cfg = loadConfig({
+        ROW_REAP_INTERVAL_SECONDS: '60',
+        ROW_REAP_BATCH_SIZE: '500',
+      });
+
+      expect(cfg.database.reapIntervalSeconds).toBe(60);
+      expect(cfg.database.reapBatchSize).toBe(500);
+    });
+
+    it('rejects ROW_REAP_INTERVAL_SECONDS above the Node timer range', () => {
+      expect(() =>
+        loadConfig({ROW_REAP_INTERVAL_SECONDS: '2592000'})
+      ).toThrow();
+    });
+
+    it('accepts ROW_REAP_INTERVAL_SECONDS=0 to disable reaping', () => {
+      const cfg = loadConfig({ROW_REAP_INTERVAL_SECONDS: '0'});
+
+      expect(cfg.database.reapIntervalSeconds).toBe(0);
+    });
+
     it('honors MESSAGE_VISIBILITY_TTL_SECONDS', () => {
       const cfg = loadConfig({
         MESSAGE_BACKEND: 'postgres',
