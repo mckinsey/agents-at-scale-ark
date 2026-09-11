@@ -33,6 +33,9 @@ class SecretResponse(BaseModel):
     """Kubernetes secret response model."""
     name: str
     id: str
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
     annotations: Optional[Dict[str, str]] = None
 
     @field_validator("annotations")
@@ -52,11 +55,30 @@ class SecretCreateRequest(BaseModel):
     name: str
     string_data: Dict[str, str]
     type: Optional[str] = "Opaque"
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
+
+    @field_validator("labels")
+    @classmethod
+    def _validate_labels(cls, value: List[str]) -> List[str]:
+        return [validate_tag(label) for label in value]
 
 
 class SecretUpdateRequest(BaseModel):
     """Request model for updating a secret."""
-    string_data: Dict[str, str]
+    string_data: Optional[Dict[str, str]] = None
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
+
+    @field_validator("labels")
+    @classmethod
+    def _validate_labels(cls, value: List[str]) -> List[str]:
+        # A tag pre-dating the alphanumeric-only rule may still be sent back
+        # unchanged here; SecretClient.update_secret enforces the current
+        # rule on anything that isn't already on the resource.
+        return [validate_legacy_tag(label) for label in value]
 
 
 class SecretDetailResponse(BaseModel):
@@ -66,6 +88,9 @@ class SecretDetailResponse(BaseModel):
     type: str
     secret_length: int  # Total length of all secret data in bytes
     keys: List[str] = []  # Names of the keys in the secret data (never the values)
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
     annotations: Optional[Dict[str, str]] = None
 
     @field_validator("annotations")
