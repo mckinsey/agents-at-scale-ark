@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { type UseFormReturn, useWatch } from 'react-hook-form';
 
 import { Checkbox } from '@/components/ui/checkbox';
@@ -48,6 +49,7 @@ export function StrategySection({
   selectedMembers,
   disabled,
 }: Readonly<StrategySectionProps>) {
+  const loopsId = useId();
   const selectedStrategy = useWatch({ control: form.control, name: 'strategy' });
   const loopsChecked = useWatch({ control: form.control, name: 'loops' });
   const enableTerminateTool = useWatch({
@@ -105,6 +107,7 @@ export function StrategySection({
           render={({ field }) => (
             <div className="flex flex-row items-center gap-2">
               <Checkbox
+                id={loopsId}
                 checked={field.value}
                 onCheckedChange={checked => {
                   field.onChange(checked);
@@ -114,7 +117,9 @@ export function StrategySection({
                 }}
                 disabled={disabled}
               />
-              <Label className="text-sm font-normal">
+              <Label
+                htmlFor={loopsId}
+                className="cursor-pointer text-sm font-normal">
                 Enable loops (cycle through members repeatedly)
               </Label>
             </div>
