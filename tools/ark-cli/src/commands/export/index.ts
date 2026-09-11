@@ -74,14 +74,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isResourceTypeNotFoundError(error: unknown): boolean {
+function errorText(error: unknown): string {
   const stderr =
     isRecord(error) && typeof error.stderr === 'string' ? error.stderr : '';
   const message = error instanceof Error ? error.message : String(error);
-  const combined = `${stderr}\n${message}`;
+  return `${stderr}\n${message}`;
+}
+
+function isResourceTypeNotFoundError(error: unknown): boolean {
+  const combined = errorText(error);
   return (
     combined.includes("doesn't have a resource type") ||
     combined.includes('could not find the requested resource')
+  );
+}
+
+function isForbiddenError(error: unknown): boolean {
+  const combined = errorText(error);
+  return (
+    combined.includes('(Forbidden)') || combined.includes('is forbidden:')
   );
 }
 
@@ -198,14 +209,19 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
           labels: options.labels,
         });
       } catch (error) {
-        if (
-          OPTIONAL_RESOURCE_TYPES.has(resourceType) &&
-          isResourceTypeNotFoundError(error)
-        ) {
-          output.warning(
-            `${resourceType} CRD not installed on this cluster, skipping`
-          );
-          continue;
+        if (OPTIONAL_RESOURCE_TYPES.has(resourceType)) {
+          if (isResourceTypeNotFoundError(error)) {
+            output.warning(
+              `${resourceType} CRD not installed on this cluster, skipping`
+            );
+            continue;
+          }
+          if (isForbiddenError(error)) {
+            output.warning(
+              `not authorized to list ${resourceType}, skipping`
+            );
+            continue;
+          }
         }
         throw error;
       }

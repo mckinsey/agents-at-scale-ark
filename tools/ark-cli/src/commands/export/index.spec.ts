@@ -763,6 +763,53 @@ describe('export command', () => {
     expect(mockWriteFile).not.toHaveBeenCalled();
   });
 
+  it('warns and skips an Argo type when the user is not authorized to list it', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'clusterworkflowtemplates') {
+        const error = new Error('kubectl failed') as Error & {stderr?: string};
+        error.stderr =
+          'Error from server (Forbidden): clusterworkflowtemplates.argoproj.io is forbidden: User "tenant" cannot list resource "clusterworkflowtemplates" in API group "argoproj.io" at the cluster scope';
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify(mockKubectlGetResponse)});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'not authorized to list clusterworkflowtemplates, skipping'
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 9 resources to test.yaml'
+    );
+  });
+
+  it('does not swallow a Forbidden error for Ark-native types', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'agents') {
+        const error = new Error('kubectl failed') as Error & {stderr?: string};
+        error.stderr =
+          'Error from server (Forbidden): agents.ark.mckinsey.com is forbidden: User "tenant" cannot list resource "agents"';
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify({items: []})});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'export failed:',
+      'kubectl failed'
+    );
+    expect(mockWriteFile).not.toHaveBeenCalled();
+  });
+
   it('fails if kubectl get fails for a resource type', async () => {
     mockExeca.mockRejectedValue('Export broke');
 
