@@ -64,6 +64,43 @@ func TestFairScheduler_EqualSplitAcrossTenants(t *testing.T) {
 	assert.Equal(t, 2, s.perNS["b"])
 }
 
+// The floor-division remainder (max mod active) must be handed out on demand,
+// not stranded once every backlogged tenant sits at its share.
+func TestFairScheduler_RemainderNotStranded(t *testing.T) {
+	s, _ := newTestScheduler(4)
+
+	// Three backlogged tenants each reach the share of 1 (4/3 floored).
+	require.True(t, s.tryAcquire("a"))
+	require.True(t, s.tryAcquire("b"))
+	require.True(t, s.tryAcquire("c"))
+
+	// One slot remains. No tenant is waiting below its share, so the leftover
+	// slot is grantable rather than stranded behind the fairness check.
+	assert.True(t, s.tryAcquire("a"), "the remainder slot must be grantable, not stranded")
+	assert.Equal(t, 4, s.inFlight)
+
+	// The pool is now full: the next attempt is refused by the global bound.
+	assert.False(t, s.tryAcquire("b"), "further acquires are refused only by the global cap")
+}
+
+// A busy tenant must be able to use spare capacity that quiet, low-demand
+// tenants are entitled to but are not asking for. A tenant holding fewer slots
+// than its share does not reserve capacity unless it is actively waiting.
+func TestFairScheduler_BusyTenantUsesSpareLeftByQuietTenant(t *testing.T) {
+	s, _ := newTestScheduler(4)
+
+	// Quiet tenant takes a single slot and stops asking (no waiting mark).
+	require.True(t, s.tryAcquire("quiet"))
+
+	// Busy tenant is not throttled to its notional share of 2: it fills every
+	// remaining slot because "quiet" has no pending demand.
+	require.True(t, s.tryAcquire("busy"))
+	require.True(t, s.tryAcquire("busy"))
+	assert.True(t, s.tryAcquire("busy"), "busy must claim the slot quiet is not asking for")
+	assert.Equal(t, 3, s.perNS["busy"])
+	assert.Equal(t, 4, s.inFlight)
+}
+
 func TestFairScheduler_ShareExpandsAsTenantsDrain(t *testing.T) {
 	s, clock := newTestScheduler(4)
 

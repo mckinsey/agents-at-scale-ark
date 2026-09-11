@@ -63,7 +63,7 @@ func (s *fairScheduler) tryAcquire(ns string) bool {
 	}
 
 	share := s.shareLocked(ns, now)
-	if s.perNS[ns] >= share {
+	if s.perNS[ns] >= share && s.anyOtherWaitingBelowShareLocked(ns, share) {
 		s.markWaitingLocked(ns, now)
 		queryFairnessDeniedTotal.WithLabelValues(ns).Inc()
 		s.publishLocked(ns)
@@ -104,6 +104,21 @@ func (s *fairScheduler) shareLocked(ns string, now time.Time) int {
 		share = 1
 	}
 	return share
+}
+
+// anyOtherWaitingBelowShareLocked reports whether some namespace other than ns
+// is actively waiting (denied within the window) and still below its share, and
+// is therefore entitled to the next freed slot. A tenant already at its share
+// may exceed it only when this returns false, so the floor-division remainder
+// (max mod active) is handed out on demand instead of being stranded, while a
+// slot is still reserved for a tenant that actually has work waiting.
+func (s *fairScheduler) anyOtherWaitingBelowShareLocked(ns string, share int) bool {
+	for k := range s.waitingSeen {
+		if k != ns && s.perNS[k] < share {
+			return true
+		}
+	}
+	return false
 }
 
 // countActiveLocked returns the number of namespaces currently competing for
