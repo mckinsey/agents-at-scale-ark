@@ -6,7 +6,7 @@ import { ConditionalInputRow } from '@/components/ui/conditionalInputRow';
 import { Plus } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { FieldError, FieldSet, FieldTitle } from '@/components/ui/field';
-import { Form, FormField } from '@/components/ui/form';
+import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import {
   GHOST_TRIGGER,
@@ -25,8 +25,6 @@ import type { FormValues, HeaderRows, UrlFieldState } from './utils';
 
 interface McpServerFieldsProps {
   readonly form: UseFormReturn<FormValues>;
-  readonly formId: string;
-  readonly onSubmit: (values: FormValues) => void;
   readonly headerRows: HeaderRows;
   readonly urlState: UrlFieldState;
   readonly nameDisabled?: boolean;
@@ -35,8 +33,6 @@ interface McpServerFieldsProps {
 
 export function McpServerFields({
   form,
-  formId,
-  onSubmit,
   headerRows,
   urlState,
   nameDisabled,
@@ -53,99 +49,94 @@ export function McpServerFields({
   } = headerRows;
 
   return (
-    <Form {...form}>
-      <form
-        id={formId}
-        onSubmit={form.handleSubmit(onSubmit)}
-        className="flex flex-col gap-6">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field, fieldState }) => (
-            <FieldSet className="gap-2">
-              <FieldTitle>Name</FieldTitle>
-              <Input
-                variant="inline"
-                {...field}
-                placeholder="e.g., github-remote-mcp"
-                disabled={nameDisabled}
-                aria-invalid={!!fieldState.error}
-              />
-              <FieldError>{fieldState.error?.message}</FieldError>
-            </FieldSet>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field, fieldState }) => (
-            <FieldSet className="gap-2">
-              <FieldTitle>Description</FieldTitle>
-              <Input
-                variant="inline"
-                {...field}
-                placeholder="e.g., This is a remote github mcp server"
-                aria-invalid={!!fieldState.error}
-              />
-              <FieldError>{fieldState.error?.message}</FieldError>
-            </FieldSet>
-          )}
-        />
-        <McpUrlField form={form} state={urlState} />
-        <FormField
-          control={form.control}
-          name="transport"
-          render={({ field, fieldState }) => (
-            <FieldSet className="gap-2">
-              <FieldTitle>Transport</FieldTitle>
-              <Select
-                onValueChange={field.onChange}
-                value={field.value}
-                disabled={transportDisabled}>
-                <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
-                  <SelectValue placeholder="Select a transport" />
-                </SelectTrigger>
-                <SelectContent className="bg-fill-onsurface-ui-2">
-                  <SelectItem value="http">
-                    <SelectItemText>http</SelectItemText>
-                  </SelectItem>
-                  <SelectItem value="sse">
-                    <SelectItemText>sse</SelectItemText>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <FieldError>{fieldState.error?.message}</FieldError>
-            </FieldSet>
-          )}
-        />
-        <FieldSet className="gap-2">
-          <FieldTitle>Headers</FieldTitle>
-          {headers.map((row, index) => (
-            <ConditionalInputRow
-              key={row.key}
-              data={row}
-              onChange={updated => {
-                updateRow(index, updated);
-                clearRowError(row.key, updated);
-              }}
-              secrets={secrets ?? []}
-              deleteRow={deleteRow}
-              nameError={headerErrors[row.key]?.nameError}
-              valueError={headerErrors[row.key]?.valueError}
-              namePlaceholder="e.g., Authorization"
-              valuePlaceholder="e.g., Bearer token"
+    <>
+      <FormField
+        control={form.control}
+        name="name"
+        render={({ field, fieldState }) => (
+          <FieldSet className="gap-2">
+            <FieldTitle>Name</FieldTitle>
+            <Input
+              variant="inline"
+              {...field}
+              placeholder="e.g., github-remote-mcp"
+              disabled={nameDisabled}
+              aria-invalid={!!fieldState.error}
             />
-          ))}
-          <Button
-            type="button"
-            onClick={addRow}
-            variant="outline"
-            size="icon"
-            aria-label="Add header">
-            <Plus />
-          </Button>
-        </FieldSet>
-      </form>
-    </Form>
+            <FieldError>{fieldState.error?.message}</FieldError>
+          </FieldSet>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="description"
+        render={({ field, fieldState }) => (
+          <FieldSet className="gap-2">
+            <FieldTitle>Description</FieldTitle>
+            <Input
+              variant="inline"
+              {...field}
+              placeholder="e.g., This is a remote github mcp server"
+              aria-invalid={!!fieldState.error}
+            />
+            <FieldError>{fieldState.error?.message}</FieldError>
+          </FieldSet>
+        )}
+      />
+      <McpUrlField form={form} state={urlState} />
+      <FormField
+        control={form.control}
+        name="transport"
+        render={({ field, fieldState }) => (
+          <FieldSet className="gap-2">
+            <FieldTitle>Transport</FieldTitle>
+            <Select
+              onValueChange={field.onChange}
+              value={field.value}
+              disabled={transportDisabled}>
+              <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
+                <SelectValue placeholder="Select a transport" />
+              </SelectTrigger>
+              <SelectContent className="bg-fill-onsurface-ui-2">
+                <SelectItem value="http">
+                  <SelectItemText>http</SelectItemText>
+                </SelectItem>
+                <SelectItem value="sse">
+                  <SelectItemText>sse</SelectItemText>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldError>{fieldState.error?.message}</FieldError>
+          </FieldSet>
+        )}
+      />
+      <FieldSet className="gap-2">
+        <FieldTitle>Headers</FieldTitle>
+        {headers.map((row, index) => (
+          <ConditionalInputRow
+            key={row.key}
+            data={row}
+            onChange={updated => {
+              updateRow(index, updated);
+              clearRowError(row.key, updated);
+            }}
+            secrets={secrets ?? []}
+            deleteRow={deleteRow}
+            nameError={headerErrors[row.key]?.nameError}
+            valueError={headerErrors[row.key]?.valueError}
+            namePlaceholder="e.g., Authorization"
+            valuePlaceholder="e.g., Bearer token"
+          />
+        ))}
+        <Button
+          type="button"
+          onClick={addRow}
+          variant="outline"
+          size="icon"
+          aria-label="Add header">
+          <Plus />
+        </Button>
+      </FieldSet>
+    </>
   );
 }
