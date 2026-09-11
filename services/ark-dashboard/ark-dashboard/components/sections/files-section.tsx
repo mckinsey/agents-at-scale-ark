@@ -447,7 +447,7 @@ export function FilesSection() {
       )}
 
       {hasFiles && (
-        <Table className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+        <Table className="min-w-[648px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
           <TableHeader>
             <TableRow>
               <TableHead size="small">Name</TableHead>

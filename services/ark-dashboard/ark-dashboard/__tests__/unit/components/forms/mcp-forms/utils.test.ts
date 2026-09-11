@@ -223,10 +223,46 @@ describe('buildUpdateAddressMode', () => {
     });
   });
 
-  it('has no original to preserve for a literal address', () => {
+  it('carries the literal url forward as a fallback, not an original', () => {
     expect(
       buildUpdateAddressMode({ kind: 'literal', url: 'https://legacy/mcp' }),
-    ).toEqual({ kind: 'configuration' });
+    ).toEqual({ kind: 'configuration', literalUrl: 'https://legacy/mcp' });
+  });
+});
+
+describe('editing an MCP server with a legacy literal address', () => {
+  it('does not require a configuration when the field is untouched', () => {
+    const mode = buildUpdateAddressMode({
+      kind: 'literal',
+      url: 'https://legacy.example/mcp',
+    });
+    const schema = createFormSchema(mode);
+    const result = schema.safeParse({ ...values, configurationName: '' });
+    expect(result.success).toBe(true);
+  });
+
+  it('preserves the literal url in the built address when untouched', () => {
+    const mode = buildUpdateAddressMode({
+      kind: 'literal',
+      url: 'https://legacy.example/mcp',
+    });
+    const spec = buildSpec({ ...values, configurationName: '' }, [], mode);
+    expect(spec.address).toEqual({ value: 'https://legacy.example/mcp' });
+  });
+
+  it('moves to a configuration once one is selected', () => {
+    const mode = buildUpdateAddressMode({
+      kind: 'literal',
+      url: 'https://legacy.example/mcp',
+    });
+    const spec = buildSpec(
+      { ...values, configurationName: 'github-mcp-url' },
+      [],
+      mode,
+    );
+    expect(spec.address).toEqual({
+      valueFrom: { configMapKeyRef: { name: 'github-mcp-url', key: 'value' } },
+    });
   });
 });
 

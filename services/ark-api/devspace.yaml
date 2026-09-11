@@ -15,7 +15,7 @@ images:
     image: ark-api-dev
     dockerfile: Dockerfile.dev
     context: .
-    buildKit: {}
+    # buildKit: {}
 
 dependencies:
   ark-sdk:

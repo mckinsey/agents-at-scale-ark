@@ -40,6 +40,7 @@ export const secretsService = {
         token: password,
       },
       type: 'Opaque',
+      labels: [],
     };
     const response = await apiClient.post<SecretDetailResponse>(
       `/api/v1/secrets`,
@@ -63,6 +64,7 @@ export const secretsService = {
       string_data: {
         token: password,
       },
+      labels: [],
     };
     const response = await apiClient.put<SecretDetailResponse>(
       `/api/v1/secrets/${name}`,

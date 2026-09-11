@@ -118,7 +118,7 @@ function TasksTable({ data }: { readonly data: A2ATask[] }) {
 
   return (
     <div className="mt-5 min-h-0 flex-1 overflow-auto">
-      <Table className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      <Table className="min-w-[1088px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
         <TableHeader>
           <TableRow>
             <TableHead size="small" className="w-[110px]">
