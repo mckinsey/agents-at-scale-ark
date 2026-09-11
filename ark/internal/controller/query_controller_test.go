@@ -658,6 +658,42 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 		})
 	})
 
+	Context("spec.cancel on a running query", func() {
+		var (
+			ctx context.Context
+			r   *QueryReconciler
+		)
+		BeforeEach(func() {
+			ctx = context.Background()
+			r = &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		})
+
+		It("cancels a running query and tears down its in-flight operation", func() {
+			q := newTimeoutQuery("cancel-running").seed(ctx, k8sClient, "")
+			Expect(r.updateStatus(ctx, q, statusRunning)).To(Succeed())
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
+			opCanceled := false
+			r.operations.Store(req.NamespacedName, context.CancelFunc(func() { opCanceled = true }))
+
+			refetched := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, refetched)).To(Succeed())
+			refetched.Spec.Cancel = true
+
+			_, err := r.handleQueryExecution(ctx, req, *refetched)
+			Expect(err).NotTo(HaveOccurred())
+
+			after := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
+			Expect(after.Status.Phase).To(Equal(statusCanceled), "a running query must transition to canceled")
+			Expect(findCompletedCondition(after).Reason).To(Equal("QueryCanceled"), "condition reason must reflect the cancel")
+
+			Expect(opCanceled).To(BeTrue(), "the in-flight operation's context must be canceled")
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeFalse(), "the tracked operation must be removed on cancel")
+		})
+	})
+
 	Context("safety-net requeue", func() {
 		It("arms a bounded requeue for an in-flight op without spawning a duplicate", func() {
 			r := &QueryReconciler{
