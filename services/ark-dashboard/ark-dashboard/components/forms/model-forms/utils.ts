@@ -29,6 +29,9 @@ type BaseUrlValueSource = {
 };
 
 export function mapBaseUrlState(rawBaseUrl: unknown): BaseUrlFieldState {
+  if (typeof rawBaseUrl === 'string') {
+    return rawBaseUrl ? { kind: 'literal', url: rawBaseUrl } : { kind: 'unset' };
+  }
   const source =
     rawBaseUrl && typeof rawBaseUrl === 'object'
       ? (rawBaseUrl as BaseUrlValueSource)

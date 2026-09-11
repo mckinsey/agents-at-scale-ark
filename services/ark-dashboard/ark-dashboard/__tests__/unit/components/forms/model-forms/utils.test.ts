@@ -32,6 +32,17 @@ describe('mapBaseUrlState', () => {
   it('reports unset when there is no source', () => {
     expect(mapBaseUrlState(undefined)).toEqual({ kind: 'unset' });
   });
+
+  it('reads a legacy literal value written as a bare string (kubectl shorthand)', () => {
+    expect(mapBaseUrlState('https://legacy.example/v1')).toEqual({
+      kind: 'literal',
+      url: 'https://legacy.example/v1',
+    });
+  });
+
+  it('reports unset for an empty bare string', () => {
+    expect(mapBaseUrlState('')).toEqual({ kind: 'unset' });
+  });
 });
 
 describe('buildBaseUrlMode', () => {
