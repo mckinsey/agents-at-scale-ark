@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildBaseUrlMode,
   buildBaseUrlValueSource,
+  CLEAR_BASE_URL_VALUE,
   createConfig,
   mapBaseUrlState,
 } from '@/components/forms/model-forms/utils';
@@ -108,6 +109,14 @@ describe('buildBaseUrlValueSource', () => {
     expect(buildBaseUrlValueSource(undefined)).toBeUndefined();
     expect(buildBaseUrlValueSource('')).toBeUndefined();
   });
+
+  it('clears the value even when a literal fallback exists, given the explicit clear sentinel', () => {
+    expect(
+      buildBaseUrlValueSource(CLEAR_BASE_URL_VALUE, {
+        literalUrl: 'https://legacy.example/v1',
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe('createSchema - editing a model with a legacy literal base URL', () => {
@@ -183,5 +192,26 @@ describe('createConfig - preserving a legacy literal base URL on submit', () => 
     expect(config.openai?.baseUrl).toEqual({
       valueFrom: { configMapKeyRef: { name: 'ai-gateway', key: 'value' } },
     });
+  });
+
+  it('bedrock: clears a legacy literal base URL when "None" is explicitly selected', () => {
+    const formValues = {
+      name: 'my-bedrock-model',
+      provider: 'bedrock',
+      model: 'anthropic.claude-v2',
+      bedrockAuthMethod: 'iam',
+      bedrockApiKeySecretName: '',
+      bedrockAccessKeyIdSecretName: 'access-key',
+      bedrockSecretAccessKeySecretName: 'secret-key',
+      baseUrl: CLEAR_BASE_URL_VALUE,
+      region: '',
+      modelARN: '',
+    } as FormValues;
+
+    const config = createConfig(formValues, {
+      literalUrl: 'https://legacy-bedrock.example/v1',
+    });
+
+    expect(config.bedrock?.baseUrl).toBeUndefined();
   });
 });

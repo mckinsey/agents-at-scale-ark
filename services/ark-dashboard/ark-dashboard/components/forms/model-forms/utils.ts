@@ -8,6 +8,10 @@ import type { FormValues } from './schema';
 
 export const BASE_URL_CONFIGURATION_KEY = 'value';
 
+// Sentinel written by the Base URL field's "None" option (bedrock only) to
+// mean "explicitly clear", distinct from an untouched field left as ''.
+export const CLEAR_BASE_URL_VALUE = '__none__';
+
 export type BaseUrlFieldState =
   | {
       kind: 'configuration';
@@ -67,6 +71,9 @@ export function buildBaseUrlValueSource(
   configurationName: string | undefined | null,
   mode: BaseUrlMode = {},
 ): BaseUrlValueSource | undefined {
+  if (configurationName === CLEAR_BASE_URL_VALUE) {
+    return undefined;
+  }
   if (!configurationName) {
     return mode.literalUrl ? { value: mode.literalUrl } : undefined;
   }

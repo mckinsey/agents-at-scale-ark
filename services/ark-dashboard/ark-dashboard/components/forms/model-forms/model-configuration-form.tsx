@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils';
 
 import { useModelConfigurationForm } from './model-configuration-form-context';
 import type { FormValues } from './schema';
+import { CLEAR_BASE_URL_VALUE } from './utils';
 import type { BaseUrlFieldState } from './utils';
 
 export function ModelConfiguratorForm() {
@@ -287,8 +288,6 @@ function SecretSelectorField({
   );
 }
 
-const CLEAR_BASE_URL_VALUE = '__none__';
-
 function BaseUrlField({
   control,
   placeholder,
@@ -331,11 +330,7 @@ function BaseUrlField({
               </p>
             )}
             <div className="flex items-center gap-3">
-              <Select
-                onValueChange={value =>
-                  field.onChange(value === CLEAR_BASE_URL_VALUE ? '' : value)
-                }
-                value={currentValue}>
+              <Select onValueChange={field.onChange} value={currentValue}>
                 <SelectTrigger
                   className={cn(GHOST_TRIGGER, 'flex-1')}
                   aria-invalid={!!fieldState.error}>
