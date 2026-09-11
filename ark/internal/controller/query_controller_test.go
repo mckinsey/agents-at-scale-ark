@@ -580,14 +580,18 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			refetched := &arkv1alpha1.Query{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: q.Name, Namespace: q.Namespace}, refetched)).To(Succeed())
 			terminalRV := refetched.ResourceVersion
-			terminalReason := findCompletedCondition(refetched).Reason
+			refetchedCond := findCompletedCondition(refetched)
+			Expect(refetchedCond).NotTo(BeNil())
+			terminalReason := refetchedCond.Reason
 
 			time.Sleep(20 * time.Millisecond)
 
 			after := reconcile(refetched)
 			Expect(after.Status.Phase).To(Equal(statusDone), "terminal phase must be preserved")
 			Expect(after.ResourceVersion).To(Equal(terminalRV), "no status write should have been issued on a terminal query")
-			Expect(findCompletedCondition(after).Reason).To(Equal(terminalReason), "condition reason must not be clobbered")
+			afterCond := findCompletedCondition(after)
+			Expect(afterCond).NotTo(BeNil())
+			Expect(afterCond.Reason).To(Equal(terminalReason), "condition reason must not be clobbered")
 		})
 	})
 
@@ -603,7 +607,8 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 
 		reconcile := func(q *arkv1alpha1.Query) *arkv1alpha1.Query {
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
-			_, _ = r.handleQueryExecution(ctx, req, *q)
+			_, err := r.handleQueryExecution(ctx, req, *q)
+			Expect(err).NotTo(HaveOccurred())
 			out := &arkv1alpha1.Query{}
 			Expect(k8sClient.Get(ctx, req.NamespacedName, out)).To(Succeed())
 			return out
@@ -624,7 +629,9 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 
 				Expect(after.Status.Phase).To(Equal(phase), "terminal phase must be preserved")
 				Expect(after.ResourceVersion).To(Equal(terminalRV), "no status write should be issued when cancelling a terminal query")
-				Expect(findCompletedCondition(after).Reason).To(Equal(wantReason), "condition reason must not be clobbered to QueryCanceled")
+				afterCond := findCompletedCondition(after)
+				Expect(afterCond).NotTo(BeNil())
+				Expect(afterCond.Reason).To(Equal(wantReason), "condition reason must not be clobbered to QueryCanceled")
 			},
 			Entry("done stays done", "cancel-done", statusDone, "QuerySucceeded"),
 			Entry("error stays error", "cancel-error", statusError, "QueryErrored"),
@@ -654,7 +661,9 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			Expect(after.ResourceVersion).To(Equal(terminalRV), "cancel must issue no status write once the refetch sees a terminal phase")
 			Expect(after.Status.Response).NotTo(BeNil())
 			Expect(after.Status.Response.Phase).To(Equal(statusDone), "the completed response must not be stranded under a canceled phase")
-			Expect(findCompletedCondition(after).Reason).To(Equal("QuerySucceeded"), "condition reason must not be clobbered to QueryCanceled")
+			afterCond := findCompletedCondition(after)
+			Expect(afterCond).NotTo(BeNil())
+			Expect(afterCond.Reason).To(Equal("QuerySucceeded"), "condition reason must not be clobbered to QueryCanceled")
 		})
 	})
 
@@ -686,7 +695,9 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			after := &arkv1alpha1.Query{}
 			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
 			Expect(after.Status.Phase).To(Equal(statusCanceled), "a running query must transition to canceled")
-			Expect(findCompletedCondition(after).Reason).To(Equal("QueryCanceled"), "condition reason must reflect the cancel")
+			afterCond := findCompletedCondition(after)
+			Expect(afterCond).NotTo(BeNil())
+			Expect(afterCond.Reason).To(Equal("QueryCanceled"), "condition reason must reflect the cancel")
 
 			Expect(opCanceled).To(BeTrue(), "the in-flight operation's context must be canceled")
 			_, exists := r.operations.Load(req.NamespacedName)
