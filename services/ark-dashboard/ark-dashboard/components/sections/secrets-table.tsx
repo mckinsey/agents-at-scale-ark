@@ -44,14 +44,13 @@ function NameCell({ secret }: Readonly<{ secret: Secret }>) {
       <TruncatedTooltip label={secret.name}>
         <NamespacedLink
           href={`/secrets/${encodeURIComponent(secret.name)}`}
-          title={secret.name}
           className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
           {secret.name}
         </NamespacedLink>
       </TruncatedTooltip>
       {secret.alias && (
         <TruncatedTooltip label={secret.alias}>
-          <span className="text-fg-secondary label-small-primary block truncate">
+          <span className="text-fg-secondary label-small-primary relative z-10 block truncate">
             Alias: {secret.alias}
           </span>
         </TruncatedTooltip>
@@ -156,7 +155,7 @@ function SecretTableRow({
         <TableCell size="small">
           <ModelsInUse models={usingModels} />
         </TableCell>
-        <TableCell size="small" className={COL.labels}>
+        <TableCell size="small" className={cn(COL.labels, 'relative z-10')}>
           <LabelsCell labels={secret.labels} />
         </TableCell>
         <TableCell size="small" className={COL.status}>
