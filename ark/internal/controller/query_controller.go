@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,6 +78,11 @@ const (
 	// when MaxConcurrentQueries is reached. Short enough to be responsive,
 	// long enough to avoid a busy-loop while in-flight queries drain.
 	queryCapacityRequeueDelay = 250 * time.Millisecond
+	// queryFairnessWaitWindow is how long a namespace denied a slot stays in
+	// the fair-share divisor after its last attempt. A few requeue cycles, so
+	// a still-competing tenant keeps its share while one that stops requeuing
+	// ages out and lets the remaining tenants expand.
+	queryFairnessWaitWindow = 4 * queryCapacityRequeueDelay
 	// queryRunningSafetyRequeue re-reconciles a running Query whose execution
 	// goroutine died so it converges to a terminal phase instead of stranding.
 	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
@@ -116,7 +120,7 @@ type QueryReconciler struct {
 	// default (1).
 	MaxConcurrentReconciles int
 
-	sem        *semaphore.Weighted
+	sched      *fairScheduler
 	operations sync.Map
 
 	// brokerEndpoint resolves the broker endpoint for a namespace, used by the
@@ -310,7 +314,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 	}
 
-	if r.sem != nil && !r.sem.TryAcquire(1) {
+	if r.sched != nil && !r.sched.tryAcquire(req.Namespace) {
 		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
 		if obj.Status.Phase != statusQueued {
 			if err := r.updateStatus(ctx, &obj, statusQueued); err != nil {
@@ -329,8 +333,8 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 
 	if obj.Status.Phase != statusRunning {
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
-			if r.sem != nil {
-				r.sem.Release(1)
+			if r.sched != nil {
+				r.sched.release(req.Namespace)
 			}
 			return ctrl.Result{}, err
 		}
@@ -518,8 +522,8 @@ func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespace
 		r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
 	}
 	r.operations.Delete(namespacedName)
-	if r.sem != nil {
-		r.sem.Release(1)
+	if r.sched != nil {
+		r.sched.release(namespacedName.Namespace)
 	}
 }
 
@@ -1671,7 +1675,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 
 func (r *QueryReconciler) initSemaphore() {
 	if r.MaxConcurrentQueries > 0 {
-		r.sem = semaphore.NewWeighted(int64(r.MaxConcurrentQueries))
+		r.sched = newFairScheduler(r.MaxConcurrentQueries, queryFairnessWaitWindow)
 	}
 }
 
