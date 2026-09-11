@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -112,7 +113,7 @@ func newAgentAdmissionStorage(backend storage.Backend) *AdmissionStorage {
 		NewListFunc: func() runtime.Object { return &arkv1alpha1.AgentList{} },
 	}
 	inner := registry.NewGenericStorage(backend, NewRegistryTypeConverter(), cfg, GetPrinterColumnRegistry())
-	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}))
+	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), nil)
 }
 
 func agent(name string) *arkv1alpha1.Agent {
@@ -472,6 +473,119 @@ func TestAdmissionStorage_Update_RejectedByArkValidation(t *testing.T) {
 	}
 	if updateCalled != 0 {
 		t.Errorf("generic admission ran %d times after Ark validation already rejected", updateCalled)
+	}
+}
+
+func newQueryAdmissionStorage(backend storage.Backend, lookup validation.ArkConfigLookup) *AdmissionStorage {
+	cfg := registry.ResourceConfig{
+		Kind: "Query", Resource: "queries", SingularName: "query",
+		NewFunc:     func() runtime.Object { return &arkv1alpha1.Query{} },
+		NewListFunc: func() runtime.Object { return &arkv1alpha1.QueryList{} },
+	}
+	inner := registry.NewGenericStorage(backend, NewRegistryTypeConverter(), cfg, GetPrinterColumnRegistry())
+	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), lookup)
+}
+
+func query(name string) *arkv1alpha1.Query {
+	return &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec:       arkv1alpha1.QuerySpec{Selector: &metav1.LabelSelector{}},
+	}
+}
+
+// The pg-mode counterpart of the mutating webhook's TTL defaulting: a Query created without
+// spec.ttl gets the value from the stored ArkConfig singleton.
+func TestAdmissionStorage_Create_InjectsQueryTTLFromArkConfig(t *testing.T) {
+	t.Parallel()
+
+	backend := newFakeBackend()
+	cfg := &arkv1alpha1.ArkConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: validation.ArkConfigSingletonName},
+		Spec:       arkv1alpha1.ArkConfigSpec{QueryTTL: &metav1.Duration{Duration: 24 * time.Hour}},
+	}
+	if err := backend.Create(context.Background(), "ArkConfig", "", validation.ArkConfigSingletonName, cfg); err != nil {
+		t.Fatalf("seed ArkConfig: %v", err)
+	}
+
+	s := newQueryAdmissionStorage(backend, &validation.StorageLookup{Backend: backend})
+
+	out, err := s.Create(contextForNamespace(nsTeamA), query("q1"), nil, &metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	stored := out.(*arkv1alpha1.Query)
+	if stored.Spec.TTL == nil || stored.Spec.TTL.Duration != 24*time.Hour {
+		t.Errorf("spec.ttl = %v, want 24h from the ArkConfig singleton", stored.Spec.TTL)
+	}
+}
+
+func TestAdmissionStorage_Create_QueryTTLFallsBackWithoutArkConfig(t *testing.T) {
+	t.Parallel()
+
+	backend := newFakeBackend()
+	s := newQueryAdmissionStorage(backend, &validation.StorageLookup{Backend: backend})
+
+	out, err := s.Create(contextForNamespace(nsTeamA), query("q1"), nil, &metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	stored := out.(*arkv1alpha1.Query)
+	if stored.Spec.TTL == nil || stored.Spec.TTL.Duration != validation.DefaultTTLFallback {
+		t.Errorf("spec.ttl = %v, want the hardcoded fallback %v", stored.Spec.TTL, validation.DefaultTTLFallback)
+	}
+}
+
+func newArkConfigAdmissionStorage(backend storage.Backend) *AdmissionStorage {
+	cfg := registry.ResourceConfig{
+		Kind: "ArkConfig", Resource: "arkconfigs", SingularName: "arkconfig", ClusterScoped: true,
+		NewFunc:     func() runtime.Object { return &arkv1alpha1.ArkConfig{} },
+		NewListFunc: func() runtime.Object { return &arkv1alpha1.ArkConfigList{} },
+	}
+	inner := registry.NewGenericStorage(backend, NewRegistryTypeConverter(), cfg, GetPrinterColumnRegistry())
+	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), nil)
+}
+
+func clusterScopedContext() context.Context {
+	return genericrequest.WithRequestInfo(context.Background(), &genericrequest.RequestInfo{
+		Resource: "arkconfigs",
+		APIGroup: arkv1alpha1.GroupVersion.Group,
+	})
+}
+
+// Validator parity with etcd mode: the same ValidateArkConfig rules run on the apiserver path.
+func TestAdmissionStorage_Create_ArkConfigValidatedAndStoredClusterScoped(t *testing.T) {
+	t.Parallel()
+
+	backend := newFakeBackend()
+	s := newArkConfigAdmissionStorage(backend)
+	ctx := clusterScopedContext()
+
+	bad := &arkv1alpha1.ArkConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: validation.ArkConfigSingletonName},
+		Spec:       arkv1alpha1.ArkConfigSpec{QueryTTL: &metav1.Duration{Duration: -time.Second}},
+	}
+	if _, err := s.Create(ctx, bad, nil, &metav1.CreateOptions{}); err == nil {
+		t.Fatal("expected a negative queryTTL to be rejected")
+	}
+	if len(backend.objects) != 0 {
+		t.Fatalf("expected nothing persisted after a rejection, got %d objects", len(backend.objects))
+	}
+
+	good := &arkv1alpha1.ArkConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: validation.ArkConfigSingletonName},
+		Spec:       arkv1alpha1.ArkConfigSpec{QueryTTL: &metav1.Duration{Duration: time.Hour}},
+	}
+	if _, err := s.Create(ctx, good, nil, &metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, ok := backend.objects["ArkConfig//"+validation.ArkConfigSingletonName]; !ok {
+		t.Errorf("expected the singleton under an empty-namespace key, got %v", func() []string {
+			keys := make([]string, 0, len(backend.objects))
+			for k := range backend.objects {
+				keys = append(keys, k)
+			}
+			return keys
+		}())
 	}
 }
 

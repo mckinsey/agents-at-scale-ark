@@ -116,30 +116,45 @@ func TestStatusStorage_Destroy(t *testing.T) {
 	storage.Destroy()
 }
 
-func TestGetNamespaceFromContext(t *testing.T) {
+func TestResourceConfigNamespace(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
+		config   ResourceConfig
 		ctx      context.Context
 		expected string
 	}{
 		{
 			name:     "with namespace",
+			config:   ResourceConfig{},
 			ctx:      contextWithNamespace("test-ns"),
 			expected: "test-ns",
 		},
 		{
 			name:     "without request info",
+			config:   ResourceConfig{},
 			ctx:      context.Background(),
 			expected: "default", //nolint:goconst
+		},
+		{
+			name:     "cluster-scoped ignores request namespace",
+			config:   ResourceConfig{ClusterScoped: true},
+			ctx:      contextWithNamespace("test-ns"),
+			expected: "",
+		},
+		{
+			name:     "cluster-scoped without request info",
+			config:   ResourceConfig{ClusterScoped: true},
+			ctx:      context.Background(),
+			expected: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getNamespaceFromContext(tt.ctx)
+			got := tt.config.namespace(tt.ctx)
 			if got != tt.expected {
-				t.Errorf("getNamespaceFromContext() = %q, want %q", got, tt.expected)
+				t.Errorf("namespace() = %q, want %q", got, tt.expected)
 			}
 		})
 	}
