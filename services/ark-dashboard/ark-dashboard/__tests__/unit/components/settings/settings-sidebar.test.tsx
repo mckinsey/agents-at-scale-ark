@@ -64,27 +64,21 @@ describe('SettingsSidebar', () => {
     expect(screen.getByText('Manage marketplace')).toBeInTheDocument();
   });
 
-  it('should navigate to the marketplace settings page when Manage marketplace is clicked', async () => {
+  it('should link to the marketplace settings page preserving namespace', () => {
     store.set(storedIsMarketplaceEnabledAtom, true);
-    const user = userEvent.setup();
     renderWithStore();
 
-    await user.click(screen.getByText('Manage marketplace'));
-
-    expect(mockReplace).toHaveBeenCalledWith(
-      '/settings/manage-marketplace?namespace=demo',
-    );
+    expect(
+      screen.getByRole('link', { name: 'Manage marketplace' }),
+    ).toHaveAttribute('href', '/settings/manage-marketplace?namespace=demo');
   });
 
-  it('should navigate to settings page preserving namespace when a menu item is clicked', async () => {
-    const user = userEvent.setup();
+  it('should link to a settings page preserving namespace', () => {
     renderWithStore();
 
-    await user.click(screen.getByText('Queries settings'));
-
-    expect(mockReplace).toHaveBeenCalledWith(
-      '/settings/queries?namespace=demo',
-    );
+    expect(
+      screen.getByRole('link', { name: 'Queries settings' }),
+    ).toHaveAttribute('href', '/settings/queries?namespace=demo');
   });
 
   it('should navigate to entry URL preserving namespace when close button is clicked after soft navigation', async () => {
