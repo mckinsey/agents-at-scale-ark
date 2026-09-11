@@ -15,11 +15,8 @@ const SKELETON_ROWS = ['first', 'second', 'third'];
 
 function MarketplaceSourcesSkeleton() {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex max-w-[600px] flex-col gap-2">
-      <span className="sr-only">Loading marketplace sources…</span>
+    <div className="flex max-w-[600px] flex-col gap-2">
+      <output className="sr-only">Loading marketplace sources…</output>
       <Skeleton className="h-6 w-[200px]" />
       <div aria-hidden className="flex flex-col gap-3">
         {SKELETON_ROWS.map(row => (
