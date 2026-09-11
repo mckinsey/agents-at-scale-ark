@@ -121,6 +121,32 @@ func TestFairScheduler_ShareExpandsAsTenantsDrain(t *testing.T) {
 	assert.Equal(t, 4, s.perNS["a"])
 }
 
+// The active-tenant count must return to zero once everything drains and the
+// waiting marks age out, on the release/denial paths too — not only when a
+// later non-saturated acquire happens to prune.
+func TestFairScheduler_ActiveTenantsClearAfterDrain(t *testing.T) {
+	s, clock := newTestScheduler(2)
+
+	// a fills the pool; b is denied at the global cap and left waiting.
+	require.True(t, s.tryAcquire("a"))
+	require.True(t, s.tryAcquire("a"))
+	assert.False(t, s.tryAcquire("b"))
+
+	// a drains completely. b never acquired, so only its waiting mark remains.
+	s.release("a")
+	s.release("a")
+
+	// Before the window elapses b still counts as active.
+	assert.Equal(t, 1, s.activeTenantsLocked())
+
+	// Past the window a release must prune b, dropping the active count to zero
+	// with nothing running.
+	*clock = clock.Add(time.Second)
+	s.publishLocked("a")
+	assert.Equal(t, 0, s.activeTenantsLocked())
+	assert.Empty(t, s.waitingSeen)
+}
+
 func TestFairScheduler_WaitingEntryAgesOut(t *testing.T) {
 	s, clock := newTestScheduler(4)
 

@@ -160,9 +160,12 @@ func (s *fairScheduler) markWaitingLocked(ns string, now time.Time) {
 	s.waitingSeen[ns] = now
 }
 
-// publishLocked updates only the changed namespace's in-flight gauge and the
-// active-tenant gauge, so cost is independent of how many namespaces hold slots.
+// publishLocked prunes stale waiting marks, then updates the changed namespace's
+// in-flight gauge and the active-tenant gauge. Pruning here (rather than only on
+// the non-saturated acquire path) keeps the active-tenant gauge accurate on the
+// release and denial paths and bounds waitingSeen under sustained saturation.
 func (s *fairScheduler) publishLocked(ns string) {
+	s.pruneWaitingLocked(s.now())
 	if n := s.perNS[ns]; n > 0 {
 		queryInflightGauge.WithLabelValues(ns).Set(float64(n))
 	} else {
