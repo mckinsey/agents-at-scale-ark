@@ -576,8 +576,8 @@ function QueryDetailContent() {
         setMemoriesLoading(true);
         try {
           const [agents, models, teams, tools, memories] = await Promise.all([
-            agentsService.getAll(namespace),
-            modelsService.getAll(namespace),
+            agentsService.list(namespace),
+            modelsService.list(namespace),
             teamsService.getAll(namespace),
             toolsService.getAll(namespace),
             memoriesService.getAll(namespace),

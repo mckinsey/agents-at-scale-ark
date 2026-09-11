@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { ChatNotice } from '@/components/chat/chat-notice';
-import { Autorenew, Build, Info, Send, Stop, Warning } from '@/components/icons';
+import { Autorenew, Build, Info, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -114,7 +114,7 @@ export function ChatPanel({
         className="h-0 min-h-0 flex-1">
         <div className="space-y-4 p-4">
           {engineToolWarning && (
-            <ChatNotice icon={<Warning />} iconClassName="text-status-warning">
+            <ChatNotice icon={<Info />} iconClassName="text-status-information">
               {engineToolWarning}
             </ChatNotice>
           )}

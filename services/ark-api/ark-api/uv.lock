@@ -9,10 +9,10 @@ resolution-markers = [
     "python_full_version == '3.13.*' and sys_platform == 'emscripten'",
     "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -309,7 +309,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.68-py3-none-any.whl", hash = "sha256:d307ef4e5858087f29b5ec77038e7c45ef8e99a9118a07dd069966891153b03e" },
+    { filename = "ark_sdk-0.1.68-py3-none-any.whl", hash = "sha256:ff6a4831836602a1437bd28ba7b80be80bd5a31ab08a005d7b25e62f352a13c3" },
 ]
 
 [package.metadata]

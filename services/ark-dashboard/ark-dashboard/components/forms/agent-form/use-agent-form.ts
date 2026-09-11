@@ -15,7 +15,7 @@ import type {
   AgentTool,
   AgentUpdateRequest,
   ExecutionEngine,
-  Model,
+  ModelListItem,
   Tool,
 } from '@/lib/services';
 import {
@@ -60,7 +60,7 @@ export function useAgentForm({
   );
   const [saving, setSaving] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<ModelListItem[]>([]);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
@@ -101,7 +101,7 @@ export function useAgentForm({
           const [agentData, modelsData, toolsData, enginesData] =
             await Promise.all([
               agentsService.getByName(namespace, agentName),
-              modelsService.getAll(namespace),
+              modelsService.list(namespace),
               toolsService.getAll(namespace),
               enginesPromise,
             ]);
@@ -139,7 +139,7 @@ export function useAgentForm({
           });
         } else {
           const [modelsData, toolsData, enginesData] = await Promise.all([
-            modelsService.getAll(namespace),
+            modelsService.list(namespace),
             toolsService.getAll(namespace),
             enginesPromise,
           ]);

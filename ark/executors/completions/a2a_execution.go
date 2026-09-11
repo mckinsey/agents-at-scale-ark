@@ -74,11 +74,12 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	if agentAnnotations[arkann.A2AStreamingSupported] == TrueString && eventStream != nil {
 		result, err := e.executeStreaming(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, modelID, eventStream, &a2aServer)
 		if err != nil {
-			log.Error(err, "A2A streaming failed, falling back to blocking", "agent", agentName)
-		} else {
-			e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
-			return result, nil
+			StreamError(ctx, eventStream, err, "a2a_execution_failed", modelID)
+			e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A execution failed: %v", err), err, operationData)
+			return nil, err
 		}
+		e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
+		return result, nil
 	}
 
 	// Query extension spec: ark/api/extensions/query/v1/

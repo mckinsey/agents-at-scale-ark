@@ -6,7 +6,7 @@ import { useForm, useWatch } from 'react-hook-form';
 
 import { toast } from '@/components/ui/sonner';
 import {
-  type Agent,
+  type AgentListItem,
   type Team,
   agentsService,
   teamsService,
@@ -56,7 +56,7 @@ export function useToolForm({
   const [loading, setLoading] = useState(isViewing);
   const [saving, setSaving] = useState(false);
   const [tool, setTool] = useState<ToolDetail | null>(null);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [teamsLoading, setTeamsLoading] = useState(false);
@@ -109,7 +109,7 @@ export function useToolForm({
     const loadAgents = async () => {
       setAgentsLoading(true);
       try {
-        const data = await agentsService.getAll(namespace);
+        const data = await agentsService.list(namespace);
         if (!cancelled) setAgents(data);
       } catch (error) {
         console.error('Failed to load agents:', error);

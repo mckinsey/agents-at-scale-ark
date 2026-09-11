@@ -10,9 +10,8 @@ export const labelSchema = z
   .max(LABEL_MAX_LENGTH, {
     message: `Label must be ${LABEL_MAX_LENGTH} characters or less`,
   })
-  .regex(/^[a-zA-Z0-9]([-_.a-zA-Z0-9]*[a-zA-Z0-9])?$/, {
-    message:
-      "Use letters, digits, '-', '_' or '.', starting and ending with a letter or digit",
+  .regex(/^[a-zA-Z0-9]+$/, {
+    message: 'Use only letters and digits',
   });
 
 export const validateLabelDraft = (
@@ -38,7 +37,10 @@ export const configurationFormSchema = z
       .string()
       .max(256, { message: 'Description must be 256 characters or less' })
       .optional(),
-    alias: z.string().optional(),
+    alias: z.string().refine(
+      value => value === '' || kubernetesNameSchema.safeParse(value).success,
+      { message: 'Alias can only contain lowercase letters, numbers, hyphens, and dots' },
+    ),
     labels: z.array(labelSchema),
     labelDraft: z.string(),
   })
