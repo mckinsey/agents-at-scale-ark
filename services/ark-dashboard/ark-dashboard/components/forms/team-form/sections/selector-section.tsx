@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
 import {
@@ -20,6 +20,7 @@ import {
 import {
   FieldDescription,
   FieldError,
+  FieldLabel,
   FieldSet,
   FieldTitle,
 } from '@/components/ui/field';
@@ -62,6 +63,7 @@ export function SelectorSection({
   unavailableAgents,
   disabled,
 }: Readonly<SelectorSectionProps>) {
+  const terminateToolId = useId();
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const selectedStrategy = form.watch('strategy');
@@ -206,12 +208,17 @@ export function SelectorSection({
             render={({ field }) => (
               <div className="flex flex-row items-start gap-3">
                 <Checkbox
+                  id={terminateToolId}
                   checked={field.value ?? true}
                   onCheckedChange={field.onChange}
                   disabled={disabled}
                 />
                 <div className="space-y-1 leading-none">
-                  <FieldTitle>Enable Terminate Tool</FieldTitle>
+                  <FieldLabel
+                    htmlFor={terminateToolId}
+                    className="cursor-pointer">
+                    Enable Terminate Tool
+                  </FieldLabel>
                   <p className="text-fg-tertiary text-xs">
                     Allow the selector agent to use the terminate tool to end
                     the conversation early when appropriate.
