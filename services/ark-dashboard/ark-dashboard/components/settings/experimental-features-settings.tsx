@@ -1,7 +1,7 @@
 'use client';
 
 import { useAtom } from 'jotai';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { experimentalFeatureGroups } from '@/components/experimental-features-dialog/experimental-features';
 import type {
@@ -9,6 +9,7 @@ import type {
   NumberSetting,
 } from '@/components/experimental-features-dialog/types';
 import { Badge } from '@/components/ui/badge';
+import { FieldError } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -20,6 +21,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
+import {
+  formatQueryTimeoutMinutes,
+  validateQueryTimeoutMinutes,
+} from '@/lib/utils/query-timeout';
 
 const COL = {
   name: 'w-[240px]',
@@ -85,14 +90,23 @@ function NumberFeatureRow({
 }: Readonly<{ feature: NumberSetting; category?: string }>) {
   const [value, setValue] = useAtom(feature.atom);
 
-  const [draft, setDraft] = useState(
-    () => `${Number.parseInt(value, 10) || ''}`,
-  );
+  const [draft, setDraft] = useState(() => formatQueryTimeoutMinutes(value));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(previous =>
+      Number.parseInt(previous, 10) === Number.parseInt(value, 10)
+        ? previous
+        : formatQueryTimeoutMinutes(value),
+    );
+  }, [value]);
 
   const handleChange = (raw: string) => {
     setDraft(raw);
-    if (/^\d+$/.test(raw) && Number(raw) > 0) {
-      setValue(`${raw}m`);
+    const validation = validateQueryTimeoutMinutes(raw);
+    setError(validation);
+    if (!validation) {
+      setValue(`${raw.trim()}m`);
     }
   };
 
@@ -101,18 +115,22 @@ function NumberFeatureRow({
       feature={feature}
       category={category}
       control={
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            variant="inline"
-            value={draft}
-            onChange={e => handleChange(e.target.value)}
-            aria-label={feature.feature}
-            className="w-[64px]"
-          />
-          <span className="text-fg-tertiary paragraph-regular-primary">
-            min
-          </span>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              variant="inline"
+              value={draft}
+              onChange={e => handleChange(e.target.value)}
+              aria-label={feature.feature}
+              aria-invalid={!!error}
+              className="w-[64px]"
+            />
+            <span className="text-fg-tertiary paragraph-regular-primary">
+              min
+            </span>
+          </div>
+          <FieldError>{error}</FieldError>
         </div>
       }
     />

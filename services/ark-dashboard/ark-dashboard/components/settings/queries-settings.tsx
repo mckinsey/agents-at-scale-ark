@@ -27,12 +27,15 @@ import {
   useClearArkConfig,
   useUpdateArkConfig,
 } from '@/lib/services/arkconfig-hooks';
+import {
+  QUERY_TIMEOUT_ERROR_MESSAGE,
+  formatQueryTimeoutMinutes,
+  validateQueryTimeoutMinutes,
+} from '@/lib/utils/query-timeout';
 
 const TTL_PATTERN = /^\d+(\.\d+)?(ns|us|µs|ms|s|m|h)$/;
 const DEFAULT_QUERY_TIMEOUT_MINUTES = 5;
 const DEFAULT_QUERY_TIMEOUT = `${DEFAULT_QUERY_TIMEOUT_MINUTES}m`;
-const TIMEOUT_ERROR_MESSAGE =
-  'Use a whole number of minutes greater than zero.';
 
 function validate(value: string): string | null {
   if (value.trim() === '') return null;
@@ -44,10 +47,7 @@ function validate(value: string): string | null {
 
 function validateTimeout(value: string): string | null {
   if (value.trim() === '') return null;
-  if (!/^\d+$/.test(value.trim()) || Number(value) <= 0) {
-    return TIMEOUT_ERROR_MESSAGE;
-  }
-  return null;
+  return validateQueryTimeoutMinutes(value);
 }
 
 export function QueriesSettings() {
@@ -75,7 +75,7 @@ export function QueriesSettings() {
   }, [data?.queryTTL]);
 
   useEffect(() => {
-    setTimeoutInput(`${Number.parseInt(storedTimeout, 10) || ''}`);
+    setTimeoutInput(formatQueryTimeoutMinutes(storedTimeout));
   }, [storedTimeout]);
 
   if (isLoading) {
@@ -113,7 +113,7 @@ export function QueriesSettings() {
     const trimmedTimeout = timeoutInput.trim();
     const validation = validate(trimmed);
     const timeoutValidation = timeoutBadInput
-      ? TIMEOUT_ERROR_MESSAGE
+      ? QUERY_TIMEOUT_ERROR_MESSAGE
       : validateTimeout(trimmedTimeout);
 
     setLocalError(validation);
@@ -128,18 +128,27 @@ export function QueriesSettings() {
     const timeoutChanged = nextTimeout !== storedTimeout;
 
     if (!ttlChanged && !timeoutChanged) {
+      setTimeoutInput(formatQueryTimeoutMinutes(storedTimeout));
       toast.info('No changes to save');
       return;
     }
 
-    setStoredTimeout(nextTimeout);
-
     if (!ttlChanged) {
+      setStoredTimeout(nextTimeout);
       toast.success('Settings saved');
       return;
     }
 
-    updateMutation.mutate({ queryTTL: trimmed === '' ? null : trimmed });
+    updateMutation.mutate(
+      { queryTTL: trimmed === '' ? null : trimmed },
+      {
+        onSuccess: () => {
+          if (timeoutChanged) {
+            setStoredTimeout(nextTimeout);
+          }
+        },
+      },
+    );
   };
 
   const handleReset = () => {

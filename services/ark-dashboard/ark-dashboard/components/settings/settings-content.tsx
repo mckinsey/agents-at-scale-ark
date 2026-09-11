@@ -19,9 +19,10 @@ const SKELETON_ROWS = ['first', 'second', 'third', 'fourth'];
 
 function SettingsPageSkeleton() {
   return (
-    <div aria-hidden className="flex flex-col gap-4">
+    <div role="status" aria-live="polite" className="flex flex-col gap-4">
+      <span className="sr-only">Loading settings…</span>
       <Skeleton className="h-9 w-[280px]" />
-      <div className="flex flex-col gap-4 pt-2">
+      <div aria-hidden className="flex flex-col gap-4 pt-2">
         {SKELETON_ROWS.map(row => (
           <div key={row} className="flex items-center gap-4">
             <Skeleton className="h-5 w-[240px]" />

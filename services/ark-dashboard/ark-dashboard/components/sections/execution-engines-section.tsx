@@ -40,8 +40,12 @@ const SKELETON_ROWS = ['first', 'second', 'third', 'fourth', 'fifth'];
 
 function ExecutionEnginesSkeleton() {
   return (
-    <div aria-hidden className="flex min-h-0 w-full flex-1 flex-col gap-2">
-      <div className="flex flex-col gap-4 pt-4">
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-h-0 w-full flex-1 flex-col gap-2">
+      <span className="sr-only">Loading execution engines…</span>
+      <div aria-hidden className="flex flex-col gap-4 pt-4">
         {SKELETON_ROWS.map(row => (
           <div key={row} className="flex items-center gap-4">
             <Skeleton className="h-5 w-[200px]" />

@@ -130,6 +130,7 @@ export function AddMarketplaceDialog({
   const [adoFields, setAdoFields] = useState<AdoFields>(ADO_FIELD_DEFAULTS);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [credentialError, setCredentialError] = useState<string | null>(null);
+  const [schemeAutoSelected, setSchemeAutoSelected] = useState(false);
 
   const adoUrl = urlMode === 'ado' ? buildAdoUrl(adoFields) : null;
   const effectiveUrl = urlMode === 'ado' ? (adoUrl ?? '') : newSource.url;
@@ -140,6 +141,7 @@ export function AddMarketplaceDialog({
     setAdoFields(ADO_FIELD_DEFAULTS);
     setUrlError(null);
     setCredentialError(null);
+    setSchemeAutoSelected(false);
   };
 
   const handleUrlModeChange = (mode: UrlMode) => {
@@ -150,12 +152,14 @@ export function AddMarketplaceDialog({
     if (mode === 'ado') {
       if (newSource.scheme === 'none') {
         setNewSource({ ...newSource, scheme: 'basic' });
+        setSchemeAutoSelected(true);
       }
       return;
     }
 
-    if (newSource.scheme === 'basic') {
+    if (schemeAutoSelected && newSource.scheme === 'basic') {
       setNewSource({ ...newSource, scheme: 'none', credential: '' });
+      setSchemeAutoSelected(false);
     }
   };
 
@@ -357,13 +361,15 @@ export function AddMarketplaceDialog({
             <Select
               items={SCHEME_OPTIONS}
               value={newSource.scheme}
-              onValueChange={value =>
+              onValueChange={value => {
                 setNewSource({
                   ...newSource,
                   scheme: value as SchemeChoice,
                   credential: '',
-                })
-              }>
+                });
+                setCredentialError(null);
+                setSchemeAutoSelected(false);
+              }}>
               <SelectTrigger
                 id={schemeFieldId}
                 aria-label="Authentication"
