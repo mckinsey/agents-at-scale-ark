@@ -7,9 +7,12 @@ import (
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-// Fair-scheduler metrics. The namespace label is bounded by the number of
-// tenant namespaces with in-flight Query work; series are deleted when a
-// namespace drains to zero so idle tenants don't leak stale series.
+// Fair-scheduler metrics. ark_query_inflight series are deleted when a
+// namespace drains to zero, so that gauge's cardinality tracks namespaces with
+// in-flight Query work. ark_query_fairness_denied_total is a counter and is
+// never deleted, so it retains one series per namespace ever denied for the
+// controller's lifetime — unbounded on clusters that create ephemeral or
+// per-PR namespaces.
 var (
 	queryInflightGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -29,7 +32,7 @@ var (
 	queryFairnessDeniedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "ark_query_fairness_denied_total",
-			Help: "Query slot acquisitions denied because the namespace was at its fair share, by namespace.",
+			Help: "Query slot acquire attempts denied because the namespace was at its fair share, by namespace. Increments once per denied attempt; queries re-attempt on requeue, so the rate reflects retry frequency, not the number of distinct starved queries.",
 		},
 		[]string{"namespace"},
 	)
