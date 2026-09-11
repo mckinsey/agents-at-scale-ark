@@ -16,13 +16,13 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
       {
         type: 'boolean',
         feature: 'Experimental Dark Mode',
-        description: 'Enables experimental Dark Mode',
+        description: 'Enables experimental dark mode',
         atom: storedIsExperimentalDarkModeEnabledAtom,
       },
       {
         type: 'boolean',
         feature: 'Marketplace',
-        description: 'Enables adding 3rd party Marketplaces from settings',
+        description: 'Enables adding 3rd party marketplaces from settings',
         atom: storedIsMarketplaceEnabledAtom,
       },
     ],
@@ -33,13 +33,9 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     features: [
       {
         type: 'boolean',
-        feature: 'Experimental Execution Engine Field',
-        description: (
-          <span>
-            Enables the experimental{' '}
-            <span className="font-bold">Execution Engine</span> field on Agents
-          </span>
-        ),
+        feature: 'Experimental execution engine field',
+        description:
+          'Enables the experimental execution engine field on agents',
         atom: storedIsExperimentalExecutionEngineEnabledAtom,
       },
     ],
@@ -50,7 +46,7 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     features: [
       {
         type: 'boolean',
-        feature: 'Chat Streaming',
+        feature: 'Chat streaming',
         description: 'Enables streaming responses in the chat',
         atom: storedIsChatStreamingEnabledAtom,
       },
@@ -62,7 +58,7 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     features: [
       {
         type: 'number',
-        feature: 'Query Timeout',
+        feature: 'Query timeout',
         description: 'Default timeout for query execution',
         atom: storedQueryTimeoutSettingAtom,
       },

@@ -138,13 +138,21 @@ function SelectContent({
   sideOffset = 4,
   alignItemWithTrigger = false,
   collisionAvoidance = { side: 'none', align: 'shift' },
+  container,
   ...positionerProps
 }: SelectPrimitive.Positioner.Props & {
   className?: string;
   children?: React.ReactNode;
+  /**
+   * Where to portal the popup. Pass the containing dialog's content element
+   * when the select lives inside a modal dialog: a popup left in `<body>` sits
+   * outside the dialog's focus trap, so the dialog pulls focus back and the
+   * selection never commits.
+   */
+  container?: SelectPrimitive.Portal.Props['container'];
 }) {
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={container}>
       <SelectPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}
