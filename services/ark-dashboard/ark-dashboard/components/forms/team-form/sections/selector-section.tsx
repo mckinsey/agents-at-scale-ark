@@ -216,7 +216,8 @@ export function SelectorSection({
                 <div className="space-y-1 leading-none">
                   <FieldLabel
                     htmlFor={terminateToolId}
-                    className="cursor-pointer">
+                    disabled={disabled}
+                    className={disabled ? undefined : 'cursor-pointer'}>
                     Enable Terminate Tool
                   </FieldLabel>
                   <p className="text-fg-tertiary text-xs">
