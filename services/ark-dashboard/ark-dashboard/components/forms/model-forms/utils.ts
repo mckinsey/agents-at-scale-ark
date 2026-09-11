@@ -20,6 +20,7 @@ export type BaseUrlFieldState =
 export type BaseUrlMode = {
   originalName?: string;
   originalKey?: string;
+  literalUrl?: string;
 };
 
 type BaseUrlValueSource = {
@@ -53,15 +54,18 @@ export function buildBaseUrlMode(state: BaseUrlFieldState): BaseUrlMode {
       originalKey: state.configurationKey,
     };
   }
+  if (state.kind === 'literal') {
+    return { literalUrl: state.url };
+  }
   return {};
 }
 
 export function buildBaseUrlValueSource(
   configurationName: string | undefined | null,
   mode: BaseUrlMode = {},
-): { valueFrom: { configMapKeyRef: { name: string; key: string } } } | undefined {
+): BaseUrlValueSource | undefined {
   if (!configurationName) {
-    return undefined;
+    return mode.literalUrl ? { value: mode.literalUrl } : undefined;
   }
   const key =
     mode.originalKey && configurationName === mode.originalName
@@ -86,6 +90,9 @@ export function createConfig(
             },
           },
         },
+        // Non-null: the schema requires either a selected configuration or a
+        // preserved baseUrlMode.literalUrl for this provider, so one of the
+        // two branches in buildBaseUrlValueSource always returns a value.
         baseUrl: buildBaseUrlValueSource(formValues.baseUrl, baseUrlMode)!,
       };
       return config;

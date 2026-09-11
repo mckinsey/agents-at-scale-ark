@@ -18,7 +18,7 @@ import { ModelConfiguratorForm } from './model-configuration-form';
 import type { DisabledFields } from './model-configuration-form-context';
 import { ModelConfigurationFormContext } from './model-configuration-form-context';
 import type { FormValues } from './schema';
-import { schema } from './schema';
+import { createSchema } from './schema';
 import {
   buildBaseUrlMode,
   createModelUpdateConfig,
@@ -46,7 +46,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const baseUrlMode = buildBaseUrlMode(baseUrlState);
   const form = useForm<FormValues>({
     mode: 'onTouched',
-    resolver: zodResolver(schema),
+    resolver: zodResolver(createSchema(baseUrlState.kind === 'literal')),
     defaultValues,
   });
 

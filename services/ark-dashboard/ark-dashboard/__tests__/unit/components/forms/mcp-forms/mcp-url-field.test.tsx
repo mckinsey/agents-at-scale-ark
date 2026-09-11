@@ -31,13 +31,20 @@ vi.mock('@/lib/services/secrets-hooks', () => ({
   }),
 }));
 
-function Harness({ state }: { readonly state: UrlFieldState }) {
+function Harness({
+  state,
+  configurationName,
+}: {
+  readonly state: UrlFieldState;
+  readonly configurationName?: string;
+}) {
   const form = useForm<FormValues>({
     defaultValues: {
       name: 'github-mcp',
       description: 'x',
       configurationName:
-        state.kind === 'configuration' ? state.configurationName : '',
+        configurationName ??
+        (state.kind === 'configuration' ? state.configurationName : ''),
       transport: 'http',
     },
   });
@@ -71,6 +78,20 @@ describe('McpUrlField', () => {
     expect(
       screen.getByRole('button', { name: 'Move to configuration' }),
     ).toBeInTheDocument();
+  });
+
+  it('clears the literal hint once a configuration has been selected in-session', () => {
+    render(
+      <Harness
+        state={{ kind: 'literal', url: 'https://api.githubcopilot.com/mcp/' }}
+        configurationName="github-mcp-url"
+      />,
+    );
+    expect(screen.queryByText(/stored in/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add New' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Move to configuration' }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders a service reference read-only', () => {

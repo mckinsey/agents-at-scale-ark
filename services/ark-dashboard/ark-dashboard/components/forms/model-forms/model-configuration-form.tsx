@@ -310,78 +310,91 @@ function BaseUrlField({
     <FormField
       control={control}
       name="baseUrl"
-      render={({ field, fieldState }) => (
-        <FieldSet className="gap-2">
-          <FieldTitle>Base URL{optional ? ' (Optional)' : ''}</FieldTitle>
-          {baseUrlState?.kind === 'literal' && (
-            <p className="text-sm">
-              This URL is currently stored in the model itself:{' '}
-              {baseUrlState.url}
-            </p>
-          )}
-          <div className="flex items-center gap-3">
-            <Select
-              onValueChange={value =>
-                field.onChange(value === CLEAR_BASE_URL_VALUE ? '' : value)
-              }
-              value={(field.value as string) ?? ''}>
-              <SelectTrigger
-                className={cn(GHOST_TRIGGER, 'flex-1')}
-                aria-invalid={!!fieldState.error}>
-                <SelectValue placeholder={placeholder} />
-              </SelectTrigger>
-              <SelectContent className="bg-fill-onsurface-ui-2">
-                {isConfigurationsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {optional && (
-                      <SelectItem value={CLEAR_BASE_URL_VALUE}>
-                        <SelectItemText>
-                          None (use the default endpoint)
-                        </SelectItemText>
-                      </SelectItem>
-                    )}
-                    {configurations?.map(configuration => (
-                      <SelectItem
-                        key={configuration.name}
-                        value={configuration.name}>
-                        <SelectItemText>{configuration.name}</SelectItemText>
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-            <CreateResourceButton
-              kind="configuration"
-              label={
-                baseUrlState?.kind === 'literal'
-                  ? 'Move to configuration'
-                  : 'Add New'
-              }
-              dialogTitle={
-                baseUrlState?.kind === 'literal'
-                  ? 'Move URL to a configuration'
-                  : undefined
-              }
-              defaultValue={
-                baseUrlState?.kind === 'literal' ? baseUrlState.url : undefined
-              }
-              onCreated={name =>
-                setValue('baseUrl', name, {
-                  shouldValidate: true,
-                  shouldDirty: true,
-                })
-              }
-            />
-          </div>
-          {configurations?.length === 0 && (
-            <p className="text-sm">No configurations in this namespace.</p>
-          )}
-          <FieldError>{fieldState.error?.message}</FieldError>
-        </FieldSet>
-      )}
+      render={({ field, fieldState }) => {
+        const currentValue = (field.value as string) ?? '';
+        const stillLiteral = baseUrlState?.kind === 'literal' && !currentValue;
+        const isStoredValueMissing =
+          !!currentValue &&
+          currentValue !== CLEAR_BASE_URL_VALUE &&
+          !isConfigurationsPending &&
+          !configurations?.some(
+            configuration => configuration.name === currentValue,
+          );
+
+        return (
+          <FieldSet className="gap-2">
+            <FieldTitle>Base URL{optional ? ' (Optional)' : ''}</FieldTitle>
+            {stillLiteral && (
+              <p className="text-sm">
+                This URL is currently stored in the model itself:{' '}
+                {baseUrlState.url}
+              </p>
+            )}
+            <div className="flex items-center gap-3">
+              <Select
+                onValueChange={value =>
+                  field.onChange(value === CLEAR_BASE_URL_VALUE ? '' : value)
+                }
+                value={currentValue}>
+                <SelectTrigger
+                  className={cn(GHOST_TRIGGER, 'flex-1')}
+                  aria-invalid={!!fieldState.error}>
+                  <SelectValue placeholder={placeholder} />
+                </SelectTrigger>
+                <SelectContent className="bg-fill-onsurface-ui-2">
+                  {isConfigurationsPending ? (
+                    <Spinner size="sm" className="mx-auto my-2" />
+                  ) : (
+                    <>
+                      {optional && (
+                        <SelectItem value={CLEAR_BASE_URL_VALUE}>
+                          <SelectItemText>
+                            None (use the default endpoint)
+                          </SelectItemText>
+                        </SelectItem>
+                      )}
+                      {isStoredValueMissing && (
+                        <SelectItem value={currentValue}>
+                          <SelectItemText>
+                            {currentValue} (not found in this namespace)
+                          </SelectItemText>
+                        </SelectItem>
+                      )}
+                      {configurations?.map(configuration => (
+                        <SelectItem
+                          key={configuration.name}
+                          value={configuration.name}>
+                          <SelectItemText>
+                            {configuration.name}
+                          </SelectItemText>
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              <CreateResourceButton
+                kind="configuration"
+                label={stillLiteral ? 'Move to configuration' : 'Add New'}
+                dialogTitle={
+                  stillLiteral ? 'Move URL to a configuration' : undefined
+                }
+                defaultValue={stillLiteral ? baseUrlState.url : undefined}
+                onCreated={name =>
+                  setValue('baseUrl', name, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
+              />
+            </div>
+            {configurations?.length === 0 && (
+              <p className="text-sm">No configurations in this namespace.</p>
+            )}
+            <FieldError>{fieldState.error?.message}</FieldError>
+          </FieldSet>
+        );
+      }}
     />
   );
 }
