@@ -215,13 +215,14 @@ func NewToolRegistry(mcpSettings map[string]arkmcp.MCPSettings, telemetryRecorde
 	}
 }
 
-// ToolApproval returns the approval config declared on the Tool CRD, keyed by the
-// name the agent exposes to the model.
-func (tr *ToolRegistry) ToolApproval(exposedName string) *arkv1alpha1.ToolApprovalConfig {
+// ToolApproval returns the approval config declared on the Tool CRD, keyed by the name
+// the tool is registered under - for a renaming partial that is partial.name, which is
+// also the name the model calls.
+func (tr *ToolRegistry) ToolApproval(registeredName string) *arkv1alpha1.ToolApprovalConfig {
 	if tr == nil || tr.toolApproval == nil {
 		return nil
 	}
-	return tr.toolApproval[exposedName]
+	return tr.toolApproval[registeredName]
 }
 
 func (tr *ToolRegistry) RegisterTool(def ToolDefinition, executor ToolExecutor) {

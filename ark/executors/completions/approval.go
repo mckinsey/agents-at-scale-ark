@@ -79,12 +79,18 @@ func matchesApprovalArguments(config *arkv1alpha1.ToolApprovalConfig, arguments 
 // agent's reference to that tool. The two are unioned on Required, so an agent cannot
 // drop a gate the Tool declares; Timeout and OnTimeout come from the agent when set,
 // otherwise from the Tool.
+//
+// Both the registry lookup and the resulting key use GetToolCRDName, which is the name
+// registerTool registers the tool under and therefore the name the model calls. A
+// renaming partial exposes partial.name, not agentTool.name, so keying on agentTool.name
+// would leave the gate unreachable from requiresApproval.
 func buildApprovalMap(agentTools []arkv1alpha1.AgentTool, registry *ToolRegistry) map[string]*arkv1alpha1.ToolApprovalConfig {
 	approvalMap := make(map[string]*arkv1alpha1.ToolApprovalConfig)
 	for _, agentTool := range agentTools {
-		merged := mergeApprovalConfig(registry.ToolApproval(agentTool.Name), agentTool.Approval)
+		registeredName := agentTool.GetToolCRDName()
+		merged := mergeApprovalConfig(registry.ToolApproval(registeredName), agentTool.Approval)
 		if merged != nil && merged.Required {
-			approvalMap[agentTool.Name] = merged
+			approvalMap[registeredName] = merged
 		}
 	}
 	return approvalMap

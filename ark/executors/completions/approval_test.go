@@ -491,6 +491,31 @@ func registryWithToolApproval(name string, config *arkv1alpha1.ToolApprovalConfi
 	return registry
 }
 
+// registryWithToolApprovalFor seeds the registry under the key registerTool actually
+// writes, by running the same naming path: agentTool.Name first, then whatever
+// CreatePartialToolDefinition leaves behind. Deriving the key instead of hardcoding it
+// keeps the gate tests honest if the naming rule changes.
+func registryWithToolApprovalFor(t *testing.T, agentTool arkv1alpha1.AgentTool, config *arkv1alpha1.ToolApprovalConfig) (*ToolRegistry, string) {
+	t.Helper()
+
+	toolDef := ToolDefinition{
+		Name:       agentTool.GetToolCRDName(),
+		Parameters: map[string]any{"properties": map[string]any{}},
+	}
+	toolDef.Name = agentTool.Name
+	if agentTool.Partial != nil {
+		var err error
+		toolDef, err = CreatePartialToolDefinition(toolDef, agentTool.Partial)
+		require.NoError(t, err)
+	}
+
+	registry := &ToolRegistry{toolApproval: map[string]*arkv1alpha1.ToolApprovalConfig{}}
+	if config != nil {
+		registry.toolApproval[toolDef.Name] = config
+	}
+	return registry, toolDef.Name
+}
+
 func TestBuildApprovalMapToolLevelOnly(t *testing.T) {
 	agentTools := []arkv1alpha1.AgentTool{{Type: "mcp", Name: "write-file"}}
 	registry := registryWithToolApproval("write-file", approvalConfig(true, "5m", "reject"))
@@ -566,20 +591,39 @@ func TestBuildApprovalMapSkipsUngatedTools(t *testing.T) {
 	assert.Empty(t, approvalMap)
 }
 
-func TestBuildApprovalMapUsesExposedNameForPartialTools(t *testing.T) {
-	// A partial tool is exposed under agentTool.Name while the CRD keeps its own name,
-	// and requiresApproval is called with the exposed name the model saw.
-	agentTools := []arkv1alpha1.AgentTool{{
+func TestBuildApprovalMapGatesRenamingPartialFromToolCRD(t *testing.T) {
+	agentTool := arkv1alpha1.AgentTool{
 		Type:    "mcp",
 		Name:    "write-report",
 		Partial: &arkv1alpha1.ToolPartial{Name: "file-gateway-write-file"},
-	}}
-	registry := registryWithToolApproval("write-report", approvalConfig(true, "5m", "reject"))
+	}
+	registry, registeredName := registryWithToolApprovalFor(t, agentTool, approvalConfig(true, "5m", "reject"))
+	require.Equal(t, "file-gateway-write-file", registeredName)
 
-	approvalMap := buildApprovalMap(agentTools, registry)
+	approvalMap := buildApprovalMap([]arkv1alpha1.AgentTool{agentTool}, registry)
 
-	require.Contains(t, approvalMap, "write-report")
-	assert.NotContains(t, approvalMap, "file-gateway-write-file")
+	require.Contains(t, approvalMap, registeredName)
+	assert.NotContains(t, approvalMap, "write-report")
+
+	agent := &Agent{approvalRequiredTools: approvalMap}
+	require.NotNil(t, agent.requiresApproval(registeredName, "{}"),
+		"Tool CRD gate must be reachable from the name the model calls")
+}
+
+func TestBuildApprovalMapGatesRenamingPartialFromAgentLevel(t *testing.T) {
+	agentTool := arkv1alpha1.AgentTool{
+		Type:     "mcp",
+		Name:     "write-report",
+		Partial:  &arkv1alpha1.ToolPartial{Name: "file-gateway-write-file"},
+		Approval: approvalConfig(true, "5m", "reject"),
+	}
+	registry := &ToolRegistry{toolApproval: map[string]*arkv1alpha1.ToolApprovalConfig{}}
+
+	approvalMap := buildApprovalMap([]arkv1alpha1.AgentTool{agentTool}, registry)
+
+	agent := &Agent{approvalRequiredTools: approvalMap}
+	require.NotNil(t, agent.requiresApproval("file-gateway-write-file", "{}"),
+		"agent-level gate must be reachable from the name the model calls")
 }
 
 func TestRequiresApprovalUsesMergedMap(t *testing.T) {
