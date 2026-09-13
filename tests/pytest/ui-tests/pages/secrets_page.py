@@ -73,34 +73,23 @@ class SecretsPage(BasePage):
 
         logger.info(f"Creating secret: {secret_name}")
 
+        # Creating a secret navigates to a full page (/secrets/new), not a modal.
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
-        self.wait_for_modal_open()
+        self.wait_for_navigation_complete()
 
-        inputs = self.page.locator("[role='dialog'] input, [data-slot='dialog-content'] input")
-        inputs.first.wait_for(state="visible", timeout=10000)
-        try:
-            inputs.nth(1).wait_for(state="visible", timeout=5000)
-        except Exception:
-            pass
+        name_input = self.page.get_by_placeholder("e.g., api-key-production")
+        name_input.wait_for(state="visible", timeout=10000)
+        name_input.fill(secret_name)
 
-        input_count = inputs.count()
-        logger.info(f"Found {input_count} inputs in dialog")
+        value_input = self.page.get_by_placeholder("Enter the secret value")
+        value_input.fill(secret_value)
 
-        if input_count >= 2:
-            inputs.nth(0).fill(secret_name)
-            inputs.nth(1).fill(secret_value)
-        else:
-            inputs.first.fill(secret_name)
-            textarea = self.page.locator("[role='dialog'] textarea, [data-slot='dialog-content'] textarea").first
-            if textarea.is_visible(timeout=2000):
-                textarea.fill(secret_value)
-
-        save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
+        save_button = self.page.get_by_role("button", name="Create")
         save_button.wait_for(state="visible", timeout=5000)
-        save_button.click(force=True)
+        save_button.click()
 
         popup_visible = self._check_toast_popup()
-        self.wait_for_modal_close()
+        self.wait_for_navigation_complete()
 
         self.navigate_to_secrets_tab()
         in_table = self.is_secret_in_table(secret_name)
