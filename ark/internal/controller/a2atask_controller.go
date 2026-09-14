@@ -10,12 +10,16 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
@@ -106,9 +110,35 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *A2ATaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return setupA2ATaskController(mgr, r)
+}
+
+// a2aTaskUpdatePredicate skips updates that change neither generation nor status —
+// i.e. the reconciler's own poll-failure annotation write, which would otherwise
+// retrigger immediately and supersede the RequeueAfter backoff. Status updates must
+// pass: the reconciler drives its phase handshakes (TaskNotStarted, approval
+// decisions) through its own status writes with no RequeueAfter.
+func a2aTaskUpdatePredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
+				return true
+			}
+			oldTask, okOld := e.ObjectOld.(*arkv1alpha1.A2ATask)
+			newTask, okNew := e.ObjectNew.(*arkv1alpha1.A2ATask)
+			if !okOld || !okNew {
+				return true
+			}
+			return !equality.Semantic.DeepEqual(oldTask.Status, newTask.Status)
+		},
+	}
+}
+
+func setupA2ATaskController(mgr ctrl.Manager, rec reconcile.Reconciler) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.A2ATask{}).
-		Complete(r)
+		WithEventFilter(a2aTaskUpdatePredicate()).
+		Complete(rec)
 }
 
 // reconcileTTL deletes the task once it has outlived its TTL. Returns true when handled.
