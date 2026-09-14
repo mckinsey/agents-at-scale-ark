@@ -505,7 +505,7 @@ export function mapArgoWorkflowToSession(
   let steps: MappedWorkflowStep[] = [];
 
   if (rootNode && rootNode.children && rootNode.children.length > 0) {
-    if (rootNode.type === 'DAG') {
+    if (rootNode.type === 'DAG' || rootNode.type === 'Retry') {
       const mappedRootStep = mapArgoNodeToStep(
         rootNode,
         createStepMappingContext(nodes, workflowName, workflowNamespace),

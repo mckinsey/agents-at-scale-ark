@@ -272,6 +272,28 @@ describe('mapArgoWorkflowToSession', () => {
     expect(session.steps[1].displayName).toBe('step-last');
   });
 
+  it('maps attempts when the root node itself is a Retry node', () => {
+    const session = mapArgoWorkflowToSession(
+      stepsWorkflow({
+        'wf-1': {
+          id: 'wf-1',
+          name: 'wf-1',
+          displayName: 'wf-1',
+          type: 'Retry',
+          phase: 'Succeeded',
+          children: ['wf-1(0)', 'wf-1(1)'],
+        },
+        'wf-1(0)': pod('wf-1(0)', 'wf-1(0)'),
+        'wf-1(1)': pod('wf-1(1)', 'wf-1(1)'),
+      }),
+    );
+
+    expect(session.steps.map(step => step.displayName)).toEqual([
+      'wf-1(0)',
+      'wf-1(1)',
+    ]);
+  });
+
   it('keeps mapping a plain sequential workflow without retries', () => {
     const session = mapArgoWorkflowToSession(
       stepsWorkflow({

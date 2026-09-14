@@ -433,6 +433,10 @@ describe('workflow utility functions', () => {
 });
 
 describe('expandCompressedNodes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   async function gzipBase64(value: string): Promise<string> {
     const bytes = new TextEncoder().encode(value);
     const compressed = new ReadableStream<BufferSource>({
@@ -546,8 +550,11 @@ describe('expandCompressedNodes', () => {
 
     vi.mocked(apiClient.get).mockResolvedValue(workflow);
 
-    const result = await workflowsService.get('wf-1', 'default');
+    const result = await workflowsService.get('default', 'wf-1');
 
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/wf-1?namespace=default',
+    );
     expect(result.status?.nodes).toEqual(nodes);
   });
 
