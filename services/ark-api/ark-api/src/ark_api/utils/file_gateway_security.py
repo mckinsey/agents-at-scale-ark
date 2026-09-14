@@ -1,14 +1,16 @@
 """Security controls for file-gateway uploads and downloads proxied through ark-api."""
 
 import re
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 
 from fastapi import HTTPException
 
+from .active_content import assert_declared_type
 from .svg_sanitize import (
     CONTENT_TYPE_ATTR,
     FILENAME_ATTR,
     is_svg_payload,
+    sanitize_svg,
     sanitize_svg_if_needed,
 )
 
@@ -57,7 +59,8 @@ def _parse_multipart_headers(headers: str) -> tuple[str | None, str | None]:
     content_type = None
     filename_match = FILENAME_ATTR.search(headers)
     if filename_match:
-        filename = filename_match.group(1)
+        matched = next((group for group in filename_match.groups() if group is not None), "")
+        filename = matched.strip() or None
     content_type_match = CONTENT_TYPE_ATTR.search(headers)
     if content_type_match:
         content_type = content_type_match.group(1).strip()
@@ -124,6 +127,8 @@ def sanitize_file_gateway_upload(body: bytes, content_type: str | None) -> bytes
     for headers, content in _iter_multipart_parts(body, boundary):
         filename, part_content_type = _parse_multipart_headers(headers)
         try:
+            if filename:
+                assert_declared_type(filename, part_content_type, content)
             sanitized = sanitize_svg_if_needed(filename, part_content_type, content)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -141,10 +146,12 @@ def _filename_from_download_path(path: str) -> str | None:
     trimmed = path.rstrip("/")
     if not trimmed.endswith(DOWNLOAD_SUFFIX):
         return None
+    # The ASGI server already percent-decoded the path, so decoding again here would
+    # turn a file genuinely named "a%20b.svg" into "a b.svg".
     file_path = trimmed[: -len(DOWNLOAD_SUFFIX)]
     if "/" not in file_path:
-        return unquote(file_path)
-    return unquote(file_path.rsplit("/", 1)[-1])
+        return file_path
+    return file_path.rsplit("/", 1)[-1]
 
 
 def secure_file_gateway_download(
@@ -158,7 +165,7 @@ def secure_file_gateway_download(
     is_svg = is_svg_payload(filename, content_type, content)
     if is_svg:
         try:
-            content = sanitize_svg_if_needed(filename, content_type, content)
+            content = sanitize_svg(content)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -166,7 +173,9 @@ def secure_file_gateway_download(
     # header is the primary control: it neutralizes stored XSS for any file type
     # (SVG, HTML, etc.) regardless of content. SVG sanitize + CSP are added on top
     # as defense-in-depth.
-    dropped = {"content-length", "content-disposition"}
+    # content-encoding is also stripped by the proxy's response filter; kept here so
+    # this function stays correct on its own for any future caller.
+    dropped = {"content-length", "content-disposition", "content-encoding"}
     base_type = (content_type or "").split(";")[0].strip().lower()
     neutralize_type = base_type in ACTIVE_CONTENT_TYPES
     if neutralize_type:
