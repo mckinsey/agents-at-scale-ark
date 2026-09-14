@@ -89,6 +89,51 @@ spec:
                     description: A human-readable title for the tool.
                     type: string
                 type: object
+              approval:
+                description: |-
+                  Approval configuration applied to every agent that uses this tool. An agent may
+                  tighten it but not remove it; see AgentTool.Approval for the per-agent override.
+                properties:
+                  argumentMatches:
+                    description: |-
+                      ArgumentMatches narrows approval to calls whose arguments match one of these patterns.
+                      Empty means approval applies to every call of this tool.
+                    items:
+                      properties:
+                        argument:
+                          description: Argument is the JSON field name in the tool
+                            call arguments to inspect (e.g. "path").
+                          minLength: 1
+                          type: string
+                        pattern:
+                          description: Pattern is a regular expression; approval is
+                            required when the argument value matches.
+                          minLength: 1
+                          type: string
+                      required:
+                      - argument
+                      - pattern
+                      type: object
+                    type: array
+                  onTimeout:
+                    default: reject
+                    description: 'OnTimeout specifies the action to take when approval
+                      times out: "reject" fails the query, "proceed" executes the
+                      tool'
+                    enum:
+                    - reject
+                    - proceed
+                    type: string
+                  required:
+                    description: Required indicates whether human approval is required
+                      before executing this tool
+                    type: boolean
+                  timeout:
+                    default: 5m
+                    description: Timeout specifies how long to wait for approval before
+                      timing out
+                    type: string
+                type: object
               builtin:
                 description: |-
                   Builtin-specific configuration for builtin tools.
