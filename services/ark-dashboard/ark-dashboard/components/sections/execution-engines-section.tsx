@@ -7,6 +7,11 @@ import { Settings, Trash } from '@/components/icons';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  type StatusConfig,
+  StatusIndicator,
+  UNKNOWN_STATUS,
+} from '@/components/ui/status-indicator';
+import {
   Table,
   TableBody,
   TableCell,
@@ -57,33 +62,18 @@ function ExecutionEnginesSkeleton() {
   );
 }
 
-interface PhaseConfig {
-  label: string;
-  dotClass: string;
-}
-
-const PHASE_CONFIG: Record<ExecutionEnginePhase, PhaseConfig> = {
+const PHASE_CONFIG: Record<ExecutionEnginePhase, StatusConfig> = {
   ready: { label: 'Ready', dotClass: 'bg-status-success' },
   running: { label: 'Running', dotClass: 'bg-status-warning' },
   error: { label: 'Error', dotClass: 'bg-status-error' },
 };
 
-const UNKNOWN_PHASE_CONFIG: PhaseConfig = {
-  label: 'Unknown',
-  dotClass: 'bg-fg-tertiary',
-};
-
 function EngineStatus({ engine }: Readonly<{ engine: ExecutionEngine }>) {
-  const config = PHASE_CONFIG[engine.phase] ?? UNKNOWN_PHASE_CONFIG;
+  const config = PHASE_CONFIG[engine.phase] ?? UNKNOWN_STATUS;
 
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="inline-flex items-center gap-2">
-        <span className={cn('size-2 rounded-full', config.dotClass)} />
-        <span className="label-regular-primary text-fg-primary">
-          {config.label}
-        </span>
-      </span>
+      <StatusIndicator {...config} />
       {engine.phase === 'error' && engine.statusMessage && (
         <TruncatedTooltip label={engine.statusMessage}>
           <span className="text-status-error block w-full truncate text-xs">

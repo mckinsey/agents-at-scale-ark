@@ -5,6 +5,7 @@ import * as React from 'react';
 
 import { Check } from '@/components/icons/check';
 import { ChevronDown } from '@/components/icons/chevron-down';
+import { useDialogContentElement } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
 export type SelectSize = 'sm' | 'default' | 'lg';
@@ -144,15 +145,18 @@ function SelectContent({
   className?: string;
   children?: React.ReactNode;
   /**
-   * Where to portal the popup. Pass the containing dialog's content element
-   * when the select lives inside a modal dialog: a popup left in `<body>` sits
-   * outside the dialog's focus trap, so the dialog pulls focus back and the
-   * selection never commits.
+   * Where to portal the popup. Defaults to the closest enclosing
+   * `DialogContent`, because a popup left in `<body>` sits outside a modal
+   * dialog's focus trap and pointer-events guard, so the selection never
+   * commits. Only set this to override that default.
    */
   container?: SelectPrimitive.Portal.Props['container'];
 }) {
+  const dialogContentElement = useDialogContentElement();
+
   return (
-    <SelectPrimitive.Portal container={container}>
+    <SelectPrimitive.Portal
+      container={container ?? dialogContentElement ?? undefined}>
       <SelectPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}

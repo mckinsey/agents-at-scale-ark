@@ -152,7 +152,9 @@ describe('ManageMarketplaceSettings', () => {
     );
 
     await user.click(screen.getByRole('combobox', { name: /authentication/i }));
-    await user.click(screen.getByRole('option', { name: /bearer\/token/i }));
+    await user.click(
+      await screen.findByRole('option', { name: /bearer\/token/i }),
+    );
 
     await user.type(screen.getByLabelText('Token'), 'tok-123');
     await user.click(screen.getByRole('button', { name: /^add$/i }));
@@ -202,7 +204,7 @@ describe('ManageMarketplaceSettings', () => {
 
     await openDialog(user);
     await fillAdoPreset(user);
-    await user.type(screen.getByLabelText('Token'), 'pat-123');
+    await user.type(screen.getByLabelText('Personal access token'), 'pat-123');
 
     await user.click(screen.getByRole('button', { name: /^add$/i }));
 

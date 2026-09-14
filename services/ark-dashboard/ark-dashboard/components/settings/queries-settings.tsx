@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 
 import { storedQueryTimeoutSettingAtom } from '@/atoms/experimental-features';
+import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ErrorIcon, Info } from '@/components/icons';
 import {
   Alert,
@@ -69,6 +70,7 @@ export function QueriesSettings() {
   const [timeoutInput, setTimeoutInput] = useState<string>('');
   const [timeoutError, setTimeoutError] = useState<string | null>(null);
   const [timeoutBadInput, setTimeoutBadInput] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   useEffect(() => {
     setInput(data?.queryTTL ?? '');
@@ -123,51 +125,55 @@ export function QueriesSettings() {
     }
 
     const nextTimeout =
-      trimmedTimeout === '' ? DEFAULT_QUERY_TIMEOUT : `${trimmedTimeout}m`;
+      trimmedTimeout === '' ? storedTimeout : `${trimmedTimeout}m`;
     const ttlChanged = trimmed !== (data?.queryTTL ?? '');
     const timeoutChanged = nextTimeout !== storedTimeout;
 
-    if (!ttlChanged && !timeoutChanged) {
+    if (!timeoutChanged) {
       setTimeoutInput(formatQueryTimeoutMinutes(storedTimeout));
+    }
+
+    if (!ttlChanged && !timeoutChanged) {
       toast.info('No changes to save');
       return;
     }
 
-    if (!ttlChanged) {
+    if (timeoutChanged) {
       setStoredTimeout(nextTimeout);
+    }
+
+    if (!ttlChanged) {
       toast.success('Settings saved');
       return;
     }
 
-    updateMutation.mutate(
-      { queryTTL: trimmed === '' ? null : trimmed },
-      {
-        onSuccess: () => {
-          if (timeoutChanged) {
-            setStoredTimeout(nextTimeout);
-          }
-        },
-      },
-    );
+    updateMutation.mutate({ queryTTL: trimmed === '' ? null : trimmed });
   };
 
   const handleReset = () => {
     setLocalError(null);
     setTimeoutError(null);
     setTimeoutBadInput(false);
-    setInput('');
     setTimeoutInput(`${DEFAULT_QUERY_TIMEOUT_MINUTES}`);
     setStoredTimeout(DEFAULT_QUERY_TIMEOUT);
 
     if (!hasExisting) {
+      setInput('');
       toast.success('Defaults cleared');
       return;
     }
 
-    clearMutation.mutate(undefined);
+    clearMutation.mutate(undefined, {
+      onSuccess: () => {
+        setInput('');
+      },
+    });
   };
 
   const isSaving = updateMutation.isPending || clearMutation.isPending;
+  const resetDescription = hasExisting
+    ? `This clears the cluster-wide default Query TTL and resets the query timeout stored in this browser to ${DEFAULT_QUERY_TIMEOUT_MINUTES} minutes.`
+    : `This resets the query timeout stored in this browser to ${DEFAULT_QUERY_TIMEOUT_MINUTES} minutes.`;
   const hasResettableState =
     hasExisting ||
     storedTimeout !== DEFAULT_QUERY_TIMEOUT ||
@@ -222,7 +228,7 @@ export function QueriesSettings() {
         <Button
           type="button"
           variant="outline"
-          onClick={handleReset}
+          onClick={() => setResetConfirmOpen(true)}
           disabled={isSaving || !hasResettableState}>
           {clearMutation.isPending ? 'Clearing...' : 'Reset to default'}
         </Button>
@@ -246,6 +252,16 @@ export function QueriesSettings() {
           </AlertDescription>
         </AlertContent>
       </Alert>
+
+      <ConfirmationDialog
+        open={resetConfirmOpen}
+        onOpenChange={setResetConfirmOpen}
+        title="Reset to default"
+        description={resetDescription}
+        confirmText="Reset"
+        cancelText="Cancel"
+        onConfirm={handleReset}
+      />
     </div>
   );
 }

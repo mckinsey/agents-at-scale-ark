@@ -1,4 +1,3 @@
-export { TeamCard } from './team-card';
 export { ToolCard } from './tool-card';
 export { HomepageModelsCard } from './homepage-models-card';
 export { HomepageAgentsCard } from './homepage-agents-card';

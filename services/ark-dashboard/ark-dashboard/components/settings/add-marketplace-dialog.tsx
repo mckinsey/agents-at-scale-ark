@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -110,7 +110,6 @@ export function AddMarketplaceDialog({
   onOpenChange,
 }: AddMarketplaceDialogProps) {
   const createSource = useCreateMarketplaceSource();
-  const contentRef = useRef<HTMLDivElement>(null);
 
   const fieldId = useId();
   const urlFieldId = `${fieldId}-url`;
@@ -209,7 +208,7 @@ export function AddMarketplaceDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent ref={contentRef} className="sm:max-w-[586px]">
+      <DialogContent className="sm:max-w-[586px]">
         <DialogHeader>
           <DialogTitle>Add new marketplace</DialogTitle>
         </DialogHeader>
@@ -317,9 +316,7 @@ export function AddMarketplaceDialog({
                   </FieldSet>
                 </div>
                 <FieldSet className="gap-2">
-                  <FieldLabel htmlFor={adoUrlId}>
-                    Generated URL
-                  </FieldLabel>
+                  <FieldLabel htmlFor={adoUrlId}>Generated URL</FieldLabel>
                   <Input
                     id={adoUrlId}
                     variant="inline"
@@ -376,9 +373,7 @@ export function AddMarketplaceDialog({
                 className={cn(GHOST_TRIGGER, 'w-full')}>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent
-                container={contentRef}
-                className="bg-fill-onsurface-ui-2">
+              <SelectContent className="bg-fill-onsurface-ui-2">
                 {SCHEME_OPTIONS.map(option => (
                   <SelectItem key={option.value} value={option.value}>
                     <SelectItemText>{option.label}</SelectItemText>
@@ -390,7 +385,11 @@ export function AddMarketplaceDialog({
 
           {newSource.scheme !== 'none' && (
             <FieldSet className="gap-2">
-              <FieldLabel htmlFor={credentialFieldId}>Token</FieldLabel>
+              <FieldLabel htmlFor={credentialFieldId}>
+                {newSource.scheme === 'basic'
+                  ? 'Personal access token'
+                  : 'Token'}
+              </FieldLabel>
               <Input
                 id={credentialFieldId}
                 type="password"
