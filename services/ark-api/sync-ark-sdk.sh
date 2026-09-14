@@ -19,5 +19,5 @@ cd ark-api
 sed -i.bak "s|path = \"../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl\"|path = \"./out/${WHEEL_NAME}\"|" pyproject.toml && \
 uv remove ark_sdk || true && \
 uv add "./out/${WHEEL_NAME}" && \
-rm -f uv.lock && uv sync
+uv lock && uv sync
 cd ../

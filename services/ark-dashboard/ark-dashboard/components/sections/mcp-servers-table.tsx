@@ -395,7 +395,7 @@ export function McpServersTable({
   return (
     <Table
       aria-label="MCP Servers"
-      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[1104px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>

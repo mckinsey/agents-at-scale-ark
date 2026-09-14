@@ -151,7 +151,7 @@ export function TeamsTable({ teams, onDelete }: Readonly<TeamsTableProps>) {
   return (
     <Table
       aria-label="Teams"
-      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[896px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>

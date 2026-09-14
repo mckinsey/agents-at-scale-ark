@@ -303,6 +303,8 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
+	setDBPoolStats(db.Stats)
+
 	backend.warmPool()
 	go backend.refreshBookmarkLoop()
 	go backend.cleanupLoop()
@@ -317,6 +319,8 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 func (p *PostgreSQLBackend) StartWALConsumer() {
 	p.walOnce.Do(func() {
 		go p.startWALConsumer()
+		sampler := &slotLagSampler{interval: slotLagSampleInterval, query: p.querySlotLag}
+		go sampler.run(p.ctx)
 	})
 }
 
