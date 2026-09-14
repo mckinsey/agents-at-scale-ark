@@ -1,0 +1,42 @@
+# A workflow template for the grouping journey to move in and out of a group.
+# The list page shows its empty state when the namespace has no templates, so
+# the group UI needs at least one row to exist. It is listed and grouped, never
+# run, but it is a real two-stage template rather than a placeholder.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ui-grouped-workflow
+  namespace: default
+  annotations:
+    workflows.argoproj.io/title: "Nightly Data Quality Check"
+    workflows.argoproj.io/description: "Counts yesterday's rows, then reports drift"
+spec:
+  entrypoint: nightly-check
+  serviceAccountName: argo-workflow
+  arguments:
+    parameters:
+      - name: table
+        value: orders
+  templates:
+    - name: nightly-check
+      steps:
+        - - name: count-rows
+            template: count-rows
+        - - name: report-drift
+            template: report-drift
+
+    - name: count-rows
+      script:
+        image: alpine:3.22
+        command: [sh]
+        source: |
+          set -e
+          echo "counting rows in {{workflow.parameters.table}}"
+
+    - name: report-drift
+      script:
+        image: alpine:3.22
+        command: [sh]
+        source: |
+          set -e
+          echo "row count within tolerance for {{workflow.parameters.table}}"
