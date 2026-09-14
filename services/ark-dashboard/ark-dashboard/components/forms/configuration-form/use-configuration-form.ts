@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
@@ -11,6 +11,7 @@ import {
   useUpdateConfiguration,
 } from '@/lib/services/configurations-hooks';
 
+import { useAliasOptions } from '../fields/use-alias-options';
 import {
   ConfigurationFormMode,
   configurationFormSchema,
@@ -45,14 +46,7 @@ export function useConfigurationForm({
   );
 
   const { data: allConfigurations } = useGetAllConfigurations();
-  const aliasOptions = useMemo(
-    () =>
-      (allConfigurations ?? [])
-        .map(item => item.name)
-        .filter(name => name !== configurationName)
-        .sort((a, b) => a.localeCompare(b)),
-    [allConfigurations, configurationName],
-  );
+  const aliasOptions = useAliasOptions(allConfigurations, configurationName);
 
   const { reset } = form;
   useEffect(() => {
