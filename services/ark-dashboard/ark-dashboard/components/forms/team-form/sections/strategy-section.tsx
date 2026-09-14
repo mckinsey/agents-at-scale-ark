@@ -2,11 +2,7 @@ import { useId } from 'react';
 import { type UseFormReturn, useWatch } from 'react-hook-form';
 
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  FieldError,
-  FieldSet,
-  FieldTitle,
-} from '@/components/ui/field';
+import { FieldError, FieldSet, FieldTitle } from '@/components/ui/field';
 import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,7 +46,10 @@ export function StrategySection({
   disabled,
 }: Readonly<StrategySectionProps>) {
   const loopsId = useId();
-  const selectedStrategy = useWatch({ control: form.control, name: 'strategy' });
+  const selectedStrategy = useWatch({
+    control: form.control,
+    name: 'strategy',
+  });
   const loopsChecked = useWatch({ control: form.control, name: 'loops' });
   const enableTerminateTool = useWatch({
     control: form.control,
@@ -119,7 +118,11 @@ export function StrategySection({
               />
               <Label
                 htmlFor={loopsId}
-                className="cursor-pointer text-sm font-normal">
+                disabled={disabled}
+                className={cn(
+                  'text-sm font-normal',
+                  !disabled && 'cursor-pointer',
+                )}>
                 Enable loops (cycle through members repeatedly)
               </Label>
             </div>
