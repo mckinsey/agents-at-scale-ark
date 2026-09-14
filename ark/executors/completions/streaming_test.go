@@ -356,6 +356,7 @@ func TestNotifyCompletionUsesFreshContext(t *testing.T) {
 		baseURL:   broker.URL,
 		queryName: "test-query",
 		client:    &http.Client{Timeout: 5 * time.Second},
+		streamed:  true,
 	}
 
 	// Cancelled context, as on the drain-deadline path.
@@ -371,4 +372,23 @@ func TestNotifyCompletionUsesFreshContext(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("broker never received the completion POST")
 	}
+}
+
+func TestNotifyCompletionSkipsWhenNothingStreamed(t *testing.T) {
+	var called bool
+	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer broker.Close()
+
+	stream := &HTTPEventStream{
+		baseURL:   broker.URL,
+		queryName: "test-query",
+		client:    &http.Client{Timeout: 5 * time.Second},
+	}
+
+	err := stream.NotifyCompletion(context.Background())
+	require.NoError(t, err, "completion must be a no-op when nothing was streamed")
+	assert.False(t, called, "completion POST must not be sent when no chunks were streamed")
 }

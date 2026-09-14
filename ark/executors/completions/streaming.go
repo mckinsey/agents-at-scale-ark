@@ -432,6 +432,7 @@ type HTTPEventStream struct {
 	// For persistent streaming connection
 	streamWriter io.WriteCloser
 	streamMutex  sync.Mutex
+	streamed     bool
 }
 
 // StreamChunk sends a chunk to the event stream
@@ -460,6 +461,7 @@ func (h *HTTPEventStream) StreamChunk(ctx context.Context, chunk interface{}) er
 		return fmt.Errorf("failed to write chunk to stream: %w", err)
 	}
 
+	h.streamed = true
 	return nil
 }
 
@@ -523,6 +525,11 @@ func (h *HTTPEventStream) startStream(ctx context.Context) error {
 func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 	h.streamMutex.Lock()
 	defer h.streamMutex.Unlock()
+
+	if !h.streamed {
+		logf.FromContext(ctx).V(1).Info("skipping stream completion, no chunks were streamed", "query", h.queryName)
+		return nil
+	}
 
 	// Close the streaming connection if open
 	if h.streamWriter != nil {
