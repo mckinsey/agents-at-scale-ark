@@ -289,7 +289,6 @@ describe('chatService', () => {
         'TestAgent',
         undefined,
         undefined,
-        undefined,
         '5m',
       );
 
@@ -297,28 +296,6 @@ describe('chatService', () => {
         '/api/v1/queries/',
         expect.objectContaining({
           timeout: '5m',
-        }), { params: { namespace: 'default' } });
-    });
-
-    it('should handle enableStreaming parameter', async () => {
-      await chatService.submitChatQuery(
-        'default',
-        'Hello',
-        'agent',
-        'TestAgent',
-        undefined,
-        undefined,
-        true,
-      );
-
-      expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/v1/queries/',
-        expect.objectContaining({
-          metadata: {
-            annotations: {
-              'ark.mckinsey.com/streaming-enabled': 'true',
-            },
-          },
         }), { params: { namespace: 'default' } });
     });
   });
