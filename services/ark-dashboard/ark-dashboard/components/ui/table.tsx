@@ -78,7 +78,7 @@ function TableHead({
       data-slot="table-head"
       data-state={selected ? 'selected' : undefined}
       className={cn(
-        'border-stroke-tertiary border-b bg-transparent text-left align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[1px]',
+        'border-stroke-tertiary border-b bg-transparent text-left align-middle overflow-hidden text-ellipsis whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[1px]',
         'text-fg-secondary hover:border-stroke-tertiary-hover',
         'transition-colors duration-200',
         'data-[state=selected]:text-fg-primary data-[state=selected]:border-stroke-active',

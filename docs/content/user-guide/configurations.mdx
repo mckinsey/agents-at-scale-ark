@@ -13,7 +13,7 @@ Use a Secret for anything sensitive. Configuration values are stored unencrypted
 
 In the dashboard, open **Configurations** and select **Add configuration**. Each configuration has a name, a value, and optional description, alias, and labels.
 
-A configuration is a ConfigMap with an Ark marker label and a fixed `value` key, so it can also be created with `kubectl`:
+A configuration is a ConfigMap with an Ark marker annotation and a fixed `value` key, so it can also be created with `kubectl`:
 
 ```yaml
 apiVersion: v1
@@ -21,9 +21,9 @@ kind: ConfigMap
 metadata:
   name: github-mcp-url
   labels:
-    ark.mckinsey.com/resource-type: configuration
     ark.mckinsey.com/label.mcp: "true"
   annotations:
+    ark.mckinsey.com/resource-type: configuration
     ark.mckinsey.com/description: GitHub remote MCP endpoint
     ark.mckinsey.com/alias: github-mcp
 data:
@@ -38,9 +38,9 @@ data:
 | `ark.mckinsey.com/description` | Free text shown in the dashboard. |
 | `ark.mckinsey.com/alias` | An alternative name, for display only. See [Aliases do not resolve](#aliases-do-not-resolve). |
 
-Label names accept letters, digits, `-`, `_`, and `.`, must start and end with a letter or digit, and are limited to 57 characters. The API rejects anything else.
+Label names accept only letters and digits, and are limited to 57 characters. The API rejects anything else.
 
-A ConfigMap without the marker label stays invisible to the Configurations page, and Ark never adds the marker to a ConfigMap it did not create. Referencing such a ConfigMap from a resource still works — the marker only controls what the page manages.
+A ConfigMap without the marker annotation stays invisible to the Configurations page, and Ark never adds the marker to a ConfigMap it did not create. Referencing such a ConfigMap from a resource still works — the marker only controls what the page manages.
 
 ## Reference a configuration
 
@@ -90,7 +90,7 @@ Deleting a configuration is allowed even when resources reference it. The dashbo
 
 ## Restrict what Ark can write
 
-Managing configurations requires `create`, `update`, and `delete` on ConfigMaps, so the Ark API's role grants them in the namespace it is installed in. RBAC cannot narrow this further: a rule has no label selector, and `resourceNames` cannot restrict `create` — the name does not exist yet. The Ark API checks the marker label before every write, but that check lives in the application.
+Managing configurations requires `create`, `update`, and `delete` on ConfigMaps, so the Ark API's role grants them in the namespace it is installed in. RBAC cannot narrow this further: a rule has no label selector, and `resourceNames` cannot restrict `create` — the name does not exist yet. The Ark API checks the marker annotation before every write, but that check lives in the application.
 
 A ValidatingAdmissionPolicy enforces the same boundary at admission and ships enabled:
 
@@ -105,7 +105,7 @@ It requires Kubernetes 1.30 or later. On older clusters the policy is skipped ra
 
 ## Grant a user access to configurations
 
-With impersonation enabled, the Ark API acts as the logged-in user, so that user needs the ConfigMap permissions themselves. The chart creates a ClusterRole for this, suffixed with the namespace Ark is installed in, and leaves it unbound. Bind it where the configurations live:
+With [impersonation](/developer-guide/authentication) enabled, the Ark API acts as the logged-in user, so that user needs the ConfigMap permissions themselves. The chart creates a [ClusterRole](https://github.com/mckinsey/agents-at-scale-ark/blob/main/services/ark-api/chart/templates/configmap-editor-role.yaml) for this, suffixed with the namespace Ark is installed in, and leaves it unbound. Bind it where the configurations live:
 
 ```bash
 kubectl create rolebinding ark-configurations \
