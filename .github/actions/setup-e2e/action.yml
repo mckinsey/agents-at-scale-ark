@@ -35,7 +35,11 @@ inputs:
     required: false
     default: 'etcd'
   prefetch-test-images:
-    description: 'Pre-pull chainsaw test images (mock-llm, curl, mockserver, hurl, python, Argo)'
+    description: 'Pre-pull chainsaw test images (mock-llm, curl, mockserver, hurl, python)'
+    required: false
+    default: 'false'
+  prefetch-argo-images:
+    description: 'Pre-pull Argo Workflows images (only for jobs that install Argo)'
     required: false
     default: 'false'
   install-broker:
@@ -90,6 +94,7 @@ runs:
           ${{ inputs.install-broker == 'true' && '--install-broker' || '' }} \
           --storage-backend ${{ inputs.storage-backend }} \
           ${{ inputs.prefetch-test-images == 'true' && '--prefetch-test-images' || '' }} \
+          ${{ inputs.prefetch-argo-images == 'true' && '--prefetch-argo-images' || '' }} \
           ${{ inputs.enable-third-party-webhooks == 'true' && '--enable-third-party-webhooks' || '' }}
       env:
         DOCKER_CICD_CACHE_REGISTRY: ${{ inputs.ci-cache-registry || format('ghcr.io/{0}', github.repository_owner) }}

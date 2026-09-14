@@ -17,6 +17,7 @@ INSTALL_COVERAGE="false"
 INSTALL_BROKER="false"
 STORAGE_BACKEND="etcd"
 PREFETCH_TEST_IMAGES="false"
+PREFETCH_ARGO_IMAGES="false"
 # Off by default so the standard legs exercise the shipped default. Only the
 # dedicated third-party-webhooks job turns this on.
 ENABLE_THIRD_PARTY_WEBHOOKS="false"
@@ -40,16 +41,21 @@ while [[ $# -gt 0 ]]; do
       PREFETCH_TEST_IMAGES="true"
       shift
       ;;
+    --prefetch-argo-images)
+      PREFETCH_ARGO_IMAGES="true"
+      shift
+      ;;
     --enable-third-party-webhooks)
       ENABLE_THIRD_PARTY_WEBHOOKS="true"
       shift
       ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images] [--enable-third-party-webhooks]"
+      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images] [--prefetch-argo-images] [--enable-third-party-webhooks]"
       echo "  --install-coverage      Install coverage collection components"
       echo "  --install-broker        Install ark-broker (only needed for tests that use it)"
       echo "  --storage-backend       Storage backend to use (default: etcd)"
       echo "  --prefetch-test-images  Pre-pull chainsaw test images (mock-llm, curl, mockserver, etc.)"
+      echo "  --prefetch-argo-images  Pre-pull Argo Workflows images (only needed for jobs that install Argo)"
       echo "  --enable-third-party-webhooks  Set policy.thirdPartyWebhooks.enabled=true on the apiserver (postgresql only)"
       exit 0
       ;;
@@ -105,14 +111,21 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
 fi
 if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
   echo "=== Pre-pulling test images (background) ==="
-  # Argo image tags track the argo-workflows chart (services/argo-workflows/chart,
-  # dep 0.45.26 -> Argo v3.7.2); bump these when that chart is upgraded.
   for img in \
     docker.io/curlimages/curl:latest \
     docker.io/mockserver/mockserver:5.15.0 \
     ghcr.io/orange-opensource/hurl:6.1.1 \
     docker.io/python:3.12-bookworm \
-    ghcr.io/dwmkerr/mock-llm:0.1.28 \
+    ghcr.io/dwmkerr/mock-llm:0.1.28; do
+    sudo k3s crictl pull "$img" > /dev/null 2>&1 &
+    IMAGE_PULL_PIDS+=($!)
+  done
+fi
+if [ "${PREFETCH_ARGO_IMAGES}" = "true" ]; then
+  echo "=== Pre-pulling Argo Workflows images (background) ==="
+  # Argo image tags track the argo-workflows chart (services/argo-workflows/chart,
+  # dep 0.45.26 -> Argo v3.7.2); bump these when that chart is upgraded.
+  for img in \
     quay.io/argoproj/workflow-controller:v3.7.2 \
     quay.io/argoproj/argocli:v3.7.2 \
     quay.io/argoproj/argoexec:v3.7.2 \
