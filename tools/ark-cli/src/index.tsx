@@ -11,6 +11,7 @@ import output from './lib/output.js';
 import {startup} from './lib/startup.js';
 import type {ArkConfig} from './lib/config.js';
 import {createAgentsCommand} from './commands/agents/index.js';
+import {createApprovalsCommand} from './commands/approvals/index.js';
 import {createChatCommand} from './commands/chat/index.js';
 import {createClusterCommand} from './commands/cluster/index.js';
 import {createCompletionCommand} from './commands/completion/index.js';
@@ -55,6 +56,7 @@ async function main() {
     .version(packageJson.version);
 
   program.addCommand(createAgentsCommand(config));
+  program.addCommand(createApprovalsCommand(config));
   program.addCommand(createChatCommand(config));
   program.addCommand(createClusterCommand(config));
   program.addCommand(createCompletionCommand(config));
