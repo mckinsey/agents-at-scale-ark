@@ -34,6 +34,11 @@ inputs:
     description: 'Additional build arguments (multiline string)'
     required: false
 
+outputs:
+  digest:
+    description: 'The digest of the built (and optionally pushed) image'
+    value: ${{ steps.build.outputs.digest }}
+
 runs:
   using: 'composite'
   steps:
@@ -56,6 +61,7 @@ runs:
         ${{ inputs.prebuild }}
 
     - name: Build and optionally push
+      id: build
       uses: docker/build-push-action@v6
       with:
         context: ${{ inputs.path }}
