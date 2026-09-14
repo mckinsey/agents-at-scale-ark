@@ -4,48 +4,25 @@
 
 Real-time message streaming allows users to see agent responses as they're generated during query execution.
 
-Streaming is implemented using Server-Sent Events (SSE) with chunks in OpenAI-compatible format. To stream a query, create it with the `ark.mckinsey.com/streaming-enabled` annotation and consume SSE from the broker proxy endpoint. See the [Ark APIs](/reference/ark-apis) reference for details.
+Streaming is implemented using Server-Sent Events (SSE) with chunks in OpenAI-compatible format. Streaming is enabled cluster-side by configuring an event streaming service (see [Event Streaming Service](#event-streaming-service)); no per-query flag is required. Consume SSE from the broker proxy endpoint using the query name. See the [Ark APIs](/reference/ark-apis) reference for details.
 
 ## Enabling Streaming
 
-Enable streaming for a query by setting the `ark.mckinsey.com/streaming-enabled` annotation:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: my-query
-  annotations:
-    # Enable streaming for this query.
-    ark.mckinsey.com/streaming-enabled: "true"
-spec:
-  input: "Hello"
-  # Point to a memory resource that implemnts the event stream API.
-  memory: "streaming-memory"
-  target:
-    - name: my-agent
-```
-
-To stream query responses, create a query with the streaming annotation and consume SSE from the broker proxy:
+Streaming is a cluster-side capability, not a per-query setting. When an event streaming service is configured, every query produces chunks that can be consumed from the broker proxy. Create a query as usual and stream its chunks by query name:
 
 ```bash
-# Create a query with streaming enabled
+# Create a query
 curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/v1/queries/ \
   -H "Content-Type: application/json" \
   -d '{
     "name": "stream-query",
     "type": "user",
     "input": "Write a haiku about streaming data",
-    "target": {"type": "model", "name": "gpt-4"},
-    "metadata": {
-      "annotations": {
-        "ark.mckinsey.com/streaming-enabled": "true"
-      }
-    }
+    "target": {"type": "model", "name": "gpt-4"}
   }'
 
 # Stream the response via the broker proxy
-curl -N http://ark-api.default.127.0.0.1.nip.io:8080/v1/broker/chunks?watch=true&query-id=stream-query
+curl -N "http://ark-api.default.127.0.0.1.nip.io:8080/v1/broker/chunks?watch=true&query-id=stream-query"
 ```
 
 The response is Server-Sent Events (SSE) with streaming chunks in OpenAI format.
@@ -209,7 +186,7 @@ data:
     namespace: ""             # Optional: namespace (defaults to current namespace)
 ```
 
-When this ConfigMap is present and `enabled` is set to `"true"`, the Query Controller will use the specified service for event streaming. If the ConfigMap is not present or `enabled` is `"false"`, streaming is disabled. If a query is issued with the `streaming-enabled` annotation set to `true` and no event streaming service is available, a warning will be logged.
+When this ConfigMap is present and `enabled` is set to `"true"`, the Query Controller will use the specified service for event streaming. If the ConfigMap is not present or `enabled` is `"false"`, streaming is disabled and queries return only their final response.
 
 The `ark-broker` service implements this API when deployed with streaming enabled. By default chunks are held in the broker's process memory, so live streaming and `from-beginning=true` replay work within a single broker replica. With the [Redis chunks backend](/developer-guide/services/ark-broker#chunk-backend-redis) (`backends.chunk: redis`), chunks are stored in Redis Streams, so a client whose SSE connection lands on a different broker replica than the one that produced the chunks still receives the full stream. 
 

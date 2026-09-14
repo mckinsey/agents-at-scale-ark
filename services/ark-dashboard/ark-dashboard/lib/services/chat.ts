@@ -3,7 +3,6 @@ import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
 import { apiUrl } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
-import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { generateUUID } from '@/lib/utils/uuid';
 import { a2aTasksService } from '@/lib/services/a2a-tasks';
 
@@ -226,7 +225,6 @@ export const chatService = {
     targetName: string,
     sessionId?: string,
     conversationId?: string,
-    enableStreaming?: boolean,
     timeout?: string,
     parameters?: QueryParameter[],
   ): Promise<QueryDetailResponse> {
@@ -243,14 +241,6 @@ export const chatService = {
       timeout,
       ...(parameters && parameters.length > 0 ? { parameters } : {}),
     };
-
-    if (enableStreaming) {
-      queryRequest.metadata = {
-        annotations: {
-          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
-        },
-      };
-    }
 
     return await this.createQuery(namespace, queryRequest);
   },
@@ -440,7 +430,6 @@ export const chatService = {
       targetName,
       sessionId,
       conversationId,
-      true,
       timeout,
       parameters,
     );
