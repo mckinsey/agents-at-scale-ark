@@ -3,6 +3,7 @@ const MARKETPLACE_DOCS = 'https://mckinsey.github.io/agents-at-scale-marketplace
 
 export const DOCS_URLS = {
   root: `${ARK_DOCS}/`,
+  a2aServers: `${ARK_DOCS}/reference/resources/a2aserver/`,
   a2aTasks: `${ARK_DOCS}/reference/resources/a2atask/`,
   agents: `${ARK_DOCS}/user-guide/agents/`,
   apiKeys: `${ARK_DOCS}/developer-guide/authentication/#api-key-authentication`,

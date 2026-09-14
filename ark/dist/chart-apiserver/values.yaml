@@ -71,7 +71,10 @@ containerSecurityContext:
 
 terminationGracePeriodSeconds: 10
 
-extraEnv: {}
+# AUTOMEMLIMIT sets GOMEMLIMIT to this fraction of the container memory limit.
+# Set to "off" to disable.
+extraEnv:
+  AUTOMEMLIMIT: "0.9"
 
 certManager:
   enabled: true

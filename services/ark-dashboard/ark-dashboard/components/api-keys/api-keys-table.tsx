@@ -151,7 +151,7 @@ export function APIKeysTable({ data, onRevoke }: Readonly<APIKeysTableProps>) {
   }, []);
 
   return (
-    <Table className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+    <Table className="min-w-[1056px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small">Name</TableHead>

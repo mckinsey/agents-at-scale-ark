@@ -140,7 +140,7 @@ export function AgentsTable({ agents, onDelete }: Readonly<AgentsTableProps>) {
   return (
     <Table
       aria-label="Agents"
-      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[800px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>
