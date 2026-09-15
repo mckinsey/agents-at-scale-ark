@@ -14,6 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// failingEventStream fails every StreamChunk and, unlike the real
+// HTTPEventStream, has no abandon-latch. It isolates the model loop's behavior:
+// broker-side suppression after the first failure is covered by
+// TestHTTPEventStream_AbandonsAfterWriteFailure.
 type failingEventStream struct {
 	calls int
 }
@@ -63,7 +67,8 @@ func TestAgentExecute_ChunkStreamFailureIsNonFatal(t *testing.T) {
 	require.NoError(t, err, "a chunk stream failure must not fail the query")
 	require.NotNil(t, res)
 	assert.Equal(t, len(chunks), stream.calls,
-		"every chunk should be attempted; the LLM stream must drain fully despite broker failure")
+		"the model loop must keep invoking StreamChunk and drain the full LLM stream despite failures "+
+			"(this mock has no abandon-latch; broker-side suppression is covered by TestHTTPEventStream_AbandonsAfterWriteFailure)")
 	assert.Equal(t, "hello", extractAssistantText(res.Messages),
 		"the accumulated response must still be delivered")
 }
