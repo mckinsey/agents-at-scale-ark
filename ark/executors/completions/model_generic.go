@@ -9,6 +9,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type ChatCompletionProvider interface {
@@ -64,7 +65,10 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 	if eventStream != nil {
 		response, err = m.Provider.ChatCompletionStream(ctx, messages, n, func(chunk *openai.ChatCompletionChunk) error {
 			chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, m.Model, nil)
-			return eventStream.StreamChunk(ctx, chunkWithMeta)
+			if streamErr := eventStream.StreamChunk(ctx, chunkWithMeta); streamErr != nil {
+				logf.FromContext(ctx).Error(streamErr, "failed to stream chunk to broker; continuing without streaming")
+			}
+			return nil
 		}, tools, toolChoice)
 	} else {
 		response, err = m.Provider.ChatCompletion(ctx, messages, n, tools, toolChoice)
