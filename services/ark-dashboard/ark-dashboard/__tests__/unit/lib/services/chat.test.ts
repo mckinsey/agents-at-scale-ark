@@ -125,41 +125,7 @@ describe('chatService', () => {
       expect(result).toEqual(mockResponse);
     });
 
-    it('should add streaming annotation when enableStreaming is true', async () => {
-      const mockResponse: QueryDetailResponse = {
-        name: 'chat-query-mock-uuid',
-        input: 'Hello',
-        target: { type: 'agent', name: 'test-agent' },
-        status: { phase: 'pending' },
-      };
-
-      vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
-
-      const result = await chatService.submitChatQuery(
-        'default',
-        'Hello',
-        'agent',
-        'test-agent',
-        'session-123',
-        undefined,
-        true,
-      );
-
-      expect(apiClient.post).toHaveBeenCalledWith(
-        `/api/v1/queries/`,
-        expect.objectContaining({
-          type: 'user',
-          input: 'Hello',
-          metadata: {
-            annotations: {
-              'ark.mckinsey.com/streaming-enabled': 'true',
-            },
-          },
-        }), { params: { namespace: 'default' } });
-      expect(result).toEqual(mockResponse);
-    });
-
-    it('should not add streaming annotation when enableStreaming is false or undefined', async () => {
+    it('should not add metadata annotations for a standard chat query', async () => {
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
         input: 'Hello',
@@ -201,7 +167,6 @@ describe('chatService', () => {
         'agent',
         'test-agent',
         'session-123',
-        undefined,
         undefined,
         undefined,
         [{ name: 'agent_name', value: 'Alice' }],

@@ -130,7 +130,7 @@ The `/openai/v1/chat/completions` and `/openai/v1/models` endpoints have been re
 **Migration:**
 - Replace `POST /openai/v1/chat/completions` with `POST /v1/queries/` using `type: "user"` and string `input`
 - Replace `GET /openai/v1/models` with `GET /v1/agents/`, `GET /v1/models/`, etc.
-- For streaming, create a query with the `ark.mckinsey.com/streaming-enabled: "true"` annotation and consume SSE from `/v1/broker/chunks?watch=true&query-id={name}`
+- For streaming, consume SSE from `/v1/broker/chunks?watch=true&query-id={name}` (streaming is enabled cluster-side via the event streaming ConfigMap; no per-query annotation is required)
 - OpenAI SDK wrappers (Python/JS) are no longer supported; use direct HTTP calls to the query API
 
 ## v0.1.51
