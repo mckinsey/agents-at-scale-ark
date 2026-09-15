@@ -432,12 +432,20 @@ type HTTPEventStream struct {
 	// For persistent streaming connection
 	streamWriter io.WriteCloser
 	streamMutex  sync.Mutex
+	// Latched on the first write failure for this query. Once abandoned, chunk
+	// writes and completion signals are no-ops so a slow broker does not trigger
+	// a reopen storm mid-query.
+	streamAbandoned bool
 }
 
 // StreamChunk sends a chunk to the event stream
 func (h *HTTPEventStream) StreamChunk(ctx context.Context, chunk interface{}) error {
 	h.streamMutex.Lock()
 	defer h.streamMutex.Unlock()
+
+	if h.streamAbandoned {
+		return nil
+	}
 
 	// If we don't have an active stream, start one
 	if h.streamWriter == nil {
@@ -454,9 +462,11 @@ func (h *HTTPEventStream) StreamChunk(ctx context.Context, chunk interface{}) er
 
 	// Write with newline delimiter for streaming
 	if _, err := h.streamWriter.Write(append(data, '\n')); err != nil {
-		// Stream broken, clear it
+		// Abandon streaming for the rest of this query: close the writer and latch
+		// so later chunks and the completion signal skip the broker entirely.
 		_ = h.streamWriter.Close() // Ignore error - we're already in error state
 		h.streamWriter = nil
+		h.streamAbandoned = true
 		return fmt.Errorf("failed to write chunk to stream: %w", err)
 	}
 
@@ -524,6 +534,10 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 	h.streamMutex.Lock()
 	defer h.streamMutex.Unlock()
 
+	if h.streamAbandoned {
+		return nil
+	}
+
 	// Close the streaming connection if open
 	if h.streamWriter != nil {
 		if err := h.streamWriter.Close(); err != nil {
@@ -567,6 +581,10 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 func (h *HTTPEventStream) Close() error {
 	h.streamMutex.Lock()
 	defer h.streamMutex.Unlock()
+
+	if h.streamAbandoned {
+		return nil
+	}
 
 	if h.streamWriter != nil {
 		err := h.streamWriter.Close()
