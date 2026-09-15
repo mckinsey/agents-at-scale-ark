@@ -62,16 +62,24 @@ spec:
 
         subprocess.run(
             ["kubectl", "delete", "namespace", cls.token_namespace,
-             "--ignore-not-found=true", "--wait=false"],
-            capture_output=True
+             "--ignore-not-found=true", "--wait=true", "--timeout=120s"],
+            capture_output=True, timeout=150
         )
 
     @classmethod
     def _setup_token_namespace(cls):
         subprocess.run(
-            ["kubectl", "create", "namespace", cls.token_namespace],
-            capture_output=True, text=True
+            ["kubectl", "delete", "namespace", cls.token_namespace,
+             "--ignore-not-found=true", "--wait=true", "--timeout=120s"],
+            capture_output=True, timeout=150
         )
+
+        result = subprocess.run(
+            ["kubectl", "create", "namespace", cls.token_namespace],
+            capture_output=True, text=True, timeout=30
+        )
+        assert result.returncode == 0, \
+            f"Failed to create namespace {cls.token_namespace}: {result.stderr}"
 
         model_yaml = MOCK_LLM_MODEL_YAML.read_text().replace(
             "namespace: default", f"namespace: {cls.token_namespace}"
