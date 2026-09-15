@@ -526,8 +526,12 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 	h.streamMutex.Lock()
 	defer h.streamMutex.Unlock()
 
+	// No chunk write ever succeeded, so the stream never reached the broker and no query
+	// record exists to complete. Posting completion would only 404. This is a whole-turn
+	// property: the terminator chunk is always attempted before completion, so streamed is
+	// false only when every write failed (broker unreachable), not for empty responses.
 	if !h.streamed {
-		logf.FromContext(ctx).V(1).Info("skipping stream completion, no chunks were streamed", "query", h.queryName)
+		logf.FromContext(ctx).V(1).Info("skipping stream completion, stream never reached the broker", "query", h.queryName)
 		return nil
 	}
 
