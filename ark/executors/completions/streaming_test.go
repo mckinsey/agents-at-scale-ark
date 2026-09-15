@@ -4,9 +4,11 @@ package completions
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -391,4 +393,77 @@ func TestNotifyCompletionSkipsWhenNothingStreamed(t *testing.T) {
 	err := stream.NotifyCompletion(context.Background())
 	require.NoError(t, err, "completion must be a no-op when nothing was streamed")
 	assert.False(t, called, "completion POST must not be sent when no chunks were streamed")
+}
+
+// TestStreamChunkMarksStreamedThenCompletes exercises the full streamed path: a successful
+// StreamChunk sets streamed, so the subsequent NotifyCompletion sends the terminal POST.
+func TestStreamChunkMarksStreamedThenCompletes(t *testing.T) {
+	var mu sync.Mutex
+	var gotComplete bool
+	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Drain the body so the streaming pipe write unblocks.
+		_, _ = io.Copy(io.Discard, r.Body)
+		if strings.HasSuffix(r.URL.Path, "/complete") {
+			mu.Lock()
+			gotComplete = true
+			mu.Unlock()
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer broker.Close()
+
+	stream := &HTTPEventStream{
+		baseURL:   broker.URL,
+		queryName: "test-query",
+		client:    &http.Client{Timeout: 5 * time.Second},
+	}
+
+	require.NoError(t, stream.StreamChunk(context.Background(), map[string]string{"content": "hello"}))
+	assert.True(t, stream.streamed, "streamed must be set after a chunk is written")
+
+	require.NoError(t, stream.NotifyCompletion(context.Background()))
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return gotComplete
+	}, 2*time.Second, 10*time.Millisecond, "broker never received the completion POST after streaming")
+}
+
+type failingWriteCloser struct{}
+
+func (failingWriteCloser) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+func (failingWriteCloser) Close() error              { return nil }
+
+type nopWriteCloser struct{}
+
+func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+func (nopWriteCloser) Close() error                { return nil }
+
+// TestStreamChunkWriteErrorDoesNotMarkStreamed verifies a failed chunk write clears the broken
+// stream writer and leaves streamed false, so a subsequent NotifyCompletion skips the terminal
+// POST — the invariant that keeps unsent chunks from producing broker 404s.
+func TestStreamChunkWriteErrorDoesNotMarkStreamed(t *testing.T) {
+	stream := &HTTPEventStream{
+		queryName:    "test-query",
+		streamWriter: failingWriteCloser{},
+	}
+
+	err := stream.StreamChunk(context.Background(), map[string]string{"content": "hello"})
+	require.Error(t, err, "a failed write must surface an error")
+	assert.False(t, stream.streamed, "streamed must stay false when the write fails")
+	assert.Nil(t, stream.streamWriter, "broken stream writer must be cleared")
+}
+
+// TestStreamChunkMarshalErrorDoesNotMarkStreamed verifies an unmarshalable chunk errors before
+// any write and leaves streamed false.
+func TestStreamChunkMarshalErrorDoesNotMarkStreamed(t *testing.T) {
+	stream := &HTTPEventStream{
+		queryName:    "test-query",
+		streamWriter: nopWriteCloser{},
+	}
+
+	err := stream.StreamChunk(context.Background(), make(chan int))
+	require.Error(t, err, "an unmarshalable chunk must surface an error")
+	assert.False(t, stream.streamed, "streamed must stay false when marshalling fails")
 }
