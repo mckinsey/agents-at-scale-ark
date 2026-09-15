@@ -31,9 +31,10 @@ const isSafeImageSrc = (src: string | undefined): boolean => {
   if (!src) return false;
   // Browsers fold \ to / when parsing an http(s) URL, so "/\evil.com/x.png"
   // loads from evil.com. A src from markdown arrives already percent-encoded as
-  // %5C by mdast-to-hast and is harmless, but a src from raw HTML skips that
-  // normalization - so this fold is what keeps the policy correct if rehype-raw
-  // is ever enabled.
+  // %5C by mdast-to-hast, so the fold is a no-op there; it matters for a src that
+  // skips that normalization, as raw HTML would. Note this only polices the src:
+  // an external reference can also ride in on another attribute, which is why the
+  // img renderer below forwards a fixed set rather than spreading.
   const trimmed = src.trim().replace(/\\/g, '/');
   if (trimmed.startsWith('//')) return false;
   if (/^data:image\//i.test(trimmed) || trimmed.startsWith('blob:'))
@@ -80,7 +81,11 @@ export const renderMarkdown = (
             {children}
           </a>
         ),
-        img: ({ src, alt, ...props }) => {
+        // Only these attributes are forwarded. Spreading the rest would let an
+        // external reference through on srcSet or style even when the src passes,
+        // and React emits a <link rel="preload"> for srcSet, so that fetch would
+        // fire before the element mounts.
+        img: ({ src, alt, title, width, height }) => {
           const source = typeof src === 'string' ? src : undefined;
           if (isSafeImageSrc(source)) {
             return (
@@ -88,8 +93,10 @@ export const renderMarkdown = (
               <img
                 src={source}
                 alt={alt || ''}
+                title={title}
+                width={width}
+                height={height}
                 className="max-w-full"
-                {...props}
               />
             );
           }

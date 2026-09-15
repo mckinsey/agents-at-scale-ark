@@ -134,6 +134,52 @@ describe('renderMarkdown', () => {
       );
     });
 
+    // Only reachable because imageAwareUrlTransform re-admits blob:; the default
+    // transform blanks it. Pinned so a react-markdown upgrade cannot quietly drop it.
+    it('renders a local blob: image', () => {
+      const { container } = render(
+        renderMarkdown('![ok](blob:http://localhost/abc-123)'),
+      );
+
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(
+        'blob:http://localhost/abc-123',
+      );
+    });
+
+    it('blocks an empty source', () => {
+      const { container } = render(renderMarkdown('![x]()'));
+
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('external image blocked');
+    });
+
+    // The src policy only covers the src. srcSet and style can carry an external
+    // reference of their own, and React emits a <link rel="preload"> for srcSet, so
+    // that fetch fires before the element mounts. The renderer therefore forwards a
+    // fixed set of attributes; this pins that list so reintroducing a spread fails.
+    it('forwards only the allowed attributes to an allowed image', () => {
+      const allowed = new Set([
+        'src',
+        'alt',
+        'title',
+        'width',
+        'height',
+        'class',
+      ]);
+      const { container } = render(
+        renderMarkdown('![ok](/local/chart.png "a title")'),
+      );
+      const img = container.querySelector('img');
+
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute('title')).toBe('a title');
+
+      const forwarded = Array.from(img?.attributes ?? []).map(
+        attr => attr.name,
+      );
+      expect(forwarded.filter(name => !allowed.has(name))).toEqual([]);
+    });
+
     // Browsers fold \ to / when parsing an http(s) URL, so a backslash source
     // would beacon externally if it reached the DOM raw. It cannot: mdast-to-hast
     // percent-encodes it to %5C before the src policy runs, and %5C is an ordinary
