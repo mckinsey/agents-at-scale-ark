@@ -492,68 +492,70 @@ function createStepMappingContext(
   };
 }
 
+function mapStepGroupsUnderRoot(
+  rootNode: ArgoNodeStatus,
+  context: StepMappingContext,
+): MappedWorkflowStep[] {
+  const visitedStepGroups = new Set<string>();
+
+  for (const childId of rootNode.children ?? []) {
+    const childNode = context.allNodes[childId];
+    if (childNode && isStepGroupNode(childNode)) {
+      return processStepGroup(
+        childNode,
+        context,
+        visitedStepGroups,
+        rootNode.id,
+      );
+    }
+  }
+
+  return [];
+}
+
+function mapRootNodeChildren(
+  rootNode: ArgoNodeStatus,
+  context: StepMappingContext,
+): MappedWorkflowStep[] {
+  if (rootNode.type === 'DAG' || rootNode.type === 'Retry') {
+    return mapArgoNodeToStep(rootNode, context)?.children ?? [];
+  }
+
+  return mapStepGroupsUnderRoot(rootNode, context);
+}
+
+function mapTopLevelNodes(
+  rootNodeId: string,
+  context: StepMappingContext,
+): MappedWorkflowStep[] {
+  const retryAttemptIds = collectRetryAttemptIds(context.allNodes);
+  const topLevelNodeIds = getAllNodesFlat(context.allNodes)
+    .filter(
+      node =>
+        (!node.boundaryID || node.boundaryID === rootNodeId) &&
+        !retryAttemptIds.has(node.id),
+    )
+    .map(node => node.id);
+
+  return mapNodeIdsToSteps(topLevelNodeIds, context, ROOT_CHILD_OPTIONS);
+}
+
 export function mapArgoWorkflowToSession(
   workflow: ArgoWorkflow,
 ): MappedWorkflowSession {
   const workflowName = workflow.metadata.name;
-  const rootNodeId = workflowName;
   const status = workflow.status;
   const nodes = status?.nodes || {};
-  const rootNode = nodes[rootNodeId];
-  const workflowNamespace = workflow.metadata.namespace;
+  const rootNode = nodes[workflowName];
+  const context = createStepMappingContext(
+    nodes,
+    workflowName,
+    workflow.metadata.namespace,
+  );
 
-  let steps: MappedWorkflowStep[] = [];
-
-  if (rootNode && rootNode.children && rootNode.children.length > 0) {
-    if (rootNode.type === 'DAG' || rootNode.type === 'Retry') {
-      const mappedRootStep = mapArgoNodeToStep(
-        rootNode,
-        createStepMappingContext(nodes, workflowName, workflowNamespace),
-      );
-      if (mappedRootStep && mappedRootStep.children) {
-        steps = mappedRootStep.children;
-      }
-    } else {
-      const context = createStepMappingContext(
-        nodes,
-        workflowName,
-        workflowNamespace,
-      );
-      const visitedStepGroups = new Set<string>();
-      for (const childId of rootNode.children) {
-        const childNode = nodes[childId];
-        if (childNode && isStepGroupNode(childNode)) {
-          steps = processStepGroup(
-            childNode,
-            context,
-            visitedStepGroups,
-            rootNode.id,
-          );
-          break;
-        }
-      }
-    }
-  } else {
-    const allNodesFlat = getAllNodesFlat(nodes);
-    const retryAttemptIds = collectRetryAttemptIds(nodes);
-    const topLevelNodes = allNodesFlat.filter(
-      node =>
-        (!node.boundaryID || node.boundaryID === rootNodeId) &&
-        !retryAttemptIds.has(node.id),
-    );
-
-    const context = createStepMappingContext(
-      nodes,
-      workflowName,
-      workflowNamespace,
-    );
-    for (const node of topLevelNodes) {
-      const mappedStep = mapArgoNodeToStep(node, context);
-      if (mappedStep) {
-        steps.push(mappedStep);
-      }
-    }
-  }
+  const steps = rootNode?.children?.length
+    ? mapRootNodeChildren(rootNode, context)
+    : mapTopLevelNodes(workflowName, context);
 
   return {
     id: workflowName,
