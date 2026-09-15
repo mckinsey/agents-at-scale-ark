@@ -212,7 +212,5 @@
         }
       ]
     }
-  },
-  "release-as": "0.1.69",
-  "last-release-sha": "1a9dc1fde5cb0b1d0be8a72399e43af5e6b3a086"
+  }
 }

@@ -7,6 +7,10 @@ import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
+  StatusIndicator,
+  getAvailabilityStatus,
+} from '@/components/ui/status-indicator';
+import {
   Table,
   TableBody,
   TableCell,
@@ -27,33 +31,12 @@ interface TeamsTableProps {
   readonly onDelete: (id: string) => void;
 }
 
-const STATUS_CONFIG = {
-  True: { label: 'Active', dotClass: 'bg-status-success' },
-  False: { label: 'Error', dotClass: 'bg-status-error' },
-  Unknown: { label: 'Unknown', dotClass: 'bg-fg-tertiary' },
-} as const;
-
 const COL = {
   name: 'w-[240px]',
   members: 'w-[180px]',
   status: 'w-[120px]',
   action: 'w-[100px]',
 };
-
-function TeamStatus({
-  status,
-}: Readonly<{ status?: Team['available'] | null }>) {
-  const value = status ?? 'Unknown';
-  const config = STATUS_CONFIG[value];
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span className={cn('size-2 rounded-full', config.dotClass)} />
-      <span className="label-regular-primary text-fg-primary">
-        {config.label}
-      </span>
-    </span>
-  );
-}
 
 interface TeamTableRowProps {
   readonly team: Team;
@@ -112,7 +95,7 @@ export function TeamTableRow({ team, onDelete }: Readonly<TeamTableRowProps>) {
           </span>
         </TableCell>
         <TableCell size="small">
-          <TeamStatus status={team.available} />
+          <StatusIndicator {...getAvailabilityStatus(team.available)} />
         </TableCell>
         <TableCell size="small" className="relative z-10">
           <div className="flex items-center justify-center gap-2">

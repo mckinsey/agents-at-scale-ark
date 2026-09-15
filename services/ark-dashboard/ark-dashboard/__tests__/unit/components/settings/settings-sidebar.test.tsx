@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { storedIsMarketplaceEnabledAtom } from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
-import type { SettingPage } from '@/components/settings/settings-types';
 import { SettingsSidebar } from '@/components/settings/settings-sidebar';
+import type { SettingPage } from '@/components/settings/settings-types';
 
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/'),
@@ -49,7 +49,7 @@ describe('SettingsSidebar', () => {
 
   it('should render all menu items', () => {
     renderWithStore();
-    expect(screen.getByText('Queries')).toBeInTheDocument();
+    expect(screen.getByText('Queries settings')).toBeInTheDocument();
     expect(screen.getByText('Experimental features')).toBeInTheDocument();
   });
 
@@ -64,25 +64,21 @@ describe('SettingsSidebar', () => {
     expect(screen.getByText('Manage marketplace')).toBeInTheDocument();
   });
 
-  it('should navigate to the marketplace settings page when Manage marketplace is clicked', async () => {
+  it('should link to the marketplace settings page preserving namespace', () => {
     store.set(storedIsMarketplaceEnabledAtom, true);
-    const user = userEvent.setup();
     renderWithStore();
 
-    await user.click(screen.getByText('Manage marketplace'));
-
-    expect(mockReplace).toHaveBeenCalledWith(
-      '/settings/manage-marketplace?namespace=demo',
-    );
+    expect(
+      screen.getByRole('link', { name: 'Manage marketplace' }),
+    ).toHaveAttribute('href', '/settings/manage-marketplace?namespace=demo');
   });
 
-  it('should navigate to settings page preserving namespace when a menu item is clicked', async () => {
-    const user = userEvent.setup();
+  it('should link to a settings page preserving namespace', () => {
     renderWithStore();
 
-    await user.click(screen.getByText('Queries'));
-
-    expect(mockReplace).toHaveBeenCalledWith('/settings/queries?namespace=demo');
+    expect(
+      screen.getByRole('link', { name: 'Queries settings' }),
+    ).toHaveAttribute('href', '/settings/queries?namespace=demo');
   });
 
   it('should navigate to entry URL preserving namespace when close button is clicked after soft navigation', async () => {

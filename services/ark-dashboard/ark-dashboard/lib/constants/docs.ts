@@ -9,6 +9,7 @@ export const DOCS_URLS = {
   apiKeys: `${ARK_DOCS}/developer-guide/authentication/#api-key-authentication`,
   configurations: `${ARK_DOCS}/user-guide/configurations/`,
   events: `${ARK_DOCS}/developer-guide/logging-and-events/`,
+  executionEngines: `${ARK_DOCS}/reference/resources/executionengine/`,
   fileGateway: `${MARKETPLACE_DOCS}/services/file-gateway/`,
   fileGatewaySizeLimits: `${MARKETPLACE_DOCS}/services/file-gateway/#file-size-limitations`,
   memory: `${ARK_DOCS}/reference/resources/memory/`,
