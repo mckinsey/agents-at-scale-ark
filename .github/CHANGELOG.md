@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.70-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.69...v0.1.70-rc) (2026-09-15)
+
+
+### Features
+
+* settings page qbds update ([#3433](https://github.com/mckinsey/agents-at-scale-ark/issues/3433)) ([a4d6eb1](https://github.com/mckinsey/agents-at-scale-ark/commit/a4d6eb1260e3b66827bd81b5a60c014241c3e6a2))
+
+
+### Bug Fixes
+
+* address CVE-2026-90711 (proxy-addr) in ark-broker and ark-cli ([#3485](https://github.com/mckinsey/agents-at-scale-ark/issues/3485)) ([a011061](https://github.com/mckinsey/agents-at-scale-ark/commit/a011061ebf24523ae96a296a96b6f2ec3d87ab9a)), closes [#3480](https://github.com/mckinsey/agents-at-scale-ark/issues/3480)
+* **argo-workflows:** use the non-root executor image by default ([#3370](https://github.com/mckinsey/agents-at-scale-ark/issues/3370)) ([2f41f5d](https://github.com/mckinsey/agents-at-scale-ark/commit/2f41f5d6384f2eb70c847bb71d84be14715bd17d))
+* bump brace-expansion to 5.0.12 ([#3475](https://github.com/mckinsey/agents-at-scale-ark/issues/3475)) ([f7fca83](https://github.com/mckinsey/agents-at-scale-ark/commit/f7fca8331ba375cce8c664825e45aad2ae513fad))
+* **charts:** add pg_isready startup, liveness and readiness probes to ark-storage-dev ([#3423](https://github.com/mckinsey/agents-at-scale-ark/issues/3423)) ([53b9b0b](https://github.com/mckinsey/agents-at-scale-ark/commit/53b9b0b22e57615c86803f80f0b0363f9dfab5cc)), closes [#3392](https://github.com/mckinsey/agents-at-scale-ark/issues/3392)
+* **controller:** ignore spec.cancel on terminal queries ([#3397](https://github.com/mckinsey/agents-at-scale-ark/issues/3397)) ([bd7caf1](https://github.com/mckinsey/agents-at-scale-ark/commit/bd7caf1425ebd5391a1fced4405aed41e8acf9d6))
+* **dashboard:** clickable checkbox labels and wrapped tool description ([#3459](https://github.com/mckinsey/agents-at-scale-ark/issues/3459)) ([f47ddc3](https://github.com/mckinsey/agents-at-scale-ark/commit/f47ddc3f8523bf5cff507c680187962030728201))
+* harden HTTP caching and TLS ciphers as per pentest findings ([#3382](https://github.com/mckinsey/agents-at-scale-ark/issues/3382)) ([a23119b](https://github.com/mckinsey/agents-at-scale-ark/commit/a23119b9be3bd05fd65c63ed9ccffc6f8d88894c))
+* **postgresql:** pg_notify fast path for cross-replica watch delivery ([#3129](https://github.com/mckinsey/agents-at-scale-ark/issues/3129)) ([22eba23](https://github.com/mckinsey/agents-at-scale-ark/commit/22eba237039118de6fcf73641f0b3dc0765b4aae))
+
 ## [0.1.69](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.69...v0.1.69) (2026-09-14)
 
 
