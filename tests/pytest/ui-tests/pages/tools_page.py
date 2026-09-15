@@ -123,7 +123,7 @@ class ToolsPage(BasePage):
             logger.info("Name was cleared by type selection re-render, re-filling")
             name_input.fill(tool_name)
 
-        description_input = self.page.locator("input#description, input[name='description']").first
+        description_input = self.page.locator("textarea#description, textarea[name='description'], input#description, input[name='description']").first
         description_input.wait_for(state="visible", timeout=15000)
         description_input.fill(description)
 

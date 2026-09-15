@@ -405,7 +405,6 @@ describe('conversationsService', () => {
         'session-1',
         'conv-1',
         undefined,
-        undefined,
         undefined
       );
     });
@@ -430,7 +429,6 @@ describe('conversationsService', () => {
         'session-1',
         'conv-1',
         undefined,
-        undefined,
         undefined
       );
     });
@@ -453,7 +451,6 @@ describe('conversationsService', () => {
         'test-agent',
         'session-1',
         'conv-1',
-        undefined,
         undefined,
         undefined
       );
