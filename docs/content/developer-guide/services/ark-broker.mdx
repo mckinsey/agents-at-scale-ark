@@ -138,10 +138,12 @@ Key environment variables:
 | `DATABASE_CONNECT_TIMEOUT_MS` | `10000` | Connection timeout |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement timeout |
 | `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
+| `ROW_REAP_INTERVAL_SECONDS` | `3600` | Interval between expired-row reaper runs. `0` disables the reaper. Max `2147483` (~24 days). |
+| `ROW_REAP_BATCH_SIZE` | `10000` | Rows deleted per `DELETE` statement while the reaper drains a backlog |
 | `DATABASE_DEBUG_QUERIES` | `false` | Log SQL at debug level (SQL text + parameter count, never values) |
 | `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate. When set, the broker reads the file and passes it to the Postgres driver for server certificate verification (`sslmode=verify-full`). Set automatically by the Helm chart when `database.tls.enabled=true`. |
 
-Messages carry a TTL-based expiry: each message is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `MESSAGE_VISIBILITY_TTL_SECONDS` when no per-message TTL is supplied.
+Messages carry a TTL-based expiry: each message is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `MESSAGE_VISIBILITY_TTL_SECONDS` when no per-message TTL is supplied. Expired rows are also physically deleted: a background reaper runs every `ROW_REAP_INTERVAL_SECONDS` (hourly by default) and deletes rows past `expires_at` in batches of `ROW_REAP_BATCH_SIZE`, so the tables don't grow unbounded.
 
 Messages are also removed when their originating `Query` is deleted: the controller issues `DELETE /queries/{queryId}/messages`, which hard-deletes every message for that query across all conversations. On the Postgres backend this is a single indexed delete. This complements the TTL above — TTL is time-based, this is triggered by the Query's removal. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
@@ -246,7 +248,7 @@ Key environment variables:
 
 The other `DATABASE_*` variables (`DATABASE_POOL_MAX`, `DATABASE_CONNECT_TIMEOUT_MS`, `DATABASE_STATEMENT_TIMEOUT_MS`, `DATABASE_DEBUG_QUERIES`, `DATABASE_SSL_ROOT_CERT_PATH`) are shared with the message backend — see the table above. Securing the connection (TLS, `migrateUrl`, hiding the URL in a Secret) works identically; see [Securing the Postgres connection](#securing-the-postgres-connection).
 
-Events carry a TTL-based expiry: each event is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `EVENT_VISIBILITY_TTL_SECONDS` when no per-query TTL is supplied.
+Events carry a TTL-based expiry: each event is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `EVENT_VISIBILITY_TTL_SECONDS` when no per-query TTL is supplied. The expired-row reaper covers the `events` table as well (see the message backend above).
 
 Events are also removed when their originating `Query` is deleted, through a path separate from messages: events aren't part of the [Memory API](/reference/resources/memory#memory-http-api), so the controller calls `DELETE /events/{queryId}` directly on the broker endpoint discovered via the `ark-config-broker` ConfigMap, rather than going through a `Memory` resource. Events are keyed by the Query's UID rather than its name, so `{queryId}` here is the UID. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
@@ -284,7 +286,7 @@ Key environment variables:
 
 The other `DATABASE_*` variables are shared with the message and event backends — see the [Message backend](#message-backend-postgres) table. Securing the connection (TLS, `migrateUrl`, hiding the URL in a Secret) works identically; see [Securing the Postgres connection](#securing-the-postgres-connection).
 
-Session expiry is a **sliding** window rather than the write-time snapshot used for messages and events: every event or message on a session pushes `expires_at` out by `SESSIONS_VISIBILITY_TTL_SECONDS`, so a session stays visible for as long as it is in use, and the value does not track the originating query's `spec.ttl`. The minimum enforced at startup exists because a session is the index into its own messages and events — hiding it earlier than they expire would strand data that is still retained. Expiry hides a session from reads; it does not delete the row, and a later event or message on an expired session makes it visible again.
+Session expiry is a **sliding** window rather than the write-time snapshot used for messages and events: every event or message on a session pushes `expires_at` out by `SESSIONS_VISIBILITY_TTL_SECONDS`, so a session stays visible for as long as it is in use, and the value does not track the originating query's `spec.ttl`. The minimum enforced at startup exists because a session is the index into its own messages and events — hiding it earlier than they expire would strand data that is still retained. Expiry hides a session from reads, and a later event or message on a still-present expired session makes it visible again. The expired-row reaper covers the `sessions` table too (see the [message backend](#message-backend-postgres)), so a session that stays expired is eventually deleted, taking its `session_queries` rows with it via `ON DELETE CASCADE` — after that there is no row left to revive.
 
 Deleting a `Query` does **not** remove it from the sessions read model. Messages and events have per-query cleanup paths (see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup)); sessions do not, so the query's row stays in `session_queries` and its session keeps listing it. `DELETE /sessions` purges every session and its queries.
 

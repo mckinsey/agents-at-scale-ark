@@ -135,6 +135,10 @@ spec:
               value: {{ .Values.database.eventVisibilityTtlSeconds | int | quote }}
             - name: SESSIONS_VISIBILITY_TTL_SECONDS
               value: {{ .Values.database.sessionsVisibilityTtlSeconds | int | quote }}
+            - name: ROW_REAP_INTERVAL_SECONDS
+              value: {{ .Values.database.reapIntervalSeconds | int | quote }}
+            - name: ROW_REAP_BATCH_SIZE
+              value: {{ .Values.database.reapBatchSize | int | quote }}
             {{- if .Values.database.debugQueries }}
             - name: DATABASE_DEBUG_QUERIES
               value: "true"
