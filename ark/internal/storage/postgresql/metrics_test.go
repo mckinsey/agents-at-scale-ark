@@ -52,6 +52,7 @@ func TestMetricsGatheredByControllerRuntimeRegistry(t *testing.T) {
 	broadcasterEventsDropped.WithLabelValues("RegistryTest")
 	watcherRelistFailures.WithLabelValues("RegistryTest")
 	broadcasterActiveWatchers.WithLabelValues("RegistryTest")
+	notifyReceivedTotal.WithLabelValues("RegistryTest")
 	swapDBPoolStats(t, func() sql.DBStats { return sql.DBStats{} })
 
 	families, err := ctrlmetrics.Registry.Gather()
@@ -73,6 +74,9 @@ func TestMetricsGatheredByControllerRuntimeRegistry(t *testing.T) {
 		"ark_apiserver_wal_consumer_active",
 		"ark_apiserver_wal_last_message_timestamp_seconds",
 		"ark_apiserver_replication_slot_lag_bytes",
+		"ark_apiserver_notify_received_total",
+		"ark_apiserver_notify_listener_connected",
+		"ark_apiserver_notify_listener_reconnects_total",
 		"ark_apiserver_db_pool_max_open_connections",
 		"ark_apiserver_db_pool_open_connections",
 		"ark_apiserver_db_pool_in_use_connections",
