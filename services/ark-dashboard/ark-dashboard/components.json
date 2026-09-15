@@ -3,6 +3,11 @@
   "style": "new-york",
   "rsc": true,
   "tsx": true,
+  "registries": {
+    "@qbds": {
+      "url": "https://designsystem.quantumblack.com/r/{name}.json"
+    }
+  },
   "tailwind": {
     "config": "",
     "css": "app/globals.css",

@@ -24,14 +24,7 @@ export function handleStreamingAllEvents(
     cursor === undefined
       ? undefined
       : async (): Promise<EventData[]> => {
-          let items = (await events.all()).filter(
-            (item) => item.sequenceNumber > cursor
-          );
-          if (sessionId) {
-            items = items.filter(
-              (item) => item.data.data.sessionId === sessionId
-            );
-          }
+          const items = await events.eventsAfter(cursor, sessionId);
           return items.map((item) => item.data);
         };
 
@@ -97,9 +90,8 @@ export function handleStreamingQueryEvents(
           if (fromBeginning) {
             return events.getEventsByQuery(queryId);
           }
-          return (await events.getByQuery(queryId))
-            .filter((item) => item.sequenceNumber > cursor!)
-            .map((item) => item.data);
+          const items = await events.queryEventsAfter(queryId, cursor!);
+          return items.map((item) => item.data);
         }
       : undefined;
 

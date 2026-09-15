@@ -70,6 +70,8 @@ Ark supports two storage backends for its resources; the choice is a deployment 
 
 <img src="/ark-core-aggregated.jpg" alt="Aggregated Core Architecture" style={{maxWidth: '800px', width: '100%'}} />
 
+The two backends hold independent copies of the resources, so switching does not move data. See [Migrating between storage backends](/operations-guide/postgres-storage-backend#migrating-between-storage-backends) before changing the backend on an install that holds resources you care about.
+
 See [Query Execution Flow → How the query is stored](/reference/query-execution#how-the-query-is-stored) for how a query moves through each backend, [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup and operation, and [Scalability](/reference/scalability) for capacity and performance.
 
 ## Deploying on AWS and Azure

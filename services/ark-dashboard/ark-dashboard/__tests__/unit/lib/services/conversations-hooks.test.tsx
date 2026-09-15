@@ -11,6 +11,15 @@ import {
 } from '@/lib/services/conversations-hooks';
 import type { Conversation, ConversationMessage } from '@/lib/services/conversations';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/conversations', () => ({
   conversationsService: {
     getConversations: vi.fn(),
@@ -276,7 +285,9 @@ describe('conversations hooks', () => {
 
       expect(conversationsService.sendMessage).toHaveBeenCalled();
       const [[firstArg]] = vi.mocked(conversationsService.sendMessage).mock.calls;
+      // useSendMessage injects the active namespace so no caller has to.
       expect(firstArg).toEqual({
+        namespace: 'default',
         conversationId: 'conv-1',
         message: 'Hello',
         sessionId: 'session-1',
@@ -337,7 +348,7 @@ describe('conversations hooks', () => {
 
       expect(conversationsService.sendMessage).toHaveBeenCalled();
       const [[firstArg]] = vi.mocked(conversationsService.sendMessage).mock.calls;
-      expect(firstArg).toEqual(params);
+      expect(firstArg).toEqual({ ...params, namespace: 'default' });
     });
   });
 });

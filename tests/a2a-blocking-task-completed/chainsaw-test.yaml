@@ -36,7 +36,7 @@ spec:
           condition:
             name: Completed
             value: 'True'
-    # Verify response contains full countdown history
+    # Verify response contains the final result artifact; intermediate task status updates are excluded from reply content
     - assert:
         timeout: 1s
         resource:
@@ -47,10 +47,9 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'countdown-agent'
-            (contains(response.content, 'Starting countdown from 2 seconds')): true
-            (contains(response.content, '1 seconds remaining')): true
-            (contains(response.content, '0 seconds remaining')): true
             (contains(response.content, 'Countdown complete!')): true
+            (contains(response.content, 'Starting countdown')): false
+            (contains(response.content, 'seconds remaining')): false
     catch:
     - events: {}
     - describe:

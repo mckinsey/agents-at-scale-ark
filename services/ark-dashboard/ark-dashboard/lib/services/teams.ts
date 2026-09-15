@@ -1,5 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -22,15 +23,18 @@ export type Team = TeamDetailResponse & { id: string };
 
 // CRUD Operations
 export const teamsService = {
-  // Get all teams
-  async getAll(): Promise<Team[]> {
-    const response = await apiClient.get<TeamListResponse>(`/api/v1/teams`);
+  // Still does a per-item detail fetch (#2581 follow-up) - TeamResponse lacks
+  // the computed `available` field and `members` array; needs an ark-api change.
+  async getAll(namespace: string): Promise<Team[]> {
+    const items = await fetchAllPages<TeamResponse>(`/api/v1/teams`, {
+      namespace,
+    });
 
     // Map the response items to include id for UI compatibility
     const teams = await Promise.all(
-      response.items.map(async item => {
+      items.map(async item => {
         // Fetch detailed info for each team to get full data
-        const detailed = await teamsService.getByName(item.name);
+        const detailed = await teamsService.getByName(namespace, item.name);
         return detailed!;
       }),
     );
@@ -39,10 +43,11 @@ export const teamsService = {
   },
 
   // Get a single team by name
-  async getByName(name: string): Promise<Team | null> {
+  async getByName(namespace: string, name: string): Promise<Team | null> {
     try {
       const response = await apiClient.get<TeamDetailResponse>(
         `/api/v1/teams/${name}`,
+        { params: { namespace } },
       );
       return {
         ...response,
@@ -57,16 +62,17 @@ export const teamsService = {
   },
 
   // Get a single team by ID (for UI compatibility - ID is actually the name)
-  async getById(id: number | string): Promise<Team | null> {
+  async getById(namespace: string, id: number | string): Promise<Team | null> {
     // Convert numeric ID to string name
     const name = String(id);
-    return teamsService.getByName(name);
+    return teamsService.getByName(namespace, name);
   },
 
-  async create(team: TeamCreateRequest): Promise<Team> {
+  async create(namespace: string, team: TeamCreateRequest): Promise<Team> {
     const response = await apiClient.post<TeamDetailResponse>(
       `/api/v1/teams`,
       team,
+      { params: { namespace } },
     );
 
     trackEvent({
@@ -84,11 +90,16 @@ export const teamsService = {
     };
   },
 
-  async update(name: string, updates: TeamUpdateRequest): Promise<Team | null> {
+  async update(
+    namespace: string,
+    name: string,
+    updates: TeamUpdateRequest,
+  ): Promise<Team | null> {
     try {
       const response = await apiClient.put<TeamDetailResponse>(
         `/api/v1/teams/${name}`,
         updates,
+        { params: { namespace } },
       );
 
       trackEvent({
@@ -112,16 +123,19 @@ export const teamsService = {
 
   // Update by ID (for UI compatibility)
   async updateById(
+    namespace: string,
     id: number | string,
     updates: TeamUpdateRequest,
   ): Promise<Team | null> {
     const name = String(id);
-    return teamsService.update(name, updates);
+    return teamsService.update(namespace, name, updates);
   },
 
-  async delete(name: string): Promise<boolean> {
+  async delete(namespace: string, name: string): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/teams/${name}`);
+      await apiClient.delete(`/api/v1/teams/${name}`, {
+        params: { namespace },
+      });
 
       trackEvent({
         name: 'team_deleted',
@@ -140,14 +154,18 @@ export const teamsService = {
   },
 
   // Delete by ID (for UI compatibility)
-  async deleteById(id: number | string): Promise<boolean> {
+  async deleteById(namespace: string, id: number | string): Promise<boolean> {
     const name = String(id);
-    return teamsService.delete(name);
+    return teamsService.delete(namespace, name);
   },
 
-  async getRawResource(name: string): Promise<Record<string, unknown>> {
+  async getRawResource(
+    namespace: string,
+    name: string,
+  ): Promise<Record<string, unknown>> {
     return apiClient.get<Record<string, unknown>>(
       `/api/v1/resources/apis/ark.mckinsey.com/v1alpha1/Team/${name}`,
+      { params: { namespace } },
     );
   },
 };

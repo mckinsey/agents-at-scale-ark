@@ -70,3 +70,65 @@ func TestValidateMCPServer(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateMCPServerClientCredentials(t *testing.T) {
+	ctx := context.Background()
+	v := NewValidator(newMockLookup())
+
+	build := func(tokenEndpoint string) *arkv1alpha1.MCPServer {
+		return &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address: arkv1alpha1.ValueSource{Value: "https://mcp.example.com/mcp"},
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: "tok"},
+					ClientCredentials: &arkv1alpha1.ClientCredentialsSpec{
+						ClientID:      "ark-client",
+						TokenEndpoint: tokenEndpoint,
+						ClientAuthentication: arkv1alpha1.ClientAuthenticationSpec{
+							PrivateKeyJWT: &arkv1alpha1.PrivateKeyJWTSpec{
+								SecretKeyRef: arkv1alpha1.SigningKeySecretKeyRef{Name: "key", Key: "private.pem"},
+								Algorithm:    "ES256",
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	// The client assertion is a replayable credential in flight and the
+	// issued token returns on the same channel, so plaintext is refused
+	// except on loopback, where OAuth 2.1 and MCP Authorization allow it
+	// for development.
+	accepted := []string{
+		"https://auth.example.com/token",
+		"http://localhost:8090/realms/ark/protocol/openid-connect/token",
+		"http://127.0.0.1:8090/token",
+		"http://[::1]:8090/token",
+	}
+	for _, ep := range accepted {
+		if _, err := v.ValidateMCPServer(ctx, build(ep)); err != nil {
+			t.Errorf("tokenEndpoint %q should be accepted, got %v", ep, err)
+		}
+	}
+
+	rejected := []string{
+		"http://auth.example.com/token",
+		"http://10.0.0.5:8080/token",
+		"http://keycloak.default.svc:8080/token",
+	}
+	for _, ep := range rejected {
+		if _, err := v.ValidateMCPServer(ctx, build(ep)); err == nil {
+			t.Errorf("plaintext tokenEndpoint %q should be rejected", ep)
+		}
+	}
+
+	t.Run("rejects a blank clientID", func(t *testing.T) {
+		s := build("https://auth.example.com/token")
+		s.Spec.Authorization.ClientCredentials.ClientID = "  "
+		if _, err := v.ValidateMCPServer(ctx, s); err == nil {
+			t.Error("expected an error for a blank clientID")
+		}
+	})
+}

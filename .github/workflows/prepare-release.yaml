@@ -1,0 +1,129 @@
+name: Prepare Release
+
+# Opens a "release: vX.Y.Z" PR that promotes a specific tested RC to stable,
+# WITHOUT release-please (which releases main HEAD). The PR branch is cut from
+# main HEAD so its workflow files match main and GITHUB_TOKEN can push (no PAT).
+# The PR strips -rc across every version file, bumps the release-please manifest,
+# and records the RC being promoted in .releasing. Merging it triggers
+# release-on-merge.yaml, which builds the RC's code as the stable version and
+# publishes it.
+#
+# The old promote-to-stable.yaml path remains as a fallback.
+
+on:
+  workflow_dispatch:
+    inputs:
+      rc_tag:
+        description: 'RC tag to promote (blank = latest RC for the current manifest line)'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Stamp + show the diff without pushing a branch or opening a PR'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve RC to promote
+        id: rc
+        run: |
+          set -euo pipefail
+          MANIFEST=".github/release-please-manifest.json"
+          CURRENT=$(jq -r '."."' "$MANIFEST")
+          STABLE="${CURRENT%-rc*}"
+
+          RC_TAG="${{ inputs.rc_tag }}"
+          if [ -z "$RC_TAG" ]; then
+            if [[ "$CURRENT" != *-rc* ]]; then
+              echo "Manifest version $CURRENT is not an RC and no rc_tag was given. Nothing to promote."
+              exit 1
+            fi
+            RC_TAG=$(git tag --list "v${STABLE}-rc*" --sort=-version:refname | head -1)
+          fi
+          [ -z "$RC_TAG" ] && { echo "No RC tag found for v${STABLE}"; exit 1; }
+          git rev-parse -q --verify "refs/tags/${RC_TAG}" >/dev/null || { echo "RC tag ${RC_TAG} not found"; exit 1; }
+
+          # Derive stable from the resolved RC tag (authoritative).
+          STABLE="${RC_TAG#v}"; STABLE="${STABLE%-rc*}"
+          git rev-parse -q --verify "refs/tags/v${STABLE}" >/dev/null 2>&1 && { echo "v${STABLE} already released"; exit 1; }
+          RC_SHA=$(git rev-list -n 1 "$RC_TAG")
+
+          echo "rc_tag=${RC_TAG}" >> "$GITHUB_OUTPUT"
+          echo "rc_sha=${RC_SHA}" >> "$GITHUB_OUTPUT"
+          echo "stable=${STABLE}" >> "$GITHUB_OUTPUT"
+          echo "Promoting ${RC_TAG} (${RC_SHA}) -> v${STABLE}"
+
+      - name: Check for existing release PR / branch
+        run: |
+          set -euo pipefail
+          BRANCH="release-prep/${{ steps.rc.outputs.stable }}"
+          EXISTING=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number')
+          [ -n "$EXISTING" ] && { echo "Release PR #${EXISTING} already exists for v${{ steps.rc.outputs.stable }}"; exit 1; }
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "Deleting orphaned branch $BRANCH"
+            git push origin --delete "$BRANCH" || true
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Stamp stable version + record RC
+        run: |
+          set -euo pipefail
+          STABLE="${{ steps.rc.outputs.stable }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "release-prep/${STABLE}"
+
+          bash scripts/stamp-version.sh "${STABLE}"
+
+          # Hand-off to release-on-merge: which RC commit to build the stable from.
+          printf 'rc_tag=%s\nrc_sha=%s\n' "${{ steps.rc.outputs.rc_tag }}" "${{ steps.rc.outputs.rc_sha }}" > .releasing
+
+          git add -A
+          git commit -m "release: v${STABLE} (promote ${{ steps.rc.outputs.rc_tag }})"
+
+      - name: Show diff (dry-run)
+        if: ${{ inputs.dry_run }}
+        run: git show --stat HEAD
+
+      - name: Push branch and open release PR
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          STABLE="${{ steps.rc.outputs.stable }}"
+          git push origin "release-prep/${STABLE}"
+          gh pr create --base main --head "release-prep/${STABLE}" \
+            --title "release: v${STABLE}" \
+            --body "## Summary
+          Promotes release candidate \`${{ steps.rc.outputs.rc_tag }}\` to stable \`v${STABLE}\`.
+
+          On merge, \`release-on-merge.yaml\`:
+          - builds the RC's code (commit \`${{ steps.rc.outputs.rc_sha }}\`) as version \`${STABLE}\` and publishes containers, charts, npm, PyPI, and docs
+          - creates tag \`v${STABLE}\` (at main HEAD) and a GitHub Release
+          - runs the installation verification against the published release
+
+          No release-please, no PAT: git refs stay at main HEAD; the shipped artifacts are built from the tested RC commit."
+
+      - name: Summary
+        run: |
+          {
+            echo "## Prepared release v${{ steps.rc.outputs.stable }}"
+            echo "- Promoting: \`${{ steps.rc.outputs.rc_tag }}\` (\`${{ steps.rc.outputs.rc_sha }}\`)"
+            echo "- Dry run: ${{ inputs.dry_run }}"
+          } >> "$GITHUB_STEP_SUMMARY"

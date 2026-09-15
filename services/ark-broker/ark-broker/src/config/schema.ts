@@ -11,10 +11,11 @@ export const envSchema = z
     PORT: z.coerce.number().int().nonnegative().default(8080),
     HOST: z.string().default('0.0.0.0'),
     REQUEST_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(0),
-    MAX_MESSAGES: z.coerce.number().int().nonnegative().default(0),
-    MAX_CHUNKS: z.coerce.number().int().nonnegative().default(0),
-    MAX_SPANS: z.coerce.number().int().nonnegative().default(0),
-    MAX_EVENTS: z.coerce.number().int().nonnegative().default(0),
+    MESSAGE_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
+    EVENT_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
+    CHUNK_MAX_BYTES: z.coerce.number().int().positive().default(33554432),
+    TRACE_MAX_BYTES: z.coerce.number().int().positive().default(33554432),
+    CHUNK_TTL_SECONDS: z.coerce.number().int().positive().optional(),
     MEMORY_FILE_PATH: z.string().min(1).optional(),
     STREAM_FILE_PATH: z.string().min(1).optional(),
     TRACE_FILE_PATH: z.string().min(1).optional(),
@@ -44,6 +45,12 @@ export const envSchema = z
       .int()
       .positive()
       .default(2592000),
+    SESSIONS_BACKEND: z.enum(['memory', 'postgres']).default('memory'),
+    SESSIONS_VISIBILITY_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(2592000),
     DATABASE_DEBUG_QUERIES: z
       .string()
       .default('false')
@@ -65,14 +72,41 @@ export const envSchema = z
   .superRefine((data, ctx) => {
     if (
       (data.MESSAGE_BACKEND === 'postgres' ||
-        data.EVENT_BACKEND === 'postgres') &&
+        data.EVENT_BACKEND === 'postgres' ||
+        data.SESSIONS_BACKEND === 'postgres') &&
       !data.DATABASE_URL
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          'DATABASE_URL is required when MESSAGE_BACKEND=postgres or EVENT_BACKEND=postgres',
+          'DATABASE_URL is required when MESSAGE_BACKEND=postgres, EVENT_BACKEND=postgres, or SESSIONS_BACKEND=postgres',
         path: ['DATABASE_URL'],
+      });
+    }
+    if (
+      data.SESSIONS_BACKEND === 'postgres' &&
+      (data.MESSAGE_BACKEND !== 'postgres' || data.EVENT_BACKEND !== 'postgres')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'SESSIONS_BACKEND=postgres requires MESSAGE_BACKEND=postgres and EVENT_BACKEND=postgres, since sessions are materialized from both',
+        path: ['SESSIONS_BACKEND'],
+      });
+    }
+    if (
+      data.SESSIONS_BACKEND === 'postgres' &&
+      data.SESSIONS_VISIBILITY_TTL_SECONDS <
+        Math.max(
+          data.MESSAGE_VISIBILITY_TTL_SECONDS,
+          data.EVENT_VISIBILITY_TTL_SECONDS
+        )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'SESSIONS_VISIBILITY_TTL_SECONDS must be at least as long as MESSAGE_VISIBILITY_TTL_SECONDS and EVENT_VISIBILITY_TTL_SECONDS, so a session is never hidden while the messages and events it indexes are still retained',
+        path: ['SESSIONS_VISIBILITY_TTL_SECONDS'],
       });
     }
     if (data.CHUNK_BACKEND === 'redis' && !data.REDIS_URL) {

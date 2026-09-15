@@ -14,7 +14,14 @@ from ark_sdk.impersonation import ImpersonationConfig
 from ....auth.dependencies import get_impersonation_config
 
 from ..client_utils import get_impersonating_api_client
+from ..exceptions import handle_k8s_errors
 from ....models.models import ServiceListResponse
+from ....utils.file_gateway_security import (
+    is_file_gateway_download,
+    is_file_gateway_upload,
+    sanitize_file_gateway_upload,
+    secure_file_gateway_download,
+)
 from .proxy_resources import Resource
 
 logger = logging.getLogger(__name__)
@@ -48,7 +55,7 @@ async def _get_a2a_server_address(a2a_server_name: str,
             resolved_address = status.get("lastResolvedAddress")
             spec = a2a_dict.get("spec", {})
             headers = {}
-            await get_headers(spec, headers, namespace)
+            await get_headers(spec, headers, namespace, impersonation)
             if not resolved_address:
                 raise HTTPException(
                     status_code=500,
@@ -82,7 +89,7 @@ async def _get_mcp_server_address(mcp_server_name: str,
             resolved_address = status.get("resolvedAddress")
             spec = mcp_dict.get("spec", {})
             headers = {}
-            await get_headers(spec, headers, namespace)
+            await get_headers(spec, headers, namespace, impersonation)
 
             if not resolved_address:
                 raise HTTPException(
@@ -99,7 +106,10 @@ async def _get_mcp_server_address(mcp_server_name: str,
 async def _proxy_request(
     target_url: str,
     request: Request,
-    headers_to_forward: Optional[dict] = None
+    headers_to_forward: Optional[dict] = None,
+    *,
+    file_gateway_server: Optional[str] = None,
+    file_gateway_path: Optional[str] = None,
 ) -> Response:
     """Proxy an HTTP request to a target URL and provide back the response.
     
@@ -129,8 +139,14 @@ async def _proxy_request(
     if headers_to_forward:
         headers.update(headers_to_forward)
     
-    # Read request body if present
     body = await request.body()
+    if file_gateway_server and file_gateway_path and is_file_gateway_upload(
+        file_gateway_server, request.method, file_gateway_path
+    ):
+        content_type = request.headers.get("content-type")
+        body = sanitize_file_gateway_upload(body, content_type)
+        headers["content-length"] = str(len(body))
+
     timeout = httpx.Timeout(
         timeout=PROXY_TIMEOUT,
         read=None,
@@ -145,14 +161,32 @@ async def _proxy_request(
                 content=body if body else None,
                 params=dict(request.query_params) if request.query_params else None
             )
+            response_content = response.content
+            response_headers = {
+                key: value for key, value in response.headers.items()
+                if key.lower() not in hop_by_hop_headers
+            }
+            # Only a 2xx body is the file; sanitizing a JSON error would mask its status.
+            if (
+                file_gateway_server
+                and file_gateway_path
+                and 200 <= response.status_code < 300
+                and is_file_gateway_download(
+                    file_gateway_server, request.method, file_gateway_path
+                )
+            ):
+                response_content, response_headers = secure_file_gateway_download(
+                    response_content,
+                    response_headers,
+                    file_gateway_path,
+                )
+
             return Response(
-                content=response.content,
+                content=response_content,
                 status_code=response.status_code,
-                headers={
-                    key: value for key, value in response.headers.items()
-                    if key.lower() not in hop_by_hop_headers
-                },
-                media_type=response.headers.get("content-type")
+                headers=response_headers,
+                media_type=response_headers.get("content-type")
+                or response.headers.get("content-type"),
             )
         except httpx.RequestError as e:
             logger.error(f"Proxy request failed: {e}")
@@ -175,6 +209,14 @@ async def list_services(
         services = await v1.list_namespaced_service(namespace=namespace)
         service_names = [svc.metadata.name for svc in services.items]
         return ServiceListResponse(services=service_names)
+
+@handle_k8s_errors(operation="get", resource_type="service")
+async def _check_service_access(service_name: str, namespace: str, impersonation: Optional[ImpersonationConfig]) -> None:
+    """Gate the plain-service proxy on the user's RBAC, same as proxy_services."""
+    async with get_impersonating_api_client(impersonation) as api_client:
+        v1 = client.CoreV1Api(api_client)
+        await v1.read_namespaced_service(name=service_name, namespace=namespace)
+
 
 @router.options("/{resource}/{server_name}")
 @router.post("/{resource}/{server_name}")
@@ -207,11 +249,19 @@ async def proxy_server(
     else:
         if namespace is None:
             namespace = get_context()["namespace"]
+        await _check_service_access(service_name=server_name, namespace=namespace, impersonation=impersonation)
         resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"  # NOSONAR - in-cluster traffic
         additional_headers = {}
 
     logger.info(f"Forwarding at {request.method} {resource_url}")
-    return await _proxy_request(resource_url, request, additional_headers)
+    file_gateway_server = server_name if resource == Resource.SERVICES else None
+    return await _proxy_request(
+        resource_url,
+        request,
+        additional_headers,
+        file_gateway_server=file_gateway_server,
+        file_gateway_path="",
+    )
 
 
 @router.options("/{resource}/{server_name}/{path:path}")
@@ -231,6 +281,7 @@ async def proxy_server_path(resource: Resource,
     else:
         if namespace is None:
             namespace = get_context()["namespace"]
+        await _check_service_access(service_name=server_name, namespace=namespace, impersonation=impersonation)
         resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"  # NOSONAR - in-cluster traffic
         additional_headers = {}
 
@@ -238,7 +289,14 @@ async def proxy_server_path(resource: Resource,
     resource_url = f"{resource_url}/{path}" if resource_url[-1]!= "/" \
         else f"{resource_url}{path}"
     logger.info(f"Forwarding at {request.method} {resource_url}")
-    return await _proxy_request(resource_url, request, additional_headers)
+    file_gateway_server = server_name if resource == Resource.SERVICES else None
+    return await _proxy_request(
+        resource_url,
+        request,
+        additional_headers,
+        file_gateway_server=file_gateway_server,
+        file_gateway_path=path,
+    )
 
 @router.delete("/services/{service_name}/{api_path:path}")
 @router.patch("/services/{service_name}/{api_path:path}")
@@ -247,8 +305,14 @@ async def proxy_services(
     service_name: str,
     api_path: str,
     request: Request,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> Response:
     """Proxy DELETE, PATCH, HEAD requests to other services in the cluster."""
-    resource_url = f"http://{service_name}/{api_path}"  # NOSONAR - in-cluster service validated by K8s
-    # Forward the request to the resolved resource URL
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    await _check_service_access(service_name=service_name, namespace=namespace, impersonation=impersonation)
+
+    resource_url = f"http://{service_name}.{namespace}.svc.cluster.local/{api_path}"  # NOSONAR - in-cluster traffic
     return await _proxy_request(resource_url, request)

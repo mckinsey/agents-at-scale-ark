@@ -6,6 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { queriesService } from '@/lib/services/queries';
 import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/queries', () => ({
   queriesService: {
     list: vi.fn(),
@@ -44,7 +53,7 @@ describe('useListQueries', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(queriesService.list).toHaveBeenCalledWith({});
+    expect(queriesService.list).toHaveBeenCalledWith('default', {});
   });
 
   it('passes pagination and search params through to the service', async () => {
@@ -63,7 +72,7 @@ describe('useListQueries', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(queriesService.list).toHaveBeenCalledWith({
+    expect(queriesService.list).toHaveBeenCalledWith('default', {
       page: 2,
       pageSize: 15,
       search: 'hello',
@@ -126,8 +135,8 @@ describe('useListQueries', () => {
     await waitFor(() => expect(r2.current.isSuccess).toBe(true));
 
     expect(queriesService.list).toHaveBeenCalledTimes(2);
-    expect(queriesService.list).toHaveBeenNthCalledWith(1, { page: 1 });
-    expect(queriesService.list).toHaveBeenNthCalledWith(2, { page: 2 });
+    expect(queriesService.list).toHaveBeenNthCalledWith(1, 'default', { page: 1 });
+    expect(queriesService.list).toHaveBeenNthCalledWith(2, 'default', { page: 2 });
   });
 });
 
@@ -146,7 +155,7 @@ describe('useGetQuery', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(queriesService.get).toHaveBeenCalledWith('q-1');
+    expect(queriesService.get).toHaveBeenCalledWith('default', 'q-1');
     expect(result.current.data).toEqual(mockQuery);
   });
 

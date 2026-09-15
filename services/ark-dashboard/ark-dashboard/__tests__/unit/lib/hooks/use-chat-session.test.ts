@@ -13,6 +13,15 @@ import { storedIsChatStreamingEnabledAtom } from '@/atoms/experimental-features'
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { useChatSession } from '@/lib/hooks/use-chat-session';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
 }));
@@ -28,6 +37,7 @@ const mockSubmitChatQuery = vi.fn();
 const mockGetQueryResult = vi.fn();
 const mockCancelQuery = vi.fn();
 const mockGetByName = vi.fn();
+const mockTeamGetByName = vi.fn();
 
 vi.mock('@/lib/services', () => ({
   chatService: {
@@ -41,6 +51,9 @@ vi.mock('@/lib/services', () => ({
   },
   agentsService: {
     getByName: (...args: unknown[]) => mockGetByName(...args),
+  },
+  teamsService: {
+    getByName: (...args: unknown[]) => mockTeamGetByName(...args),
   },
 }));
 
@@ -92,6 +105,10 @@ function createStopChunk() {
   };
 }
 
+function createA2AStatusChunk(message: string) {
+  return { type: 'a2a_status', taskId: 'task-1', state: 'working', message };
+}
+
 async function* asyncIterableFrom<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) {
     yield item;
@@ -112,6 +129,7 @@ describe('useChatSession', () => {
     store.set(lastConversationIdAtom, null);
     mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });
     mockGetByName.mockResolvedValue({ parameters: [] });
+    mockTeamGetByName.mockResolvedValue({ members: [] });
     sessionStorage.clear();
 
     mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
@@ -714,7 +732,7 @@ describe('useChatSession', () => {
             m => m.content === 'Conversation stopped by user',
           ),
         ).toBe(true);
-        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+        expect(mockCancelQuery).toHaveBeenCalledWith('default', 'test-query');
       });
     });
 
@@ -761,7 +779,7 @@ describe('useChatSession', () => {
             m => m.content === 'Conversation stopped by user',
           ),
         ).toBe(true);
-        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+        expect(mockCancelQuery).toHaveBeenCalledWith('default', 'test-query');
       });
     });
 
@@ -797,7 +815,7 @@ describe('useChatSession', () => {
             m => m.content === 'Conversation stopped by user',
           ),
         ).toBe(true);
-        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+        expect(mockCancelQuery).toHaveBeenCalledWith('default', 'test-query');
       });
     });
 
@@ -835,7 +853,7 @@ describe('useChatSession', () => {
       ],
     };
 
-    it('blocks sending and sets an error when a required parameter is missing', async () => {
+    it('blocks sending without setting an error when a required parameter is missing', async () => {
       mockGetByName.mockResolvedValue(agentWithQueryParam);
 
       const { result } = renderHook(
@@ -844,14 +862,14 @@ describe('useChatSession', () => {
       );
 
       await waitFor(() => {
-        expect(result.current.requiredParameters).toEqual(['muting']);
+        expect(result.current.availableParameters).toEqual(['muting']);
       });
 
       await act(async () => {
         await result.current.sendMessage('Hello');
       });
 
-      expect(result.current.error).toMatch(/muting/);
+      expect(result.current.error).toBeNull();
       expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
       expect(mockSubmitChatQuery).not.toHaveBeenCalled();
     });
@@ -872,11 +890,18 @@ describe('useChatSession', () => {
       );
 
       await waitFor(() => {
-        expect(result.current.requiredParameters).toEqual(['muting']);
+        expect(result.current.availableParameters).toEqual(['muting']);
       });
 
       act(() => {
-        result.current.setParameterValue('muting', 'BANANAPHONE');
+        result.current.addParameterRow();
+      });
+      const rowId = result.current.parameterRows[0].id;
+      act(() => {
+        result.current.setParameterRowName(rowId, 'muting');
+      });
+      act(() => {
+        result.current.setParameterRowValue(rowId, 'BANANAPHONE');
       });
 
       await act(async () => {
@@ -887,6 +912,107 @@ describe('useChatSession', () => {
       expect(lastCall?.at(-1)).toEqual([
         { name: 'muting', value: 'BANANAPHONE' },
       ]);
+    });
+  });
+
+  describe('A2A status and multi-artifact rendering', () => {
+    it('does not treat intermediate a2a_status as reply content', async () => {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createA2AStatusChunk('Working on it'),
+          createContentChunk('Here is the answer', 'a2a-agent'),
+          createStopChunk(),
+        ]),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'a2a-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('question');
+      });
+
+      await waitFor(() => {
+        const assistantMessages = result.current.messages.filter(
+          m => m.role === 'assistant',
+        );
+        const last = assistantMessages[assistantMessages.length - 1];
+        expect(last.content).toBe('Here is the answer');
+      });
+
+      const combined = result.current.messages
+        .filter(m => m.role === 'assistant')
+        .map(m => m.content)
+        .join('');
+      expect(combined).not.toContain('Working on it');
+      expect(result.current.statusText).toBeUndefined();
+    });
+
+    it('exposes a2a_status text transiently while streaming', async () => {
+      let releaseGate: (() => void) | undefined;
+      const gate = new Promise<void>(resolve => {
+        releaseGate = resolve;
+      });
+
+      async function* gatedChunks() {
+        yield createA2AStatusChunk('Analyzing your request');
+        await gate;
+        yield createContentChunk('The final answer', 'a2a-agent');
+        yield createStopChunk();
+      }
+      mockStreamChatResponse.mockReturnValue(gatedChunks());
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'a2a-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      let sendPromise: Promise<void> | undefined;
+      act(() => {
+        sendPromise = result.current.sendMessage('question');
+      });
+
+      await waitFor(() => {
+        expect(result.current.statusText).toBe('Analyzing your request');
+      });
+
+      await act(async () => {
+        releaseGate?.();
+        await sendPromise;
+      });
+
+      expect(result.current.statusText).toBeUndefined();
+    });
+
+    it('renders multiple text artifacts as separate assistant messages', async () => {
+      const raw = JSON.stringify([
+        { role: 'assistant', content: 'First artifact' },
+        { role: 'assistant', content: 'Second artifact' },
+      ]);
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([createArkFinalChunk({ raw })]),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'a2a-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('question');
+      });
+
+      await waitFor(() => {
+        const assistantMessages = result.current.messages.filter(
+          m => m.role === 'assistant',
+        );
+        expect(assistantMessages.map(m => m.content)).toEqual([
+          'First artifact',
+          'Second artifact',
+        ]);
+      });
     });
   });
 });

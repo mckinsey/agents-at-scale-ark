@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: mixed-team
+spec:
+  description: Sequential team mixing an engine-backed member with a local member
+  strategy: sequential
+  members:
+  - name: engine-member-a
+    type: agent
+  - name: local-reviewer
+    type: agent

@@ -1,5 +1,6 @@
 import {vi} from 'vitest';
 import {Command} from 'commander';
+import yaml from 'yaml';
 
 const mockExeca = vi.fn() as any;
 vi.mock('execa', () => ({
@@ -27,7 +28,7 @@ const _mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
 
 const mockKubectlGetResponse = {
   apiVersion: 'v1',
-  items: [{spec: 'foo'}],
+  items: [{metadata: {name: 'test-resource'}, spec: 'foo'}],
   kind: 'List',
   metadata: {
     resourceVersion: '',
@@ -70,6 +71,9 @@ describe('export command', () => {
       'teams',
       'mcpservers',
       'a2aservers',
+      'clusterworkflowtemplates',
+      'workflowtemplates',
+      'cronworkflows',
     ];
 
     expect(mockExeca).toHaveBeenCalledTimes(expectedResourceTypes.length);
@@ -86,6 +90,42 @@ describe('export command', () => {
     }
 
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips cluster-scoped types for a namespace-scoped export', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify(mockKubectlGetResponse),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-n',
+      'tenant-a',
+      '-o',
+      'test.yaml',
+    ]);
+
+    // clusterworkflowtemplates is cluster-scoped: never fetched when -n is set
+    expect(mockExeca).not.toHaveBeenCalledWith(
+      'kubectl',
+      expect.arrayContaining(['get', 'clusterworkflowtemplates']),
+      expect.any(Object)
+    );
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'skipping cluster-scoped clusterworkflowtemplates for namespace-scoped export'
+    );
+
+    // the namespaced Argo types are still fetched, scoped to the namespace
+    for (const resourceType of ['workflowtemplates', 'cronworkflows']) {
+      expect(mockExeca).toHaveBeenCalledWith(
+        'kubectl',
+        expect.arrayContaining(['get', resourceType, '-n', 'tenant-a']),
+        expect.any(Object)
+      );
+    }
   });
 
   it('should export types specified in config in dependency order', async () => {
@@ -198,6 +238,576 @@ describe('export command', () => {
     );
 
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('should remove cluster-managed state from exported resources', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'ark.mckinsey.com/v1alpha1',
+            kind: 'Agent',
+            metadata: {
+              name: 'test-agent',
+              namespace: 'default',
+              labels: {app: 'test'},
+              annotations: {
+                'kubectl.kubernetes.io/last-applied-configuration': '{}',
+                note: 'keep-me',
+              },
+              resourceVersion: '10',
+              uid: 'source-uid',
+              generation: 3,
+              creationTimestamp: '2026-01-01T00:00:00Z',
+              managedFields: [{manager: 'controller'}],
+              selfLink: '/apis/ark.mckinsey.com/v1alpha1/agents/test-agent',
+              deletionTimestamp: '2026-01-02T00:00:00Z',
+              deletionGracePeriodSeconds: 30,
+              ownerReferences: [{name: 'source-owner', uid: 'owner-uid'}],
+              finalizers: ['ark.mckinsey.com/finalizer'],
+            },
+            spec: {prompt: '', enabled: false, maxTurns: 0},
+            status: {phase: 'Ready'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'agents',
+      '-o',
+      'test.yaml',
+    ]);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    const exported = yaml.parse(yamlContent);
+
+    expect(exported).toEqual({
+      apiVersion: 'ark.mckinsey.com/v1alpha1',
+      kind: 'Agent',
+      metadata: {
+        name: 'test-agent',
+        namespace: 'default',
+        labels: {app: 'test'},
+        annotations: {note: 'keep-me'},
+      },
+      spec: {prompt: '', enabled: false, maxTurns: 0},
+    });
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      'test.yaml',
+      expect.any(String),
+      'utf-8'
+    );
+  });
+
+  it('should remove annotations when only last-applied remains', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'ark.mckinsey.com/v1alpha1',
+            kind: 'Agent',
+            metadata: {
+              name: 'test-agent',
+              annotations: {
+                'kubectl.kubernetes.io/last-applied-configuration': '{}',
+              },
+            },
+            spec: {prompt: 'test'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-t', 'agents']);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    expect(yaml.parse(yamlContent).metadata).toEqual({name: 'test-agent'});
+  });
+
+  it('should exclude system secrets and retain application secrets', async () => {
+    const secretNames = [
+      'sh.helm.release.v1.ark-api.v1',
+      'helm-type-only',
+      'sh.helm.release.v1.application.v1',
+      'service-account-token',
+      'application-tls',
+    ];
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: secretNames[0]},
+            type: 'helm.sh/release.v1',
+            data: {release: 'encoded-release'},
+          },
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: secretNames[1]},
+            type: 'helm.sh/release.v1',
+            data: {key: 'retained'},
+          },
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {
+              name: secretNames[2],
+              resourceVersion: '42',
+              uid: 'secret-uid',
+              creationTimestamp: '2026-01-01T00:00:00Z',
+              managedFields: [{manager: 'controller'}],
+              annotations: {
+                'kubectl.kubernetes.io/last-applied-configuration': '{}',
+              },
+            },
+            type: 'Opaque',
+            stringData: {token: 'retained'},
+          },
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: secretNames[3]},
+            type: 'kubernetes.io/service-account-token',
+            data: {token: 'encoded-token'},
+          },
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: secretNames[4]},
+            type: 'kubernetes.io/tls',
+            immutable: true,
+            data: {'tls.crt': 'certificate', 'tls.key': 'private-key'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'secrets',
+      '-o',
+      'secrets.yaml',
+    ]);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    const exported = yaml
+      .parseAllDocuments(yamlContent)
+      .map((document) => document.toJSON());
+
+    expect(exported.map((resource) => resource.metadata.name)).toEqual([
+      secretNames[1],
+      secretNames[2],
+      secretNames[4],
+    ]);
+    expect(exported[1]).toMatchObject({
+      metadata: {name: secretNames[2]},
+      type: 'Opaque',
+      stringData: {token: 'retained'},
+    });
+    expect(exported[1].metadata).toEqual({name: secretNames[2]});
+    expect(exported[2]).toMatchObject({
+      type: 'kubernetes.io/tls',
+      immutable: true,
+      data: {'tls.crt': 'certificate', 'tls.key': 'private-key'},
+    });
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'excluded 2 system-managed secrets'
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 3 resources to secrets.yaml'
+    );
+
+    const outputMessages = [
+      ...mockOutput.info.mock.calls,
+      ...mockOutput.success.mock.calls,
+      ...mockOutput.warning.mock.calls,
+    ]
+      .flat()
+      .join(' ');
+    for (const secretName of secretNames) {
+      expect(outputMessages).not.toContain(secretName);
+    }
+  });
+
+  it('should exclude controller-managed children and retain their parents', async () => {
+    mockExeca
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          items: [
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Tool',
+              metadata: {
+                name: 'managed-tool-by-label',
+                labels: {'mcp/server': 'test-mcp'},
+              },
+              spec: {type: 'mcp'},
+            },
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Tool',
+              metadata: {
+                name: 'managed-tool-by-owner',
+                ownerReferences: [
+                  {
+                    apiVersion: 'ark.mckinsey.com/v1alpha1',
+                    kind: 'MCPServer',
+                    name: 'test-mcp',
+                    uid: 'mcp-uid',
+                  },
+                ],
+              },
+              spec: {type: 'mcp'},
+            },
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Tool',
+              metadata: {name: 'user-tool'},
+              spec: {type: 'http'},
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          items: [
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Agent',
+              metadata: {
+                name: 'managed-agent-by-label',
+                labels: {'a2a/server': 'test-a2a'},
+              },
+              spec: {prompt: 'managed'},
+            },
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Agent',
+              metadata: {
+                name: 'managed-agent-by-owner',
+                ownerReferences: [
+                  {
+                    apiVersion: 'ark.mckinsey.com/v1prealpha1',
+                    kind: 'A2AServer',
+                    name: 'test-a2a',
+                    uid: 'a2a-uid',
+                  },
+                ],
+              },
+              spec: {prompt: 'managed'},
+            },
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'Agent',
+              metadata: {name: 'user-agent'},
+              spec: {prompt: 'user'},
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          items: [
+            {
+              apiVersion: 'ark.mckinsey.com/v1alpha1',
+              kind: 'MCPServer',
+              metadata: {name: 'test-mcp'},
+              spec: {transport: 'http'},
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          items: [
+            {
+              apiVersion: 'ark.mckinsey.com/v1prealpha1',
+              kind: 'A2AServer',
+              metadata: {name: 'test-a2a'},
+              spec: {description: 'test'},
+            },
+          ],
+        }),
+      });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'a2aservers,tools,mcpservers,agents',
+      '-o',
+      'managed-resources.yaml',
+    ]);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    const exported = yaml
+      .parseAllDocuments(yamlContent)
+      .map((document) => document.toJSON());
+
+    expect(exported.map((resource) => resource.metadata.name)).toEqual([
+      'user-tool',
+      'user-agent',
+      'test-mcp',
+      'test-a2a',
+    ]);
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'excluded 4 controller-managed resources'
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 4 resources to managed-resources.yaml'
+    );
+  });
+
+  it('should not write output when all resources are controller-managed', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'ark.mckinsey.com/v1alpha1',
+            kind: 'Tool',
+            metadata: {
+              name: 'managed-tool-by-label',
+              labels: {'mcp/server': 'test-mcp'},
+            },
+            spec: {type: 'mcp'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'tools',
+      '-o',
+      'managed-tools.yaml',
+    ]);
+
+    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'excluded 1 controller-managed resource'
+    );
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'no resources found to export'
+    );
+  });
+
+  it('should not write output when all resources are excluded', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify({
+        items: [
+          {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {name: 'default-token'},
+            type: 'kubernetes.io/service-account-token',
+            data: {token: 'encoded-token'},
+          },
+        ],
+      }),
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync([
+      'node',
+      'test',
+      '-t',
+      'secrets',
+      '-o',
+      'existing.yaml',
+    ]);
+
+    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockOutput.info).toHaveBeenCalledWith(
+      'excluded 1 system-managed secret'
+    );
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'no resources found to export'
+    );
+  });
+
+  it('should warn and skip unknown resource types', async () => {
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-t', 'unknown']);
+
+    expect(mockExeca).not.toHaveBeenCalled();
+    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'unknown resource type: unknown, skipping'
+    );
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'no resources found to export'
+    );
+  });
+
+  it('warns and skips Argo types when the CRD is not installed', async () => {
+    const argoTypes = [
+      'clusterworkflowtemplates',
+      'workflowtemplates',
+      'cronworkflows',
+    ];
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (argoTypes.includes(resourceType)) {
+        const error = new Error('kubectl failed') as Error & {stderr?: string};
+        error.stderr = `error: the server doesn't have a resource type "${resourceType}"`;
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify(mockKubectlGetResponse)});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    for (const resourceType of argoTypes) {
+      expect(mockOutput.warning).toHaveBeenCalledWith(
+        `${resourceType} CRD not installed on this cluster, skipping`
+      );
+    }
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 7 resources to test.yaml'
+    );
+  });
+
+  it('exports Argo resources when the CRDs are installed', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'workflowtemplates') {
+        return Promise.resolve({
+          stdout: JSON.stringify({
+            items: [
+              {
+                apiVersion: 'argoproj.io/v1alpha1',
+                kind: 'WorkflowTemplate',
+                metadata: {name: 'cobol-wf'},
+                spec: {entrypoint: 'main'},
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({stdout: JSON.stringify({items: []})});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    const yamlContent = mockWriteFile.mock.calls[0][1] as string;
+    expect(yamlContent).toContain('kind: WorkflowTemplate');
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 1 resources to test.yaml'
+    );
+  });
+
+  it('propagates non-"not found" errors from an Argo type', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'workflowtemplates') {
+        const error = new Error('boom') as Error & {stderr?: string};
+        error.stderr = 'The connection to the server was refused';
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify({items: []})});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    expect(mockOutput.error).toHaveBeenCalledWith('export failed:', 'boom');
+    expect(mockWriteFile).not.toHaveBeenCalled();
+  });
+
+  it('does not swallow a missing-CRD error for Ark-native types', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'agents') {
+        const error = new Error('kubectl failed') as Error & {stderr?: string};
+        error.stderr =
+          'error: the server doesn\'t have a resource type "agents"';
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify({items: []})});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'export failed:',
+      'kubectl failed'
+    );
+    expect(mockWriteFile).not.toHaveBeenCalled();
+  });
+
+  it('warns and skips an Argo type when the user is not authorized to list it', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'clusterworkflowtemplates') {
+        const error = new Error('kubectl failed') as Error & {stderr?: string};
+        error.stderr =
+          'Error from server (Forbidden): clusterworkflowtemplates.argoproj.io is forbidden: User "tenant" cannot list resource "clusterworkflowtemplates" in API group "argoproj.io" at the cluster scope';
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify(mockKubectlGetResponse)});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'not authorized to list clusterworkflowtemplates, skipping'
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'exported 9 resources to test.yaml'
+    );
+  });
+
+  it('does not swallow a Forbidden error for Ark-native types', async () => {
+    mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+      const resourceType = args[1];
+      if (resourceType === 'agents') {
+        const error = new Error('kubectl failed') as Error & {stderr?: string};
+        error.stderr =
+          'Error from server (Forbidden): agents.ark.mckinsey.com is forbidden: User "tenant" cannot list resource "agents"';
+        return Promise.reject(error);
+      }
+      return Promise.resolve({stdout: JSON.stringify({items: []})});
+    });
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'export failed:',
+      'kubectl failed'
+    );
+    expect(mockWriteFile).not.toHaveBeenCalled();
   });
 
   it('fails if kubectl get fails for a resource type', async () => {

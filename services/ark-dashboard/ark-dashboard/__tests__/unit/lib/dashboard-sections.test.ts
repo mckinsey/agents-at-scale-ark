@@ -28,7 +28,6 @@ describe('Dashboard Sections - enabledWhen', () => {
       const agentBuilderKeys = AGENT_BUILDER_SECTIONS.map(s => s.key);
       expect(agentBuilderKeys).toContain('agents');
       expect(agentBuilderKeys).toContain('teams');
-      expect(agentBuilderKeys).toContain('queries');
     });
 
     it('should only contain sections with group "agent-builder"', () => {

@@ -5,6 +5,7 @@ from pages.agents_page import AgentsPage
 from pages.teams_page import TeamsPage
 from pages.sessions_page import SessionsPage
 from conftest import MOCK_LLM_MODEL_NAME
+from urllib.parse import urlparse
 
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ class TestSessionsAndConversations:
 
         sessions.navigate_to_session_detail(session_id)
         sessions.wait_for_session_detail_page()
-        conv_count = sessions.get_conversation_count_from_header()
+        conv_count = sessions.wait_for_conversation_count_in_header(min_count=1, timeout_s=30)
         assert conv_count >= 1, \
             f"Session {session_id} should show at least 1 conversation in the detail header, got {conv_count}"
         sessions.navigate_back_to_sessions()
@@ -262,7 +263,7 @@ class TestSessionsAndConversations:
         sessions.navigate_to_session_detail(session_id)
         sessions.wait_for_session_detail_page()
 
-        conv_count = sessions.get_conversation_count_from_header()
+        conv_count = sessions.wait_for_conversation_count_in_header(min_count=1, timeout_s=30)
         assert conv_count >= 1, \
             f"Session detail header should show at least 1 conversation, got {conv_count}"
 
@@ -290,8 +291,11 @@ class TestSessionsAndConversations:
             "Create button should be disabled when no participant is selected"
 
         sessions.cancel_session_dialog()
-        assert page.url == initial_url, \
-            "URL should not change after canceling session dialog"
+        # The dashboard writes the resolved namespace into the URL, so the query
+        # string may gain ?namespace= between the two reads. Cancel must not
+        # change the route; compare paths rather than whole URLs.
+        assert urlparse(page.url).path == urlparse(initial_url).path, \
+            "Route should not change after canceling session dialog"
         assert not sessions.is_visible(sessions.SESSION_DIALOG, timeout=3000), \
             "Dialog should close after clicking Cancel"
 
@@ -410,10 +414,10 @@ class TestSessionsAndConversations:
             "At least one conversation should appear in sidebar after first message"
 
         sessions.click_new_conversation_button()
-        assert sessions.is_visible(sessions.NEW_CONVERSATION_DIALOG, timeout=5000), \
-            "New conversation dialog should open"
+        assert sessions.is_visible(sessions.NEW_CONVERSATION_PANEL, timeout=5000), \
+            "New conversation panel should open"
 
-        sessions.select_participant_in_dialog(agent_name, participant_tab="Agents")
+        sessions.select_participant_in_panel(agent_name)
         sessions.confirm_new_conversation()
         sessions.page.wait_for_timeout(1000)
         sessions.wait_for_navigation_complete()

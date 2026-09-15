@@ -17,7 +17,20 @@ postgresql:
   user: ""
   passwordSecretName: ""
   passwordSecretKey: "password"
-  sslMode: "disable"
+  # sslMode: disable | require | verify-ca | verify-full
+  sslMode: "require"
+  # Optional Secret holding PEM files for TLS verification and/or client auth.
+  # When set it is mounted read-only at /etc/ark/postgres-tls; name the keys that exist in it.
+  # sslRootCertKey enables verify-ca/verify-full against a custom/private CA.
+  sslSecretName: ""
+  sslRootCertKey: ""
+  sslClientCertKey: ""
+  sslClientKeyKey: ""
+  # Fallback GID for the mounted cert files when containerSecurityContext.runAsGroup
+  # is unset; the files are group-owned by it so the non-root process can read them.
+  # 65532 matches the image USER (distroless nonroot). If you set
+  # containerSecurityContext.runAsGroup, fsGroup follows that value instead.
+  sslFsGroup: 65532
 
 resources:
   limits:
@@ -58,11 +71,82 @@ containerSecurityContext:
 
 terminationGracePeriodSeconds: 10
 
-extraEnv: {}
+# AUTOMEMLIMIT sets GOMEMLIMIT to this fraction of the container memory limit.
+# Set to "off" to disable.
+extraEnv:
+  AUTOMEMLIMIT: "0.9"
 
 certManager:
   enabled: true
 
+# Apiserver audit log, written as JSON to stdout. On by default. Produced in-process, so it
+# covers the direct service path too, which never transits the main kube-apiserver.
+audit:
+  enabled: true
+  # Catch-all level: None | Metadata | Request | RequestResponse. Request and
+  # RequestResponse include bodies, so Query `.spec.input` reaches your log pipeline.
+  level: Metadata
+  # Reads (get/list/watch) by these users are dropped. The controller's reconcile loops poll
+  # continuously, so auditing their reads buries operator- and user-driven records without
+  # adding anything; their writes are still recorded. Set to [] to audit everything.
+  excludeReadsByUsers:
+    - system:serviceaccount:ark-system:ark-controller
+  # Full audit.k8s.io/v1 Policy YAML. Overrides `level` and the default exclusions.
+  policy: ""
+
+# Admission enforcement — the supported enforcement point in apiserver mode, since the
+# kube-apiserver runs no webhook chain on aggregated resources. Two independent mechanisms, each
+# with the same two knobs: `enabled` wires it, `required` makes it a startup precondition rather
+# than best-effort. Setting `required` on a mechanism whose `enabled` is false is rejected.
+policy:
+  cel:
+    # false: never wire CEL enforcement, and drop the cluster-wide policy/namespace watches and
+    # their RBAC. For deployments that do not want the apiserver reading cluster-scoped policy
+    # objects. Ark's in-process validation and audit are unaffected.
+    enabled: true
+    # false: start anyway if CEL enforcement cannot be wired (older host, failed discovery,
+    # missing RBAC), and log why. true: fail startup instead of serving unenforced.
+    required: false
+  thirdPartyWebhooks:
+    # true: run the webhook admission plugins, so ValidatingWebhookConfiguration and
+    # MutatingWebhookConfiguration objects registered by Kyverno, OPA/Gatekeeper and similar fire
+    # on Ark resources — including on the direct service path.
+    #
+    # Off by default, because it changes the write path: every matching webhook becomes a
+    # synchronous call, and a webhook with failurePolicy=Fail couples Ark writes to that engine's
+    # availability. Requires the controller chart at storage.backend=postgresql, which stops
+    # rendering Ark's own webhook configurations — otherwise Ark's validation runs twice, once
+    # in-process and once over the webhook.
+    enabled: false
+    # false: start anyway if the webhook plugins cannot be wired (missing RBAC on the webhook
+    # configuration watches), and log why. true: fail startup instead of serving unenforced —
+    # set this where an external engine such as Kyverno is a compliance control on Ark resources.
+    required: false
+  # Extra RBAC for policies using `paramKind`; the plugin needs read access to the param
+  # resource or its informer never syncs. ConfigMaps/Secrets are already granted.
+  #   extraParamRules:
+  #     - apiGroups: ["mycorp.example.com"]
+  #       resources: ["policysettings"]
+  #       verbs: ["get", "list", "watch"]
+  extraParamRules: []
+
+# Prometheus metrics endpoint (controller-runtime metrics server on metrics.port). Serves
+# the Ark apiserver collectors plus the WAL consumer, replication slot lag and DB pool
+# gauges from the PostgreSQL backend.
+metrics:
+  enabled: false
+  port: 8443
+  # Serve HTTPS with authn/authz filtering (TokenReview + SubjectAccessReview); the
+  # auth-delegator binding the chart already grants covers the required RBAC.
+  secure: true
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+
 networkPolicy:
   enabled: false
   extraIngressFrom: []
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1

@@ -14,16 +14,35 @@ type MCPClientConfig struct {
 	Headers         map[string]string
 	Transport       string
 	Timeout         time.Duration
+	ToolCallTimeout time.Duration
+}
+
+func ParseToolCallTimeout(raw string) (time.Duration, error) {
+	if raw == "" {
+		return 0, nil
+	}
+
+	timeout, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid toolCallTimeout %q: %w", raw, err)
+	}
+	if timeout <= 0 {
+		return 0, fmt.Errorf("invalid toolCallTimeout %q: must be positive", raw)
+	}
+
+	return timeout, nil
 }
 
 type MCPClientPool struct {
 	mu      sync.RWMutex
 	clients map[string]*MCPClient
+	opts    []Option
 }
 
-func NewMCPClientPool() *MCPClientPool {
+func NewMCPClientPool(opts ...Option) *MCPClientPool {
 	return &MCPClientPool{
 		clients: make(map[string]*MCPClient),
+		opts:    opts,
 	}
 }
 
@@ -46,7 +65,8 @@ func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, cfg MCPClientConf
 
 	mcpSetting := mcpSettings[key]
 
-	mcpClient, err := NewMCPClient(ctx, cfg.ServerURL, cfg.Headers, cfg.Transport, cfg.Timeout, mcpSetting)
+	opts := append([]Option{WithServerName(key), WithToolCallTimeout(cfg.ToolCallTimeout)}, p.opts...)
+	mcpClient, err := NewMCPClient(ctx, cfg.ServerURL, cfg.Headers, cfg.Transport, cfg.Timeout, mcpSetting, opts...)
 	if err != nil {
 		return nil, err
 	}

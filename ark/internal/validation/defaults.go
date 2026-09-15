@@ -11,7 +11,10 @@ import (
 	"mckinsey.com/ark/internal/resolution"
 )
 
-const toolTypeCustom = "custom"
+const (
+	toolTypeCustom  = "custom"
+	toolTypeBuiltIn = "built-in"
+)
 
 func DefaultAgent(agent *arkv1alpha1.Agent) {
 	_, isA2A := agent.Annotations[annotations.A2AServerName]

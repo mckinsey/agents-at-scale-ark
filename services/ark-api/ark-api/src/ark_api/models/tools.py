@@ -2,6 +2,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from .common import PaginatedListResponse
+
 
 class ToolResponse(BaseModel):
     name: str
@@ -12,9 +14,8 @@ class ToolResponse(BaseModel):
     type: Optional[str] = None
 
 
-class ToolListResponse(BaseModel):
+class ToolListResponse(PaginatedListResponse):
     items: List[ToolResponse]
-    total: int
 
 
 class ToolDetailResponse(BaseModel):

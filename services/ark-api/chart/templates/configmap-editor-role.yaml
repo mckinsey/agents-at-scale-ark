@@ -1,0 +1,27 @@
+{{- if .Values.impersonation.enabled }}
+# Grants every configmap in the namespace it is bound in, not just Ark
+# configurations: RBAC rules take no label selector, and resourceNames cannot
+# restrict create. configMapPolicy does not narrow this either - it matches on
+# ark-api's service account, and an impersonated request carries the user's
+# identity, not the service account's. Bind it to admins only.
+# Unbound: an admin grants configuration management with one RoleBinding per
+# namespace. A ClusterRoleBinding would grant it cluster-wide.
+# Only takes effect with impersonation enabled.
+# Namespace-suffixed like every other ClusterRole in the charts, so a second
+# ark-api release does not fail Helm's ownership check.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-configmap-editor-role-{{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ark
+  annotations:
+    {{- with .Values.global.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+rules:
+  # secrets deliberately absent
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+{{- end }}

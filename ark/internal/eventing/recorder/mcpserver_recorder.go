@@ -45,3 +45,11 @@ func (t *mcpServerRecorder) TokenRejected(ctx context.Context, obj runtime.Objec
 func (t *mcpServerRecorder) AuthorizationSecretUnresolvable(ctx context.Context, obj runtime.Object, reason string) {
 	t.emitter.EmitWarning(ctx, obj, "AuthorizationSecretUnresolvable", reason)
 }
+
+func (t *mcpServerRecorder) TokenAcquisitionFailed(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitWarning(ctx, obj, "TokenAcquisitionFailed", reason)
+}
+
+func (t *mcpServerRecorder) TokenAcquired(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitNormal(ctx, obj, "TokenAcquired", reason)
+}

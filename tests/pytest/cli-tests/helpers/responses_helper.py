@@ -1,0 +1,438 @@
+"""
+Shared helpers, constants, and Kubernetes manifest builders for
+executor-openai-responses tests (test_responses.py).
+"""
+
+import base64
+import json
+import os
+import select
+import subprocess
+import time
+import uuid
+from typing import Optional
+
+import pytest
+import requests
+
+
+# ---------------------------------------------------------------------------
+# Annotation keys
+# ---------------------------------------------------------------------------
+
+REASONING_KEY = "executor-openai-responses.ark.mckinsey.com/reasoning"
+TOOLS_KEY     = "executor-openai-responses.ark.mckinsey.com/tools"
+SCHEMA_KEY    = "executor-openai-responses.ark.mckinsey.com/output-schema"
+
+
+# ---------------------------------------------------------------------------
+# Model names
+# ---------------------------------------------------------------------------
+
+MODEL_GPT5 = "gpt-5.2-2025-12-11"
+
+MOCK_LLM_MODEL_NAME = "test-model-mock"
+MOCK_LLM_BASE_URL   = "http://mock-llm.default.svc.cluster.local:6556/v1"
+
+
+# ---------------------------------------------------------------------------
+# Built-in tool definitions
+# ---------------------------------------------------------------------------
+
+WEB_SEARCH_TOOL = [
+    {
+        "type": "web_search_preview",
+        "user_location": {
+            "type": "approximate",
+            "country": "GB",
+            "city": "London",
+            "region": "London",
+        },
+    }
+]
+
+COMPANY_LOOKUP_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "company_name":           {"type": "string"},
+        "website_url":            {"type": "string"},
+        "companies_house_number": {"type": "string"},
+        "registered_address":     {"type": "string"},
+        "company_status":         {"type": "string"},
+    },
+    "required": [
+        "company_name", "website_url", "companies_house_number",
+        "registered_address", "company_status",
+    ],
+    "additionalProperties": False,
+}
+
+SQL_CFG_TOOL = [
+    {
+        "type": "custom",
+        "name": "generate_sql",
+        "description": "Generate a valid read-only PostgreSQL SELECT query constrained by grammar",
+        "format": {
+            "type": "grammar",
+            "syntax": "lark",
+            "definition": (
+                'SP: " "\nCOMMA: ","\nGT: ">"\nLT: "<"\nEQ: "="\nSEMI: ";"\n\n'
+                'start: "SELECT" SP select_list SP "FROM" SP table '
+                'where_clause? order_clause? limit_clause SEMI\n\n'
+                'select_list: "*" | column (COMMA SP column)*\ncolumn: IDENTIFIER\n\n'
+                'table: IDENTIFIER\n\n'
+                'where_clause: SP "WHERE" SP condition (SP "AND" SP condition)*\n'
+                'condition: IDENTIFIER SP op SP value\n'
+                'op: GT | LT | EQ | ">=" | "<=" | "!="\n'
+                'value: NUMBER | QUOTED_STRING\n\n'
+                'order_clause: SP "ORDER" SP "BY" SP IDENTIFIER SP ("ASC" | "DESC")\n'
+                'limit_clause: SP "LIMIT" SP NUMBER\n\n'
+                'IDENTIFIER: /[A-Za-z_][A-Za-z0-9_]*/\nNUMBER: /[0-9]+/\n'
+                "QUOTED_STRING: /\\'[^']*\\'/\n"
+            ),
+        },
+    }
+]
+
+
+# ---------------------------------------------------------------------------
+# ARK stack timing constants
+# ---------------------------------------------------------------------------
+
+ARK_CONCURRENT = int(os.environ.get("ARK_CONCURRENT_QUERIES", "3"))
+ARK_TIMEOUT    = int(os.environ.get("ARK_QUERY_TIMEOUT", "300"))
+
+
+# ---------------------------------------------------------------------------
+# Executor port-forward helpers
+# ---------------------------------------------------------------------------
+
+def kill_port_forward(pf_port: int, pf_proc: Optional[subprocess.Popen]) -> None:
+    if pf_proc is not None:
+        try:
+            pf_proc.terminate()
+            pf_proc.wait(timeout=5)
+        except Exception:
+            pass
+    subprocess.run(
+        ["pkill", "-f", f"kubectl.*port-forward.*{pf_port}"],
+        capture_output=True,
+    )
+    time.sleep(1)
+
+
+def start_port_forward(pf_port: int, skip_on_failure: bool = False) -> tuple:
+    result = subprocess.run(
+        ["kubectl", "get", "svc", "executor-openai-responses", "-n", "default"],
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        msg = (
+            "executor-openai-responses service not found and EXECUTOR_URL not set. "
+            "Deploy the executor or set EXECUTOR_URL."
+        )
+        if skip_on_failure:
+            pytest.skip(msg)
+        raise RuntimeError(msg)
+
+    proc = subprocess.Popen(
+        ["kubectl", "port-forward", "-n", "default",
+         "svc/executor-openai-responses", f"{pf_port}:8000"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(3)
+    return f"http://localhost:{pf_port}/execute", proc
+
+
+def reconnect_executor(pf_port: int, pf_proc: Optional[subprocess.Popen],
+                       skip_on_failure: bool = False) -> tuple:
+    subprocess.run(
+        ["kubectl", "wait", "--for=condition=ready", "pod",
+         "-l", "app=executor-openai-responses", "-n", "default", "--timeout=90s"],
+        capture_output=True,
+    )
+    executor_url, new_proc = start_port_forward(pf_port, skip_on_failure=skip_on_failure)
+    wait_for_executor(executor_url, skip_on_failure=skip_on_failure)
+    return executor_url, new_proc
+
+
+def wait_for_executor(executor_url: str, retries: int = 10, delay: float = 2.0,
+                      skip_on_failure: bool = False) -> None:
+    health_url = executor_url.replace("/execute", "/health")
+    for _ in range(retries):
+        try:
+            resp = requests.get(health_url, timeout=20)
+            if resp.status_code == 200:
+                return
+        except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout):
+            pass
+        time.sleep(delay)
+    msg = f"Executor not reachable at {executor_url} after {retries} retries"
+    if skip_on_failure:
+        pytest.skip(msg)
+    else:
+        raise RuntimeError(msg)
+
+
+def clear_sessions() -> None:
+    pod = subprocess.run(
+        ["kubectl", "get", "pod", "-n", "default",
+         "-l", "app=executor-openai-responses",
+         "-o", "jsonpath={.items[0].metadata.name}"],
+        capture_output=True, text=True,
+    )
+    if pod.returncode == 0 and pod.stdout.strip():
+        subprocess.run(
+            ["kubectl", "exec", "-n", "default", pod.stdout.strip(),
+             "--", "rm", "-rf", "/data/sessions/"],
+            capture_output=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Kubernetes helpers
+# ---------------------------------------------------------------------------
+
+def run_command(cmd: list, stdin_text: str = None, timeout: int = 30) -> tuple:
+    try:
+        r = subprocess.run(
+            cmd,
+            input=stdin_text,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return r.returncode == 0, r.stdout, r.stderr
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return False, "", str(e)
+
+
+
+def wait_for_webhook_ready(namespace: str = "ark-system",
+                           retries: int = 20, delay: float = 10.0) -> None:
+    for _ in range(retries):
+        ok, stdout, _ = run_command([
+            "kubectl", "get", "endpoints", "ark-webhook-service",
+            "-n", namespace, "-o", "json",
+        ])
+        if ok and stdout:
+            try:
+                data = json.loads(stdout)
+                for subset in data.get("subsets", []):
+                    if subset.get("addresses"):
+                        return
+            except json.JSONDecodeError:
+                continue
+        time.sleep(delay)
+    pytest.fail(
+        f"ark-webhook-service endpoints not ready after {retries} retries "
+        f"({retries * delay:.0f}s); fix the cluster or ark-webhook-service before CRD tests."
+    )
+
+
+def kubectl_apply(yaml_str: str, retries: int = 3, timeout: int = 120) -> None:
+    for attempt in range(retries):
+        ok, _, err = run_command(
+            ["kubectl", "apply", "-f", "-"], stdin_text=yaml_str, timeout=timeout,
+        )
+        if ok:
+            return
+        if ("connection refused" in err or "failed calling webhook" in err) and attempt < retries - 1:
+            wait_for_webhook_ready()
+            continue
+        assert False, f"kubectl apply failed:\n{err}\n---\n{yaml_str}"
+
+
+def check_executor_ready(namespace: str = "default") -> None:
+    ok, _, _ = run_command([
+        "kubectl", "get", "executionengine", "executor-openai-responses",
+        "-n", namespace, "-o", "jsonpath={.status.phase}",
+    ])
+    if not ok:
+        pytest.skip("executor-openai-responses ExecutionEngine not found in cluster")
+
+
+# ---------------------------------------------------------------------------
+# Kubernetes manifest builders
+# ---------------------------------------------------------------------------
+
+def build_secret_manifest(name: str, namespace: str, api_key: str, base_url: str) -> str:
+    ak = base64.b64encode(api_key.encode()).decode()
+    bu = base64.b64encode(base_url.encode()).decode()
+    return f"""apiVersion: v1
+kind: Secret
+metadata:
+  name: {name}
+  namespace: {namespace}
+type: Opaque
+data:
+  api-key: {ak}
+  base-url: {bu}
+"""
+
+
+def build_model_manifest(name: str, namespace: str, secret_name: str,
+                   model: str = "gpt-4o") -> str:
+    return f"""apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: {name}
+  namespace: {namespace}
+spec:
+  provider: openai
+  type: completions
+  model:
+    value: {model}
+  config:
+    openai:
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: {secret_name}
+            key: api-key
+      baseUrl:
+        valueFrom:
+          secretKeyRef:
+            name: {secret_name}
+            key: base-url
+"""
+
+
+def build_agent_manifest(name: str, namespace: str, model_name: str,
+                   prompt: str = "You are a concise assistant. Answer questions directly and briefly.\nDo not add unnecessary explanation or caveats.\n",
+                   execution_engine: Optional[str] = "executor-openai-responses") -> str:
+    indented_prompt = prompt.strip().replace("\n", "\n    ")
+    ee_block = f"  executionEngine:\n    name: {execution_engine}\n" if execution_engine else ""
+    return f"""apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: {name}
+  namespace: {namespace}
+spec:
+  modelRef:
+    name: {model_name}
+{ee_block}  prompt: |
+    {indented_prompt}
+"""
+
+
+def build_query_manifest(name: str, namespace: str, agent_name: str,
+                         input_text: str, annotations: Optional[dict] = None) -> str:
+    ann_block = ""
+    if annotations:
+        lines = "\n".join(
+            f"    {k}: {json.dumps(str(v))}"
+            for k, v in annotations.items()
+        )
+        ann_block = f"  annotations:\n{lines}\n"
+    input_yaml = json.dumps(input_text)
+    return f"""apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: {name}
+  namespace: {namespace}
+{ann_block}spec:
+  target:
+    type: agent
+    name: {agent_name}
+  input: {input_yaml}
+  type: user
+  timeout: 5m
+  ttl: 1h
+"""
+
+
+# ---------------------------------------------------------------------------
+# Query lifecycle helpers
+# ---------------------------------------------------------------------------
+
+def submit_query(name: str, input_text: str, agent_name: str,
+                 namespace: str, created_queries: list,
+                 annotations: Optional[dict] = None) -> bool:
+    kubectl_apply(
+        build_query_manifest(name, namespace, agent_name, input_text, annotations),
+    )
+    created_queries.append(name)
+    return True
+
+
+def _evaluate_query_status(status: dict) -> Optional[tuple]:
+    phase = status.get("phase", "")
+    if phase == "done":
+        content = status.get("response", {}).get("content", "") or ""
+        if not content.strip():
+            conv = status.get("conversationId") or ""
+            detail = (
+                f"empty_response conversationId={conv!r}" if conv
+                else "empty_response"
+            )
+            return False, None, detail
+        return True, content, phase
+    if phase in ("error", "submit_failed"):
+        return False, None, phase
+    return None
+
+
+def _fetch_query_status(name: str, namespace: str) -> dict:
+    result = subprocess.run(
+        ["kubectl", "get", "query", name, "-n", namespace, "-o", "json"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return {}
+    try:
+        return json.loads(result.stdout).get("status", {})
+    except json.JSONDecodeError:
+        return {}
+
+
+def poll_query(name: str, namespace: str,
+               timeout: int = ARK_TIMEOUT) -> tuple:
+    proc = subprocess.Popen(
+        ["kubectl", "get", "query", name, "-n", namespace,
+         "--watch", "--output-watch-events", "-o", "json"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    deadline = time.time() + timeout
+    try:
+        while time.time() < deadline:
+            remaining = deadline - time.time()
+            ready = select.select([proc.stdout], [], [], min(remaining, 5.0))[0]
+            if not ready:
+                # Watch is alive but silent; a delivered event can be missed on
+                # a stalled connection, so poll current state as a safety net.
+                terminal = _evaluate_query_status(_fetch_query_status(name, namespace))
+                if terminal is not None:
+                    return terminal
+                continue
+            line = proc.stdout.readline()
+            if not line:
+                break
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            terminal = _evaluate_query_status(event.get("object", {}).get("status", {}))
+            if terminal is not None:
+                return terminal
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    return False, None, "timeout"
+
+
+def run_query(name: str, input_text: str, agent_name: str,
+              namespace: str, created_queries: list,
+              annotations: Optional[dict] = None) -> tuple:
+    submit_query(name, input_text, agent_name, namespace, created_queries, annotations)
+    return poll_query(name, namespace)
+
+
+def unique_name(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex[:6]}"

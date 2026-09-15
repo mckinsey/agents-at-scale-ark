@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: config-driven-mcp
+spec:
+  description: MCP server whose address comes from a configuration
+  address:
+    valueFrom:
+      configMapKeyRef:
+        name: mcp-endpoint
+        key: value
+  transport: http
+  pollInterval: 1h

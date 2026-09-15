@@ -1,0 +1,140 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: configuration-propagation
+spec:
+  description: A configuration update reaches an MCPServer that resolves its address from it
+  steps:
+  - name: install-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl get pods --namespace "$NAMESPACE" -l app.kubernetes.io/name=mock-llm -o wide || true
+          kubectl logs --namespace "$NAMESPACE" -l app.kubernetes.io/name=mock-llm --tail=50 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: create-configuration-and-mcpserver
+    try:
+    - apply:
+        file: manifests/a01-configuration.yaml
+    - apply:
+        file: manifests/a02-mcpserver.yaml
+    catch:
+    - events: {}
+
+  - name: assert-stale-address-in-effect
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: config-driven-mcp
+          status:
+            resolvedAddress: http://wrong-address.invalid/mcp
+            (conditions[?type == 'Available']):
+            - status: "False"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: config-driven-mcp
+    - script:
+        content: |
+          kubectl get configmap mcp-endpoint --namespace "$NAMESPACE" -o yaml || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: update-configuration
+    try:
+    - script:
+        content: |
+          kubectl patch configmap mcp-endpoint \
+            --namespace "$NAMESPACE" \
+            --type merge \
+            --patch "{\"data\":{\"value\":\"http://mock-llm.$NAMESPACE.svc.cluster.local:6556/mcp\"}}"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl get configmap mcp-endpoint --namespace "$NAMESPACE" -o yaml || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: assert-new-address-in-effect
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: config-driven-mcp
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: config-driven-mcp
+          status:
+            (resolvedAddress != 'http://wrong-address.invalid/mcp'): true
+            (ends_with(resolvedAddress, '.svc.cluster.local:6556/mcp')): true
+            (toolCount > `0`): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            labels:
+              mcp/server: config-driven-mcp
+            ownerReferences:
+            - apiVersion: ark.mckinsey.com/v1alpha1
+              kind: MCPServer
+              name: config-driven-mcp
+          status:
+            state: Ready
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: config-driven-mcp
+    # pollInterval is 1h, so a failure here means the watch never fired rather
+    # than a slow poll. Dump the ConfigMap to tell "the patch never landed"
+    # apart from "the reconcile never ran", and the mock-llm pod to rule out an
+    # unreachable target.
+    - script:
+        content: |
+          kubectl get configmap mcp-endpoint --namespace "$NAMESPACE" -o yaml || true
+          kubectl get pods --namespace "$NAMESPACE" -l app.kubernetes.io/name=mock-llm -o wide || true
+          kubectl get tools.ark.mckinsey.com --namespace "$NAMESPACE" -l mcp/server=config-driven-mcp || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { MarketplaceAuthScheme } from '@/lib/services/marketplace';
+import { ADO_FIELD_DEFAULTS, buildAdoUrl, type AdoFields } from '@/lib/services/marketplace-ado';
 import {
   useCreateMarketplaceSource,
   useDeleteMarketplaceSource,
@@ -18,6 +19,8 @@ const PUBLIC_MARKETPLACE_URL =
   'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
 
 type SchemeChoice = 'none' | MarketplaceAuthScheme;
+
+type UrlMode = 'custom' | 'ado';
 
 type NewSourceForm = {
   url: string;
@@ -37,6 +40,11 @@ const SCHEME_OPTIONS: { value: SchemeChoice; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'bearer', label: 'Bearer / token' },
   { value: 'basic', label: 'HTTP Basic (Azure DevOps)' },
+];
+
+const URL_MODE_OPTIONS: { value: UrlMode; label: string }[] = [
+  { value: 'custom', label: 'Custom URL' },
+  { value: 'ado', label: 'Azure DevOps' },
 ];
 
 function validateMarketplaceUrl(url: string): string | null {
@@ -79,11 +87,24 @@ export function ManageMarketplaceSettings() {
 
   const [isAdding, setIsAdding] = useState(false);
   const [newSource, setNewSource] = useState<NewSourceForm>(EMPTY_FORM);
+  const [urlMode, setUrlMode] = useState<UrlMode>('custom');
+  const [adoFields, setAdoFields] = useState<AdoFields>(ADO_FIELD_DEFAULTS);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [credentialError, setCredentialError] = useState<string | null>(null);
 
+  const adoUrl = urlMode === 'ado' ? buildAdoUrl(adoFields) : null;
+  const effectiveUrl = urlMode === 'ado' ? adoUrl ?? '' : newSource.url;
+
+  const handleUrlModeChange = (mode: UrlMode) => {
+    setUrlMode(mode);
+    setUrlError(null);
+    if (mode === 'ado' && newSource.scheme === 'none') {
+      setNewSource({ ...newSource, scheme: 'basic' });
+    }
+  };
+
   const handleAddSource = () => {
-    const staticError = validateMarketplaceUrl(newSource.url);
+    const staticError = validateMarketplaceUrl(effectiveUrl);
     if (staticError) {
       setUrlError(staticError);
       return;
@@ -99,8 +120,8 @@ export function ManageMarketplaceSettings() {
 
     createSource.mutate(
       {
-        name: deriveSourceName(newSource.displayName, newSource.url),
-        url: newSource.url,
+        name: deriveSourceName(newSource.displayName, effectiveUrl),
+        url: effectiveUrl,
         displayName: newSource.displayName || undefined,
         auth:
           scheme === 'none'
@@ -110,6 +131,8 @@ export function ManageMarketplaceSettings() {
       {
         onSuccess: () => {
           setNewSource(EMPTY_FORM);
+          setUrlMode('custom');
+          setAdoFields(ADO_FIELD_DEFAULTS);
           setIsAdding(false);
         },
       },
@@ -119,6 +142,8 @@ export function ManageMarketplaceSettings() {
   const handleCancelAdd = () => {
     setIsAdding(false);
     setNewSource(EMPTY_FORM);
+    setUrlMode('custom');
+    setAdoFields(ADO_FIELD_DEFAULTS);
     setUrlError(null);
     setCredentialError(null);
   };
@@ -190,32 +215,134 @@ export function ManageMarketplaceSettings() {
           <h3 className="mb-4 text-sm font-medium">Add new marketplace</h3>
           <div className="space-y-3">
             <div>
-              <Label htmlFor="new-url" className="text-sm">
-                Marketplace JSON URL
-              </Label>
-              <Input
-                id="new-url"
-                value={newSource.url}
-                onChange={e => {
-                  setNewSource({ ...newSource, url: e.target.value });
-                  setUrlError(null);
-                }}
-                placeholder="https://raw.githubusercontent.com/org/repo/main/marketplace.json"
-                className={`mt-1.5 font-mono text-sm${urlError ? ' border-destructive' : ''}`}
-              />
-              {urlError && (
-                <p className="mt-1 text-xs text-destructive">
-                  {urlError}{' '}
-                  <a
-                    href={PUBLIC_MARKETPLACE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline">
-                    See the public marketplace.json for reference.
-                  </a>
-                </p>
-              )}
+              <Label className="text-sm">Marketplace JSON URL</Label>
+              <div className="mt-1.5 flex gap-2">
+                {URL_MODE_OPTIONS.map(option => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={urlMode === option.value ? 'secondary' : 'outline'}
+                    size="sm"
+                    onClick={() => handleUrlModeChange(option.value)}>
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
             </div>
+            {urlMode === 'custom' && (
+              <div>
+                <Input
+                  id="new-url"
+                  value={newSource.url}
+                  onChange={e => {
+                    setNewSource({ ...newSource, url: e.target.value });
+                    setUrlError(null);
+                  }}
+                  placeholder="https://raw.githubusercontent.com/org/repo/main/marketplace.json"
+                  className={`font-mono text-sm${urlError ? ' border-destructive' : ''}`}
+                />
+                {urlError && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {urlError}{' '}
+                    <a
+                      href={PUBLIC_MARKETPLACE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline">
+                      See the public marketplace.json for reference.
+                    </a>
+                  </p>
+                )}
+              </div>
+            )}
+            {urlMode === 'ado' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="ado-org" className="text-sm">
+                      Organization
+                    </Label>
+                    <Input
+                      id="ado-org"
+                      value={adoFields.org}
+                      onChange={e => {
+                        setAdoFields({ ...adoFields, org: e.target.value });
+                        setUrlError(null);
+                      }}
+                      placeholder="my-org"
+                      className="mt-1.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="ado-project" className="text-sm">
+                      Project
+                    </Label>
+                    <Input
+                      id="ado-project"
+                      value={adoFields.project}
+                      onChange={e => {
+                        setAdoFields({ ...adoFields, project: e.target.value });
+                        setUrlError(null);
+                      }}
+                      placeholder="my-project"
+                      className="mt-1.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="ado-repo" className="text-sm">
+                      Repository
+                    </Label>
+                    <Input
+                      id="ado-repo"
+                      value={adoFields.repo}
+                      onChange={e => {
+                        setAdoFields({ ...adoFields, repo: e.target.value });
+                        setUrlError(null);
+                      }}
+                      placeholder="my-repo"
+                      className="mt-1.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="ado-branch" className="text-sm">
+                      Branch
+                    </Label>
+                    <Input
+                      id="ado-branch"
+                      value={adoFields.branch}
+                      onChange={e => {
+                        setAdoFields({ ...adoFields, branch: e.target.value });
+                        setUrlError(null);
+                      }}
+                      className="mt-1.5 text-sm"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="ado-path" className="text-sm">
+                      Path
+                    </Label>
+                    <Input
+                      id="ado-path"
+                      value={adoFields.path}
+                      onChange={e => {
+                        setAdoFields({ ...adoFields, path: e.target.value });
+                        setUrlError(null);
+                      }}
+                      className="mt-1.5 font-mono text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-muted-foreground">Generated URL</div>
+                  <Input
+                    value={adoUrl ?? 'Fill in organization, project and repository'}
+                    readOnly
+                    className="bg-muted/50 font-mono text-xs"
+                  />
+                </div>
+                {urlError && <p className="text-xs text-destructive">{urlError}</p>}
+              </div>
+            )}
             <div>
               <Label htmlFor="new-display" className="text-sm">
                 Display name (optional)

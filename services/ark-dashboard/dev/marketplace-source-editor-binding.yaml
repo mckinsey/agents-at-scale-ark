@@ -1,0 +1,22 @@
+# Local-dev only: bind the marketplace-source-editor Role (shipped unbound by the
+# chart, on purpose) to ark-api-sa. With impersonation disabled (AUTH_MODE=open,
+# the devspace default), ark-api acts as its own service account, so this is the
+# effective identity behind the dashboard's marketplace-source writes. Binding it
+# makes the "Manage marketplace" add/edit/delete controls work out of the box in
+# devspace.
+#
+# Production stays unbound: bind the Role per namespace to real users and rely on
+# impersonation instead (see samples/marketplace/marketplace-source-editor-binding.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: marketplace-source-editor-dev
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: ark-api-sa
+    namespace: default
+roleRef:
+  kind: Role
+  name: marketplace-source-editor
+  apiGroup: rbac.authorization.k8s.io

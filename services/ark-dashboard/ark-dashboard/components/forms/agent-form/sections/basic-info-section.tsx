@@ -36,7 +36,7 @@ export function BasicInfoSection({
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Name {!isEditing && <span className="text-destructive">*</span>}
+                Name {!isEditing && <span className="text-status-error">*</span>}
               </FormLabel>
               <FormControl>
                 <Input
@@ -45,7 +45,7 @@ export function BasicInfoSection({
                   }
                   disabled={disabled || isEditing}
                   className={
-                    isEditing ? 'bg-muted/50 font-mono text-sm' : undefined
+                    isEditing ? 'bg-fill-muted font-mono text-sm' : undefined
                   }
                   {...field}
                 />
@@ -66,7 +66,7 @@ export function BasicInfoSection({
               <Input
                 placeholder="Brief description of the agent's purpose"
                 disabled={disabled}
-                className="border-border"
+                className="border-stroke-divider"
                 {...field}
               />
             </FormControl>

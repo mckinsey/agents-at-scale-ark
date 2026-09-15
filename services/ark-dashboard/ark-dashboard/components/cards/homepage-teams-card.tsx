@@ -33,7 +33,6 @@ export function HomepageTeamsCard() {
       key={section.key}
       title={section.title}
       value={count}
-      Icon={section.icon}
       href={href}
       isLoading={isPending}
       hasError={Boolean(error)}

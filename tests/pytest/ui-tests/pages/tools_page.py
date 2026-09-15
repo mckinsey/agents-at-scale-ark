@@ -2,7 +2,7 @@ import logging
 import random
 import pytest
 from datetime import datetime
-from playwright.sync_api import Page
+from playwright.sync_api import expect, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 class ToolsPage(BasePage):
 
-    ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), button:has-text('New Tool')"
-    TOOL_NAME_INPUT = "input[name='name'], input[placeholder*='name' i], input#name, [role='dialog'] input:first-of-type"
+    ADD_TOOL_BUTTON = "a[href^='/tools/new'], button:has-text('Add Tool'), button:has-text('Create Tool'), button:has-text('New Tool')"
+    TOOL_NAME_INPUT = "input[name='name'], input#name, form input:first-of-type"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
     
@@ -61,98 +61,101 @@ class ToolsPage(BasePage):
         return False
     
     def create_http_tool_with_verification(self, tool_name: str, description: str, url: str) -> dict:
-        
-        self._close_any_dialog()
-        
-        add_button = self.page.locator(self.ADD_TOOL_BUTTON).first
-        add_button.click()
-        self.wait_for_navigation_complete()
-        self.wait_for_form_ready()
-        dialog = self.page.locator("[role='dialog']").first
-        self.wait_for_animations_complete(dialog)
-        
-        name_input = self.page.locator(self.TOOL_NAME_INPUT).first
 
-        for attempt in range(3):
-            try:
-                name_input.wait_for(state="visible", timeout=5000)
+        self._close_any_dialog()
+
+        # The "Add tool" link moves between the page header and the empty-state
+        # body while the tools list loads, so under parallel load the click can
+        # miss. Click and confirm we reached the new-tool form via the URL; if
+        # the button stays unstable, navigate to the /tools/new route directly
+        # (its own visibility is covered by the dashboard navigation test).
+        name_input = self.page.locator(self.TOOL_NAME_INPUT).first
+        for attempt in range(4):
+            if "/tools/new" in self.page.url:
                 break
-            except:
-                logger.info(f"Name input not visible (attempt {attempt + 1}), retrying click")
-                add_button.click()
+            try:
+                self.page.locator(self.ADD_TOOL_BUTTON).first.click(timeout=5000)
+                self.page.wait_for_url("**/tools/new**", timeout=5000)
+            except Exception:
+                logger.info(
+                    "Add tool navigation not ready (attempt %d), retrying",
+                    attempt + 1,
+                )
+                self.page.wait_for_timeout(1000)
+        if "/tools/new" not in self.page.url:
+            logger.info("Add tool button unstable; navigating to /tools/new directly")
+            self.page.goto(
+                "http://localhost:3274/tools/new", wait_until="domcontentloaded"
+            )
+        self.wait_for_form_ready()
+        name_input.wait_for(state="visible", timeout=15000)
 
         logger.info(f"Tool name should be: {tool_name}")
         name_input.fill(tool_name)
         name_input.blur()
         logger.info(f"Name in name input is {name_input.input_value()}")
 
-        type_trigger = self.page.locator("[role='dialog'] [role='combobox']").first
+        type_trigger = self.page.locator("[role='combobox']").first
         type_trigger.scroll_into_view_if_needed()
         type_trigger.wait_for(state="visible", timeout=15000)
 
-        listbox = self.page.locator("[role='listbox'][data-state='open']")
         for attempt in range(3):
             logger.info(f"Clicking type trigger to open dropdown (attempt {attempt + 1})")
             type_trigger.click()
             try:
-                listbox.wait_for(state="visible", timeout=5000)
-                logger.info("Listbox visible")
+                self.wait_for_dropdown_options(timeout=5000)
+                logger.info("Dropdown options visible")
                 break
             except Exception:
-                logger.info(f"Listbox not visible on attempt {attempt + 1}, retrying")
+                logger.info(f"Dropdown options not visible on attempt {attempt + 1}, retrying")
         else:
-            listbox.wait_for(state="visible", timeout=1)
+            logger.error("Dropdown failed to open after 3 attempts")
+            self.wait_for_dropdown_options(timeout=1000)
 
-        self.wait_for_animations_complete(listbox)
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
         http_option.wait_for(state="visible", timeout=10000)
         logger.info("HTTP option visible, clicking")
         http_option.click()
+        self.wait_for_element_hidden("[role='listbox'], [data-slot='select-content']", timeout=3000)
         name_value_after_type = name_input.input_value()
         logger.info(f"Name input value after type selection: '{name_value_after_type}'")
         if not name_value_after_type:
             logger.info("Name was cleared by type selection re-render, re-filling")
             name_input.fill(tool_name)
 
-        description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
+        description_input = self.page.locator("input#description, input[name='description']").first
         description_input.wait_for(state="visible", timeout=15000)
         description_input.fill(description)
-        
+
         input_schema = '{"type": "object", "properties": {"city": {"type": "string", "description": "City name to get coordinates for"}}, "required": ["city"]}'
-        schema_textarea = self.page.locator("textarea#inputSchema, textarea[name='inputSchema'], [role='dialog'] textarea").first
+        schema_textarea = self.page.locator("textarea#inputSchema, textarea[name='inputSchema']").first
         schema_textarea.wait_for(state="visible", timeout=15000)
         schema_textarea.fill(input_schema)
-        
-        dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
-        if dialog.count() > 0:
-            dialog.evaluate("el => el.scrollTo(0, el.scrollHeight)")
-        
+
         url_input = self.page.locator("input[name='httpUrl'], input#http-url, input#httpUrl, input[placeholder*='https://']").first
-        
-        for attempt in range(3):
-            try:
-                url_input.wait_for(state="visible", timeout=3000)
-                break
-            except:
-                logger.info(f"URL input not visible (attempt {attempt + 1}), scrolling dialog")
-                if dialog.count() > 0:
-                    dialog.evaluate("el => el.scrollTo(0, el.scrollHeight)")
-        
+        url_input.wait_for(state="visible", timeout=15000)
         url_input.scroll_into_view_if_needed()
         url_input.fill(url)
-        
-        save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
-        
+
+        save_button = self.page.locator("button:has-text('Create'), button[type='submit']").first
         save_button.scroll_into_view_if_needed()
-        save_button.click(force=True)
-        
+
+        # A missing POST after a "successful" click is the stale-DOM re-render
+        # race signature (click event lands on a detached node).
+        try:
+            with self.page.expect_response(
+                lambda r: r.request.method == "POST" and "/api/v1/tools" in r.url,
+                timeout=5000,
+            ):
+                save_button.click()
+        except PlaywrightTimeoutError:
+            logger.error("Create click did not fire POST /api/v1/tools (stale-DOM race)")
+
         popup_visible = self._check_toast_popup()
         logger.info(f"Toast visible: {popup_visible}")
-        
-        self.wait_for_modal_close()
-        
+
+        self.wait_for_navigation_complete()
+
         in_table = self.is_tool_in_table(tool_name)
         logger.info(f"Tool '{tool_name}' in table after creation: {in_table}")
         
@@ -180,10 +183,13 @@ class ToolsPage(BasePage):
             name_element = self.page.get_by_text(tool_name, exact=True).first
             name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete tool'] or .//button[.//*[contains(@class,'lucide-trash')]]  ][1]")
-            delete_btn = card.locator("button[aria-label='Delete tool'], button:has(svg.lucide-trash-2)").first
+            row = self.page.get_by_role("row").filter(has_text=tool_name).first
+            delete_btn = row.get_by_role("button", name="Delete tool")
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click(force=True)
+            # The delete action is disabled while the tool is in use by an agent;
+            # wait for it to become enabled before clicking.
+            expect(delete_btn).to_be_enabled(timeout=15000)
+            delete_btn.click()
         except Exception as e:
             logger.warning("Delete button not accessible for tool '%s': %s", tool_name, e)
             return self._delete_not_available(tool_name)

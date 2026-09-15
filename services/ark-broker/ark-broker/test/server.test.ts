@@ -5,6 +5,7 @@ import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 
 const config = loadConfig({});
 const logger = createLogger({level: 'silent', pretty: false});
@@ -15,6 +16,7 @@ const {app} = buildApp({
   messageStream: createMessageStream(config, logger),
   chunkStream: createChunkStream(config, logger),
   eventStream: createEventStream(config, logger),
+  sessionsStorage: createSessionsStorage(config, logger),
 });
 
 describe('ARK Broker API', () => {
@@ -209,6 +211,57 @@ describe('ARK Broker API', () => {
 
       const getResponse = await request(app).get('/conversations/delete-conv');
       expect(getResponse.status).toBe(404);
+    });
+  });
+
+  describe('GET /memory-status', () => {
+    test('returns aggregated per-conversation message and query counts', async () => {
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'status-conv-1',
+          query_id: 'status-q1',
+          messages: [{role: 'user', content: 'one'}],
+        });
+
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'status-conv-1',
+          query_id: 'status-q2',
+          messages: [{role: 'user', content: 'two'}],
+        });
+
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'status-conv-2',
+          query_id: 'status-q3',
+          messages: [{role: 'user', content: 'three'}],
+        });
+
+      const response = await request(app).get('/memory-status');
+
+      expect(response.status).toBe(200);
+      expect(response.body.total_conversations).toBe(2);
+      expect(response.body.total_messages).toBe(3);
+      expect(response.body.conversations['status-conv-1']).toEqual({
+        message_count: 2,
+        query_count: 2,
+      });
+      expect(response.body.conversations['status-conv-2']).toEqual({
+        message_count: 1,
+        query_count: 1,
+      });
+    });
+
+    test('returns zero totals when memory is empty', async () => {
+      const response = await request(app).get('/memory-status');
+
+      expect(response.status).toBe(200);
+      expect(response.body.total_conversations).toBe(0);
+      expect(response.body.total_messages).toBe(0);
+      expect(response.body.conversations).toEqual({});
     });
   });
 

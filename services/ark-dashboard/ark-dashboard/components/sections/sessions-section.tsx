@@ -39,6 +39,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -48,6 +49,7 @@ import {
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import { cn } from '@/lib/utils';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
@@ -61,6 +63,11 @@ type TeamStepType =
   | 'delegation'
   | 'tool-call'
   | 'response';
+
+const sortOrderItems = [
+  { label: 'Newest First', value: 'newest' },
+  { label: 'Oldest First', value: 'oldest' },
+];
 
 interface WorkflowStepDetail {
   image?: string;
@@ -202,16 +209,16 @@ function getSessionTypeIcon(type: SessionType) {
 
 function getStatusBadgeVariant(
   status: StepStatus,
-): 'default' | 'secondary' | 'destructive' | 'outline' {
+): 'success' | 'error' | 'alternative' | 'high-emphasis' {
   switch (status) {
     case 'succeeded':
-      return 'default';
+      return 'success';
     case 'failed':
-      return 'destructive';
+      return 'error';
     case 'running':
-      return 'secondary';
+      return 'alternative';
     default:
-      return 'outline';
+      return 'high-emphasis';
   }
 }
 
@@ -245,8 +252,8 @@ function WorkflowStepDetail({
         if (detail.podName) {
           try {
             logData = await workflowsService.getPodLogs(
-              detail.podName,
               detail.namespace!,
+              detail.podName,
             );
           } catch {
             // If pod logs fail, try archived workflow logs
@@ -257,9 +264,9 @@ function WorkflowStepDetail({
         // If pod logs didn't work or no podName, try archived workflow logs
         if (!logData) {
           logData = await workflowsService.getWorkflowLogs(
+            detail.namespace!,
             detail.workflowName!,
             detail.nodeId!,
-            detail.namespace!,
           );
         }
 
@@ -840,7 +847,7 @@ function SessionDetailView({
                   {session.status}
                 </Badge>
                 <Badge
-                  variant="outline"
+                  variant="alternative"
                   className="text-xs font-medium capitalize">
                   {session.type}
                 </Badge>
@@ -864,18 +871,17 @@ function SessionDetailView({
             {session.type === 'workflow' &&
               session.namespace &&
               session.uid && (
-                <Button variant="outline" size="sm" asChild>
-                  <a
-                    href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="View in Argo Workflows"
-                    className="gap-2">
+                <a
+                  href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View in Argo Workflows">
+                  <Button variant="outline" size="sm" className="gap-2">
                     <ExternalLink className="h-4 w-4" />
                     <span className="hidden sm:inline">View in Argo</span>
                     <span className="sm:hidden">Argo</span>
-                  </a>
-                </Button>
+                  </Button>
+                </a>
               )}
           </div>
         </div>
@@ -930,7 +936,7 @@ function SessionListItem({
             {session.status}
           </Badge>
           <Badge
-            variant="outline"
+            variant="alternative"
             className="h-5 text-xs font-medium capitalize">
             {session.type}
           </Badge>
@@ -966,6 +972,7 @@ const normalizeStatus = (status: string): string => {
 };
 
 export function SessionsSection() {
+  const { namespace } = useNamespace();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1012,9 +1019,9 @@ export function SessionsSection() {
     const params = new URLSearchParams();
 
     // Preserve namespace parameter
-    const namespace = searchParams.get('namespace');
-    if (namespace) {
-      params.set('namespace', namespace);
+    const namespaceParam = searchParams.get('namespace');
+    if (namespaceParam) {
+      params.set('namespace', namespaceParam);
     }
 
     if (debouncedWorkflowName) {
@@ -1031,6 +1038,9 @@ export function SessionsSection() {
     }
 
     const queryString = params.toString();
+    if (queryString === searchParams.toString()) {
+      return;
+    }
     const newUrl = queryString ? `?${queryString}` : window.location.pathname;
     router.replace(newUrl, { scroll: false });
   }, [
@@ -1047,7 +1057,7 @@ export function SessionsSection() {
     loading,
     error,
     refetch: refetchWorkflows,
-  } = useWorkflows('default', filters);
+  } = useWorkflows(namespace, filters);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
@@ -1097,10 +1107,10 @@ export function SessionsSection() {
 
   const { workflow: selectedWorkflowDetail, loading: loadingDetail } =
     useWorkflow(
+      namespace,
       useRealData && selectedSessionFromList?.type === 'workflow'
         ? selectedSessionId || ''
         : '',
-      'default',
     );
 
   const selectedSession =
@@ -1112,7 +1122,7 @@ export function SessionsSection() {
 
   useEffect(() => {
     if (selectedWorkflowDetail && useRealData) {
-      const currentStatus = selectedWorkflowDetail.status.phase;
+      const currentStatus = selectedWorkflowDetail.status?.phase;
       const previousStatus = previousStatusRef.current;
 
       const isTerminalState =
@@ -1232,7 +1242,7 @@ export function SessionsSection() {
             <div className="flex flex-wrap items-center gap-2 md:ml-auto md:shrink-0">
               <Select
                 value={statusFilter || 'all'}
-                onValueChange={setStatusFilter}>
+                onValueChange={(value) => setStatusFilter(value as string)}>
                 <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
@@ -1264,14 +1274,18 @@ export function SessionsSection() {
                 </SelectContent>
               </Select>
               <Select
+                items={sortOrderItems}
                 value={sortOrder}
                 onValueChange={value => setSortOrder(value as SortOrder)}>
                 <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="newest">Newest First</SelectItem>
-                  <SelectItem value="oldest">Oldest First</SelectItem>
+                  {sortOrderItems.map(item => (
+                    <SelectItem key={item.value} value={item.value}>
+                      <SelectItemText>{item.label}</SelectItemText>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button

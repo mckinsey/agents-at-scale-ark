@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -21,7 +22,70 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
+
+func findCompletedCondition(q *arkv1alpha1.Query) *metav1.Condition {
+	for i := range q.Status.Conditions {
+		if q.Status.Conditions[i].Type == string(arkv1alpha1.QueryCompleted) {
+			return &q.Status.Conditions[i]
+		}
+	}
+	return nil
+}
+
+// timeoutQueryBuilder assembles a Query configured for the spec.timeout
+// tests. Default is a 1ms budget, no anchor, no Response — override with the
+// with* methods and finalise with seed(phase).
+type timeoutQueryBuilder struct{ q *arkv1alpha1.Query }
+
+func newTimeoutQuery(name string) *timeoutQueryBuilder {
+	q := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target:  &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+			Timeout: &metav1.Duration{Duration: time.Millisecond},
+			TTL:     &metav1.Duration{Duration: time.Hour},
+		},
+	}
+	Expect(q.Spec.SetInputString("timeout test")).To(Succeed())
+	return &timeoutQueryBuilder{q}
+}
+
+func (b *timeoutQueryBuilder) withTimeout(d time.Duration) *timeoutQueryBuilder {
+	b.q.Spec.Timeout.Duration = d
+	return b
+}
+
+func (b *timeoutQueryBuilder) withAnchorAgo(d time.Duration) *timeoutQueryBuilder {
+	if b.q.Annotations == nil {
+		b.q.Annotations = map[string]string{}
+	}
+	b.q.Annotations[annotations.RoundAnchor] = time.Now().Add(-d).UTC().Format(time.RFC3339Nano)
+	return b
+}
+
+func (b *timeoutQueryBuilder) withHITLResponse(taskID string) *timeoutQueryBuilder {
+	b.q.Status.Response = &arkv1alpha1.Response{
+		Target: arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+		Phase:  statusInputRequired,
+		A2A:    &arkv1alpha1.A2AMetadata{TaskID: taskID, ContextID: "ctx-" + taskID},
+	}
+	return b
+}
+
+// seed persists the Query, applies status.phase (and Response, if set), and
+// registers cleanup. Returns the persisted query for subsequent reconcile.
+func (b *timeoutQueryBuilder) seed(ctx context.Context, c client.Client, phase string) *arkv1alpha1.Query {
+	Expect(c.Create(ctx, b.q)).To(Succeed())
+	DeferCleanup(func() { _ = c.Delete(ctx, b.q) })
+	if phase != "" || b.q.Status.Response != nil {
+		b.q.Status.Phase = phase
+		Expect(c.Status().Update(ctx, b.q)).To(Succeed())
+	}
+	return b.q
+}
 
 var _ = Describe("Query Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -292,6 +356,8 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			r := &QueryReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 0,
 			}
 			Expect(r.sem).To(BeNil(), "nil semaphore means enforcement is disabled")
@@ -311,9 +377,248 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			result, err := r.handleRunningPhase(context.Background(), req, query)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeZero(), "must not requeue with capacity delay when enforcement is disabled")
+			Expect(result.RequeueAfter).To(Equal(queryRunningSafetyRequeue), "spawn path arms the safety-net requeue, not the capacity delay")
 			_, exists := r.operations.Load(req.NamespacedName)
 			Expect(exists).To(BeTrue(), "should register the operation, proving execution branch was taken despite no semaphore")
+		})
+	})
+
+	Context("queued phase visibility", func() {
+		newTestQuery := func(name string) *arkv1alpha1.Query {
+			q := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+					TTL:    &metav1.Duration{Duration: time.Hour},
+				},
+			}
+			Expect(q.Spec.SetInputString("phase visibility test")).To(Succeed())
+			return q
+		}
+
+		It("transitions phase queued -> running once the semaphore drains", func() {
+			ctx := context.Background()
+			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
+			}
+			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+
+			query := newTestQuery("phase-queued-then-running")
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleRunningPhase(ctx, req, *query)
+			Expect(err).NotTo(HaveOccurred())
+
+			queued := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, queued)).To(Succeed())
+			Expect(queued.Status.Phase).To(Equal(statusQueued))
+
+			r.sem.Release(1)
+
+			_, err = r.handleRunningPhase(ctx, req, *queued)
+			Expect(err).NotTo(HaveOccurred())
+
+			running := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, running)).To(Succeed())
+			Expect(running.Status.Phase).To(Equal(statusRunning))
+
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeTrue(), "acquire path should have spawned the executor")
+			r.cleanupExistingOperation(req.NamespacedName)
+		})
+
+		It("never writes queued when MaxConcurrentQueries is 0", func() {
+			ctx := context.Background()
+			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
+				MaxConcurrentQueries: 0,
+			}
+			Expect(r.sem).To(BeNil())
+
+			query := newTestQuery("phase-no-semaphore")
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleRunningPhase(ctx, req, *query)
+			Expect(err).NotTo(HaveOccurred())
+
+			refetched := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, refetched)).To(Succeed())
+			Expect(refetched.Status.Phase).To(Equal(statusRunning))
+			r.cleanupExistingOperation(req.NamespacedName)
+		})
+
+		It("does not rewrite status when phase is already queued", func() {
+			ctx := context.Background()
+			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				MaxConcurrentQueries: 1,
+				sem:                  semaphore.NewWeighted(1),
+			}
+			Expect(r.sem.TryAcquire(1)).To(BeTrue())
+
+			query := newTestQuery("phase-queued-idempotent")
+			Expect(k8sClient.Create(ctx, query)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, query) })
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: query.Name, Namespace: query.Namespace}}
+			_, err := r.handleRunningPhase(ctx, req, *query)
+			Expect(err).NotTo(HaveOccurred())
+
+			afterFirst := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, afterFirst)).To(Succeed())
+			Expect(afterFirst.Status.Phase).To(Equal(statusQueued))
+			firstRV := afterFirst.ResourceVersion
+
+			_, err = r.handleRunningPhase(ctx, req, *afterFirst)
+			Expect(err).NotTo(HaveOccurred())
+
+			afterSecond := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, afterSecond)).To(Succeed())
+			Expect(afterSecond.Status.Phase).To(Equal(statusQueued))
+			Expect(afterSecond.ResourceVersion).To(Equal(firstRV), "no status update should have been issued the second time")
+		})
+	})
+
+	Context("spec.timeout enforcement", func() {
+		var (
+			ctx context.Context
+			r   *QueryReconciler
+		)
+		BeforeEach(func() {
+			ctx = context.Background()
+			r = &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		})
+
+		reconcile := func(q *arkv1alpha1.Query) *arkv1alpha1.Query {
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
+			_, _ = r.handleQueryExecution(ctx, req, *q)
+			out := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, out)).To(Succeed())
+			return out
+		}
+
+		expectTimedOut := func(after *arkv1alpha1.Query, wantReason, msgFragment string) {
+			Expect(after.Status.Phase).To(Equal(statusError))
+			cond := findCompletedCondition(after)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal(wantReason))
+			Expect(cond.Message).To(ContainSubstring(msgFragment))
+			Expect(after.Status.Response).NotTo(BeNil())
+			Expect(after.Status.Response.Content).To(ContainSubstring(msgFragment))
+			Expect(after.Status.Response.Phase).To(Equal(statusError))
+		}
+
+		expectNoTimeout := func(after *arkv1alpha1.Query) {
+			Expect(after.Status.Phase).NotTo(Equal(statusError))
+			if cond := findCompletedCondition(after); cond != nil {
+				Expect(cond.Reason).NotTo(Or(Equal(reasonTimedOutInQueue), Equal(reasonTimedOutInExecution)))
+			}
+			if after.Status.Response != nil {
+				Expect(after.Status.Response.Content).NotTo(ContainSubstring("timed out"))
+			}
+		}
+
+		It("fails an elapsed queued query with TimedOutInQueue", func() {
+			q := newTimeoutQuery("elapsed-queued").seed(ctx, k8sClient, statusQueued)
+			time.Sleep(20 * time.Millisecond)
+			expectTimedOut(reconcile(q), reasonTimedOutInQueue, "capacity")
+		})
+
+		It("fails an elapsed pre-queue query with a neutral before-execution message", func() {
+			q := newTimeoutQuery("elapsed-prequeue").seed(ctx, k8sClient, "")
+			time.Sleep(20 * time.Millisecond)
+			expectTimedOut(reconcile(q), reasonTimedOutInQueue, "before execution began")
+		})
+
+		DescribeTable(
+			"pre-flight is not a wall-SLO on this phase",
+			func(phase string) {
+				q := newTimeoutQuery("no-transition-"+phase).seed(ctx, k8sClient, phase)
+				time.Sleep(20 * time.Millisecond)
+				expectNoTimeout(reconcile(q))
+			},
+			Entry("running (executor per-round budget owns it)", statusRunning),
+			Entry("input-required (HITL owns its own timer via A2ATask)", statusInputRequired),
+		)
+
+		DescribeTable(
+			"per-round anchor drives the budget for HITL-resumed queries",
+			func(name string, anchorAgo, timeout time.Duration, wantTimeout bool) {
+				q := newTimeoutQuery(name).
+					withTimeout(timeout).
+					withAnchorAgo(anchorAgo).
+					withHITLResponse("resumed").
+					seed(ctx, k8sClient, statusQueued)
+				after := reconcile(q)
+				if wantTimeout {
+					expectTimedOut(after, reasonTimedOutInQueue, "capacity")
+				} else {
+					expectNoTimeout(after)
+				}
+			},
+			Entry("fresh anchor gives a full budget", "hitl-fresh-anchor", time.Duration(0), time.Minute, false),
+			Entry("elapsed anchor trips pre-flight", "hitl-elapsed-anchor", 2*time.Second, time.Millisecond, true),
+		)
+
+		It("does not re-transition an already terminal query even when budget has elapsed", func() {
+			q := newTimeoutQuery("already-terminal").seed(ctx, k8sClient, "")
+			Expect(r.updateStatus(ctx, q, statusDone)).To(Succeed())
+
+			refetched := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: q.Name, Namespace: q.Namespace}, refetched)).To(Succeed())
+			terminalRV := refetched.ResourceVersion
+			terminalReason := findCompletedCondition(refetched).Reason
+
+			time.Sleep(20 * time.Millisecond)
+
+			after := reconcile(refetched)
+			Expect(after.Status.Phase).To(Equal(statusDone), "terminal phase must be preserved")
+			Expect(after.ResourceVersion).To(Equal(terminalRV), "no status write should have been issued on a terminal query")
+			Expect(findCompletedCondition(after).Reason).To(Equal(terminalReason), "condition reason must not be clobbered")
+		})
+	})
+
+	Context("safety-net requeue", func() {
+		It("arms a bounded requeue for an in-flight op without spawning a duplicate", func() {
+			r := &QueryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "inflight-query", Namespace: "default"}}
+
+			// Pre-register an operation so handleRunningPhase treats it as in-flight.
+			_, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			r.operations.Store(req.NamespacedName, cancel)
+
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              req.Name,
+					Namespace:         req.Namespace,
+					CreationTimestamp: metav1.Time{Time: time.Now()},
+				},
+			}
+
+			result, err := r.handleRunningPhase(context.Background(), req, query)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(queryRunningSafetyRequeue), "in-flight op must re-arm the safety net so a dead goroutine is recovered")
+
+			_, exists := r.operations.Load(req.NamespacedName)
+			Expect(exists).To(BeTrue(), "in-flight branch returns before any spawn, leaving the tracked op intact")
 		})
 	})
 
@@ -397,6 +702,10 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 
 		It("recovers from a panic in the goroutine and still cleans up", func() {
 			r := &QueryReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				Telemetry:            telemetryconfig.NewProvider(context.Background(), nil),
+				Eventing:             eventingconfig.NewProviderWithClient(context.Background(), nil),
 				MaxConcurrentQueries: 1,
 				sem:                  semaphore.NewWeighted(1),
 			}
@@ -911,5 +1220,91 @@ var _ = Describe("Query Controller handleInputRequiredPhase", func() {
 		Expect(updated.Status.Phase).To(Equal(statusRunning))
 		_, present := updated.Annotations[annotations.ApprovalCascadeCount]
 		Expect(present).To(BeFalse(), "annotation should be cleared after approval")
+	})
+
+	It("stamps a fresh round-anchor annotation on approval so the resumed round gets a per-round budget", func() {
+		ctx := context.Background()
+		defer cleanup(ctx)
+		query := createQueryAwaitingApproval(ctx)
+
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{Name: taskName, Namespace: "default"},
+			Spec: arkv1alpha1.A2ATaskSpec{
+				TaskID:   taskID,
+				QueryRef: arkv1alpha1.QueryRef{Name: queryName, Namespace: "default"},
+				AgentRef: arkv1alpha1.AgentRef{Name: "test-agent"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, task)).To(Succeed())
+		task.Status = arkv1alpha1.A2ATaskStatus{
+			Phase: "completed",
+			Conditions: []metav1.Condition{{
+				Type:               string(arkv1alpha1.A2ATaskCompleted),
+				Status:             metav1.ConditionTrue,
+				Reason:             "ApprovalGranted",
+				LastTransitionTime: metav1.Now(),
+			}},
+		}
+		Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
+		before := time.Now()
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.handleInputRequiredPhase(ctx, query)
+		Expect(err).NotTo(HaveOccurred())
+		after := time.Now()
+
+		updated := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
+		stamp, present := updated.Annotations[annotations.RoundAnchor]
+		Expect(present).To(BeTrue(), "handleApprovedTask must stamp the round-anchor annotation")
+		parsed, err := time.Parse(time.RFC3339Nano, stamp)
+		Expect(err).NotTo(HaveOccurred(), "round-anchor must be RFC3339Nano so remainingBudget can parse it")
+		Expect(parsed).To(BeTemporally(">=", before.Add(-time.Second)))
+		Expect(parsed).To(BeTemporally("<=", after.Add(time.Second)))
+	})
+
+	It("stamps a fresh round-anchor annotation on a resumable denial", func() {
+		ctx := context.Background()
+		defer cleanup(ctx)
+		query := createQueryAwaitingApproval(ctx)
+
+		task := &arkv1alpha1.A2ATask{
+			ObjectMeta: metav1.ObjectMeta{Name: taskName, Namespace: "default"},
+			Spec: arkv1alpha1.A2ATaskSpec{
+				TaskID:   taskID,
+				QueryRef: arkv1alpha1.QueryRef{Name: queryName, Namespace: "default"},
+				AgentRef: arkv1alpha1.AgentRef{Name: "test-agent"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, task)).To(Succeed())
+		// Resumable denial: timeout-rejected is treated as a soft denial the
+		// agent can react to (same path as handleResumableDenial).
+		task.Status = arkv1alpha1.A2ATaskStatus{
+			Phase: "failed",
+			Error: "Approval timeout exceeded after 5m",
+			Conditions: []metav1.Condition{{
+				Type:               string(arkv1alpha1.A2ATaskCompleted),
+				Status:             metav1.ConditionTrue,
+				Reason:             "ApprovalTimeoutRejected",
+				LastTransitionTime: metav1.Now(),
+			}},
+		}
+		Expect(k8sClient.Status().Update(ctx, task)).To(Succeed())
+
+		before := time.Now()
+		r := &QueryReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.handleInputRequiredPhase(ctx, query)
+		Expect(err).NotTo(HaveOccurred())
+		after := time.Now()
+
+		updated := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: queryName, Namespace: "default"}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(statusRunning))
+		stamp, present := updated.Annotations[annotations.RoundAnchor]
+		Expect(present).To(BeTrue(), "handleResumableDenial must stamp the round-anchor annotation")
+		parsed, err := time.Parse(time.RFC3339Nano, stamp)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parsed).To(BeTemporally(">=", before.Add(-time.Second)))
+		Expect(parsed).To(BeTemporally("<=", after.Add(time.Second)))
 	})
 })

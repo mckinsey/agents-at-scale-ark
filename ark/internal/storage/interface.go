@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	ErrNotFound       = errors.New("not found")
-	ErrConflict       = errors.New("conflict: resource version mismatch")
-	ErrAlreadyExists  = errors.New("already exists")
-	ErrInvalidRequest = errors.New("invalid request")
+	ErrNotFound        = errors.New("not found")
+	ErrConflict        = errors.New("conflict: resource version mismatch")
+	ErrAlreadyExists   = errors.New("already exists")
+	ErrInvalidRequest  = errors.New("invalid request")
+	ErrResourceExpired = errors.New("resource version too old")
 )
 
 type ListOptions struct {
@@ -33,7 +34,10 @@ type WatchOptions struct {
 type Backend interface {
 	Create(ctx context.Context, kind, namespace, name string, obj runtime.Object) error
 	Get(ctx context.Context, kind, namespace, name string) (runtime.Object, error)
-	List(ctx context.Context, kind, namespace string, opts ListOptions) ([]runtime.Object, string, error)
+	// List returns matching objects, a continue token for pagination, and the
+	// list resourceVersion. The list RV is the store head revision (not the max
+	// item RV), so a watch resuming from it is always at or above the purge floor.
+	List(ctx context.Context, kind, namespace string, opts ListOptions) ([]runtime.Object, string, int64, error)
 	Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error
 	UpdateStatus(ctx context.Context, kind, namespace, name string, obj runtime.Object) error
 	Delete(ctx context.Context, kind, namespace, name string) error

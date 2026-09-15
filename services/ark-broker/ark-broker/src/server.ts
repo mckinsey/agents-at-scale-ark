@@ -18,13 +18,18 @@ import {CompletionChunkBroker} from './brokers/chunks-broker.js';
 import type {ChunkStream} from './brokers/stream/chunk-stream.js';
 import {TraceBroker} from './brokers/trace-broker.js';
 import {EventBroker} from './brokers/event-broker.js';
-import {SessionsBroker} from './brokers/sessions-broker.js';
+import {
+  SessionsBroker,
+  type SessionsStorage,
+} from './brokers/sessions-broker.js';
 import {createMemoryRouter} from './http/routes/memory/index.js';
 import {createStreamRouter} from './http/routes/stream/index.js';
 import {createTracesRouter} from './http/routes/traces/index.js';
 import {createEventsRouter} from './http/routes/events/index.js';
 import {createSessionsRouter} from './http/routes/sessions/index.js';
 import {createOTLPRouter} from './http/routes/otlp.js';
+import {createMetricsRouter} from './http/routes/metrics/index.js';
+import {createMetricsRegistry} from './metrics/registry.js';
 import {setupSwagger} from './http/swagger.js';
 
 export type Brokers = {
@@ -47,6 +52,7 @@ export function buildApp(deps: {
   messageStream: MessageStream;
   chunkStream: ChunkStream;
   eventStream: EventStream;
+  sessionsStorage: SessionsStorage;
   db?: Db;
   redis?: RedisClient;
 }): AppBundle {
@@ -57,6 +63,7 @@ export function buildApp(deps: {
     messageStream,
     chunkStream,
     eventStream,
+    sessionsStorage,
     db,
     redis,
   } = deps;
@@ -64,16 +71,21 @@ export function buildApp(deps: {
 
   const memory = new MemoryBroker(messageStream);
   const chunks = new CompletionChunkBroker(chunkStream);
-  const traces = new TraceBroker(
-    logger.child({broker: 'traces'}),
-    config.persistence.traceFilePath,
-    config.limits.maxSpans
-  );
+  const traces = new TraceBroker(logger.child({broker: 'traces'}), {
+    path: config.persistence.traceFilePath,
+    maxBytes: config.limits.traceMaxBytes,
+  });
   const events = new EventBroker(eventStream);
-  const sessions = new SessionsBroker(
-    logger.child({broker: 'sessions'}),
-    config.persistence.sessionsFilePath
-  );
+  const sessions = new SessionsBroker(sessionsStorage);
+
+  const metricsRegistry = createMetricsRegistry({
+    messages: messageStream.cachedItemCount?.bind(messageStream),
+    chunks: chunkStream.cachedItemCount?.bind(chunkStream),
+    spans: traces.cachedItemCount.bind(traces),
+    events: eventStream.cachedItemCount?.bind(eventStream),
+    sessions: sessionsStorage.cachedItemCount?.bind(sessionsStorage),
+    sessionQueries: sessionsStorage.cachedQueryCount?.bind(sessionsStorage),
+  });
 
   logger.info('brokers initialized');
 
@@ -99,6 +111,7 @@ export function buildApp(deps: {
     }
   });
 
+  app.use('/metrics', createMetricsRouter(metricsRegistry));
   app.use('/', createMemoryRouter(memory, sessions));
   app.use('/stream', createStreamRouter(chunks));
   app.use('/traces', createTracesRouter(traces));

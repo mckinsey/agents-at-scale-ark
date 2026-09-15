@@ -1,0 +1,344 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: apiserver-policy
+  labels:
+    postgresql: "true"
+spec:
+  description: >
+    Third-party webhook policy engines (Kyverno/OPA/Gatekeeper) cannot fire on
+    aggregated resources, so the supported enforcement point in apiserver mode is
+    a native ValidatingAdmissionPolicy (CEL), evaluated in-process by ARK's
+    apiserver. This test proves a CEL policy blocks a non-conforming Ark resource
+    (via both the proxied and direct service paths) while a conforming one is
+    accepted — satisfying #2684's "documented alternative enforcement point".
+    Requires host k8s >=1.30 (ValidatingAdmissionPolicy GA); CI runs 1.35.
+
+  steps:
+    - name: install-policy
+      try:
+        - apply:
+            resource:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingAdmissionPolicy
+              metadata:
+                name: apiserver-policy-require-label
+              spec:
+                failurePolicy: Fail
+                matchConstraints:
+                  resourceRules:
+                    - apiGroups: ["ark.mckinsey.com"]
+                      apiVersions: ["v1alpha1"]
+                      operations: ["CREATE", "UPDATE"]
+                      resources: ["agents"]
+                validations:
+                  - expression: "has(object.metadata.labels) && 'example.com/reviewed' in object.metadata.labels"
+                    message: "Agent must carry the example.com/reviewed label"
+        - apply:
+            resource:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingAdmissionPolicyBinding
+              metadata:
+                name: apiserver-policy-require-label
+              spec:
+                policyName: apiserver-policy-require-label
+                validationActions: ["Deny"]
+                matchResources:
+                  namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: ($namespace)
+
+    - name: reject-non-conforming-proxied
+      try:
+        - script:
+            timeout: 120s
+            # Poll: the policy/binding must propagate to the apiserver's informers
+            # before it enforces. Retry until the create is denied by our policy.
+            content: |
+              set -eu
+              for i in $(seq 1 45); do
+                if OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: policy-bad-agent
+              spec:
+                prompt: You are a helpful assistant.
+              EOF
+              ); then
+                  # Accepted — policy not enforcing yet. Clean up and retry.
+                  kubectl delete agent policy-bad-agent -n $NAMESPACE --ignore-not-found >/dev/null 2>&1 || true
+                  sleep 2
+                  continue
+                fi
+                if echo "$OUTPUT" | grep -q "example.com/reviewed"; then
+                  echo "PASS: CEL policy rejected non-conforming agent (proxied path)"
+                  exit 0
+                fi
+                echo "rejected, but not by our policy yet: $OUTPUT"
+                sleep 2
+              done
+              echo "FAIL: non-conforming agent was not rejected by the CEL policy"
+              exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+
+    - name: accept-conforming-proxied
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: policy-good-agent
+                labels:
+                  example.com/reviewed: "true"
+              spec:
+                prompt: You are a helpful assistant.
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: policy-good-agent
+
+    # --- server-assigned metadata must be visible to policy -------------------
+    # Regression guard: admission used to run before the apiserver populated
+    # name/namespace/uid, so a policy reading object.metadata.name saw "" and passed
+    # everything. generateName is the sharpest case — the name only exists server-side.
+    - name: install-name-policy
+      try:
+        - apply:
+            resource:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingAdmissionPolicy
+              metadata:
+                name: apiserver-policy-name-prefix
+              spec:
+                failurePolicy: Fail
+                matchConstraints:
+                  resourceRules:
+                    - apiGroups: ["ark.mckinsey.com"]
+                      apiVersions: ["v1alpha1"]
+                      operations: ["CREATE"]
+                      resources: ["agents"]
+                validations:
+                  # Also asserts namespace/uid are populated: an empty value here would
+                  # fail the check and surface the ordering bug rather than hide it.
+                  - expression: "object.metadata.name.startsWith('approved-')"
+                    message: "Agent name must start with approved-"
+                  - expression: "object.metadata.namespace != ''"
+                    message: "Agent namespace must be set at admission time"
+                  - expression: "object.metadata.uid != ''"
+                    message: "Agent uid must be set at admission time"
+        - apply:
+            resource:
+              apiVersion: admissionregistration.k8s.io/v1
+              kind: ValidatingAdmissionPolicyBinding
+              metadata:
+                name: apiserver-policy-name-prefix
+              spec:
+                policyName: apiserver-policy-name-prefix
+                validationActions: ["Deny"]
+                matchResources:
+                  namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: ($namespace)
+
+    - name: reject-generatename-violating-name-policy
+      try:
+        - script:
+            timeout: 120s
+            # The reviewed label is present so the label policy from the earlier steps is
+            # satisfied and the *only* possible rejection is the name policy — otherwise
+            # the two messages are indistinguishable here.
+            content: |
+              set -eu
+              for i in $(seq 1 45); do
+                if OUTPUT=$(kubectl create -f - --namespace $NAMESPACE 2>&1 <<EOF
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                generateName: unapproved-
+                labels:
+                  example.com/reviewed: "true"
+              spec:
+                prompt: You are a helpful assistant.
+              EOF
+              ); then
+                  # Accepted. Either the policy has not propagated yet, or admission is
+                  # seeing an empty metadata.name and the check cannot bite. Retry, then
+                  # fail — the distinction is settled by the timeout below.
+                  sleep 2
+                  continue
+                fi
+                if echo "$OUTPUT" | grep -q "must start with approved-"; then
+                  echo "PASS: policy evaluated the server-generated name"
+                  exit 0
+                fi
+                if echo "$OUTPUT" | grep -qE "namespace must be set|uid must be set"; then
+                  echo "FAIL: admission ran before server-assigned metadata was populated"
+                  echo "$OUTPUT"
+                  exit 1
+                fi
+                echo "rejected, but not by our policy yet: $OUTPUT"
+                sleep 2
+              done
+              echo "FAIL: generateName create was never rejected — policy cannot see metadata.name"
+              exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+
+    - name: accept-generatename-satisfying-name-policy
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -eu
+              OUT=$(kubectl create -f - --namespace $NAMESPACE <<EOF
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                generateName: approved-
+                labels:
+                  example.com/reviewed: "true"
+              spec:
+                prompt: You are a helpful assistant.
+              EOF
+              )
+              echo "$OUT"
+              echo "$OUT" | grep -q "^agent.ark.mckinsey.com/approved-" || {
+                echo "FAIL: expected a generated name with the approved- prefix"
+                exit 1
+              }
+              echo "PASS: conforming generateName create accepted"
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+
+    # Removed in its own step, not in `cleanup`: step-level cleanup runs at test
+    # teardown, which would leave this policy enforcing during the direct-path step
+    # below and reject its agent for the wrong reason. Step order is deterministic.
+    - name: remove-name-policy
+      try:
+        - script:
+            content: |
+              set -eu
+              kubectl delete validatingadmissionpolicybinding apiserver-policy-name-prefix --ignore-not-found
+              kubectl delete validatingadmissionpolicy apiserver-policy-name-prefix --ignore-not-found
+              # Wait for the removal to reach the apiserver's informers, so the next step
+              # is not racing a policy that is still briefly enforcing.
+              for i in $(seq 1 30); do
+                if kubectl create -f - --namespace $NAMESPACE >/dev/null 2>&1 <<EOF
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                generateName: probe-removal-
+                labels:
+                  example.com/reviewed: "true"
+              spec:
+                prompt: probe
+              EOF
+                then
+                  echo "name policy no longer enforcing"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "FAIL: name policy still enforcing after deletion"
+              exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      cleanup:
+        - script:
+            content: |
+              kubectl delete validatingadmissionpolicybinding apiserver-policy-name-prefix --ignore-not-found
+              kubectl delete validatingadmissionpolicy apiserver-policy-name-prefix --ignore-not-found
+
+    - name: reject-non-conforming-direct
+      try:
+        - apply:
+            resource:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: Role
+              metadata:
+                name: apiserver-policy-writer
+              rules:
+                - apiGroups: ["ark.mckinsey.com"]
+                  resources: ["agents"]
+                  verbs: ["create", "get", "list"]
+        - apply:
+            resource:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: apiserver-policy-writer
+              subjects:
+                - kind: ServiceAccount
+                  name: default
+                  namespace: ($namespace)
+              roleRef:
+                kind: Role
+                name: apiserver-policy-writer
+                apiGroup: rbac.authorization.k8s.io
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: policycurl
+              spec:
+                containers:
+                  - name: curl
+                    image: curlimages/curl:8.11.1
+                    command: ["sleep", "300"]
+                restartPolicy: Never
+                terminationGracePeriodSeconds: 0
+        - wait:
+            apiVersion: v1
+            kind: Pod
+            name: policycurl
+            timeout: 120s
+            for:
+              condition:
+                name: Ready
+                value: 'True'
+        - script:
+            timeout: 90s
+            content: |
+              set -eu
+              TOKEN=$(kubectl create token default -n $NAMESPACE)
+              URL="https://ark-apiserver.ark-system.svc.cluster.local:6443/apis/ark.mckinsey.com/v1alpha1/namespaces/${NAMESPACE}/agents"
+              BODY='{"apiVersion":"ark.mckinsey.com/v1alpha1","kind":"Agent","metadata":{"name":"policy-bad-direct","namespace":"'"$NAMESPACE"'"},"spec":{"prompt":"hi"}}'
+              RESP=$(kubectl exec policycurl -n $NAMESPACE -- \
+                curl -sk -w '\n%{http_code}' \
+                -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+                -d "$BODY" "$URL")
+              CODE=$(echo "$RESP" | tail -n1)
+              echo "direct create of non-conforming agent returned HTTP $CODE"
+              echo "$RESP" | sed '$d'
+              if [ "$CODE" -lt 400 ]; then
+                echo "FAIL: policy did not block the direct-path create (HTTP $CODE)"
+                exit 1
+              fi
+              if echo "$RESP" | grep -q "example.com/reviewed"; then
+                echo "PASS: CEL policy blocked the non-conforming agent on the direct service path"
+              else
+                echo "FAIL: blocked, but not by our policy"
+                exit 1
+              fi
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      catch:
+        - events: {}
+        - podLogs:
+            name: policycurl
+      cleanup:
+        - script:
+            content: |
+              kubectl delete validatingadmissionpolicybinding apiserver-policy-require-label --ignore-not-found
+              kubectl delete validatingadmissionpolicy apiserver-policy-require-label --ignore-not-found

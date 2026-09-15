@@ -12,6 +12,15 @@ import FloatingChat from '@/components/floating-chat';
 import type { QueryDetailResponse } from '@/lib/services';
 import { chatService } from '@/lib/services';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 // Mock Next.js router - used by ChatMessage component
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -535,53 +544,32 @@ describe('FloatingChat', () => {
       vi.mocked(useAtomValue).mockReturnValue(true);
     });
 
-    it('should render debug mode switch', () => {
+    const getToolCallsToggle = () =>
+      screen.getByRole('button', { name: /tool calls/i });
+
+    it('should render the tool-calls toggle', () => {
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
-      });
-      expect(debugSwitch).toBeInTheDocument();
+      expect(getToolCallsToggle()).toBeInTheDocument();
     });
 
-    it('should have debug mode enabled by default', () => {
+    it('should have tool calls enabled by default', () => {
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
-      });
-      expect(debugSwitch).toBeChecked();
+      expect(getToolCallsToggle()).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('should toggle debug mode when switch is clicked', async () => {
+    it('should toggle debug mode when the toggle is clicked', async () => {
       const user = userEvent.setup();
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
-      });
-      expect(debugSwitch).toBeChecked();
+      expect(getToolCallsToggle()).toHaveAttribute('aria-pressed', 'true');
 
-      await user.click(debugSwitch);
-      expect(debugSwitch).not.toBeChecked();
+      await user.click(getToolCallsToggle());
+      expect(getToolCallsToggle()).toHaveAttribute('aria-pressed', 'false');
 
-      await user.click(debugSwitch);
-      expect(debugSwitch).toBeChecked();
-    });
-
-    it('should toggle debug mode when label is clicked', async () => {
-      const user = userEvent.setup();
-      renderFloatingChat(defaultProps);
-
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
-      });
-      const label = screen.getByText('Show tool calls');
-
-      expect(debugSwitch).toBeChecked();
-
-      await user.click(label);
-      expect(debugSwitch).not.toBeChecked();
+      await user.click(getToolCallsToggle());
+      expect(getToolCallsToggle()).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('should show tool calls by default (debug mode on)', async () => {
@@ -677,8 +665,8 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
+      const debugSwitch = screen.getByRole('button', {
+        name: /tool calls/i,
       });
       await user.click(debugSwitch);
 
@@ -735,8 +723,8 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
+      const debugSwitch = screen.getByRole('button', {
+        name: /tool calls/i,
       });
 
       const input = screen.getByPlaceholderText('Type your message...');
@@ -795,12 +783,12 @@ describe('FloatingChat', () => {
 
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+          'default',
           'Test message',
           'agent',
           'Test Agent',
           expect.any(String),
           undefined, // conversationId
-          undefined, // enableStreaming
           '5m', // timeout
           undefined, // parameters
         );
@@ -808,7 +796,7 @@ describe('FloatingChat', () => {
 
       // Should call getQueryResult
       await waitFor(() => {
-        expect(chatService.getQueryResult).toHaveBeenCalledWith('query-123');
+        expect(chatService.getQueryResult).toHaveBeenCalledWith('default', 'query-123');
       });
 
       // Should eventually show the response
@@ -924,11 +912,11 @@ describe('FloatingChat', () => {
 
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+          'default',
           'Test message',
           'agent',
           'Test Agent',
           expect.any(String),
-          undefined,
           undefined,
           '5m',
           undefined, // parameters

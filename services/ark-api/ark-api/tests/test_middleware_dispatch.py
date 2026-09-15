@@ -1,3 +1,4 @@
+import base64
 import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -12,6 +13,11 @@ def _make_request(headers=None, path="/v1/agents", method="GET"):
     request.headers = Headers(headers or {})
     request.state = MagicMock(spec=[])
     return request
+
+
+def _basic_auth_header(public_key="pk-ark-test", secret_key="sk-ark-test"):
+    encoded = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
+    return f"Basic {encoded}"
 
 
 class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCase):
@@ -199,6 +205,106 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
         response = await middleware.dispatch(request, call_next)
 
         self.assertEqual(response.status_code, 401)
+
+
+class TestMiddlewareDispatchBasicAuthOwnership(unittest.IsolatedAsyncioTestCase):
+
+    @patch.dict(os.environ, {
+        "AUTH_MODE": "hybrid",
+        "OIDC_ISSUER_URL": "http://issuer",
+        "OIDC_APPLICATION_ID": "app",
+        "IMPERSONATION_ENABLED": "true",
+    })
+    @patch("ark_api.auth.middleware.APIKeyService")
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_hybrid_rejects_key_without_recorded_owner(self, mock_validator_cls, mock_api_key_svc):
+        from ark_api.auth.middleware import AuthMiddleware
+
+        mock_api_key_svc.return_value.verify_api_key = AsyncMock(return_value={
+            "public_key": "pk-ark-test", "created_by": None
+        })
+
+        app = MagicMock()
+        middleware = AuthMiddleware(app)
+        call_next = AsyncMock()
+
+        request = _make_request(headers={"authorization": _basic_auth_header()})
+        response = await middleware.dispatch(request, call_next)
+
+        self.assertEqual(response.status_code, 401)
+        call_next.assert_not_called()
+
+    @patch.dict(os.environ, {
+        "AUTH_MODE": "hybrid",
+        "OIDC_ISSUER_URL": "http://issuer",
+        "OIDC_APPLICATION_ID": "app",
+        "IMPERSONATION_ENABLED": "true",
+    })
+    @patch("ark_api.auth.middleware.APIKeyService")
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_hybrid_allows_key_with_recorded_owner(self, mock_validator_cls, mock_api_key_svc):
+        from ark_api.auth.middleware import AuthMiddleware
+
+        mock_api_key_svc.return_value.verify_api_key = AsyncMock(return_value={
+            "public_key": "pk-ark-test", "created_by": "alice@example.com"
+        })
+
+        app = MagicMock()
+        middleware = AuthMiddleware(app)
+        expected_response = MagicMock()
+        call_next = AsyncMock(return_value=expected_response)
+
+        request = _make_request(headers={"authorization": _basic_auth_header()})
+        response = await middleware.dispatch(request, call_next)
+
+        self.assertEqual(response, expected_response)
+        call_next.assert_called_once()
+
+    @patch.dict(os.environ, {
+        "AUTH_MODE": "hybrid",
+        "OIDC_ISSUER_URL": "http://issuer",
+        "OIDC_APPLICATION_ID": "app",
+        "IMPERSONATION_ENABLED": "false",
+    })
+    @patch("ark_api.auth.middleware.APIKeyService")
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_hybrid_allows_unowned_key_when_impersonation_disabled(self, mock_validator_cls, mock_api_key_svc):
+        from ark_api.auth.middleware import AuthMiddleware
+
+        mock_api_key_svc.return_value.verify_api_key = AsyncMock(return_value={
+            "public_key": "pk-ark-test", "created_by": None
+        })
+
+        app = MagicMock()
+        middleware = AuthMiddleware(app)
+        expected_response = MagicMock()
+        call_next = AsyncMock(return_value=expected_response)
+
+        request = _make_request(headers={"authorization": _basic_auth_header()})
+        response = await middleware.dispatch(request, call_next)
+
+        self.assertEqual(response, expected_response)
+        call_next.assert_called_once()
+
+    @patch.dict(os.environ, {"AUTH_MODE": "basic"})
+    @patch("ark_api.auth.middleware.APIKeyService")
+    async def test_basic_only_mode_allows_unowned_key(self, mock_api_key_svc):
+        from ark_api.auth.middleware import AuthMiddleware
+
+        mock_api_key_svc.return_value.verify_api_key = AsyncMock(return_value={
+            "public_key": "pk-ark-test", "created_by": None
+        })
+
+        app = MagicMock()
+        middleware = AuthMiddleware(app)
+        expected_response = MagicMock()
+        call_next = AsyncMock(return_value=expected_response)
+
+        request = _make_request(headers={"authorization": _basic_auth_header()})
+        response = await middleware.dispatch(request, call_next)
+
+        self.assertEqual(response, expected_response)
+        call_next.assert_called_once()
 
 
 if __name__ == "__main__":

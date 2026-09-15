@@ -256,6 +256,36 @@ def playwright():
         yield p
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _warmup_dashboard(playwright, ark_setup):
+    """Warm up the dashboard once per worker before any test runs.
+
+    On a fresh deploy the first client render (shared layout, sidebar,
+    providers) can exceed the per-test 10s element wait, so the first test on
+    each xdist worker intermittently times out on cold start. Absorbing that
+    cost here — with its own generous timeout — lets individual tests keep
+    tight waits. It is a no-op when the app is already warm (local dev)."""
+    base_url = "http://localhost:3274"
+    try:
+        browser = playwright.chromium.launch()
+    except Exception as e:
+        logger.warning("Dashboard warmup skipped (browser launch failed): %s", e)
+        yield
+        return
+    try:
+        page = browser.new_page()
+        page.goto(base_url, wait_until="domcontentloaded", timeout=60000)
+        page.locator("main[data-slot='sidebar-inset']").first.wait_for(
+            state="visible", timeout=60000
+        )
+        logger.info("Dashboard warmup complete")
+    except Exception as e:
+        logger.warning("Dashboard warmup did not reach ready state: %s", e)
+    finally:
+        browser.close()
+    yield
+
+
 @pytest.fixture(scope="function")
 def browser(playwright, ark_setup, request):
     visible = request.config.getoption("--visible")

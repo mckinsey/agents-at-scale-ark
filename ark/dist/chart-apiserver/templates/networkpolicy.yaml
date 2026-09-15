@@ -23,4 +23,9 @@ spec:
     - ports:
         - port: 8081
           protocol: TCP
+    {{- if .Values.metrics.enabled }}
+    - ports:
+        - port: {{ .Values.metrics.port }}
+          protocol: TCP
+    {{- end }}
 {{- end }}

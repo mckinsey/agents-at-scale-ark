@@ -25,6 +25,14 @@ vi.mock('next/navigation', () => ({
     get: vi.fn((key: string) => key === 'namespace' ? 'default' : null),
   })),
 }));
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'test-namespace',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
 vi.mock('@/components/sessions-conversations/session-message', () => ({
   SessionMessage: ({ role, content }: any) => (
     <div data-testid={`message-${role}`}>{content}</div>

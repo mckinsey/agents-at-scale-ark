@@ -49,14 +49,26 @@ export const conversationsService = {
     const queries = Object.values(session.queries || {});
 
     const conversations = session.conversations.map((conv: ConversationSummary): Conversation => {
+      // Get all queries associated with this conversation
       const conversationQueries = queries.filter((q: SessionQuery) => q.conversationId === conv.conversationId);
       const queryNames = new Set(conversationQueries.map((q: SessionQuery) => q.name));
 
+      // Internal tools that shouldn't be counted (team coordination)
+      const internalTools = new Set(['select-next-speaker']);
+
       const toolCallCount = events
-        ? events.items.filter(e =>
-            e.reason === 'ToolCallComplete' &&
-            queryNames.has(e.data.queryName)
-          ).length
+        ? events.items.filter(e => {
+            if (e.reason !== 'ToolCallComplete') return false;
+
+            // Filter by query name (original approach)
+            if (!queryNames.has(e.data.queryName)) return false;
+
+            // Exclude internal tools (new addition)
+            const toolName = e.data.toolName;
+            if (!toolName || typeof toolName !== 'string') return false;
+
+            return !internalTools.has(toolName);
+          }).length
         : 0;
 
       return {
@@ -87,6 +99,7 @@ export const conversationsService = {
 
 
   async sendMessage(params: {
+    namespace: string;
     conversationId: string;
     message: string;
     sessionId: string;
@@ -99,12 +112,12 @@ export const conversationsService = {
       : params.agentName;
 
     await chatService.submitChatQuery(
+      params.namespace,
       params.message,
       params.participantType || 'agent',
       targetName,
       params.sessionId,
       params.conversationId,
-      undefined,
       undefined,
       params.parameters
     );

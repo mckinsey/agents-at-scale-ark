@@ -187,15 +187,15 @@ describe('conversationsService', () => {
         items: [
           {
             reason: 'ToolCallComplete',
-            data: { queryName: 'query-1' },
+            data: { queryName: 'query-1', toolName: 'search' },
           },
           {
             reason: 'ToolCallComplete',
-            data: { queryName: 'query-1' },
+            data: { queryName: 'query-1', toolName: 'calculate' },
           },
           {
             reason: 'ToolCallComplete',
-            data: { queryName: 'other-query' },
+            data: { queryName: 'other-query', toolName: 'fetch' },
           },
         ],
       };
@@ -389,6 +389,7 @@ describe('conversationsService', () => {
       const { chatService } = await import('@/lib/services/chat');
 
       await conversationsService.sendMessage({
+        namespace: 'default',
         conversationId: 'conv-1',
         message: 'Hello',
         sessionId: 'session-1',
@@ -397,12 +398,12 @@ describe('conversationsService', () => {
       });
 
       expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+        'default',
         'Hello',
         'agent',
         'test-agent',
         'session-1',
         'conv-1',
-        undefined,
         undefined,
         undefined
       );
@@ -412,6 +413,7 @@ describe('conversationsService', () => {
       const { chatService } = await import('@/lib/services/chat');
 
       await conversationsService.sendMessage({
+        namespace: 'default',
         conversationId: 'conv-1',
         message: 'Hello',
         sessionId: 'session-1',
@@ -420,12 +422,12 @@ describe('conversationsService', () => {
       });
 
       expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+        'default',
         'Hello',
         'agent',
         'test-agent',
         'session-1',
         'conv-1',
-        undefined,
         undefined,
         undefined
       );
@@ -435,6 +437,7 @@ describe('conversationsService', () => {
       const { chatService } = await import('@/lib/services/chat');
 
       await conversationsService.sendMessage({
+        namespace: 'default',
         conversationId: 'conv-1',
         message: 'Hello',
         sessionId: 'session-1',
@@ -442,12 +445,12 @@ describe('conversationsService', () => {
       });
 
       expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+        'default',
         'Hello',
         'agent',
         'test-agent',
         'session-1',
         'conv-1',
-        undefined,
         undefined,
         undefined
       );

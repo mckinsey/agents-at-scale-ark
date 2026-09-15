@@ -3,9 +3,9 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
 import * as z from 'zod';
 
+import { toast } from '@/components/ui/sonner';
 import type { components } from '@/lib/api/generated/types';
 import type { Agent, Team, TeamMember } from '@/lib/services';
 import { agentsService, teamsService } from '@/lib/services';
@@ -114,8 +114,8 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
           teamName
         ) {
           const [teamData, agentsData] = await Promise.all([
-            teamsService.getByName(teamName),
-            agentsService.getAll(),
+            teamsService.getByName(namespace, teamName),
+            agentsService.getAll(namespace),
           ]);
 
           if (!teamData) {
@@ -151,7 +151,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
               teamData.selector?.terminatePrompt || DEFAULT_TERMINATE_PROMPT,
           });
         } else {
-          const agentsData = await agentsService.getAll();
+          const agentsData = await agentsService.getAll(namespace);
           setAgents(agentsData);
         }
       } catch (error) {
@@ -185,7 +185,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
       setSaving(true);
       try {
         if (mode === TeamFormMode.VIEW && team) {
-          const updatedTeam = await teamsService.updateById(team.id, {
+          const updatedTeam = await teamsService.updateById(namespace, team.id, {
             description: values.description || undefined,
             members: selectedMembers.length > 0 ? selectedMembers : undefined,
             strategy: values.strategy || undefined,
@@ -212,7 +212,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
           form.reset(values);
           toast.success('Team updated successfully');
         } else {
-          await teamsService.create({
+          await teamsService.create(namespace, {
             name: values.name,
             description: values.description || undefined,
             members: selectedMembers,
@@ -233,7 +233,6 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
           });
-          toast.success('Team created successfully');
           onSuccessRef.current?.();
         }
       } catch (error) {

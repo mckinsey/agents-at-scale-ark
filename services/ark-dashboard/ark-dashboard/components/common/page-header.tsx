@@ -20,8 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Separator } from '@/components/ui/separator';
-import { SidebarTrigger } from '@/components/ui/sidebar';
+import { cn } from '@/lib/utils';
 
 import { Button } from '../ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
@@ -97,13 +96,17 @@ type PageHeaderProps = {
   breadcrumbs?: BreadcrumbElement[];
   currentPage?: string;
   actions?: ReactNode;
+  customBreadcrumb?: ReactNode;
+  className?: string;
 };
 
 export function PageHeader({
   breadcrumbs,
   currentPage,
   actions,
-}: PageHeaderProps) {
+  customBreadcrumb,
+  className,
+}: Readonly<PageHeaderProps>) {
   const firstCrumb =
     (breadcrumbs?.length || 0) > 2 ? breadcrumbs?.[0] : undefined;
   const crumbsInDropdown =
@@ -112,14 +115,14 @@ export function PageHeader({
     (breadcrumbs?.length || 0) > 2 ? breadcrumbs?.slice(-1) : breadcrumbs;
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 px-4">
-      <SidebarTrigger className="-ml-1" />
-      <Separator
-        orientation="vertical"
-        className="mr-2 data-[orientation=vertical]:h-4"
-      />
+    <header
+      className={cn(
+        'flex h-16 shrink-0 items-center gap-2 px-4',
+        className,
+      )}>
+      {customBreadcrumb}
       {/* Mobile */}
-      {currentPage && (
+      {!customBreadcrumb && currentPage && (
         <Breadcrumb className="block md:hidden">
           <BreadcrumbList>
             {breadcrumbs?.length ? (
@@ -137,7 +140,7 @@ export function PageHeader({
         </Breadcrumb>
       )}
       {/* Desktop */}
-      {currentPage && (
+      {!customBreadcrumb && currentPage && (
         <Breadcrumb className="hidden md:block">
           <BreadcrumbList>
             {firstCrumb && (

@@ -1,9 +1,10 @@
 'use client';
 
-import { AlertCircle, FileSpreadsheet, TableIcon } from 'lucide-react';
 import { useState } from 'react';
 
+import { ErrorIcon, GridOn, TableChart } from '@/components/icons';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   Table,
   TableBody,
@@ -55,7 +56,9 @@ export function SpreadsheetViewer({ data }: SpreadsheetViewerProps) {
     <div className="space-y-4">
       {/* Metadata */}
       <div className="text-muted-foreground flex items-center gap-2 text-sm">
-        <FileSpreadsheet className="h-4 w-4" />
+        <IconShell size="sm">
+          <TableChart />
+        </IconShell>
         <span>
           {data.metadata.fileType.toUpperCase()} • {data.metadata.sheetCount}{' '}
           sheet
@@ -107,7 +110,9 @@ function SheetContent({ sheet }: { sheet: SpreadsheetSheet }) {
       {/* Preview limitation warning */}
       {sheet.previewLimited && (
         <Alert>
-          <AlertCircle className="h-4 w-4" />
+          <IconShell size="sm">
+            <ErrorIcon />
+          </IconShell>
           <AlertDescription>
             Preview limited to first 1000 rows and 26 columns. Total:{' '}
             {sheet.totalRows} rows × {sheet.totalColumns} columns
@@ -118,7 +123,9 @@ function SheetContent({ sheet }: { sheet: SpreadsheetSheet }) {
       {/* Table info */}
       <div className="text-muted-foreground flex items-center gap-4 text-sm">
         <span className="flex items-center gap-1">
-          <TableIcon className="h-3 w-3" />
+          <IconShell size="sm">
+            <GridOn />
+          </IconShell>
           {sheet.totalRows} rows
         </span>
         <span>•</span>

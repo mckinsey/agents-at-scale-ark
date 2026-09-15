@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from .common import PaginatedListResponse
+
 
 class A2AServerRef(BaseModel):
     """Reference to an A2AServer."""
@@ -79,10 +81,9 @@ class A2ATaskResponse(BaseModel):
     creationTimestamp: Optional[datetime] = None
 
 
-class A2ATaskListResponse(BaseModel):
+class A2ATaskListResponse(PaginatedListResponse):
     """List of A2ATasks response model."""
     items: List[A2ATaskResponse]
-    count: int
 
 
 class A2ATaskDetailResponse(BaseModel):

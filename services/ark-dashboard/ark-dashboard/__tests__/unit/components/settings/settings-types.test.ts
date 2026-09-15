@@ -3,33 +3,39 @@ import { describe, expect, it } from 'vitest';
 import { settingsSections } from '@/components/settings/settings-types';
 
 describe('settingsSections', () => {
-  it('should have two sections', () => {
-    expect(settingsSections).toHaveLength(2);
+  it('should have one section', () => {
+    expect(settingsSections).toHaveLength(1);
   });
 
-  it('should have general section with correct items', () => {
-    const general = settingsSections.find(s => s.sectionKey === 'general');
-    expect(general).toBeDefined();
-    expect(general!.sectionLabel).toBe('General');
-    expect(general!.items).toHaveLength(5);
-    expect(general!.items.map(i => i.key)).toEqual([
-      'a2a-servers',
-      'memory',
-      'manage-marketplace',
+  it('should have settings section with correct items', () => {
+    const settings = settingsSections.find(s => s.sectionKey === 'settings');
+    expect(settings).toBeDefined();
+    expect(settings!.sectionLabel).toBe('');
+    expect(settings!.items).toHaveLength(4);
+    expect(settings!.items.map(i => i.key)).toEqual([
       'queries',
       'experimental-features',
+      'execution-engines',
+      'manage-marketplace',
     ]);
   });
 
-  it('should have privacy section with correct items', () => {
-    const privacy = settingsSections.find(s => s.sectionKey === 'privacy');
-    expect(privacy).toBeDefined();
-    expect(privacy!.sectionLabel).toBe('Privacy');
-    expect(privacy!.items).toHaveLength(2);
-    expect(privacy!.items.map(i => i.key)).toEqual([
-      'service-api-keys',
-      'secrets',
-    ]);
+  it('should mark execution-engines as experimental', () => {
+    const settings = settingsSections.find(s => s.sectionKey === 'settings');
+    const executionEngines = settings!.items.find(
+      i => i.key === 'execution-engines',
+    );
+    expect(executionEngines).toBeDefined();
+    expect(executionEngines!.experimental).toBe(true);
+  });
+
+  it('should mark manage-marketplace as experimental', () => {
+    const settings = settingsSections.find(s => s.sectionKey === 'settings');
+    const manageMarketplace = settings!.items.find(
+      i => i.key === 'manage-marketplace',
+    );
+    expect(manageMarketplace).toBeDefined();
+    expect(manageMarketplace!.experimental).toBe(true);
   });
 
   it('should have icons for all items', () => {

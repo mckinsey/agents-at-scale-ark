@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
 import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertIcon, AlertContent, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -65,11 +65,15 @@ export const MarketplaceSection = forwardRef<
       )}
 
       {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Failed to load marketplace items. Please try again later.
-          </AlertDescription>
+        <Alert layout="long">
+          <AlertIcon className="text-status-error">
+            <AlertCircle className="text-[25px]" />
+          </AlertIcon>
+          <AlertContent>
+            <AlertDescription>
+              Failed to load marketplace items. Please try again later.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 

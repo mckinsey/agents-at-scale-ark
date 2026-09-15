@@ -125,6 +125,7 @@ deployments:
           host: ark-storage-dev
           user: postgres
           passwordSecretName: ark-storage-dev-password
+          sslMode: disable
 
 dev:
   ark-controller:
@@ -133,7 +134,7 @@ dev:
     # Match the controller's unique label instead.
     labelSelector:
       control-plane: ark-controller
-    devImage: golang:1.24.13-bookworm
+    devImage: golang:1.26.6-bookworm
     command:
       - "sh"
       - "-c"
@@ -165,7 +166,7 @@ dev:
       enabled: true
   ark-completions:
     imageSelector: ark-completions
-    devImage: golang:1.24.13-bookworm
+    devImage: golang:1.26.6-bookworm
     command:
       - "sh"
       - "-c"

@@ -12,7 +12,7 @@ import type { LogsResponse } from '@/lib/services/logs';
 vi.mock('@/lib/services/broker-sessions-hooks');
 vi.mock('@/lib/services/logs-hooks');
 vi.mock('@/lib/services/logs');
-vi.mock('sonner');
+vi.mock('@/components/ui/sonner');
 vi.mock('@/components/sessions-conversations/session-table-row', () => ({
   SessionTableRow: ({ session }: any) => (
     <div data-testid={`session-row-${session.sessionId}`}>{session.name}</div>
@@ -20,6 +20,22 @@ vi.mock('@/components/sessions-conversations/session-table-row', () => ({
 }));
 vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
   NewSessionDialog: () => null,
+}));
+vi.mock('@/components/ui/pagination', () => ({
+  Pagination: ({ currentPage, totalPages, onPageChange }: any) => (
+    <div
+      data-testid="pagination"
+      data-current-page={currentPage}
+      data-total-pages={totalPages}
+    >
+      <button
+        data-testid="pagination-next"
+        onClick={() => onPageChange(currentPage + 1)}
+      >
+        Next
+      </button>
+    </div>
+  ),
 }));
 
 describe('Pagination Edge Cases', () => {
@@ -78,12 +94,12 @@ describe('Pagination Edge Cases', () => {
       });
     });
 
-    it('should reset cursor when sort changes', async () => {
+    it('should reset cursor to 0 when sort changes after navigating to a later page', async () => {
       const user = userEvent.setup();
 
-      // Start with cursor at 20
+      // Provide enough sessions to render pagination
       vi.mocked(useListSessions).mockReturnValue({
-        data: { ...mockSessionsData, hasMore: true, nextCursor: 20 },
+        data: { ...mockSessionsData, total: 60, hasMore: true, nextCursor: 20 },
         isLoading: false,
         isError: false,
         error: null,
@@ -96,10 +112,16 @@ describe('Pagination Edge Cases', () => {
         />
       );
 
-      // Click load more to advance cursor
-      await user.click(screen.getByText('Load More'));
+      // Advance to page 2 (cursor 20)
+      await user.click(screen.getByTestId('pagination-next'));
 
-      // Change sort
+      await waitFor(() => {
+        const calls = vi.mocked(useListSessions).mock.calls;
+        const lastCall = calls[calls.length - 1][0];
+        expect(lastCall.cursor).toBe(20);
+      });
+
+      // Change sort → should reset to page 1
       await user.click(screen.getByText('Name'));
 
       await waitFor(() => {
@@ -110,9 +132,9 @@ describe('Pagination Edge Cases', () => {
       });
     });
 
-    it('should not show load more button when hasMore is false', () => {
+    it('should not show pagination when total is below page size', () => {
       vi.mocked(useListSessions).mockReturnValue({
-        data: { ...mockSessionsData, hasMore: false },
+        data: { ...mockSessionsData, total: 3, hasMore: false },
         isLoading: false,
         isError: false,
         error: null,
@@ -125,14 +147,12 @@ describe('Pagination Edge Cases', () => {
         />
       );
 
-      expect(screen.queryByText('Load More')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pagination')).not.toBeInTheDocument();
     });
 
-    it('should handle missing nextCursor gracefully', async () => {
-      const user = userEvent.setup();
-
+    it('should compute totalPages correctly when total is not a multiple of page size', () => {
       vi.mocked(useListSessions).mockReturnValue({
-        data: { ...mockSessionsData, hasMore: true, nextCursor: undefined },
+        data: { ...mockSessionsData, total: 45, hasMore: true, nextCursor: 20 },
         isLoading: false,
         isError: false,
         error: null,
@@ -145,16 +165,14 @@ describe('Pagination Edge Cases', () => {
         />
       );
 
-      await user.click(screen.getByText('Load More'));
-
-      await waitFor(() => {
-        const calls = vi.mocked(useListSessions).mock.calls;
-        const lastCall = calls[calls.length - 1][0];
-        expect(lastCall.cursor).toBe(0);
-      });
+      // ceil(45 / 20) = 3
+      expect(screen.getByTestId('pagination')).toHaveAttribute(
+        'data-total-pages',
+        '3',
+      );
     });
 
-    it('should show correct count when total equals items length', () => {
+    it('should not render pagination when total equals items length', () => {
       vi.mocked(useListSessions).mockReturnValue({
         data: {
           items: mockSessionsData.items,
@@ -173,7 +191,7 @@ describe('Pagination Edge Cases', () => {
         />
       );
 
-      expect(screen.queryByText('Load More')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pagination')).not.toBeInTheDocument();
       expect(screen.getByText('Session 1')).toBeInTheDocument();
     });
   });
@@ -307,10 +325,10 @@ describe('Pagination Edge Cases', () => {
 
       render(<LogsTab sessionId="session-1" />);
 
-      const loadMoreButton = screen.getByText('Load more');
+      const loadMoreButton = screen.getByRole('button', { name: 'Load more' });
       await user.click(loadMoreButton);
 
-      expect(screen.getByText('Loading...')).toBeDisabled();
+      expect(loadMoreButton).toBeDisabled();
     });
 
     it('should not allow load more when nextCursor is undefined', () => {

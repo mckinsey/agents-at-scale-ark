@@ -5,4 +5,5 @@ requests>=2.25.0
 playwright>=1.40.0
 pytest-playwright>=0.4.0
 pytest-xdist>=3.5.0
+pytest-rerunfailures>=14.0
 pexpect>=4.9.0

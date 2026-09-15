@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
@@ -81,6 +83,27 @@ func TestResolveDispatchAddress(t *testing.T) {
 		}
 		engine := &arkv1prealpha1.ExecutionEngine{
 			ObjectMeta: metav1.ObjectMeta{Name: "my-engine", Namespace: "default"},
+			Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: engineAddr},
+		}
+		r := &QueryReconciler{
+			Client:          fake.NewClientBuilder().WithScheme(newTestScheme()).WithObjects(agent, engine).Build(),
+			CompletionsAddr: completionsAddr,
+		}
+		target := arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "engine-agent"}
+		addr, err := r.resolveDispatchAddress(context.Background(), target, "default")
+		require.NoError(t, err)
+		assert.Equal(t, engineAddr, addr)
+	})
+
+	t.Run("named engine with explicit namespace returns engine address", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "engine-agent", Namespace: "default"},
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "my-engine", Namespace: "engines"},
+			},
+		}
+		engine := &arkv1prealpha1.ExecutionEngine{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-engine", Namespace: "engines"},
 			Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: engineAddr},
 		}
 		r := &QueryReconciler{
@@ -338,6 +361,38 @@ func TestExtractEngineResponseMeta(t *testing.T) {
 		require.NotNil(t, meta.TokenUsage)
 		assert.Equal(t, int64(30), meta.TokenUsage.TotalTokens)
 		assert.NotEmpty(t, meta.MessagesRaw)
+		assert.False(t, meta.MemoryUnavailable)
+	})
+
+	t.Run("extracts memoryUnavailable flag", func(t *testing.T) {
+		msg := &protocol.Message{
+			Role:  protocol.MessageRoleAgent,
+			Parts: []protocol.Part{protocol.NewTextPart("response")},
+			Metadata: map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"conversationId":    "conv-1",
+					"memoryUnavailable": true,
+				},
+			},
+		}
+		meta := extractEngineResponseMeta(&protocol.MessageResult{Result: msg})
+		assert.True(t, meta.MemoryUnavailable)
+	})
+
+	t.Run("extracts memoryDegraded flag", func(t *testing.T) {
+		msg := &protocol.Message{
+			Role:  protocol.MessageRoleAgent,
+			Parts: []protocol.Part{protocol.NewTextPart("response")},
+			Metadata: map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"conversationId": "conv-1",
+					"memoryDegraded": true,
+				},
+			},
+		}
+		meta := extractEngineResponseMeta(&protocol.MessageResult{Result: msg})
+		assert.True(t, meta.MemoryDegraded)
+		assert.False(t, meta.MemoryUnavailable)
 	})
 
 	t.Run("extracts native A2A contextId and taskId from message", func(t *testing.T) {
@@ -385,6 +440,162 @@ func TestExtractEngineResponseMeta(t *testing.T) {
 		result := &protocol.MessageResult{Result: task}
 		meta := extractEngineResponseMeta(result)
 		assert.Empty(t, meta.ConversationId)
+	})
+}
+
+func TestSetConditionMemoryUnavailable(t *testing.T) {
+	r := &QueryReconciler{}
+	condType := string(arkv1alpha1.QueryMemoryUnavailable)
+
+	t.Run("sets True with NoMemoryBackend reason when unavailable", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryUnavailable(query, true)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionTrue, cond.Status)
+		assert.Equal(t, "NoMemoryBackend", cond.Reason)
+	})
+
+	t.Run("sets False when memory reachable", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryUnavailable(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+		assert.Equal(t, "MemoryReachable", cond.Reason)
+	})
+
+	t.Run("clears a prior True to False on re-run", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryUnavailable(query, true)
+		r.setConditionMemoryUnavailable(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	})
+}
+
+func TestSetConditionMemoryDegraded(t *testing.T) {
+	r := &QueryReconciler{}
+	condType := string(arkv1alpha1.QueryMemoryDegraded)
+
+	t.Run("sets True with GetMessagesFailed reason when degraded", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryDegraded(query, true)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionTrue, cond.Status)
+		assert.Equal(t, "GetMessagesFailed", cond.Reason)
+		assert.NotEmpty(t, cond.Message)
+	})
+
+	t.Run("sets False when history was read", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryDegraded(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+		assert.Equal(t, "MemoryHealthy", cond.Reason)
+	})
+
+	t.Run("clears a prior True to False on re-run", func(t *testing.T) {
+		query := &arkv1alpha1.Query{}
+		r.setConditionMemoryDegraded(query, true)
+		r.setConditionMemoryDegraded(query, false)
+		cond := findCondition(query.Status.Conditions, condType)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	})
+}
+
+// The setters above run against an in-memory Query, but the terminal write
+// refetches the object inside mutateStatus. Without the snapshot in
+// savedQueryStatus, both conditions are dropped before they are ever persisted
+// and a completed query carries only Completed.
+func TestUpdateStatusWithDuration_PersistsMemoryConditions(t *testing.T) {
+	ctx := context.Background()
+	unavailableType := string(arkv1alpha1.QueryMemoryUnavailable)
+	degradedType := string(arkv1alpha1.QueryMemoryDegraded)
+
+	newPersistedQuery := func(name string) (*arkv1alpha1.Query, *QueryReconciler, client.Client) {
+		q := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: &arkv1alpha1.QueryTarget{Type: targetTypeAgent, Name: "test-agent"},
+			},
+			Status: arkv1alpha1.QueryStatus{Phase: statusRunning},
+		}
+		c := fake.NewClientBuilder().WithScheme(newTestScheme()).
+			WithObjects(q).
+			WithStatusSubresource(&arkv1alpha1.Query{}).
+			Build()
+		return q, &QueryReconciler{Client: c, Scheme: c.Scheme()}, c
+	}
+
+	fetch := func(t *testing.T, c client.Client, q *arkv1alpha1.Query) *arkv1alpha1.Query {
+		t.Helper()
+		after := &arkv1alpha1.Query{}
+		require.NoError(t, c.Get(ctx, apimachinerytypes.NamespacedName{Name: q.Name, Namespace: q.Namespace}, after))
+		return after
+	}
+
+	t.Run("persists the False form when memory was healthy", func(t *testing.T) {
+		q, r, c := newPersistedQuery("memory-conditions-false")
+		r.setConditionMemoryUnavailable(q, false)
+		r.setConditionMemoryDegraded(q, false)
+
+		require.NoError(t, r.updateStatusWithDuration(ctx, q, statusDone, &metav1.Duration{Duration: time.Second}))
+
+		after := fetch(t, c, q)
+		unavailable := findCondition(after.Status.Conditions, unavailableType)
+		require.NotNil(t, unavailable, "MemoryUnavailable must be persisted in its False form so consumers can tell 'memory was fine' from 'never evaluated'")
+		assert.Equal(t, metav1.ConditionFalse, unavailable.Status)
+		assert.Equal(t, "MemoryReachable", unavailable.Reason)
+
+		degraded := findCondition(after.Status.Conditions, degradedType)
+		require.NotNil(t, degraded, "MemoryDegraded must be persisted in its False form")
+		assert.Equal(t, metav1.ConditionFalse, degraded.Status)
+		assert.Equal(t, "MemoryHealthy", degraded.Reason)
+
+		require.NotNil(t, findCondition(after.Status.Conditions, string(arkv1alpha1.QueryCompleted)), "the phase condition must still be written alongside the restored memory conditions")
+	})
+
+	t.Run("persists the True form when memory was unavailable", func(t *testing.T) {
+		q, r, c := newPersistedQuery("memory-conditions-unavailable")
+		r.setConditionMemoryUnavailable(q, true)
+		r.setConditionMemoryDegraded(q, false)
+
+		require.NoError(t, r.updateStatusWithDuration(ctx, q, statusDone, &metav1.Duration{Duration: time.Second}))
+
+		after := fetch(t, c, q)
+		unavailable := findCondition(after.Status.Conditions, unavailableType)
+		require.NotNil(t, unavailable)
+		assert.Equal(t, metav1.ConditionTrue, unavailable.Status)
+		assert.Equal(t, "NoMemoryBackend", unavailable.Reason)
+	})
+
+	t.Run("persists the True form when memory was degraded", func(t *testing.T) {
+		q, r, c := newPersistedQuery("memory-conditions-degraded")
+		r.setConditionMemoryUnavailable(q, false)
+		r.setConditionMemoryDegraded(q, true)
+
+		require.NoError(t, r.updateStatusWithDuration(ctx, q, statusDone, &metav1.Duration{Duration: time.Second}))
+
+		after := fetch(t, c, q)
+		degraded := findCondition(after.Status.Conditions, degradedType)
+		require.NotNil(t, degraded)
+		assert.Equal(t, metav1.ConditionTrue, degraded.Status)
+		assert.Equal(t, "GetMessagesFailed", degraded.Reason)
+	})
+
+	t.Run("leaves conditions absent when dispatch never evaluated memory", func(t *testing.T) {
+		q, r, c := newPersistedQuery("memory-conditions-untouched")
+
+		require.NoError(t, r.updateStatusWithDuration(ctx, q, statusRunning, nil))
+
+		after := fetch(t, c, q)
+		assert.Nil(t, findCondition(after.Status.Conditions, unavailableType), "a non-dispatch status write must not invent a memory condition")
+		assert.Nil(t, findCondition(after.Status.Conditions, degradedType))
 	})
 }
 

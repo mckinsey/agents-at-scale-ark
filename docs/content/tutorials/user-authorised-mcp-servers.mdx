@@ -17,13 +17,13 @@ By the end you'll have:
 
 ## How per-user auth works
 
-An `MCPServer` can carry static `spec.headers` (a shared token). On top of that, an Agent or a Query can set `spec.overrides` with `resourceType: mcpserver` to inject or replace headers for that specific run. The headers merge with this precedence (last wins):
+An `MCPServer` can carry static `spec.headers` (a shared token), or a bearer resolved from `spec.authorization.tokenSecretRef`. On top of either, an Agent or a Query can set `spec.overrides` with `resourceType: mcpserver` to inject or replace headers for that specific run. The headers merge with this precedence (last wins):
 
 ```
-MCPServer.spec.headers  <  Agent.spec.overrides  <  Query.spec.overrides
+MCPServer.spec.headers  <  MCPServer.spec.authorization  <  Agent.spec.overrides  <  Query.spec.overrides
 ```
 
-So a per-query `Authorization` override replaces the server's default token for that call — that's what makes the request "user authorised." The registration token on the `MCPServer` is only used to **discover** the server's tools; the token that actually authorises a tool *call* is whichever override is in effect.
+The `MCPServer`-level credential applies to both tool **discovery** and tool **calls**, so an agent can use the server with no override at all. A per-query `Authorization` override replaces it for that call — that's what makes the request "user authorised."
 
 ## Prerequisites
 
@@ -32,10 +32,10 @@ So a per-query `Authorization` override replaces the server's default token for 
 
 ## Step 1 — Register the GitHub MCP server
 
-The MCP controller connects to the server, discovers its tools, and creates a `Tool` per function. It needs a token to do that discovery — use a service/registration token here (any valid GitHub token works):
+The MCP controller connects to the server, discovers its tools, and creates a `Tool` per function. It needs a token to do that — use a service/registration token here (any valid GitHub token works). This token is also the fallback for tool calls that carry no override, so scope it accordingly:
 
 ```bash
-# Registration token, used only for tool discovery.
+# Registration token: used for tool discovery, and for any call without an override.
 kubectl create secret generic github-registration-token \
   --from-literal=token="Bearer $(gh auth token)"
 ```

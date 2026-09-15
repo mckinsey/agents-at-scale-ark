@@ -1,24 +1,17 @@
 'use client';
 
-import {
-  AlertTriangle,
-  Bot,
-  FileText,
-  Plus,
-  Trash2,
-  Variable,
-} from 'lucide-react';
 import { useMemo } from 'react';
 
+import { Add, Code, Info, SmartToy, Trash, Warning } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import {
   type QueryParameter,
   extractTemplateParameters,
 } from '@/lib/utils/query-parameters';
+import { generateUUID } from '@/lib/utils/uuid';
 
 import { Button } from './button';
-import { Input } from './input';
-import { Label } from './label';
+import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
 export interface QueryParameterEditorProps {
   parameters: QueryParameter[];
@@ -28,6 +21,9 @@ export interface QueryParameterEditorProps {
   className?: string;
   agentRequiredParams?: string[];
 }
+
+const VARIABLES_TOOLTIP_TEXT =
+  'Use {{.parameterName}} in your input to add variables. Values are substituted at query time.';
 
 export function QueryParameterEditor({
   parameters,
@@ -54,7 +50,7 @@ export function QueryParameterEditor({
   );
 
   const addParameter = (name = '') => {
-    onChange([...parameters, { name, value: '' }]);
+    onChange([...parameters, { id: generateUUID(), name, value: '' }]);
   };
 
   const removeParameter = (index: number) => {
@@ -68,33 +64,46 @@ export function QueryParameterEditor({
   };
 
   return (
-    <div className={cn('space-y-4', className)}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Variable className="text-muted-foreground h-4 w-4" />
-          <h3 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
-            Parameters
-          </h3>
+    <div className={cn('flex flex-col gap-5', className)}>
+      <div className="flex w-full items-start justify-between">
+        <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-fg-secondary text-base leading-6 tracking-[-0.016px]">
+              Variables
+            </h3>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="How to use variables"
+                  className="text-fg-secondary inline-flex cursor-help">
+                  <Info className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{VARIABLES_TOOLTIP_TEXT}</TooltipContent>
+            </Tooltip>
+          </div>
+          <p className="text-fg-secondary text-xs leading-4 tracking-[0.024px]">
+            {parameters.length} result{parameters.length === 1 ? '' : 's'}
+          </p>
         </div>
         <Button
           type="button"
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="xs"
           onClick={() => addParameter()}
-          disabled={disabled}
-          className="h-7 px-2 text-xs">
-          <Plus className="mr-1 h-3 w-3" />
-          Add
+          disabled={disabled}>
+          <Add className="size-4" />
+          Add new
         </Button>
       </div>
 
-      {/* Agent-required params suggestion */}
       {undefinedAgentParams.length > 0 && (
-        <div className="rounded-md border border-blue-500/30 bg-blue-500/10 p-3">
+        <div className="bg-status-info/10 rounded-md p-3">
           <div className="flex items-start gap-2">
-            <Bot className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+            <SmartToy className="text-status-info mt-0.5 size-4 shrink-0" />
             <div className="flex-1">
-              <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
+              <p className="text-status-info text-xs font-medium">
                 Required by agent:
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -104,9 +113,9 @@ export function QueryParameterEditor({
                     type="button"
                     onClick={() => addParameter(param)}
                     disabled={disabled}
-                    className="inline-flex items-center rounded bg-blue-500/20 px-2 py-0.5 font-mono text-xs text-blue-700 transition-colors hover:bg-blue-500/30 disabled:cursor-not-allowed dark:text-blue-400">
+                    className="bg-status-info/20 text-status-info hover:bg-status-info/30 inline-flex items-center rounded px-2 py-0.5 font-mono text-xs transition-colors disabled:cursor-not-allowed">
                     {param}
-                    <Plus className="ml-1 h-3 w-3" />
+                    <Add className="ml-1 size-3" />
                   </button>
                 ))}
               </div>
@@ -115,13 +124,12 @@ export function QueryParameterEditor({
         </div>
       )}
 
-      {/* Undefined input params warning */}
       {undefinedInputParams.length > 0 && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+        <div className="bg-status-warning/10 rounded-md p-3">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+            <Warning className="text-status-warning mt-0.5 size-4 shrink-0" />
             <div className="flex-1">
-              <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              <p className="text-status-warning text-xs font-medium">
                 Undefined in input:
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -131,11 +139,11 @@ export function QueryParameterEditor({
                     type="button"
                     onClick={() => addParameter(param)}
                     disabled={disabled}
-                    className="inline-flex items-center rounded bg-amber-500/20 px-2 py-0.5 font-mono text-xs text-amber-700 transition-colors hover:bg-amber-500/30 disabled:cursor-not-allowed dark:text-amber-400">
+                    className="bg-status-warning/20 text-status-warning hover:bg-status-warning/30 inline-flex items-center rounded px-2 py-0.5 font-mono text-xs transition-colors disabled:cursor-not-allowed">
                     {'{{.'}
                     {param}
                     {'}}'}
-                    <Plus className="ml-1 h-3 w-3" />
+                    <Add className="ml-1 size-3" />
                   </button>
                 ))}
               </div>
@@ -144,128 +152,76 @@ export function QueryParameterEditor({
         </div>
       )}
 
-      {parameters.length === 0 ? (
-        <div className="rounded-md border border-dashed p-4 text-center">
-          <p className="text-muted-foreground text-xs">
-            No parameters defined. Use{' '}
-            <code className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">
-              {'{{.name}}'}
-            </code>{' '}
-            syntax in your input for template variables.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
+      {parameters.length > 0 && (
+        <div className="flex flex-col gap-2">
           {parameters.map((param, index) => {
             const isUsedInInput =
-              param.name && inputParams.includes(param.name);
+              !!param.name && inputParams.includes(param.name);
             const isRequiredByAgent =
-              param.name && agentRequiredParams.includes(param.name);
+              !!param.name && agentRequiredParams.includes(param.name);
             const isDuplicate =
-              param.name &&
+              !!param.name &&
               parameters.filter(p => p.name === param.name).length > 1;
 
             return (
-              <div
-                key={index}
-                className={cn(
-                  'rounded-md border p-3',
-                  isDuplicate && 'border-destructive/50 bg-destructive/5',
-                )}>
-                <div className="flex items-start gap-2">
-                  <div className="flex flex-1 flex-col gap-2">
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <Label className="text-muted-foreground text-[10px] tracking-wide uppercase">
-                          Name
-                        </Label>
-                        <Input
-                          value={param.name}
-                          onChange={e =>
-                            updateParameter(index, { name: e.target.value })
-                          }
-                          placeholder="parameter_name"
-                          disabled={disabled}
-                          className={cn(
-                            'h-8 font-mono text-sm',
-                            isDuplicate && 'border-destructive',
-                          )}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <Label className="text-muted-foreground text-[10px] tracking-wide uppercase">
-                          Value
-                        </Label>
-                        <Input
-                          value={param.value}
-                          onChange={e =>
-                            updateParameter(index, { value: e.target.value })
-                          }
-                          placeholder="Enter value..."
-                          disabled={disabled}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-center gap-1 pt-4">
-                    <div className="flex gap-1">
-                      {isUsedInInput && (
-                        <span
-                          className="text-[9px] text-emerald-600 dark:text-emerald-400"
-                          title="Used in input text">
-                          <FileText className="h-3 w-3" />
-                        </span>
-                      )}
-                      {isRequiredByAgent && (
-                        <span
-                          className="text-[9px] text-blue-600 dark:text-blue-400"
-                          title="Required by agent">
-                          <Bot className="h-3 w-3" />
-                        </span>
-                      )}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeParameter(index)}
-                      disabled={disabled}
-                      className="text-muted-foreground hover:text-destructive h-6 w-6 p-0">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+              <div key={param.id} className="flex items-center gap-3">
+                <div className="focus-within:border-b-stroke-status-focus flex h-10 min-w-0 flex-1 items-center gap-2 border-b border-white/[0.16]">
+                  <input
+                    type="text"
+                    value={param.name}
+                    onChange={e =>
+                      updateParameter(index, { name: e.target.value })
+                    }
+                    placeholder="parameter_name"
+                    disabled={disabled}
+                    aria-label={`Parameter ${index + 1} name`}
+                    className={cn(
+                      'text-fg-primary placeholder:text-fg-secondary min-w-0 flex-1 bg-transparent font-mono text-sm leading-4 tracking-[-0.112px] outline-none disabled:cursor-not-allowed disabled:opacity-50',
+                      isDuplicate &&
+                        'text-status-error placeholder:text-status-error',
+                    )}
+                  />
+                  {isUsedInInput && (
+                    <span
+                      className="text-status-success inline-flex shrink-0 items-center"
+                      title="Used in input text">
+                      <Code className="size-3.5" />
+                    </span>
+                  )}
+                  {isRequiredByAgent && (
+                    <span
+                      className="text-status-info inline-flex shrink-0 items-center"
+                      title="Required by agent">
+                      <SmartToy className="size-3.5" />
+                    </span>
+                  )}
+                </div>
+                <div className="focus-within:border-b-stroke-status-focus flex h-10 min-w-0 flex-1 items-center border-b border-white/[0.16]">
+                  <input
+                    type="text"
+                    value={param.value}
+                    onChange={e =>
+                      updateParameter(index, { value: e.target.value })
+                    }
+                    placeholder="Value"
+                    disabled={disabled}
+                    aria-label={`Parameter ${index + 1} value`}
+                    className="text-fg-primary placeholder:text-fg-secondary min-w-0 flex-1 bg-transparent text-sm leading-4 tracking-[-0.112px] outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                </div>
+                <div className="flex h-10 w-8 shrink-0 items-center justify-center border-b border-white/[0.16]">
+                  <button
+                    type="button"
+                    onClick={() => removeParameter(index)}
+                    disabled={disabled}
+                    aria-label="Remove parameter"
+                    className="text-fg-secondary hover:text-status-error transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+                    <Trash className="size-4" />
+                  </button>
                 </div>
               </div>
             );
           })}
-        </div>
-      )}
-
-      {(parameters.length > 0 ||
-        inputParams.length > 0 ||
-        agentRequiredParams.length > 0) && (
-        <div className="text-muted-foreground flex items-center gap-3 text-[10px]">
-          <span>{parameters.filter(p => p.name).length} defined</span>
-          {inputParams.length > 0 && (
-            <>
-              <span>·</span>
-              <span className="flex items-center gap-1">
-                <FileText className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                {inputParams.length} in input
-              </span>
-            </>
-          )}
-          {agentRequiredParams.length > 0 && (
-            <>
-              <span>·</span>
-              <span className="flex items-center gap-1">
-                <Bot className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                {agentRequiredParams.length} for agent
-              </span>
-            </>
-          )}
         </div>
       )}
     </div>

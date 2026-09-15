@@ -1,41 +1,33 @@
 'use client';
 
-import { ExternalLink } from 'lucide-react';
-
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
+import { InsertDriveFile } from '@/components/icons';
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
+  LearnMoreButton,
+  ResourceEmptyState,
+} from '@/components/sections/resource-list-states';
+import { DOCS_URLS } from '@/lib/constants/docs';
 
 export function FilesSetupInstructions() {
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4">
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <DASHBOARD_SECTIONS.files.icon />
-          </EmptyMedia>
-          <EmptyTitle>File Gateway Service Not Configured</EmptyTitle>
-          <EmptyDescription>
-            Set up the{' '}
-            <a
-              href="https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors">
-              File Gateway Service
-              <ExternalLink className="h-3 w-3" />
-            </a>{' '}
-            to enable file management capabilities.
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent></EmptyContent>
-      </Empty>
+    <div className="content-shell flex h-full w-full flex-col">
+      <ResourcePageHeader
+        icon={<InsertDriveFile />}
+        title="Files"
+        description="Manage datasets, documents, and assets used by agents"
+      />
+
+      <ResourceEmptyState
+        icon={<InsertDriveFile />}
+        title="File Gateway Service Not Configured"
+        description={
+          <>
+            <p className="mb-2">Set up the File Gateway Service</p>
+            <p>to enable file management capabilities.</p>
+          </>
+        }
+        actions={<LearnMoreButton href={DOCS_URLS.fileGateway} />}
+      />
     </div>
   );
 }

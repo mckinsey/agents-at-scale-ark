@@ -10,6 +10,15 @@ import {
 } from '@/lib/services/workflow-mapper';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
   useSearchParams: vi.fn(),
@@ -207,14 +216,20 @@ describe('SessionsSection', () => {
     refresh: vi.fn(),
   };
 
-  const mockSearchParams = new URLSearchParams();
+  let currentSearch = '';
   const allWorkflows = [mockWorkflow, mockFailedWorkflow, mockRunningWorkflow];
 
   beforeEach(() => {
     vi.clearAllMocks();
+    currentSearch = '';
+    mockRouter.replace.mockImplementation((url: string) => {
+      currentSearch = url.split('?')[1] ?? '';
+    });
     vi.mocked(useRouter).mockReturnValue(mockRouter as any);
-    vi.mocked(useSearchParams).mockReturnValue(mockSearchParams as any);
-    
+    vi.mocked(useSearchParams).mockImplementation(
+      () => new URLSearchParams(currentSearch) as any,
+    );
+
     vi.mocked(mapArgoWorkflowsToSessions).mockImplementation((workflows) =>
       workflows.map((w: any) => ({
         id: w.metadata.name,
@@ -443,7 +458,7 @@ describe('SessionsSection', () => {
       const statusSelect = comboboxes[0];
       await user.click(statusSelect);
 
-      const failedOption = screen.getByRole('option', { name: /failed/i });
+      const failedOption = await screen.findByRole('option', { name: /failed/i });
       await user.click(failedOption);
 
       await waitFor(() => {
@@ -533,7 +548,7 @@ describe('SessionsSection', () => {
       const sortSelect = comboboxes[1];
       await user.click(sortSelect);
 
-      const oldestOption = screen.getByRole('option', { name: /oldest first/i });
+      const oldestOption = await screen.findByRole('option', { name: /oldest first/i });
       expect(oldestOption).toBeInTheDocument();
       await user.click(oldestOption);
 
@@ -784,7 +799,7 @@ describe('SessionsSection', () => {
       const statusSelect = comboboxes[0];
       await user.click(statusSelect);
 
-      const failedOption = screen.getByRole('option', { name: /failed/i });
+      const failedOption = await screen.findByRole('option', { name: /failed/i });
       await user.click(failedOption);
 
       await waitFor(() => {
@@ -803,7 +818,7 @@ describe('SessionsSection', () => {
       const sortSelect = comboboxes[1];
       await user.click(sortSelect);
 
-      const oldestOption = screen.getByRole('option', { name: /oldest first/i });
+      const oldestOption = await screen.findByRole('option', { name: /oldest first/i });
       await user.click(oldestOption);
 
       await waitFor(() => {
@@ -828,6 +843,18 @@ describe('SessionsSection', () => {
         const lastCall = mockRouter.replace.mock.calls[mockRouter.replace.mock.calls.length - 1];
         expect(lastCall[0]).not.toContain('workflowName');
       });
+    });
+
+    it('should not replace URL when it already matches current filters', async () => {
+      currentSearch = 'workflowName=test';
+
+      render(<SessionsSection />);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('test')).toBeInTheDocument();
+      });
+
+      expect(mockRouter.replace).not.toHaveBeenCalled();
     });
   });
 

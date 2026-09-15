@@ -6,7 +6,7 @@ package postgresql
 import (
 	"context"
 	"fmt"
-	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,24 +16,18 @@ import (
 	"mckinsey.com/ark/internal/storage"
 )
 
+func rvInt(t *testing.T, s string) int64 {
+	t.Helper()
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		t.Fatalf("non-numeric resourceVersion %q: %v", s, err)
+	}
+	return n
+}
+
 func newTestBackend(t *testing.T) *PostgreSQLBackend {
 	t.Helper()
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		t.Skip("POSTGRES_HOST not set")
-	}
-	port := 5432
-	if p := os.Getenv("POSTGRES_PORT"); p != "" {
-		fmt.Sscanf(p, "%d", &port)
-	}
-	backend, err := New(Config{
-		Host:     host,
-		Port:     port,
-		Database: "ark",
-		User:     "postgres",
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		SSLMode:  "disable",
-	}, &integrationMockConverter{})
+	backend, err := New(testConfig(t), &integrationMockConverter{})
 	if err != nil {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
@@ -66,6 +60,7 @@ func createTestResource(t *testing.T, backend *PostgreSQLBackend, kind, ns, name
 func TestWatch_EventDropUnderBurst(t *testing.T) {
 	backend := newTestBackend(t)
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -119,29 +114,34 @@ drained:
 		_ = backend.Create(ctx, kind, ns, name, obj)
 	}
 
-	// Wait for notifications to propagate
+	// Wait for notifications to propagate while the consumer stays stalled
 	time.Sleep(5 * time.Second)
 
-	// Now drain the channel and count events
-	received := 0
-	for {
+	// Drain until every resource has been delivered. Drops into the full buffer
+	// are by design (the watcher is marked behind and recovers via its own
+	// relist, at the latest on the 30s bookmark tick); permanent loss is not.
+	received := make(map[string]bool)
+	events := 0
+	deadline := time.After(60 * time.Second)
+	for len(received) < count {
 		select {
 		case ev := <-w.ResultChan():
-			if ev.Type == watch.Added {
-				received++
+			if ev.Type == watch.Added || ev.Type == watch.Modified {
+				events++
+				if obj, ok := ev.Object.(*integrationTestObject); ok {
+					received[obj.Metadata.Name] = true
+				}
 			}
-		default:
+		case <-deadline:
 			goto done
 		}
 	}
 done:
 
-	t.Logf("Created %d resources, received %d ADDED events (channel buffer=100)", count, received)
+	t.Logf("Created %d resources, received %d events covering %d unique resources (channel buffer=100)", count, events, len(received))
 
-	if received < count {
-		t.Logf("CONFIRMED: %d events were dropped (%d created, %d received)", count-received, count, received)
-	} else {
-		t.Log("No drops detected — consumer kept up or notifications coalesced")
+	if len(received) < count {
+		t.Errorf("%d of %d resources never delivered — slow consumer did not recover", count-len(received), count)
 	}
 
 	backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
@@ -150,6 +150,7 @@ done:
 func TestWatch_VersionSkipping(t *testing.T) {
 	backend := newTestBackend(t)
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -196,19 +197,28 @@ drained:
 		}
 	}
 
-	// Wait for notifications to propagate
-	time.Sleep(5 * time.Second)
+	got, err := backend.Get(ctx, kind, ns, name)
+	if err != nil {
+		t.Fatalf("Get after updates failed: %v", err)
+	}
+	finalRV := got.(*integrationTestObject).Metadata.ResourceVersion
 
-	// Collect all MODIFIED events
+	// Intermediate versions may coalesce (the store holds only the latest row per
+	// resource), but the final state must be delivered.
 	var versions []string
-	for {
+	sawFinal := false
+	deadline := time.After(30 * time.Second)
+	for !sawFinal {
 		select {
 		case ev := <-w.ResultChan():
 			if ev.Type == watch.Modified {
 				obj := ev.Object.(*integrationTestObject)
 				versions = append(versions, obj.Metadata.ResourceVersion)
+				if obj.Metadata.ResourceVersion == finalRV {
+					sawFinal = true
+				}
 			}
-		default:
+		case <-deadline:
 			goto collected
 		}
 	}
@@ -218,12 +228,15 @@ collected:
 	t.Logf("Versions received: %v", versions)
 
 	if len(versions) < updateCount {
-		t.Logf("CONFIRMED: %d versions were skipped (%d updates, %d events)", updateCount-len(versions), updateCount, len(versions))
+		t.Logf("%d intermediate versions coalesced (%d updates, %d events)", updateCount-len(versions), updateCount, len(versions))
+	}
+	if !sawFinal {
+		t.Errorf("final version %s never delivered (%d updates, %d events)", finalRV, updateCount, len(versions))
 	}
 
 	// Check monotonic ordering
 	for i := 1; i < len(versions); i++ {
-		if versions[i] <= versions[i-1] {
+		if rvInt(t, versions[i]) <= rvInt(t, versions[i-1]) {
 			t.Errorf("OUT OF ORDER: version[%d]=%s <= version[%d]=%s", i, versions[i], i-1, versions[i-1])
 		}
 	}
@@ -234,6 +247,7 @@ collected:
 func TestWatch_NotifyLatency(t *testing.T) {
 	backend := newTestBackend(t)
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -314,6 +328,7 @@ drained:
 func TestWatch_ConcurrentWriteOrdering(t *testing.T) {
 	backend := newTestBackend(t)
 	defer backend.Close()
+	backend.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -376,48 +391,35 @@ drained:
 	}
 	wg.Wait()
 
-	time.Sleep(5 * time.Second)
-
-	var events []watch.Event
-	for {
+	want := int(created.Load())
+	seen := make(map[string]bool)
+	deadline := time.After(45 * time.Second)
+	for len(seen) < want {
 		select {
 		case ev := <-w.ResultChan():
 			if ev.Type == watch.Added {
-				events = append(events, ev)
+				seen[ev.Object.(*integrationTestObject).Metadata.Name] = true
 			}
-		default:
+		case <-deadline:
 			goto collected
 		}
 	}
 collected:
 
-	t.Logf("Created %d resources from %d concurrent writers, received %d events", created.Load(), writers, len(events))
+	t.Logf("Created %d resources from %d concurrent writers, received %d events", want, writers, len(seen))
 
-	if len(events) < int(created.Load()) {
-		t.Logf("CONFIRMED: %d events lost under concurrent writes", int(created.Load())-len(events))
-	}
-
-	// Check version ordering
-	outOfOrder := 0
-	for i := 1; i < len(events); i++ {
-		prev := events[i-1].Object.(*integrationTestObject).Metadata.ResourceVersion
-		curr := events[i].Object.(*integrationTestObject).Metadata.ResourceVersion
-		if curr <= prev {
-			outOfOrder++
-		}
-	}
-	if outOfOrder > 0 {
-		t.Logf("CONFIRMED: %d out-of-order events detected", outOfOrder)
-	} else {
-		t.Log("All events arrived in resourceVersion order")
+	if len(seen) < want {
+		t.Errorf("%d of %d resources never delivered under concurrent writes", want-len(seen), want)
 	}
 
 	backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 }
 
 func TestWatch_CrossReplicaDelivery(t *testing.T) {
+	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
+	replicaA.StartWALConsumer()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
 
@@ -471,8 +473,11 @@ drained:
 
 	t.Logf("Created %d resources on replica A, waiting for replica B watcher...", count)
 
+	// Replica B has no WAL consumer; its only signal is the broadcaster's
+	// safety-net relist (shortened via withFastRelist), so the deadline must
+	// exceed one tick.
 	received := 0
-	deadline := time.After(15 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for received < count {
 		select {
 		case ev := <-w.ResultChan():
@@ -487,19 +492,18 @@ timeout:
 
 	t.Logf("Replica B received %d/%d events", received, count)
 
-	if received == 0 {
-		t.Fatal("Replica B received ZERO events — cross-replica delivery is broken")
-	}
-	if received >= count {
-		t.Log("All events delivered cross-replica via pg_notify nudge")
+	if received < count {
+		t.Errorf("Replica B received %d/%d events — cross-replica delivery incomplete", received, count)
 	}
 
 	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 }
 
 func TestWatch_CrossReplicaBurst(t *testing.T) {
+	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
+	replicaA.StartWALConsumer()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
 
@@ -556,7 +560,7 @@ drained2:
 	t.Logf("Created %d/%d resources on replica A, waiting for replica B...", actual, count)
 
 	seen := make(map[string]bool)
-	deadline := time.After(45 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for len(seen) < actual {
 		select {
 		case ev := <-w.ResultChan():
@@ -587,8 +591,10 @@ timeout2:
 }
 
 func TestWatch_CrossReplicaDelete(t *testing.T) {
+	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
+	replicaA.StartWALConsumer()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
 
@@ -629,7 +635,7 @@ func TestWatch_CrossReplicaDelete(t *testing.T) {
 	}
 
 	gotDelete := false
-	deadline := time.After(10 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for {
 		select {
 		case ev := <-w.ResultChan():

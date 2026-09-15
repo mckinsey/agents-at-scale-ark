@@ -1,21 +1,27 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAtom } from 'jotai';
-import { Plus, ChevronLeft, ChevronRight, Send } from 'lucide-react';
+import { Plus } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 import type { Participant } from '@/lib/services/participants';
+import type { Participant as SessionParticipant } from '@/lib/services/broker-sessions';
 import { sessionPendingMessagesAtom, sessionProcessingStateAtom } from '@/atoms/session-pending-messages';
 import { ConversationSidebar } from './conversation-sidebar';
 import { MessageDisplay } from './message-display';
 import { ChatInput } from './chat-input';
-import { NewConversationDialog } from './new-conversation-dialog';
+import { NewConversationPanel } from './new-conversation-panel';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { generateUUID } from '@/lib/utils/uuid';
+
+type PendingMessage = { role: 'user'; content: string; timestamp: string };
+const EMPTY_PENDING_MESSAGES: PendingMessage[] = [];
 
 interface Props {
   readonly sessionId: string;
@@ -31,11 +37,16 @@ interface Props {
 export function ConversationsTab({ sessionId, initialParticipant, initialConversationId, hasSentMessage, onMessageSent }: Props) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [temporaryConversations, setTemporaryConversations] = useState<Conversation[]>([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+
+  const closeNewConversationPanel = useCallback(() => {
+    setIsCreatingConversation(false);
+    requestAnimationFrame(() => createButtonRef.current?.focus());
+  }, []);
   const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
   const [processingStateMap, setProcessingStateMap] = useAtom(sessionProcessingStateAtom);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [showToolCalls, setShowToolCalls] = useState(false);
+  const [showToolCalls, setShowToolCalls] = useState(true);
 
   // Skip API call for new sessions before first message is sent
   const isNewSession = !!initialParticipant && !(hasSentMessage ?? false);
@@ -86,9 +97,35 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
     return [...uniqueTemporary, ...backend];
   }, [temporaryConversations, backendConversations]);
 
+  // Auto-select first conversation if none is selected
+  useEffect(() => {
+    if (!selectedConversationId && allConversations.length > 0 && !initialConversationId) {
+      setSelectedConversationId(allConversations[0].conversationId);
+    }
+  }, [allConversations, selectedConversationId, initialConversationId]);
+
   const selectedConversation = useMemo(() => {
     return allConversations.find(c => c.conversationId === selectedConversationId) || null;
   }, [allConversations, selectedConversationId]);
+
+  // Targets already in this session: prefer backend session participants, falling back
+  // to the targets of existing conversations so new sessions populate "In this session".
+  const sessionTargets = useMemo<SessionParticipant[]>(() => {
+    const targets = new Map<string, SessionParticipant>();
+    for (const participant of session?.participants ?? []) {
+      targets.set(participant.name, participant);
+    }
+    for (const conv of allConversations) {
+      if (!targets.has(conv.name)) {
+        targets.set(conv.name, {
+          id: conv.name,
+          name: conv.name,
+          type: conv.participantType ?? 'agent',
+        });
+      }
+    }
+    return Array.from(targets.values());
+  }, [session, allConversations]);
 
   const handleSelectParticipant = (participant: Participant) => {
     const conversationId = generateUUID();
@@ -106,6 +143,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
     };
     setTemporaryConversations((prev) => [...prev, newConversation]);
     setSelectedConversationId(conversationId);
+    closeNewConversationPanel();
   };
 
   const handleAddPendingMessage = (conversationId: string, content: string) => {
@@ -142,9 +180,9 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
   }
 
   return (
-    <div className="flex flex-col space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col">
       {allConversations.length === 0 ? (
-        <div className="flex min-h-[400px] items-center justify-center">
+        <div className="flex flex-1 items-center justify-center">
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No conversations yet</EmptyTitle>
@@ -153,58 +191,57 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
         </div>
       ) : (
         <div
-          className="grid min-h-[500px] max-h-[calc(100vh-20rem)] grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
-          style={{ gridTemplateColumns: isSidebarCollapsed ? '48px 1fr' : 'minmax(250px, 300px) minmax(min(400px, 50vw), 1fr)' }}
+          className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden"
+          style={{ gridTemplateColumns: 'minmax(250px, 300px) minmax(min(400px, 50vw), 1fr)' }}
         >
-          <div className="flex h-full flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-r border-border bg-muted p-4">
-              {!isSidebarCollapsed && <h3 className="text-sm font-medium">Conversations</h3>}
-              <div className="flex items-center gap-1">
-                {!isSidebarCollapsed && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setDialogOpen(true)}
-                    className="size-6"
-                    aria-label="Create new conversation"
-                    title="Create new conversation"
-                  >
-                    <Plus className="size-4" />
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                  className="size-6"
-                  title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                >
-                  {isSidebarCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
-                </Button>
-              </div>
+          <div className="flex h-full flex-col border-r border-stroke-divider overflow-hidden">
+            <div className="flex items-center justify-between h-14 bg-surface-bg-secondary px-5 py-2">
+              <h3 className="text-sm font-semibold text-fg-primary">Conversations</h3>
+              <Button
+                ref={createButtonRef}
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsCreatingConversation(true)}
+                className="size-6"
+                aria-label="Create new conversation"
+                title="Create new conversation"
+                disabled={isCreatingConversation}
+              >
+                <IconShell size="sm" variant="secondary">
+                  <Plus />
+                </IconShell>
+              </Button>
             </div>
-            {!isSidebarCollapsed && (
-              <div className="min-h-0 flex-1 flex flex-col">
+            {isCreatingConversation ? (
+              <NewConversationPanel
+                sessionParticipants={sessionTargets}
+                onSelectParticipant={handleSelectParticipant}
+                onCancel={closeNewConversationPanel}
+              />
+            ) : (
+              <ScrollArea className="flex-1 h-0 [&_[data-slot=scroll-area-viewport]>div]:!block">
                 <ConversationSidebar
                   conversations={allConversations}
                   selectedId={selectedConversationId}
                   onSelect={setSelectedConversationId}
                 />
-              </div>
+              </ScrollArea>
             )}
           </div>
 
           {selectedConversationId ? (
-            <div className="flex h-full flex-col overflow-hidden border-r border-border">
-              <MessageDisplay
-                conversationId={selectedConversationId}
-                sessionId={sessionId}
-                conversation={selectedConversation}
-                pendingMessages={pendingMessagesMap[selectedConversationId] || []}
-                onClearPending={() => handleClearPendingMessages(selectedConversationId)}
-                isProcessing={processingStateMap[selectedConversationId] || false}
-                showToolCalls={showToolCalls}
-              />
+            <div className="flex h-full flex-col overflow-hidden">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <MessageDisplay
+                  conversationId={selectedConversationId}
+                  sessionId={sessionId}
+                  conversation={selectedConversation}
+                  pendingMessages={pendingMessagesMap[selectedConversationId] || EMPTY_PENDING_MESSAGES}
+                  onClearPending={() => handleClearPendingMessages(selectedConversationId)}
+                  isProcessing={processingStateMap[selectedConversationId] || false}
+                  showToolCalls={showToolCalls}
+                />
+              </div>
               <ChatInput
                 conversationId={selectedConversationId}
                 sessionId={sessionId}
@@ -217,42 +254,30 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
               />
             </div>
           ) : (
-            <div className="flex h-full flex-col overflow-hidden border-r border-border">
-              <div className="flex items-center justify-between border-b border-border bg-muted p-4">
-                <h3 className="text-sm font-medium">No participant selected</h3>
+            <div className="flex h-full flex-col overflow-hidden">
+              <div className="flex items-center justify-between h-14 bg-surface-bg-secondary pl-4">
+                <h3 className="text-sm font-semibold text-fg-primary">No participant selected</h3>
               </div>
-              <div className="flex flex-1 items-center justify-center p-4">
-                <span className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground">
+              <div className="flex flex-1 items-center justify-start flex-col gap-6 overflow-hidden bg-surface-bg-base p-4 outline outline-1 outline-offset-[-1px] outline-stroke-divider">
+                <span className="inline-flex items-center justify-center gap-1 rounded-full bg-surface-bg-primary px-3 py-2 text-xs font-normal leading-4 tracking-tight text-fg-tertiary outline outline-1 outline-offset-[-1px] outline-stroke-divider">
                   Create a conversation to start
                 </span>
               </div>
-              <div className="border-b border-r border-t border-border">
-                <div className="relative flex items-center gap-2 py-6 pl-6 pr-8 opacity-50 pointer-events-none">
-                  <div className="flex-1 min-h-[48px] resize-none border-0 bg-transparent pt-6 pb-3 pr-16 text-sm text-muted-foreground">
-                    Select a conversation to start messaging
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    disabled
-                    className="absolute right-10 h-9 w-9"
-                  >
-                    <Send className="size-4" />
-                  </Button>
-                </div>
-              </div>
+              <ChatInput
+                conversationId=""
+                sessionId={sessionId}
+                conversation={null}
+                onAddPendingMessage={handleAddPendingMessage}
+                onSetProcessing={handleSetProcessing}
+                onEnableQueries={handleEnableQueries}
+                showToolCalls={showToolCalls}
+                onShowToolCallsChange={setShowToolCalls}
+              />
             </div>
           )}
         </div>
       )}
 
-      <NewConversationDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        sessionParticipants={session?.participants || []}
-        selectedConversation={selectedConversation}
-        onSelectParticipant={handleSelectParticipant}
-      />
     </div>
   );
 }

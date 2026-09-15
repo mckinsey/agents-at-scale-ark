@@ -3,8 +3,10 @@ package validation
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent) ([]string, error) {
@@ -24,15 +26,61 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 		}
 	}
 
+	if warning := v.engineToolWarning(ctx, agent); warning != "" {
+		warnings = append(warnings, warning)
+	}
+
 	warnings = append(warnings, CollectMigrationWarnings(agent.Annotations)...)
 	return warnings, nil
+}
+
+func (v *Validator) engineToolWarning(ctx context.Context, agent *arkv1alpha1.Agent) string {
+	if !arka2a.IsNamedEngine(agent.Spec.ExecutionEngine) {
+		return ""
+	}
+
+	dropped := make([]string, 0, len(agent.Spec.Tools))
+	for _, tool := range agent.Spec.Tools {
+		toolType := v.resolveAgentToolType(ctx, agent.Namespace, tool)
+		if toolType == "" || toolType == ToolTypeMCP {
+			continue
+		}
+		dropped = append(dropped, fmt.Sprintf("%s (%s)", tool.Name, toolType))
+	}
+
+	if len(dropped) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf(
+		"agent '%s': execution engine '%s' receives only mcp tools; these tools will not be available to the agent: %s",
+		agent.Name,
+		agent.Spec.ExecutionEngine.Name,
+		strings.Join(dropped, ", "),
+	)
+}
+
+func (v *Validator) resolveAgentToolType(ctx context.Context, namespace string, tool arkv1alpha1.AgentTool) string {
+	if tool.Type != toolTypeCustom && tool.Type != toolTypeBuiltIn {
+		return tool.Type
+	}
+
+	obj, err := v.Lookup.GetResource(ctx, "Tool", namespace, tool.GetToolCRDName())
+	if err != nil {
+		return ""
+	}
+	toolCRD, ok := obj.(*arkv1alpha1.Tool)
+	if !ok {
+		return ""
+	}
+	return toolCRD.Spec.Type
 }
 
 func validateAgentTool(index int, tool arkv1alpha1.AgentTool) error {
 	hasName := tool.Name != ""
 
 	switch tool.Type {
-	case "built-in":
+	case toolTypeBuiltIn:
 		if !hasName {
 			return fmt.Errorf("tool[%d]: built-in tools must specify a name", index)
 		}

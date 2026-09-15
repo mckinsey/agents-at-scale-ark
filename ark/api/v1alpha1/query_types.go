@@ -16,6 +16,12 @@ type QueryConditionType string
 const (
 	// QueryCompleted indicates that the query has finished (regardless of outcome)
 	QueryCompleted QueryConditionType = "Completed"
+	// QueryMemoryUnavailable indicates that the query carried a conversationId
+	// but no Memory backend was reachable, so conversation history was dropped.
+	QueryMemoryUnavailable QueryConditionType = "MemoryUnavailable"
+	// QueryMemoryDegraded indicates that a Memory backend was reachable but
+	// reading the conversation history failed, so the query ran without it.
+	QueryMemoryDegraded QueryConditionType = "MemoryDegraded"
 )
 
 const (
@@ -76,6 +82,10 @@ type QuerySpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// ConversationId is sent as A2A ContextID when dispatching to execution engines.
 	// Engines use it for conversation threading (e.g., memory lookup, session management).
+	// Deliberately unconstrained beyond MinLength: status.conversationId accepts
+	// arbitrary engine-generated IDs and those are reused here for follow-up queries,
+	// so any character-set or length rule added here breaks that round-trip.
+	// Engines that map it to a filesystem path must validate it at the path join.
 	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Time to retain Query after completion.
@@ -139,7 +149,7 @@ type TokenUsage struct {
 
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
-	// +kubebuilder:validation:Enum=pending;provisioning;running;input-required;error;done;canceled
+	// +kubebuilder:validation:Enum=pending;provisioning;running;queued;input-required;error;done;canceled
 	Phase string `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Conditions represent the latest available observations of a query's state

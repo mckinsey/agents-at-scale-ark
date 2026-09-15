@@ -6,6 +6,7 @@ import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 import {createRedis} from '../src/redis/redis.js';
 import {useRedisContainer} from '../src/redis/__tests__/testHelpers/redis-testcontainer.js';
 
@@ -78,6 +79,7 @@ describeIntegration('redis chunk backend — cross-replica', () => {
       messageStream: createMessageStream(config, logger),
       chunkStream: createChunkStream(config, logger, redisA),
       eventStream: createEventStream(config, logger),
+      sessionsStorage: createSessionsStorage(config, logger),
       redis: redisA,
     }).app;
 
@@ -88,6 +90,7 @@ describeIntegration('redis chunk backend — cross-replica', () => {
       messageStream: createMessageStream(config, logger),
       chunkStream: createChunkStream(config, logger, redisB),
       eventStream: createEventStream(config, logger),
+      sessionsStorage: createSessionsStorage(config, logger),
       redis: redisB,
     }).app;
   });

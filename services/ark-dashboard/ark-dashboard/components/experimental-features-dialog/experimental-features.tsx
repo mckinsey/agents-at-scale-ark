@@ -1,5 +1,4 @@
 import {
-  storedIsBrokerEnabledAtom,
   storedIsChatStreamingEnabledAtom,
   storedIsExperimentalDarkModeEnabledAtom,
   storedIsExperimentalExecutionEngineEnabledAtom,
@@ -46,24 +45,6 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     ],
   },
   {
-    groupKey: 'observability',
-    groupLabel: 'Observability',
-    features: [
-      {
-        type: 'boolean',
-        feature: 'Broker',
-        description: (
-          <span>
-            Enables the experimental <span className="font-bold">Broker</span>{' '}
-            diagnostic page for viewing real-time OTEL traces, messages, and LLM
-            chunks
-          </span>
-        ),
-        atom: storedIsBrokerEnabledAtom,
-      },
-    ],
-  },
-  {
     groupKey: 'chat',
     groupLabel: 'Chat',
     features: [
@@ -80,15 +61,10 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     groupLabel: 'Queries',
     features: [
       {
-        type: 'select',
+        type: 'number',
         feature: 'Query Timeout',
         description: 'Default timeout for query execution',
         atom: storedQueryTimeoutSettingAtom,
-        options: [
-          { value: '5m', label: '5m (default)' },
-          { value: '10m', label: '10m' },
-          { value: '15m', label: '15m' },
-        ],
       },
     ],
   },

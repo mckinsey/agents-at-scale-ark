@@ -1,6 +1,9 @@
 //The OIDC endpoint to use to fetch openid configuration
 export const OIDC_CONFIG_URL = `${process.env.OIDC_ISSUER_URL}/.well-known/openid-configuration`;
 
+export const DEFAULT_OIDC_SCOPES = 'openid email profile';
+export const OIDC_SCOPES = process.env.OIDC_SCOPES?.trim() || DEFAULT_OIDC_SCOPES;
+
 //Paths we use for signing in and out
 export const SIGNIN_PATH = '/api/auth/signin';
 export const FEDERATED_SIGNOUT_PATH = '/api/auth/federated-signout';

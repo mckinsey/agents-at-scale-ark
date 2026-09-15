@@ -11,6 +11,8 @@ export interface CompletionChunkData {
 }
 
 export interface ChunkStream {
+  init?(): Promise<void>;
+  close?(): void;
   appendChunk(
     queryId: string,
     chunk: unknown
@@ -34,4 +36,5 @@ export interface ChunkStream {
   getCurrentSequence(): Promise<number>;
   delete(queryId?: string): Promise<void>;
   save(): Promise<void>;
+  cachedItemCount?(): number;
 }

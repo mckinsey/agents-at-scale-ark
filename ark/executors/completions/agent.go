@@ -54,6 +54,10 @@ func (a *Agent) GetToolRegistry() *ToolRegistry {
 	return a.Tools
 }
 
+func (a *Agent) GetExecutionEngine() *arkv1alpha1.ExecutionEngineRef {
+	return a.ExecutionEngine
+}
+
 // Execute executes the agent with optional event emission for tool calls.
 // opts carries caller-controlled options such as forcing a tool call; pass ExecuteOptions{} for defaults.
 func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
@@ -65,7 +69,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	})
 
 	operationData := map[string]string{
-		"agent": a.FullName(),
+		"agent": a.Name,
 	}
 	ctx = a.eventingRecorder.Start(ctx, "AgentExecution", fmt.Sprintf("Executing agent %s", a.FullName()), operationData)
 
@@ -111,8 +115,11 @@ func (a *Agent) handleSignalError(ctx context.Context, span telemetry.Span, resu
 }
 
 func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error) {
-	if a.ExecutionEngine != nil {
-		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
+	if dispatchesToEngine(ctx, a.ExecutionEngine, a.Name) {
+		if arka2a.IsNamedEngine(a.ExecutionEngine) {
+			return a.executeWithNamedExecutionEngine(ctx, userInput, history, eventStream)
+		}
+		return a.executeWithA2AExecutionEngine(ctx, userInput, history, eventStream)
 	}
 
 	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream, opts)
@@ -125,10 +132,27 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 	return &ExecutionResult{Messages: messages}, nil
 }
 
-func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)
-	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, eventStream)
+	input := userInput
+	if isTeamMemberExecution(ctx) {
+		input = NewUserMessage(renderEngineInput(userInput, history))
+	}
+	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, input, eventStream)
+}
+
+func (a *Agent) executeWithNamedExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	engine := NewNamedExecutionEngine(a.client, a.eventing.A2aRecorder())
+	return engine.Execute(ctx, NamedEngineRequest{
+		AgentName:   a.Name,
+		Namespace:   a.Namespace,
+		EngineRef:   a.ExecutionEngine,
+		ContextID:   GetParentConversationID(ctx),
+		UserInput:   userInput,
+		History:     history,
+		EventStream: eventStream,
+	})
 }
 
 func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -148,7 +172,7 @@ func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, e
 	a.Model.OutputSchema = a.OutputSchema
 	a.Model.SchemaName = fmt.Sprintf("%.64s", fmt.Sprintf("namespace-%s-agent-%s", a.Namespace, a.Name))
 
-	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools, toolChoice)
+	response, err := a.Model.ChatCompletion(ctx, withoutOwnAgentName(agentMessages, a.Name), eventStream, 1, tools, toolChoice)
 	if err != nil {
 		return nil, fmt.Errorf("agent %s execution failed: %w", a.FullName(), err)
 	}
@@ -168,6 +192,21 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 	}
 
 	return assistantMessage
+}
+
+func withoutOwnAgentName(messages []Message, agentName string) []Message {
+	result := make([]Message, len(messages))
+	copy(result, messages)
+	for i := range result {
+		assistant := result[i].OfAssistant
+		if assistant == nil || assistant.Name.Value != agentName {
+			continue
+		}
+		clone := *assistant
+		clone.Name = param.Opt[string]{}
+		result[i].OfAssistant = &clone
+	}
+	return result
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
@@ -325,16 +364,15 @@ func (a *Agent) GetDescription() string {
 
 // ValidateExecutionEngine checks if the specified ExecutionEngine resource exists
 func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, executionEngine *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) error {
+	if !arka2a.IsNamedEngine(executionEngine) {
+		return nil
+	}
+
 	// Resolve execution engine name and namespace
 	engineName := executionEngine.Name
 	namespace := executionEngine.Namespace
 	if namespace == "" {
 		namespace = defaultNamespace
-	}
-
-	// Pass validation for reserved 'a2a' execution engine (internal)
-	if engineName == arka2a.ExecutionEngineA2A {
-		return nil
 	}
 
 	// Check if ExecutionEngine CRD exists
@@ -428,11 +466,14 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 
 	var resolvedModel *Model
 
-	// A2A agents don't need models - they delegate to external A2A servers
-	if crd.Spec.ExecutionEngine == nil || crd.Spec.ExecutionEngine.Name != arka2a.ExecutionEngineA2A {
+	if !dispatchesToEngine(ctx, crd.Spec.ExecutionEngine, crd.Name) {
 		var err error
 		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, modelHeaders, telemetryProvider.ModelRecorder(), eventingProvider.ModelRecorder())
 		if err != nil {
+			if arka2a.IsNamedEngine(crd.Spec.ExecutionEngine) {
+				return nil, fmt.Errorf("agent %s/%s has execution engine %q, which resolves back to this completions engine, so it must run locally and needs a usable modelRef: %w",
+					crd.Namespace, crd.Name, crd.Spec.ExecutionEngine.Name, err)
+			}
 			return nil, fmt.Errorf("failed to load model for agent %s/%s: %w", crd.Namespace, crd.Name, err)
 		}
 	}

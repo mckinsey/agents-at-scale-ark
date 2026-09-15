@@ -11,6 +11,8 @@ class AuthConfig(BaseSettings):
 
     jwt_algorithm: str = "RS256"
     issuer: Optional[str] = None
+    # May hold several comma-separated audiences (e.g. "app-a,app-b"); the
+    # validator accepts a token whose aud matches any of them.
     audience: Optional[str] = None
     jwks_url: Optional[str] = None
 

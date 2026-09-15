@@ -1,7 +1,7 @@
 'use client';
 
 import { useAtom } from 'jotai';
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
 import {
@@ -11,21 +11,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 
 import { experimentalFeatureGroups } from './experimental-features';
 import type {
   BooleanSetting,
   ExperimentalFeature,
-  SelectSetting,
+  NumberSetting,
 } from './types';
 
 const EXPERIMENTAL_MODAL_KEYBOARD_SHORTCUT = 'e';
@@ -59,12 +53,23 @@ function BooleanFeatureToggle({ feature }: BooleanFeatureToggleProps) {
   );
 }
 
-type SelectFeatureProps = {
-  feature: SelectSetting;
+type NumberFeatureProps = {
+  feature: NumberSetting;
 };
 
-function SelectFeature({ feature }: SelectFeatureProps) {
+function NumberFeature({ feature }: Readonly<NumberFeatureProps>) {
   const [atomValue, setAtom] = useAtom(feature.atom);
+
+  const [draft, setDraft] = useState(
+    () => `${Number.parseInt(atomValue, 10) || ''}`,
+  );
+
+  const handleChange = (raw: string) => {
+    setDraft(raw);
+    if (/^\d+$/.test(raw) && Number(raw) > 0) {
+      setAtom(`${raw}m`);
+    }
+  };
 
   return (
     <div className="flex flex-row items-center justify-between">
@@ -76,18 +81,15 @@ function SelectFeature({ feature }: SelectFeatureProps) {
           </div>
         )}
       </div>
-      <Select value={atomValue} onValueChange={setAtom}>
-        <SelectTrigger className="w-[180px]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {feature.options.map(option => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          value={draft}
+          onChange={e => handleChange(e.target.value)}
+          className="w-[120px]"
+        />
+        <span className="text-muted-foreground text-sm">minutes</span>
+      </div>
     </div>
   );
 }
@@ -102,7 +104,7 @@ function ExperimentalFeatureToggle({
   if (feature.type === 'boolean') {
     return <BooleanFeatureToggle feature={feature} />;
   }
-  return <SelectFeature feature={feature} />;
+  return <NumberFeature feature={feature} />;
 }
 
 export function ExperimentalFeaturesDialog() {

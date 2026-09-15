@@ -20,6 +20,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 )
 
@@ -103,10 +104,14 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 	}
 
 	// Check the status of the agent's model. Some agents (such as A2A agents) have a 'nil' model, and their status is not associated with model availability.
-	if agent.Spec.ModelRef != nil {
+	switch {
+	case !agentRequiresModel(agent):
+	case agent.Spec.ModelRef != nil:
 		if ok, msg := r.checkModelDependency(ctx, agent); !ok {
 			return false, "ModelNotFound", msg
 		}
+	default:
+		return false, "ModelNotConfigured", "Agent has no model configured; the default executor requires a model"
 	}
 
 	// Check execution engine dependency
@@ -123,6 +128,15 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 
 	// All dependencies resolved
 	return true, "Available", "All dependencies are available"
+}
+
+// agentRequiresModel reports whether the agent needs a model to run. A2A agents
+// (model is external) and agents delegating to an ExecutionEngine are exempt.
+func agentRequiresModel(agent *arkv1alpha1.Agent) bool {
+	if _, isA2A := agent.Annotations[annotations.A2AServerName]; isA2A {
+		return false
+	}
+	return agent.Spec.ExecutionEngine == nil
 }
 
 // checkModelDependency validates model dependency
@@ -186,14 +200,14 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 
 // checkExecutionEngineDependency validates execution engine dependency
 func (r *AgentReconciler) checkExecutionEngineDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string, string) {
-	engineName := agent.Spec.ExecutionEngine.Name
-
 	// The "a2a" engine is built into the controller, not a deployed
 	// ExecutionEngine resource, so there is no CR to look up. Availability for
 	// A2A agents is governed by the owning A2AServer (checkA2AServerDependency).
-	if engineName == arka2a.ExecutionEngineA2A {
+	if !arka2a.IsNamedEngine(agent.Spec.ExecutionEngine) {
 		return true, "", ""
 	}
+
+	engineName := agent.Spec.ExecutionEngine.Name
 
 	engineNamespace := agent.Namespace
 

@@ -1,0 +1,10 @@
+{
+  "name": "ark-sdk-codegen",
+  "private": true,
+  "devDependencies": {
+    "@openapitools/openapi-generator-cli": "2.40.1"
+  },
+  "overrides": {
+    "basic-ftp": "6.2.1"
+  }
+}

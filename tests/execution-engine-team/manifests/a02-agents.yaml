@@ -1,0 +1,19 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: engine-member-a
+spec:
+  description: First engine-backed team member
+  prompt: You are the first member.
+  executionEngine:
+    name: mock-engine
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: engine-member-b
+spec:
+  description: Second engine-backed team member
+  prompt: You are the second member.
+  executionEngine:
+    name: mock-engine

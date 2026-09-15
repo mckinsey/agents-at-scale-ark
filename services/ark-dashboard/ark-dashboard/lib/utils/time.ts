@@ -55,8 +55,8 @@ export function simplifyDuration(duration: string | null | undefined): string {
 }
 
 /**
- * Formats a timestamp to a Kubernetes-style age format
- * Examples: "12m", "3h5m", "2d1h", "5d"
+ * Formats a timestamp to a Kubernetes-style relative age
+ * Examples: "5s ago", "12m ago", "3h5m ago", "2d1h ago"
  */
 export function formatAge(timestamp: Date | string | null | undefined): string {
   if (!timestamp) return '-';
@@ -75,28 +75,32 @@ export function formatAge(timestamp: Date | string | null | undefined): string {
     // Handle negative differences (future dates)
     if (diffMs < 0) return 'now';
 
+    const diffSecs = Math.floor(diffMs / 1000);
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    // Less than 1 minute
-    if (diffMins < 1) return 'now';
+    // Less than 1 second
+    if (diffSecs < 1) return 'now';
+
+    // Less than 1 minute: show seconds only
+    if (diffSecs < 60) return `${diffSecs}s ago`;
 
     // Less than 1 hour: show minutes only
-    if (diffMins < 60) return `${diffMins}m`;
+    if (diffMins < 60) return `${diffMins}m ago`;
 
     // Less than 1 day: show hours and minutes
     if (diffHours < 24) {
       const remainingMins = diffMins % 60;
-      if (remainingMins === 0) return `${diffHours}h`;
-      return `${diffHours}h${remainingMins}m`;
+      if (remainingMins === 0) return `${diffHours}h ago`;
+      return `${diffHours}h${remainingMins}m ago`;
     }
 
     // Less than 1 week: show days and hours
     if (diffDays < 7) {
       const remainingHours = diffHours % 24;
-      if (remainingHours === 0) return `${diffDays}d`;
-      return `${diffDays}d${remainingHours}h`;
+      if (remainingHours === 0) return `${diffDays}d ago`;
+      return `${diffDays}d${remainingHours}h ago`;
     }
 
     // More than a week: show full date
@@ -104,4 +108,11 @@ export function formatAge(timestamp: Date | string | null | undefined): string {
   } catch {
     return '-';
   }
+}
+
+export function formatTimestamp(timestamp: string | undefined | null): string {
+  if (!timestamp) return '—';
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return date.toLocaleString();
 }

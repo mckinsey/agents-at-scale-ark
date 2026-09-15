@@ -1,0 +1,334 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockUseNamespace = vi.fn(() => ({
+  namespace: 'default',
+  readOnlyMode: false,
+}));
+
+interface MockConfiguration {
+  id: string;
+  name: string;
+  value: string;
+  description: string | null;
+  alias: string | null;
+  labels: string[];
+}
+
+interface MockGetConfigurationResult {
+  data: MockConfiguration | undefined;
+  isLoading: boolean;
+}
+
+interface MockGetAllConfigurationsResult {
+  data: MockConfiguration[] | undefined;
+}
+
+const mockCreateMutateAsync = vi.fn().mockResolvedValue(undefined);
+const mockUpdateMutateAsync = vi.fn().mockResolvedValue(undefined);
+const mockUseGetConfiguration = vi.fn<() => MockGetConfigurationResult>(() => ({
+  data: undefined,
+  isLoading: false,
+}));
+const mockUseGetAllConfigurations = vi.fn<
+  () => MockGetAllConfigurationsResult
+>(() => ({
+  data: [],
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: vi.fn(() => ({ push: vi.fn() })),
+  usePathname: vi.fn(() => '/configurations'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => mockUseNamespace(),
+}));
+
+vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
+  useNamespacedNavigation: vi.fn(() => ({ push: vi.fn() })),
+}));
+
+vi.mock('@/lib/services/configurations-hooks', () => ({
+  useGetConfiguration: () => mockUseGetConfiguration(),
+  useGetAllConfigurations: () => mockUseGetAllConfigurations(),
+  useCreateConfiguration: () => ({
+    mutateAsync: mockCreateMutateAsync,
+    isPending: false,
+  }),
+  useUpdateConfiguration: () => ({
+    mutateAsync: mockUpdateMutateAsync,
+    isPending: false,
+  }),
+}));
+
+import { ConfigurationForm } from '@/components/forms/configuration-form/configuration-form';
+import { ConfigurationFormMode } from '@/components/forms/configuration-form/types';
+
+const field = (name: string) => screen.getByPlaceholderText(name);
+
+const NAME_FIELD = 'e.g., mcp-server-url';
+const VALUE_FIELD = 'e.g., https://mcp.example.com';
+const DESCRIPTION_FIELD = 'e.g., Base URL of the MCP server for this environment';
+const ALIAS_FIELD = 'Search aliases';
+const LABEL_FIELD = 'e.g., production';
+
+describe('ConfigurationForm', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseNamespace.mockReturnValue({
+      namespace: 'default',
+      readOnlyMode: false,
+    });
+    mockUseGetConfiguration.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    });
+    mockUseGetAllConfigurations.mockReturnValue({
+      data: [],
+    });
+  });
+
+  it('leaves every field editable in a writable namespace', () => {
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    for (const placeholder of [
+      NAME_FIELD,
+      VALUE_FIELD,
+      DESCRIPTION_FIELD,
+      ALIAS_FIELD,
+      LABEL_FIELD,
+    ]) {
+      expect(field(placeholder)).toBeEnabled();
+    }
+    expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled();
+  });
+
+  it('disables every field in a read-only namespace, not just the submit button', () => {
+    mockUseNamespace.mockReturnValue({
+      namespace: 'default',
+      readOnlyMode: true,
+    });
+
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    for (const placeholder of [
+      NAME_FIELD,
+      VALUE_FIELD,
+      DESCRIPTION_FIELD,
+      ALIAS_FIELD,
+      LABEL_FIELD,
+    ]) {
+      expect(field(placeholder)).toBeDisabled();
+    }
+    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
+  });
+
+  it('sends labels under the labels key when creating', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(NAME_FIELD), 'github-mcp-url');
+    await user.type(field(VALUE_FIELD), 'https://example.test/mcp/');
+    await user.type(field(LABEL_FIELD), 'mcp{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(mockCreateMutateAsync).toHaveBeenCalledWith({
+        name: 'github-mcp-url',
+        value: 'https://example.test/mcp/',
+        description: null,
+        alias: null,
+        labels: ['mcp'],
+      });
+    });
+  });
+
+  it('refuses to create while a typed label is still invalid', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(NAME_FIELD), 'github-mcp-url');
+    await user.type(field(VALUE_FIELD), 'https://example.test/mcp/');
+    await user.type(field(LABEL_FIELD), 'mcp servers');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/use only letters and digits/i),
+      ).toBeInTheDocument();
+    });
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled();
+    expect(field(LABEL_FIELD)).toHaveValue('mcp servers');
+  });
+
+  it('flags an invalid label on Enter, before the user reaches Create', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(LABEL_FIELD), 'mcp servers{Enter}');
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/use only letters and digits/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('refuses to create while a typed label duplicates an existing one', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(NAME_FIELD), 'github-mcp-url');
+    await user.type(field(VALUE_FIELD), 'https://example.test/mcp/');
+    await user.type(field(LABEL_FIELD), 'mcp{Enter}');
+    await user.type(field(LABEL_FIELD), 'mcp');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/label already added/i)).toBeInTheDocument();
+    });
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('creates once the invalid label is corrected', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(NAME_FIELD), 'github-mcp-url');
+    await user.type(field(VALUE_FIELD), 'https://example.test/mcp/');
+    await user.type(field(LABEL_FIELD), 'mcp servers');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(
+        screen.getByText(/use only letters and digits/i),
+      ).toBeInTheDocument();
+    });
+
+    await user.clear(field(LABEL_FIELD));
+    await user.type(field(LABEL_FIELD), 'mcpservers{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(mockCreateMutateAsync).toHaveBeenCalledWith({
+        name: 'github-mcp-url',
+        value: 'https://example.test/mcp/',
+        description: null,
+        alias: null,
+        labels: ['mcpservers'],
+      });
+    });
+  });
+
+  it('locks the name field when editing an existing configuration', () => {
+    mockUseGetConfiguration.mockReturnValue({
+      data: {
+        id: 'uuid-1234',
+        name: 'github-mcp-url',
+        value: 'https://example.test/mcp/',
+        description: null,
+        alias: null,
+        labels: [],
+      },
+      isLoading: false,
+    });
+
+    render(
+      <ConfigurationForm
+        mode={ConfigurationFormMode.EDIT}
+        configurationName="github-mcp-url"
+      />,
+    );
+
+    expect(field(NAME_FIELD)).toBeDisabled();
+    expect(field(VALUE_FIELD)).toBeEnabled();
+  });
+
+  it('suggests existing configuration names as alias options and fills the field on selection', async () => {
+    mockUseGetAllConfigurations.mockReturnValue({
+      data: [
+        {
+          id: 'uuid-2',
+          name: 'other-config',
+          value: 'v',
+          description: null,
+          alias: 'existing-alias',
+          labels: [],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.click(field(ALIAS_FIELD));
+    await user.click(await screen.findByText('other-config'));
+
+    expect(field(ALIAS_FIELD)).toHaveValue('other-config');
+  });
+
+  it('does not offer the configuration being edited as its own alias option', async () => {
+    mockUseGetConfiguration.mockReturnValue({
+      data: {
+        id: 'uuid-1234',
+        name: 'github-mcp-url',
+        value: 'https://example.test/mcp/',
+        description: null,
+        alias: null,
+        labels: [],
+      },
+      isLoading: false,
+    });
+    mockUseGetAllConfigurations.mockReturnValue({
+      data: [
+        {
+          id: 'uuid-1234',
+          name: 'github-mcp-url',
+          value: 'https://example.test/mcp/',
+          description: null,
+          alias: null,
+          labels: [],
+        },
+        {
+          id: 'uuid-2',
+          name: 'other-config',
+          value: 'v',
+          description: null,
+          alias: null,
+          labels: [],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(
+      <ConfigurationForm
+        mode={ConfigurationFormMode.EDIT}
+        configurationName="github-mcp-url"
+      />,
+    );
+
+    await user.click(field(ALIAS_FIELD));
+
+    expect(await screen.findByText('other-config')).toBeInTheDocument();
+    expect(screen.queryByText('github-mcp-url')).not.toBeInTheDocument();
+  });
+
+  it('rejects a description longer than 256 characters', async () => {
+    const user = userEvent.setup();
+    render(<ConfigurationForm mode={ConfigurationFormMode.CREATE} />);
+
+    await user.type(field(NAME_FIELD), 'github-mcp-url');
+    await user.type(field(VALUE_FIELD), 'https://example.test/mcp/');
+    await user.click(field(DESCRIPTION_FIELD));
+    await user.paste('a'.repeat(257));
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Description must be 256 characters or less'),
+      ).toBeInTheDocument();
+    });
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled();
+  });
+});

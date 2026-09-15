@@ -4,15 +4,19 @@ import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
 
 import { type WorkflowFilters, workflowsService } from './workflows';
 
-export function useWorkflows(
-  namespace: string = 'default',
-  filters?: WorkflowFilters,
-) {
+export function useWorkflows(namespace: string, filters?: WorkflowFilters) {
   const [workflows, setWorkflows] = useState<ArgoWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchWorkflows = useCallback(async () => {
+    if (!namespace) {
+      setWorkflows([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const data = await workflowsService.list(namespace, filters);
@@ -33,16 +37,16 @@ export function useWorkflows(
 }
 
 export function useWorkflow(
+  namespace: string,
   name: string,
-  namespace: string = 'default',
-  refreshInterval: number = 2000,
+  refreshInterval: number = 5000,
 ) {
   const [workflow, setWorkflow] = useState<ArgoWorkflow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!name) {
+    if (!name || !namespace) {
       setWorkflow(null);
       setLoading(false);
       return;
@@ -53,16 +57,16 @@ export function useWorkflow(
 
     const fetchWorkflow = async () => {
       try {
-        const data = await workflowsService.get(name, namespace);
+        const data = await workflowsService.get(namespace, name);
         if (mounted) {
           setWorkflow(data);
           setError(null);
           setLoading(false);
 
           const isTerminalState =
-            data.status.phase === 'Succeeded' ||
-            data.status.phase === 'Failed' ||
-            data.status.phase === 'Error';
+            data.status?.phase === 'Succeeded' ||
+            data.status?.phase === 'Failed' ||
+            data.status?.phase === 'Error';
 
           if (isTerminalState && intervalId) {
             clearInterval(intervalId);
@@ -85,9 +89,9 @@ export function useWorkflow(
 
       if (mounted && initialData) {
         const isTerminalState =
-          initialData.status.phase === 'Succeeded' ||
-          initialData.status.phase === 'Failed' ||
-          initialData.status.phase === 'Error';
+          initialData.status?.phase === 'Succeeded' ||
+          initialData.status?.phase === 'Failed' ||
+          initialData.status?.phase === 'Error';
 
         if (!isTerminalState) {
           intervalId = setInterval(fetchWorkflow, refreshInterval);

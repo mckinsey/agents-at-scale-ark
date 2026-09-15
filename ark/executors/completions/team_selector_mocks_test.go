@@ -37,6 +37,8 @@ func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history
 }
 
 type mockSelectorAgent struct {
+	executionEngine         *arkv1alpha1.ExecutionEngineRef
+	returnText              string
 	returnName              string
 	returnEmpty             bool
 	returnTerminateResponse string
@@ -63,6 +65,9 @@ func (m *mockSelectorAgent) Execute(_ context.Context, _ Message, history []Mess
 	}
 	if m.returnEmpty {
 		return &ExecutionResult{Messages: []Message{}}, nil
+	}
+	if m.returnText != "" {
+		return &ExecutionResult{Messages: []Message{NewAssistantMessage(m.returnText)}}, nil
 	}
 	if m.returnTerminateResponse != "" {
 		assistantMsg := Message(openai.ChatCompletionMessageParamUnion{
@@ -101,6 +106,10 @@ func (m *mockSelectorAgent) GetToolRegistry() *ToolRegistry {
 	return m.tools
 }
 
+func (m *mockSelectorAgent) GetExecutionEngine() *arkv1alpha1.ExecutionEngineRef {
+	return m.executionEngine
+}
+
 type mockSelectorAgentNoTool struct {
 	tools *ToolRegistry
 }
@@ -115,6 +124,10 @@ func (m *mockSelectorAgentNoTool) FullName() string {
 
 func (m *mockSelectorAgentNoTool) GetToolRegistry() *ToolRegistry {
 	return m.tools
+}
+
+func (m *mockSelectorAgentNoTool) GetExecutionEngine() *arkv1alpha1.ExecutionEngineRef {
+	return nil
 }
 
 type mockTelemetrySpan struct {

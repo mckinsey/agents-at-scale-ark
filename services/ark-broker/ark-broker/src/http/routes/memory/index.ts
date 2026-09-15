@@ -83,7 +83,7 @@ export function createMemoryRouter(
           'received messages'
         );
 
-        await memory.addMessages(
+        const persisted = await memory.addMessages(
           conversation_id,
           query_id,
           messages,
@@ -92,7 +92,11 @@ export function createMemoryRouter(
         await memory.save();
 
         if (sessions && conversation_id) {
-          sessions.applyMessage(conversation_id, query_id);
+          await sessions.applyMessage(
+            conversation_id,
+            query_id,
+            persisted.at(-1)?.sequenceNumber
+          );
         }
 
         res.status(200).send();
@@ -134,29 +138,25 @@ export function createMemoryRouter(
 
   router.get('/memory-status', async (req, res) => {
     try {
-      const conversationIds = await memory.getConversationIds();
-      const allItems = await memory.all();
+      const stats = await memory.getConversationStats();
 
-      const conversationStats: Record<
+      const conversations: Record<
         string,
         {message_count: number; query_count: number}
       > = {};
-      for (const conversationId of conversationIds) {
-        const convItems = allItems.filter(
-          (i) => i.data.conversationId === conversationId
-        );
-        const queryIds = new Set(convItems.map((i) => i.data.queryId));
-
-        conversationStats[conversationId] = {
-          message_count: convItems.length,
-          query_count: queryIds.size,
+      let totalMessages = 0;
+      for (const stat of stats) {
+        conversations[stat.conversationId] = {
+          message_count: stat.messageCount,
+          query_count: stat.queryCount,
         };
+        totalMessages += stat.messageCount;
       }
 
       res.json({
-        total_conversations: conversationIds.length,
-        total_messages: allItems.length,
-        conversations: conversationStats,
+        total_conversations: stats.length,
+        total_messages: totalMessages,
+        conversations,
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to get memory status');

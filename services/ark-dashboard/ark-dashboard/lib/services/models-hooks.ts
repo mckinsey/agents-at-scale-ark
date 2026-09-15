@@ -1,17 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
-import type { ModelUpdateRequest } from './models';
+import { useNamespace } from '@/providers/NamespaceProvider';
+
+import type { ModelCreateRequest, ModelUpdateRequest } from './models';
 import { modelsService } from './models';
 
 export const GET_ALL_MODELS_QUERY_KEY = 'get-all-models';
 export const GET_MODEL_BY_ID_QUERY_KEY = 'get-model-by-id';
 
 export const useGetAllModels = () => {
+  const { namespace } = useNamespace();
+
   return useQuery({
-    queryKey: [GET_ALL_MODELS_QUERY_KEY],
-    queryFn: modelsService.getAll,
+    queryKey: [GET_ALL_MODELS_QUERY_KEY, namespace],
+    queryFn: () => modelsService.list(namespace),
+    enabled: Boolean(namespace),
   });
 };
 
@@ -21,13 +26,13 @@ type UseCreateModelProps = {
 
 export const useCreateModel = (props?: UseCreateModelProps) => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
-    mutationFn: modelsService.create,
-    onSuccess: model => {
-      toast.success('Model Created', {
-        description: `Successfully created ${model.name}`,
-      });
+    mutationFn: (model: ModelCreateRequest) =>
+      modelsService.create(namespace, model),
+    onSuccess: () => {
+      toast.success('Model created successfully');
 
       queryClient.invalidateQueries({ queryKey: [GET_ALL_MODELS_QUERY_KEY] });
 
@@ -55,9 +60,12 @@ type UseGetModelbyIdProps = {
 };
 
 export const useGetModelbyId = ({ modelId }: UseGetModelbyIdProps) => {
+  const { namespace } = useNamespace();
+
   const query = useQuery({
-    queryKey: [GET_MODEL_BY_ID_QUERY_KEY, modelId],
-    queryFn: () => modelsService.getById(modelId),
+    queryKey: [GET_MODEL_BY_ID_QUERY_KEY, modelId, namespace],
+    queryFn: () => modelsService.getById(namespace, modelId),
+    enabled: Boolean(namespace),
   });
 
   useEffect(() => {
@@ -76,15 +84,14 @@ export const useGetModelbyId = ({ modelId }: UseGetModelbyIdProps) => {
 
 export const useUpdateModelById = () => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
     mutationFn: ({ id, ...data }: ModelUpdateRequest & { id: string }) => {
-      return modelsService.updateById(id, data);
+      return modelsService.updateById(namespace, id, data);
     },
     onSuccess: model => {
-      toast.success('Model Updated', {
-        description: `Successfully updated ${model?.id}`,
-      });
+      toast.success('Model updated successfully');
 
       queryClient.invalidateQueries({ queryKey: [GET_ALL_MODELS_QUERY_KEY] });
       if (model?.id) {

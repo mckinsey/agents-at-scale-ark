@@ -3,7 +3,6 @@ import {
   Bot,
   Calendar,
   ClipboardList,
-  Cog,
   Database,
   Download,
   FileText,
@@ -22,11 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 
-import {
-  BROKER_FEATURE_KEY,
-  EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY,
-  FILES_BROWSER_FEATURE_KEY,
-} from '@/atoms/experimental-features';
+import { FILES_BROWSER_FEATURE_KEY } from '@/atoms/experimental-features';
 
 export interface DashboardSection {
   key: string;
@@ -43,7 +38,7 @@ export interface DashboardSection {
   enablerFeature?: string;
 }
 
-export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
+export const DASHBOARD_SECTIONS = {
   // Configurations - order: Agents, Teams, Models, Secrets
   agents: {
     key: 'agents',
@@ -55,12 +50,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     key: 'teams',
     title: 'Teams',
     icon: Users,
-    group: 'agent-builder',
-  },
-  queries: {
-    key: 'queries',
-    title: 'Queries',
-    icon: Search,
     group: 'agent-builder',
   },
 
@@ -88,17 +77,23 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     group: 'configurations',
   },
 
-  // Monitoring
+  // Monitoring - order: Sessions, Workflow runs, Query Logs, Broker, Events
   sessions: {
     key: 'sessions',
-    title: 'Workflow Runs',
+    title: 'Sessions',
+    icon: MessageSquare,
+    group: 'monitoring',
+  },
+  'workflow-runs': {
+    key: 'workflow-runs',
+    title: 'Workflow runs',
     icon: Play,
     group: 'monitoring',
   },
-  events: {
-    key: 'events',
-    title: 'Events',
-    icon: Calendar,
+  queries: {
+    key: 'queries',
+    title: 'Query Logs',
+    icon: Search,
     group: 'monitoring',
   },
   broker: {
@@ -106,12 +101,11 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     title: 'Broker',
     icon: Activity,
     group: 'monitoring',
-    enablerFeature: BROKER_FEATURE_KEY,
   },
-  'session-history': {
-    key: 'session-history',
-    title: 'Sessions',
-    icon: MessageSquare,
+  events: {
+    key: 'events',
+    title: 'Events',
+    icon: Calendar,
     group: 'monitoring',
   },
 
@@ -154,14 +148,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     title: 'A2A Servers',
     icon: Server,
     group: 'runtime',
-  },
-
-  'execution-engines': {
-    key: 'execution-engines',
-    title: 'Execution Engines',
-    icon: Cog,
-    group: 'runtime',
-    enablerFeature: EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY,
   },
 
   // Service

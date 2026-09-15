@@ -17,6 +17,7 @@ import (
 const (
 	QueryMessagesEndpointFmt = "/queries/%s/messages"
 	QueryEventsEndpointFmt   = "/events/%s"
+	QuerySessionsEndpointFmt = "/sessions/queries/%s"
 )
 
 // LoggingTransport wraps an http.RoundTripper to provide optional HTTP request/response logging.

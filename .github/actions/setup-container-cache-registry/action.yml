@@ -51,7 +51,8 @@ runs:
           # The fork owner's GITHUB_TOKEN has write access to their own namespace
           # Example: ttl.sh/forked-owner/forked-repo-name
 
-          REGISTRY="ttl.sh/${{ github.event.pull_request.head.repo.full_name }}"
+          # Docker/OCI repository paths must be lowercase, but fork owner logins can be mixed-case.
+          REGISTRY="ttl.sh/$(echo "${{ github.event.pull_request.head.repo.full_name }}" | tr '[:upper:]' '[:lower:]')"
           IS_FORK_PR="true"
           echo "External PR detected - using fork's registry: $REGISTRY"
         elif [[ "${{ github.actor }}" == "dependabot[bot]" ]]; then

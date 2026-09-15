@@ -9,3 +9,10 @@ XRAY-97724 - CVE-2018-20225
 - NOT EXPLOITABLE in Ark: Ark uses uv (not pip) for Python dependency management in all production services (ark-api, ark-mcp, simple-agent, retrieval-service, tool templates).
 - Evidence: All Python Dockerfiles use "uv sync --frozen" for dependency installation. pip is only present in base images and used to bootstrap uv itself ("pip install uv"), never for --extra-index-url operations.
 - No fix available: This is considered intended pip functionality per official response. Using uv eliminates the attack vector entirely.
+
+XRAY-1051070 - CVE-2026-73086 / GHSA-xwg4-73v4-xw9w (nanoid integer overflow)
+- nanoid(size) coerced size to a signed 32-bit int; 2147483648 wrapped to -2147483648 and corrupted the CSPRNG poolOffset, making tokens the deterministic string "uuuuuuuuuuuuuuuuuuuuu" until restart. Fixed on the 3.x line in 3.3.12 and on the 5.x line in 5.1.11.
+- FALSE POSITIVE: Ark ships patched nanoid — 3.3.17 (docs) and 3.3.18 (tools/ark-cli, services/ark-landing-page, services/ark-dashboard), both above the 3.3.12 fix. Xray's "fixed" metadata lists only 5.1.11 and omits 3.3.12, so it flags the patched 3.3.x releases anyway.
+- Verified at source, not just advisory data: nanoid 3.3.18 fillPool() still guards "if (bytes < 0) throw new RangeError", and nanoid()/random() feed it "(size |= 0)". The exploit input wraps to a negative value and is rejected before poolOffset is touched. Guard is unchanged since 3.3.12 (3.3.12->3.3.18 only relaxed the upper 1024 cap in the ESM build); not a regression. Matches OSV: affected = 3.3.0-3.3.11 and 4.0.0-5.1.10; 3.3.12-3.3.18 not affected.
+- Cannot upgrade to 5.1.11: nanoid is transitive, pulled only by postcss, which pins nanoid ^3.3.x (3.x line) even at its latest 8.5.26. nanoid 5.x is ESM-only and would break postcss's CommonJS require() and every Next.js/CLI build.
+- Remove this entry if Xray corrects its fixed-version metadata, or if nanoid moves onto a genuinely affected line.

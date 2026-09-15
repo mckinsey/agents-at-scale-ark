@@ -164,6 +164,20 @@ You can uninstall / cleanup your deployment with:
 devspace purge
 ```
 
+## Returning Responses
+
+Your A2A server can reply with either a stateless `Message` or a stateful `Task`. Ark extracts the response text from both:
+
+- **`Message`**: Ark reads the text parts of the message.
+- **`Task`**: Ark reads the final answer from, in order of precedence:
+  1. Text `artifacts` (`artifacts[].parts[].text`, or `TaskArtifactUpdateEvent` when streaming)
+  2. The terminal `status.message` (or a final `TaskStatusUpdateEvent` when streaming)
+  3. Agent messages in `history`
+
+A completed `Task` that returns its output as a text artifact is the canonical A2A pattern (the spec states completed tasks should use artifacts to return generated output), so Ark checks artifacts first. The terminal `status.message` and `history` are used as fallbacks, so agents that report results either way work unchanged.
+
+Only text is extracted as the response. File and data parts are recorded on the `A2ATask` resource status for observability but are not returned as the query answer.
+
 ## Timeout Configuration
 
 ARK provides flexible timeout configuration for A2A agent execution through multiple layers:
@@ -175,7 +189,7 @@ A2A execution automatically respects query timeouts:
 1. **Query.spec.timeout** (default: 5 minutes) sets the overall time limit
 2. **A2AServer.spec.timeout** (optional) can reduce the timeout for specific A2A servers
 
-The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses.
+The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses. Values above 5 minutes take effect: the HTTP client that carries A2A requests keeps only a 30 minute backstop for callers that set no deadline of their own.
 
 ### Configuring A2AServer Timeout
 

@@ -49,7 +49,7 @@ spec:
             name: test-query-math-timeout
           status:
             phase: error
-            (contains(response.content, 'Client.Timeout exceeded') || contains(response.content, 'context deadline exceeded')): true
+            (contains(response.content, 'timed out')): true
     catch:
     - events: {}
     - describe:

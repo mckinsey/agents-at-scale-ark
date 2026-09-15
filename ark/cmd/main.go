@@ -5,21 +5,27 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/record"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -33,6 +39,7 @@ import (
 	"mckinsey.com/ark/internal/apiserver"
 	"mckinsey.com/ark/internal/controller"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/storage/postgresql"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	webhookv1 "mckinsey.com/ark/internal/webhook/v1"
 	webhookv1prealpha1 "mckinsey.com/ark/internal/webhook/v1prealpha1"
@@ -72,23 +79,39 @@ type config struct {
 }
 
 const (
-	RoleAPIServer  = "apiserver"
-	RoleController = "controller"
+	RoleAPIServer       = "apiserver"
+	RoleController      = "controller"
+	RolePostgresCleanup = "postgres-cleanup"
 )
 
+var validRoles = []string{RoleAPIServer, RoleController, RolePostgresCleanup}
+
 func validateRole(role string) error {
-	switch role {
-	case RoleAPIServer, RoleController:
+	if slices.Contains(validRoles, role) {
 		return nil
-	case "":
-		return fmt.Errorf("--role is required; must be %q or %q", RoleAPIServer, RoleController)
-	default:
-		return fmt.Errorf("--role=%q is invalid; must be %q or %q", role, RoleAPIServer, RoleController)
 	}
+	if role == "" {
+		return fmt.Errorf("--role is required; must be one of %q", validRoles)
+	}
+	return fmt.Errorf("--role=%q is invalid; must be one of %q", role, validRoles)
 }
 
 func leaderElectionID(role string) string {
 	return "ark-" + role + "-leader"
+}
+
+// watchNamespaces returns the namespaces the controller cache is confined to, from
+// ARK_WATCH_NAMESPACES (comma-separated). Empty means watch all namespaces, which is the
+// default. Confining the cache lets the ServiceAccount be granted core resource access
+// through per-namespace RoleBindings instead of a cluster-wide ClusterRoleBinding.
+func watchNamespaces() []string {
+	var out []string
+	for _, ns := range strings.Split(os.Getenv("ARK_WATCH_NAMESPACES"), ",") {
+		if ns = strings.TrimSpace(ns); ns != "" {
+			out = append(out, ns)
+		}
+	}
+	return out
 }
 
 func main() {
@@ -106,6 +129,21 @@ func main() {
 	}
 
 	setupLog.Info("starting ark controller", "version", Version, "commit", GitCommit, "role", result.role)
+
+	if limit, err := memlimit.Set(); err != nil {
+		if errors.Is(err, memlimit.ErrCgroupsNotSupported) || errors.Is(err, memlimit.ErrNoCgroup) {
+			setupLog.Info("GOMEMLIMIT not configured: no cgroup memory limit available", "reason", err.Error())
+		} else {
+			setupLog.Error(err, "failed to configure GOMEMLIMIT from cgroup memory limit")
+		}
+	} else {
+		setupLog.Info("configured GOMEMLIMIT", "bytes", limit)
+	}
+
+	if result.role == RolePostgresCleanup {
+		runPostgresCleanup()
+		return
+	}
 
 	mgr, metricsCertWatcher, webhookCertWatcher := setupManager(result.config)
 
@@ -163,7 +201,7 @@ func parseFlags() struct {
 	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system",
 		"Address of the completions engine for A2A communication")
 	flag.StringVar(&cfg.role, "role", "",
-		"Required: process role — 'apiserver' (runs only the aggregated API server) or 'controller' (runs only reconcilers and webhooks)")
+		"Required: process role — 'apiserver' (runs only the aggregated API server), 'controller' (runs only reconcilers and webhooks) or 'postgres-cleanup' (drops the PostgreSQL replication slot and publication, then exits)")
 	flag.IntVar(&cfg.maxConcurrentQueries, "max-concurrent-queries", 32,
 		"Maximum number of Query executions running concurrently in goroutines. "+
 			"When the cap is reached, Reconcile requeues so the workqueue holds the backlog "+
@@ -200,6 +238,15 @@ func setupManager(cfg config) (ctrl.Manager, *certwatcher.CertWatcher, *certwatc
 			BurstSize: 100,
 			QPS:       100,
 		}),
+	}
+
+	if ns := watchNamespaces(); len(ns) > 0 {
+		defaults := make(map[string]cache.Config, len(ns))
+		for _, n := range ns {
+			defaults[n] = cache.Config{}
+		}
+		managerOptions.Cache = cache.Options{DefaultNamespaces: defaults}
+		setupLog.Info("controller cache scoped to namespaces", "namespaces", ns)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
@@ -372,27 +419,70 @@ func setupWebhooks(mgr ctrl.Manager) {
 	}
 }
 
-func setupEmbeddedApiserver(mgr ctrl.Manager) {
-	backend := os.Getenv("ARK_STORAGE_BACKEND")
-	if backend != "postgresql" {
-		setupLog.Error(fmt.Errorf("--role=apiserver requires ARK_STORAGE_BACKEND=postgresql (got %q)", backend), "invalid configuration")
+func postgresCleanupConfig() postgresql.Config {
+	cfg := postgresql.Config{
+		Host:        os.Getenv("ARK_POSTGRES_HOST"),
+		Database:    os.Getenv("ARK_POSTGRES_DATABASE"),
+		User:        os.Getenv("ARK_POSTGRES_USER"),
+		Password:    os.Getenv("ARK_POSTGRES_PASSWORD"),
+		SSLMode:     os.Getenv("ARK_POSTGRES_SSL_MODE"),
+		SSLRootCert: os.Getenv("ARK_POSTGRES_SSL_ROOT_CERT"),
+		SSLCert:     os.Getenv("ARK_POSTGRES_SSL_CERT"),
+		SSLKey:      os.Getenv("ARK_POSTGRES_SSL_KEY"),
+	}
+	if portStr := os.Getenv("ARK_POSTGRES_PORT"); portStr != "" {
+		port, _ := strconv.Atoi(portStr)
+		cfg.Port = port
+	}
+	return cfg
+}
+
+func runPostgresCleanup() {
+	cfg := postgresCleanupConfig()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	err := postgresql.DropReplicationArtifacts(ctx, cfg)
+	cancel()
+	if err != nil {
+		setupLog.Error(err, "postgres cleanup failed")
 		os.Exit(1)
 	}
+	setupLog.Info("postgres cleanup complete")
+}
 
+// envBool applies an optional boolean env var, leaving dst at its caller-set default when the
+// variable is unset. An unparseable value is an error rather than a silent fallback: these flags
+// decide whether admission enforcement runs at all.
+func envBool(name string, dst *bool) error {
+	v := os.Getenv(name)
+	if v == "" {
+		return nil
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		return fmt.Errorf("invalid %s %q: %w", name, v, err)
+	}
+	*dst = parsed
+	return nil
+}
+
+func apiserverConfigFromEnv() (apiserver.Config, error) {
 	cfg := apiserver.Config{}
 
 	if portStr := os.Getenv("ARK_APISERVER_PORT"); portStr != "" {
 		port, err := strconv.Atoi(portStr)
 		if err != nil {
-			setupLog.Error(err, "invalid ARK_APISERVER_PORT")
-			os.Exit(1)
+			return cfg, fmt.Errorf("invalid ARK_APISERVER_PORT %q: %w", portStr, err)
 		}
 		cfg.BindPort = port
 	}
 
 	cfg.PostgresHost = os.Getenv("ARK_POSTGRES_HOST")
 	if portStr := os.Getenv("ARK_POSTGRES_PORT"); portStr != "" {
-		port, _ := strconv.Atoi(portStr)
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid ARK_POSTGRES_PORT %q: %w", portStr, err)
+		}
 		cfg.PostgresPort = port
 	}
 	cfg.PostgresDB = os.Getenv("ARK_POSTGRES_DATABASE")
@@ -400,16 +490,83 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 	cfg.PostgresPass = os.Getenv("ARK_POSTGRES_PASSWORD")
 	cfg.PostgresSSL = os.Getenv("ARK_POSTGRES_SSL_MODE")
 	if cfg.PostgresSSL == "" {
-		cfg.PostgresSSL = "disable"
+		cfg.PostgresSSL = "require"
 	}
 	cfg.AuthMode = os.Getenv("ARK_APISERVER_AUTH_MODE")
 	cfg.TLSCertFile = os.Getenv("ARK_APISERVER_TLS_CERT_FILE")
 	cfg.TLSKeyFile = os.Getenv("ARK_APISERVER_TLS_KEY_FILE")
-	cfg.K8sClient = mgr.GetClient()
+	cfg.PostgresSSLRoot = os.Getenv("ARK_POSTGRES_SSL_ROOT_CERT")
+	cfg.PostgresSSLCert = os.Getenv("ARK_POSTGRES_SSL_CERT")
+	cfg.PostgresSSLKey = os.Getenv("ARK_POSTGRES_SSL_KEY")
+
+	// Audit defaults on; the chart wires the env explicitly. AuditLogPath "-" = stdout.
+	auditRequested := os.Getenv("ARK_APISERVER_AUDIT_ENABLED")
+	cfg.AuditEnabled = true
+	if auditRequested != "" {
+		enabled, err := strconv.ParseBool(auditRequested)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid ARK_APISERVER_AUDIT_ENABLED %q: %w", auditRequested, err)
+		}
+		cfg.AuditEnabled = enabled
+	}
+	cfg.AuditPolicyFile = os.Getenv("ARK_APISERVER_AUDIT_POLICY_FILE")
+	cfg.AuditLogPath = os.Getenv("ARK_APISERVER_AUDIT_LOG_PATH")
+	if cfg.AuditLogPath == "" {
+		cfg.AuditLogPath = "-"
+	}
+	// Audit records nothing without a policy file, so "on by default" only holds when one is
+	// configured. An explicit opt-in without one stays an error (see Server.applyAudit).
+	if auditRequested == "" && cfg.AuditPolicyFile == "" {
+		cfg.AuditEnabled = false
+	}
+
+	// Unset means enabled: CEL enforcement is the default, and only an explicit opt-out removes
+	// the cluster-wide policy watches.
+	celEnabled := true
+	if err := envBool("ARK_APISERVER_POLICY_CEL_ENABLED", &celEnabled); err != nil {
+		return cfg, err
+	}
+	cfg.CELDisabled = !celEnabled
+	if err := envBool("ARK_APISERVER_POLICY_CEL_REQUIRED", &cfg.CELRequired); err != nil {
+		return cfg, err
+	}
+
+	// Off unless asked for: enabling it puts a synchronous webhook call on every write.
+	if err := envBool("ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_ENABLED", &cfg.ThirdPartyWebhooks); err != nil {
+		return cfg, err
+	}
+	if err := envBool("ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED", &cfg.ThirdPartyWebhooksRequired); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
+}
+
+func setupEmbeddedApiserver(mgr ctrl.Manager) {
+	backend := os.Getenv("ARK_STORAGE_BACKEND")
+	if backend != "postgresql" {
+		setupLog.Error(fmt.Errorf("--role=apiserver requires ARK_STORAGE_BACKEND=postgresql (got %q)", backend), "invalid configuration")
+		os.Exit(1)
+	}
+
+	cfg, err := apiserverConfigFromEnv()
+	if err != nil {
+		setupLog.Error(err, "invalid apiserver configuration")
+		os.Exit(1)
+	}
+	cfg.K8sClient = mgr.GetAPIReader()
+	cfg.RestConfig = mgr.GetConfig()
 
 	server := apiserver.New(cfg)
 	if err := mgr.Add(server); err != nil {
 		setupLog.Error(err, "unable to add embedded apiserver to manager")
+		os.Exit(1)
+	}
+	if err := mgr.Add(server.WALConsumer()); err != nil {
+		setupLog.Error(err, "unable to add WAL consumer to manager")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("apiserver-storage", server.Readyz); err != nil {
+		setupLog.Error(err, "unable to set up apiserver storage ready check")
 		os.Exit(1)
 	}
 	setupLog.Info("embedded apiserver configured", "backend", backend)
