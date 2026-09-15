@@ -8,6 +8,10 @@ import { NamespacedLink } from '@/components/namespaced-link';
 import { LabelsCell, TagOverflowList } from '@/components/sections/labels-cell';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
+  StatusIndicator,
+  UNKNOWN_STATUS,
+} from '@/components/ui/status-indicator';
+import {
   Table,
   TableBody,
   TableCell,
@@ -94,17 +98,10 @@ function modelUsesSecret(model: Model, secretName: string): boolean {
 
 function SecretStatus({ inUse }: Readonly<{ inUse: boolean }>) {
   return (
-    <span className="inline-flex items-center gap-2">
-      <span
-        className={cn(
-          'size-2 rounded-full',
-          inUse ? 'bg-status-success' : 'bg-fg-tertiary',
-        )}
-      />
-      <span className="label-regular-primary text-fg-primary">
-        {inUse ? 'In use' : 'Not in use'}
-      </span>
-    </span>
+    <StatusIndicator
+      label={inUse ? 'In use' : 'Not in use'}
+      dotClass={inUse ? 'bg-status-success' : UNKNOWN_STATUS.dotClass}
+    />
   );
 }
 
