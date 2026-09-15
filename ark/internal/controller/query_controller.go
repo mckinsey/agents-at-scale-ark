@@ -209,7 +209,7 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
-	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
+	if obj.Spec.Cancel && !isTerminalPhase(obj.Status.Phase) {
 		r.cleanupExistingOperation(req.NamespacedName)
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{}, err
@@ -1088,6 +1088,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	// The executor needs the taskID to detect this is a resumption after approval
 	// and clears it after processing (handler.go).
 	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
+		if status == statusCanceled && isTerminalPhase(q.Status.Phase) {
+			return false
+		}
 		saved.restoreOnto(q)
 		q.Status.Phase = status
 		r.setConditionForPhase(q, status)

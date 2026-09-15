@@ -2,8 +2,6 @@ import { atom } from 'jotai';
 
 import type { GraphEdge } from '@/lib/types/chat-message';
 
-export const experimentalFeaturesDialogOpenAtom = atom(false);
-
 const SESSION_STORAGE_KEY = 'files-browser-prefix';
 
 const filesBrowserPrefixBaseAtom = atom<string | null>(null);
