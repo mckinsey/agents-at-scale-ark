@@ -133,5 +133,23 @@ describe('renderMarkdown', () => {
         '/local/chart.png',
       );
     });
+
+    // Browsers fold \ to / when parsing an http(s) URL, so a backslash source
+    // would beacon externally if it reached the DOM raw. It cannot: mdast-to-hast
+    // percent-encodes it to %5C before the src policy runs, and %5C is an ordinary
+    // path character that never re-parses into an authority. These pin that, so the
+    // guarantee fails loudly if the markdown pipeline stops normalizing.
+    it('keeps backslash image sources on the current origin', () => {
+      for (const src of ['/\\evil.com/p.png', '\\\\evil.com/p.png']) {
+        const { container } = render(renderMarkdown(`![x](${src})`));
+        const rendered = container.querySelector('img')?.getAttribute('src');
+
+        expect(rendered).not.toBeUndefined();
+        expect(rendered).not.toContain('\\');
+        expect(new URL(rendered as string, 'https://dash/app/').origin).toBe(
+          'https://dash',
+        );
+      }
+    });
   });
 });

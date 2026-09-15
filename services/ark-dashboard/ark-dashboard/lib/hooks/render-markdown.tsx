@@ -29,7 +29,12 @@ if (typeof window !== 'undefined') {
 // to SVG uploads server-side.
 const isSafeImageSrc = (src: string | undefined): boolean => {
   if (!src) return false;
-  const trimmed = src.trim();
+  // Browsers fold \ to / when parsing an http(s) URL, so "/\evil.com/x.png"
+  // loads from evil.com. A src from markdown arrives already percent-encoded as
+  // %5C by mdast-to-hast and is harmless, but a src from raw HTML skips that
+  // normalization - so this fold is what keeps the policy correct if rehype-raw
+  // is ever enabled.
+  const trimmed = src.trim().replace(/\\/g, '/');
   if (trimmed.startsWith('//')) return false;
   if (/^data:image\//i.test(trimmed) || trimmed.startsWith('blob:'))
     return true;
