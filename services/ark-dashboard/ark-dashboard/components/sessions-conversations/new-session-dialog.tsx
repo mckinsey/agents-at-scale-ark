@@ -241,7 +241,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="bg-surface-bg-secondary sm:max-w-[600px] flex h-[700px] max-h-[90vh] flex-col gap-10 border-0 p-12"
+        className="bg-surface-bg-secondary sm:max-w-[600px] flex h-[700px] max-h-[90vh] flex-col gap-10 p-12"
         showCloseButton={false}
       >
         <DialogHeader>

@@ -416,12 +416,12 @@ collected:
 }
 
 func TestWatch_CrossReplicaDelivery(t *testing.T) {
-	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaA.StartWALConsumer()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
+	replicaB.StartNotifyListener()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -473,11 +473,12 @@ drained:
 
 	t.Logf("Created %d resources on replica A, waiting for replica B watcher...", count)
 
-	// Replica B has no WAL consumer; its only signal is the broadcaster's
-	// safety-net relist (shortened via withFastRelist), so the deadline must
-	// exceed one tick.
+	// Replica B has no WAL consumer; its fast path is the pg_notify nudge from
+	// replica A's writes. The relist ticker keeps its production 120s cadence
+	// so the deadline below can only be met through the notify path.
+	start := time.Now()
 	received := 0
-	deadline := time.After(30 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for received < count {
 		select {
 		case ev := <-w.ResultChan():
@@ -490,7 +491,7 @@ drained:
 	}
 timeout:
 
-	t.Logf("Replica B received %d/%d events", received, count)
+	t.Logf("Replica B received %d/%d events in %v", received, count, time.Since(start))
 
 	if received < count {
 		t.Errorf("Replica B received %d/%d events — cross-replica delivery incomplete", received, count)
@@ -500,12 +501,12 @@ timeout:
 }
 
 func TestWatch_CrossReplicaBurst(t *testing.T) {
-	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaA.StartWALConsumer()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
+	replicaB.StartNotifyListener()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -560,7 +561,7 @@ drained2:
 	t.Logf("Created %d/%d resources on replica A, waiting for replica B...", actual, count)
 
 	seen := make(map[string]bool)
-	deadline := time.After(30 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for len(seen) < actual {
 		select {
 		case ev := <-w.ResultChan():
@@ -591,12 +592,12 @@ timeout2:
 }
 
 func TestWatch_CrossReplicaDelete(t *testing.T) {
-	withFastRelist(t, 2*time.Second)
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaA.StartWALConsumer()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
+	replicaB.StartNotifyListener()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -634,14 +635,15 @@ func TestWatch_CrossReplicaDelete(t *testing.T) {
 		t.Fatalf("Delete on replica A failed: %v", err)
 	}
 
+	deleteStart := time.Now()
 	gotDelete := false
-	deadline := time.After(30 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for {
 		select {
 		case ev := <-w.ResultChan():
 			if ev.Type == watch.Deleted {
 				obj := ev.Object.(*integrationTestObject)
-				t.Logf("Replica B received DELETED event for %s", obj.Metadata.Name)
+				t.Logf("Replica B received DELETED event for %s after %v", obj.Metadata.Name, time.Since(deleteStart))
 				gotDelete = true
 				goto done
 			}
@@ -658,4 +660,118 @@ done:
 	}
 
 	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+}
+
+// TestWatch_CrossReplicaNotifyLatency proves the notify path alone: the writer
+// runs no WAL consumer and the relist ticker keeps its production cadence, so
+// the only fast signal reaching replica B's watcher is the pg_notify nudge.
+func TestWatch_CrossReplicaNotifyLatency(t *testing.T) {
+	replicaA := newTestBackend(t)
+	defer replicaA.Close()
+	replicaB := newTestBackend(t)
+	defer replicaB.Close()
+	replicaB.StartNotifyListener()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kind := "NotifyLatencyTest"
+	ns := "notify-latency-test"
+
+	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+
+	w, err := replicaB.Watch(ctx, kind, ns, storage.WatchOptions{})
+	if err != nil {
+		t.Fatalf("Watch on replica B failed: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(2 * time.Second)
+	for {
+		select {
+		case <-w.ResultChan():
+		default:
+			goto drained3
+		}
+	}
+drained3:
+
+	start := time.Now()
+	createTestResource(t, replicaA, kind, ns, "latency-probe")
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case ev := <-w.ResultChan():
+			if ev.Type == watch.Added {
+				t.Logf("Cross-replica notify latency: %v", time.Since(start))
+				replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+				return
+			}
+		case <-deadline:
+			t.Fatal("No ADDED event on replica B within 5s — the notify fast path is not working")
+		}
+	}
+}
+
+// TestNotifyListener_ReconnectRecovers kills the LISTEN backend, writes while
+// the listener is reconnecting, and asserts the write still reaches the watcher
+// quickly. The listener nudges all watchers on reconnect (notify_listener.go),
+// so a write that landed during the LISTEN gap is picked up by the post-reconnect
+// relist rather than waiting for the production ticker.
+func TestNotifyListener_ReconnectRecovers(t *testing.T) {
+	replicaA := newTestBackend(t)
+	defer replicaA.Close()
+	replicaB := newTestBackend(t)
+	defer replicaB.Close()
+	replicaB.StartNotifyListener()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kind := "NotifyReconnectTest"
+	ns := "notify-reconnect-test"
+
+	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+
+	w, err := replicaB.Watch(ctx, kind, ns, storage.WatchOptions{})
+	if err != nil {
+		t.Fatalf("Watch on replica B failed: %v", err)
+	}
+	defer w.Stop()
+
+	var pid int64
+	pidDeadline := time.After(10 * time.Second)
+	for {
+		row := replicaA.db.QueryRowContext(ctx, "SELECT pid FROM pg_stat_activity WHERE query = 'LISTEN "+notifyChannel+"'")
+		if err := row.Scan(&pid); err == nil {
+			break
+		}
+		select {
+		case <-pidDeadline:
+			t.Fatal("notify listener never opened a LISTEN session")
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+
+	if _, err := replicaA.db.ExecContext(ctx, "SELECT pg_terminate_backend($1)", pid); err != nil {
+		t.Fatalf("pg_terminate_backend failed: %v", err)
+	}
+
+	createTestResource(t, replicaA, kind, ns, "reconnect-probe")
+
+	start := time.Now()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case ev := <-w.ResultChan():
+			if ev.Type == watch.Added {
+				t.Logf("Replica B recovered the write %v after the LISTEN backend was killed", time.Since(start))
+				replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+				return
+			}
+		case <-deadline:
+			t.Fatal("Replica B did not recover the write within 5s of the LISTEN backend being killed")
+		}
+	}
 }

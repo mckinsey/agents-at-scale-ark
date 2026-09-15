@@ -233,6 +233,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create PostgreSQL backend: %w", err)
 	}
 	close(s.backendReady)
+	s.backend.StartNotifyListener()
 	klog.Infof("Using PostgreSQL storage backend: %s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
 
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()

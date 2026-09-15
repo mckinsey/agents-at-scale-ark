@@ -31,7 +31,7 @@ class SessionsPage(BasePage):
 
     def navigate_to_session_history(self) -> None:
         dashboard = DashboardPage(self.page)
-        dashboard.navigate_to_section("session-history")
+        dashboard.navigate_to_section("sessions")
         self.wait_for_load_state("domcontentloaded")
         self.wait_for_navigation_complete()
 

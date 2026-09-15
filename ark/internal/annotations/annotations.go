@@ -59,7 +59,6 @@ const (
 
 // Streaming annotations
 const (
-	StreamingEnabled   = ARKPrefix + "streaming-enabled"
 	StreamingURL       = ARKPrefix + "streaming-url"
 	StreamingSupported = ARKPrefix + "streaming-supported"
 )

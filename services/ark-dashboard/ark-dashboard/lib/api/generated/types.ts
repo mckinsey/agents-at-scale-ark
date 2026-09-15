@@ -4601,6 +4601,15 @@ export interface components {
          * @description Request model for creating a secret.
          */
         SecretCreateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
             /** Name */
             name: string;
             /** String Data */
@@ -4618,10 +4627,14 @@ export interface components {
          * @description Detailed secret response model.
          */
         SecretDetailResponse: {
+            /** Alias */
+            alias?: string | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;
             } | null;
+            /** Description */
+            description?: string | null;
             /** Id */
             id: string;
             /**
@@ -4629,6 +4642,11 @@ export interface components {
              * @default []
              */
             keys: string[];
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
             /** Name */
             name: string;
             /** Secret Length */
@@ -4651,12 +4669,21 @@ export interface components {
          * @description Kubernetes secret response model.
          */
         SecretResponse: {
+            /** Alias */
+            alias?: string | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;
             } | null;
+            /** Description */
+            description?: string | null;
             /** Id */
             id: string;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
             /** Name */
             name: string;
         };
@@ -4665,10 +4692,19 @@ export interface components {
          * @description Request model for updating a secret.
          */
         SecretUpdateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
             /** String Data */
-            string_data: {
+            string_data?: {
                 [key: string]: string;
-            };
+            } | null;
         };
         /**
          * Selector
