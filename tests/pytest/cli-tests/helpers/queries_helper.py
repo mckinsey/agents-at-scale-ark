@@ -123,6 +123,24 @@ spec:
             return True, f"Phase: {phase}"
         return False, None
     
+    def get_token_usage(self, name: str) -> Tuple[bool, Optional[Dict]]:
+        success, query_data = self.get_query(name)
+        if not success or not query_data:
+            return False, None
+        token_usage = query_data.get("status", {}).get("tokenUsage")
+        if not token_usage:
+            return False, None
+        return True, token_usage
+
+    def wait_for_token_usage(self, name: str, timeout: int = 30) -> Tuple[bool, Optional[Dict]]:
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            success, token_usage = self.get_token_usage(name)
+            if success:
+                return True, token_usage
+            time.sleep(2)
+        return False, None
+
     def list_queries(self) -> Tuple[bool, List[str]]:
         success, stdout, stderr = self._run_cmd(
             ["kubectl", "get", "queries", "-n", self.namespace, "-o", "json"],
