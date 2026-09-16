@@ -1,312 +1,366 @@
 ## ADDED Requirements
 
-### Requirement: Tool CRD accepts `type: inline` with an `inline` sub-object
+### Requirement: Tool accepts an explicit inline script and language
 
-The operator SHALL accept a `Tool` custom resource (`ark.mckinsey.com/v1alpha1`) whose `spec.type` is `inline`. When `spec.type == inline`, the resource SHALL include a `spec.inline` sub-object with:
+The operator SHALL support `Tool.spec.type: inline` with a required `spec.inline` containing a non-whitespace `source` of at most 65,536 UTF-8 bytes and a required `language` of `bash`, `python`, `node`, or `ts`. There SHALL be no implicit language default or shebang dispatch. Inline validation SHALL be equivalent on both storage backends.
 
-- `source` (string, required, MUST be non-empty, MUST be ≤ 64 KiB)
-- `language` (string, required, MUST be one of `bash`, `python`, `node`, `ts`)
-
-The `spec.inline` field SHALL be permitted only when `spec.type == inline`. The validating webhook SHALL reject any other combination. There is no shebang inference and no implicit default: `language` MUST be supplied explicitly.
+`spec.inline` SHALL be invalid on another type, and an inline Tool SHALL NOT carry other subtype configuration. Inline input schemas SHALL describe JSON objects; an omitted schema SHALL be advertised as an empty-object schema. Non-inline validation SHALL remain unchanged. Updates crossing the inline/non-inline type boundary SHALL require delete/recreate in v1.
 
 #### Scenario: Minimal valid inline tool
 
-- **WHEN** a `Tool` is applied with `spec.type: inline`, a non-empty `spec.inline.source`, and a valid `spec.inputSchema`
-- **THEN** the validating webhook accepts the object
-- **AND** the controller reconciles the owned `ConfigMap`, `ServiceAccount`, `NetworkPolicy`, `Deployment` (replicas: 0), `Service`, and synthetic MCP endpoint
+- **GIVEN** inline authoring is enabled and the requester has the dedicated author permission in the target namespace
+- **WHEN** a Tool is created with `type: inline`, non-empty source, `language: python`, and an object input schema
+- **THEN** admission accepts it
+- **AND** it remains Pending if runtime prerequisites are incomplete
 
-#### Scenario: Empty source rejected
+#### Scenario: Missing or invalid fields
 
-- **WHEN** a `Tool` is applied with `spec.type: inline` and `spec.inline.source` empty or missing
-- **THEN** the validating webhook rejects the admission with a message naming `spec.inline.source`
+- **WHEN** an inline Tool has missing/whitespace-only source, missing language, or an unsupported language
+- **THEN** admission rejects it with an error naming the invalid field
 
-#### Scenario: `inline` sub-object on a non-inline tool is rejected
+#### Scenario: Source byte limit
 
-- **WHEN** a `Tool` is applied with `spec.type: http` and a populated `spec.inline`
-- **THEN** the validating webhook rejects the admission with a message stating `spec.inline` is only allowed when `spec.type == inline`
+- **WHEN** source exceeds 65,536 UTF-8 bytes, including multibyte characters
+- **THEN** admission rejects it and recommends MCPServer for larger tools
+- **AND** a source of exactly 65,536 bytes is not rejected on size alone
 
-#### Scenario: Invalid language rejected
+#### Scenario: Conflicting subtype fields
 
-- **WHEN** a `Tool` is applied with `spec.type: inline`, a valid `spec.inline.source`, and `spec.inline.language: ruby`
-- **THEN** the validating webhook rejects the admission with a message naming the allowed values (`bash`, `python`, `node`, `ts`)
+- **WHEN** a non-inline Tool contains `spec.inline`, or an inline Tool contains `spec.http` or another subtype configuration
+- **THEN** admission rejects the inconsistent shape
 
-#### Scenario: Missing language rejected
+#### Scenario: Conversion requires recreation
 
-- **WHEN** a `Tool` is applied with `spec.type: inline`, a valid `spec.inline.source`, and no `spec.inline.language`
-- **THEN** the validating webhook rejects the admission with a message stating `spec.inline.language` is required and naming the allowed values (`bash`, `python`, `node`, `ts`)
+- **WHEN** an update, PATCH, or apply changes a Tool from non-inline to inline or from inline to another type
+- **THEN** admission rejects the transition with delete/recreate guidance
 
-#### Scenario: Source size cap
+### Requirement: Inline authoring requires a dedicated permission on both backends
 
-- **WHEN** a `Tool` is applied whose `spec.inline.source` exceeds 64 KiB
-- **THEN** the validating webhook rejects the admission with a message pointing the author at `MCPServer` for larger payloads
+Inline creation and every inline spec update SHALL require `inlineTools.enabled: true` (default false) and an explicitly allowed SubjectAccessReview. The review SHALL use `group: ark.mckinsey.com`, `resource: inlinetools`, `verb: use`, the server-validated request namespace, and the authenticated requester's username, UID, groups, and extra information where present. Missing identity, denial, timeout, and authorization errors SHALL fail closed.
 
-### Requirement: Creating a `type: inline` Tool requires a dedicated permission and an enabled feature flag
+CRD admission SHALL obtain identity from AdmissionReview; the PostgreSQL-backed API server SHALL obtain it from authenticated request context and enforce the same decision in-process. The gate SHALL NOT depend on optional third-party admission plugins, be bypassable by validation-skip labels or namespace selectors, or inherit a configurable fail-open policy. Installations unable to enforce the gate SHALL reject inline authoring. Authentication-disabled aggregated API configurations SHALL reject inline authoring.
 
-Because `spec.type == inline` embeds code that Ark executes in a pod, creating one is arbitrary code execution in the namespace — a higher privilege than any other tool type, which only registers config. The validating webhook SHALL reject a `Tool` with `spec.type == inline` unless BOTH conditions hold:
+No dedicated author permission SHALL be added automatically to existing Tool editors or ark-api's service account. Unchanged-spec metadata operations, status updates, and deletion SHALL retain their normal permissions and remain possible while disabled; these paths SHALL NOT mutate executable spec fields. Non-inline operations SHALL retain their existing authorization behavior.
 
-1. the cluster-level inline-tools feature flag (`inlineTools.enabled`) is enabled (default `false`), AND
-2. the requesting user is authorised by a `SubjectAccessReview` for the dedicated permission (`use` on `inlinetools.ark.mckinsey.com`).
+#### Scenario: Authorized creation and update
 
-The authorisation check SHALL use the requester identity from the AdmissionReview request (`userInfo`), so it runs while the author's identity is still present. This gate SHALL apply only to `spec.type == inline`; `create` permission on `tools` and every other tool type SHALL be unaffected.
+- **GIVEN** authoring is enabled and a subject has the dedicated permission in namespace A
+- **WHEN** the subject creates an inline Tool or changes its source/language/schema through update, PATCH, or apply in A
+- **THEN** the CRD and PostgreSQL admission paths both allow the otherwise-valid operation
 
-#### Scenario: Authorised user with the feature enabled
+#### Scenario: Generic Tool permission is insufficient
 
-- **GIVEN** the `inlineTools.enabled` flag is `true`
-- **AND** the requesting user holds `use` on `inlinetools.ark.mckinsey.com`
-- **WHEN** the user applies a valid `Tool` with `spec.type: inline`
-- **THEN** the validating webhook admits the object
+- **GIVEN** a subject may create/update Tools but lacks the dedicated author permission
+- **WHEN** it attempts inline creation or a spec update
+- **THEN** both backends reject the write
 
-#### Scenario: User without the dedicated permission is rejected
+#### Scenario: Permission is namespace scoped
 
-- **GIVEN** the `inlineTools.enabled` flag is `true`
-- **AND** the requesting user can `create` `tools` but does NOT hold `use` on `inlinetools.ark.mckinsey.com`
-- **WHEN** the user applies a valid `Tool` with `spec.type: inline`
-- **THEN** the validating webhook rejects the admission with a message naming the missing permission
+- **GIVEN** the subject has the dedicated permission only in namespace A
+- **WHEN** it attempts an inline write in namespace B, including with a conflicting body namespace
+- **THEN** it cannot use the grant in A to authorize the write in B
 
-#### Scenario: Feature flag disabled rejects even an authorised user
+#### Scenario: Disabled feature or unavailable authorization
 
-- **GIVEN** the `inlineTools.enabled` flag is `false`
-- **AND** the requesting user holds `use` on `inlinetools.ark.mckinsey.com`
-- **WHEN** the user applies a valid `Tool` with `spec.type: inline`
-- **THEN** the validating webhook rejects the admission with a message stating inline tools are disabled on this cluster
+- **WHEN** the feature is disabled, authenticated identity is missing, or SubjectAccessReview fails or times out
+- **THEN** inline authoring is rejected on both backends
+- **AND** existing resource cleanup remains possible under ordinary permissions
 
-#### Scenario: The gate does not affect other tool types
+#### Scenario: Security admission cannot be skipped
 
-- **GIVEN** the requesting user can `create` `tools` but does NOT hold `use` on `inlinetools.ark.mckinsey.com`
-- **WHEN** the user applies a `Tool` with `spec.type: http`
-- **THEN** the validating webhook admits the object (the inline gate is not consulted)
+- **WHEN** an unauthorized inline request carries `ark.mckinsey.com/skip-webhook-validation: "true"`, or optional third-party webhooks are disabled
+- **THEN** the mandatory inline security gate still rejects the write
 
-### Requirement: Inline tools attach via the existing `Agent.spec.tools`
+### Requirement: API inline authoring uses authenticated end-user impersonation
 
-The `Agent` CRD SHALL surface inline tools through the existing `spec.tools` mechanism with no new field. From an agent author's perspective, attaching an inline `Tool` is identical to attaching any other `Tool`.
+Typed Tool and generic resource create/spec-update paths SHALL require an authenticated user identity and enabled impersonation for inline authoring. They SHALL reject API-key-only or non-impersonated authoring and SHALL NOT retry a denial as ark-api's service account, even when general fallback is enabled. Update checks SHALL consider both the stored and proposed Tool. Direct authenticated Kubernetes service accounts MAY receive explicit author grants; API restrictions do not prohibit those direct callers.
 
-#### Scenario: Attaching an inline tool by name
+#### Scenario: Authorized dashboard user
 
-- **GIVEN** an inline `Tool` named `csv-summarise` and an `Agent` whose `spec.tools` references it
-- **WHEN** the agent reconciles
-- **THEN** the agent's effective tool list includes `csv-summarise`
-- **AND** the agent's `spec.tools` did not require any inline-specific entries
+- **GIVEN** an authenticated user with impersonation enabled and the dedicated permission
+- **WHEN** the user creates or edits an inline Tool through the dashboard
+- **THEN** admission evaluates that user, not ark-api's service account
 
-#### Scenario: Inline tool callable end-to-end
+#### Scenario: API identity or permission is insufficient
 
-- **GIVEN** an `Agent` with `spec.tools` including `csv-summarise` (an inline Python tool)
-- **WHEN** the model invokes `csv-summarise(file: "/tmp/data.csv")` during a turn
-- **THEN** the call succeeds
-- **AND** the response is the script's stdout
+- **WHEN** an inline authoring request lacks user identity, uses only an API key, has impersonation disabled, or is denied admission
+- **THEN** the API rejects it without a service-account retry
+- **AND** using the generic resource endpoint does not bypass that decision
 
-### Requirement: Controller reconciles per-tool sandbox infrastructure
+### Requirement: Inline tools inherit the existing execution authorization model
 
-For each `Tool` with `spec.type == inline`, the controller SHALL reconcile a set of owned Kubernetes objects such that the script body is mounted at `/tool/source`, the pod runs with the documented security defaults, and external traffic reaches the pod only via the scale-to-zero activator. Each owned object SHALL set an owner reference pointing at the `Tool` so deletion cascades. The reconciliation of these objects SHALL be gated on `spec.type == inline`; `Tool` resources of other types SHALL retain their existing status-only reconciliation.
+Inline Tools SHALL attach through existing `Agent.spec.tools`. Their resolution and invocation SHALL preserve the query/executor resource-access identity, attachment/allowlist restrictions, and applicable approval flows of the chosen execution engine. The dedicated author permission SHALL NOT become an invocation permission. This change SHALL NOT introduce per-user invocation OAuth, a new execute verb, or additional engine features not already supported for existing tools.
 
-#### Scenario: In-place source ConfigMap with rollout-triggering annotation
+#### Scenario: Invoke without author privileges
 
-- **WHEN** an inline `Tool` is reconciled
-- **THEN** a single `ConfigMap` with a stable name (`<tool>-source`) is created in the tool's namespace containing the script body at key `source`
-- **AND** the generated `Deployment`'s pod template carries an annotation (`ark.mckinsey.com/inline-source-hash`) whose value is a deterministic hash of `spec.inline.source`
+- **GIVEN** an existing inline Tool and a query execution context that can resolve and use it through the ordinary tool path
+- **AND** that execution context lacks the dedicated inline author permission
+- **WHEN** the agent invokes the attached Tool
+- **THEN** the lack of author permission alone does not reject invocation
 
-#### Scenario: Editing source updates in place without orphaning ConfigMaps
+#### Scenario: Existing resource restrictions and approval apply
 
-- **GIVEN** a reconciled inline `Tool` with its `<tool>-source` ConfigMap
-- **WHEN** `spec.inline.source` is edited and the `Tool` is re-reconciled
-- **THEN** the same `<tool>-source` ConfigMap is updated in place (no new ConfigMap is created and none is orphaned)
-- **AND** the pod-template `ark.mckinsey.com/inline-source-hash` annotation changes, triggering a rollout
+- **WHEN** an inline Tool is resolved and invoked
+- **THEN** resolution does not elevate to the controller's identity to bypass the execution context's resource permissions
+- **AND** it cannot bypass the chosen engine's existing tool allowlist or configured approval flow
 
-#### Scenario: Security-hardened pod template
+#### Scenario: Runnable in-memory CSV example
 
-- **WHEN** an inline `Tool` is reconciled
-- **THEN** the generated `Deployment`'s pod template sets `automountServiceAccountToken: false`
-- **AND** the pod security context is `runAsNonRoot: true`, `runAsUser: 65532`, `readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `seccompProfile.type: RuntimeDefault`
-- **AND** the default resource limits are `cpu: 500m`, `memory: 256Mi`
-- **AND** the pod sets a PID limit (default `128`) so a fork bomb cannot exhaust node-level PIDs for other pods
+- **GIVEN** an agent with the `csv-summarise` Tool from design.md attached and its runtime available
+- **WHEN** the model supplies `{"csv":"amount\n2\n3\n"}`
+- **THEN** the tool returns text representing `{"rows":2,"total":"5"}`
+- **AND** it needs no external file, network access, or third-party package
 
-#### Scenario: Default-deny egress
+### Requirement: Inline resolution reuses existing MCP invocation types
 
-- **WHEN** an inline `Tool` is reconciled
-- **THEN** a `NetworkPolicy` is created that selects the tool's pod and permits no egress
-- **AND** v1 exposes no relaxation knob (an author needing egress SHALL author an `MCPServer` instead)
+The controller SHALL publish an internal activator URL in `Tool.status.resolvedAddress` and the corresponding `status.observedGeneration`. Go `CreateToolExecutor` SHALL adapt inline Tools into existing MCP client configuration and `MCPExecutor`; the Python SDK's `_build_mcp_servers` SHALL emit existing `MCPServerConfig` records as specified by the `mcp-server-resolution` delta. The stored Tool SHALL remain inline; no synthetic MCPServer or duplicate Tool SHALL be created.
 
-#### Scenario: Owner-reference cascade on delete
+Connections SHALL use transport `http` (MCP Streamable HTTP), a namespace/UID-qualified connection identity, and the authored Tool name as the original MCP tool name. Unresolved or stale status SHALL NOT supply a usable connection. Existing tracing, events, result/error handling, and supported attachment transformations SHALL be reused. HTTP tools SHALL retain their separate HTTP execution path.
 
-- **WHEN** an inline `Tool` is deleted
-- **THEN** every controller-owned object (`ConfigMap`, `ServiceAccount`, `NetworkPolicy`, `Deployment`, `Service`, synthetic MCP endpoint) is deleted by the Kubernetes garbage collector
+#### Scenario: Existing MCP and inline tool in one agent
 
-#### Scenario: Non-inline tools keep status-only reconciliation
+- **GIVEN** an agent with one MCP Tool and one inline Tool
+- **WHEN** its tools are registered and invoked
+- **THEN** both use the existing MCP invocation implementation after their respective resolution steps
+- **AND** inline adaptation preserves applicable attachment aliases/partial arguments and tool events
 
-- **WHEN** a `Tool` with `spec.type: http` is reconciled
-- **THEN** no `ConfigMap`, `Deployment`, `Service`, or `NetworkPolicy` is created for it
-- **AND** its status transitions to `Ready` exactly as before this change
+#### Scenario: Direct Tool query
 
-### Requirement: Egress isolation is verified, not assumed
+- **WHEN** a direct Tool query targets an inline Tool through `CreateToolExecutor`
+- **THEN** the shared factory supplies an MCP executor rather than rejecting the new type or executing the script locally
 
-The deny-all-egress `NetworkPolicy` provides isolation only if the cluster CNI enforces NetworkPolicy. Ark SHALL NOT assume enforcement. Enabling inline tools SHALL run a preflight that actively verifies egress is blocked (e.g. a canary pod under a deny-all policy attempting an outbound connection), and SHALL fail enablement loudly, identifying the cause, when egress is not blocked. A negative end-to-end test SHALL assert that an inline script's outbound network call is denied.
+#### Scenario: Unresolved inline tool
 
-#### Scenario: Preflight fails on a non-enforcing CNI
+- **WHEN** an inline Tool is Pending or its observed generation is stale
+- **THEN** resolution reports it unavailable using the caller's existing error/skip behavior
+- **AND** does not connect directly to a runner or rewrite the stored subtype
 
-- **GIVEN** a cluster whose CNI does not enforce NetworkPolicy
-- **WHEN** inline tools are enabled and the preflight runs
-- **THEN** enablement fails with an error stating that egress is not enforced and naming the CNI as the likely cause
-- **AND** no `type: inline` Tool is admitted while enablement is failed
+### Requirement: Controller reconciles owned, revision-checked runner infrastructure
 
-#### Scenario: Preflight passes on an enforcing CNI
+Each inline Tool SHALL own one source ConfigMap, ServiceAccount, NetworkPolicy, Deployment, and Service in its namespace. Child names SHALL be deterministic and length-safe, labels SHALL distinguish Tool UIDs, and ownership collisions SHALL fail without adopting unrelated resources. Non-inline reconciliation SHALL remain unchanged.
 
-- **GIVEN** a cluster whose CNI enforces NetworkPolicy
-- **WHEN** inline tools are enabled and the preflight runs
-- **THEN** the preflight confirms the canary's outbound connection is blocked and enablement proceeds
+The source ConfigMap SHALL have a stable name (`<tool>-source` when it fits), key `source`, and in-place updates. The pod template SHALL carry `ark.mckinsey.com/inline-source-hash`; source and language changes SHALL trigger a rollout. Mount a read-only per-pod snapshot at `/tool/source.sh`, `/tool/source.py`, `/tool/source.js`, or `/tool/source.ts` as appropriate, and verify its checksum before runner readiness. New invocations SHALL wait for the current revision rather than use stale source.
 
-#### Scenario: Inline script outbound call is blocked (negative e2e)
+Ready SHALL mean that the current endpoint/configuration and runtime prerequisites are usable, not that a runner pod is warm. Missing runtime or network verification SHALL produce Pending and no usable endpoint. Inline reconciliation SHALL process edits and child drift even if the previous status was Ready. Ordinary reconciliation SHALL NOT overwrite the activator's active replica count.
 
-- **GIVEN** an enabled inline `Tool` whose script attempts an outbound network connection
-- **WHEN** the model invokes the tool
-- **THEN** the outbound connection fails
-- **AND** the script observes the failure rather than reaching the external host
+#### Scenario: Initial and repeated reconciliation
 
-### Requirement: Scale-to-zero activator brings pods from 0 to 1 on demand
+- **WHEN** an inline Tool is reconciled repeatedly with runtime prerequisites satisfied
+- **THEN** one owned set of children exists and the initially unused Deployment has zero replicas
+- **AND** the Tool can be Ready without starting a runner
 
-A new `inlinetoolactivator` subsystem in the operator SHALL front each inline tool's `Service` as an HTTP proxy. When a request arrives for a tool whose `Deployment` has zero ready pods, the activator SHALL scale the `Deployment` to `replicas: 1`, wait for readiness, and forward the request. After an inline tool has been idle for `60s`, the controller SHALL scale the `Deployment` back to `replicas: 0`.
+#### Scenario: Source edit without orphaned ConfigMaps
 
-#### Scenario: Cold start on first request
+- **WHEN** the source of a Ready inline Tool changes
+- **THEN** the existing source ConfigMap is updated and the pod-template checksum changes
+- **AND** new invocations wait for the matching revision
+- **AND** no stale ConfigMaps accumulate and no interrupted call is automatically replayed
 
-- **GIVEN** an inline `Tool` whose `Deployment` has `replicas: 0`
-- **WHEN** an MCP request arrives at the tool's `Service`
-- **THEN** the activator scales the `Deployment` to `1`
-- **AND** the activator waits for a ready pod
-- **AND** the request is forwarded and the response returned to the caller
+#### Scenario: ConfigMap and template race
 
-#### Scenario: Scale back after idle
+- **WHEN** a starting runner mounts source whose checksum differs from its expected revision
+- **THEN** it does not become ready or execute that source for an invocation
 
-- **GIVEN** an inline `Tool` that last served a request 61 s ago
-- **WHEN** the controller's idle sweeper runs
-- **THEN** the `Deployment` is scaled to `replicas: 0`
+#### Scenario: Hardened pod template
 
-#### Scenario: Cold-start timeout returns a tool error
+- **WHEN** the runner Deployment is generated
+- **THEN** it disables service-account token automounting, runs non-root as UID 65532, and uses `seccompProfile: RuntimeDefault`
+- **AND** container security contexts set read-only root filesystems, no privilege escalation, and all capabilities dropped
+- **AND** CPU and memory limits are 500m and 256Mi, with no secrets or host namespaces/host paths
 
-- **GIVEN** an inline `Tool` whose pod never becomes ready
-- **WHEN** an MCP request arrives and the activation deadline is exceeded
-- **THEN** the activator returns a tool error indicating the activation timeout
+#### Scenario: Disable, delete, and downgrade
 
-### Requirement: Runner image contract
+- **WHEN** inline execution is disabled or a Tool is deleting
+- **THEN** new calls are rejected, cached routes/waiters are invalidated, and bounded active work ends before scale-down
+- **AND** deleting the Tool removes all owned children on both storage backends
+- **AND** downgrade guidance requires verifying child/pod removal before replacing the inline-aware operator
 
-Ark SHALL publish one runner image per supported language — `bash` on an Alpine base, and `python`, `node`, `ts` on distroless bases (no shell or package manager). Each image SHALL bundle a common static Go runner binary that exposes an MCP-shaped HTTP endpoint, mounts the tool's source at `/tool/source`, and executes it under that image's interpreter. The controller SHALL select the image from the required `spec.inline.language` at reconcile time:
+### Requirement: Effective network isolation gates execution
 
-- `bash` → bash image → `bash /tool/source`
-- `python` → python image → `python3 /tool/source`
-- `node` → node image → `node /tool/source`
-- `ts` → ts image → `tsx /tool/source`
+Before publishing a usable endpoint or running scripts, Ark SHALL verify effective isolation for the runner's namespace and policy-relevant labels. Runner policies SHALL deny egress and restrict backend ingress to the activator; activator ingress SHALL be restricted to administrator-selected executor workloads. Neither endpoint SHALL be publicly exposed by this feature. No per-user invocation authentication is implied by these network restrictions.
 
-The runner SHALL NOT inspect the source for a shebang and SHALL NOT apply an implicit language default; the image and interpreter are fixed by `spec.inline.language`, which is required. Distroless images SHALL run as uid 65532, matching the pod security default.
+Verification SHALL account for all selecting policies, including additive allow policies such as the optional ark-tenant allow-all egress policy. It SHALL use a controlled reachable destination, a successful positive control, and representative restricted probes for egress and ingress. Failed or inconclusive verification SHALL block execution with an actionable Pending reason, without silently modifying unrelated policies. Authorized authoring MAY persist a Pending Tool before runtime/network prerequisites are ready.
 
-The runner SHALL pass the tool's JSON arguments as a single string in `argv[1]`, without shell interpolation, so argument values are never executed as commands. The runner SHALL stream `stdout` back as the tool result (trimmed to 256 KiB) as opaque bytes, without parsing or reformatting it, log `stderr`, and return a tool error if the exit code is non-zero (error message includes the last 4 KiB of `stderr`). Validating input values and shaping output are the script author's responsibility (see the design threat model); the runner guarantees transport, not semantics. The runner SHALL enforce a per-invocation execution timeout (default `30s`): when the timeout expires before the script exits, the runner SHALL kill the process group and return a tool error naming the timeout.
+Relevant policy, label, or configuration changes and loss of verification state SHALL invalidate verification and require rechecking before new execution. Operations guidance SHALL explain standard NetworkPolicy limits, including node-local traffic exceptions and administrator responsibility for node/metadata-service protection.
 
-#### Scenario: Controller selects the per-language image
+#### Scenario: Discovery does not prove isolation
 
-- **GIVEN** an inline `Tool` with `language: python`
-- **WHEN** the controller reconciles the `Deployment`
-- **THEN** the pod uses the `python` runner image (distroless), not a catch-all or another language's image
+- **WHEN** a NetworkPolicy object exists but the CNI ignores it
+- **THEN** an allowed restricted probe causes verification to fail
+- **AND** no script executes
 
-#### Scenario: Language dispatch within the image
+#### Scenario: Unreachable positive control
 
-- **GIVEN** an inline `Tool` with `language: python`
-- **WHEN** the model invokes the tool
-- **THEN** the runner executes `python3 /tool/source <args-json>`
+- **WHEN** the positive-control connection cannot reach the controlled destination
+- **THEN** verification is inconclusive, not successful
+- **AND** the Tool remains unavailable for execution
 
-#### Scenario: Shebang in source is not honoured as dispatch
+#### Scenario: Overlapping tenant allow-all policy
 
-- **GIVEN** an inline `Tool` with `language: python` whose `source` begins with `#!/usr/bin/env bash`
-- **WHEN** the model invokes the tool
-- **THEN** the runner executes the script under `python3` (the `language` field, not the shebang line, selects the interpreter)
+- **GIVEN** an enforcing CNI and an allow-all policy selecting the actual runner
+- **WHEN** verification evaluates the runner context
+- **THEN** it rejects that context despite the separate deny-all policy
+- **AND** reports that the administrator must correct the overlap before execution
 
-#### Scenario: Runtime timeout kills a hung script
+#### Scenario: Effective restrictions pass
 
-- **GIVEN** an inline `Tool` whose script never exits (infinite loop)
-- **WHEN** the model invokes the tool and the per-invocation execution timeout (default `30s`) expires
-- **THEN** the runner kills the script's process group
-- **AND** the tool call returns an error naming the execution timeout
+- **GIVEN** a reachable positive control and policies allowing only the intended ingress while denying runner egress
+- **WHEN** representative probes verify the restrictions
+- **THEN** network verification succeeds
+- **AND** a real inline script's attempted outbound connection is blocked in the negative e2e check
 
-#### Scenario: JSON arguments arrive on argv[1]
+#### Scenario: Runner cannot be reached by another workload
 
-- **GIVEN** an inline Python `Tool` whose source contains `import sys, json; args = json.loads(sys.argv[1])`
-- **WHEN** the model invokes the tool with `{"file": "data.csv", "limit": 10}`
-- **THEN** the script's `args` dict equals `{"file": "data.csv", "limit": 10}`
+- **WHEN** a non-activator workload attempts to call a runner directly
+- **THEN** the configured backend ingress restriction denies that connection
 
-#### Scenario: Argument values are passed literally, not shell-interpreted
+### Requirement: PID containment is documented as an administrator best practice
 
-- **GIVEN** an inline `Tool` invoked with an argument value of `; rm -rf /`
-- **WHEN** the model invokes the tool
-- **THEN** the runner delivers the JSON containing that value as a single `argv[1]` element
-- **AND** no part of the argument value is executed as a shell command
+Operations documentation SHALL describe node-level PID exhaustion as a residual risk and recommend finite per-pod limits through kubelet `podPidsLimit` or provider/runtime equivalents. It SHALL explain that an ordinary PodSpec has no PID-limit field, configuration belongs to cluster administrators, limits must accommodate processes and threads, and enforcement should be verified outside production. CPU/memory limits and the execution timeout SHALL NOT be described as guaranteeing PID containment.
 
-#### Scenario: Script fails with non-zero exit
+Ark SHALL NOT prescribe 128, change node configuration, require a dedicated node pool, or gate admission/readiness/execution on PID verification. Existing cluster limits SHALL NOT be bypassed.
 
-- **GIVEN** an inline `Tool` whose script exits 1 with `"bad input"` on stderr
-- **WHEN** the model invokes the tool
-- **THEN** the tool call returns an error
-- **AND** the error message includes `"bad input"`
+#### Scenario: Operator reads deployment guidance
 
-#### Scenario: Oversize stdout is trimmed
+- **WHEN** an operator reviews inline-tool operations guidance
+- **THEN** it identifies the risk to neighboring workloads and recommends provider-supported per-pod PID limits
+- **AND** it does not claim an Ark-enforced 128-PID guarantee
 
-- **GIVEN** an inline `Tool` whose script emits 5 MiB of stdout
-- **WHEN** the model invokes the tool
-- **THEN** the returned tool result is ≤ 256 KiB
-- **AND** the result indicates that the output was truncated
+#### Scenario: PID settings are not accessible to Ark
 
-### Requirement: Inline tools surface to the executor through existing MCP plumbing
+- **GIVEN** all other admission and runtime prerequisites are met
+- **WHEN** Ark cannot inspect or configure the cluster's PID settings
+- **THEN** that alone does not prevent authoring, readiness, or invocation
 
-The execution engine SHALL NOT learn a dedicated code path for inline tools. When a `Tool` of `type: inline` is attached to an agent, the controller SHALL ensure there exists an MCP-shaped endpoint (a synthesised `MCPServer` or an equivalent internal record) such that the executor's standard MCP client invokes the inline tool by name. Tracing, auditing, authentication, and broker integration SHALL apply unchanged.
+### Requirement: Discovery does not activate runners
 
-#### Scenario: Executor uses the same call path for HTTP and inline tools
+The shared activator SHALL terminate stateless MCP Streamable HTTP at a per-tool route qualified by namespace, name, and UID. It SHALL serve initialize, initialized notifications, ping, and `tools/list` from Tool metadata without starting runners or extending their idle lifetime. Discovery SHALL expose the Tool name, description, schema, and annotations, not script source. Unsupported operations and unknown tool names SHALL fail without activation.
 
-- **GIVEN** an `Agent` whose `spec.tools` contains both an `http` tool and an `inline` tool
-- **WHEN** the executor calls each tool in the same turn
-- **THEN** both calls go through the same MCP client interface inside the executor
-- **AND** both calls emit the same trace span types and broker events
+Only valid `tools/call` requests SHALL activate a backend, after feature, runtime, network, current UID/revision, and child-ownership checks. The activator SHALL connect to the runner Service only after readiness and SHALL NOT accept caller-selected backend URLs or Deployment names.
 
-### Requirement: Inline tools are authorable from the dashboard and persist to the cluster
+#### Scenario: Attached tools remain unused
 
-The ark-api Tool endpoints SHALL accept `spec.type: inline` and the `spec.inline.{source,language}` fields on the existing create/get/list/delete paths. The ark-dashboard SHALL surface inline-tool authoring through the existing Tool editor: the Type selector SHALL offer an `Inline` option alongside the other tool types. When `Inline` is selected the editor SHALL show a required multiline `Source` input and a required `Language` selector offering `Bash`, `Python`, `Node`, and `TS` (no `Auto` option, and no default selection). Creating an inline tool through the dashboard SHALL persist a `Tool` resource of `type: inline` in the selected namespace. The editor SHALL apply client-side validation that mirrors the webhook (non-empty source, source ≤ 64 KiB, a language chosen from the allowed set) for fast feedback, with the webhook remaining authoritative.
+- **GIVEN** several Ready inline Tools at zero replicas
+- **WHEN** an executor initializes connections and lists their tools before a model decision
+- **THEN** every runner remains at zero replicas
+- **AND** calling one listed Tool subsequently starts only that Tool's runner
 
-#### Scenario: Selecting Inline reveals the source and language fields
+#### Scenario: Deleted and recreated Tool
 
-- **GIVEN** the dashboard Tool editor opened via "Add Tool"
-- **WHEN** the user selects `Inline` in the Type selector
-- **THEN** the editor shows the required `Source` and `Language` fields
+- **WHEN** a request uses the old UID-qualified route after a Tool is deleted and recreated with the same name
+- **THEN** the activator rejects the stale route without executing the replacement Tool
 
-#### Scenario: Create inline tool via ark-api round-trips
+### Requirement: Activation and idle scaling have one authority
 
-- **WHEN** a client POSTs a Tool with `spec.type: inline`, `spec.inline.source`, and `spec.inline.language: python` to the ark-api tools endpoint
-- **THEN** the API persists a `Tool` resource of `type: inline`
-- **AND** a subsequent GET returns the same `spec.inline.source` and `spec.inline.language`
+The activator SHALL run as a singleton Deployment independently of controller replica count in v1. It SHALL coalesce simultaneous cold starts, track pending/active calls, and scale a runner to one replica for invocation. It SHALL scale back to zero only after 60 seconds since the last completed call with no pending or active work. Discovery traffic SHALL NOT refresh this clock.
 
-#### Scenario: Create inline tool from the dashboard editor
+Activation SHALL have a 60-second deadline shortened by the caller's remaining budget; script execution SHALL have a separate 30-second limit, also bounded by the caller. Handshake timeout SHALL NOT accidentally become the complete invocation budget. Cancellation SHALL propagate to backend work. Restarts/uncertain responses SHALL NOT automatically replay scripts, and recovered runners SHALL be reconciled conservatively before idle scale-down.
 
-- **GIVEN** the dashboard Tool editor with `Inline` selected as the type
-- **WHEN** the author supplies a name, a description, an input schema, a source script, and an explicit language, and submits
-- **THEN** a `Tool` of `type: inline` is created in the active namespace with `spec.inline.source` and `spec.inline.language` set
-- **AND** the new tool appears in the tools list with an `(inline · <language>)` badge
+#### Scenario: Concurrent cold start
 
-#### Scenario: Language must be chosen before submit
+- **WHEN** concurrent calls arrive for one zero-replica Tool
+- **THEN** they share one activation to one replica
+- **AND** no idle transition interrupts their pending or active work
 
-- **GIVEN** the dashboard Tool editor with `Inline` selected and no `Language` chosen
-- **WHEN** the author attempts to submit
-- **THEN** the editor blocks submission and shows a validation message that a language is required
+#### Scenario: Idle runner
 
-#### Scenario: Empty source blocked client-side
+- **GIVEN** no pending/active calls and a last completed call more than 60 seconds ago
+- **WHEN** the idle sweep runs
+- **THEN** the Deployment scales to zero even if discovery requests continue
 
-- **GIVEN** the dashboard Tool editor with `Inline` selected and an empty `Source`
-- **WHEN** the author attempts to submit
-- **THEN** the editor blocks submission and shows a validation message naming the source field
+#### Scenario: Activation timeout or cancellation
 
-### Requirement: v1 feature scope is explicitly bounded
+- **WHEN** the backend cannot become ready within the activation/caller deadline, or the caller cancels
+- **THEN** the call reports failure and pending work is released
+- **AND** no script is started later on behalf of the abandoned call
 
-The v1 `inline-tools` capability SHALL NOT support: bundling multiple scripts in one `Tool`, `SKILL.md`-style prose / lazy-load catalogs, languages outside the published runner images (Go, Rust, Ruby, custom interpreter versions), per-tool custom (author-supplied) runner images, third-party dependencies (`pip`/`npm` packages beyond each interpreter's standard library, or any package-install step), OCI / Git / HTTP script sources, mounted reference files, cross-namespace tool references, streaming tool responses, or relaxation of the security defaults (egress allow-lists, mounted secrets, RBAC role refs). Authors requiring any of these SHALL continue to use `MCPServer`.
+### Requirement: Runner uses bounded literal arguments and text results
 
-Standard-library-only is a documented non-goal, not webhook-enforced: admission does not parse source for imports. Deny-all egress makes a runtime `pip`/`npm install` fail, so a third-party import fails at execution time — the signal to move to an `MCPServer`.
+Ark SHALL publish per-language images sharing a static Go MCP runner. Bash SHALL include bash/jq/coreutils on Alpine; Python/Node/TypeScript SHALL use distroless language bases, with the TypeScript loader vendored at image build time and invoked without a shell launcher. Every image SHALL be tested with the specified non-root/read-only security settings and a language-appropriate source filename.
 
-#### Scenario: Custom runner image rejected
+The runner SHALL invoke the fixed interpreter directly with the script path followed by one JSON-object argument, without shell interpolation or shebang dispatch. It SHALL reject malformed/non-object arguments, bodies over 128 KiB, and serialized arguments over 64 KiB before script execution, using bounded decoding/capture memory.
 
-- **WHEN** a `Tool` is applied with `spec.inline.image: my-registry/foo:bar`
-- **THEN** the validating webhook rejects the admission with a message pointing the author at `MCPServer`
+The runner SHALL return one MCP text result after execution, not stream tool responses. Successful stdout SHALL be UTF-8, at most 256 KiB including a truncation indicator, truncated on a character boundary. Invalid UTF-8 stdout SHALL return a tool error. Non-zero exit, invalid output, timeout, and cancellation SHALL be errors, with at most the last 4 KiB of stderr rendered safely. Shared MCP handling SHALL preserve `isError` in the existing tool-result/error reporting path.
 
-#### Scenario: Source reference outside `spec.inline.source` rejected
+The runner SHALL drain output incrementally with bounded buffers/logging, enforce the 30-second/caller deadline, terminate and reap subprocess groups on timeout/cancellation, and clean up remaining children on completion. Authors retain responsibility for semantic argument validation and output content, including prompt-injection risks.
 
-- **WHEN** a `Tool` is applied with `spec.inline.source` empty but a sibling `spec.inline.sourceRef` (ConfigMap reference, Git URL, or similar) populated
-- **THEN** the validating webhook rejects the admission with a message stating only `spec.inline.source` is supported in v1
+#### Scenario: Supported languages
+
+- **WHEN** each language image executes its sample, including actual TypeScript syntax
+- **THEN** the interpreter matches the required language and receives the JSON argument
+- **AND** a shebang naming another interpreter does not change dispatch
+
+#### Scenario: Arguments are data
+
+- **WHEN** a call contains shell metacharacters, quotes, Unicode, or nested values
+- **THEN** the script receives the same JSON values as data in its single argument
+- **AND** Ark does not execute argument content as a shell command
+
+#### Scenario: Invalid or oversized input
+
+- **WHEN** JSON is malformed/non-object, the request exceeds 128 KiB, or serialized arguments exceed 64 KiB
+- **THEN** the request fails before spawning the interpreter
+
+#### Scenario: Bounded output
+
+- **WHEN** a script emits 5 MiB of valid UTF-8 stdout and sustained stderr
+- **THEN** capture/logging memory remains bounded
+- **AND** returned text stays within 256 KiB, remains valid UTF-8, and indicates truncation
+
+#### Scenario: Script error or binary output
+
+- **WHEN** a script exits non-zero or emits invalid UTF-8 stdout
+- **THEN** MCP reports a tool error, not a successful opaque-byte result
+- **AND** error reporting preserves that failure with bounded, safely rendered stderr
+
+#### Scenario: Hung script and children
+
+- **WHEN** a script or child process hangs, including holding output pipes open, and the execution/caller deadline expires
+- **THEN** the runner terminates and reaps the subprocess group and returns an error without waiting indefinitely for pipe closure
+
+### Requirement: Dashboard authoring persists and reports honest status
+
+Typed ark-api Tool endpoints SHALL preserve inline source/language through create, detail read, and PUT update. Handwritten DTOs, generated SDK models, and dashboard serialization SHALL all support the fields. List responses SHALL expose language for the badge without including script source.
+
+The existing Add Tool flow SHALL offer Inline, a required monospace source textarea, and a required language selector with no default. Client validation SHALL check non-whitespace source and UTF-8 byte size without trimming persisted source; server validation remains authoritative. Source/language edits SHALL persist to the active namespace and round-trip when reopened. Admission failures and Pending reasons SHALL be visible.
+
+The authoring-first release SHALL provision no runners or usable execution endpoints. It SHALL persist authorized Tools as Pending with a clear not-yet-executable message until the runtime is installed and prerequisites succeed.
+
+#### Scenario: Create and reopen
+
+- **GIVEN** an authorized impersonated user selects Inline and supplies valid fields
+- **WHEN** the form is submitted and reopened
+- **THEN** the source and language round-trip unchanged in the selected namespace
+- **AND** the list shows an inline/language badge without downloading every script
+
+#### Scenario: Edit and reopen
+
+- **WHEN** an authorized user changes source or language and saves
+- **THEN** PUT persists the changes and a subsequent detail read displays them
+
+#### Scenario: Invalid form input
+
+- **WHEN** language is unselected, source is whitespace-only, or its UTF-8 encoding exceeds 64 KiB
+- **THEN** submission is blocked with a field-specific error
+
+#### Scenario: Authoring before runtime installation
+
+- **WHEN** an authorized user creates a Tool in the authoring-first release
+- **THEN** the dashboard shows Pending and explicitly says it is not executable yet
+- **AND** no runner or usable execution endpoint is provisioned
+
+### Requirement: v1 scope remains bounded
+
+Inline SHALL NOT support bundled scripts, custom images, third-party package installation, remote source references, reference-file mounts, cross-namespace attachments, streaming tool results, or author-controlled security relaxation. Unsupported fields SHALL NOT influence execution; clients using strict field validation MAY reject them, while CRD pruning SHALL NOT be misrepresented as a webhook rejection. Admission SHALL reject missing required inline source regardless of a supplied source reference.
+
+#### Scenario: Unsupported image or source reference
+
+- **WHEN** a request supplies a custom image field alongside valid source
+- **THEN** it cannot select that image or bypass the fixed language image
+- **AND** a request with only a source reference and no inline source is rejected
+
+#### Scenario: Missing third-party package
+
+- **WHEN** a script imports a package absent from the documented runtime
+- **THEN** execution reports the import failure without installing packages
+- **AND** author guidance directs dependency-requiring tools to MCPServer

@@ -1,53 +1,41 @@
 ## Context
 
-See the proposal for motivation. This design recreates the earlier `inline-tools` proposal (PR #2116, issue #1161), refreshed against the current codebase. Two facts about the current state shape the design:
+This proposal adds short scripts to the existing Tool model (issue #1161, superseding PR #2116). The current Tool controller only sets status; it owns no runtime objects. Inline is the first subtype for which Ark provisions the execution environment.
 
-1. **The `Tool` CRD already has discriminated subtypes** (`http`, `mcp`, `agent`, `team`, `builtin`) selected by `spec.type`, each with its own typed sub-object. Adding `inline` is a natural sixth variant.
-2. **The `Tool` controller (`ark/internal/controller/tool_controller.go`) is status-only today** — it validates configuration and sets `status.state: Ready`, owning zero child objects. Inline tools would be the first `Tool` subtype to reconcile real Kubernetes infrastructure (Deployment, Service, ConfigMap, NetworkPolicy). This is the single largest new pattern the change introduces.
-
-Three hard constraints carry forward from the original proposal:
-
-1. **The wire-level invocation path must reuse Ark's existing MCP plumbing** (`mcp-server-resolution`, `mcp-auth-token-injection`). Auth, audit, tracing, and broker integration are not worth reinventing.
-2. **The security boundary must hold from the first commit.** Inline tools run user-authored code; the default posture has to be defensible without authors thinking about it.
-3. **The CRD shape must be additive to today's `Tool`.** No new kind, no new attachment field on `Agent`. An inline tool should be indistinguishable from an HTTP or MCP tool from the agent author's point of view.
+Two existing integration points need explicit changes: `CreateToolExecutor` in `ark/executors/completions/agent_tools.go` dispatches on Tool type, and `_build_mcp_servers` in the Python SDK currently drops non-MCP Tools. An endpoint alone does not make an inline Tool callable. MCP clients also connect before the model selects a tool, so discovery must not start runner pods.
 
 ## Goals / Non-Goals
 
 **Goals**
 
-- A custom tool is authorable in a single YAML file (or via the dashboard) and deployable with no image build, no registry, and no additional CRDs authored by hand.
-- Inline tools attach to agents via the existing `Agent.spec.tools` — agent authors learn no new concept.
-- An agent can attach many inline tools cheaply; attached-but-unused tools cost zero pods (scale-to-zero) and add nothing to the model's context beyond their tool descriptions.
-- Existing MCP/Tool tracing, auditing, and observability apply to inline-tool invocations unchanged.
-- The default security posture (no egress, no secrets, read-only root, non-root user, no Kubernetes token) is strong enough that an operator can trust an inline tool authored by a teammate without auditing YAML for boilerplate hardening.
-- The full path works end to end: create in the dashboard → persist as a `Tool` in the cluster → attach to an agent → invoke during a query.
+- Author one script per Tool through YAML or the dashboard, without an author-built image or registry push.
+- Preserve `Agent.spec.tools` and reuse existing MCP invocation, query/executor identity, applicable approval, tracing, and events.
+- Keep attached-but-unused runners at zero pods; advertise only tool metadata, never script source, to the model.
+- Make security responsibilities and deployment prerequisites explicit.
+- Deliver dashboard authoring before runtime execution, without displaying a non-executable Tool as Ready.
 
-**Non-Goals**
+**Non-goals**
 
-- Bundling multiple scripts into one resource. Three related scripts means three `Tool` resources.
-- The full Claude-Code skill shape (`SKILL.md` + frontmatter + lazy-load catalog). Out of scope; future work if demand materialises.
-- Custom (author-supplied) runner images in v1. Authors pick `bash`, `python`, `node`, or `ts`; each maps to an Ark-published per-language image.
-- **Third-party dependencies.** No `pip`/`npm` install mechanism; deny-all egress blocks runtime fetches anyway. Scripts use each interpreter's standard library only (plus `jq`/coreutils for bash). Needing packages means an `MCPServer`.
-- A marketplace publishing story for inline tools. v1 is `kubectl apply` / dashboard and a sample directory.
-- Cross-namespace tool references, streaming tool responses, OCI/Git/HTTP source URLs, and reference-file mounts. Anything needing these is an `MCPServer`.
-
-## Where scripts run (and don't)
-
-Inline tools are a *harness-side* primitive — neither Anthropic's API nor any other provider has a native concept here. What models supply is **tool calling**; inline tools are implemented on top of that. From the model's side the flow is identical to any MCP tool: the model picks a tool, a tool call comes back, the executor invokes it. The only difference is *where* the executor sends the call — to a per-tool Ark-managed runner pod instead of an author-built MCP server. The script always runs in a per-tool sandbox pod inside the cluster, regardless of the agent's model provider (Anthropic, OpenAI, Azure OpenAI, Bedrock, Gemini).
+- New author-facing resource kinds, bundled scripts, custom images, third-party package installation, remote sources, mounted reference files, cross-namespace attachments, or streaming results.
+- Per-tool security relaxation, a new per-user invocation permission, or mandatory hostile-author sandboxing.
+- PID-limit enforcement by Ark, dedicated node pools, configurable runtime limits, `keepWarm`, or a new editor dependency.
 
 ## Threat model
 
-v1 makes explicit assumptions about who supplies the script and who supplies its inputs, and what each control covers:
-
-- **Script authorship is restricted at admission.** The admission gate (see the decision below) limits creation of a `type: inline` Tool to identities holding a dedicated permission; generic `create tools` RBAC is not sufficient. The design therefore assumes the script author is an authorised subject, and treats broadening that set as an explicit administrative action.
-- **Invocation inputs are untrusted.** Tool arguments are model-generated and may be adversarial (e.g. prompt-injected) regardless of who authored the script. The runner passes them as data (JSON on `argv[1]`); validating and sanitising input, and bounding output size and format, are the script author's responsibility.
-- **Escape by an authorised author is out of scope.** Pod hardening (non-root, read-only root, dropped capabilities, deny-all egress, PID limit) bounds the blast radius of a script that misbehaves at runtime, but does not prevent a container escape attempted by the author of the script — that requires a kernel-level sandbox (`runtimeClass` such as gVisor or Kata), which v1 does not mandate. The admission gate, not pod hardening, is the control that bounds who can author a script; a cluster requiring defence against authorised-but-malicious authors configures a sandboxing `runtimeClass` out of band.
+- **Trusted authors, hostile inputs.** Only subjects explicitly granted inline authorship can introduce or change scripts. Arguments and tool output may be adversarial; the runner guarantees bounded transport, not semantic safety. Authors must validate values and avoid interpreting input as code or trusting echoed content as model instructions.
+- **Workload execution identity.** Invocation follows existing query/executor resource access and attachment/allowlist rules, not the human author's identity. The author permission is not required to invoke an existing Tool. Applicable human-approval flows remain in the executor; they are not a new endpoint authorization system.
+- **Deployment administrators remain trusted.** They control runner infrastructure, pod labels, network policies, and service-account privileges. Network isolation is not cryptographic caller authentication, and a compromised allowed executor is inside the invocation trust boundary.
+- **Residual node risks.** Non-root execution, dropped capabilities, bounded resources, and timeouts reduce risk but do not guarantee containment of PID exhaustion or a kernel escape. Protection against malicious authorized authors requires additional platform isolation outside v1.
 
 ## Decisions
 
-### Decision: Extend the existing `Tool` CRD; do not introduce a new kind
+### Extend Tool; keep one script per resource
 
-`inline` slots in as a sixth `spec.type` variant with its own typed sub-object `spec.inline`. Author surface:
+Add `spec.inline` with required `source` (non-whitespace, at most 65,536 UTF-8 bytes) and required `language` (`bash`, `python`, `node`, `ts`). No shebang inference or language default. `spec.inline` is invalid on another type; inline Tools cannot carry other subtype configuration.
+
+Reuse the existing input schema. Inline schemas describe a JSON object; an omitted schema is advertised as an empty-object schema. The dashboard requires an explicit schema for authoring, including an empty-object schema for no-argument tools. Existing non-inline validation is unchanged. Transitions into or out of inline require delete/recreate in v1, avoiding ambiguous child cleanup during type conversion.
+
+This example accepts CSV content rather than a path: the isolated pod has no caller file mounts or network access.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -56,197 +44,159 @@ metadata:
   name: csv-summarise
 spec:
   type: inline
-  description: Summarise a CSV — column types, row count, basic stats
+  description: Count CSV rows and sum the amount column
   inputSchema:
     type: object
     properties:
-      file: { type: string, description: "Path to the CSV file" }
-    required: [file]
+      csv: {type: string, description: CSV content with an amount column}
+    required: [csv]
+    additionalProperties: false
   inline:
-    language: python   # required
+    language: python
     source: |
-      import sys, json, csv, statistics
+      import csv
+      import io
+      import json
+      import sys
+      from decimal import Decimal
+
       args = json.loads(sys.argv[1])
-      with open(args["file"], newline="") as f:
-          rows = list(csv.DictReader(f))
-      numeric = {
-          k: [float(r[k]) for r in rows if r[k].replace(".", "", 1).isdigit()]
-          for k in (rows[0].keys() if rows else [])
-      }
-      stats = {
-          k: {"count": len(v), "mean": statistics.mean(v)}
-          for k, v in numeric.items() if v
-      }
-      print(json.dumps({"rows": len(rows), "stats": stats}))
+      if not isinstance(args.get("csv"), str):
+          raise ValueError("csv must be a string")
+      reader = csv.DictReader(io.StringIO(args["csv"]))
+      if not reader.fieldnames or "amount" not in reader.fieldnames:
+          raise ValueError("CSV must contain an amount column")
+      count = 0
+      total = Decimal("0")
+      for row in reader:
+          amount = Decimal(row["amount"])
+          if not amount.is_finite():
+              raise ValueError("amount must be finite")
+          count += 1
+          total += amount
+      print(json.dumps({"rows": count, "total": str(total)}))
 ```
 
-**Why.** Inline tools are *tools*. A separate kind (`InlineTool`, `Function`, `Script`) would split the agent author's mental model and add a second attachment surface on `Agent`. The discriminated-union shape is exactly what the `Tool` CRD already does for four runtime models; this is the fifth.
+Input `{"csv":"amount\n2\n3\n"}` produces `{"rows":2,"total":"5"}` as text. No pandas, local data file, or dependency installation is required.
 
-**Alternative — new kind `InlineTool`.** Cleaner isolation, easier to remove later. Rejected: forces a second attachment surface on `Agent` or a translator, for no clear benefit.
+### Adapt resolution; reuse MCP invocation
 
-**Alternative — a `script` type instead of `inline`.** Slightly more accurate but `inline` better captures the value prop versus the other types, which all delegate to *something external*.
+Use an internal resolved connection, not a synthetic MCPServer or duplicate Tool. A real MCPServer would trigger its controller's discovery polling and generated Tool creation unnecessarily.
 
-### Decision: One tool per CRD; no bundling
-
-A `Tool` of `type: inline` is exactly one script with exactly one input schema. Multiple related scripts mean multiple `Tool` resources.
-
-**Why.** Bundling carries real cost — a manifest to define the bundle, a file-to-tool discovery rule, a separate attachment surface. User testing of the earlier skills mockup did not find grouping load-bearing. Dropping it makes inline tools "just tools that happen to be scripts."
-
-**Cost accepted.** One `Deployment` per inline tool even where two could share a pod. Mitigated by scale-to-zero: idle tools cost nothing. Pooling same-language runners is a backwards-compatible future change if object count becomes a real problem.
-
-### Decision: Per-language distroless runner images, selected by required `language`
-
-v1 ships one minimal image per language rather than a single catch-all. `python`, `node`, and `ts` are built on distroless bases; `bash` is built on Alpine (there is no distroless shell — a shell *is* the tooling distroless removes). Each image bundles a common **static Go runner binary** (`CGO_ENABLED=0`) that exposes an MCP-shaped HTTP endpoint, mounts the tool's `ConfigMap` at `/tool/source`, and executes the script under that image's interpreter:
-
-```
-spec.inline.language → image (base)             → interpreter
-  bash                → ark-inline-runner-bash   (alpine)      → bash /tool/source <args-json>
-  python              → ark-inline-runner-python (distroless)  → python3 /tool/source <args-json>
-  node                → ark-inline-runner-node   (distroless)  → node /tool/source <args-json>
-  ts                  → ark-inline-runner-ts      (distroless) → tsx /tool/source <args-json>
+```text
+Tool + Agent.spec.tools
+        |
+        +-- Go CreateToolExecutor ------> existing MCPExecutor
+        +-- SDK _build_mcp_servers -----> existing MCPServerConfig
+                                              |
+                           shared activator Service / namespace / Tool UID
+                              | initialize, tools/list: metadata only
+                              | tools/call: activate and forward
+                              v
+                           per-tool Service -> runner pod -> script
 ```
 
-`language` is **required**, and the controller selects the image from it at reconcile time and writes it into the PodSpec. The runner never inspects the source for a shebang; the declared `language` is the only thing that selects both the image and the interpreter.
+The controller publishes `status.resolvedAddress` and `status.observedGeneration`. The address identifies namespace, name, and UID at the shared activator, not the runner Service. A Ready Tool may have zero runner pods. The endpoint is usable only for the current generation; adapters reject or skip unresolved Tools using their existing error-reporting conventions and never fall back to a caller-supplied URL.
 
-**Why required, not shebang-inferred.** A shebang plus an explicit `language` are two sources of truth: the shebang silently overrides the field, and "neither present" falls back to bash — the least-visible default. Requiring `language` removes the ambiguity and is the precondition for per-language images: the controller must know the language at reconcile time to pick the image, which a runtime shebang could not provide. Shebang's only unique power — interpreter flags — is unneeded in v1.
+- **Go:** add inline resolution at `CreateToolExecutor`, create the existing `MCPClientConfig`, and return `MCPExecutor`. This also covers direct Tool queries. Preserve existing attachment aliases, descriptions, partial arguments, and approval handling rather than bypassing registration.
+- **Python SDK:** `_build_mcp_servers` emits the existing `MCPServerConfig` using the resolved activator URL, transport `http`, an identity derived from Tool UID, and a one-tool allowlist. Read the Tool under the existing query/executor identity. Named executor implementations still receive ordinary MCP connections; this does not add alias/partial/approval features they do not already support.
+- **Names:** the original MCP tool name is the authored Tool name. Connection identities include namespace/UID and do not collide with ordinary MCPServer names. The stored Tool remains `type: inline` with no `spec.mcp` mutation.
+- **Authentication:** inline connections have no OAuth/token Secret in v1. Existing HTTP/MCP credential behavior stays unchanged; referencing `mcp-auth-token-injection` does not authenticate the new endpoint. Restrict activator ingress to administrator-selected executor workloads and backend ingress to the activator. Do not publish an Ingress, gateway route, or external Service for either endpoint.
 
-**Why per-language distroless, not one catch-all.** Attack surface. A catch-all image carries every runtime into every pod — a Python tool would ship the node/tsx runtimes it never uses, each an extra thing to attack if the script is compromised. Per-language images carry only what runs. Distroless goes further: it drops the shell and package manager entirely, removing common post-compromise routes (`sh -c …`, `pip install …`, `curl … | sh`). This stacks with the other defaults (deny-all egress, non-root, read-only root, dropped caps, PID limit) — same "minimum blast radius" principle, applied to image composition. Distroless `nonroot` images also run as uid 65532, matching the `runAsUser` already chosen.
+### Serve discovery without activation
 
-**Why the maintenance cost is low.** The MCP runner is a single static Go binary needed regardless of packaging. Each image is therefore `FROM <base>` + `COPY runner`, sharing one runner build and one publish pipeline — not four independently-maintained images. `node` and `ts` share the distroless Node base; the `ts` image additionally vendors the `tsx` loader.
+The activator terminates stateless MCP Streamable HTTP using the installed Go MCP SDK (`Stateless` and JSON responses), with a distinct per-tool route. It handles initialization, initialized notifications, ping, and `tools/list` from Tool metadata. These operations neither create a runner nor extend its idle lifetime. Unsupported methods and unknown tool names fail without activation.
 
-**Cost accepted.** Four images to build, sign, and publish instead of one, and a small controller lookup from `language` to image. Bounded by the shared runner binary and shared build tooling; published via the existing signed image-publish workflow with pinned base digests.
+Only a valid `tools/call` activates the backend, after checking feature enablement, effective network verification, the current Tool UID/generation, and child ownership. The activator establishes a backend MCP connection after readiness; it does not forward a client initialization request to a zero-pod Service. Do not accept arbitrary backend URLs, Deployment names, or script source in requests.
 
-**TypeScript.** `language: ts` runs under `tsx` on the distroless Node base. The CRD `language` enum lists `bash`, `python`, `node`, `ts` in v1.
+Package the activator as a separate singleton Deployment alongside the operator so process-local call tracking does not depend on controller HA. Only the activator changes active/idle replica counts after initial creation. Coalesce concurrent cold starts, track pending and active calls, and scale down 60 seconds after the last call completes when no calls remain. Ordinary Tool reconciliation must not reset an active Deployment to zero.
 
-### Decision: JSON-on-`argv[1]` runtime contract
+Bound activation to 60 seconds and execution to 30 seconds, each shortened by the caller's remaining deadline. Connection/handshake timeout is separate from the complete tool-call budget. Cancellation terminates backend work; a restart or uncertain response is reported as failure, not an automatic replay of the script. After restart, reconcile existing runners conservatively before idle scale-down. Multi-replica activator coordination is deferred.
 
-The runner serialises the tool's JSON arguments into a single string on `argv[1]`. Authors parse however their language wants:
+### Reconcile owned children and current revisions
 
-```python
-args = json.loads(sys.argv[1])
-```
-```bash
-FILE=$(jq -r .file <<< "$1")
-```
-```javascript
-const args = JSON.parse(process.argv[2]);
-```
+Each Tool owns one ConfigMap, ServiceAccount, NetworkPolicy, Deployment, and Service in its namespace. Use UID-based labels and deterministic length-safe child names; `<tool>-source` is the source ConfigMap naming pattern for names that fit. Do not adopt or overwrite unrelated resources on a name collision. Delete cascades must work with both storage backends.
 
-**Why.** Simplest path that works uniformly across every supported language: no argparse, no flag-to-property mapping, no nested-object edge cases, no extra read step.
+Keep the ConfigMap name stable and update its contents in place. Put the source checksum in `ark.mckinsey.com/inline-source-hash` on the pod template, and roll the template for language and other runner configuration changes. Mount a per-pod source snapshot read-only using `subPath`; verify its checksum before readiness so a ConfigMap/template update race cannot execute a mismatched revision. Use a language-appropriate filename (`source.sh`, `source.py`, `source.js`, `source.ts`) under `/tool`, all sourced from ConfigMap key `source`.
 
-**Alternative — JSON on stdin.** Cleaner for very large payloads, more boilerplate for the common case. Rejected for v1; addable as an opt-in mode later.
+Before admitting new calls, the activator checks that the backend serves the current revision. Calls already running during an edit may complete or fail during rollout, but must not be replayed. Reconcile source edits and child drift even when the previous Tool status is Ready. Ready means the endpoint and current configuration are usable, not that a pod is warm. Runtime absence or unverified network isolation produces Pending with a reason; provisioning errors are surfaced in status.
 
-**Alternative — named CLI flags from `inputSchema`.** Natural for shell scripts but breaks on nested objects/arrays and forces authors to learn a pseudo-argparse surface. Rejected.
+Disable blocks new invocations, clears usable endpoints, and scales runners down after bounded in-flight work. Delete invalidates cached routes/waiters and removes owned objects. Status updates and cleanup must remain possible while the feature is disabled.
 
-**Input/output handling and responsibility.** The contract splits into what Ark guarantees (safe *transport*) and what the author owns (*semantics*):
+### Use bounded JSON arguments and UTF-8 results
 
-- **Ark's side.** Arguments are passed as a single JSON string in `argv[1]`, never interpolated into a shell command — a value like `"; rm -rf /"` reaches the script as that literal string, not as a command. The script's `stdout` is returned as opaque bytes (trimmed to 256 KiB), not parsed or reformatted; binary or unexpectedly-shaped output is returned as-is.
-- **The author's side.** Inputs are model-generated and may be adversarial (see the threat model), so validating argument values, and bounding and shaping output, are the author's responsibility. In particular, output flows back to the model as a tool result, so an author whose tool echoes untrusted input into its output can produce a prompt-injection vector — guarding against that is the author's job, not Ark's.
+The common static Go runner invokes a fixed interpreter executable with a script path followed by one serialized JSON argument. Never use shell command interpolation, `eval`, or language selection from a shebang. Python reads `sys.argv[1]`, bash reads `$1`, and Node/TypeScript read `process.argv[2]`.
 
-Ark cannot judge either semantic: it does not know a given argument's valid range, nor whether a byte sequence is a legitimate result or a hostile prompt. It therefore transports faithfully and leaves meaning to the author, which is the only division that holds without Ark parsing every tool's domain.
+| Limit | v1 contract |
+| --- | --- |
+| Source | 64 KiB of UTF-8 bytes |
+| MCP request body | 128 KiB, rejected before unbounded decoding |
+| Serialized arguments | JSON object, at most 64 KiB of UTF-8 bytes; rejected before spawning |
+| stdout | At most 256 KiB returned as MCP text, including any truncation indicator |
+| stderr | Last 4 KiB in an error; bounded capture/logging |
+| Execution | 30 seconds or remaining caller budget, whichever is shorter |
+| Runner resources | CPU limit 500m, memory limit 256Mi |
 
-### Decision: Per-tool sandbox; scale-to-zero by default
+Drain stdout/stderr incrementally with bounded memory; do not capture unlimited output and truncate afterward. Return one result after execution, not a streamed tool response. Successful stdout must be valid UTF-8; truncate on a character boundary and indicate truncation. Binary/invalid UTF-8 stdout is a tool error. Render invalid stderr bytes safely within the error bound.
 
-Each inline `Tool` reconciles to its own `Deployment` (`replicas: 0` initially), `Service`, `ServiceAccount`, `NetworkPolicy` (deny-all egress), and `ConfigMap` (script body, stable name `<tool>-source`), all owned by the `Tool` for GC cascade. The source hash lives in a pod-template annotation (`ark.mckinsey.com/inline-source-hash`), not in the ConfigMap name — see the ConfigMap decision below. A new `inlinetoolactivator` subsystem in the operator (HTTP front-end, ~300 LOC) intercepts the first request, scales the `Deployment` `0 → 1`, waits for readiness, and forwards. After `idleTimeout` (default 60s) of no traffic, the controller scales back to `0`.
+Non-zero exit, timeout, cancellation, and invalid output return MCP `isError` results with bounded messages. Preserve this signal through shared MCP result handling instead of introducing an inline-specific execution path. Kill and reap the subprocess group on timeout/cancellation and clean up remaining children on completion, including children holding pipes open. The timeout and process cleanup are not hostile-author isolation guarantees.
 
-**Why per-tool, not pooled.** Strong isolation from day one — a misbehaving script cannot tamper with another tool's state, exhaust its memory, or read its secrets. The cost (more Deployments) is bounded by scale-to-zero.
+### Publish per-language images
 
-**Why custom, not Knative/KEDA.** Knative is a heavy cluster dependency; KEDA still pulls in CRDs and event sources we don't otherwise use. The behaviour we need is trivial — 0 ↔ 1, no autoscaling beyond that in v1.
+Share one `CGO_ENABLED=0` Go runner build. The bash image includes bash, jq, and coreutils on Alpine; Python uses a distroless Python base; Node and TypeScript use distroless Node, with the TypeScript image vendoring its loader at build time. Invoke the loader through Node rather than relying on a shell launcher. Pin bases and publish signed images through existing build tooling.
 
-**Alternative — pool same-language runners.** One long-lived pod per language per namespace, scripts injected per request. Faster cold start; loses per-tool isolation. Rejected for v1; revisitable.
+Scripts have only the documented standard libraries/tools. Import scanning is not admission policy: missing third-party packages fail at execution and indicate that the author needs an MCPServer. Smoke-test all four images under the real security settings, including TypeScript syntax and read-only source paths. Allow only a bounded ephemeral scratch volume if required by a runtime; it supplies no caller reference files and is not durable tool state.
 
-**New-pattern note.** Because the current `Tool` controller owns no child objects, this decision introduces owner-reference cascade, an in-place source ConfigMap with rollout-on-change, and readiness gating into a controller that previously only set status. The reconciler branch is gated strictly on `spec.type == inline` so the other five tool types keep their status-only path unchanged.
+### Enforce author admission on both storage backends
 
-### Decision: One in-place source ConfigMap; hash in the pod-template annotation
+Keep `inlineTools.enabled` false by default. For inline creation and every inline spec update (including PATCH/apply), require an explicit successful SubjectAccessReview with `group: ark.mckinsey.com`, `resource: inlinetools`, `verb: use`, and the server-validated Tool namespace. Forward the authenticated subject's username, UID, groups, and extra information where present. Missing identity, denial, timeout, or authorization failure rejects the write. RBAC bindings are explicit administrator actions; existing Tool editor and ark-api roles gain no automatic grant.
 
-The script body lives in a single ConfigMap with a stable name (`<tool>-source`) that the controller updates in place on every source edit. The content hash is written to the pod template as an annotation (`ark.mckinsey.com/inline-source-hash: <hash>`), so editing the source changes the pod template and triggers a rollout — the standard Helm `checksum/config` pattern.
+- **CRD/etcd:** obtain identity from AdmissionReview. Add a mandatory fail-closed inline security admission path that cannot be skipped by `ark.mckinsey.com/skip-webhook-validation`, configurable Ignore behavior, or namespace selectors that leave inline writes unchecked. Structural validation remains shared. If security admission cannot be installed, the schema/admission configuration must reject inline, not leave it usable.
+- **PostgreSQL:** enforce the same decision in `ark/internal/apiserver/admission.go` using authenticated request-context identity. The host API server does not run the CRD webhook chain for aggregated resources. The check must not depend on optional third-party webhook or CEL policy configuration, and inline writes are rejected if API-server authentication is disabled.
+- **API/dashboard:** inline create/spec-update paths require authenticated end-user impersonation; reject disabled impersonation, missing identity, and API-key-only calls. Never retry as ark-api's service account, even when general fallback is enabled. Apply this to typed `/tools` and generic resource writes, examining the stored object on updates as well as the submitted one. Direct Kubernetes callers, including explicitly granted service accounts, use normal authenticated admission.
+- **Cleanup:** unchanged-spec metadata operations, the status subresource, and deletion use their ordinary permissions, not the author permission. Disabling inline prevents new authoring but must not strand finalizers or deletion. No metadata update may change the executable spec as a side effect.
 
-**Why not a content-hashed name (`<tool>-<hash>`).** A hashed name mints a new ConfigMap on every source edit and orphans the old one — owner-reference GC only fires when the `Tool` is deleted, so stale ConfigMaps accumulate. The in-place ConfigMap plus the annotation gives identical rollout-on-change with nothing to orphan.
+### Verify effective network isolation before execution
 
-### Decision: Inline tools surface to the executor as MCP tools
+A deny-all NetworkPolicy is not sufficient by itself: policies are additive, and the tenant chart's optional policy selects every pod and allows all egress. The platform must account for every policy selecting the actual runner labels in its namespace. Reject conflicting contexts until an administrator narrows the overlapping policy or chooses a suitable namespace; do not silently rewrite unrelated policies.
 
-When the controller reconciles an inline `Tool`, it synthesises an MCP-shaped endpoint (a synthesised `MCPServer` record or equivalent) pointing at the tool's `Service`. The executor's "call a tool" path is unchanged: the same MCP client, driven by `mcp-server-resolution` (tools grouped by MCPServer, resolved connection info, original tool names), invokes inline tools exactly as it invokes author-built MCP tools, with the same tracing, auth (`mcp-auth-token-injection`), and audit hooks.
+Verify each runner policy context using a controlled reachable destination, a successful positive control, and a restricted probe matching the runner's namespace and policy-relevant labels. An unreachable control, allowed restricted connection, or inconclusive test is failure. Check both egress denial and restricted backend ingress. Revalidate on relevant policy/label/configuration changes and after verification state is lost; block new execution until successful. Missing verification does not prevent authorized authoring for the dashboard-first phase, but the Tool remains Pending with no usable endpoint.
 
-**Why.** Reuses every line of existing MCP machinery. The executor grows no new code path; only the controller knows that `type: inline` materialises infrastructure.
+This establishes the documented NetworkPolicy boundary, not absolute network isolation. Standard NetworkPolicy has limits, including node-local traffic exceptions; cluster administrators remain responsible for node/metadata-service protection and trusted policy administration. Document those limitations rather than promising an air gap. There is no author-facing egress relaxation in v1.
 
-**Alternative — direct executor → runner HTTP.** Skips the synthetic MCPServer, cheaper in object count, but forces the executor to learn a second tool-call protocol. Rejected — the synthetic MCPServer is cheap and keeps the executor uniform.
+### Keep PID containment an administrator best practice
 
-### Decision: Security defaults are non-negotiable in v1
+A script can exhaust node-level PIDs and disrupt other workloads before the execution timeout. CPU/memory limits do not guarantee protection. Administrators should configure finite per-pod limits through kubelet `podPidsLimit` or their provider/runtime equivalent, size them for processes and threads on affected nodes, and verify enforcement outside production.
 
-Every inline tool pod runs with `runAsNonRoot: true`, `runAsUser: 65532`, `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`, `allowPrivilegeEscalation: false`, `automountServiceAccountToken: false`, `seccompProfile.type: RuntimeDefault`, a deny-all-egress `NetworkPolicy`, and no mounted secrets.
+This is outside Ark configuration: [AKS exposes `podMaxPids`](https://learn.microsoft.com/en-us/azure/aks/custom-node-configuration-reference); [EKS AL2023 nodeadm accepts kubelet configuration](https://awslabs.github.io/amazon-eks-ami/nodeadm/doc/api/#kubeletoptions). Supported controls vary by provider and node type; consult the provider where they are not exposed. See [Kubernetes PID limits and reservations](https://kubernetes.io/docs/concepts/policy/pid-limiting/).
 
-**Containment beyond cpu/memory.** The `cpu: 500m` / `memory: 256Mi` limits don't stop two failure modes:
+Ark does not prescribe 128, modify node configuration, require a dedicated node pool, or gate admission/readiness/execution on PID verification. This does not bypass existing cluster limits. Surface the residual risk and recommendation in operations documentation.
 
-- **Fork bomb.** PIDs are a node-level resource, so an unbounded `fork()` loop can exhaust PIDs for other pods on the node. A **PID limit** (default `128`) confines a runaway script to itself.
-- **Hung script.** The idle/activation timeouts govern 0↔1 scaling, not a single invocation — nothing kills a script that never returns. The runner enforces a **per-invocation execution timeout** (default `30s`), killing the process group and returning a tool error on expiry.
+### Deliver dashboard authoring first
 
-Both defaults are fixed in v1.
+Use the current `components/forms/tool-form/` and `lib/services/tools.ts`, not the historical mockup's removed editor/row paths. Add Inline to the existing Add Tool flow, a required language selector without a default, and a required monospace source textarea. Validate the UTF-8 byte limit without trimming the stored source. No Monaco/CodeMirror dependency.
 
-There is no `spec.inline.security` knob in v1. An author needing to relax any of these (egress to an allow-listed host, a mounted secret, a Kubernetes role) authors an `MCPServer` instead. This keeps the surface a reviewer audits when approving an inline tool to *just the script* — not the script plus a Kubernetes-permissions diff.
+Update handwritten API request models and dashboard serialization as well as generated SDK types. Support create, detail read, and persisted source/language edits through PUT. Add language to the list projection for the badge without returning every script body. Display admission errors and Pending reasons; authorization remains server-side.
 
-**Alternative — ship relax-knobs from the start.** Faster path to real use cases. Rejected for v1: we would be designing the relaxation surface without evidence of what authors need, and re-adding it later is purely additive.
-
-### Decision: Verify NetworkPolicy enforcement rather than assume it
-
-The deny-all-egress `NetworkPolicy` restricts traffic only if the cluster CNI enforces NetworkPolicy. Some CNIs (or CNI configurations) accept the object and ignore it — the policy exists in the API but does nothing, and the egress guarantee silently evaporates.
-
-Ark therefore does not assume enforcement. When inline tools are enabled (`inlineTools.enabled`), a preflight verifies it — applying a deny-all policy to a canary pod and confirming an outbound connection is actually blocked — and fails enablement loudly, naming the CNI, if egress is not blocked. A negative e2e test asserts that a real inline script's outbound call is denied, so a regression in enforcement is caught in CI rather than in production.
-
-**Why fail loud, not warn.** A silently non-enforced egress policy is worse than none: operators believe scripts cannot reach the network and extend trust accordingly. Failing enablement forces the gap to be closed (an enforcing CNI, or an explicit decision to run without egress isolation) before any inline tool runs.
-
-### Decision: Gate `type: inline` at admission, behind a dedicated permission and an off-by-default flag
-
-Every other `Tool` type registers config pointing at something external; `type: inline` embeds code Ark runs in a pod. Creating one is therefore arbitrary code execution in the namespace — a different privilege from creating an `http` or `mcp` tool. Kubernetes RBAC cannot express that difference: it authorises on resource + verb, so `create tools` cannot distinguish `inline` from `http`. On upgrade, everyone already holding `create tools` (developer Roles, CI service accounts, dashboard users) would silently gain code execution.
-
-Two controls, both in the validating webhook that already validates inline tools:
-
-1. **Dedicated permission via SubjectAccessReview.** Admitting a `Tool` with `type == inline`, the webhook issues a `SubjectAccessReview` for the requesting user (from the AdmissionReview `userInfo`) against a dedicated verb/resource — `use` on `inlinetools.ark.mckinsey.com`, mirroring the PodSecurityPolicy `use` pattern. Denied → admission rejected. Admins grant this via RBAC, independent of `create tools`.
-2. **Off-by-default feature flag.** A cluster-level flag (`inlineTools.enabled`, default `false`) gates the whole capability. Disabled → the webhook rejects every `type: inline` Tool regardless of permission.
-
-**Why admission, not execution time.** The check must run while the author's identity is still in the request. By the time the script runs, the work is driven by the controller's own service account — the original user has left the path. Admission is the last point where "who asked" exists.
-
-**Why a flag on top of the permission.** Defense in depth: an upgrade alone changes nothing until an operator opts in. Enabling the flag is the deliberate moment they accept "this cluster runs inline code, and I've granted the permission to the right subjects."
-
-### Decision: Dashboard authoring reuses the existing Tool editor patterns
-
-The ark-dashboard Tool editor (`components/editors/tool-editor.tsx`) is a `Dialog` + react-hook-form + zod form that already does per-type conditional fields via `.refine()` (e.g. `httpUrl` is required only when `type == http`). Inline tools slot into that shape:
-
-- **No dedicated entry point.** Inline is authored through the normal "Add Tool" flow by selecting `Inline` in the Type dropdown — first-class in that it uses the same path as every other tool, not a separate button. (An earlier iteration added a dedicated "New inline tool" action; dropped as redundant once inline is a first-class option in the shared flow.)
-- **Type dropdown** gains an `Inline` option alongside the existing curated subset (`http`, `mcp`, `agent`, `team`). The dropdown is already narrower than the CRD enum, so adding one item is routine.
-- **`Source` field** is a plain expandable `<Textarea>` (monospace), reusing the same expand/collapse + character/line-counter treatment as the existing `Input Schema` and `Annotations` fields. Shown only when `type == inline`. It is required in that case.
-- **`Language` selector** offers `Bash`, `Python`, `Node`, `TS` and is **required** — there is no `Auto` option, because `language` is now a required CRD field with no shebang inference. The selector has no default value; the author must pick one before submitting.
-- **Client-side validation mirrors the webhook** via zod `.refine()`: when `type == inline`, `source` must be non-empty and ≤ 64 KiB, and `language` must be one of the four allowed values. This is UX-only fast feedback; the webhook remains the authority.
-- **`inputSchema` stays required for all types**, inline included. The model needs the argument shape; a script that genuinely takes no arguments still declares an empty-object schema. Relaxing this is out of scope.
-- **Tools list badge.** `components/rows/tool-row.tsx` renders a small `(inline · <language>)` badge so inline tools are visually distinct in the list.
-
-**Why a plain `<Textarea>`, not a code editor.** The dashboard has `react-syntax-highlighter` (display-only) but no editable code-editor dependency (no Monaco/CodeMirror). A textarea matches the existing `Input Schema` field exactly, adds zero dependencies, and ships fastest. Syntax highlighting and line numbers are a v1.1 UX upgrade, not a v1 blocker for the "write twenty lines, attach, run" flow.
-
-**Phasing: dashboard v0 first.** The dashboard authoring slice (CRD + webhook + ark-api + editor) is Phase 1 in `tasks.md`, delivered before the per-tool runtime (Phase 2). This validates the PoC-building experience early, per Nab's request. The trade-off: at the end of Phase 1 an inline tool persists and is authorable but does **not execute yet** (no runner/activator). To avoid the UI misleading users, the Phase 1 controller sets an honest non-`Ready` status (e.g. `Pending — inline runtime not installed`) until Phase 2 lands. A user-facing "prototype / not yet executable" hint in the editor is optional but recommended for the v0 demo.
-
-**Alternative — add Monaco/CodeMirror.** Better authoring UX (highlighting, line numbers, indentation). Rejected for v1: heavy new dependency for a PoC-phase on-ramp; the value prop is "skip the container," not "best-in-class code editor."
-
-**Alternative — textarea + read-only highlighted preview** (via the existing `react-syntax-highlighter`). A middle ground, but a two-pane dialog is more UI surface than v1 needs. Revisitable.
+Phase 1 ships the authoring path, mandatory author admission on both backends, and an honest Pending status with a not-yet-executable hint. It provisions no runner and advertises no usable execution endpoint. Phase 2 supplies runner images and reconciliation; Phase 3 supplies verified networking, activation, and resolution adapters. Enable execution only when that full path is available. The task groups follow this sequence.
 
 ## Risks / Trade-offs
 
-- **Cold-start latency** → Scale-from-zero pod start is on the order of seconds depending on image-cache state; first invocation feels slower than an HTTP tool. Mitigation: keep the runner image tight, document the latency, consider `spec.inline.keepWarm` in v1.1.
-- **Per-tool pod sprawl** → A namespace with 50 inline tools has 50 Deployments (mostly at 0 replicas) plus 50 Service IPs and etcd objects. Mitigation: scale-to-zero handles compute cost; pooling is a backwards-compatible follow-up if object count bites.
-- **`argv[1]` quoting surprises for bash authors** → JSON-in-an-argv-element is unfamiliar. Mitigation: docs lead with `jq -r .field <<< "$1"`; sample tools use it.
-- **Insufficient stderr surfacing** → Tool errors return only the last 4 KiB of stderr. Mitigation: per-tool pod logs are reachable via `kubectl logs`; the debugging doc calls this out.
-- **New reconciliation pattern in a status-only controller** → The inline branch adds owner-reference GC, in-place ConfigMap updates with an annotation-driven rollout, and readiness gating to a controller that had none. Mitigation: gate the entire branch on `spec.type == inline`; cover child-object creation and delete-cascade with envtest before wiring the activator.
-- **Runner image supply chain** → Ark-published per-language images run all inline tool code. Mitigation: publish via the existing signed image-publish workflow; pin base image digests; distroless bases plus the deny-all-egress default limit the blast radius of a compromised script.
+- **PID exhaustion and kernel escape:** residual platform risks, not solved by separate pods or a timeout. Document administrator hardening; no unverified containment claim.
+- **Internal endpoint reachability:** network policies do not add per-user authorization. Administrators must restrict ingress and protect policy/label management; approved executors remain trusted.
+- **Cold starts and object count:** unused runners cost no pods, but every Tool still has Kubernetes objects and an activator dependency. KeepWarm and pooling are deferred.
+- **Singleton activator:** temporary unavailability interrupts tool calls; v1 favors a single scaling authority over distributed call tracking. Do not replay uncertain calls.
+- **Script edits:** a rollout can interrupt in-flight work; revision checks prevent new calls from silently using stale source.
+- **Resource budgets and packaging:** prove the four images work within the fixed budgets and security settings; do not relax them silently to make a smoke test pass.
 
 ## Migration Plan
 
-Purely additive — no migration of existing resources.
+Existing Tool types and their reconciliation behavior remain unchanged. New enum/status fields and the disabled-by-default feature are additive. No data migration is needed.
 
-- **Deploy order:** publish the per-language runner images (`ark-inline-runner-{bash,python,node,ts}`) → ship the CRD extension + webhook (validation + admission gate; inert because `inlineTools.enabled` defaults `false`) → ship the reconciler + activator → ship ark-api/dashboard surface. Upgrading changes nothing until an operator flips the flag and grants the dedicated permission.
-- **Backwards compatibility:** existing `Tool` resources (`http`/`mcp`/`agent`/`team`/`builtin`) are untouched; their controller path is unchanged. The new enum value and `spec.inline` field are optional.
-- **Rollback:** deleting all inline `Tool` resources GCs their owned infrastructure via owner references. Reverting the operator image removes the reconciler/activator; leftover inline `Tool` resources become inert (status-only) rather than breaking the controller. Reverting the CRD enum is only safe once no inline `Tool` resources remain.
+Deliver authoring first as described above. Before enabling execution, publish runner images, install runtime components and resolution adapters, and verify network isolation. Authorized Tools may exist in Pending while these prerequisites are incomplete.
 
-## Open Questions
+For downgrade, first disable new invocations, delete inline Tools, and verify their owned resources and runner pods are gone while the inline-aware controller is still installed. Only then revert the operator or remove the enum. Reverting the operator alone does not stop surviving Deployments or make them inert.
 
-- **`keepWarm` on day one or v1.1?** `spec.inline.keepWarm: true` is a few lines and addresses cold-start for hot tools. Leaning v1.1 to keep v1 tight.
-- **Resource / containment defaults.** v1 defaults `cpu: 500m`, `memory: 256Mi`, PID limit `128`, and per-invocation execution timeout `30s`, none exposed via `spec.inline`. Are these the right numbers (esp. `30s` vs longer-running glue, and `128` PIDs vs interpreters that spawn helper processes), and should any become configurable in v1?
-- **Idle timeout configurability.** 60s default is hard-coded in v1. Expose `spec.inline.idleTimeout` now or later?
-- **Synthetic MCPServer visibility.** Should the synthesised MCP record be a real `MCPServer` object (visible in the dashboard/list) or an internal-only record? Real object is more transparent but clutters the MCPServer list with machine-generated entries.
+## Deferred Decisions
+
+KeepWarm, configurable resource/time limits, multi-replica activation, richer editors, and CLI shortcuts are follow-ups, not v1 blockers. There is no synthetic MCPServer visibility decision: v1 creates none. PID enforcement and a new per-user invocation permission are explicitly outside this change.
