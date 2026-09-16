@@ -789,7 +789,6 @@ describe('FloatingChat', () => {
           'Test Agent',
           expect.any(String),
           undefined, // conversationId
-          undefined, // enableStreaming
           '5m', // timeout
           undefined, // parameters
         );
@@ -918,7 +917,6 @@ describe('FloatingChat', () => {
           'agent',
           'Test Agent',
           expect.any(String),
-          undefined,
           undefined,
           '5m',
           undefined, // parameters
