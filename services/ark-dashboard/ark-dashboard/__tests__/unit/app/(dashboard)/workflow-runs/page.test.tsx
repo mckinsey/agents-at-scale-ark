@@ -10,10 +10,6 @@ vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => mockUseNamespace(),
 }));
 
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: () => <div data-testid="page-header">Page Header</div>,
-}));
-
 vi.mock('@/components/sections/sessions-section', () => ({
   SessionsSection: () => (
     <div data-testid="sessions-section">Sessions Section</div>
@@ -48,7 +44,11 @@ const renderPage = () =>
 describe('WorkflowRunsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseWorkflows.mockReturnValue({ workflows: [] });
+    mockUseWorkflows.mockReturnValue({
+      workflows: [],
+      loading: false,
+      error: null,
+    });
     mockUseNamespace.mockReturnValue({
       namespace: 'test-namespace',
       isNamespaceResolved: true,
@@ -78,9 +78,17 @@ describe('WorkflowRunsPage', () => {
   });
 
   it('should render page header and sessions section', () => {
+    mockUseWorkflows.mockReturnValue({
+      workflows: [{ id: 'run-1' }],
+      loading: false,
+      error: null,
+    });
+
     renderPage();
 
-    expect(screen.getByTestId('page-header')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Workflow runs (1)' }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId('sessions-section')).toBeInTheDocument();
   });
 });
