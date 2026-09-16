@@ -826,7 +826,6 @@ export function useChatSession({
         name,
         sessionId,
         conversationId,
-        undefined,
         queryTimeout,
         apiParameters,
       );
