@@ -57,7 +57,7 @@ export class InMemoryStream<T> implements Stream<T> {
       }
       this.nextSequence = loaded.nextSequence;
       this.maintain();
-      await this.save();
+      await this.compact();
     }
     if ((this.ttlMs || this.maxBytes) && !this.sweepTimer) {
       const interval = this.ttlMs
@@ -107,6 +107,12 @@ export class InMemoryStream<T> implements Stream<T> {
     await this.fileStore.save(this.items, this.nextSequence);
   }
 
+  // Force a full rewrite. Used on load and after a delete, where records were
+  // removed and an append cannot express the removal.
+  private async compact(): Promise<void> {
+    await this.fileStore.compact(this.items, this.nextSequence);
+  }
+
   // Enforce age (TTL) then the byte budget, evicting oldest first. Public so
   // callers and tests can force a deterministic pass; the timer calls it with
   // the wall clock. Each item is sized at most once (memoized), and only when a
@@ -133,7 +139,7 @@ export class InMemoryStream<T> implements Stream<T> {
       this.sizes.clear();
       this.nextSequence = 1;
     }
-    await this.save();
+    await this.compact();
   }
 
   subscribe(callback: (item: BrokerItem<T>) => void): () => void {

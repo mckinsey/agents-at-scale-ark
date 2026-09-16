@@ -1,5 +1,5 @@
 import {createReadStream, existsSync, mkdirSync} from 'node:fs';
-import {open, writeFile, rename} from 'node:fs/promises';
+import {open, writeFile, rename, appendFile} from 'node:fs/promises';
 import {createInterface} from 'node:readline';
 import {dirname} from 'node:path';
 // Used ONLY to migrate a legacy monolithic snapshot to JSONL on first load;
@@ -11,12 +11,27 @@ import type {Logger} from '@ark-broker/logging/logger.js';
 // object; the JSONL format starts with a `{"nextSequence":N}` header line.
 const LEGACY_PREFIX = '{"items"';
 
+// Between compactions the append log may grow to this multiple of the live
+// record count before the next flush rewrites it in full. Bounds the file to
+// ~ratio× the (already byte-capped) in-memory set. Injectable for tests.
+const COMPACT_RATIO = 2;
+
 type Limits = {maxBytes?: number};
 type Loaded<T> = {items: T[]; nextSequence: number};
 
 export class JsonFileStore<T> {
   private flushing: Promise<void> | null = null;
-  private pending: {items: T[]; nextSequence: number} | null = null;
+  private pending: {
+    items: T[];
+    nextSequence: number;
+    compact: boolean;
+  } | null = null;
+  // Highest sequence number written to disk; appends persist only records above
+  // it, and the header is refreshed from it on compaction.
+  private lastPersistedSequence = 0;
+  // Record lines currently in the file. Drives the compaction threshold.
+  private logRecordCount = 0;
+  private baselineWritten = false;
   // The sibling `.json` this store may migrate from once. It is only ever read,
   // never written, so a rollback to the pre-.jsonl build still finds it intact.
   private readonly legacyPath?: string;
@@ -24,7 +39,8 @@ export class JsonFileStore<T> {
   constructor(
     private readonly logger: Logger,
     private readonly name: string,
-    private readonly path?: string
+    private readonly path?: string,
+    private readonly compactRatio = COMPACT_RATIO
   ) {
     this.legacyPath = path?.endsWith('.jsonl')
       ? path.replace(/\.jsonl$/, '.json')
@@ -53,7 +69,7 @@ export class JsonFileStore<T> {
           {from: this.legacyPath, to: this.path},
           'migrating legacy store to a new .jsonl file'
         );
-        await this.save(loaded.items, loaded.nextSequence);
+        await this.compact(loaded.items, loaded.nextSequence);
       }
       return loaded;
     }
@@ -244,15 +260,38 @@ export class JsonFileStore<T> {
     return last?.sequenceNumber === undefined ? 1 : last.sequenceNumber + 1;
   }
 
-  // Coalesced, non-blocking snapshot. The caller records the latest state and
-  // the resolved promise guarantees it (or a newer state) reached disk, but the
+  // Coalesced, non-blocking append. The caller records the latest state and the
+  // resolved promise guarantees it (or a newer state) reached disk, but the
   // write runs off the event loop and at most one is in flight — so a burst of
-  // saves collapses to a trailing write instead of one full-file rewrite per
-  // event. `items` is read at write time, so a save issued mid-flush is folded
-  // into the trailing pass rather than starting a second write.
+  // saves collapses to a trailing write. Only records above the last persisted
+  // sequence are appended (O(delta)); the log is periodically rewritten in full
+  // (see compact) to reclaim evicted records and stay bounded. `items` is read
+  // at write time, so a save issued mid-flush is folded into the trailing pass.
   save(items: T[], nextSequence: number): Promise<void> {
+    return this.enqueue(items, nextSequence, false);
+  }
+
+  // Force a full rewrite of the current set. Callers use this when records were
+  // removed (delete) or on load: an append cannot express a removal, and the
+  // rewrite refreshes the header so nextSequence recovery cannot regress.
+  compact(items: T[], nextSequence: number): Promise<void> {
+    return this.enqueue(items, nextSequence, true);
+  }
+
+  private enqueue(
+    items: T[],
+    nextSequence: number,
+    compact: boolean
+  ): Promise<void> {
     if (!this.path) return Promise.resolve();
-    this.pending = {items, nextSequence};
+    // Compaction is sticky across coalescing: once a removal has requested a
+    // full rewrite, an append folded into the same pass must not downgrade it,
+    // or the removed records would survive on disk.
+    this.pending = {
+      items,
+      nextSequence,
+      compact: compact || (this.pending?.compact ?? false),
+    };
     if (this.flushing) return this.flushing;
     this.flushing = this.flush();
     return this.flushing;
@@ -266,19 +305,34 @@ export class JsonFileStore<T> {
       // by another pass) or runs after the reset (starts a fresh flush). Do not
       // introduce an await in that window — it would let a coalesced save be lost.
       while (this.pending) {
-        const {items, nextSequence} = this.pending;
+        const {items, nextSequence, compact} = this.pending;
         this.pending = null;
-        await this.writeSnapshot(items, nextSequence);
+        await this.write(items, nextSequence, compact);
       }
     } finally {
       this.flushing = null;
     }
   }
 
+  private async write(
+    items: T[],
+    nextSequence: number,
+    compact: boolean
+  ): Promise<void> {
+    const mustCompact =
+      compact ||
+      !this.baselineWritten ||
+      this.logRecordCount > this.compactRatio * Math.max(items.length, 1);
+    if (mustCompact) {
+      await this.writeSnapshot(items, nextSequence);
+    } else {
+      await this.appendDelta(items, nextSequence);
+    }
+  }
+
   // Full-rewrite JSONL snapshot: a `{"nextSequence":N}` header line followed by
-  // one record per line. Written to a temp file and atomically renamed. (The
-  // append-only, O(delta) write is a later change; this bounded full rewrite is
-  // acceptable because the retained set is already byte-capped in memory.)
+  // one record per line. Written to a temp file and atomically renamed. Resets
+  // the append baseline so subsequent saves append only newer records.
   private async writeSnapshot(items: T[], nextSequence: number): Promise<void> {
     if (!this.path) return;
     try {
@@ -289,9 +343,36 @@ export class JsonFileStore<T> {
       for (const item of items) lines.push(JSON.stringify(item));
       await writeFile(tmp, lines.join('\n') + '\n');
       await rename(tmp, this.path);
+      this.lastPersistedSequence = nextSequence - 1;
+      this.logRecordCount = items.length;
+      this.baselineWritten = true;
       this.logger.info({count: items.length}, 'saved records');
     } catch (err) {
       this.logger.error({err}, 'failed to save');
+    }
+  }
+
+  // Append only records above the last persisted sequence (O(delta)). A partial
+  // final line from a crash mid-write is skipped on load, and the stale header
+  // is corrected there via max(header, last record + 1).
+  private async appendDelta(items: T[], nextSequence: number): Promise<void> {
+    if (!this.path) return;
+    const delta = items.filter((item) => {
+      const seq = (item as {sequenceNumber?: number}).sequenceNumber;
+      return seq !== undefined && seq > this.lastPersistedSequence;
+    });
+    if (delta.length === 0) return;
+    try {
+      const lines = delta.map((item) => JSON.stringify(item)).join('\n') + '\n';
+      await appendFile(this.path, lines);
+      this.lastPersistedSequence = nextSequence - 1;
+      this.logRecordCount += delta.length;
+      this.logger.info(
+        {appended: delta.length, count: this.logRecordCount},
+        'appended records'
+      );
+    } catch (err) {
+      this.logger.error({err}, 'failed to append');
     }
   }
 
