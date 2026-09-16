@@ -277,3 +277,109 @@ class TestUploadTypeChecks(unittest.TestCase):
         )
 
         self.assertEqual(sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE), body)
+
+
+DISGUISED_HTML = b"<!doctype html><html><script>alert(1)</script></html>"
+
+
+class TestUploadHeaderParsing(unittest.TestCase):
+    """The declared-type check is only worth as much as the header parse behind it.
+
+    Each case below is a body that the ASGI server parses as a real file upload, so
+    a parse here that disagrees with the server's leaves the check reading the wrong
+    filename - or skipped altogether - while the file still lands in the store.
+    """
+
+    def _assert_blocked(self, body: bytes, content_type: str = UPLOAD_CONTENT_TYPE):
+        with self.assertRaises(HTTPException) as ctx:
+            sanitize_file_gateway_upload(body, content_type)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_boundary_with_linear_white_space_is_still_checked(self):
+        # Legal around a MIME parameter, and python_multipart accepts it, so a regex
+        # on a literal "boundary=" would read no boundary and forward unchecked.
+        body = _upload_body(
+            b'Content-Disposition: form-data; name="file"; filename="evil.png"',
+            DISGUISED_HTML,
+            b"\r\nContent-Type: image/png",
+        )
+        for content_type in (
+            "multipart/form-data; boundary = B",
+            "multipart/form-data; boundary\t=B",
+            'multipart/form-data; name="boundary=FAKE"; boundary=B',
+        ):
+            with self.subTest(content_type=content_type):
+                self._assert_blocked(body, content_type)
+
+    def test_multipart_without_usable_boundary_is_refused(self):
+        with self.assertRaises(HTTPException) as ctx:
+            sanitize_file_gateway_upload(b"anything", "multipart/form-data")
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_filename_comes_only_from_content_disposition(self):
+        # A decoy header line carrying "filename=a.html" made the sniffed html agree
+        # with the declared type, so the file passed and was stored as evil.png.
+        body = _upload_body(
+            b'Content-Disposition: form-data; name="file"; filename="evil.png"',
+            DISGUISED_HTML,
+            b"\r\nContent-Type: image/png",
+        )
+        decoyed = body.replace(b"--B\r\n", b"--B\r\nX-A: filename=a.html\r\n", 1)
+
+        self._assert_blocked(decoyed)
+        self.assertEqual(
+            _parse_multipart_headers(
+                'X-A: filename=a.html\r\n'
+                'Content-Disposition: form-data; name="file"; filename="evil.png"'
+            )[0],
+            "evil.png",
+        )
+
+    def test_filename_inside_a_quoted_name_does_not_win(self):
+        self._assert_blocked(
+            _upload_body(
+                b'Content-Disposition: form-data; name="filename=a.html; z"; '
+                b'filename="evil.png"',
+                DISGUISED_HTML,
+                b"\r\nContent-Type: image/png",
+            )
+        )
+
+    def test_last_filename_parameter_wins(self):
+        # Matches what the server stores; taking the first would compare against a
+        # name nothing downstream uses.
+        self._assert_blocked(
+            _upload_body(
+                b'Content-Disposition: form-data; name="file"; '
+                b'filename="a.html"; filename="evil.png"',
+                DISGUISED_HTML,
+                b"\r\nContent-Type: image/png",
+            )
+        )
+
+    def test_rfc5987_extended_filename_is_decoded(self):
+        self._assert_blocked(
+            _upload_body(
+                b"Content-Disposition: form-data; name=\"file\"; "
+                b"filename*=UTF-8''evil.png",
+                DISGUISED_HTML,
+                b"\r\nContent-Type: image/png",
+            )
+        )
+        self.assertEqual(
+            _parse_multipart_headers(
+                "Content-Disposition: form-data; filename*=UTF-8''ca%CC%80fe.svg"
+            )[0],
+            "càfe.svg",
+        )
+
+    def test_lf_only_framing_is_checked(self):
+        # Go's mime/multipart tolerates LF-only framing deliberately, so a body the
+        # file-gateway accepts must not yield zero parts here and pass unchecked.
+        body = (
+            b"--B\n"
+            b'Content-Disposition: form-data; name="file"; filename="evil.png"\n'
+            b"Content-Type: image/png\n\n" + DISGUISED_HTML + b"\n--B--\n"
+        )
+
+        self._assert_blocked(body)

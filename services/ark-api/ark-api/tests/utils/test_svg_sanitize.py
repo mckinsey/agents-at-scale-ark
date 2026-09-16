@@ -348,3 +348,79 @@ class TestSvgSanitize(unittest.TestCase):
     def test_sanitize_svg_rejects_dangerous_root(self):
         with self.assertRaisesRegex(ValueError, "Disallowed root"):
             sanitize_svg(b"<script>alert(1)</script>")
+
+
+class TestCssObfuscation(unittest.TestCase):
+    """The <style> element is kept now rather than deleted, so the content check is
+    the only thing standing between a stylesheet and an external fetch. Each case
+    reaches the browser as a live reference despite not looking like one."""
+
+    def test_escaped_at_rule_is_unsafe(self):
+        # "@\69 mport" is @import once the browser resolves the escape.
+        self.assertTrue(_has_unsafe_css('@\\69 mport "http://evil/x.css";'))
+        self.assertTrue(_has_unsafe_css('@\\49 MPORT "http://evil/x.css";'))
+
+    def test_comment_before_url_target_is_unsafe(self):
+        # The comment leaves the target starting with /*, which is neither
+        # scheme-prefixed nor //-prefixed, so it read as a relative path.
+        self.assertTrue(_has_unsafe_css('a{background:url(/*x*/"http://evil/x")}'))
+        self.assertTrue(_has_unsafe_css('a{background:url("http:/*x*/evil/x")}'))
+
+    def test_image_set_bare_string_is_unsafe(self):
+        # image-set() takes a bare string, so there is no url( opener to find.
+        self.assertTrue(
+            _has_unsafe_css('a{background-image:image-set("http://evil/x.png" 1x)}')
+        )
+        self.assertTrue(
+            _has_unsafe_css(
+                "a{background-image:-webkit-image-set('//evil/x.png' 1x)}"
+            )
+        )
+
+    def test_image_set_relative_string_stays_safe(self):
+        # Guards the fix against over-blocking: a relative target is still fine.
+        self.assertFalse(
+            _has_unsafe_css('a{background-image:image-set("sprite.png" 1x)}')
+        )
+
+    def test_inert_content_string_is_not_flagged(self):
+        # Only fetching functions are inspected; a content: string cannot load.
+        self.assertFalse(_has_unsafe_css('a::after{content:"http://example.com"}'))
+
+    def test_css_after_a_child_element_is_checked(self):
+        # The CSS lives in the child's tail, which elem.text does not reach.
+        svg = (
+            b'<svg xmlns="http://www.w3.org/2000/svg">'
+            b"<style><desc/>a{background:url(http://evil/x)}</style>"
+            b"</svg>"
+        )
+
+        out = sanitize_svg(svg)
+
+        self.assertNotIn(b"evil", out)
+
+    def test_escaped_at_rule_is_cleared_end_to_end(self):
+        svg = (
+            b'<svg xmlns="http://www.w3.org/2000/svg">'
+            b'<style>@\\69 mport "http://evil/x.css";</style>'
+            b"</svg>"
+        )
+
+        out = sanitize_svg(svg)
+
+        self.assertNotIn(b"evil", out)
+
+    def test_parse_failure_message_carries_no_internal_detail(self):
+        # defusedxml refuses an internal DTD subset with an exception whose repr
+        # names the entity; that repr used to land in the 400 response body.
+        adobe = (
+            b'<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "svg11.dtd"'
+            b' [ <!ENTITY ns_extend "http://ns.adobe.com/Extensibility/1.0/"> ]>'
+            b'<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>'
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            sanitize_svg(adobe)
+
+        self.assertEqual(str(ctx.exception), "Invalid SVG content")
+        self.assertNotIn("ns_extend", str(ctx.exception))

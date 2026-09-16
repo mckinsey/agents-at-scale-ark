@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/proxy", tags=["proxy"])
 
 PROXY_TIMEOUT = float(os.getenv('PROXY_TIMEOUT', '10.0'))
-PROXY_MAX_UPLOAD_BYTES = int(os.getenv('PROXY_MAX_UPLOAD_BYTES', str(1024 * 1024)))
+DEFAULT_MAX_UPLOAD_BYTES = 1024 * 1024
+PROXY_MAX_UPLOAD_BYTES = int(os.getenv('PROXY_MAX_UPLOAD_BYTES', str(DEFAULT_MAX_UPLOAD_BYTES)))
 
 # CRD configuration
 VERSION_A2A = "v1prealpha1"

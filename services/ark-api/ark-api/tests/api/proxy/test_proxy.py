@@ -1,10 +1,18 @@
 """Tests for Proxy API."""
 import json
 import os
+import pathlib
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
-from ark_api.api.v1.proxy.proxy import _get_a2a_server_address
 
+import yaml
+from ark_api.api.v1.proxy.proxy import (
+    DEFAULT_MAX_UPLOAD_BYTES,
+    _get_a2a_server_address,
+    _read_body_capped,
+)
+
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 os.environ["AUTH_MODE"] = "open"
@@ -758,7 +766,12 @@ class TestServicesProxyEndpoint(unittest.TestCase):
 
     @patch('httpx.AsyncClient.request')
     def test_upload_route_rejects_oversized_file(self, mock_request):
-        """Exercises the real request.stream() read, not a mock."""
+        """Covers the Content-Length precheck; TestClient always sends an honest one.
+
+        The streaming total is covered separately by
+        TestCappedBodyRead.test_understated_content_length_is_still_capped, which is
+        the branch that matters for a chunked or lying request.
+        """
         from ark_api.api.v1.proxy.proxy import PROXY_MAX_UPLOAD_BYTES
 
         response = self._upload("big.bin", b"a" * (PROXY_MAX_UPLOAD_BYTES + 1))
@@ -1358,3 +1371,56 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         self.assertIn("my-service", call_args.kwargs["url"])
         self.assertIn("/api/v1/data", call_args.kwargs["url"])
 
+
+
+class TestCappedBodyRead(unittest.IsolatedAsyncioTestCase):
+    """The Content-Length precheck is advisory; the running total is the authority.
+
+    The route-level test cannot reach this: TestClient always sends an honest
+    Content-Length, so the precheck fires and the streaming branch never runs.
+    """
+
+    @staticmethod
+    def _request(*chunks: bytes, declared: str | None):
+        request = Mock()
+        request.headers = {} if declared is None else {"content-length": declared}
+        request.stream = _byte_stream(*chunks)
+        return request
+
+    async def test_understated_content_length_is_still_capped(self):
+        request = self._request(b"a" * 40, b"a" * 40, declared="10")
+
+        with self.assertRaises(HTTPException) as ctx:
+            await _read_body_capped(request, 50)
+
+        self.assertEqual(ctx.exception.status_code, 413)
+
+    async def test_absent_content_length_is_still_capped(self):
+        request = self._request(b"a" * 80, declared=None)
+
+        with self.assertRaises(HTTPException) as ctx:
+            await _read_body_capped(request, 50)
+
+        self.assertEqual(ctx.exception.status_code, 413)
+
+    async def test_body_within_the_cap_is_returned_whole(self):
+        request = self._request(b"ab", b"cd", declared="4")
+
+        self.assertEqual(await _read_body_capped(request, 50), b"abcd")
+
+
+class TestChartDefaultMatchesCode(unittest.TestCase):
+    def test_chart_upload_cap_matches_code_default(self):
+        chart = (
+            pathlib.Path(__file__).resolve().parents[2].parent.parent
+            / "chart"
+            / "values.yaml"
+        )
+        values = yaml.safe_load(chart.read_text())
+        declared = next(
+            entry["value"]
+            for entry in values["app"]["env"]
+            if entry["name"] == "PROXY_MAX_UPLOAD_BYTES"
+        )
+
+        self.assertEqual(int(declared), DEFAULT_MAX_UPLOAD_BYTES)

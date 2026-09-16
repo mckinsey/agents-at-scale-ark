@@ -1,14 +1,13 @@
 """Security controls for file-gateway uploads and downloads proxied through ark-api."""
 
 import re
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from fastapi import HTTPException
+from python_multipart.multipart import parse_options_header
 
 from .active_content import assert_declared_type
 from .svg_sanitize import (
-    CONTENT_TYPE_ATTR,
-    FILENAME_ATTR,
     is_svg_payload,
     sanitize_svg,
     sanitize_svg_if_needed,
@@ -31,6 +30,9 @@ SVG_DOWNLOAD_CSP = (
 # Content-Disposition filename and enable header injection / filename spoofing.
 UNSAFE_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f"\\]')
 
+# RFC 5987 extended parameter; parse_options_header does not surface it.
+EXT_FILENAME_ATTR = re.compile(r"filename\*\s*=\s*([^;]+)", re.I)
+
 
 def _content_disposition(filename: str | None) -> str:
     """Build a safe attachment Content-Disposition for an attacker-controlled name.
@@ -48,38 +50,92 @@ def _content_disposition(filename: str | None) -> str:
 
 
 def _extract_boundary(content_type: str) -> str | None:
-    match = re.search(r"boundary=([^;]+)", content_type, flags=re.I)
-    if not match:
+    """Read the boundary with the same parser the ASGI server uses.
+
+    A regex on a literal "boundary=" misses the linear white space that is legal
+    around a MIME parameter, and picks up a "boundary=" that appears inside an
+    earlier quoted parameter value. Either way the caller would read a different
+    boundary than the server does.
+    """
+    _, params = parse_options_header(content_type)
+    raw = params.get(b"boundary")
+    if raw is None:
         return None
-    return match.group(1).strip().strip('"')
+    return raw.decode("utf-8", errors="replace").strip() or None
+
+
+def _decode_ext_filename(raw: str) -> str | None:
+    """Decode an RFC 5987 filename* value (charset'lang'percent-encoded)."""
+    parts = raw.strip().strip('"').split("'", 2)
+    if len(parts) != 3:
+        return None
+    charset, _lang, encoded = parts
+    try:
+        return unquote(encoded, encoding=charset or "utf-8", errors="strict") or None
+    except (LookupError, UnicodeDecodeError):
+        return None
 
 
 def _parse_multipart_headers(headers: str) -> tuple[str | None, str | None]:
-    filename = None
+    """Read the part's filename and content-type from its own headers.
+
+    The filename is taken only from the parsed Content-Disposition parameters. A
+    scan of the whole header block would let any earlier textual "filename=" - in
+    a decoy header line, or inside a quoted name - win over the real parameter,
+    and the check would then compare the sniffed bytes against a name that is not
+    the one the file is stored under.
+    """
+    disposition = None
     content_type = None
-    filename_match = FILENAME_ATTR.search(headers)
-    if filename_match:
-        matched = next((group for group in filename_match.groups() if group is not None), "")
-        filename = matched.strip() or None
-    content_type_match = CONTENT_TYPE_ATTR.search(headers)
-    if content_type_match:
-        content_type = content_type_match.group(1).strip()
+    for line in headers.splitlines():
+        name, separator, value = line.partition(":")
+        if not separator:
+            continue
+        key = name.strip().lower()
+        if key == "content-disposition" and disposition is None:
+            disposition = value.strip()
+        elif key == "content-type" and content_type is None:
+            content_type = value.strip() or None
+
+    filename = None
+    if disposition:
+        _, params = parse_options_header(disposition)
+        raw = params.get(b"filename")
+        if raw is not None:
+            decoded = raw.decode("utf-8", errors="replace").strip()
+            # Single quotes are not RFC 2045 quoting, so the parser keeps them; a
+            # client sending filename='x.svg' means x.svg, as the old match read it.
+            if len(decoded) >= 2 and decoded[0] == decoded[-1] == "'":
+                decoded = decoded[1:-1].strip()
+            filename = decoded or None
+        else:
+            # parse_options_header drops filename*, so read it separately rather
+            # than leaving the declared type unknown and skipping the check.
+            ext = EXT_FILENAME_ATTR.search(disposition)
+            if ext:
+                filename = _decode_ext_filename(ext.group(1))
     return filename, content_type
 
 
 def _iter_multipart_parts(body: bytes, boundary: str):
+    # LF-only framing is tolerated rather than skipped: Go's mime/multipart accepts
+    # it deliberately, so a body the file-gateway parses must not slip past unchecked.
     delimiter = f"--{boundary}".encode()
     for part in body.split(delimiter):
-        if not part or part in (b"--", b"--\r\n"):
+        if not part or part.strip() in (b"", b"--"):
             continue
         chunk = part.lstrip(b"\r\n")
-        if chunk.endswith(b"\r\n"):
-            chunk = chunk[:-2]
+        chunk = chunk.rstrip(b"\r\n") if chunk.endswith((b"\r\n", b"\n")) else chunk
         header_end = chunk.find(b"\r\n\r\n")
+        separator = 4
+        lf_end = chunk.find(b"\n\n")
+        if header_end == -1 or (lf_end != -1 and lf_end < header_end):
+            header_end = lf_end
+            separator = 2
         if header_end == -1:
             continue
         headers = chunk[:header_end].decode("utf-8", errors="replace")
-        content = chunk[header_end + 4 :]
+        content = chunk[header_end + separator :]
         yield headers, content
 
 
@@ -118,7 +174,12 @@ def sanitize_file_gateway_upload(body: bytes, content_type: str | None) -> bytes
 
     boundary = _extract_boundary(content_type)
     if not boundary:
-        return body
+        # Forwarding a multipart body whose boundary will not parse would skip every
+        # check below while the ASGI server may still parse it happily, so refuse it.
+        raise HTTPException(
+            status_code=400,
+            detail="Malformed multipart upload: no usable boundary",
+        )
 
     rebuilt_parts: list[tuple[str, bytes]] = []
     changed = False
