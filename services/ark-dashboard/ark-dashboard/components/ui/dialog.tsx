@@ -47,25 +47,52 @@ function DialogOverlay({
   );
 }
 
+const DialogContentElementContext = React.createContext<HTMLDivElement | null>(
+  null,
+);
+
+function useDialogContentElement() {
+  return React.useContext(DialogContentElementContext);
+}
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
 }) {
+  const [contentElement, setContentElement] =
+    React.useState<HTMLDivElement | null>(null);
+
+  const registerContent = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      setContentElement(node);
+      if (typeof ref === 'function') {
+        ref(node);
+      } else if (ref) {
+        ref.current = node;
+      }
+    },
+    [ref],
+  );
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
+        ref={registerContent}
         data-slot="dialog-content"
         className={cn(
           'bg-surface-secondary shadow-elevation-3 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-7 p-10 duration-200 [--dialog-close-inset:2.5rem] sm:max-w-lg',
           className,
         )}
         {...props}>
-        {children}
+        <DialogContentElementContext.Provider value={contentElement}>
+          {children}
+        </DialogContentElementContext.Provider>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
@@ -144,4 +171,5 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+  useDialogContentElement,
 };
