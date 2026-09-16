@@ -40,6 +40,8 @@ Inline creation and every inline spec update SHALL require `inlineTools.enabled:
 
 CRD admission SHALL obtain identity from AdmissionReview; the PostgreSQL-backed API server SHALL obtain it from authenticated request context and enforce the same decision in-process. The gate SHALL NOT depend on optional third-party admission plugins, be bypassable by validation-skip labels or namespace selectors, or inherit a configurable fail-open policy. Installations unable to enforce the gate SHALL reject inline authoring. Authentication-disabled aggregated API configurations SHALL reject inline authoring.
 
+On every accepted inline write, the admission path SHALL record the admitted subject and timestamp on the Tool as the `ark.mckinsey.com/inline-authored-by` and `ark.mckinsey.com/inline-authored-at` annotations, following the existing webhook annotation-stamping convention, and the controller SHALL emit an event through the existing eventing provider when the source hash changes. Requesters SHALL NOT be able to set or alter those annotations; a submitted value SHALL be replaced with the admitted identity, and a metadata-only update that omits them SHALL NOT clear them. Audit logging SHALL NOT be the only record, since it can be disabled on the PostgreSQL backend.
+
 No dedicated author permission SHALL be added automatically to existing Tool editors or ark-api's service account. Unchanged-spec metadata operations, status updates, and deletion SHALL retain their normal permissions and remain possible while disabled; these paths SHALL NOT mutate executable spec fields. Non-inline operations SHALL retain their existing authorization behavior.
 
 #### Scenario: Authorized creation and update
@@ -65,6 +67,22 @@ No dedicated author permission SHALL be added automatically to existing Tool edi
 - **WHEN** the feature is disabled, authenticated identity is missing, or SubjectAccessReview fails or times out
 - **THEN** inline authoring is rejected on both backends
 - **AND** existing resource cleanup remains possible under ordinary permissions
+
+#### Scenario: Authorship is recorded
+
+- **WHEN** an authorized subject creates an inline Tool or changes its source
+- **THEN** the stored Tool SHALL carry the admitted subject and timestamp annotations
+- **AND** a source change SHALL emit an event through the existing eventing provider
+
+#### Scenario: Requester cannot forge authorship
+
+- **WHEN** a request supplies its own authorship annotations
+- **THEN** the stored values SHALL be those of the admitted subject
+
+#### Scenario: Metadata update preserves authorship
+
+- **WHEN** a label-only or annotation-only update omits the authorship annotations
+- **THEN** the stored authorship SHALL be unchanged rather than cleared
 
 #### Scenario: Security admission cannot be skipped
 
@@ -113,9 +131,9 @@ Inline Tools SHALL attach through existing `Agent.spec.tools`. Their resolution 
 
 ### Requirement: Inline resolution reuses existing MCP invocation types
 
-The controller SHALL publish an internal activator URL in `Tool.status.resolvedAddress` and the corresponding `status.observedGeneration`. Go `CreateToolExecutor` SHALL adapt inline Tools into existing MCP client configuration and `MCPExecutor`; the Python SDK's `_build_mcp_servers` SHALL emit existing `MCPServerConfig` records as specified by the `mcp-server-resolution` delta. The stored Tool SHALL remain inline; no synthetic MCPServer or duplicate Tool SHALL be created.
+The controller SHALL publish an internal activator URL in `Tool.status.resolvedAddress` and the corresponding `status.observedGeneration`, both new fields on `ToolStatus`. Lifecycle SHALL be reported through the existing `status.state`/`status.message` pair, with a new `Pending` state value alongside `Ready` and the reason in `message`; this change SHALL NOT add `conditions` to Tool. Readers SHALL treat a `resolvedAddress` whose `observedGeneration` differs from `metadata.generation` as unusable. Go `CreateToolExecutor` SHALL adapt inline Tools into existing MCP client configuration and `MCPExecutor`; the Python SDK's `_build_mcp_servers` SHALL emit existing `MCPServerConfig` records as specified by the `mcp-server-resolution` delta. The stored Tool SHALL remain inline; no synthetic MCPServer or duplicate Tool SHALL be created.
 
-Connections SHALL use transport `http` (MCP Streamable HTTP), a namespace/UID-qualified connection identity, and the authored Tool name as the original MCP tool name. Unresolved or stale status SHALL NOT supply a usable connection. Existing tracing, events, result/error handling, and supported attachment transformations SHALL be reused. HTTP tools SHALL retain their separate HTTP execution path.
+Connections SHALL use transport `http` (MCP Streamable HTTP), a namespace/UID-qualified connection identity, and the authored Tool name as the original MCP tool name. The Go adapter SHALL qualify the pooled client identity by Tool UID, because `MCPClientPool` keys clients by server namespace and name alone. Unresolved or stale status SHALL NOT supply a usable connection. Existing tracing, events, result/error handling, and supported attachment transformations SHALL be reused. HTTP tools SHALL retain their separate HTTP execution path.
 
 #### Scenario: Existing MCP and inline tool in one agent
 
@@ -123,6 +141,13 @@ Connections SHALL use transport `http` (MCP Streamable HTTP), a namespace/UID-qu
 - **WHEN** its tools are registered and invoked
 - **THEN** both use the existing MCP invocation implementation after their respective resolution steps
 - **AND** inline adaptation preserves applicable attachment aliases/partial arguments and tool events
+
+#### Scenario: Inline tool name matches an MCPServer name
+
+- **GIVEN** an inline Tool and an MCPServer with the same name in one namespace
+- **WHEN** both are attached to an agent and registered
+- **THEN** the inline connection SHALL NOT reuse or replace the MCPServer's pooled client
+- **AND** each call SHALL reach its own endpoint
 
 #### Scenario: Direct Tool query
 
@@ -141,13 +166,20 @@ Each inline Tool SHALL own one source ConfigMap, ServiceAccount, NetworkPolicy, 
 
 The source ConfigMap SHALL have a stable name (`<tool>-source` when it fits), key `source`, and in-place updates. The pod template SHALL carry `ark.mckinsey.com/inline-source-hash`; source and language changes SHALL trigger a rollout. Mount a read-only per-pod snapshot at `/tool/source.sh`, `/tool/source.py`, `/tool/source.js`, or `/tool/source.ts` as appropriate, and verify its checksum before runner readiness. New invocations SHALL wait for the current revision rather than use stale source.
 
-Ready SHALL mean that the current endpoint/configuration and runtime prerequisites are usable, not that a runner pod is warm. Missing runtime or network verification SHALL produce Pending and no usable endpoint. Inline reconciliation SHALL process edits and child drift even if the previous status was Ready. Ordinary reconciliation SHALL NOT overwrite the activator's active replica count.
+Ready SHALL mean that the current endpoint/configuration and runtime prerequisites are usable, not that a runner pod is warm. Because `status.resolvedAddress` points at the activator, an unavailable activator Deployment SHALL produce `state: Pending` and no usable endpoint. Missing runner components or a conflicting NetworkPolicy SHALL likewise produce `state: Pending` with the reason in `status.message`. Inline reconciliation SHALL process edits and child drift even if the previous status was Ready. Ordinary reconciliation SHALL NOT overwrite the activator's active replica count.
 
 #### Scenario: Initial and repeated reconciliation
 
 - **WHEN** an inline Tool is reconciled repeatedly with runtime prerequisites satisfied
 - **THEN** one owned set of children exists and the initially unused Deployment has zero replicas
 - **AND** the Tool can be Ready without starting a runner
+
+#### Scenario: Activator unavailable
+
+- **GIVEN** an inline Tool whose children are provisioned and current
+- **WHEN** the activator Deployment has no available replica
+- **THEN** the Tool SHALL report `state: Pending` naming the unavailable activator
+- **AND** SHALL NOT advertise a usable endpoint
 
 #### Scenario: Source edit without orphaned ConfigMaps
 
@@ -166,7 +198,9 @@ Ready SHALL mean that the current endpoint/configuration and runtime prerequisit
 - **WHEN** the runner Deployment is generated
 - **THEN** it disables service-account token automounting, runs non-root as UID 65532, and uses `seccompProfile: RuntimeDefault`
 - **AND** container security contexts set read-only root filesystems, no privilege escalation, and all capabilities dropped
-- **AND** CPU and memory limits are 500m and 256Mi, with no secrets or host namespaces/host paths
+- **AND** CPU and memory limits are 500m and 256Mi, with requests explicitly set below them (50m and 64Mi) so a cold start is schedulable, and no secrets or host namespaces/host paths
+
+Disabling the feature SHALL block authoring and invocation without uninstalling the activator or stopping Tool reconciliation, and the controller SHALL perform the scale-down after a bounded drain while disabled. The single-scaling-authority rule SHALL apply while the feature is enabled; it SHALL NOT leave runner pods with nothing authorised to scale them down. Uninstalling the components SHALL be a separate step, valid once no inline Tools remain.
 
 #### Scenario: Disable, delete, and downgrade
 
@@ -175,39 +209,50 @@ Ready SHALL mean that the current endpoint/configuration and runtime prerequisit
 - **AND** deleting the Tool removes all owned children on both storage backends
 - **AND** downgrade guidance requires verifying child/pod removal before replacing the inline-aware operator
 
-### Requirement: Effective network isolation gates execution
+#### Scenario: Disable does not strand runners
 
-Before publishing a usable endpoint or running scripts, Ark SHALL verify effective isolation for the runner's namespace and policy-relevant labels. Runner policies SHALL deny egress and restrict backend ingress to the activator; activator ingress SHALL be restricted to administrator-selected executor workloads. Neither endpoint SHALL be publicly exposed by this feature. No per-user invocation authentication is implied by these network restrictions.
+- **GIVEN** an inline Tool whose runner is scaled up
+- **WHEN** `inlineTools.enabled` is set false
+- **THEN** the activator SHALL remain installed and reconciliation SHALL continue
+- **AND** the runner SHALL reach zero replicas after a bounded drain rather than remain running
 
-Verification SHALL account for all selecting policies, including additive allow policies such as the optional ark-tenant allow-all egress policy. It SHALL use a controlled reachable destination, a successful positive control, and representative restricted probes for egress and ingress. Failed or inconclusive verification SHALL block execution with an actionable Pending reason, without silently modifying unrelated policies. Authorized authoring MAY persist a Pending Tool before runtime/network prerequisites are ready.
+### Requirement: Ark owns the runner NetworkPolicy and reports conflicts
 
-Relevant policy, label, or configuration changes and loss of verification state SHALL invalidate verification and require rechecking before new execution. Operations guidance SHALL explain standard NetworkPolicy limits, including node-local traffic exceptions and administrator responsibility for node/metadata-service protection.
+Ark SHALL create and maintain a NetworkPolicy per runner that denies egress and restricts backend ingress to the activator; activator ingress SHALL be restricted to administrator-selected executor workloads. Neither endpoint SHALL be publicly exposed by this feature. No per-user invocation authentication is implied by these network restrictions.
 
-#### Scenario: Discovery does not prove isolation
+Because NetworkPolicies are additive, Ark SHALL read the policies selecting the runner's labels in its namespace and SHALL NOT publish a usable endpoint while any of them widens runner egress or backend ingress — including the optional ark-tenant policy, whose empty pod selector allows all egress and admits every pod in the namespace. The Tool SHALL report `state: Pending` naming the conflicting policy, and Ark SHALL NOT modify a policy it does not own. Ark SHALL re-evaluate on relevant policy and label changes. Authorized authoring MAY persist a Pending Tool before runtime prerequisites are ready.
 
-- **WHEN** a NetworkPolicy object exists but the CNI ignores it
-- **THEN** an allowed restricted probe causes verification to fail
-- **AND** no script executes
+Whether the CNI enforces NetworkPolicy SHALL be a documented deployment prerequisite, not a runtime check: Ark SHALL NOT send probe traffic, synthetic connections, or positive-control connections, and SHALL NOT gate execution on such a test. End-to-end coverage on an enforcing CNI SHALL assert that a real script's outbound connection is blocked. Operations guidance SHALL explain that the policy is inert on a non-enforcing CNI, and SHALL explain standard NetworkPolicy limits, including node-local traffic exceptions and administrator responsibility for node/metadata-service protection.
 
-#### Scenario: Unreachable positive control
+#### Scenario: Runner policy is provisioned
 
-- **WHEN** the positive-control connection cannot reach the controlled destination
-- **THEN** verification is inconclusive, not successful
-- **AND** the Tool remains unavailable for execution
+- **WHEN** an inline Tool's children are reconciled
+- **THEN** a NetworkPolicy denying runner egress and admitting only the activator to the backend SHALL exist
+- **AND** no Ingress, gateway route, or external Service SHALL be published for either endpoint
 
 #### Scenario: Overlapping tenant allow-all policy
 
-- **GIVEN** an enforcing CNI and an allow-all policy selecting the actual runner
-- **WHEN** verification evaluates the runner context
-- **THEN** it rejects that context despite the separate deny-all policy
-- **AND** reports that the administrator must correct the overlap before execution
+- **GIVEN** the optional ark-tenant policy selecting every pod in the runner's namespace
+- **WHEN** the Tool is reconciled
+- **THEN** no usable endpoint SHALL be published despite the separate deny-all policy
+- **AND** `status.message` SHALL name the conflicting policy and say an administrator must narrow it
 
-#### Scenario: Effective restrictions pass
+#### Scenario: Conflict is resolved
 
-- **GIVEN** a reachable positive control and policies allowing only the intended ingress while denying runner egress
-- **WHEN** representative probes verify the restrictions
-- **THEN** network verification succeeds
-- **AND** a real inline script's attempted outbound connection is blocked in the negative e2e check
+- **WHEN** the overlapping policy is narrowed so it no longer selects the runner
+- **THEN** re-evaluation SHALL allow the endpoint to become usable without operator restart
+
+#### Scenario: Enforcement is not tested at runtime
+
+- **WHEN** the runner policy exists and no conflicting policy selects the runner
+- **THEN** Ark SHALL publish the endpoint without sending any probe or control connection
+- **AND** a non-enforcing CNI SHALL be surfaced by documentation and end-to-end coverage, not by a runtime gate
+
+#### Scenario: Egress is blocked on an enforcing CNI
+
+- **GIVEN** an enforcing CNI and the provisioned runner policy
+- **WHEN** an inline script attempts an outbound connection
+- **THEN** the end-to-end check SHALL observe that connection blocked
 
 #### Scenario: Runner cannot be reached by another workload
 
@@ -236,7 +281,7 @@ Ark SHALL NOT prescribe 128, change node configuration, require a dedicated node
 
 The shared activator SHALL terminate stateless MCP Streamable HTTP at a per-tool route qualified by namespace, name, and UID. It SHALL serve initialize, initialized notifications, ping, and `tools/list` from Tool metadata without starting runners or extending their idle lifetime. Discovery SHALL expose the Tool name, description, schema, and annotations, not script source. Unsupported operations and unknown tool names SHALL fail without activation.
 
-Only valid `tools/call` requests SHALL activate a backend, after feature, runtime, network, current UID/revision, and child-ownership checks. The activator SHALL connect to the runner Service only after readiness and SHALL NOT accept caller-selected backend URLs or Deployment names.
+Only valid `tools/call` requests SHALL activate a backend, after feature-enablement, published-endpoint, current UID/revision, and child-ownership checks. The activator SHALL connect to the runner Service only after readiness and SHALL NOT accept caller-selected backend URLs or Deployment names.
 
 #### Scenario: Attached tools remain unused
 
@@ -252,9 +297,15 @@ Only valid `tools/call` requests SHALL activate a backend, after feature, runtim
 
 ### Requirement: Activation and idle scaling have one authority
 
-The activator SHALL run as a singleton Deployment independently of controller replica count in v1. It SHALL coalesce simultaneous cold starts, track pending/active calls, and scale a runner to one replica for invocation. It SHALL scale back to zero only after 60 seconds since the last completed call with no pending or active work. Discovery traffic SHALL NOT refresh this clock.
+The activator SHALL run as a singleton Deployment independently of controller replica count in v1, using `strategy: Recreate` so no two activators run concurrently during a rollout, under its own ServiceAccount. Its namespaced rules SHALL be bound per namespace through RoleBindings honouring `controllerManager.watchNamespaces`, as the controller's are, and SHALL NOT be granted by a blanket ClusterRoleBinding. Its write access SHALL be limited to the `scale` subresource of runner Deployments it owns; it SHALL require no Secret access and no write access to Tool specs. It SHALL coalesce simultaneous cold starts, track pending/active calls, and scale a runner to one replica for invocation. It SHALL scale back to zero only after 60 seconds since the last completed call with no pending or active work. Discovery traffic SHALL NOT refresh this clock.
 
 Activation SHALL have a 60-second deadline shortened by the caller's remaining budget; script execution SHALL have a separate 30-second limit, also bounded by the caller. Handshake timeout SHALL NOT accidentally become the complete invocation budget. Cancellation SHALL propagate to backend work. Restarts/uncertain responses SHALL NOT automatically replay scripts, and recovered runners SHALL be reconciled conservatively before idle scale-down.
+
+#### Scenario: Activator rollout does not overlap
+
+- **WHEN** the activator is updated
+- **THEN** the replaced pod SHALL terminate before its replacement starts
+- **AND** no second activator SHALL scale a runner to zero while a call is in flight
 
 #### Scenario: Concurrent cold start
 
@@ -320,7 +371,7 @@ The runner SHALL drain output incrementally with bounded buffers/logging, enforc
 
 ### Requirement: Dashboard authoring persists and reports honest status
 
-Typed ark-api Tool endpoints SHALL preserve inline source/language through create, detail read, and PUT update. Handwritten DTOs, generated SDK models, and dashboard serialization SHALL all support the fields. List responses SHALL expose language for the badge without including script source.
+Typed ark-api Tool endpoints SHALL preserve inline source/language through create, detail read, and PUT update. Handwritten DTOs, generated SDK models, and dashboard serialization SHALL all support the fields. Because the typed update replaces `spec` wholesale from the handwritten model, that model SHALL carry every Tool subtype, not only the ones it lists today: a PUT SHALL NOT drop `spec.mcp` or `spec.builtin` from an existing Tool. List responses SHALL expose language for the badge without including script source.
 
 The existing Add Tool flow SHALL offer Inline, a required monospace source textarea, and a required language selector with no default. Client validation SHALL check non-whitespace source and UTF-8 byte size without trimming persisted source; server validation remains authoritative. Source/language edits SHALL persist to the active namespace and round-trip when reopened. Admission failures and Pending reasons SHALL be visible.
 
@@ -332,6 +383,12 @@ The authoring-first release SHALL provision no runners or usable execution endpo
 - **WHEN** the form is submitted and reopened
 - **THEN** the source and language round-trip unchanged in the selected namespace
 - **AND** the list shows an inline/language badge without downloading every script
+
+#### Scenario: Typed update preserves other subtypes
+
+- **GIVEN** an existing `mcp` or `builtin` Tool
+- **WHEN** it is updated through the typed PUT endpoint
+- **THEN** its subtype configuration SHALL survive the round trip
 
 #### Scenario: Edit and reopen
 

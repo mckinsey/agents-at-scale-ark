@@ -36,7 +36,7 @@ Inline Tool authoring is an exception to that ordinary service-account path: cre
 
 ### Requirement: Fallback mode
 
-When `IMPERSONATION_FALLBACK=true` and `IMPERSONATION_ENABLED=true`, ordinary requests SHALL attempt impersonated Kubernetes calls and MAY retry a Kubernetes 403 using ark-api's service account as specified by the existing fallback behavior. On fallback, the API SHALL log a warning with username, resource, namespace, and action and add `X-Ark-Impersonation-Fallback: true`.
+When `IMPERSONATION_FALLBACK=true` (default `false`) and `IMPERSONATION_ENABLED=true`, ordinary requests SHALL attempt impersonated Kubernetes calls. If a Kubernetes 403 Forbidden response is received, the API SHALL retry the call using ark-api's service account. On fallback, the API SHALL log a warning with username, resource, namespace, and action and add `X-Ark-Impersonation-Fallback: true`.
 
 Inline authoring requests SHALL NOT use this fallback. A denied inline create/spec-update SHALL return the denial without retrying under another identity, regardless of general fallback configuration. This restriction SHALL cover both typed Tool and generic resource write paths without changing fallback for other operations.
 
