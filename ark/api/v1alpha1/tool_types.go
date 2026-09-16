@@ -109,8 +109,9 @@ type ToolSpec struct {
 	// +kubebuilder:validation:Optional
 	Builtin *BuiltinToolRef `json:"builtin,omitempty"`
 	// +kubebuilder:validation:Optional
-	// Approval configuration applied to every agent that uses this tool. An agent may
-	// tighten it but not remove it; see AgentTool.Approval for the per-agent override.
+	// Approval configuration applied to every agent that uses this tool. An agent
+	// cannot unset Required or narrow ArgumentMatches, but Timeout and OnTimeout are
+	// agent-overridable; see AgentTool.Approval for the per-agent override.
 	Approval *ToolApprovalConfig `json:"approval,omitempty"`
 }
 
@@ -207,6 +208,14 @@ func (in *ToolSpec) DeepCopyInto(out *ToolSpec) {
 	if in.Builtin != nil {
 		in, out := &in.Builtin, &out.Builtin
 		*out = new(BuiltinToolRef)
+		(*in).DeepCopyInto(*out)
+	}
+	// Hand-written, so controller-gen skips ToolSpec entirely: a new pointer field
+	// has to be added here or DeepCopy() aliases it and a copy can mutate the gate
+	// on the original.
+	if in.Approval != nil {
+		in, out := &in.Approval, &out.Approval
+		*out = new(ToolApprovalConfig)
 		(*in).DeepCopyInto(*out)
 	}
 }

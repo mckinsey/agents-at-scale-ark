@@ -97,8 +97,9 @@ spec:
                 type: object
               approval:
                 description: |-
-                  Approval configuration applied to every agent that uses this tool. An agent may
-                  tighten it but not remove it; see AgentTool.Approval for the per-agent override.
+                  Approval configuration applied to every agent that uses this tool. An agent
+                  cannot unset Required or narrow ArgumentMatches, but Timeout and OnTimeout are
+                  agent-overridable; see AgentTool.Approval for the per-agent override.
                 properties:
                   argumentMatches:
                     description: |-

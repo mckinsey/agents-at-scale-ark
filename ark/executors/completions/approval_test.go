@@ -746,3 +746,23 @@ func TestMergeArgumentMatchesUnionsBothSides(t *testing.T) {
 	require.NotNil(t, merged)
 	assert.Len(t, merged.ArgumentMatches, 2, "matchers from both sides must be unioned")
 }
+
+// A JSON number decoded into `any` becomes a float64, which fmt renders as "1e+06",
+// so a digit pattern would never fire on a large value. The literal text is kept.
+func TestRequiresApprovalMatchesLargeNumberLiterally(t *testing.T) {
+	agent := &Agent{
+		approvalRequiredTools: map[string]*arkv1alpha1.ToolApprovalConfig{
+			"transfer": {
+				Required: true,
+				ArgumentMatches: []arkv1alpha1.ArgumentMatch{
+					{Argument: "amount", Pattern: "^[0-9]{7,}$"},
+				},
+			},
+		},
+	}
+
+	assert.NotNil(t, agent.requiresApproval("transfer", `{"amount":1000000}`),
+		"a seven-digit amount must be held")
+	assert.Nil(t, agent.requiresApproval("transfer", `{"amount":1000}`),
+		"a four-digit amount must not be held")
+}

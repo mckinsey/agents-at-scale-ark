@@ -56,8 +56,14 @@ func matchesApprovalArguments(config *arkv1alpha1.ToolApprovalConfig, arguments 
 		return true
 	}
 
+	// UseNumber keeps a JSON number as the literal text the model sent. Decoding into
+	// any makes it a float64, and fmt then renders 1000000 as "1e+06", so a digit
+	// pattern such as ^[0-9]{7,}$ would never fire on a large amount.
+	decoder := json.NewDecoder(strings.NewReader(arguments))
+	decoder.UseNumber()
+
 	var parsed map[string]any
-	if err := json.Unmarshal([]byte(arguments), &parsed); err != nil {
+	if err := decoder.Decode(&parsed); err != nil {
 		return true
 	}
 
