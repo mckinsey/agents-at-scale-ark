@@ -62,12 +62,17 @@ function NamespaceProvider({ children }: PropsWithChildren) {
     // one the URL now asks for, undoing the navigation.
     const matchesRequestedNamespace =
       !namespaceFromQueryParams ||
-      !data?.namespace ||
-      data.namespace === namespaceFromQueryParams;
+      data?.namespace === namespaceFromQueryParams;
 
-    if (data && matchesRequestedNamespace) {
+    // Only resolve on a response that carries a concrete namespace matching the
+    // request (or when the URL asked for nothing). Do NOT resolve to the
+    // 'default' fallback while a specific ?namespace= is still being validated:
+    // that briefly fires resource queries against the wrong namespace before the
+    // requested one loads — a race that is invisible locally but visible under
+    // SSO + network latency (the initial view flashes empty).
+    if (data?.namespace && matchesRequestedNamespace) {
       return {
-        namespace: data.namespace || FALLBACK_NAMESPACE,
+        namespace: data.namespace,
         isNamespaceResolved: true,
         readOnlyMode: data.read_only_mode ?? false,
         fallbackReason: null,
@@ -76,12 +81,27 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
     if (error) {
       const fallbackNamespace = readFallbackNamespace(error);
-      return {
-        namespace: fallbackNamespace || FALLBACK_NAMESPACE,
-        isNamespaceResolved: true,
-        readOnlyMode: true,
-        fallbackReason: fallbackNamespace ? 'unreachable' : 'unavailable',
-      };
+      // A definitive substitution (a 404 carrying default_namespace) resolves to
+      // that namespace. With no ?namespace= requested, fall back to 'default'.
+      // But a transient/non-definitive error while a specific namespace WAS
+      // requested must stay unresolved so queries wait and React Query retries,
+      // rather than resolving to 'default' and firing against the wrong namespace.
+      if (fallbackNamespace) {
+        return {
+          namespace: fallbackNamespace,
+          isNamespaceResolved: true,
+          readOnlyMode: true,
+          fallbackReason: 'unreachable',
+        };
+      }
+      if (!namespaceFromQueryParams) {
+        return {
+          namespace: FALLBACK_NAMESPACE,
+          isNamespaceResolved: true,
+          readOnlyMode: true,
+          fallbackReason: 'unavailable',
+        };
+      }
     }
 
     return {
