@@ -11,7 +11,7 @@ The `ExecutionEngineRequest` SHALL include an `mcpServers` field containing a li
 
 #### Scenario: Agent with inline tools
 
-- **WHEN** an agent references a Ready inline Tool whose resolved address matches its current generation
+- **WHEN** an agent references an inline Tool whose `Available` condition is `True` for its current generation
 - **THEN** the SDK SHALL emit an `MCPServerConfig` with that activator URL, transport `http`, and a namespace/UID-qualified connection identity
 - **AND** its `tools` allowlist SHALL contain the authored Tool name
 - **AND** resolution SHALL require no synthetic MCPServer resource and SHALL NOT start a runner
@@ -77,6 +77,6 @@ If an MCPServer cannot be found or its address/headers cannot be resolved, the s
 
 #### Scenario: Inline runtime unavailable
 
-- **WHEN** an inline Tool is Pending or its `status.observedGeneration` differs from `metadata.generation`
+- **WHEN** an inline Tool's `Available` condition is not `True`, or its `observedGeneration` differs from `metadata.generation`
 - **THEN** its connection SHALL be omitted with a warning
 - **AND** no fallback runner URL or privileged lookup SHALL be used

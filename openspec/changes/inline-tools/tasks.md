@@ -1,6 +1,6 @@
 ## 1. Phase 1: schema and mandatory author admission
 
-- [ ] 1.1 Add the inline Tool shape and the new `ToolStatus` fields (`resolvedAddress`, `observedGeneration`, a `Pending` state value reusing `state`/`message`, no `conditions`), plus deep-copy support; regenerate CRDs, Helm copies, SDK models, and API types.
+- [ ] 1.1 Add the inline Tool shape and the new `ToolStatus` fields (`resolvedAddress` and `conditions`, with an `Available` condition type and the closed reason set, plus a `Pending` value for the existing `state`), and deep-copy support; regenerate CRDs, Helm copies, SDK models, and API types. Existing `state`/`message` behaviour for other Tool types stays unchanged.
 - [ ] 1.2 Add shared structural validation for language, UTF-8 source size, object input schemas, subtype exclusivity, and delete/recreate-only inline type transitions; test boundary and multibyte cases.
 - [ ] 1.3 Implement the namespace-scoped author policy with complete authenticated identity and fail-closed SubjectAccessReview handling; stamp the admitted subject and timestamp annotations and emit an event on source change through the existing eventing provider; test grants, denied/error/timeout results, namespace mismatch, and that a requester cannot forge the authorship annotations.
 - [ ] 1.4 Wire mandatory inline security admission into CRD and PostgreSQL paths with `inlineTools.enabled` defaulting false; test skip labels, fail-open settings, optional plugins, authentication-disabled mode, PATCH/apply, status, metadata, and deletion behavior.
@@ -12,7 +12,7 @@
 - [ ] 2.1 Extend handwritten Tool request/response models and serialization for source/language roundtrips, and fix the existing bug where `ToolSpec` omits `mcp`/`builtin` while `update_tool` replaces `spec` wholesale, so a typed PUT silently drops those blocks; regression-test an `mcp` and a `builtin` Tool surviving a typed update; add language-only list metadata and test create, GET, PUT, list, and delete in the selected namespace.
 - [ ] 2.2 Require authenticated user impersonation without fallback for inline authoring in typed Tool and generic resource write paths; test both old/new objects, API keys, missing identity, disabled impersonation, denial with fallback enabled, and unchanged non-inline behavior.
 - [ ] 2.3 Extend the existing tool form and service mapping with Inline, required language, a monospace source textarea, UTF-8 byte validation, and exact source preservation; add persisted edit/reopen support without a new editor dependency.
-- [ ] 2.4 Add the inline/language badge, Pending reason, and explicit not-yet-executable message; verify the list does not fetch every script body.
+- [ ] 2.4 Add the inline/language badge and read the `Available` condition as `a2a-servers.ts` does, branching on `reason` so a policy conflict, a missing runtime, and an unavailable activator read differently, with the explicit not-yet-executable message; verify the list does not fetch every script body.
 - [ ] 2.5 Add API/form tests and a dashboard flow covering authorized create/edit/reopen, source validation, admission denial, and honest Pending status. Consult `tests/CLAUDE.md` and the dashboard testing conventions before implementing tests.
 
 ## 3. Phase 2: runner contract and images
@@ -26,8 +26,8 @@
 ## 4. Phase 2: owned resources and revision lifecycle
 
 - [ ] 4.1 Reconcile the stable source ConfigMap, ServiceAccount, hardened Deployment with explicit requests below its limits, backend Service, and NetworkPolicy; test deterministic length-safe names, UID labels, owner references, collisions, and idempotency.
-- [ ] 4.2 Implement source checksums, language-appropriate read-only snapshot mounts, startup revision checks, and current-generation status; test edits and child drift after Ready, ConfigMap/template races, and no orphaned source ConfigMaps.
-- [ ] 4.3 Keep initial runners at zero replicas without resetting active replicas during ordinary reconciliation; cover Pending/provisioning errors, an unavailable activator producing Pending, and the distinction between Ready and warm.
+- [ ] 4.2 Implement source checksums, language-appropriate read-only snapshot mounts, startup revision checks, and current-generation status; test edits and child drift after the Tool is available, ConfigMap/template races, and no orphaned source ConfigMaps.
+- [ ] 4.3 Keep initial runners at zero replicas without resetting active replicas during ordinary reconciliation; cover each `Available=False` reason including an unavailable activator, per-condition `observedGeneration`, and the distinction between available and warm.
 - [ ] 4.4 Implement disable/delete cleanup and endpoint invalidation, with disable keeping the activator installed and reconciliation running while the controller drains and scales runners to zero; test that a scaled-up runner does not survive disable, and that uninstall is gated on no inline Tools remaining. Verify removal of owned objects with both storage backends and document cleanup-before-downgrade. Do not rely on envtest alone to prove garbage collection.
 
 ## 5. Phase 3: runner networking and activation
@@ -51,5 +51,5 @@
 - [ ] 7.2 Add Chainsaw end-to-end coverage on an enforcing CNI for create/attach/discover/call/idle/edit/delete and negative egress, plus both-backend admission coverage. Test the dashboard-first state separately from the completed runtime.
 - [ ] 7.3 Document author grants, user impersonation, the authorship annotations and event, existing execution permissions, internal endpoint access, the CNI-enforcement prerequisite and NetworkPolicy limitations, fixed limits, and troubleshooting with bounded stderr.
 - [ ] 7.4 Document PID exhaustion as a residual risk and recommend provider-supported finite per-pod PID limits sized and tested by administrators. Do not add an Ark PID setting, verified-node-pool requirement, or PID-based execution gate.
-- [ ] 7.5 Document staged rollout and safe disable/delete/downgrade; verify no synthetic MCPServer/duplicate Tool, public runner endpoint, automatic author grant, or misleading Ready state is introduced.
+- [ ] 7.5 Document staged rollout and safe disable/delete/downgrade; verify no synthetic MCPServer/duplicate Tool, public runner endpoint, automatic author grant, or misleading available state is introduced.
 - [ ] 7.6 Run the required lint/test gates for every implementation stack touched, image smoke tests, and end-to-end checks; record remaining platform limitations before enabling execution.

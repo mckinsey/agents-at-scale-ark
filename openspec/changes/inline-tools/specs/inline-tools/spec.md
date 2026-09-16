@@ -131,7 +131,7 @@ Inline Tools SHALL attach through existing `Agent.spec.tools`. Their resolution 
 
 ### Requirement: Inline resolution reuses existing MCP invocation types
 
-The controller SHALL publish an internal activator URL in `Tool.status.resolvedAddress` and the corresponding `status.observedGeneration`, both new fields on `ToolStatus`. Lifecycle SHALL be reported through the existing `status.state`/`status.message` pair, with a new `Pending` state value alongside `Ready` and the reason in `message`; this change SHALL NOT add `conditions` to Tool. Readers SHALL treat a `resolvedAddress` whose `observedGeneration` differs from `metadata.generation` as unusable. Go `CreateToolExecutor` SHALL adapt inline Tools into existing MCP client configuration and `MCPExecutor`; the Python SDK's `_build_mcp_servers` SHALL emit existing `MCPServerConfig` records as specified by the `mcp-server-resolution` delta. The stored Tool SHALL remain inline; no synthetic MCPServer or duplicate Tool SHALL be created.
+The controller SHALL publish an internal activator URL in `Tool.status.resolvedAddress` and SHALL add `status.conditions` to `ToolStatus`, both new fields. Usability SHALL be reported by a single `Available` condition, matching the condition type Agent, Team, and MCPServer already use, whose `reason` SHALL come from a closed set — `RuntimeNotInstalled`, `ConflictingNetworkPolicy`, `ActivatorUnavailable`, `ProvisioningFailed` — with human detail in `message` and the applicable generation in the condition's own `observedGeneration`. No top-level `observedGeneration` field SHALL be added. `status.state` SHALL retain its existing role for status indicators and SHALL gain `Pending` alongside `Ready`. Readers SHALL treat a `resolvedAddress` as unusable unless `Available` is `True` with an `observedGeneration` equal to `metadata.generation`. Go `CreateToolExecutor` SHALL adapt inline Tools into existing MCP client configuration and `MCPExecutor`; the Python SDK's `_build_mcp_servers` SHALL emit existing `MCPServerConfig` records as specified by the `mcp-server-resolution` delta. The stored Tool SHALL remain inline; no synthetic MCPServer or duplicate Tool SHALL be created.
 
 Connections SHALL use transport `http` (MCP Streamable HTTP), a namespace/UID-qualified connection identity, and the authored Tool name as the original MCP tool name. The Go adapter SHALL qualify the pooled client identity by Tool UID, because `MCPClientPool` keys clients by server namespace and name alone. Unresolved or stale status SHALL NOT supply a usable connection. Existing tracing, events, result/error handling, and supported attachment transformations SHALL be reused. HTTP tools SHALL retain their separate HTTP execution path.
 
@@ -156,7 +156,7 @@ Connections SHALL use transport `http` (MCP Streamable HTTP), a namespace/UID-qu
 
 #### Scenario: Unresolved inline tool
 
-- **WHEN** an inline Tool is Pending or its observed generation is stale
+- **WHEN** an inline Tool's `Available` condition is not `True`, or its `observedGeneration` is stale
 - **THEN** resolution reports it unavailable using the caller's existing error/skip behavior
 - **AND** does not connect directly to a runner or rewrite the stored subtype
 
@@ -166,24 +166,24 @@ Each inline Tool SHALL own one source ConfigMap, ServiceAccount, NetworkPolicy, 
 
 The source ConfigMap SHALL have a stable name (`<tool>-source` when it fits), key `source`, and in-place updates. The pod template SHALL carry `ark.mckinsey.com/inline-source-hash`; source and language changes SHALL trigger a rollout. Mount a read-only per-pod snapshot at `/tool/source.sh`, `/tool/source.py`, `/tool/source.js`, or `/tool/source.ts` as appropriate, and verify its checksum before runner readiness. New invocations SHALL wait for the current revision rather than use stale source.
 
-Ready SHALL mean that the current endpoint/configuration and runtime prerequisites are usable, not that a runner pod is warm. Because `status.resolvedAddress` points at the activator, an unavailable activator Deployment SHALL produce `state: Pending` and no usable endpoint. Missing runner components or a conflicting NetworkPolicy SHALL likewise produce `state: Pending` with the reason in `status.message`. Inline reconciliation SHALL process edits and child drift even if the previous status was Ready. Ordinary reconciliation SHALL NOT overwrite the activator's active replica count.
+`Available=True` SHALL mean that the current endpoint/configuration and runtime prerequisites are usable, not that a runner pod is warm. Because `status.resolvedAddress` points at the activator, an unavailable activator Deployment SHALL set `Available=False` with reason `ActivatorUnavailable` and no usable endpoint. Missing runner components, a conflicting NetworkPolicy, and provisioning errors SHALL likewise set `Available=False` with their own reason and a message, and `state` SHALL read `Pending` in each case. Inline reconciliation SHALL process edits and child drift even if the Tool was already available. Ordinary reconciliation SHALL NOT overwrite the activator's active replica count.
 
 #### Scenario: Initial and repeated reconciliation
 
 - **WHEN** an inline Tool is reconciled repeatedly with runtime prerequisites satisfied
 - **THEN** one owned set of children exists and the initially unused Deployment has zero replicas
-- **AND** the Tool can be Ready without starting a runner
+- **AND** the Tool can be available without starting a runner
 
 #### Scenario: Activator unavailable
 
 - **GIVEN** an inline Tool whose children are provisioned and current
 - **WHEN** the activator Deployment has no available replica
-- **THEN** the Tool SHALL report `state: Pending` naming the unavailable activator
+- **THEN** the Tool SHALL report `Available=False` with reason `ActivatorUnavailable`, and `state: Pending`
 - **AND** SHALL NOT advertise a usable endpoint
 
 #### Scenario: Source edit without orphaned ConfigMaps
 
-- **WHEN** the source of a Ready inline Tool changes
+- **WHEN** the source of an available inline Tool changes
 - **THEN** the existing source ConfigMap is updated and the pod-template checksum changes
 - **AND** new invocations wait for the matching revision
 - **AND** no stale ConfigMaps accumulate and no interrupted call is automatically replayed
@@ -220,7 +220,7 @@ Disabling the feature SHALL block authoring and invocation without uninstalling 
 
 Ark SHALL create and maintain a NetworkPolicy per runner that denies egress and restricts backend ingress to the activator; activator ingress SHALL be restricted to administrator-selected executor workloads. Neither endpoint SHALL be publicly exposed by this feature. No per-user invocation authentication is implied by these network restrictions.
 
-Because NetworkPolicies are additive, Ark SHALL read the policies selecting the runner's labels in its namespace and SHALL NOT publish a usable endpoint while any of them widens runner egress or backend ingress — including the optional ark-tenant policy, whose empty pod selector allows all egress and admits every pod in the namespace. The Tool SHALL report `state: Pending` naming the conflicting policy, and Ark SHALL NOT modify a policy it does not own. Ark SHALL re-evaluate on relevant policy and label changes. Authorized authoring MAY persist a Pending Tool before runtime prerequisites are ready.
+Because NetworkPolicies are additive, Ark SHALL read the policies selecting the runner's labels in its namespace and SHALL NOT publish a usable endpoint while any of them widens runner egress or backend ingress — including the optional ark-tenant policy, whose empty pod selector allows all egress and admits every pod in the namespace. The Tool SHALL report `Available=False` with reason `ConflictingNetworkPolicy` and a message naming the policy, and Ark SHALL NOT modify a policy it does not own. Ark SHALL re-evaluate on relevant policy and label changes. Authorized authoring MAY persist a Pending Tool before runtime prerequisites are ready.
 
 Whether the CNI enforces NetworkPolicy SHALL be a documented deployment prerequisite, not a runtime check: Ark SHALL NOT send probe traffic, synthetic connections, or positive-control connections, and SHALL NOT gate execution on such a test. End-to-end coverage on an enforcing CNI SHALL assert that a real script's outbound connection is blocked. Operations guidance SHALL explain that the policy is inert on a non-enforcing CNI, and SHALL explain standard NetworkPolicy limits, including node-local traffic exceptions and administrator responsibility for node/metadata-service protection.
 
@@ -235,7 +235,7 @@ Whether the CNI enforces NetworkPolicy SHALL be a documented deployment prerequi
 - **GIVEN** the optional ark-tenant policy selecting every pod in the runner's namespace
 - **WHEN** the Tool is reconciled
 - **THEN** no usable endpoint SHALL be published despite the separate deny-all policy
-- **AND** `status.message` SHALL name the conflicting policy and say an administrator must narrow it
+- **AND** the `Available` condition SHALL carry reason `ConflictingNetworkPolicy` and a message naming the policy and saying an administrator must narrow it
 
 #### Scenario: Conflict is resolved
 
@@ -373,9 +373,9 @@ The runner SHALL drain output incrementally with bounded buffers/logging, enforc
 
 Typed ark-api Tool endpoints SHALL preserve inline source/language through create, detail read, and PUT update. Handwritten DTOs, generated SDK models, and dashboard serialization SHALL all support the fields. Because the typed update replaces `spec` wholesale from the handwritten model, that model SHALL carry every Tool subtype, not only the ones it lists today: a PUT SHALL NOT drop `spec.mcp` or `spec.builtin` from an existing Tool. List responses SHALL expose language for the badge without including script source.
 
-The existing Add Tool flow SHALL offer Inline, a required monospace source textarea, and a required language selector with no default. Client validation SHALL check non-whitespace source and UTF-8 byte size without trimming persisted source; server validation remains authoritative. Source/language edits SHALL persist to the active namespace and round-trip when reopened. Admission failures and Pending reasons SHALL be visible.
+The existing Add Tool flow SHALL offer Inline, a required monospace source textarea, and a required language selector with no default. Client validation SHALL check non-whitespace source and UTF-8 byte size without trimming persisted source; server validation remains authoritative. Source/language edits SHALL persist to the active namespace and round-trip when reopened. Admission failures SHALL be visible, and the `Available` condition's reason SHALL drive the message shown for a Pending Tool.
 
-The authoring-first release SHALL provision no runners or usable execution endpoints. It SHALL persist authorized Tools as Pending with a clear not-yet-executable message until the runtime is installed and prerequisites succeed.
+The authoring-first release SHALL provision no runners or usable execution endpoints. It SHALL persist authorized Tools with `Available=False`, reason `RuntimeNotInstalled`, and a clear not-yet-executable message until the runtime is installed and prerequisites succeed.
 
 #### Scenario: Create and reopen
 
