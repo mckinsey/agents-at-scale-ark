@@ -20,6 +20,9 @@ export type ModelUpdateRequest = components['schemas']['ModelUpdateRequest'];
 // For UI compatibility, we'll map the API response to include an id field
 export type Model = ModelDetailResponse & { id: string };
 
+// List-response shape, no detail-only fields (#2581)
+export type ModelListItem = ModelResponse & { id: string };
+
 // CRUD Operations
 export const modelsService = {
   // Get all models
@@ -38,6 +41,14 @@ export const modelsService = {
     );
 
     return models;
+  },
+
+  async list(namespace: string): Promise<ModelListItem[]> {
+    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`, {
+      namespace,
+    });
+
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get a single model by name

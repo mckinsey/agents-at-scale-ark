@@ -23,7 +23,8 @@ export type Team = TeamDetailResponse & { id: string };
 
 // CRUD Operations
 export const teamsService = {
-  // Get all teams
+  // Still does a per-item detail fetch (#2581 follow-up) - TeamResponse lacks
+  // the computed `available` field and `members` array; needs an ark-api change.
   async getAll(namespace: string): Promise<Team[]> {
     const items = await fetchAllPages<TeamResponse>(`/api/v1/teams`, {
       namespace,

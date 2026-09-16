@@ -5,6 +5,7 @@ package postgresql
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pglogrepl"
@@ -14,6 +15,10 @@ import (
 )
 
 func (p *PostgreSQLBackend) startWALConsumer() {
+	walConsumerActive.Set(1)
+	defer walConsumerActive.Set(0)
+	defer walLastMessageTimestamp.Set(math.NaN())
+
 	backoff := time.Second
 	maxBackoff := 30 * time.Second
 

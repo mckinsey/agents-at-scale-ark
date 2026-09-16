@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, Selec
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import { useDebounce } from '@/lib/hooks/use-debounce';
+import type { SortDirection } from '@/lib/hooks/use-value-sort';
 import { SessionTableRow } from './session-table-row';
 
 interface Props {
@@ -20,7 +21,6 @@ interface Props {
 }
 
 type SortField = 'date' | 'name' | 'conversations';
-type SortDirection = 'asc' | 'desc';
 
 const PAGE_SIZE = 20;
 

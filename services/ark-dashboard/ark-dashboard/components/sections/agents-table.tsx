@@ -7,6 +7,10 @@ import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
+  StatusIndicator,
+  getAvailabilityStatus,
+} from '@/components/ui/status-indicator';
+import {
   Table,
   TableBody,
   TableCell,
@@ -19,22 +23,16 @@ import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
-import type { Agent } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { OriginCell, OriginColumnHeader } from './origin-column';
 
 interface AgentsTableProps {
-  readonly agents: readonly Agent[];
+  readonly agents: readonly AgentListItem[];
   readonly onDelete: (id: string) => void;
 }
-
-const STATUS_CONFIG = {
-  True: { label: 'Active', dotClass: 'bg-status-success' },
-  False: { label: 'Error', dotClass: 'bg-status-error' },
-  Unknown: { label: 'Unknown', dotClass: 'bg-fg-tertiary' },
-} as const;
 
 const COL = {
   name: 'w-[240px]',
@@ -42,23 +40,8 @@ const COL = {
   action: 'w-[100px]',
 };
 
-function AgentStatus({
-  status,
-}: Readonly<{ status?: Agent['available'] | null }>) {
-  const value = status ?? 'Unknown';
-  const config = STATUS_CONFIG[value];
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span className={cn('size-2 rounded-full', config.dotClass)} />
-      <span className="label-regular-primary text-fg-primary">
-        {config.label}
-      </span>
-    </span>
-  );
-}
-
 interface AgentTableRowProps {
-  readonly agent: Agent;
+  readonly agent: AgentListItem;
   readonly onDelete: (id: string) => void;
 }
 
@@ -101,7 +84,7 @@ function AgentTableRow({ agent, onDelete }: Readonly<AgentTableRowProps>) {
           )}
         </TableCell>
         <TableCell size="small">
-          <AgentStatus status={agent.available} />
+          <StatusIndicator {...getAvailabilityStatus(agent.available)} />
         </TableCell>
         <TableCell size="small" className="relative z-10">
           <div className="flex items-center justify-center gap-2">
@@ -140,7 +123,7 @@ export function AgentsTable({ agents, onDelete }: Readonly<AgentsTableProps>) {
   return (
     <Table
       aria-label="Agents"
-      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[800px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>

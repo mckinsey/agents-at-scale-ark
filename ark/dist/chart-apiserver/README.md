@@ -72,6 +72,18 @@ Enabling it adds a second ClusterRole, `ark-apiserver-admission-webhooks`, grant
 Before wiring either mechanism the apiserver runs a `SelfSubjectAccessReview` for each of its watches. A missing or deleted `ark-apiserver-admission-policy` ClusterRoleBinding therefore lands on the same fallback as an unsupported host, naming the binding — rather than leaving the plugin's informers unable to sync, which upstream turns into a 10-second stall and an opaque `Forbidden` on **every write**. The review needs no extra RBAC (`system:basic-user` grants it to all authenticated identities). It confirms the grant exists at startup only; a binding removed while the process is running still fails at request time, which is what that mechanism's `required` is for.
 - `policy.extraParamRules` — extra RBAC rules for policies that use `paramKind`. The plugin builds a dynamic informer per `paramKind` and the policy silently never matches if it cannot read that resource. ConfigMaps and Secrets are already covered by the parameter-resolution role, so ConfigMap-based params work out of the box; **any other `paramKind` needs a rule here.**
 
+### Metrics
+
+`metrics.enabled=true` (default `false`) serves Prometheus metrics on `metrics.port` (default `8443`) and adds a `metrics` port to the Service (and to the NetworkPolicy when enabled). The endpoint exposes the Ark apiserver collectors (`ark_apiserver_storage_*`, `ark_apiserver_requests_*`, `ark_apiserver_admission_enforcement_active`), the watch broadcaster collectors (`ark_apiserver_watch_*`) and the PostgreSQL backend gauges:
+
+- `ark_apiserver_wal_consumer_active` — `1` on the replica running the WAL consumer; across a healthy deployment the sum is exactly `1`.
+- `ark_apiserver_wal_last_message_timestamp_seconds` — staleness means the consumer is wedged. `NaN` on replicas not running the consumer (including a leader that just lost the lease), so a `time() - ark_apiserver_wal_last_message_timestamp_seconds > 300` alert stays quiet on followers; if you scope it anyway, join on `ark_apiserver_wal_consumer_active == 1`.
+- `ark_apiserver_replication_slot_lag_bytes` — WAL pinned by the `ark_cdc` slot; a climbing value is the disk-filling condition described under "Replication slot lifecycle". Sampled every 30s on the leader; `NaN` elsewhere. The query reads `pg_replication_slots`, which works for the slot owner by default — a locked-down role needs `GRANT pg_monitor TO <role>`.
+- `ark_apiserver_notify_listener_connected` — `1` while the replica holds its `LISTEN ark_resource_change` connection. Every replica should read `1`; a `0` means that replica's watches have fallen back to the periodic relist. `ark_apiserver_notify_listener_reconnects_total` counts drops; `ark_apiserver_notify_received_total` counts nudges per kind.
+- `ark_apiserver_db_pool_*` — connection pool stats (`sql.DBStats`); `wait_count_total` rising means pool exhaustion.
+
+`metrics.secure=true` (default) serves HTTPS and requires a bearer token authorized via TokenReview/SubjectAccessReview; the RBAC is already covered by the `system:auth-delegator` binding. `metrics.serviceMonitor.enabled=true` renders a ServiceMonitor (requires the Prometheus Operator CRDs) scraping every `metrics.serviceMonitor.interval` (default `30s`).
+
 ### Replication slot lifecycle
 
 The apiserver creates a **persistent** logical replication slot named `ark_cdc` on the configured PostgreSQL database to drive its watch stream. The slot survives apiserver pod restarts, which is what lets watchers resume from the last confirmed WAL position rather than missing events from the restart gap.
@@ -88,7 +100,7 @@ If you redeploy the apiserver later, it detects the existing slot on startup and
 
 The chart defaults to a single replica — note that an unavailable aggregated apiserver degrades kube-apiserver discovery and garbage collection cluster-wide, so for production run `replicas=2` with `podDisruptionBudget.enabled=true`.
 
-All replicas serve API traffic; only the leader (`Lease/ark-apiserver-leader`) runs the WAL consumer, since the replication slot admits a single connection (the slot's `active` flag is a backstop). Non-leader replicas do not touch the slot and serve watches from a periodic relist (up to ~120s stale) until they acquire the lease.
+All replicas serve API traffic; only the leader (`Lease/ark-apiserver-leader`) runs the WAL consumer, since the replication slot admits a single connection (the slot's `active` flag is a backstop). Non-leader replicas do not touch the slot. Cross-replica watch delivery does not depend on the lease: every write emits a `pg_notify` after commit and every replica holds a `LISTEN` connection that wakes its watchers, so a watch served by any replica sees writes taken by any other typically well under a second; the periodic relist (~120s) remains as the backstop.
 
 ### Required PostgreSQL configuration
 

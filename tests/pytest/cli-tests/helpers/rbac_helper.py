@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Tuple
 
-from helpers.k8s import apply_yaml, delete_resource as k8s_delete_resource
+from shared.k8s import apply_yaml, delete_resource as k8s_delete_resource
 
 # Role + RoleBinding granting the demo group create access on secrets, models,
 # queries and teams. Used to prove RBAC gates resource creation rather than

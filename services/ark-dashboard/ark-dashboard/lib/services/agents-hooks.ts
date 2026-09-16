@@ -11,7 +11,7 @@ export const useGetAllAgents = () => {
 
   return useQuery({
     queryKey: [GET_ALL_AGENTS_QUERY_KEY, namespace],
-    queryFn: () => agentsService.getAll(namespace),
+    queryFn: () => agentsService.list(namespace),
     enabled: Boolean(namespace),
   });
 };
