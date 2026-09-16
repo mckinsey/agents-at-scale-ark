@@ -1383,11 +1383,20 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 	return r.saClients.get(query.Namespace, serviceAccount)
 }
 
+// buildImpersonatedClient returns a direct (non-cached) client for the identity.
+// Reads hit the API server rather than a per-identity informer cache: caching
+// would need a list+watch per service account, and under the cache's entry
+// bound that is a memory hazard, so we trade a live read for bounded memory.
 func (r *QueryReconciler) buildImpersonatedClient(namespace, serviceAccount string) (client.Client, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
+
+	// Disable the client-side rate limiter (InClusterConfig would default it to
+	// 5 QPS) and rely on server-side API Priority and Fairness, as
+	// ctrl.GetConfigOrDie does; this client is now shared across queries.
+	cfg.QPS = -1
 
 	cfg.Impersonate = rest.ImpersonationConfig{
 		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, serviceAccount),

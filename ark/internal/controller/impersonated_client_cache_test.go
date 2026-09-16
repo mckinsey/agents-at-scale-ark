@@ -45,8 +45,16 @@ func TestImpersonatedClientCacheDistinctIdentities(t *testing.T) {
 	b, err := c.get("ns", "sa-b")
 	require.NoError(t, err)
 
-	assert.False(t, a == b, "distinct identities should get distinct clients")
+	assert.False(t, a == b, "distinct service accounts should get distinct clients")
 	assert.EqualValues(t, 2, atomic.LoadInt32(&calls))
+
+	// Same service account in a different namespace is a distinct identity:
+	// the namespace is part of the key, so this must not reuse a's client.
+	other, err := c.get("ns-b", "sa-a")
+	require.NoError(t, err)
+
+	assert.False(t, a == other, "same service account in a different namespace must not be reused")
+	assert.EqualValues(t, 3, atomic.LoadInt32(&calls))
 }
 
 func TestImpersonatedClientCacheEvictsOldestWhenFull(t *testing.T) {
@@ -68,6 +76,12 @@ func TestImpersonatedClientCacheEvictsOldestWhenFull(t *testing.T) {
 	// "a" was evicted: it rebuilds.
 	_, _ = c.get("ns", "a")
 	assert.EqualValues(t, 4, atomic.LoadInt32(&calls))
+
+	// Re-check the bound at the end: an m/order desync (e.g. a missed trim)
+	// stays hidden by the earlier Len check but surfaces here as the map or
+	// order slice growing past max.
+	assert.Len(t, c.m, 2, "cache must not exceed its bound after eviction churn")
+	assert.Len(t, c.order, 2, "order must track the map exactly")
 }
 
 func TestImpersonatedClientCacheConcurrentGetBuildsOnce(t *testing.T) {
