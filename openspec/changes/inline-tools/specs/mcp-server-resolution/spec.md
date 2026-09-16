@@ -16,7 +16,7 @@ The `ExecutionEngineRequest` SHALL include an `mcpServers` field containing a li
 - **AND** its `tools` allowlist SHALL contain the authored Tool name
 - **AND** resolution SHALL require no synthetic MCPServer resource and SHALL NOT start a runner
 
-#### Scenario: Agent with no MCP or inline tools
+#### Scenario: Agent with no MCP tools
 
 - **WHEN** an agent has neither MCP nor inline Tools
 - **THEN** the `ExecutionEngineRequest` SHALL contain an empty `mcpServers` list

@@ -6,7 +6,7 @@ Impersonation SHALL be controlled by `IMPERSONATION_ENABLED` (default `false`). 
 
 Inline Tool authoring is an exception to that ordinary service-account path: create and spec-update operations through typed Tool or generic resource endpoints SHALL require enabled impersonation and an authenticated end-user identity. The API SHALL reject API-key-only or non-impersonated inline authoring rather than persist executable code under its shared service account. Update checks SHALL consider both stored and submitted resources; inline/non-inline conversions SHALL follow the inline-tools admission contract. Other operations SHALL retain their existing behavior.
 
-#### Scenario: Impersonation disabled for ordinary operations
+#### Scenario: Impersonation disabled (default)
 
 - **WHEN** `IMPERSONATION_ENABLED=false` and an SSO user makes a non-inline-authoring request
 - **THEN** Kubernetes calls SHALL use ark-api's service account
@@ -17,7 +17,7 @@ Inline Tool authoring is an exception to that ordinary service-account path: cre
 - **WHEN** impersonation is enabled and an authenticated SSO user makes a request
 - **THEN** Kubernetes calls SHALL include the mapped user/group impersonation headers
 
-#### Scenario: API-key authentication for ordinary operations
+#### Scenario: Impersonation enabled with API key auth
 
 - **WHEN** a request uses API-key authentication and is not inline authoring
 - **THEN** it SHALL retain the existing non-impersonated service-account behavior
@@ -45,13 +45,13 @@ Inline authoring requests SHALL NOT use this fallback. A denied inline create/sp
 - **WHEN** fallback is enabled and an impersonated ordinary request succeeds
 - **THEN** no fallback retry SHALL occur and no fallback header SHALL be present
 
-#### Scenario: Ordinary impersonated call fails and fallback succeeds
+#### Scenario: Impersonated call fails, fallback succeeds
 
 - **WHEN** fallback is enabled and an ordinary impersonated request is denied with 403
 - **THEN** the API SHALL retry using its service account
 - **AND** a successful fallback SHALL include the fallback header and a warning log
 
-#### Scenario: Fallback disabled
+#### Scenario: Fallback disabled, impersonated call fails
 
 - **WHEN** fallback is disabled and an impersonated request is denied
 - **THEN** the API SHALL return the existing structured error without a service-account retry
