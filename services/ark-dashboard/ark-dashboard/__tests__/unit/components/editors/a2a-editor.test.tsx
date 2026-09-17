@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { A2AEditor } from '@/components/editors/a2a-editor';
 
+vi.mock('@/lib/services/secrets-hooks', () => ({
+  useGetAllSecrets: () => ({ data: [] }),
+}));
+
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
     get: vi.fn(),
@@ -62,9 +66,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'valid-name');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'not-a-valid-url');
 
       const createButton = screen.getByRole('button', { name: /create/i });
@@ -83,9 +85,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'valid-name');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'https://example.com');
 
       const pollingInput = screen.getByPlaceholderText('e.g., 60');
@@ -114,9 +114,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'my-a2a-server');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'https://example.com/api');
 
       const createButton = screen.getByRole('button', { name: /create/i });
@@ -145,9 +143,7 @@ describe('A2AEditor', () => {
       const descInput = screen.getByPlaceholderText('what this server does');
       await user.type(descInput, 'My A2A server description');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'https://example.com/api');
 
       const pollingInput = screen.getByPlaceholderText('e.g., 60');
@@ -206,9 +202,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'my-a2a-server');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'https://example.com/api');
 
       await user.click(screen.getByRole('button', { name: /create/i }));
