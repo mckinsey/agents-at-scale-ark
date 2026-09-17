@@ -80,27 +80,24 @@ describe('createReaper', () => {
     it('deletes physically expired message rows', async () => {
       await insertMessage(db(), -10);
       await insertMessage(db(), -10);
+      expect(await countRows(db(), 'messages')).toBe(2);
 
       await makeReaper().reapOnce();
 
       expect(await countRows(db(), 'messages')).toBe(0);
     });
 
-    it('keeps unexpired message rows', async () => {
+    it('deletes expired rows and keeps unexpired ones across messages and events', async () => {
       await insertMessage(db(), -10);
       await insertMessage(db(), 3600);
+      await insertEvent(db(), -10);
+      await insertEvent(db(), 3600);
+      expect(await countRows(db(), 'messages')).toBe(2);
+      expect(await countRows(db(), 'events')).toBe(2);
 
       await makeReaper().reapOnce();
 
       expect(await countRows(db(), 'messages')).toBe(1);
-    });
-
-    it('deletes expired event rows', async () => {
-      await insertEvent(db(), -10);
-      await insertEvent(db(), 3600);
-
-      await makeReaper().reapOnce();
-
       expect(await countRows(db(), 'events')).toBe(1);
     });
 
@@ -211,16 +208,19 @@ describe('createReaper', () => {
       expect(await countRows(db(), 'messages')).toBe(1);
     });
 
-    it('abandons the remaining batches when stopped mid-drain', async () => {
+    it('runs exactly one batch then abandons the drain when stopped', async () => {
       for (let i = 0; i < 300; i++) {
         await insertMessage(db(), -10);
       }
+      expect(await countRows(db(), 'messages')).toBe(300);
       const reaper = makeReaper({batchSize: 1});
 
+      // start() dispatches the first DELETE synchronously; stop() flips the
+      // stopped flag before it resolves, so the loop exits after that one batch.
       reaper.start();
       await reaper.stop();
 
-      expect(await countRows(db(), 'messages')).toBeGreaterThan(0);
+      expect(await countRows(db(), 'messages')).toBe(299);
     });
   });
 });
