@@ -44,6 +44,7 @@ Environment variables:
 | `HOST` | Bind address | `0.0.0.0` | — |
 | `LOG_LEVEL` | Log level (`fatal`…`trace`, `silent`) | `info` | — |
 | `REQUEST_TIMEOUT_MS` | Request timeout, 0 to disable | `0` | `server.requestTimeout` |
+| `SHUTDOWN_DRAIN_TIMEOUT_MS` | On SIGTERM, how long to let in-flight requests (including open `/stream` responses) finish before connections are cut and the brokers are closed | `10000` | — |
 | `MESSAGE_MAX_BYTES` | Byte budget for the in-memory message store | `104857600` (100 MiB) | `limits.messageMaxBytes` |
 | `EVENT_MAX_BYTES` | Byte budget for the in-memory event store | `104857600` (100 MiB) | `limits.eventMaxBytes` |
 | `CHUNK_MAX_BYTES` | Byte budget for the in-memory chunk store | `33554432` (32 MiB) | `limits.chunkMaxBytes` |

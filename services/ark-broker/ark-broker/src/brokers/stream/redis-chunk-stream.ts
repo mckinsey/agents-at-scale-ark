@@ -150,9 +150,15 @@ export class RedisChunkStream implements ChunkStream {
       aborted = true;
       this.subscriptions.delete(unsubscribe);
       if (sub.status === 'connecting' || sub.status === 'connect') {
-        const stop = (): void => sub.disconnect();
+        const stop = (): void => {
+          sub.off('ready', stop);
+          sub.off('reconnecting', stop);
+          sub.off('end', stop);
+          sub.disconnect();
+        };
         sub.once('ready', stop);
         sub.once('reconnecting', stop);
+        sub.once('end', stop);
         return;
       }
       sub.disconnect();
