@@ -61,13 +61,32 @@ function NamespaceProvider({ children }: PropsWithChildren) {
     // longer requested. Acting on it would write that namespace back over the
     // one the URL now asks for, undoing the navigation.
     const matchesRequestedNamespace =
-      !namespaceFromQueryParams ||
-      !data?.namespace ||
-      data.namespace === namespaceFromQueryParams;
+      !namespaceFromQueryParams || data?.namespace === namespaceFromQueryParams;
 
-    if (data && matchesRequestedNamespace) {
+    // Only resolve on a response that carries a concrete namespace matching the
+    // request (or when the URL asked for nothing). Do NOT resolve to the
+    // 'default' fallback while a specific ?namespace= is still being validated:
+    // that briefly fires resource queries against the wrong namespace before the
+    // requested one loads — a race that is invisible locally but visible under
+    // SSO + network latency (the initial view flashes empty).
+    if (data?.namespace && matchesRequestedNamespace) {
       return {
-        namespace: data.namespace || FALLBACK_NAMESPACE,
+        namespace: data.namespace,
+        isNamespaceResolved: true,
+        readOnlyMode: data.read_only_mode ?? false,
+        fallbackReason: null,
+      };
+    }
+
+    // A 200 that names no namespace is still a definitive answer, not a pending
+    // state — /v1/context returns namespace or current_context, and the
+    // in-cluster service-account file can read back empty. Resolve to 'default'
+    // rather than park behind the loading gate forever: there is no error, so
+    // React Query never retries. An empty namespace can never be the stale
+    // concrete mismatch the guard above waits past, so it needs no such gate.
+    if (data && !data.namespace) {
+      return {
+        namespace: FALLBACK_NAMESPACE,
         isNamespaceResolved: true,
         readOnlyMode: data.read_only_mode ?? false,
         fallbackReason: null,
@@ -76,11 +95,26 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
     if (error) {
       const fallbackNamespace = readFallbackNamespace(error);
+      // A 404 carrying default_namespace is a definitive substitution: resolve
+      // to that namespace and announce it.
+      if (fallbackNamespace) {
+        return {
+          namespace: fallbackNamespace,
+          isNamespaceResolved: true,
+          readOnlyMode: true,
+          fallbackReason: 'unreachable',
+        };
+      }
+      // Any other error is terminal, not transient: React Query only surfaces
+      // `error` once its retries are exhausted, so there is nothing left to wait
+      // for. Fall back to 'default' (read-only) with a toast rather than hang
+      // the dashboard behind the loading gate — this holds whether or not a
+      // specific ?namespace= was requested.
       return {
-        namespace: fallbackNamespace || FALLBACK_NAMESPACE,
+        namespace: FALLBACK_NAMESPACE,
         isNamespaceResolved: true,
         readOnlyMode: true,
-        fallbackReason: fallbackNamespace ? 'unreachable' : 'unavailable',
+        fallbackReason: 'unavailable',
       };
     }
 
