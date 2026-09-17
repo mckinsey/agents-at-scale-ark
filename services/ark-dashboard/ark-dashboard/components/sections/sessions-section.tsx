@@ -716,10 +716,6 @@ function WorkflowStepNode({
           onToggle={isExpandable ? () => setShowDetail(!showDetail) : undefined}
         />
 
-        {hasDetail && showDetail && (
-          <WorkflowStepDetail detail={step.detail!} message={step.message} />
-        )}
-
         {hasChildren &&
           showDetail &&
           step.children!.map((child, index) => (
@@ -730,6 +726,10 @@ function WorkflowStepNode({
               isLast={index === step.children!.length - 1}
             />
           ))}
+
+        {hasDetail && showDetail && (
+          <WorkflowStepDetail detail={step.detail!} message={step.message} />
+        )}
       </div>
     </div>
   );
@@ -765,10 +765,6 @@ function TeamStepNode({
           onToggle={isExpandable ? () => setShowDetail(!showDetail) : undefined}
         />
 
-        {isExpandable && showDetail && (
-          <TeamStepDetail detail={step.detail ?? {}} message={step.message} />
-        )}
-
         {hasChildren &&
           showDetail &&
           step.children!.map((child, index) => (
@@ -779,6 +775,10 @@ function TeamStepNode({
               isLast={index === step.children!.length - 1}
             />
           ))}
+
+        {isExpandable && showDetail && (
+          <TeamStepDetail detail={step.detail ?? {}} message={step.message} />
+        )}
       </div>
     </div>
   );
@@ -861,7 +861,11 @@ function SessionListItem({
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-1">
-            <span role="img" aria-label={STATUS_LABELS[session.status]}>
+            <span
+              role="img"
+              data-testid="session-status"
+              data-status={session.status}
+              aria-label={STATUS_LABELS[session.status]}>
               {getStatusIcon(session.status)}
             </span>
             <span className="paragraph-small-primary text-fg-secondary">
@@ -1118,6 +1122,7 @@ export function SessionsSection({
             value={workflowNameInput}
             onChange={setWorkflowNameInput}
             placeholder="Search"
+            testId="workflow-runs-search"
             className="w-full lg:max-w-[493px] lg:flex-1"
           />
 
