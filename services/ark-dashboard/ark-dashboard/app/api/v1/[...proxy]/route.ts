@@ -3,6 +3,12 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { SESSION_COOKIE_NAME } from '@/lib/auth/auth-config';
+import {
+  isAccessTokenExpiring,
+  refreshAccessToken,
+} from '@/lib/auth/refresh-coordinator';
+import { persistSessionToken } from '@/lib/auth/session-cookie';
+import { TokenRefreshError } from '@/lib/auth/token-manager';
 
 interface RouteContext {
   params: Promise<{ proxy: string[] }>;
@@ -125,11 +131,25 @@ async function proxyToArkApi(
   // cookie is absent and getToken returns null, so no Authorization header is
   // added — matching the prior in-process middleware (proxy.ts before commit
   // b16307122) so SSO deployments keep authenticating against ark-api.
-  const token = await getToken({
+  let token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,
     cookieName: SESSION_COOKIE_NAME,
   });
+
+  if (token && isAccessTokenExpiring(token)) {
+    try {
+      token = await refreshAccessToken(token);
+      await persistSessionToken(token);
+    } catch (error) {
+      const code =
+        error instanceof TokenRefreshError ? error.code : 'refresh_failed';
+      console.error(
+        `[proxy] access token refresh failed (${code})`,
+        error instanceof Error ? (error.cause ?? error.message) : error,
+      );
+    }
+  }
 
   const headers = new Headers(request.headers);
   headers.set('X-Forwarded-Prefix', '/api');

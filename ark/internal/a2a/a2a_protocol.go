@@ -298,6 +298,14 @@ func IsUserRejection(task *arkv1alpha1.A2ATask) bool {
 	return cond != nil && cond.Reason == ConditionReasonApprovalRejected
 }
 
+// IsHITLApprovalTask reports whether the A2ATask originated from a human-in-the-loop
+// approval flow. Approval tasks are created directly by the executor and carry no
+// A2AServerRef; external A2A agent tasks (blocking or streaming) always reference the
+// A2AServer they poll. Only approval tasks are resumable by the completions executor.
+func IsHITLApprovalTask(task *arkv1alpha1.A2ATask) bool {
+	return task.Spec.A2AServerRef == nil
+}
+
 // IsResumableDenial reports whether the agent should resume to handle the denial
 // gracefully. Covers both explicit user rejection and timeout-driven rejection so
 // that the agent can respond to the user in either case.

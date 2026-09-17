@@ -1,21 +1,31 @@
 'use client';
 
 import copy from 'copy-to-clipboard';
-import { Check, Copy } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Check, ContentCopy } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { IconActionButton } from '@/components/ui/icon-action-button';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
+import { toast } from '@/components/ui/sonner';
 import { type APIKeyCreateResponse } from '@/lib/services';
+
+const COPY_RESET_MS = 2000;
+
+type CopyTarget = 'public' | 'secret' | 'both';
 
 interface APIKeyCreatedDialogProps {
   open: boolean;
@@ -23,41 +33,80 @@ interface APIKeyCreatedDialogProps {
   apiKey: APIKeyCreateResponse;
 }
 
+interface CredentialFieldProps {
+  readonly id: string;
+  readonly label: string;
+  readonly value: string;
+  readonly copied: boolean;
+  readonly onCopy: () => void;
+}
+
+function CredentialField({
+  id,
+  label,
+  value,
+  copied,
+  onCopy,
+}: Readonly<CredentialFieldProps>) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id} className="label-regular-primary text-fg-secondary">
+        {label}
+      </Label>
+      <InputGroup variant="inline" size="default">
+        <InputGroupInput
+          id={id}
+          variant="inline"
+          size="default"
+          value={value}
+          readOnly
+          onClick={event => event.currentTarget.select()}
+          className="cursor-pointer"
+        />
+        <InputGroupAddon align="inline-end">
+          <IconActionButton
+            label={copied ? `${label} copied` : `Copy ${label}`}
+            tooltip={copied ? 'Copied' : `Copy ${label}`}
+            onClick={onCopy}>
+            {copied ? <Check /> : <ContentCopy />}
+          </IconActionButton>
+        </InputGroupAddon>
+      </InputGroup>
+    </div>
+  );
+}
+
 export function APIKeyCreatedDialog({
   open,
   onOpenChange,
   apiKey,
 }: APIKeyCreatedDialogProps) {
-  const [copiedPublic, setCopiedPublic] = useState(false);
-  const [copiedSecret, setCopiedSecret] = useState(false);
-  const [copiedBoth, setCopiedBoth] = useState(false);
+  const [copiedTarget, setCopiedTarget] = useState<CopyTarget | null>(null);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const copyToClipboard = (
-    text: string,
-    type: 'public' | 'secret' | 'both',
-  ) => {
-    copy(text);
-
-    if (type === 'public') {
-      setCopiedPublic(true);
-      setTimeout(() => setCopiedPublic(false), 2000);
-    } else if (type === 'secret') {
-      setCopiedSecret(true);
-      setTimeout(() => setCopiedSecret(false), 2000);
-    } else {
-      setCopiedBoth(true);
-      setTimeout(() => setCopiedBoth(false), 2000);
+  const clearResetTimer = () => {
+    if (resetTimer.current) {
+      clearTimeout(resetTimer.current);
+      resetTimer.current = null;
     }
   };
 
-  const selectAllText = (e: React.MouseEvent<HTMLInputElement>) => {
-    e.currentTarget.select();
+  useEffect(() => clearResetTimer, []);
+
+  const copyToClipboard = (text: string, target: CopyTarget) => {
+    if (!copy(text)) {
+      toast.error('Failed to copy to clipboard');
+      return;
+    }
+    setCopiedTarget(target);
+    // One shared marker, so an earlier timer must not clear a later tick.
+    clearResetTimer();
+    resetTimer.current = setTimeout(() => setCopiedTarget(null), COPY_RESET_MS);
   };
 
   const handleClose = () => {
-    setCopiedPublic(false);
-    setCopiedSecret(false);
-    setCopiedBoth(false);
+    clearResetTimer();
+    setCopiedTarget(null);
     onOpenChange(false);
   };
 
@@ -65,86 +114,39 @@ export function APIKeyCreatedDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-[586px]">
         <DialogHeader>
           <DialogTitle>API Key Created Successfully</DialogTitle>
           <DialogDescription>
-            Your API key &ldquo;{apiKey.name}&rdquo; has been created. Save
-            these credentials securely.
+            The secret key will only be shown once. Save it securely now.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <Alert className="border-amber-200 bg-amber-50">
-            <AlertDescription className="text-amber-800">
-              ⚠️ <strong>Important:</strong> The secret key will only be shown
-              once. Save it securely now.
-            </AlertDescription>
-          </Alert>
-
-          <div className="space-y-2">
-            <Label htmlFor="public-key">Public Key</Label>
-            <div className="flex gap-2">
-              <Input
-                id="public-key"
-                value={apiKey.public_key}
-                readOnly
-                onClick={selectAllText}
-                className="cursor-pointer font-mono text-sm"
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => copyToClipboard(apiKey.public_key, 'public')}>
-                {copiedPublic ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="secret-key">Secret Key</Label>
-            <div className="flex gap-2">
-              <Input
-                id="secret-key"
-                value={apiKey.secret_key}
-                readOnly
-                onClick={selectAllText}
-                className="cursor-pointer font-mono text-sm"
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => copyToClipboard(apiKey.secret_key, 'secret')}>
-                {copiedSecret ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <Button
-              variant="outline"
-              onClick={() => copyToClipboard(bothCredentials, 'both')}
-              className="flex-1">
-              {copiedBoth ? (
-                <Check className="mr-2 h-4 w-4" />
-              ) : (
-                <Copy className="mr-2 h-4 w-4" />
-              )}
-              Copy Both
-            </Button>
-            <Button onClick={handleClose} className="flex-1">
-              Done
-            </Button>
-          </div>
+        <div className="flex flex-col gap-6">
+          <CredentialField
+            id="public-key"
+            label="Public Key"
+            value={apiKey.public_key}
+            copied={copiedTarget === 'public'}
+            onCopy={() => copyToClipboard(apiKey.public_key, 'public')}
+          />
+          <CredentialField
+            id="secret-key"
+            label="Secret Key"
+            value={apiKey.secret_key}
+            copied={copiedTarget === 'secret'}
+            onCopy={() => copyToClipboard(apiKey.secret_key, 'secret')}
+          />
         </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => copyToClipboard(bothCredentials, 'both')}>
+            {copiedTarget === 'both' ? 'Copied' : 'Copy both'}
+          </Button>
+          <Button onClick={handleClose}>Done</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

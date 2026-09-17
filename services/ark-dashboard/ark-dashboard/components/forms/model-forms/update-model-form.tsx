@@ -18,8 +18,13 @@ import { ModelConfiguratorForm } from './model-configuration-form';
 import type { DisabledFields } from './model-configuration-form-context';
 import { ModelConfigurationFormContext } from './model-configuration-form-context';
 import type { FormValues } from './schema';
-import { schema } from './schema';
-import { createModelUpdateConfig, getDefaultValuesForUpdate } from './utils';
+import { createSchema } from './schema';
+import {
+  buildBaseUrlMode,
+  createModelUpdateConfig,
+  getBaseUrlState,
+  getDefaultValuesForUpdate,
+} from './utils';
 
 const formId = 'model-update-form';
 
@@ -37,9 +42,11 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const { readOnlyMode, namespace } = useNamespace();
 
   const defaultValues = getDefaultValuesForUpdate(model);
+  const baseUrlState = getBaseUrlState(model, model.provider);
+  const baseUrlMode = buildBaseUrlMode(baseUrlState);
   const form = useForm<FormValues>({
     mode: 'onTouched',
-    resolver: zodResolver(schema),
+    resolver: zodResolver(createSchema(baseUrlState.kind === 'literal')),
     defaultValues,
   });
 
@@ -50,7 +57,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const { mutateAsync, isPending } = useUpdateModelById();
 
   const onSubmit = (formValues: FormValues) => {
-    const config = createModelUpdateConfig(formValues);
+    const config = createModelUpdateConfig(formValues, baseUrlMode);
     mutateAsync({
       id: model.id,
       model: formValues.model,
@@ -75,6 +82,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
           defaultValues.provider === 'bedrock'
             ? defaultValues.bedrockAuthMethod
             : undefined,
+        baseUrlState,
       }}>
       <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">

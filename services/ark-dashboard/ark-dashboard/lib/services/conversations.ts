@@ -119,7 +119,6 @@ export const conversationsService = {
       params.sessionId,
       params.conversationId,
       undefined,
-      undefined,
       params.parameters
     );
   },

@@ -142,7 +142,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'my-a2a-server');
 
-      const descInput = screen.getByPlaceholderText('What this server does');
+      const descInput = screen.getByPlaceholderText('what this server does');
       await user.type(descInput, 'My A2A server description');
 
       const urlInput = screen.getByPlaceholderText(
@@ -183,6 +183,56 @@ describe('A2AEditor', () => {
 
       const newNameInput = screen.getByPlaceholderText('e.g., deep-research');
       expect(newNameInput).toHaveValue('');
+    });
+
+    it('should not close while a save is in flight', async () => {
+      const user = userEvent.setup();
+      const onOpenChange = vi.fn();
+      let resolveSave: () => void = () => {};
+      const onSave = vi.fn(
+        () =>
+          new Promise<void>(resolve => {
+            resolveSave = resolve;
+          }),
+      );
+      render(
+        <A2AEditor
+          {...defaultProps}
+          onOpenChange={onOpenChange}
+          onSave={onSave}
+        />,
+      );
+
+      const nameInput = screen.getByPlaceholderText('e.g., deep-research');
+      await user.type(nameInput, 'my-a2a-server');
+
+      const urlInput = screen.getByPlaceholderText(
+        /https:\/\/agentspace-a2a/i,
+      );
+      await user.type(urlInput, 'https://example.com/api');
+
+      await user.click(screen.getByRole('button', { name: /create/i }));
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalled();
+      });
+
+      await user.keyboard('{Escape}');
+
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(nameInput).toHaveValue('my-a2a-server');
+
+      resolveSave();
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /create/i }),
+        ).not.toBeDisabled();
+      });
+
+      await user.keyboard('{Escape}');
+
+      expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
     it('should call onOpenChange when cancel is clicked', async () => {

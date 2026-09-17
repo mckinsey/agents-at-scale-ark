@@ -55,6 +55,7 @@ func (p *PostgreSQLBackend) handleWALMessage(conn *pgconn.PgConn, rawMsg pgproto
 	if !ok {
 		return nil
 	}
+	walLastMessageTimestamp.SetToCurrentTime()
 
 	switch copyData.Data[0] {
 	case pglogrepl.PrimaryKeepaliveMessageByteID:

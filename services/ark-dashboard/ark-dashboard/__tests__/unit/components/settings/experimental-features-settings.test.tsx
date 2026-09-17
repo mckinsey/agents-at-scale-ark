@@ -16,12 +16,14 @@ describe('ExperimentalFeaturesSettings', () => {
     );
   };
 
-  it('renders all group labels from experimentalFeatureGroups', () => {
+  it('renders a category badge for every feature in each group', () => {
     renderWithStore();
 
     for (const group of experimentalFeatureGroups) {
       if (group.groupLabel) {
-        expect(screen.getByText(group.groupLabel)).toBeInTheDocument();
+        expect(screen.getAllByText(group.groupLabel)).toHaveLength(
+          group.features.length,
+        );
       }
     }
   });

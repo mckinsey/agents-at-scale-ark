@@ -2,7 +2,6 @@ import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
-// Use the generated type from OpenAPI
 export type Secret = components['schemas']['SecretResponse'];
 export type SecretListResponse = components['schemas']['SecretListResponse'];
 export type SecretCreateRequest = components['schemas']['SecretCreateRequest'];
@@ -10,9 +9,7 @@ export type SecretUpdateRequest = components['schemas']['SecretUpdateRequest'];
 export type SecretDetailResponse =
   components['schemas']['SecretDetailResponse'];
 
-// Service with list operation
 export const secretsService = {
-  // Get all secrets for a given namespace
   async getAll(namespace: string): Promise<Secret[]> {
     const response = await apiClient.get<SecretListResponse>(
       `/api/v1/secrets`,
@@ -21,26 +18,16 @@ export const secretsService = {
     return response.items;
   },
 
-  // Get a single secret's details, including the names of its keys
   async get(namespace: string, name: string): Promise<SecretDetailResponse> {
     return apiClient.get<SecretDetailResponse>(`/api/v1/secrets/${name}`, {
       params: { namespace },
     });
   },
 
-  // Create a new secret
   async create(
     namespace: string,
-    name: string,
-    password: string,
+    request: SecretCreateRequest,
   ): Promise<SecretDetailResponse> {
-    const request: SecretCreateRequest = {
-      name,
-      string_data: {
-        token: password,
-      },
-      type: 'Opaque',
-    };
     const response = await apiClient.post<SecretDetailResponse>(
       `/api/v1/secrets`,
       request,
@@ -48,22 +35,21 @@ export const secretsService = {
     );
     trackEvent({
       name: 'secret_created',
-      properties: { secretName: name },
+      properties: { secretName: request.name },
     });
     return response;
   },
 
-  // Update an existing secret
+  /**
+   * Replaces a secret's metadata (and value when `string_data` is set). This is
+   * a full replace, not a partial update: omitting `description` or `alias`
+   * clears them, so callers must send the complete desired state on every call.
+   */
   async update(
     namespace: string,
     name: string,
-    password: string,
+    request: SecretUpdateRequest,
   ): Promise<SecretDetailResponse> {
-    const request: SecretUpdateRequest = {
-      string_data: {
-        token: password,
-      },
-    };
     const response = await apiClient.put<SecretDetailResponse>(
       `/api/v1/secrets/${name}`,
       request,
@@ -76,7 +62,6 @@ export const secretsService = {
     return response;
   },
 
-  // Delete a secret
   async delete(namespace: string, name: string): Promise<void> {
     await apiClient.delete(`/api/v1/secrets/${name}`, {
       params: { namespace },

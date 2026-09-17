@@ -2,6 +2,7 @@ package completions
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/openai/openai-go"
 )
@@ -96,12 +97,50 @@ type anthropicContent struct {
 	Input map[string]interface{} `json:"input,omitempty"`
 }
 
-func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthropicSystemBlock) {
-	type collectedMessage struct {
-		role string
-		text string
+func assistantMessageName(msg Message) string {
+	openaiMsg := openai.ChatCompletionMessageParamUnion(msg)
+	if assistantMsg := openaiMsg.OfAssistant; assistantMsg != nil {
+		return assistantMsg.Name.Value
+	}
+	return ""
+}
+
+type collectedMessage struct {
+	role   string
+	text   string
+	merged bool
+}
+
+func anthropicTurnFor(msg Message, content, role string) collectedMessage {
+	msgRole := role
+	if role == RoleTool {
+		msgRole = RoleUser
 	}
 
+	text := content
+	if role == RoleAssistant {
+		if name := assistantMessageName(msg); name != "" {
+			text = fmt.Sprintf("%s: %s", name, content)
+		}
+	}
+
+	return collectedMessage{role: msgRole, text: text}
+}
+
+func mergeConsecutiveRoles(collected []collectedMessage) []collectedMessage {
+	merged := make([]collectedMessage, 0, len(collected))
+	for _, m := range collected {
+		if n := len(merged); n > 0 && merged[n-1].role == m.role {
+			merged[n-1].text = merged[n-1].text + "\n\n" + m.text
+			merged[n-1].merged = true
+			continue
+		}
+		merged = append(merged, m)
+	}
+	return merged
+}
+
+func collectAnthropicTurns(messages []Message) ([]collectedMessage, []anthropicSystemBlock) {
 	var collected []collectedMessage
 	var systemBlocks []anthropicSystemBlock
 
@@ -121,16 +160,18 @@ func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthr
 				},
 			}
 		case RoleUser, RoleAssistant, RoleTool:
-			msgRole := role
-			if role == RoleTool {
-				msgRole = RoleUser
-			}
-			collected = append(collected, collectedMessage{role: msgRole, text: content})
+			collected = append(collected, anthropicTurnFor(msg, content, role))
 		}
 	}
 
+	return mergeConsecutiveRoles(collected), systemBlocks
+}
+
+func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, []anthropicSystemBlock) {
+	collected, systemBlocks := collectAnthropicTurns(messages)
+
 	cacheIndex := -1
-	if len(collected) >= 2 {
+	if len(collected) >= 2 && !collected[len(collected)-2].merged {
 		cacheIndex = len(collected) - 2
 	}
 
