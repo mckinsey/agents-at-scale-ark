@@ -1,12 +1,25 @@
 {{- if .Values.memory.createMemoryCRD }}
+{{- $memoryName := include "ark-broker.fullname" . }}
+{{- if .Values.memory.setAsDefault }}
+{{- $memoryName = "default" }}
+{{- end }}
+{{- $existing := lookup "ark.mckinsey.com/v1alpha1" "Memory" .Release.Namespace $memoryName }}
+{{- $ownedByThisRelease := true }}
+{{- if $existing }}
+{{- $releaseName := dig "metadata" "annotations" "meta.helm.sh/release-name" "" $existing }}
+{{- $releaseNamespace := dig "metadata" "annotations" "meta.helm.sh/release-namespace" "" $existing }}
+{{- /* All three fields, because Helm's own checkOwnership requires all three:
+       matching on the annotations alone would render the Memory for an object
+       Helm then refuses to adopt, failing the install with the very
+       "invalid ownership metadata" error this guard exists to avoid. */}}
+{{- $managedBy := dig "metadata" "labels" "app.kubernetes.io/managed-by" "" $existing }}
+{{- $ownedByThisRelease = and (eq $releaseName .Release.Name) (eq $releaseNamespace .Release.Namespace) (eq $managedBy "Helm") }}
+{{- end }}
+{{- if or (not $existing) $ownedByThisRelease }}
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Memory
 metadata:
-  {{- if .Values.memory.setAsDefault }}
-  name: default
-  {{- else }}
-  name: {{ include "ark-broker.fullname" . }}
-  {{- end }}
+  name: {{ $memoryName }}
   labels:
     {{- include "ark-broker.labels" . | nindent 4 }}
 spec:
@@ -16,4 +29,5 @@ spec:
         name: {{ include "ark-broker.fullname" . }}
         namespace: {{ .Release.Namespace }}
         port: http
+{{- end }}
 {{- end }}
