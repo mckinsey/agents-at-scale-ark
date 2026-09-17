@@ -352,9 +352,11 @@ export class JsonFileStore<T> {
     }
   }
 
-  // Append only records above the last persisted sequence (O(delta)). A partial
-  // final line from a crash mid-write is skipped on load, and the stale header
-  // is corrected there via max(header, last record + 1).
+  // Append only records above the last persisted sequence: O(delta) I/O, with a
+  // cheap O(items) scan to select it. No mkdir — this runs only after a
+  // writeSnapshot set baselineWritten and created the directory. A partial final
+  // line from a crash mid-write is skipped on load, and the stale header is
+  // corrected there via max(header, last record + 1).
   private async appendDelta(items: T[], nextSequence: number): Promise<void> {
     if (!this.path) return;
     const delta = items.filter((item) => {

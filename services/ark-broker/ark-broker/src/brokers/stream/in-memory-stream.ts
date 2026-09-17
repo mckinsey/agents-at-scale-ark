@@ -118,6 +118,9 @@ export class InMemoryStream<T> implements Stream<T> {
   // the wall clock. Each item is sized at most once (memoized), and only when a
   // byte budget is set — so this is the single place serialization can happen,
   // and never on the append hot path.
+  // By design eviction does not touch the file, so the log lags memory until the
+  // next compaction: an evicted record can briefly reappear after an ungraceful
+  // restart (bounded by loadBounded, then cleared by init's maintain+compact).
   maintain(now: number = Date.now()): void {
     this.evictExpired(now);
     this.evictOverByteBudget();
