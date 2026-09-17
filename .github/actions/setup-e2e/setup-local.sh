@@ -193,11 +193,6 @@ HELM_ARGS=(
 if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   HELM_ARGS+=(
     --set storage.backend=postgresql
-    --set storage.postgresql.host=ark-storage-dev
-    --set storage.postgresql.port=5432
-    --set storage.postgresql.database=ark
-    --set storage.postgresql.user=postgres
-    --set storage.postgresql.passwordSecretName=ark-storage-dev-password
   )
 fi
 

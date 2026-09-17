@@ -308,16 +308,17 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 
 	// Carry over server-owned identity the client cannot change; a PUT body omitting these
 	// would blank them, and hand admission below an object with empty uid/creationTimestamp.
-	// Mirrors upstream rest.BeforeUpdate.
+	// Mirrors upstream rest.BeforeUpdate. The namespace is always taken from the stored
+	// object: for namespaced kinds it is the request namespace the object was fetched under,
+	// for cluster-scoped kinds it is empty, so a stray metadata.namespace in the body is
+	// normalized away on update just as Create clears it.
 	if updatedAccessor.GetUID() == "" {
 		updatedAccessor.SetUID(existingAccessor.GetUID())
 	}
 	if ts := updatedAccessor.GetCreationTimestamp(); ts.IsZero() {
 		updatedAccessor.SetCreationTimestamp(existingAccessor.GetCreationTimestamp())
 	}
-	if updatedAccessor.GetNamespace() == "" {
-		updatedAccessor.SetNamespace(existingAccessor.GetNamespace())
-	}
+	updatedAccessor.SetNamespace(existingAccessor.GetNamespace())
 
 	// `updated` is passed live, not copied: AdmissionStorage runs Ark's defaulting inside this
 	// callback, so copying would silently drop those defaults. Upstream can copy because its

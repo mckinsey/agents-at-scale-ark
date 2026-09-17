@@ -58,6 +58,27 @@ func TestGenericStorage_ClusterScoped_CreateStoresUnderEmptyNamespace(t *testing
 	}
 }
 
+func TestGenericStorage_ClusterScoped_UpdateClearsStrayNamespace(t *testing.T) {
+	t.Parallel()
+	storage, backend := newClusterScopedTestStorage()
+	backend.objects["ArkConfig//default"] = &arkv1alpha1.ArkConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "default", ResourceVersion: "1"},
+	}
+
+	updated := &arkv1alpha1.ArkConfig{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "leaked"}}
+	result, _, err := storage.Update(contextWithNamespace(testNS()), "default", &simpleUpdatedObjectInfo{obj: updated}, nil, nil, false, &metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	if ns := result.(*arkv1alpha1.ArkConfig).Namespace; ns != "" {
+		t.Errorf("returned namespace = %q, want empty", ns)
+	}
+	if ns := backend.objects["ArkConfig//default"].(*arkv1alpha1.ArkConfig).Namespace; ns != "" {
+		t.Errorf("stored namespace = %q, want empty", ns)
+	}
+}
+
 func TestGenericStorage_ClusterScoped_GetIgnoresRequestNamespace(t *testing.T) {
 	t.Parallel()
 	storage, backend := newClusterScopedTestStorage()
