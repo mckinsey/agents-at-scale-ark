@@ -24,9 +24,12 @@ import {
   Schedule,
   Search as SearchIcon,
   SmartToy,
+  Terminal,
   Terminal2,
 } from '@/components/icons';
 import {
+  LearnMoreButton,
+  ResourceEmptyState,
   ResourceErrorState,
   ResourceNoResults,
   ResourceSearchInput,
@@ -43,6 +46,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import {
   mapArgoWorkflowToSession,
@@ -239,7 +243,7 @@ function StatusLabel({ status }: { readonly status: StepStatus }) {
 
 function TreeConnector({ isLast }: { readonly isLast: boolean }) {
   return (
-    <div className="relative h-10 w-5 shrink-0" aria-hidden="true">
+    <div className="relative w-5 shrink-0 self-stretch" aria-hidden="true">
       <div
         className={cn(
           'bg-stroke-divider absolute top-0 left-0 w-px',
@@ -253,6 +257,7 @@ function TreeConnector({ isLast }: { readonly isLast: boolean }) {
 
 function TraceRow({
   title,
+  subtitle,
   status,
   duration,
   isOpen,
@@ -260,6 +265,7 @@ function TraceRow({
   onToggle,
 }: {
   readonly title: string;
+  readonly subtitle?: string;
   readonly status: StepStatus;
   readonly duration?: string;
   readonly isOpen: boolean;
@@ -276,13 +282,22 @@ function TraceRow({
         ) : (
           <span className="size-6 shrink-0" aria-hidden="true" />
         )}
-        <span
-          className={cn(
-            'label-regular-primary min-w-0 flex-1 truncate text-left',
-            isEmphasised ? 'text-fg-primary' : 'text-fg-secondary',
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            className={cn(
+              'label-regular-primary min-w-0 truncate text-left',
+              isEmphasised ? 'text-fg-primary' : 'text-fg-secondary',
+            )}
+            title={title}>
+            {title}
+          </span>
+          {subtitle && (
+            <span
+              className="paragraph-small-primary text-fg-tertiary min-w-0 truncate text-left"
+              title={subtitle}>
+              {subtitle}
+            </span>
           )}
-          title={title}>
-          {title}
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-3">
@@ -307,7 +322,7 @@ function TraceRow({
       type="button"
       onClick={onToggle}
       aria-expanded={isOpen}
-      aria-label={`${title}, ${isOpen ? 'hide' : 'show'} details`}
+      aria-label={`${title}, ${isOpen ? 'collapse' : 'expand'}`}
       className={cn(
         rowClass,
         'hover:bg-stateslayer-overlay-hover cursor-pointer text-left',
@@ -472,7 +487,7 @@ function WorkflowStepDetail({
       {detail.outputs && Object.keys(detail.outputs).length > 0 && (
         <LogEntryBlock icon={<InsertDriveFile />} label="Outputs">
           {Object.entries(detail.outputs).map(([key, value]) => (
-            <LogEntryRow key={key} label={key} value={value} />
+            <LogEntryRow key={key} label={`${key}:`} value={value} />
           ))}
         </LogEntryBlock>
       )}
@@ -565,7 +580,13 @@ function WorkflowStepDetail({
   );
 }
 
-function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
+function TeamStepDetail({
+  detail,
+  message,
+}: {
+  detail: TeamStepDetail;
+  message?: string;
+}) {
   return (
     <div className="flex w-full min-w-0 flex-col pl-10">
       {detail.model && (
@@ -632,6 +653,16 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
           </span>
         </LogEntryBlock>
       )}
+
+      {message && (
+        <LogEntryBlock icon={<ErrorIcon />} label="Message">
+          <div className="bg-fill-onsurface-ui-1 w-full p-2">
+            <p className="paragraph-regular-primary text-fg-secondary break-words">
+              {message}
+            </p>
+          </div>
+        </LogEntryBlock>
+      )}
     </div>
   );
 }
@@ -648,6 +679,8 @@ function WorkflowStepNode({
   const [showDetail, setShowDetail] = useState(false);
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
+
+  const isExpandable = Boolean(hasDetail || hasChildren);
 
   const isParallelContainer =
     step.type === 'steps' &&
@@ -672,7 +705,7 @@ function WorkflowStepNode({
 
   return (
     <div className={cn('flex w-full min-w-0', depth > 0 && 'pl-5')}>
-      {depth > 0 && <TreeConnector isLast={isLast && !hasChildren} />}
+      {depth > 0 && <TreeConnector isLast={isLast} />}
       <div className="flex min-w-0 flex-1 flex-col">
         <TraceRow
           title={step.displayName}
@@ -680,7 +713,7 @@ function WorkflowStepNode({
           duration={step.duration}
           isOpen={showDetail}
           isEmphasised={showDetail || !!hasChildren}
-          onToggle={hasDetail ? () => setShowDetail(!showDetail) : undefined}
+          onToggle={isExpandable ? () => setShowDetail(!showDetail) : undefined}
         />
 
         {hasDetail && showDetail && (
@@ -688,6 +721,7 @@ function WorkflowStepNode({
         )}
 
         {hasChildren &&
+          showDetail &&
           step.children!.map((child, index) => (
             <WorkflowStepNode
               key={child.id}
@@ -713,23 +747,30 @@ function TeamStepNode({
   const [showDetail, setShowDetail] = useState(false);
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
+  const isExpandable = Boolean(hasDetail || step.message || hasChildren);
 
   return (
     <div className={cn('flex w-full min-w-0', depth > 0 && 'pl-5')}>
-      {depth > 0 && <TreeConnector isLast={isLast && !hasChildren} />}
+      {depth > 0 && <TreeConnector isLast={isLast} />}
       <div className="flex min-w-0 flex-1 flex-col">
         <TraceRow
           title={step.displayName}
+          subtitle={
+            step.agentName !== step.displayName ? step.agentName : undefined
+          }
           status={step.status}
           duration={step.duration}
           isOpen={showDetail}
           isEmphasised={showDetail || !!hasChildren}
-          onToggle={hasDetail ? () => setShowDetail(!showDetail) : undefined}
+          onToggle={isExpandable ? () => setShowDetail(!showDetail) : undefined}
         />
 
-        {hasDetail && showDetail && <TeamStepDetail detail={step.detail!} />}
+        {isExpandable && showDetail && (
+          <TeamStepDetail detail={step.detail ?? {}} message={step.message} />
+        )}
 
         {hasChildren &&
+          showDetail &&
           step.children!.map((child, index) => (
             <TeamStepNode
               key={child.id}
@@ -810,7 +851,7 @@ function SessionListItem({
       type="button"
       onClick={onClick}
       title={session.name}
-      aria-current={isSelected}
+      aria-current={isSelected ? 'true' : undefined}
       className={cn(
         'flex w-full min-w-0 cursor-pointer items-center px-3 py-2 text-left transition-colors',
         isSelected
@@ -856,8 +897,12 @@ const normalizeStatus = (status: string): string => {
   return statusMap[status.toLowerCase()] || status;
 };
 
-export function SessionsSection() {
-  const { namespace } = useNamespace();
+export function SessionsSection({
+  onCountChange,
+}: {
+  readonly onCountChange?: (count: number) => void;
+}) {
+  const { namespace, isNamespaceResolved } = useNamespace();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -986,6 +1031,12 @@ export function SessionsSection() {
     }
   }, [filteredAndSortedSessions, selectedSessionId]);
 
+  const sessionCount = filteredAndSortedSessions.length;
+
+  useEffect(() => {
+    onCountChange?.(sessionCount);
+  }, [onCountChange, sessionCount]);
+
   const selectedSessionFromList = filteredAndSortedSessions.find(
     s => s.id === selectedSessionId,
   );
@@ -1050,6 +1101,8 @@ export function SessionsSection() {
     (statusFilter && statusFilter !== 'all') ||
     sortOrder !== 'newest';
 
+  const isLoading = loading || !isNamespaceResolved;
+
   const clearFilters = () => {
     setWorkflowNameInput('');
     setWorkflowTemplateNameInput('');
@@ -1071,11 +1124,14 @@ export function SessionsSection() {
           <div
             className="flex w-full flex-col gap-2 lg:w-[197px]"
             ref={templateInputRef}>
-            <span className="label-regular-primary text-fg-secondary">
+            <label
+              htmlFor="workflow-template-filter"
+              className="label-regular-primary text-fg-secondary">
               Template
-            </span>
+            </label>
             <div className="relative">
               <Input
+                id="workflow-template-filter"
                 type="search"
                 placeholder="All templates"
                 value={workflowTemplateNameInput}
@@ -1124,14 +1180,18 @@ export function SessionsSection() {
           </div>
 
           <div className="flex w-full flex-col gap-2 lg:w-[197px]">
-            <span className="label-regular-primary text-fg-secondary">
+            <span
+              id="workflow-sort-label"
+              className="label-regular-primary text-fg-secondary">
               Sort
             </span>
             <Select
               items={sortOrderItems}
               value={sortOrder}
               onValueChange={value => setSortOrder(value as SortOrder)}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger
+                aria-labelledby="workflow-sort-label"
+                className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1145,14 +1205,18 @@ export function SessionsSection() {
           </div>
 
           <div className="flex w-full flex-col gap-2 lg:w-[197px]">
-            <span className="label-regular-primary text-fg-secondary">
+            <span
+              id="workflow-status-label"
+              className="label-regular-primary text-fg-secondary">
               Status
             </span>
             <Select
               items={statusFilterItems}
               value={statusFilter || 'all'}
               onValueChange={value => setStatusFilter(value as string)}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger
+                aria-labelledby="workflow-status-label"
+                className="w-full">
                 <SelectValue placeholder="All" />
               </SelectTrigger>
               <SelectContent>
@@ -1179,7 +1243,7 @@ export function SessionsSection() {
             title="Couldn't load workflow runs"
             description={`Error: ${error.message}`}
           />
-        ) : loading ? (
+        ) : isLoading ? (
           <div className="text-fg-secondary flex flex-1 flex-col items-center justify-center gap-4">
             <Spinner className="text-fg-tertiary" />
             <span className="label-large-primary">Loading sessions...</span>
@@ -1212,25 +1276,32 @@ export function SessionsSection() {
               )}
             </div>
           </div>
-        ) : (
+        ) : hasActiveFilters ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4">
-            {hasActiveFilters ? (
-              <>
-                <ResourceNoResults
-                  icon={<SearchIcon className="size-full" />}
-                  message="No workflow runs found matching your filters"
-                />
-                <Button variant="outline" onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              </>
-            ) : (
-              <ResourceNoResults
-                icon={<AccountTree className="size-full" />}
-                message={`No ${sourceFilter === 'all' ? '' : sourceFilter} workflow runs to display`}
-              />
-            )}
+            <ResourceNoResults
+              icon={<SearchIcon className="size-full" />}
+              message="No workflow runs found matching your filters"
+            />
+            <Button variant="outline" onClick={clearFilters}>
+              Clear filters
+            </Button>
           </div>
+        ) : (
+          <ResourceEmptyState
+            icon={<Terminal className="size-full" />}
+            title="No workflow runs yet"
+            description={
+              <>
+                <p className="mb-2">
+                  You haven&apos;t created any sessions yet.
+                </p>
+                <p>
+                  Get started by creating your session to see workflow runs.
+                </p>
+              </>
+            }
+            actions={<LearnMoreButton href={ARGO_WORKFLOWS_DOCS_URL} />}
+          />
         )}
       </div>
     </ErrorBoundary>

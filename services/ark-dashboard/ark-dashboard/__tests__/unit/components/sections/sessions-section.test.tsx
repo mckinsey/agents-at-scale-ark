@@ -10,13 +10,10 @@ import {
 } from '@/lib/services/workflow-mapper';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 
+const mockUseNamespace = vi.fn();
+
 vi.mock('@/providers/NamespaceProvider', () => ({
-  useNamespace: () => ({
-    namespace: 'default',
-    isNamespaceResolved: true,
-    isPending: false,
-    readOnlyMode: false,
-  }),
+  useNamespace: () => mockUseNamespace(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -221,6 +218,12 @@ describe('SessionsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     currentSearch = '';
+    mockUseNamespace.mockReturnValue({
+      namespace: 'default',
+      isNamespaceResolved: true,
+      isPending: false,
+      readOnlyMode: false,
+    });
     mockRouter.replace.mockImplementation((url: string) => {
       currentSearch = url.split('?')[1] ?? '';
     });
@@ -299,6 +302,31 @@ describe('SessionsSection', () => {
     } as any);
   });
 
+  describe('Namespace', () => {
+    it('should use the namespace resolved by the provider', () => {
+      render(<SessionsSection />);
+
+      expect(useWorkflows).toHaveBeenCalledWith('default', expect.any(Object));
+    });
+
+    it('should not fall back to an assumed namespace before one resolves', () => {
+      mockUseNamespace.mockReturnValue({
+        namespace: '',
+        isNamespaceResolved: false,
+        isPending: true,
+        readOnlyMode: false,
+      });
+
+      render(<SessionsSection />);
+
+      expect(useWorkflows).toHaveBeenCalledWith('', expect.any(Object));
+      expect(useWorkflows).not.toHaveBeenCalledWith(
+        'default',
+        expect.any(Object),
+      );
+    });
+  });
+
   describe('Loading, Empty, and Error States', () => {
     it('should show loading spinner when loading', () => {
       vi.mocked(useWorkflows).mockReturnValue({
@@ -323,9 +351,7 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      expect(
-        screen.getByText('No workflow runs to display'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('No workflow runs yet')).toBeInTheDocument();
     });
 
     it('should show filtered empty state when filters applied', async () => {
@@ -398,7 +424,13 @@ describe('SessionsSection', () => {
 
       const sessionCards = screen
         .getAllByRole('button')
-        .filter(button => button.hasAttribute('aria-current'));
+        .filter(button =>
+          [
+            'test-workflow-123',
+            'failed-workflow-456',
+            'running-workflow-789',
+          ].includes(button.title),
+        );
       expect(sessionCards).toHaveLength(3);
     });
 
@@ -469,8 +501,7 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const statusSelect = comboboxes[1];
+      const statusSelect = screen.getByRole('combobox', { name: 'Status' });
       await user.click(statusSelect);
 
       const failedOption = await screen.findByRole('option', {
@@ -576,8 +607,7 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const sortSelect = comboboxes[0];
+      const sortSelect = screen.getByRole('combobox', { name: 'Sort' });
       await user.click(sortSelect);
 
       const oldestOption = await screen.findByRole('option', {
@@ -604,7 +634,7 @@ describe('SessionsSection', () => {
 
       await waitFor(() => {
         const expandButtons = screen.getAllByRole('button', {
-          name: /show details|hide details/i,
+          name: /expand|collapse/i,
         });
         expect(expandButtons).toHaveLength(2);
       });
@@ -625,7 +655,7 @@ describe('SessionsSection', () => {
       });
 
       const expandButton = screen.getAllByRole('button', {
-        name: /show details/i,
+        name: /expand/i,
       })[0];
       await user.click(expandButton);
 
@@ -655,7 +685,7 @@ describe('SessionsSection', () => {
       });
 
       const expandButton = screen.getAllByRole('button', {
-        name: /show details/i,
+        name: /expand/i,
       })[0];
       await user.click(expandButton);
 
@@ -686,7 +716,7 @@ describe('SessionsSection', () => {
       });
 
       const expandButton = screen.getAllByRole('button', {
-        name: /show details/i,
+        name: /expand/i,
       })[0];
       await user.click(expandButton);
 
@@ -713,7 +743,7 @@ describe('SessionsSection', () => {
       });
 
       const expandButton = screen.getAllByRole('button', {
-        name: /show details/i,
+        name: /expand/i,
       })[0];
       await user.click(expandButton);
 
@@ -748,7 +778,7 @@ describe('SessionsSection', () => {
       });
 
       const expandButton = screen.getAllByRole('button', {
-        name: /show details/i,
+        name: /expand/i,
       })[0];
       await user.click(expandButton);
 
@@ -854,8 +884,7 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const statusSelect = comboboxes[1];
+      const statusSelect = screen.getByRole('combobox', { name: 'Status' });
       await user.click(statusSelect);
 
       const failedOption = await screen.findByRole('option', {
@@ -875,8 +904,7 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const sortSelect = comboboxes[0];
+      const sortSelect = screen.getByRole('combobox', { name: 'Sort' });
       await user.click(sortSelect);
 
       const oldestOption = await screen.findByRole('option', {
