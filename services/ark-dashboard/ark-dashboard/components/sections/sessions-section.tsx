@@ -709,13 +709,6 @@ function WorkflowStepNode({
     );
   }
 
-  const isParallelNode =
-    step.type === 'dag' ||
-    step.type === 'retry' ||
-    (hasChildren && step.children!.length > 1);
-
-  const childDepth = isParallelNode ? depth + 1 : depth;
-
   return (
     <div className={cn('flex w-full min-w-0', depth > 0 && 'pl-5')}>
       {depth > 0 && <TreeConnector isLast={isLast} />}
