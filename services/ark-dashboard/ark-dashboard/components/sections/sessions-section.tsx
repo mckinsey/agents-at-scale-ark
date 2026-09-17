@@ -590,8 +590,8 @@ function TeamStepDetail({
   detail,
   message,
 }: {
-  detail: TeamStepDetail;
-  message?: string;
+  readonly detail: TeamStepDetail;
+  readonly message?: string;
 }) {
   return (
     <div className="flex w-full min-w-0 flex-col pl-10">
@@ -762,7 +762,7 @@ function TeamStepNode({
         <TraceRow
           title={step.displayName}
           subtitle={
-            step.agentName !== step.displayName ? step.agentName : undefined
+            step.agentName === step.displayName ? undefined : step.agentName
           }
           status={step.status}
           duration={step.duration}
@@ -867,12 +867,9 @@ function SessionListItem({
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-1">
-            <span
-              role="img"
-              data-testid="session-status"
-              data-status={session.status}
-              aria-label={STATUS_LABELS[session.status]}>
+            <span data-testid="session-status" data-status={session.status}>
               {getStatusIcon(session.status)}
+              <span className="sr-only">{STATUS_LABELS[session.status]}</span>
             </span>
             <span className="paragraph-small-primary text-fg-secondary">
               {new Date(session.startedAt).toLocaleString()}
@@ -906,6 +903,150 @@ const normalizeStatus = (status: string): string => {
 
   return statusMap[status.toLowerCase()] || status;
 };
+
+function TemplateOptions({
+  templateNames,
+  filteredTemplateNames,
+  query,
+  onSelect,
+}: {
+  readonly templateNames: string[];
+  readonly filteredTemplateNames: string[];
+  readonly query: string;
+  readonly onSelect: (templateName: string) => void;
+}) {
+  if (templateNames.length === 0) {
+    return (
+      <div className="paragraph-small-primary text-fg-tertiary px-2 py-3 text-center">
+        No workflow templates found yet.
+        <br />
+        Type to enter a custom value.
+      </div>
+    );
+  }
+
+  if (filteredTemplateNames.length === 0) {
+    return (
+      <div className="paragraph-small-primary text-fg-tertiary px-2 py-3 text-center">
+        No templates match &ldquo;{query}&rdquo;
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-h-[300px] overflow-y-auto py-1">
+      {filteredTemplateNames.map(templateName => (
+        <button
+          key={templateName}
+          type="button"
+          onClick={() => onSelect(templateName)}
+          className="hover:bg-stateslayer-overlay-hover paragraph-regular-primary text-fg-primary w-full cursor-pointer truncate px-2 py-1.5 text-left transition-colors">
+          {templateName}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SessionsBody({
+  error,
+  isLoading,
+  sessions,
+  selectedSessionId,
+  onSelectSession,
+  selectedSession,
+  isDetailLoading,
+  hasActiveFilters,
+  onClearFilters,
+}: {
+  readonly error: Error | null;
+  readonly isLoading: boolean;
+  readonly sessions: Session[];
+  readonly selectedSessionId: string | null;
+  readonly onSelectSession: (sessionId: string) => void;
+  readonly selectedSession?: Session;
+  readonly isDetailLoading: boolean;
+  readonly hasActiveFilters: boolean;
+  readonly onClearFilters: () => void;
+}) {
+  if (error) {
+    return (
+      <ResourceErrorState
+        title="Couldn't load workflow runs"
+        description={`Error: ${error.message}`}
+      />
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="text-fg-secondary flex flex-1 flex-col items-center justify-center gap-4">
+        <Spinner className="text-fg-tertiary" />
+        <span className="label-large-primary">Loading sessions...</span>
+      </div>
+    );
+  }
+
+  if (sessions.length === 0 && hasActiveFilters) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4">
+        <ResourceNoResults
+          icon={<SearchIcon className="size-full" />}
+          message="No workflow runs found matching your filters"
+        />
+        <Button variant="outline" onClick={onClearFilters}>
+          Clear filters
+        </Button>
+      </div>
+    );
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <ResourceEmptyState
+        icon={<Terminal className="size-full" />}
+        title="No workflow runs yet"
+        description={
+          <>
+            <p className="mb-2">You haven&apos;t created any sessions yet.</p>
+            <p>Get started by creating your session to see workflow runs.</p>
+          </>
+        }
+        actions={<LearnMoreButton href={ARGO_WORKFLOWS_DOCS_URL} />}
+      />
+    );
+  }
+
+  return (
+    <div className="flex max-h-[calc(100vh-10rem)] min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-6">
+      <div className="flex h-full min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto lg:w-[261px]">
+        {sessions.map(session => (
+          <SessionListItem
+            key={session.id}
+            session={session}
+            isSelected={session.id === selectedSessionId}
+            onClick={() => onSelectSession(session.id)}
+          />
+        ))}
+      </div>
+      <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+        {selectedSession ? (
+          <SessionDetailView
+            session={selectedSession}
+            isLoading={isDetailLoading}
+          />
+        ) : (
+          <div className="border-fill-onsurface-ui-1 flex flex-1 items-center justify-center border">
+            <ResourceNoResults
+              icon={<AccountTree className="size-full" />}
+              message="Select a session to view details"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function SessionsSection({
   onCountChange,
@@ -1158,33 +1299,15 @@ export function SessionsSection({
               />
               {templateDropdownOpen && (
                 <div className="bg-surface-secondary border-stroke-divider animate-in fade-in-0 shadow-elevation-2 absolute z-50 mt-1 w-full border">
-                  {uniqueWorkflowTemplateNames.length === 0 ? (
-                    <div className="paragraph-small-primary text-fg-tertiary px-2 py-3 text-center">
-                      No workflow templates found yet.
-                      <br />
-                      Type to enter a custom value.
-                    </div>
-                  ) : filteredTemplateNames.length > 0 ? (
-                    <div className="max-h-[300px] overflow-y-auto py-1">
-                      {filteredTemplateNames.map(templateName => (
-                        <button
-                          key={templateName}
-                          type="button"
-                          onClick={() => {
-                            setWorkflowTemplateNameInput(templateName);
-                            setTemplateDropdownOpen(false);
-                          }}
-                          className="hover:bg-stateslayer-overlay-hover paragraph-regular-primary text-fg-primary w-full cursor-pointer truncate px-2 py-1.5 text-left transition-colors">
-                          {templateName}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="paragraph-small-primary text-fg-tertiary px-2 py-3 text-center">
-                      No templates match &ldquo;{workflowTemplateNameInput}
-                      &rdquo;
-                    </div>
-                  )}
+                  <TemplateOptions
+                    templateNames={uniqueWorkflowTemplateNames}
+                    filteredTemplateNames={filteredTemplateNames}
+                    query={workflowTemplateNameInput}
+                    onSelect={templateName => {
+                      setWorkflowTemplateNameInput(templateName);
+                      setTemplateDropdownOpen(false);
+                    }}
+                  />
                 </div>
               )}
             </div>
@@ -1249,71 +1372,17 @@ export function SessionsSection({
           </Button>
         </div>
 
-        {error ? (
-          <ResourceErrorState
-            title="Couldn't load workflow runs"
-            description={`Error: ${error.message}`}
-          />
-        ) : isLoading ? (
-          <div className="text-fg-secondary flex flex-1 flex-col items-center justify-center gap-4">
-            <Spinner className="text-fg-tertiary" />
-            <span className="label-large-primary">Loading sessions...</span>
-          </div>
-        ) : filteredAndSortedSessions.length > 0 ? (
-          <div className="flex max-h-[calc(100vh-10rem)] min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-6">
-            <div className="flex h-full min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto lg:w-[261px]">
-              {filteredAndSortedSessions.map(session => (
-                <SessionListItem
-                  key={session.id}
-                  session={session}
-                  isSelected={session.id === selectedSessionId}
-                  onClick={() => setSelectedSessionId(session.id)}
-                />
-              ))}
-            </div>
-            <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-              {selectedSession ? (
-                <SessionDetailView
-                  session={selectedSession}
-                  isLoading={loadingDetail && useRealData}
-                />
-              ) : (
-                <div className="border-fill-onsurface-ui-1 flex flex-1 items-center justify-center border">
-                  <ResourceNoResults
-                    icon={<AccountTree className="size-full" />}
-                    message="Select a session to view details"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        ) : hasActiveFilters ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4">
-            <ResourceNoResults
-              icon={<SearchIcon className="size-full" />}
-              message="No workflow runs found matching your filters"
-            />
-            <Button variant="outline" onClick={clearFilters}>
-              Clear filters
-            </Button>
-          </div>
-        ) : (
-          <ResourceEmptyState
-            icon={<Terminal className="size-full" />}
-            title="No workflow runs yet"
-            description={
-              <>
-                <p className="mb-2">
-                  You haven&apos;t created any sessions yet.
-                </p>
-                <p>
-                  Get started by creating your session to see workflow runs.
-                </p>
-              </>
-            }
-            actions={<LearnMoreButton href={ARGO_WORKFLOWS_DOCS_URL} />}
-          />
-        )}
+        <SessionsBody
+          error={error}
+          isLoading={isLoading}
+          sessions={filteredAndSortedSessions}
+          selectedSessionId={selectedSessionId}
+          onSelectSession={setSelectedSessionId}
+          selectedSession={selectedSession}
+          isDetailLoading={loadingDetail && useRealData}
+          hasActiveFilters={Boolean(hasActiveFilters)}
+          onClearFilters={clearFilters}
+        />
       </div>
     </ErrorBoundary>
   );
