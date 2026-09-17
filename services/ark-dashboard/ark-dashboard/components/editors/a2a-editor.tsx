@@ -59,7 +59,7 @@ const LABEL_CLASS = 'label-regular-primary text-fg-secondary';
 
 const SECRET_HEADER_KEY = 'token';
 
-function buildHeader(header: HeaderData): Header {
+export function buildHeader(header: HeaderData): Header {
   if (header.type === 'direct') {
     return { name: header.name, value: { value: header.value } };
   }
