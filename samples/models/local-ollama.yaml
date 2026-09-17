@@ -13,7 +13,7 @@ metadata:
     # Model characteristics for cost optimization
     model.ark.mckinsey.com/parameters: "8B"
     model.ark.mckinsey.com/context-window: "32768"
-    model.ark.mckinsey.com/deployment-type: "local"
+    model.ark.mckinsey.com/deployment-type: "in-cluster"
     model.ark.mckinsey.com/provider: "ollama"
 
     # Performance metrics for SLA planning
@@ -31,7 +31,7 @@ spec:
       apiKey:
         value: not-used
       baseUrl:
-        value: http://host.docker.internal:11434/v1
+        value: http://ollama.default.svc.cluster.local:11434/v1
   model:
     value: qwen3:8b
   type: openai
