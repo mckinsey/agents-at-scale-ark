@@ -1166,8 +1166,11 @@ describe('PostgresSessionsStorage', () => {
         // transaction holding a pooled connection for the rest of the file, and
         // the next test to need one blocks instead of reporting the failure.
         const expiry = setTimeout(release, GATE_MAX_HOLD_MS);
-        await released;
-        clearTimeout(expiry);
+        try {
+          await released;
+        } finally {
+          clearTimeout(expiry);
+        }
         if (onRelease) await onRelease(sql);
       });
       // Keeps an unreleased gate from surfacing as an unhandled rejection; the

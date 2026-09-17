@@ -193,7 +193,25 @@ describeIntegration('RedisChunkStream — redis-specific', () => {
 
       await once(sub, 'ready');
       await once(sub, 'end');
-      expect(await connectionCount()).toBe(before);
+      await waitForConnections(before);
+    }, 10_000);
+
+    it('unsubscribe mid-XREAD rejects the blocking read so the run loop exits instead of parking', async () => {
+      const duplicate = jest.spyOn(client(), 'duplicate');
+      const unsub = stream.subscribeToQuery('q1', () => {});
+      const sub = duplicate.mock.results[0].value as Redis;
+      duplicate.mockRestore();
+      const xread = jest.spyOn(sub, 'xread');
+
+      await once(sub, 'ready');
+      while (xread.mock.calls.length === 0) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+
+      unsub();
+      await expect(xread.mock.results[0].value).rejects.toThrow(
+        'Connection is closed'
+      );
     }, 10_000);
   });
 });
