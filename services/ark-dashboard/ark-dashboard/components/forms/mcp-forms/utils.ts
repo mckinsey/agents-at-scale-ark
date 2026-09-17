@@ -15,15 +15,20 @@ import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 import {
   EMPTY_HEADER_ROW,
   type HeaderData,
-  type HeaderError,
-  type HeaderRows,
+  generateUniqueKey,
+} from '../shared/header-rows';
+
+export {
+  EMPTY_HEADER_ROW,
   generateUniqueKey,
   useHeaderRows,
   validateHeaders,
 } from '../shared/header-rows';
-
-export { EMPTY_HEADER_ROW, generateUniqueKey, useHeaderRows, validateHeaders };
-export type { HeaderData, HeaderError, HeaderRows };
+export type {
+  HeaderData,
+  HeaderError,
+  HeaderRows,
+} from '../shared/header-rows';
 
 export const CONFIGURATION_VALUE_KEY = 'value';
 
