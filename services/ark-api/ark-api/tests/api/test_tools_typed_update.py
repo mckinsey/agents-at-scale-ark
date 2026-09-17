@@ -76,6 +76,17 @@ class TestTypedUpdatePreservesSubtypes(unittest.TestCase):
         }
         self.assertEqual(roundtrip(spec)["inputSchema"], spec["inputSchema"])
 
+    def test_every_subtype_block_accepts_nested_values(self):
+        # The subtype fields are Dict[str, Any] on purpose. A str-valued mapping
+        # is what broke http, and agent/team/builtin only hold {name: str} by
+        # accident of today's CRD - this asserts none of them can regress to a
+        # value type that rejects a nested field the cluster would accept.
+        nested = {"name": "x", "future": {"nested": [1, 2]}}
+        for subtype in ("http", "mcp", "agent", "team", "builtin"):
+            with self.subTest(subtype=subtype):
+                spec = {"type": subtype, "description": "d", subtype: nested}
+                self.assertEqual(roundtrip(spec)[subtype], nested)
+
     def test_unset_subtypes_are_not_emitted(self):
         # exclude_none keeps the stored spec free of empty subtype keys.
         stored = roundtrip({"type": "builtin", "description": "d", "builtin": {"name": "noop"}})
