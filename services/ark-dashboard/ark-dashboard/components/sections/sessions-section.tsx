@@ -58,7 +58,13 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
 type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
-type WorkflowStepType = 'dag' | 'steps' | 'container' | 'script' | 'suspend';
+type WorkflowStepType =
+  | 'dag'
+  | 'steps'
+  | 'retry'
+  | 'container'
+  | 'script'
+  | 'suspend';
 type SortOrder = 'newest' | 'oldest';
 type TeamStepType =
   | 'orchestrator'
@@ -702,6 +708,13 @@ function WorkflowStepNode({
       </>
     );
   }
+
+  const isParallelNode =
+    step.type === 'dag' ||
+    step.type === 'retry' ||
+    (hasChildren && step.children!.length > 1);
+
+  const childDepth = isParallelNode ? depth + 1 : depth;
 
   return (
     <div className={cn('flex w-full min-w-0', depth > 0 && 'pl-5')}>
