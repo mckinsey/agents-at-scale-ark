@@ -66,7 +66,7 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 		response, err = m.Provider.ChatCompletionStream(ctx, messages, n, func(chunk *openai.ChatCompletionChunk) error {
 			chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, m.Model, nil)
 			if streamErr := eventStream.StreamChunk(ctx, chunkWithMeta); streamErr != nil {
-				logf.FromContext(ctx).Error(streamErr, "failed to stream chunk to broker; continuing without streaming")
+				logf.FromContext(ctx).Error(streamErr, "failed to stream chunk to broker; continuing without streaming", "query", getQueryID(ctx))
 			}
 			return nil
 		}, tools, toolChoice)

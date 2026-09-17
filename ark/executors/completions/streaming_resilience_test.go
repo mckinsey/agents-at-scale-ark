@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -113,10 +114,16 @@ func TestHTTPEventStream_AbandonsAfterWriteFailure(t *testing.T) {
 	assert.Zero(t, atomic.LoadInt32(&requests), "an abandoned stream must not reopen the connection")
 }
 
-func TestHTTPEventStream_NotifyCompletionNoopWhenAbandoned(t *testing.T) {
-	var requests int32
-	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&requests, 1)
+// Even after the chunk stream is abandoned, NotifyCompletion must still POST the
+// completion signal: it is a separate request (not over the broken pipe) and is
+// the only thing that terminates the broker's SSE stream. Skipping it hangs any
+// consumer that already received a chunk.
+func TestHTTPEventStream_NotifyCompletionSendsCompletionWhenAbandoned(t *testing.T) {
+	var completeRequests int32
+	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/complete") {
+			atomic.AddInt32(&completeRequests, 1)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer broker.Close()
@@ -130,5 +137,6 @@ func TestHTTPEventStream_NotifyCompletionNoopWhenAbandoned(t *testing.T) {
 
 	err := stream.NotifyCompletion(context.Background())
 	require.NoError(t, err)
-	assert.Zero(t, atomic.LoadInt32(&requests), "an abandoned stream must not POST completion")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&completeRequests),
+		"an abandoned stream must still POST completion so the consumer's stream terminates")
 }
