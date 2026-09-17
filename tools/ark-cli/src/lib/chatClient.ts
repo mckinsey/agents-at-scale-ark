@@ -76,10 +76,6 @@ export class ChatClient {
     if (config.a2aContextId) {
       annotations[QUERY_ANNOTATIONS.A2A_CONTEXT_ID] = config.a2aContextId;
     }
-    if (config.streamingEnabled && onChunk) {
-      annotations['ark.mckinsey.com/streaming-enabled'] = 'true';
-    }
-
     const queryResult = await this.arkApiClient.createQuery({
       input,
       target: {type: targetType, name: targetName},

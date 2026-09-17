@@ -300,7 +300,7 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 	}
 
 	newMessages := []Message{}
-	boundary := newToolResultBoundary()
+	boundary := newToolResultBoundary(ctx)
 
 	for {
 		if ctx.Err() != nil {
@@ -589,7 +589,7 @@ func (a *Agent) runAgenticLoopFromResumption(
 	eventStream EventStreamInterface,
 	tools []openai.ChatCompletionToolParam,
 ) (*ExecutionResult, error) {
-	boundary := newToolResultBoundary()
+	boundary := newToolResultBoundary(ctx)
 
 	for {
 		if ctx.Err() != nil {

@@ -73,7 +73,7 @@ func scenarioQueryContext() context.Context {
 // Control 1 (recommendation 2): the file contents reach the model fenced off as data.
 func TestScenario1_PoisonedFileReachesModelAsFencedData(t *testing.T) {
 	registry := registryWith(scenarioReadTool, &MCPExecutor{})
-	boundary := newToolResultBoundary()
+	boundary := newToolResultBoundary(context.Background())
 
 	out := boundary.apply(scenarioMessages(), registry)
 	content := toolContent(t, out[2])

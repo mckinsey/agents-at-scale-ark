@@ -7,6 +7,10 @@ import { ChatBubble, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
+  StatusIndicator,
+  getAvailabilityStatus,
+} from '@/components/ui/status-indicator';
+import {
   Table,
   TableBody,
   TableCell,
@@ -30,32 +34,11 @@ interface AgentsTableProps {
   readonly onDelete: (id: string) => void;
 }
 
-const STATUS_CONFIG = {
-  True: { label: 'Active', dotClass: 'bg-status-success' },
-  False: { label: 'Error', dotClass: 'bg-status-error' },
-  Unknown: { label: 'Unknown', dotClass: 'bg-fg-tertiary' },
-} as const;
-
 const COL = {
   name: 'w-[240px]',
   status: 'w-[120px]',
   action: 'w-[100px]',
 };
-
-function AgentStatus({
-  status,
-}: Readonly<{ status?: AgentListItem['available'] | null }>) {
-  const value = status ?? 'Unknown';
-  const config = STATUS_CONFIG[value];
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span className={cn('size-2 rounded-full', config.dotClass)} />
-      <span className="label-regular-primary text-fg-primary">
-        {config.label}
-      </span>
-    </span>
-  );
-}
 
 interface AgentTableRowProps {
   readonly agent: AgentListItem;
@@ -101,7 +84,7 @@ function AgentTableRow({ agent, onDelete }: Readonly<AgentTableRowProps>) {
           )}
         </TableCell>
         <TableCell size="small">
-          <AgentStatus status={agent.available} />
+          <StatusIndicator {...getAvailabilityStatus(agent.available)} />
         </TableCell>
         <TableCell size="small" className="relative z-10">
           <div className="flex items-center justify-center gap-2">

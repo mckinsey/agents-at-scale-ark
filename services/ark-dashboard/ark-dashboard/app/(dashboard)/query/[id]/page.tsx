@@ -30,10 +30,8 @@ import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { PromptEditor } from '@/components/ui/prompt-editor';
 import { QueryParameterEditor } from '@/components/ui/query-parameter-editor';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { components } from '@/lib/api/generated/types';
-import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
@@ -196,7 +194,6 @@ interface QueryViewModeProps {
   errorViewMode: 'events' | 'details';
   setErrorViewMode: (mode: 'events' | 'details') => void;
   queryParameters: QueryParameter[];
-  streaming: boolean;
 }
 
 function QueryViewMode({
@@ -206,7 +203,6 @@ function QueryViewMode({
   errorViewMode,
   setErrorViewMode,
   queryParameters,
-  streaming,
 }: Readonly<QueryViewModeProps>) {
   const phase = query.status?.phase;
   const hasResponse = !!query.status?.response;
@@ -266,7 +262,6 @@ function QueryViewMode({
             value={simplifyDuration(query.ttl) || '—'}
           />
           <QueryDetailRow label="Memory" value={query.memory?.name || '—'} />
-          <QueryDetailRow label="Streaming" value={streaming ? 'Yes' : 'No'} />
           <QueryDetailRow
             label="Parameters"
             value={
@@ -407,7 +402,6 @@ function QueryDetailContent() {
   );
   const nameFieldRef = useRef<HTMLInputElement>(null);
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null);
-  const [streaming, setStreaming] = useState(false);
   const defaultQueryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const [queryParameters, setQueryParameters] = useState<QueryParameter[]>([]);
   const [selectedAgentDetails, setSelectedAgentDetails] =
@@ -521,11 +515,6 @@ function QueryDetailContent() {
         ...(query.conversationId && { conversationId: query.conversationId }),
         memory: query.memory,
         ...(apiParameters.length > 0 && { parameters: apiParameters }),
-        ...(streaming && {
-          metadata: {
-            [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
-          },
-        }),
       };
 
       const savedQuery = await queriesService.create(namespace, queryData);
@@ -630,13 +619,6 @@ function QueryDetailContent() {
             transformApiToQueryParameters(typedQueryData.parameters),
           );
         }
-
-        // Set streaming state based on annotation
-        const isStreamingEnabled =
-          (queryData as TypedQueryDetailResponse).metadata?.[
-            ARK_ANNOTATIONS.STREAMING_ENABLED
-          ] === 'true';
-        setStreaming(isStreamingEnabled);
       } catch (error) {
         toast.error('Failed to Load Query', {
           description:
@@ -714,7 +696,6 @@ function QueryDetailContent() {
         errorViewMode={errorViewMode}
         setErrorViewMode={setErrorViewMode}
         queryParameters={queryParameters}
-        streaming={streaming}
       />
     );
   }
@@ -866,13 +847,6 @@ function QueryDetailContent() {
                 availableMemories={availableMemories}
                 loading={memoriesLoading}
               />
-            }
-          />
-          <QueryDetailRow
-            label="Streaming"
-            valueClassName=""
-            value={
-              <Switch checked={streaming} onCheckedChange={setStreaming} />
             }
           />
           <QueryDetailRow

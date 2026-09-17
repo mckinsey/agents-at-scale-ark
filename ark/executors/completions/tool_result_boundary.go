@@ -1,11 +1,16 @@
 package completions
 
 import (
+	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"strings"
 
 	"github.com/openai/openai-go"
+
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
 const (
@@ -30,8 +35,51 @@ type toolResultBoundary struct {
 
 var nonceSource = randomNonce
 
-func newToolResultBoundary() toolResultBoundary {
-	return toolResultBoundary{nonce: nonceSource()}
+// Keyed per process so the marker cannot be derived from a conversation id alone,
+// which the author of an uploaded file may know.
+var boundaryNonceKey = newBoundaryNonceKey()
+
+func newBoundaryNonceKey() []byte {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil
+	}
+	return key
+}
+
+// newToolResultBoundary derives the marker from the conversation rather than the run.
+//
+// apply() wraps every tool message it is handed, history replayed from memory
+// included, and memory holds those results unwrapped. A per-run nonce therefore
+// re-renders the same historical result under a new marker on each turn, which
+// diverges the cached prefix from that message onward. Containment does not rely on
+// per-run freshness: marker() re-rolls when the content already carries the marker.
+//
+// Falls back to a random nonce with no conversation in context, so a one-shot query
+// behaves as before. The key is per process, so replicas derive different markers for
+// the same conversation and only share a cache prefix within a pod.
+func newToolResultBoundary(ctx context.Context) toolResultBoundary {
+	return toolResultBoundary{nonce: conversationNonce(conversationIDFromContext(ctx))}
+}
+
+func conversationIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	query, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	if !ok {
+		return ""
+	}
+	return query.Spec.ConversationId
+}
+
+func conversationNonce(conversationID string) string {
+	if conversationID == "" || len(boundaryNonceKey) == 0 {
+		return nonceSource()
+	}
+	mac := hmac.New(sha256.New, boundaryNonceKey)
+	mac.Write([]byte(conversationID))
+	return hex.EncodeToString(mac.Sum(nil)[:untrustedNonceBytes])
 }
 
 func randomNonce() string {
