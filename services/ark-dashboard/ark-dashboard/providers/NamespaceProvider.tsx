@@ -61,8 +61,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
     // longer requested. Acting on it would write that namespace back over the
     // one the URL now asks for, undoing the navigation.
     const matchesRequestedNamespace =
-      !namespaceFromQueryParams ||
-      data?.namespace === namespaceFromQueryParams;
+      !namespaceFromQueryParams || data?.namespace === namespaceFromQueryParams;
 
     // Only resolve on a response that carries a concrete namespace matching the
     // request (or when the URL asked for nothing). Do NOT resolve to the
@@ -79,13 +78,25 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       };
     }
 
+    // A 200 that names no namespace is still a definitive answer, not a pending
+    // state — /v1/context returns namespace or current_context, and the
+    // in-cluster service-account file can read back empty. Resolve to 'default'
+    // rather than park behind the loading gate forever: there is no error, so
+    // React Query never retries. An empty namespace can never be the stale
+    // concrete mismatch the guard above waits past, so it needs no such gate.
+    if (data && !data.namespace) {
+      return {
+        namespace: FALLBACK_NAMESPACE,
+        isNamespaceResolved: true,
+        readOnlyMode: data.read_only_mode ?? false,
+        fallbackReason: null,
+      };
+    }
+
     if (error) {
       const fallbackNamespace = readFallbackNamespace(error);
-      // A definitive substitution (a 404 carrying default_namespace) resolves to
-      // that namespace. With no ?namespace= requested, fall back to 'default'.
-      // But a transient/non-definitive error while a specific namespace WAS
-      // requested must stay unresolved so queries wait and React Query retries,
-      // rather than resolving to 'default' and firing against the wrong namespace.
+      // A 404 carrying default_namespace is a definitive substitution: resolve
+      // to that namespace and announce it.
       if (fallbackNamespace) {
         return {
           namespace: fallbackNamespace,
@@ -94,14 +105,17 @@ function NamespaceProvider({ children }: PropsWithChildren) {
           fallbackReason: 'unreachable',
         };
       }
-      if (!namespaceFromQueryParams) {
-        return {
-          namespace: FALLBACK_NAMESPACE,
-          isNamespaceResolved: true,
-          readOnlyMode: true,
-          fallbackReason: 'unavailable',
-        };
-      }
+      // Any other error is terminal, not transient: React Query only surfaces
+      // `error` once its retries are exhausted, so there is nothing left to wait
+      // for. Fall back to 'default' (read-only) with a toast rather than hang
+      // the dashboard behind the loading gate — this holds whether or not a
+      // specific ?namespace= was requested.
+      return {
+        namespace: FALLBACK_NAMESPACE,
+        isNamespaceResolved: true,
+        readOnlyMode: true,
+        fallbackReason: 'unavailable',
+      };
     }
 
     return {
