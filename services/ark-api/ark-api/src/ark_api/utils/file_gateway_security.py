@@ -125,17 +125,20 @@ def _iter_multipart_parts(body: bytes, boundary: str):
         if not part or part.strip() in (b"", b"--"):
             continue
         chunk = part.lstrip(b"\r\n")
-        chunk = chunk.rstrip(b"\r\n") if chunk.endswith((b"\r\n", b"\n")) else chunk
-        header_end = chunk.find(b"\r\n\r\n")
-        separator = 4
-        lf_end = chunk.find(b"\n\n")
-        if header_end == -1 or (lf_end != -1 and lf_end < header_end):
-            header_end = lf_end
-            separator = 2
-        if header_end == -1:
+        # Exactly one trailing break, not a run: an empty-bodied part ends in three
+        # line breaks, and stripping them all leaves no header terminator to find, so
+        # the part is skipped and _rebuild_multipart drops the field from the upload.
+        if chunk.endswith(b"\r\n"):
+            chunk = chunk[:-2]
+        elif chunk.endswith(b"\n"):
+            chunk = chunk[:-1]
+        # Matches all four spellings; "\n\r\n" matched neither fixed search before, and
+        # that skip also bypassed sanitising rather than only the declared-type check.
+        terminator = re.search(rb"\r?\n\r?\n", chunk)
+        if terminator is None:
             continue
-        headers = chunk[:header_end].decode("utf-8", errors="replace")
-        content = chunk[header_end + separator :]
+        headers = chunk[: terminator.start()].decode("utf-8", errors="replace")
+        content = chunk[terminator.end() :]
         yield headers, content
 
 

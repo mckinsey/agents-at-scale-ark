@@ -4,6 +4,7 @@ from urllib.parse import quote
 from fastapi import HTTPException
 
 from ark_api.utils.file_gateway_security import (
+    _iter_multipart_parts,
     _parse_multipart_headers,
     is_file_gateway_download,
     is_file_gateway_upload,
@@ -291,9 +292,15 @@ class TestUploadHeaderParsing(unittest.TestCase):
     """
 
     def _assert_blocked(self, body: bytes, content_type: str = UPLOAD_CONTENT_TYPE):
+        """Asserts the declared-type check fired, not merely that something 400'd.
+
+        There are two 400 paths in this function now, so a status-only assertion would
+        stay green if a boundary regression meant the type check never ran at all.
+        """
         with self.assertRaises(HTTPException) as ctx:
             sanitize_file_gateway_upload(body, content_type)
         self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("content is html", str(ctx.exception.detail))
 
     def test_boundary_with_linear_white_space_is_still_checked(self):
         # Legal around a MIME parameter, and python_multipart accepts it, so a regex
@@ -383,3 +390,44 @@ class TestUploadHeaderParsing(unittest.TestCase):
         )
 
         self._assert_blocked(body)
+
+
+class TestMultipartFraming(unittest.TestCase):
+    def test_empty_bodied_part_survives_a_sanitised_upload(self):
+        # Stripping a run of line breaks left no header terminator, so the part was
+        # skipped and _rebuild_multipart dropped the field. Every SVG upload rebuilds,
+        # because ET.tostring rewrites the declaration, so this fired on clean files.
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>x</script><rect/></svg>'
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="prefix"\r\n\r\n\r\n'
+            b'--B\r\nContent-Disposition: form-data; name="file"; filename="a.svg"\r\n'
+            b"Content-Type: image/svg+xml\r\n\r\n" + svg + b"\r\n--B--\r\n"
+        )
+
+        out = sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE)
+
+        self.assertNotIn(b"<script", out)
+        self.assertIn(b'name="prefix"', out)
+
+    def test_text_part_keeps_its_trailing_newlines(self):
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="note"\r\n\r\nhello\r\n\r\n'
+            b"--B--\r\n"
+        )
+
+        parts = list(_iter_multipart_parts(body, "B"))
+
+        self.assertEqual([content for _, content in parts], [b"hello\r\n"])
+
+    def test_lf_cr_lf_header_terminator_is_still_sanitised(self):
+        # This skip route bypassed sanitising, not just the declared-type check, so a
+        # script-bearing SVG was forwarded untouched.
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>x</script><rect/></svg>'
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="file"; filename="a.svg"\r\n'
+            b"Content-Type: image/svg+xml\n\r\n" + svg + b"\r\n--B--\r\n"
+        )
+
+        out = sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE)
+
+        self.assertNotIn(b"<script", out)

@@ -364,7 +364,9 @@ class TestCssObfuscation(unittest.TestCase):
         # The comment leaves the target starting with /*, which is neither
         # scheme-prefixed nor //-prefixed, so it read as a relative path.
         self.assertTrue(_has_unsafe_css('a{background:url(/*x*/"http://evil/x")}'))
-        self.assertTrue(_has_unsafe_css('a{background:url("http:/*x*/evil/x")}'))
+        # A relative target behind a comment: nothing survives the strip to look like a
+        # scheme, so this only passes because comments are removed before matching.
+        self.assertTrue(_has_unsafe_css('a{background:url(/*x*///evil.com/p.png)}'))
 
     def test_image_set_bare_string_is_unsafe(self):
         # image-set() takes a bare string, so there is no url( opener to find.
@@ -424,3 +426,18 @@ class TestCssObfuscation(unittest.TestCase):
 
         self.assertEqual(str(ctx.exception), "Invalid SVG content")
         self.assertNotIn("ns_extend", str(ctx.exception))
+
+    def test_comment_scan_is_linear_on_unterminated_comments(self):
+        # A lazy /\*.*?\*/ rescans to end of string per opener: 96 KB took ~9s on the
+        # event loop. "url(" * n cannot catch this because it contains no "/".
+        payload = "/*a" * 40000
+
+        started = time.monotonic()
+        _has_unsafe_css(payload)
+
+        self.assertLess(time.monotonic() - started, 1.0)
+
+    def test_paren_inside_a_quoted_image_set_argument(self):
+        self.assertTrue(
+            _has_unsafe_css('a{background-image:image-set("http://evil/x)y.png" 1x)}')
+        )

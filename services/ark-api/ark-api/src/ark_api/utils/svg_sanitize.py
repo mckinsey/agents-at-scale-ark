@@ -43,7 +43,6 @@ CSS_URL_OPEN = re.compile(r"url\s*\(", re.I)
 # Functions that fetch from a bare string, with no url() opener to find.
 CSS_STRING_FUNC_OPEN = re.compile(r"(?:-webkit-)?image-set\s*\(|\bsrc\s*\(", re.I)
 CSS_STRING = re.compile(r"\"([^\"]*)\"|'([^']*)'")
-CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 # A CSS escape is \ plus up to six hex digits and one optional trailing space, or
 # \ plus any single character. Escapes are legal inside an at-keyword, so "@\69 mport"
 # is "@import" to the browser.
@@ -52,8 +51,6 @@ CSS_ESCAPE = re.compile(r"\\(?:([0-9a-fA-F]{1,6})[ \t\r\n\f]?|(.))", re.S)
 SAFE_DATA_URL = re.compile(r"^data:image/(?!svg\+xml)[a-z0-9.+-]+[;,]", re.I)
 # Browsers drop these before parsing a scheme, so "java&#9;script:" runs as "javascript:".
 URL_IGNORED_CHARS = re.compile(r"[\x00-\x1f\x7f]")
-FILENAME_ATTR = re.compile(r"""filename\s*=\s*(?:"([^"]*)"|'([^']*)'|([^;\r\n]*))""", re.I)
-CONTENT_TYPE_ATTR = re.compile(r"content-type:\s*([^\r\n]+)", re.I)
 
 
 def _local_name(tag: str) -> str:
@@ -137,6 +134,21 @@ def _css_url_targets(css: str):
         pos = end + 1
 
 
+def _closing_paren(css: str, start: int) -> int:
+    """Index of the ) that closes an argument list, ignoring ones inside quotes."""
+    quote = ""
+    for i in range(start, len(css)):
+        ch = css[i]
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch == ")":
+            return i
+    return -1
+
+
 def _css_string_func_targets(css: str):
     """Yield quoted strings passed to a fetching function; None if unterminated.
 
@@ -146,13 +158,36 @@ def _css_string_func_targets(css: str):
     """
     pos = 0
     while (match := CSS_STRING_FUNC_OPEN.search(css, pos)) is not None:
-        end = css.find(")", match.end())
+        # The closing paren has to be found outside quotes: a ")" inside the string,
+        # as in image-set("http://evil/x)y.png" 1x), would otherwise end the argument
+        # list early and leave no closing quote for CSS_STRING to pair up.
+        end = _closing_paren(css, match.end())
         if end == -1:
             yield None
             return
         for quoted in CSS_STRING.finditer(css[match.end() : end]):
             yield quoted.group(1) if quoted.group(1) is not None else quoted.group(2)
         pos = end + 1
+
+
+def _strip_css_comments(css: str) -> str:
+    """Remove /* */ comments in a single pass.
+
+    A lazy regex rescans to the end of the string for every unterminated opener, so
+    "/*a" repeated is quadratic - 96 KB took nine seconds on the event loop. Each find
+    here resumes past the previous terminator, matching the scan in _css_url_targets.
+    An unterminated comment swallows the remainder, which is what a browser does.
+    """
+    parts: list[str] = []
+    pos = 0
+    while (start := css.find("/*", pos)) != -1:
+        parts.append(css[pos:start])
+        end = css.find("*/", start + 2)
+        if end == -1:
+            return "".join(parts)
+        pos = end + 2
+    parts.append(css[pos:])
+    return "".join(parts)
 
 
 def _decode_css(value: str) -> str:
@@ -173,7 +208,7 @@ def _decode_css(value: str) -> str:
             return chr(code_point)
         return literal or ""
 
-    return CSS_COMMENT.sub("", CSS_ESCAPE.sub(unescape, value))
+    return _strip_css_comments(CSS_ESCAPE.sub(unescape, value))
 
 
 def _unsafe_css_form(value: str) -> bool:
