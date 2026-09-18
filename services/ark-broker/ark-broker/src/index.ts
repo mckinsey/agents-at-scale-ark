@@ -7,6 +7,7 @@ import {createChunkStream} from './brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from './brokers/stream/event-stream-factory.js';
 import {createSessionsStorage} from './brokers/sessions/sessions-storage-factory.js';
 import {createDb} from './db/db.js';
+import {createReaper} from './db/reaper.js';
 import {createRedis} from './redis/redis.js';
 
 const require = createRequire(import.meta.url);
@@ -41,6 +42,23 @@ const main = async (): Promise<void> => {
 
   const redis =
     config.backends.chunk === 'redis' ? createRedis(config, logger) : undefined;
+
+  const reapTables = [
+    ...(config.backends.message === 'postgres' ? ['messages'] : []),
+    ...(config.backends.event === 'postgres' ? ['events'] : []),
+    ...(config.backends.sessions === 'postgres' ? ['sessions'] : []),
+  ];
+  const reaper =
+    db && config.database.reapIntervalSeconds > 0
+      ? createReaper({
+          logger: logger.child({module: 'reaper'}),
+          db,
+          tables: reapTables,
+          intervalSeconds: config.database.reapIntervalSeconds,
+          batchSize: config.database.reapBatchSize,
+        })
+      : undefined;
+  reaper?.start();
 
   const messageStream = createMessageStream(config, logger, db);
   const chunkStream = createChunkStream(config, logger, redis);
@@ -80,6 +98,7 @@ const main = async (): Promise<void> => {
 
   const gracefulShutdown = async (): Promise<void> => {
     logger.info('shutting down gracefully');
+    await reaper?.stop();
     messageStream.close?.();
     chunkStream.close?.();
     eventStream.close?.();
