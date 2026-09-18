@@ -35,6 +35,7 @@ const STATS_POLL_INTERVAL_MS = 30000;
 interface StudioHeaderActionsProps {
   workflowName: string;
   persisted: boolean;
+  readOnly?: boolean;
 }
 
 function errorMessage(error: unknown): string {
@@ -44,8 +45,10 @@ function errorMessage(error: unknown): string {
 export function StudioHeaderActions({
   workflowName,
   persisted,
+  readOnly = false,
 }: Readonly<StudioHeaderActionsProps>) {
   const { namespace, readOnlyMode } = useNamespace();
+  const effectiveReadOnly = readOnly || readOnlyMode;
   const { push } = useNamespacedNavigation();
 
   const [activityOpen, setActivityOpen] = useState(false);
@@ -159,7 +162,7 @@ export function StudioHeaderActions({
           </TooltipContent>
         </Tooltip>
 
-        {!readOnlyMode && (
+        {!effectiveReadOnly && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

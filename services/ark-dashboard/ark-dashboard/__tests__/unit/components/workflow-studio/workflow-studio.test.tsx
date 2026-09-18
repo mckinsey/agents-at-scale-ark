@@ -497,6 +497,42 @@ describe('WorkflowStudio', () => {
     });
   });
 
+  describe('read-only mode', () => {
+    it('renders the studio, disables save and run, and hides edit affordances', async () => {
+      vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(validYaml);
+
+      render(
+        <WorkflowStudio mode="edit" initialName="existing-workflow" readOnly />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('studio-run')).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId('studio-run')).toBeDisabled();
+      expect(screen.getByTestId('studio-save')).toBeDisabled();
+      expect(screen.queryByTestId('studio-edit-meta')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('studio-delete')).not.toBeInTheDocument();
+    });
+
+    it('makes the YAML editor read-only', async () => {
+      vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(validYaml);
+
+      render(
+        <WorkflowStudio mode="edit" initialName="existing-workflow" readOnly />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('studio-view-yaml')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('studio-view-yaml'));
+      expect(screen.getByTestId('studio-yaml-editor')).toHaveAttribute(
+        'readonly',
+      );
+    });
+  });
+
   describe('save guards', () => {
     it('disables save when the draft is empty', () => {
       render(<WorkflowStudio mode="new" initialName="my-workflow" />);

@@ -82,6 +82,7 @@ export interface StudioChatPanelProps {
   mcpMissing: boolean;
   mcpNotReady: boolean;
   unverifiable: boolean;
+  readOnly?: boolean;
 }
 
 export function StudioChatPanel({
@@ -93,12 +94,15 @@ export function StudioChatPanel({
   mcpMissing,
   mcpNotReady,
   unverifiable,
+  readOnly = false,
 }: Readonly<StudioChatPanelProps>) {
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const experimentalNotice = useExperimentalNotice();
   const noticeBlocking = experimentalNotice.visible;
-  const composerDisabled = chat.composerDisabled || gated || noticeBlocking;
-  const inputDisabled = chat.inputDisabled || gated || noticeBlocking;
+  const composerDisabled =
+    chat.composerDisabled || gated || noticeBlocking || readOnly;
+  const inputDisabled =
+    chat.inputDisabled || gated || noticeBlocking || readOnly;
   const notInstalled = !unverifiable && (agentMissing || mcpMissing);
   const installedNotReady =
     !unverifiable && !notInstalled && (agentNotReady || mcpNotReady);
