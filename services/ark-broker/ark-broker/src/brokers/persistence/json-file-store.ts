@@ -32,6 +32,11 @@ export class JsonFileStore<T> {
   // Record lines currently in the file. Drives the compaction threshold.
   private logRecordCount = 0;
   private baselineWritten = false;
+  // A full rewrite is owed and not yet done: set when a compaction is requested
+  // (delete/load) or any write fails, cleared only after a successful rewrite.
+  // Survives a failed flush so the next save retries the rewrite instead of
+  // appending onto a file that still holds removed records or a torn line.
+  private compactOwed = false;
   // The sibling `.json` this store may migrate from once. It is only ever read,
   // never written, so a rollback to the pre-.jsonl build still finds it intact.
   private readonly legacyPath?: string;
@@ -260,6 +265,18 @@ export class JsonFileStore<T> {
     return last?.sequenceNumber === undefined ? 1 : last.sequenceNumber + 1;
   }
 
+  // Highest sequenceNumber present, or 0 if none. Used to set the persisted
+  // high-water mark from what was actually written rather than the (possibly
+  // stale) nextSequence captured when the flush was enqueued.
+  private maxSequence(items: T[]): number {
+    let max = 0;
+    for (const item of items) {
+      const seq = (item as {sequenceNumber?: number}).sequenceNumber;
+      if (typeof seq === 'number' && seq > max) max = seq;
+    }
+    return max;
+  }
+
   // Coalesced, non-blocking append. The caller records the latest state and the
   // resolved promise guarantees it (or a newer state) reached disk, but the
   // write runs off the event loop and at most one is in flight — so a burst of
@@ -286,7 +303,10 @@ export class JsonFileStore<T> {
     if (!this.path) return Promise.resolve();
     // Compaction is sticky across coalescing: once a removal has requested a
     // full rewrite, an append folded into the same pass must not downgrade it,
-    // or the removed records would survive on disk.
+    // or the removed records would survive on disk. compactOwed additionally
+    // carries that intent across a *failed* flush, since flush() clears pending
+    // before writing.
+    if (compact) this.compactOwed = true;
     this.pending = {
       items,
       nextSequence,
@@ -321,6 +341,7 @@ export class JsonFileStore<T> {
   ): Promise<void> {
     const mustCompact =
       compact ||
+      this.compactOwed ||
       !this.baselineWritten ||
       this.logRecordCount > this.compactRatio * Math.max(items.length, 1);
     if (mustCompact) {
@@ -335,19 +356,27 @@ export class JsonFileStore<T> {
   // the append baseline so subsequent saves append only newer records.
   private async writeSnapshot(items: T[], nextSequence: number): Promise<void> {
     if (!this.path) return;
+    // Derive the high-water mark from what is actually written: `items` (a live
+    // reference) may have grown past the `nextSequence` captured at enqueue time,
+    // so nextSequence-1 alone would understate the header and re-append records.
+    const highWater = Math.max(nextSequence - 1, this.maxSequence(items));
     try {
       const dir = dirname(this.path);
       if (!existsSync(dir)) mkdirSync(dir, {recursive: true});
       const tmp = `${this.path}.tmp`;
-      const lines = [JSON.stringify({nextSequence})];
+      const lines = [JSON.stringify({nextSequence: highWater + 1})];
       for (const item of items) lines.push(JSON.stringify(item));
       await writeFile(tmp, lines.join('\n') + '\n');
       await rename(tmp, this.path);
-      this.lastPersistedSequence = nextSequence - 1;
+      this.lastPersistedSequence = highWater;
       this.logRecordCount = items.length;
       this.baselineWritten = true;
+      this.compactOwed = false;
       this.logger.info({count: items.length}, 'saved records');
     } catch (err) {
+      // Leave compactOwed set so the next save retries the full rewrite instead
+      // of appending onto a stale file.
+      this.compactOwed = true;
       this.logger.error({err}, 'failed to save');
     }
   }
@@ -367,13 +396,21 @@ export class JsonFileStore<T> {
     try {
       const lines = delta.map((item) => JSON.stringify(item)).join('\n') + '\n';
       await appendFile(this.path, lines);
-      this.lastPersistedSequence = nextSequence - 1;
+      // Advance to the highest sequence actually appended, not the captured
+      // nextSequence-1 which may lag `items` and cause a re-append next flush.
+      this.lastPersistedSequence = Math.max(
+        nextSequence - 1,
+        this.maxSequence(delta)
+      );
       this.logRecordCount += delta.length;
       this.logger.info(
         {appended: delta.length, count: this.logRecordCount},
         'appended records'
       );
     } catch (err) {
+      // A partial append may have left a torn line; force a full rewrite next
+      // time to heal it rather than splicing the retry onto the damage.
+      this.compactOwed = true;
       this.logger.error({err}, 'failed to append');
     }
   }
