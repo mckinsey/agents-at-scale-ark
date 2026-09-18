@@ -3,6 +3,8 @@ import {envSchema} from './schema.js';
 
 export function loadConfig(env: Record<string, string | undefined>): AppConfig {
   const parsed = envSchema.parse(env);
+  const chunkTtlSeconds =
+    parsed.CHUNK_TTL_SECONDS ?? parsed.REDIS_STREAM_TTL_SECONDS;
   return Object.freeze({
     nodeEnv: parsed.NODE_ENV,
     logLevel: parsed.LOG_LEVEL,
@@ -12,10 +14,11 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       requestTimeoutMs: parsed.REQUEST_TIMEOUT_MS,
     }),
     limits: Object.freeze({
-      maxMessages: parsed.MAX_MESSAGES,
-      maxChunks: parsed.MAX_CHUNKS,
-      maxSpans: parsed.MAX_SPANS,
-      maxEvents: parsed.MAX_EVENTS,
+      messageMaxBytes: parsed.MESSAGE_MAX_BYTES,
+      eventMaxBytes: parsed.EVENT_MAX_BYTES,
+      chunkMaxBytes: parsed.CHUNK_MAX_BYTES,
+      traceMaxBytes: parsed.TRACE_MAX_BYTES,
+      chunkTtlSeconds,
     }),
     persistence: Object.freeze({
       memoryFilePath: parsed.MEMORY_FILE_PATH,
@@ -47,7 +50,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       password: parsed.REDIS_PASSWORD,
       tlsCaCertPath: parsed.REDIS_TLS_CA_CERT_PATH,
       keyPrefix: parsed.REDIS_KEY_PREFIX,
-      streamTtlSeconds: parsed.REDIS_STREAM_TTL_SECONDS,
+      streamTtlSeconds: chunkTtlSeconds,
       connectTimeoutMs: parsed.REDIS_CONNECT_TIMEOUT_MS,
       debugCommands: parsed.REDIS_DEBUG_COMMANDS,
     }),

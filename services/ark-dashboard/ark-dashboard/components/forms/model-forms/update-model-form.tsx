@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { ChevronLeft } from '@/components/icons';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -18,8 +18,13 @@ import { ModelConfiguratorForm } from './model-configuration-form';
 import type { DisabledFields } from './model-configuration-form-context';
 import { ModelConfigurationFormContext } from './model-configuration-form-context';
 import type { FormValues } from './schema';
-import { schema } from './schema';
-import { createModelUpdateConfig, getDefaultValuesForUpdate } from './utils';
+import { createSchema } from './schema';
+import {
+  buildBaseUrlMode,
+  createModelUpdateConfig,
+  getBaseUrlState,
+  getDefaultValuesForUpdate,
+} from './utils';
 
 const formId = 'model-update-form';
 
@@ -37,9 +42,11 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const { readOnlyMode, namespace } = useNamespace();
 
   const defaultValues = getDefaultValuesForUpdate(model);
+  const baseUrlState = getBaseUrlState(model, model.provider);
+  const baseUrlMode = buildBaseUrlMode(baseUrlState);
   const form = useForm<FormValues>({
     mode: 'onTouched',
-    resolver: zodResolver(schema),
+    resolver: zodResolver(createSchema(baseUrlState.kind === 'literal')),
     defaultValues,
   });
 
@@ -50,7 +57,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const { mutateAsync, isPending } = useUpdateModelById();
 
   const onSubmit = (formValues: FormValues) => {
-    const config = createModelUpdateConfig(formValues);
+    const config = createModelUpdateConfig(formValues, baseUrlMode);
     mutateAsync({
       id: model.id,
       model: formValues.model,
@@ -75,26 +82,16 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
           defaultValues.provider === 'bedrock'
             ? defaultValues.bedrockAuthMethod
             : undefined,
+        baseUrlState,
       }}>
-      <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
+      <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">
           <div className="flex items-center justify-between">
-            <nav
-              aria-label="Breadcrumb"
-              className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-              <ChevronLeft className="size-4 text-white/30" />
-              <NamespacedLink
-                href="/models"
-                className="text-white/30 transition-colors hover:text-white/60">
-                Models
-              </NamespacedLink>
-              <span aria-hidden="true" className="text-white/60">
-                /
-              </span>
-              <span aria-current="page" className="text-white/60">
-                {model.id}
-              </span>
-            </nav>
+            <DetailBreadcrumb
+              backHref="/models"
+              backLabel="Models"
+              current={model.id}
+            />
             <div className="flex items-center gap-2">
               <NamespacedLink href="/models">
                 <Button variant="outline">Cancel</Button>

@@ -7,11 +7,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	arkann "mckinsey.com/ark/internal/annotations"
+	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
+	"mckinsey.com/ark/internal/eventing/recorder"
 )
 
 type mockEventStream struct {
@@ -474,6 +481,51 @@ func TestStreamContentChunkSkipsEmpty(t *testing.T) {
 
 	streamContentChunk(ctx, stream, "comp-1", "model-1", "hello")
 	assert.Len(t, stream.chunks, 1)
+}
+
+func TestExecuteStreamingFailureSurfacesError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, arkv1alpha1.AddToScheme(scheme))
+	require.NoError(t, arkv1prealpha1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	a2aServer := &arkv1prealpha1.A2AServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
+		Spec: arkv1prealpha1.A2AServerSpec{
+			Headers: []arkv1prealpha1.Header{
+				{
+					Name: "Authorization",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "missing-secret"},
+								Key:                  "token",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(a2aServer).Build()
+	emitter := eventingnoop.NewNoopEventEmitter()
+	engine := NewA2AExecutionEngine(k8sClient, recorder.NewA2aRecorder(emitter, emitter))
+
+	stream := &mockEventStream{}
+	annotations := map[string]string{
+		arkann.A2AServerAddress:      "http://test-server.default.svc.cluster.local",
+		arkann.A2AServerName:         "test-server",
+		arkann.A2AStreamingSupported: TrueString,
+	}
+	userInput := NewUserMessage("hello")
+
+	result, err := engine.Execute(context.Background(), "test-agent", "default", annotations, "", userInput, stream)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "missing-secret")
+	require.Len(t, stream.chunks, 1, "expected error chunk streamed to client")
 }
 
 func TestBuildMessagesFromA2AResponse(t *testing.T) {

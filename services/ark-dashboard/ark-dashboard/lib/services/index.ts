@@ -1,6 +1,7 @@
 export {
   modelsService,
   type Model,
+  type ModelListItem,
   type ModelCreateRequest,
   type ModelUpdateRequest,
 } from './models';
@@ -14,6 +15,7 @@ export {
 export {
   agentsService,
   type Agent,
+  type AgentListItem,
   type Skill,
   type AgentTool,
   type AgentCreateRequest,
@@ -22,6 +24,7 @@ export {
 export {
   memoriesService,
   type Memory,
+  type MemoryListItem,
   type MemoryCreateRequest,
   type MemoryUpdateRequest,
 } from './memories';

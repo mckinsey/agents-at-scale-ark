@@ -16,10 +16,11 @@ export type ServerConfig = Readonly<{
 }>;
 
 export type LimitsConfig = Readonly<{
-  maxMessages: number;
-  maxChunks: number;
-  maxSpans: number;
-  maxEvents: number;
+  messageMaxBytes: number;
+  eventMaxBytes: number;
+  chunkMaxBytes: number;
+  traceMaxBytes: number;
+  chunkTtlSeconds: number;
 }>;
 
 export type PersistenceConfig = Readonly<{

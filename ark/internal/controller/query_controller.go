@@ -51,6 +51,11 @@ import (
 // after every denial, never terminating.
 const maxApprovalCascades = 3
 
+// defaultMaxImpersonatedClients bounds the impersonated-client cache so it
+// cannot grow without limit across many distinct service accounts. It is an
+// internal safety bound, not an operational tuning knob.
+const defaultMaxImpersonatedClients = 256
+
 const (
 	targetTypeAgent = "agent"
 	targetTypeTeam  = "team"
@@ -121,7 +126,9 @@ type QueryReconciler struct {
 	MaxConcurrentReconciles int
 
 	sched      *fairScheduler
-	operations sync.Map
+	operations    sync.Map
+	saClients     *impersonatedClientCache
+	saClientsOnce sync.Once
 
 	// brokerEndpoint resolves the broker endpoint for a namespace, used by the
 	// finalizer's broker cleanups. Defaults to routing.ResolveBrokerEndpoint
@@ -213,7 +220,7 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
-	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
+	if obj.Spec.Cancel && !isTerminalPhase(obj.Status.Phase) {
 		r.cleanupExistingOperation(req.NamespacedName)
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{}, err
@@ -1092,6 +1099,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	// The executor needs the taskID to detect this is a resumption after approval
 	// and clears it after processing (handler.go).
 	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
+		if status == statusCanceled && isTerminalPhase(q.Status.Phase) {
+			return false
+		}
 		saved.restoreOnto(q)
 		q.Status.Phase = status
 		r.setConditionForPhase(q, status)
@@ -1364,19 +1374,36 @@ func (r *QueryReconciler) deleteBrokerSessionQuery(ctx context.Context, query *a
 	return r.deleteBrokerQueryResource(ctx, query, common.QuerySessionsEndpointFmt, "session query", query.Name)
 }
 
+func (r *QueryReconciler) initImpersonatedClientCache() {
+	r.saClients = newImpersonatedClientCache(defaultMaxImpersonatedClients, r.buildImpersonatedClient)
+}
+
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
 	serviceAccount := query.Spec.ServiceAccount
 	if serviceAccount == "" {
 		return r.Client, nil
 	}
+	r.saClientsOnce.Do(r.initImpersonatedClientCache)
+	return r.saClients.get(query.Namespace, serviceAccount)
+}
 
+// buildImpersonatedClient returns a direct (non-cached) client for the identity.
+// Reads hit the API server rather than a per-identity informer cache: caching
+// would need a list+watch per service account, and under the cache's entry
+// bound that is a memory hazard, so we trade a live read for bounded memory.
+func (r *QueryReconciler) buildImpersonatedClient(namespace, serviceAccount string) (client.Client, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
 
+	// Disable the client-side rate limiter (InClusterConfig would default it to
+	// 5 QPS) and rely on server-side API Priority and Fairness, as
+	// ctrl.GetConfigOrDie does; this client is now shared across queries.
+	cfg.QPS = -1
+
 	cfg.Impersonate = rest.ImpersonationConfig{
-		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", query.Namespace, serviceAccount),
+		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, serviceAccount),
 	}
 
 	impersonatedClient, err := client.New(cfg, client.Options{
@@ -1384,7 +1411,7 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 		Mapper: r.RESTMapper(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", query.Namespace, serviceAccount, err)
+		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", namespace, serviceAccount, err)
 	}
 
 	return impersonatedClient, nil

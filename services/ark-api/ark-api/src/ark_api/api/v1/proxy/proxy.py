@@ -16,6 +16,12 @@ from ....auth.dependencies import get_impersonation_config
 from ..client_utils import get_impersonating_api_client
 from ..exceptions import handle_k8s_errors
 from ....models.models import ServiceListResponse
+from ....utils.file_gateway_security import (
+    is_file_gateway_download,
+    is_file_gateway_upload,
+    sanitize_file_gateway_upload,
+    secure_file_gateway_download,
+)
 from .proxy_resources import Resource
 
 logger = logging.getLogger(__name__)
@@ -23,6 +29,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/proxy", tags=["proxy"])
 
 PROXY_TIMEOUT = float(os.getenv('PROXY_TIMEOUT', '10.0'))
+DEFAULT_MAX_UPLOAD_BYTES = 1024 * 1024
+PROXY_MAX_UPLOAD_BYTES = int(os.getenv('PROXY_MAX_UPLOAD_BYTES', str(DEFAULT_MAX_UPLOAD_BYTES)))
 
 # CRD configuration
 VERSION_A2A = "v1prealpha1"
@@ -97,10 +105,35 @@ async def _get_mcp_server_address(mcp_server_name: str,
         logger.error(f"Failed to resolve MCP server '{mcp_server_name}': {e}")
         raise HTTPException(status_code=400, detail=f"Invalid resource mcp {mcp_server_name}")
 
+async def _read_body_capped(request: Request, max_bytes: int) -> bytes:
+    """Read the request body, refusing anything over max_bytes.
+
+    The Content-Length check rejects an honest oversized upload before a byte is
+    buffered; the running total then covers a chunked or understated request, where
+    the header cannot be trusted.
+    """
+    detail = f"Upload exceeds the maximum allowed size of {max_bytes} bytes"
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > max_bytes:
+        raise HTTPException(status_code=413, detail=detail)
+
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail=detail)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 async def _proxy_request(
     target_url: str,
     request: Request,
-    headers_to_forward: Optional[dict] = None
+    headers_to_forward: Optional[dict] = None,
+    *,
+    file_gateway_server: Optional[str] = None,
+    file_gateway_path: Optional[str] = None,
 ) -> Response:
     """Proxy an HTTP request to a target URL and provide back the response.
     
@@ -119,6 +152,10 @@ async def _proxy_request(
         "connection", "keep-alive", "proxy-authenticate",
         "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"   
     ]
+    # Response-only: httpx decodes the body, so the upstream encoding and length no
+    # longer describe it. Dropping both lets Starlette recompute the length.
+    # Not applied to the request, where content-encoding still describes the body we forward.
+    resp_ignore_headers = ["content-encoding", "content-length"]
     
     
     for header_name, header_value in request.headers.items():
@@ -130,8 +167,17 @@ async def _proxy_request(
     if headers_to_forward:
         headers.update(headers_to_forward)
     
-    # Read request body if present
-    body = await request.body()
+    is_upload = bool(
+        file_gateway_server
+        and file_gateway_path
+        and is_file_gateway_upload(file_gateway_server, request.method, file_gateway_path)
+    )
+    if is_upload:
+        body = await _read_body_capped(request, PROXY_MAX_UPLOAD_BYTES)
+        body = sanitize_file_gateway_upload(body, request.headers.get("content-type"))
+    else:
+        body = await request.body()
+
     timeout = httpx.Timeout(
         timeout=PROXY_TIMEOUT,
         read=None,
@@ -146,14 +192,32 @@ async def _proxy_request(
                 content=body if body else None,
                 params=dict(request.query_params) if request.query_params else None
             )
+            response_content = response.content
+            response_headers = {
+                key: value for key, value in response.headers.items()
+                if key.lower() not in hop_by_hop_headers
+                and key.lower() not in resp_ignore_headers
+            }
+            # Only a 2xx body is the file; sanitizing a JSON error would mask its status.
+            if (
+                file_gateway_server
+                and file_gateway_path
+                and 200 <= response.status_code < 300
+                and is_file_gateway_download(
+                    file_gateway_server, request.method, file_gateway_path
+                )
+            ):
+                response_content, response_headers = secure_file_gateway_download(
+                    response_content,
+                    response_headers,
+                    file_gateway_path,
+                )
+
             return Response(
-                content=response.content,
+                content=response_content,
                 status_code=response.status_code,
-                headers={
-                    key: value for key, value in response.headers.items()
-                    if key.lower() not in hop_by_hop_headers
-                },
-                media_type=response.headers.get("content-type")
+                headers=response_headers,
+                media_type=response_headers.get("content-type"),
             )
         except httpx.RequestError as e:
             logger.error(f"Proxy request failed: {e}")
@@ -249,7 +313,14 @@ async def proxy_server_path(resource: Resource,
     resource_url = f"{resource_url}/{path}" if resource_url[-1]!= "/" \
         else f"{resource_url}{path}"
     logger.info(f"Forwarding at {request.method} {resource_url}")
-    return await _proxy_request(resource_url, request, additional_headers)
+    file_gateway_server = server_name if resource == Resource.SERVICES else None
+    return await _proxy_request(
+        resource_url,
+        request,
+        additional_headers,
+        file_gateway_server=file_gateway_server,
+        file_gateway_path=path,
+    )
 
 @router.delete("/services/{service_name}/{api_path:path}")
 @router.patch("/services/{service_name}/{api_path:path}")

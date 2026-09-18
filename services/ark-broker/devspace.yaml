@@ -214,5 +214,4 @@ profiles:
         value:
           url: "redis://:${BROKER_REDIS_PASSWORD}@ark-redis-dev:6379"
           keyPrefix: "ark-broker"
-          streamTtlSeconds: 3600
           connectTimeoutMs: 10000

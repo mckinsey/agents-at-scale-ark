@@ -14,14 +14,18 @@ from kubernetes import client as sync_client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
 
-from ark_sdk.annotations import ARK_ANNOTATION_PREFIX, filter_ark_annotations
-from ark_sdk.labels import (
-    ARK_RESOURCE_TYPE_LABEL,
-    CONFIGURATION_LABEL_SELECTOR,
+from ark_sdk.annotations import (
+    ARK_ANNOTATION_PREFIX,
+    ARK_RESOURCE_TYPE_ANNOTATION,
     CONFIGURATION_RESOURCE_TYPE,
+    filter_ark_annotations,
+)
+from ark_sdk.labels import (
     labels_to_tags,
     strip_tag_labels,
     tags_to_labels,
+    validate_tag,
+    validate_updated_tags,
 )
 from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
 
@@ -160,6 +164,47 @@ def apply_impersonation_headers(api: ApiClient, impersonation: Optional['Imperso
     return api
 
 
+DESCRIPTION_ANNOTATION = f"{ARK_ANNOTATION_PREFIX}description"
+ALIAS_ANNOTATION = f"{ARK_ANNOTATION_PREFIX}alias"
+
+
+def _build_labels_and_annotations(
+    description: Optional[str],
+    alias: Optional[str],
+    labels: Optional[List[str]],
+    existing_labels: Optional[Dict[str, str]] = None,
+    existing_annotations: Optional[Dict[str, str]] = None,
+    resource_type: Optional[str] = None,
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Build the labels and annotations this feature owns, preserving all others."""
+    k8s_labels = strip_tag_labels(existing_labels)
+    k8s_labels.update(tags_to_labels(labels))
+
+    annotations = {
+        key: value
+        for key, value in (existing_annotations or {}).items()
+        if key not in (DESCRIPTION_ANNOTATION, ALIAS_ANNOTATION)
+    }
+    if resource_type:
+        annotations[ARK_RESOURCE_TYPE_ANNOTATION] = resource_type
+    if description:
+        annotations[DESCRIPTION_ANNOTATION] = description
+    if alias:
+        annotations[ALIAS_ANNOTATION] = alias
+
+    return k8s_labels, annotations
+
+
+def _to_secret_metadata(metadata) -> Dict:
+    """Extract description/alias/labels shared by all Secret client responses."""
+    annotations = metadata.annotations or {}
+    return {
+        "description": annotations.get(DESCRIPTION_ANNOTATION),
+        "alias": annotations.get(ALIAS_ANNOTATION),
+        "labels": labels_to_tags(metadata.labels),
+    }
+
+
 class SecretClient:
     """Kubernetes Secret management client."""
 
@@ -217,7 +262,8 @@ class SecretClient:
                 secret_list.append({
                     "name": secret.metadata.name,
                     "id": str(secret.metadata.uid),
-                    "annotations": filter_ark_annotations(secret.metadata.annotations)
+                    "annotations": filter_ark_annotations(secret.metadata.annotations),
+                    **_to_secret_metadata(secret.metadata),
                 })
             
             return {
@@ -225,7 +271,15 @@ class SecretClient:
                 "count": len(secret_list)
             }
     
-    async def create_secret(self, name: str, string_data: Dict[str, str], secret_type: str = "Opaque"):
+    async def create_secret(
+        self,
+        name: str,
+        string_data: Dict[str, str],
+        secret_type: str = "Opaque",
+        description: Optional[str] = None,
+        alias: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+    ):
         """Create a new secret."""
         validated_data = self.validate_and_encode_token(string_data)
         await init_k8s()
@@ -233,25 +287,31 @@ class SecretClient:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
 
+            k8s_labels, annotations = _build_labels_and_annotations(
+                description, alias, [validate_tag(tag) for tag in (labels or [])]
+            )
             secret = client.V1Secret(
                 api_version="v1",
                 kind="Secret",
-                metadata=client.V1ObjectMeta(name=name),
+                metadata=client.V1ObjectMeta(
+                    name=name, labels=k8s_labels, annotations=annotations
+                ),
                 string_data=validated_data,
                 type=secret_type
             )
-            
+
             created_secret = await v1.create_namespaced_secret(
-                namespace=self.namespace, 
+                namespace=self.namespace,
                 body=secret
             )
-            
+
             return {
                 "name": created_secret.metadata.name,
                 "id": str(created_secret.metadata.uid),
                 "type": created_secret.type,
-                "secret_length": self.calculate_secret_length(validated_data),
-                "annotations": filter_ark_annotations(created_secret.metadata.annotations)
+                "secret_length": self.calculate_secret_length(created_secret.data or {}),
+                "annotations": filter_ark_annotations(created_secret.metadata.annotations),
+                **_to_secret_metadata(created_secret.metadata),
             }
     
     async def get_secret(self, name: str):
@@ -271,7 +331,8 @@ class SecretClient:
                 "type": secret.type,
                 "secret_length": self.calculate_secret_length(secret.data or {}),
                 "keys": sorted((secret.data or {}).keys()),
-                "annotations": filter_ark_annotations(secret.metadata.annotations)
+                "annotations": filter_ark_annotations(secret.metadata.annotations),
+                **_to_secret_metadata(secret.metadata),
             }
 
     async def get_secret_value(self, name: str, key: str):
@@ -295,33 +356,59 @@ class SecretClient:
             }
 
     
-    async def update_secret(self, name: str, string_data: Dict[str, str]):
-        """Update an existing secret."""
-        validated_data = self.validate_and_encode_token(string_data)
+    async def update_secret(
+        self,
+        name: str,
+        string_data: Optional[Dict[str, str]] = None,
+        description: Optional[str] = None,
+        alias: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+    ):
+        """Update an existing secret.
+
+        string_data is the one partial field: omit it to leave the secret's
+        value unchanged. description, alias and labels are a full replace,
+        same contract as ConfigurationClient.update_configuration - omitting
+        any of them clears it, so callers must send the complete desired
+        state for those fields on every call.
+        """
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
 
             existing_secret = await v1.read_namespaced_secret(
-                name=name, 
+                name=name,
                 namespace=self.namespace
             )
-            
-            existing_secret.string_data = validated_data
-            
+
+            if string_data is not None:
+                existing_secret.string_data = self.validate_and_encode_token(string_data)
+
+            existing_tags = labels_to_tags(existing_secret.metadata.labels)
+            k8s_labels, annotations = _build_labels_and_annotations(
+                description,
+                alias,
+                validate_updated_tags(labels or [], existing_tags),
+                existing_labels=existing_secret.metadata.labels,
+                existing_annotations=existing_secret.metadata.annotations,
+            )
+            existing_secret.metadata.labels = k8s_labels
+            existing_secret.metadata.annotations = annotations
+
             updated_secret = await v1.replace_namespaced_secret(
                 name=name,
                 namespace=self.namespace,
                 body=existing_secret
             )
-            
+
             return {
                 "name": updated_secret.metadata.name,
                 "id": str(updated_secret.metadata.uid),
                 "type": updated_secret.type,
-                "secret_length": self.calculate_secret_length(validated_data),
-                "annotations": filter_ark_annotations(updated_secret.metadata.annotations)
+                "secret_length": self.calculate_secret_length(updated_secret.data or {}),
+                "annotations": filter_ark_annotations(updated_secret.metadata.annotations),
+                **_to_secret_metadata(updated_secret.metadata),
             }
     
     async def delete_secret(self, name: str) -> bool:
@@ -338,8 +425,6 @@ class SecretClient:
 
 
 CONFIGURATION_DATA_KEY = "value"
-DESCRIPTION_ANNOTATION = f"{ARK_ANNOTATION_PREFIX}description"
-ALIAS_ANNOTATION = f"{ARK_ANNOTATION_PREFIX}alias"
 
 
 class ConfigurationClient:
@@ -367,55 +452,31 @@ class ConfigurationClient:
             "labels": labels_to_tags(config_map.metadata.labels),
         }
 
-    @staticmethod
-    def _build_labels_and_annotations(
-        description: Optional[str],
-        alias: Optional[str],
-        labels: Optional[List[str]],
-        existing_labels: Optional[Dict[str, str]] = None,
-        existing_annotations: Optional[Dict[str, str]] = None,
-    ) -> Tuple[Dict[str, str], Dict[str, str]]:
-        """Build the labels and annotations this feature owns, preserving all others."""
-        k8s_labels = strip_tag_labels(existing_labels)
-        k8s_labels[ARK_RESOURCE_TYPE_LABEL] = CONFIGURATION_RESOURCE_TYPE
-        k8s_labels.update(tags_to_labels(labels))
-
-        annotations = {
-            key: value
-            for key, value in (existing_annotations or {}).items()
-            if key not in (DESCRIPTION_ANNOTATION, ALIAS_ANNOTATION)
-        }
-        if description:
-            annotations[DESCRIPTION_ANNOTATION] = description
-        if alias:
-            annotations[ALIAS_ANNOTATION] = alias
-
-        return k8s_labels, annotations
-
     async def _read_configuration(self, v1, name: str):
         """Read a ConfigMap, refusing any that Ark does not own as a configuration."""
         config_map = await v1.read_namespaced_config_map(name=name, namespace=self.namespace)
-        labels = config_map.metadata.labels or {}
-        if labels.get(ARK_RESOURCE_TYPE_LABEL) != CONFIGURATION_RESOURCE_TYPE:
+        annotations = config_map.metadata.annotations or {}
+        if annotations.get(ARK_RESOURCE_TYPE_ANNOTATION) != CONFIGURATION_RESOURCE_TYPE:
             raise ApiException(status=404, reason=f"Configuration '{name}' not found")
         return config_map
 
     async def list_configurations(self, label_selector: Optional[str] = None):
         """List all configurations in namespace."""
-        selector = CONFIGURATION_LABEL_SELECTOR
-        if label_selector:
-            selector = f"{selector},{label_selector}"
-
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
             config_maps = await v1.list_namespaced_config_map(
                 namespace=self.namespace,
-                label_selector=selector
+                label_selector=label_selector
             )
 
-            items = [self._to_configuration(config_map) for config_map in config_maps.items]
+            items = [
+                self._to_configuration(config_map)
+                for config_map in config_maps.items
+                if (config_map.metadata.annotations or {}).get(ARK_RESOURCE_TYPE_ANNOTATION)
+                == CONFIGURATION_RESOURCE_TYPE
+            ]
             return {"items": items, "count": len(items)}
 
     async def get_configuration(self, name: str):
@@ -440,8 +501,11 @@ class ConfigurationClient:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
 
-            k8s_labels, annotations = self._build_labels_and_annotations(
-                description, alias, labels
+            k8s_labels, annotations = _build_labels_and_annotations(
+                description,
+                alias,
+                [validate_tag(tag) for tag in (labels or [])],
+                resource_type=CONFIGURATION_RESOURCE_TYPE,
             )
             config_map = client.V1ConfigMap(
                 api_version="v1",
@@ -478,12 +542,14 @@ class ConfigurationClient:
             v1 = client.CoreV1Api(api)
 
             existing = await self._read_configuration(v1, name)
-            k8s_labels, annotations = self._build_labels_and_annotations(
+            existing_tags = labels_to_tags(existing.metadata.labels)
+            k8s_labels, annotations = _build_labels_and_annotations(
                 description,
                 alias,
-                labels,
+                validate_updated_tags(labels or [], existing_tags),
                 existing_labels=existing.metadata.labels,
                 existing_annotations=existing.metadata.annotations,
+                resource_type=CONFIGURATION_RESOURCE_TYPE,
             )
             existing.metadata.labels = k8s_labels
             existing.metadata.annotations = annotations

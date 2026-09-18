@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { ChevronLeft } from '@/components/icons';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -75,25 +75,14 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
         onSubmit,
         isSubmitPending: isPending,
       }}>
-      <div className="flex min-h-0 w-full content-shell flex-1 flex-col gap-5 overflow-hidden">
+      <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">
           <div className="flex items-center justify-between">
-            <nav
-              aria-label="Breadcrumb"
-              className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-              <ChevronLeft className="size-4 text-white/30" />
-              <NamespacedLink
-                href="/models"
-                className="text-white/30 transition-colors hover:text-white/60">
-                Models
-              </NamespacedLink>
-              <span aria-hidden="true" className="text-white/60">
-                /
-              </span>
-              <span aria-current="page" className="text-white/60">
-                New model
-              </span>
-            </nav>
+            <DetailBreadcrumb
+              backHref="/models"
+              backLabel="Models"
+              current="New model"
+            />
             <div className="flex items-center gap-2">
               <NamespacedLink href="/models">
                 <Button variant="outline">Cancel</Button>

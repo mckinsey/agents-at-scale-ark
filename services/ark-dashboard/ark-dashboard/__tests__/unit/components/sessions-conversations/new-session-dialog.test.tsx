@@ -60,7 +60,7 @@ describe('NewSessionDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(agentsService.getAll).mockResolvedValue(mockAgents as any);
+    vi.mocked(agentsService.list).mockResolvedValue(mockAgents as any);
     vi.mocked(teamsService.getAll).mockResolvedValue(mockTeams as any);
     vi.mocked(toolsService.getAll).mockResolvedValue(mockTools as any);
   });
@@ -89,7 +89,7 @@ describe('NewSessionDialog', () => {
       },
     });
 
-    vi.mocked(agentsService.getAll).mockReturnValue(new Promise(() => {})); // Never resolves
+    vi.mocked(agentsService.list).mockReturnValue(new Promise(() => {})); // Never resolves
     vi.mocked(teamsService.getAll).mockReturnValue(new Promise(() => {}));
     vi.mocked(toolsService.getAll).mockReturnValue(new Promise(() => {}));
 

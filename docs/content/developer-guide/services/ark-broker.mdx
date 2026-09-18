@@ -44,10 +44,11 @@ Environment variables:
 | `HOST` | Bind address | `0.0.0.0` | — |
 | `LOG_LEVEL` | Log level (`fatal`…`trace`, `silent`) | `info` | — |
 | `REQUEST_TIMEOUT_MS` | Request timeout, 0 to disable | `0` | `server.requestTimeout` |
-| `MAX_MESSAGES` | Max messages held per store, 0 for unlimited | `0` | `limits.maxMessages` (50000) |
-| `MAX_CHUNKS` | Max completion chunks, 0 for unlimited | `0` | `limits.maxChunks` (200000) |
-| `MAX_SPANS` | Max OTEL spans, 0 for unlimited | `0` | `limits.maxSpans` (100000) |
-| `MAX_EVENTS` | Max operation events, 0 for unlimited | `0` | `limits.maxEvents` (200000) |
+| `MESSAGE_MAX_BYTES` | Byte budget for the in-memory message store | `104857600` (100 MiB) | `limits.messageMaxBytes` |
+| `EVENT_MAX_BYTES` | Byte budget for the in-memory event store | `104857600` (100 MiB) | `limits.eventMaxBytes` |
+| `CHUNK_MAX_BYTES` | Byte budget for the in-memory chunk store | `33554432` (32 MiB) | `limits.chunkMaxBytes` |
+| `TRACE_MAX_BYTES` | Byte budget for the in-memory trace store | `33554432` (32 MiB) | `limits.traceMaxBytes` |
+| `CHUNK_TTL_SECONDS` | Retention window for streaming chunks, in seconds | `3600` | `limits.chunkTtlSeconds` |
 | `MEMORY_FILE_PATH` | Path to persist messages | Not set (no persistence) | — |
 | `STREAM_FILE_PATH` | Path to persist chunks | Not set (no persistence) | — |
 | `TRACE_FILE_PATH` | Path to persist spans | Not set (no persistence) | — |
@@ -323,7 +324,7 @@ Key environment variables:
 | `REDIS_PASSWORD` | — | Redis password (optional) |
 | `REDIS_TLS_CA_CERT_PATH` | — | Path to a CA certificate for TLS connections with self-signed certs. Set automatically by the Helm chart when `redis.tls.enabled=true`. |
 | `REDIS_KEY_PREFIX` | `ark-broker` | Prefix for all Redis keys |
-| `REDIS_STREAM_TTL_SECONDS` | `3600` | TTL applied to per-query chunk streams |
+| `REDIS_STREAM_TTL_SECONDS` | `3600` | Deprecated alias for `CHUNK_TTL_SECONDS`; honored if set, but prefer `CHUNK_TTL_SECONDS` |
 | `REDIS_CONNECT_TIMEOUT_MS` | `10000` | Redis connection timeout |
 | `REDIS_DEBUG_COMMANDS` | `false` | Log Redis connection lifecycle events at debug level (never logs payloads) |
 

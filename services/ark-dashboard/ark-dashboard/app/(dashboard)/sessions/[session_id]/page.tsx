@@ -45,7 +45,7 @@ export default function SessionDetailPage() {
   }, [searchParams, router, pathname]);
 
   const handleBackToSessions = useCallback(() => {
-    push('/session-history');
+    push('/sessions');
   }, [push]);
 
   // Skip API call for new sessions (avoid 404 errors)

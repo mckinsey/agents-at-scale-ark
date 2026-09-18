@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CreateModelForm } from '@/components/forms/model-forms/create-model-form';
+import { useGetAllConfigurations } from '@/lib/services/configurations-hooks';
 import {
   useCreateSecret,
   useGetAllSecrets,
@@ -14,6 +15,11 @@ vi.mock('@/lib/services/secrets-hooks', () => ({
   useGetAllSecrets: vi.fn(),
   useGetSecret: vi.fn(),
   useCreateSecret: vi.fn(),
+}));
+
+vi.mock('@/lib/services/configurations-hooks', () => ({
+  useGetAllConfigurations: vi.fn(),
+  useCreateConfiguration: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 vi.mock('@/lib/services/models-hooks', () => ({
@@ -73,6 +79,11 @@ describe('CreateModelForm - AWS Bedrock (issue #2810)', () => {
     vi.mocked(useGetSecret).mockReturnValue({
       data: { keys: ['token'] },
       isPending: false,
+    } as never);
+    vi.mocked(useGetAllConfigurations).mockReturnValue({
+      data: [{ id: 'ai-gateway-url', name: 'ai-gateway-url' }],
+      isPending: false,
+      error: null,
     } as never);
   });
 

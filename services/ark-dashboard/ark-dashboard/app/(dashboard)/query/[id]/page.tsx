@@ -14,13 +14,14 @@ import { toast } from 'sonner';
 
 import { queryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
 import {
   DetailCard as QueryDetailCard,
   DetailRow as QueryDetailRow,
   DetailSectionCard as QuerySectionCard,
 } from '@/components/common/detail-card';
 import { JsonViewer } from '@/components/common/json-viewer';
-import { ChevronLeft, ContentCopy } from '@/components/icons';
+import { ContentCopy } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
 import { QueryTargetsField } from '@/components/query-fields/query-targets-field';
@@ -29,10 +30,8 @@ import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import { PromptEditor } from '@/components/ui/prompt-editor';
 import { QueryParameterEditor } from '@/components/ui/query-parameter-editor';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { components } from '@/lib/api/generated/types';
-import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
@@ -138,8 +137,10 @@ interface QueryStatus {
   };
 }
 
-interface TypedQueryDetailResponse
-  extends Omit<QueryDetailResponse, 'status' | 'targets'> {
+interface TypedQueryDetailResponse extends Omit<
+  QueryDetailResponse,
+  'status' | 'targets'
+> {
   status?: QueryStatus | null;
   metadata?: Record<string, string>;
   target?: { name: string; type: string };
@@ -193,7 +194,6 @@ interface QueryViewModeProps {
   errorViewMode: 'events' | 'details';
   setErrorViewMode: (mode: 'events' | 'details') => void;
   queryParameters: QueryParameter[];
-  streaming: boolean;
 }
 
 function QueryViewMode({
@@ -203,7 +203,6 @@ function QueryViewMode({
   errorViewMode,
   setErrorViewMode,
   queryParameters,
-  streaming,
 }: Readonly<QueryViewModeProps>) {
   const phase = query.status?.phase;
   const hasResponse = !!query.status?.response;
@@ -218,27 +217,14 @@ function QueryViewMode({
   const eventsHref = `/events?kind=Query&name=${query.name}`;
 
   return (
-    <div className="flex w-full content-shell flex-col gap-5">
+    <div className="content-shell flex w-full flex-col gap-5">
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <NamespacedLink
-              href="/queries"
-              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-              <IconShell size="sm" className="opacity-100">
-                <ChevronLeft />
-              </IconShell>
-              Queries
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-fg-secondary">
-              /
-            </span>
-            <span aria-current="page" className="text-fg-secondary">
-              {query.name}
-            </span>
-          </nav>
+          <DetailBreadcrumb
+            backHref="/queries"
+            backLabel="Queries"
+            current={query.name}
+          />
           <div className="flex items-center gap-3">
             <a href={eventsHref} target="_blank" rel="noopener noreferrer">
               <Button variant="outline">View events</Button>
@@ -276,7 +262,6 @@ function QueryViewMode({
             value={simplifyDuration(query.ttl) || '—'}
           />
           <QueryDetailRow label="Memory" value={query.memory?.name || '—'} />
-          <QueryDetailRow label="Streaming" value={streaming ? 'Yes' : 'No'} />
           <QueryDetailRow
             label="Parameters"
             value={
@@ -417,7 +402,6 @@ function QueryDetailContent() {
   );
   const nameFieldRef = useRef<HTMLInputElement>(null);
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null);
-  const [streaming, setStreaming] = useState(false);
   const defaultQueryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const [queryParameters, setQueryParameters] = useState<QueryParameter[]>([]);
   const [selectedAgentDetails, setSelectedAgentDetails] =
@@ -531,11 +515,6 @@ function QueryDetailContent() {
         ...(query.conversationId && { conversationId: query.conversationId }),
         memory: query.memory,
         ...(apiParameters.length > 0 && { parameters: apiParameters }),
-        ...(streaming && {
-          metadata: {
-            [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
-          },
-        }),
       };
 
       const savedQuery = await queriesService.create(namespace, queryData);
@@ -586,8 +565,8 @@ function QueryDetailContent() {
         setMemoriesLoading(true);
         try {
           const [agents, models, teams, tools, memories] = await Promise.all([
-            agentsService.getAll(namespace),
-            modelsService.getAll(namespace),
+            agentsService.list(namespace),
+            modelsService.list(namespace),
             teamsService.getAll(namespace),
             toolsService.getAll(namespace),
             memoriesService.getAll(namespace),
@@ -640,13 +619,6 @@ function QueryDetailContent() {
             transformApiToQueryParameters(typedQueryData.parameters),
           );
         }
-
-        // Set streaming state based on annotation
-        const isStreamingEnabled =
-          (queryData as TypedQueryDetailResponse).metadata?.[
-            ARK_ANNOTATIONS.STREAMING_ENABLED
-          ] === 'true';
-        setStreaming(isStreamingEnabled);
       } catch (error) {
         toast.error('Failed to Load Query', {
           description:
@@ -724,7 +696,6 @@ function QueryDetailContent() {
         errorViewMode={errorViewMode}
         setErrorViewMode={setErrorViewMode}
         queryParameters={queryParameters}
-        streaming={streaming}
       />
     );
   }
@@ -732,27 +703,14 @@ function QueryDetailContent() {
   const isToolTarget = toolSchema && query.target?.type === 'tool';
 
   return (
-    <div className="flex w-full content-shell flex-col gap-5">
+    <div className="content-shell flex w-full flex-col gap-5">
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]">
-            <NamespacedLink
-              href="/queries"
-              className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
-              <IconShell size="sm" className="opacity-100">
-                <ChevronLeft />
-              </IconShell>
-              Queries
-            </NamespacedLink>
-            <span aria-hidden="true" className="text-fg-secondary">
-              /
-            </span>
-            <span aria-current="page" className="text-fg-secondary">
-              New Query
-            </span>
-          </nav>
+          <DetailBreadcrumb
+            backHref="/queries"
+            backLabel="Queries"
+            current="New Query"
+          />
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => push('/query/new')}>
               New Query
@@ -889,13 +847,6 @@ function QueryDetailContent() {
                 availableMemories={availableMemories}
                 loading={memoriesLoading}
               />
-            }
-          />
-          <QueryDetailRow
-            label="Streaming"
-            valueClassName=""
-            value={
-              <Switch checked={streaming} onCheckedChange={setStreaming} />
             }
           />
           <QueryDetailRow

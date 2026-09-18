@@ -11,7 +11,7 @@ export interface Participant {
 export const participantsService = {
   async getAll(namespace: string): Promise<Participant[]> {
     const results = await Promise.allSettled([
-      agentsService.getAll(namespace),
+      agentsService.list(namespace),
       teamsService.getAll(namespace),
       toolsService.getAll(namespace),
     ]);

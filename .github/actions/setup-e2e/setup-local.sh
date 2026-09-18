@@ -17,6 +17,7 @@ INSTALL_COVERAGE="false"
 INSTALL_BROKER="false"
 STORAGE_BACKEND="etcd"
 PREFETCH_TEST_IMAGES="false"
+PREFETCH_ARGO_IMAGES="false"
 # Off by default so the standard legs exercise the shipped default. Only the
 # dedicated third-party-webhooks job turns this on.
 ENABLE_THIRD_PARTY_WEBHOOKS="false"
@@ -40,16 +41,21 @@ while [[ $# -gt 0 ]]; do
       PREFETCH_TEST_IMAGES="true"
       shift
       ;;
+    --prefetch-argo-images)
+      PREFETCH_ARGO_IMAGES="true"
+      shift
+      ;;
     --enable-third-party-webhooks)
       ENABLE_THIRD_PARTY_WEBHOOKS="true"
       shift
       ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images] [--enable-third-party-webhooks]"
+      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images] [--prefetch-argo-images] [--enable-third-party-webhooks]"
       echo "  --install-coverage      Install coverage collection components"
       echo "  --install-broker        Install ark-broker (only needed for tests that use it)"
       echo "  --storage-backend       Storage backend to use (default: etcd)"
       echo "  --prefetch-test-images  Pre-pull chainsaw test images (mock-llm, curl, mockserver, etc.)"
+      echo "  --prefetch-argo-images  Pre-pull Argo Workflows images (only needed for jobs that install Argo)"
       echo "  --enable-third-party-webhooks  Set policy.thirdPartyWebhooks.enabled=true on the apiserver (postgresql only)"
       exit 0
       ;;
@@ -86,6 +92,23 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
   sudo k3s crictl pull "${REGISTRY}/ark-broker:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
   IMAGE_PULL_PIDS+=($!)
 fi
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  # The Postgres backend installs ark-storage-dev (postgres:16-alpine) and the
+  # broker migration job during serial --wait helm installs. Prefetch so the
+  # pulls overlap the cert-manager/gateway setup that runs first, rather than
+  # blocking pod readiness. The aggregated apiserver reuses the already-prefetched
+  # ark-controller image.
+  for img in \
+    docker.io/postgres:16-alpine \
+    docker.io/alpine:3; do
+    sudo k3s crictl pull "$img" > /dev/null 2>&1 &
+    IMAGE_PULL_PIDS+=($!)
+  done
+  if [ "${INSTALL_BROKER}" = "true" ]; then
+    sudo k3s crictl pull "${REGISTRY}/ark-broker-migrate:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
+    IMAGE_PULL_PIDS+=($!)
+  fi
+fi
 if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
   echo "=== Pre-pulling test images (background) ==="
   for img in \
@@ -98,8 +121,46 @@ if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
     IMAGE_PULL_PIDS+=($!)
   done
 fi
+if [ "${PREFETCH_ARGO_IMAGES}" = "true" ]; then
+  echo "=== Pre-pulling Argo Workflows images (background) ==="
+  # Argo image tags track the argo-workflows chart (services/argo-workflows/chart,
+  # dep 0.45.26 -> Argo v3.7.2); bump these when that chart is upgraded.
+  for img in \
+    quay.io/argoproj/workflow-controller:v3.7.2 \
+    quay.io/argoproj/argocli:v3.7.2 \
+    quay.io/argoproj/argoexec:v3.7.2 \
+    docker.io/alpine/k8s:1.28.13; do
+    sudo k3s crictl pull "$img" > /dev/null 2>&1 &
+    IMAGE_PULL_PIDS+=($!)
+  done
+fi
 if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
   echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
+fi
+
+# The Postgres backend (ark-storage-dev) has no cert-manager dependency — its
+# TLS is a Helm-generated self-signed cert — so install it in the background
+# now, concurrently with the cert-manager install below, and join before the
+# apiserver (which consumes Postgres) needs it. Hides ~26s of serial setup.
+PG_SETUP_PID=""
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  echo "=== Installing PostgreSQL (ark-storage-dev, background) ==="
+  (
+    helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
+      --namespace ark-system \
+      --create-namespace \
+      --set ssl.enabled=true \
+      --wait --timeout=120s
+    kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
+    kubectl -n ark-system get secret ark-storage-dev-tls -o json | \
+      python3 -c "
+import sys, json
+s = json.load(sys.stdin)
+out = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': s['metadata']['name'], 'namespace': 'default'}, 'type': s['type'], 'data': s['data']}
+print(json.dumps(out))
+" | kubectl apply -f -
+  ) &
+  PG_SETUP_PID=$!
 fi
 
 # Install cert-manager if not present
@@ -153,25 +214,12 @@ data:
 BROKER_CM_EOF
 fi
 
-if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
-  echo "=== Installing PostgreSQL (ark-storage-dev) ==="
-  helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
-    --namespace ark-system \
-    --create-namespace \
-    --set ssl.enabled=true \
-    --wait --timeout=120s
-
-  echo "=== Waiting for PostgreSQL Pod Readiness ==="
-  kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
-
-  echo "=== Copying ark-storage-dev TLS secret to default namespace ==="
-  kubectl -n ark-system get secret ark-storage-dev-tls -o json | \
-    python3 -c "
-import sys, json
-s = json.load(sys.stdin)
-out = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': s['metadata']['name'], 'namespace': 'default'}, 'type': s['type'], 'data': s['data']}
-print(json.dumps(out))
-" | kubectl apply -f -
+if [ -n "${PG_SETUP_PID}" ]; then
+  echo "=== Waiting for background PostgreSQL setup ==="
+  if ! wait "${PG_SETUP_PID}"; then
+    echo "ERROR: background PostgreSQL setup failed" >&2
+    exit 1
+  fi
 fi
 
 BROKER_PID=""
@@ -259,7 +307,6 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
     POSTGRES_PASSWORD=$(kubectl -n ark-system get secret ark-storage-dev-password \
       -o jsonpath='{.data.password}' | base64 -d)
     BROKER_HELM_ARGS+=(
-      --set memory.createMemoryCRD=false
       --set backends.message=postgres
       --set backends.event=postgres
       --set backends.sessions=postgres
@@ -271,6 +318,12 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
       --set migrate.image.repository="${REGISTRY}/ark-broker-migrate"
       --set migrate.image.tag="${ARK_IMAGE_TAG}"
     )
+    # The chart's Memory template does a `lookup` against ark.mckinsey.com/v1alpha1,
+    # which on this backend is served by the aggregated ark-apiserver rather than a
+    # native CRD. Its Deployment rollout finishing (waited on above) doesn't guarantee
+    # the aggregation layer has already marked the APIService Available, so wait for
+    # that explicitly before the chart renders.
+    kubectl wait --for=condition=Available apiservice v1alpha1.ark.mckinsey.com --timeout=120s
   fi
   helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
     "${BROKER_HELM_ARGS[@]}" &

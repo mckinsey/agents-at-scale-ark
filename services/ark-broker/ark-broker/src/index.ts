@@ -46,6 +46,15 @@ const main = async (): Promise<void> => {
   const chunkStream = createChunkStream(config, logger, redis);
   const eventStream = createEventStream(config, logger, db);
   const sessionsStorage = createSessionsStorage(config, logger, db);
+
+  // Bounded streaming load off disk must finish before the server accepts
+  // traffic, so replay cursors are correct from the first request.
+  await Promise.all([
+    messageStream.init?.(),
+    chunkStream.init?.(),
+    eventStream.init?.(),
+  ]);
+
   const {app, brokers} = buildApp({
     config,
     logger,
@@ -58,6 +67,7 @@ const main = async (): Promise<void> => {
     redis,
   });
   const {memory, chunks, traces, events, sessions} = brokers;
+  await traces.init();
 
   const server = app.listen(config.server.port, config.server.host, () => {
     logger.info(
@@ -70,6 +80,10 @@ const main = async (): Promise<void> => {
 
   const gracefulShutdown = async (): Promise<void> => {
     logger.info('shutting down gracefully');
+    messageStream.close?.();
+    chunkStream.close?.();
+    eventStream.close?.();
+    traces.close();
     const results = await Promise.allSettled([
       memory.save(),
       chunks.save(),

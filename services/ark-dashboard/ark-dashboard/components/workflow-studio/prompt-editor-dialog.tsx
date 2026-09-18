@@ -30,7 +30,7 @@ export function PromptEditorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         data-testid="prompt-editor-dialog"
-        className="flex h-[90vh] w-[90vw] max-w-[90vw] flex-col gap-4 p-6 sm:max-w-[90vw]">
+        className="flex h-[90vh] w-[90vw] max-w-[90vw] flex-col gap-4 p-6 [--dialog-close-inset:1.5rem] sm:max-w-[90vw]">
         <DialogHeader className="shrink-0">
           <DialogTitle>Edit prompt</DialogTitle>
           <DialogDescription>

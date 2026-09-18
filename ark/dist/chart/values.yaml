@@ -34,6 +34,9 @@ controllerManager:
     env:
       ARK_MODEL_PROBE_TIMEOUT_SECONDS: "60"
       ARK_A2A_DISCOVERY_TIMEOUT: "30"
+      # AUTOMEMLIMIT sets GOMEMLIMIT to this fraction of the container memory limit.
+      # Set to "off" to disable.
+      AUTOMEMLIMIT: "0.9"
     resources:
       limits:
         cpu: 500m
@@ -159,6 +162,17 @@ modelUrlSecurity:
   privateIPAllowlist:
     enabled: false
     key: "allowed-private-ips"
+
+# [DEFAULT-MEMORY]: Backstop that guarantees a default Memory wherever a
+# broker is present, for install paths the broker chart's own Memory
+# template does not cover (a hand-rolled helm install, or GitOps with
+# memory.createMemoryCRD=false). See issue #3281.
+defaultMemory:
+  # When true, the controller creates a namespace's Memory/default whenever
+  # it discovers an enabled broker there (via the ark-config-broker /
+  # ark-config-streaming ConfigMaps) and none exists yet. It only creates —
+  # an existing Memory, Helm-owned or not, is never patched.
+  autoProvision: true
 
 # [TELEMETRY]: Telemetry and tracing configuration
 telemetry:

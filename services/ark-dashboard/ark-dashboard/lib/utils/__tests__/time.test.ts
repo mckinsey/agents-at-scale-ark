@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { formatAge, parseDurationToMs, simplifyDuration } from '../time';
+import {
+  formatAge,
+  formatTimestamp,
+  parseDurationToMs,
+  simplifyDuration,
+} from '../time';
 
 describe('formatAge', () => {
   beforeEach(() => {
@@ -194,5 +199,24 @@ describe('parseDurationToMs', () => {
   it('parses zero durations', () => {
     expect(parseDurationToMs('0s')).toBe(0);
     expect(parseDurationToMs('0m')).toBe(0);
+  });
+});
+
+describe('formatTimestamp', () => {
+  it('formats a valid timestamp for the current locale', () => {
+    expect(formatTimestamp('2023-01-01T10:00:00Z')).toBe(
+      new Date('2023-01-01T10:00:00Z').toLocaleString(),
+    );
+  });
+
+  it('returns an em dash when the timestamp is missing', () => {
+    expect(formatTimestamp(undefined)).toBe('—');
+    expect(formatTimestamp(null)).toBe('—');
+    expect(formatTimestamp('')).toBe('—');
+  });
+
+  it('returns the raw value rather than "Invalid Date" when unparseable', () => {
+    expect(formatTimestamp('garbage')).toBe('garbage');
+    expect(formatTimestamp('2023-13-45')).toBe('2023-13-45');
   });
 });
