@@ -86,13 +86,18 @@ helm upgrade --install ark-api services/ark-api/chart \
 
 The cap applies only to file-gateway uploads (`POST` to the `files` path). A2A and MCP proxy traffic is unaffected. Oversized uploads get `413` with the maximum in the response body.
 
+The cap measures the whole upload request, not the file on its own. Multipart framing
+and the other form fields add a few hundred bytes, so a file of exactly 1MB is
+rejected even though the dashboard allowed it. Leave a little headroom, or raise
+`PROXY_MAX_UPLOAD_BYTES` above the file size you want to accept.
+
 Raising the cap on ark-api does not raise it in the dashboard, which keeps its own 1MB check, and the File Gateway service applies its own limit — see the [File Gateway Service documentation](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/#file-size-limitations).
 
 ### Upload and Download Checks
 
 ark-api inspects file-gateway traffic in both directions. Uploads are checked for content that does not match its declared type: a file whose bytes are HTML, PDF, ZIP, RTF, an executable, or SVG, but whose name says otherwise, is rejected with `400`. Detection reads magic bytes rather than trusting the extension, and the filename is authoritative when present because that is what gets stored. Files that are genuinely what they claim pass through, and formats Ark does not treat as active are not checked.
 
-An upload whose multipart framing cannot be parsed is rejected with `400` rather than forwarded, so a malformed request cannot skip these checks.
+Headers are read with the same parser the web server uses, so the filename these checks compare against is the one the file is stored under. An upload whose multipart boundary cannot be parsed is rejected with `400` rather than forwarded unchecked.
 
 SVG uploads are sanitized rather than rejected, so ordinary illustration files keep working while scripts and external references are stripped. An SVG that cannot be parsed at all is rejected with `400`.
 
