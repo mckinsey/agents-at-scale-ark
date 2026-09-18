@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/semaphore"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -51,15 +50,15 @@ func TestHandleRunningPhase_QueuedUpdateError_ReturnsError(t *testing.T) {
 		Client:               c,
 		Scheme:               c.Scheme(),
 		MaxConcurrentQueries: 1,
-		sem:                  semaphore.NewWeighted(1),
+		sched:                newFairScheduler(1, queryFairnessWaitWindow),
 	}
-	require.True(t, r.sem.TryAcquire(1), "pre-condition: saturate the semaphore so handleRunningPhase hits the queued-write branch")
+	require.True(t, r.sched.tryAcquire(q.Namespace), "pre-condition: saturate the pool so handleRunningPhase hits the queued-write branch")
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
 	_, err := r.handleRunningPhase(context.Background(), req, *q)
 
 	require.Error(t, err, "handleRunningPhase must surface a queued-write failure so the reconciler retries")
-	assert.False(t, r.sem.TryAcquire(1), "sem-full branch must not attempt a new acquisition; the pre-acquired slot is still held")
+	assert.False(t, r.sched.tryAcquire(q.Namespace), "capacity-full branch must not acquire a new slot; the pre-acquired slot is still held")
 }
 
 func TestHandleRunningPhase_RunningUpdateError_ReleasesSemaphore(t *testing.T) {
@@ -78,14 +77,14 @@ func TestHandleRunningPhase_RunningUpdateError_ReleasesSemaphore(t *testing.T) {
 		Client:               c,
 		Scheme:               c.Scheme(),
 		MaxConcurrentQueries: 1,
-		sem:                  semaphore.NewWeighted(1),
+		sched:                newFairScheduler(1, queryFairnessWaitWindow),
 	}
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
 	_, err := r.handleRunningPhase(context.Background(), req, *q)
 
 	require.Error(t, err, "handleRunningPhase must surface a running-write failure so the reconciler retries")
-	assert.True(t, r.sem.TryAcquire(1), "semaphore slot must be released on running-write error to prevent a permanent leak")
+	assert.True(t, r.sched.tryAcquire(q.Namespace), "slot must be released on running-write error to prevent a permanent leak")
 }
 
 func TestFailQueryOnTimeout_StatusUpdateError_Propagates(t *testing.T) {
