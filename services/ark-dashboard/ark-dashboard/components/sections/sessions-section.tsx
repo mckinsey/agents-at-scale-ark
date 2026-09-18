@@ -702,7 +702,7 @@ function WorkflowStepNode({
             key={child.id}
             step={child}
             depth={depth}
-            isLast={index === step.children!.length - 1}
+            isLast={isLast && index === step.children!.length - 1}
           />
         ))}
       </>
