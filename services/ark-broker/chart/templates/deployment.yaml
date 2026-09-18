@@ -1,3 +1,6 @@
+{{- if and .Values.persistence.enabled (gt (int .Values.replicaCount) 1) }}
+{{- fail "persistence.enabled=true requires replicaCount=1: the file store is a single append-only log on a ReadWriteOnce volume, and multiple broker replicas writing it duplicate or lose records. Use replicaCount=1, or a Postgres/Redis backend for HA." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
