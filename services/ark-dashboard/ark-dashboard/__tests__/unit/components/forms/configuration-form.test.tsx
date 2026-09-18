@@ -69,11 +69,11 @@ import { ConfigurationFormMode } from '@/components/forms/configuration-form/typ
 
 const field = (name: string) => screen.getByPlaceholderText(name);
 
-const NAME_FIELD = 'e.g., github-mcp-url';
-const VALUE_FIELD = 'e.g., https://api.githubcopilot.com/mcp/';
-const DESCRIPTION_FIELD = 'e.g., GitHub remote MCP endpoint';
-const ALIAS_FIELD = 'e.g., github-mcp';
-const LABEL_FIELD = 'Type a label and press Enter';
+const NAME_FIELD = 'e.g., mcp-server-url';
+const VALUE_FIELD = 'e.g., https://mcp.example.com';
+const DESCRIPTION_FIELD = 'e.g., Base URL of the MCP server for this environment';
+const ALIAS_FIELD = 'Search aliases';
+const LABEL_FIELD = 'e.g., production';
 
 describe('ConfigurationForm', () => {
   beforeEach(() => {
@@ -188,7 +188,7 @@ describe('ConfigurationForm', () => {
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/already been added/i)).toBeInTheDocument();
+      expect(screen.getByText(/label already added/i)).toBeInTheDocument();
     });
     expect(mockCreateMutateAsync).not.toHaveBeenCalled();
   });
@@ -208,7 +208,7 @@ describe('ConfigurationForm', () => {
     });
 
     await user.clear(field(LABEL_FIELD));
-    await user.type(field(LABEL_FIELD), 'mcpservers');
+    await user.type(field(LABEL_FIELD), 'mcpservers{Enter}');
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {

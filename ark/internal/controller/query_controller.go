@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,6 +51,11 @@ import (
 // after every denial, never terminating.
 const maxApprovalCascades = 3
 
+// defaultMaxImpersonatedClients bounds the impersonated-client cache so it
+// cannot grow without limit across many distinct service accounts. It is an
+// internal safety bound, not an operational tuning knob.
+const defaultMaxImpersonatedClients = 256
+
 const (
 	targetTypeAgent = "agent"
 	targetTypeTeam  = "team"
@@ -79,6 +83,11 @@ const (
 	// when MaxConcurrentQueries is reached. Short enough to be responsive,
 	// long enough to avoid a busy-loop while in-flight queries drain.
 	queryCapacityRequeueDelay = 250 * time.Millisecond
+	// queryFairnessWaitWindow is how long a namespace denied a slot stays in
+	// the fair-share divisor after its last attempt. A few requeue cycles, so
+	// a still-competing tenant keeps its share while one that stops requeuing
+	// ages out and lets the remaining tenants expand.
+	queryFairnessWaitWindow = 4 * queryCapacityRequeueDelay
 	// queryRunningSafetyRequeue re-reconciles a running Query whose execution
 	// goroutine died so it converges to a terminal phase instead of stranding.
 	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
@@ -116,8 +125,10 @@ type QueryReconciler struct {
 	// default (1).
 	MaxConcurrentReconciles int
 
-	sem        *semaphore.Weighted
-	operations sync.Map
+	sched      *fairScheduler
+	operations    sync.Map
+	saClients     *impersonatedClientCache
+	saClientsOnce sync.Once
 
 	// brokerEndpoint resolves the broker endpoint for a namespace, used by the
 	// finalizer's broker cleanups. Defaults to routing.ResolveBrokerEndpoint
@@ -209,7 +220,7 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
-	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
+	if obj.Spec.Cancel && !isTerminalPhase(obj.Status.Phase) {
 		r.cleanupExistingOperation(req.NamespacedName)
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{}, err
@@ -310,7 +321,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 	}
 
-	if r.sem != nil && !r.sem.TryAcquire(1) {
+	if r.sched != nil && !r.sched.tryAcquire(req.Namespace) {
 		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
 		if obj.Status.Phase != statusQueued {
 			if err := r.updateStatus(ctx, &obj, statusQueued); err != nil {
@@ -329,8 +340,8 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 
 	if obj.Status.Phase != statusRunning {
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
-			if r.sem != nil {
-				r.sem.Release(1)
+			if r.sched != nil {
+				r.sched.release(req.Namespace)
 			}
 			return ctrl.Result{}, err
 		}
@@ -518,8 +529,8 @@ func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespace
 		r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
 	}
 	r.operations.Delete(namespacedName)
-	if r.sem != nil {
-		r.sem.Release(1)
+	if r.sched != nil {
+		r.sched.release(namespacedName.Namespace)
 	}
 }
 
@@ -1088,6 +1099,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	// The executor needs the taskID to detect this is a resumption after approval
 	// and clears it after processing (handler.go).
 	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
+		if status == statusCanceled && isTerminalPhase(q.Status.Phase) {
+			return false
+		}
 		saved.restoreOnto(q)
 		q.Status.Phase = status
 		r.setConditionForPhase(q, status)
@@ -1360,19 +1374,36 @@ func (r *QueryReconciler) deleteBrokerSessionQuery(ctx context.Context, query *a
 	return r.deleteBrokerQueryResource(ctx, query, common.QuerySessionsEndpointFmt, "session query", query.Name)
 }
 
+func (r *QueryReconciler) initImpersonatedClientCache() {
+	r.saClients = newImpersonatedClientCache(defaultMaxImpersonatedClients, r.buildImpersonatedClient)
+}
+
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
 	serviceAccount := query.Spec.ServiceAccount
 	if serviceAccount == "" {
 		return r.Client, nil
 	}
+	r.saClientsOnce.Do(r.initImpersonatedClientCache)
+	return r.saClients.get(query.Namespace, serviceAccount)
+}
 
+// buildImpersonatedClient returns a direct (non-cached) client for the identity.
+// Reads hit the API server rather than a per-identity informer cache: caching
+// would need a list+watch per service account, and under the cache's entry
+// bound that is a memory hazard, so we trade a live read for bounded memory.
+func (r *QueryReconciler) buildImpersonatedClient(namespace, serviceAccount string) (client.Client, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
 
+	// Disable the client-side rate limiter (InClusterConfig would default it to
+	// 5 QPS) and rely on server-side API Priority and Fairness, as
+	// ctrl.GetConfigOrDie does; this client is now shared across queries.
+	cfg.QPS = -1
+
 	cfg.Impersonate = rest.ImpersonationConfig{
-		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", query.Namespace, serviceAccount),
+		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, serviceAccount),
 	}
 
 	impersonatedClient, err := client.New(cfg, client.Options{
@@ -1380,7 +1411,7 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 		Mapper: r.RESTMapper(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", query.Namespace, serviceAccount, err)
+		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", namespace, serviceAccount, err)
 	}
 
 	return impersonatedClient, nil
@@ -1671,7 +1702,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 
 func (r *QueryReconciler) initSemaphore() {
 	if r.MaxConcurrentQueries > 0 {
-		r.sem = semaphore.NewWeighted(int64(r.MaxConcurrentQueries))
+		r.sched = newFairScheduler(r.MaxConcurrentQueries, queryFairnessWaitWindow)
 	}
 }
 

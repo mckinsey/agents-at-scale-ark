@@ -1,6 +1,6 @@
 {
   "name": "y",
-  "version": "0.1.68",
+  "version": "0.1.69",
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {
@@ -27,7 +27,7 @@
     "sharp": "^0.35.0"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.3.2",
+    "@testing-library/react": "^16.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "^4.1.10",
     "http-server": "^14.1.1",
@@ -45,7 +45,7 @@
     "@napi-rs/simple-git-linux-x64-musl": "^1.1.0"
   },
   "overrides": {
-    "brace-expansion": ">=5.0.9",
+    "brace-expansion": "^5.0.12",
     "undici": "^7.29.1",
     "rollup": "4.59.0",
     "minimatch": "^10.2.3",

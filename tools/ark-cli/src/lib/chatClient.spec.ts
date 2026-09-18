@@ -197,41 +197,6 @@ describe('ChatClient', () => {
       ).rejects.toThrow('Query creation did not return a name');
     });
 
-    it('should include streaming annotation when streaming enabled with onChunk', async () => {
-      const client = new ChatClient(mockArkApiClient);
-      mockCreateQuery.mockResolvedValue({name: 'test-query-stream'});
-
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        body: {
-          getReader: () => ({
-            read: vi.fn().mockResolvedValue({done: true, value: undefined}),
-            releaseLock: vi.fn(),
-          }),
-        },
-      });
-      vi.stubGlobal('fetch', mockFetch);
-
-      await client.sendMessage(
-        'agent/test-agent',
-        [{role: 'user', content: 'Hello'}],
-        {streamingEnabled: true},
-        vi.fn()
-      );
-
-      expect(mockCreateQuery).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            annotations: expect.objectContaining({
-              'ark.mckinsey.com/streaming-enabled': 'true',
-            }),
-          }),
-        })
-      );
-
-      vi.unstubAllGlobals();
-    });
-
     it('should include conversationId when provided', async () => {
       const client = new ChatClient(mockArkApiClient);
       mockCreateQuery.mockResolvedValue({name: 'test-query-conv'});

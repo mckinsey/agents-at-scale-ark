@@ -1,39 +1,41 @@
 'use client';
 
-import {
-  AlertCircle,
-  Bot,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Circle,
-  Clock,
-  Container,
-  Cpu,
-  ExternalLink,
-  FileCode,
-  FileText,
-  GitBranch,
-  HardDrive,
-  Loader2,
-  MessageSquare,
-  Play,
-  RefreshCw,
-  Search,
-  Terminal,
-  Users,
-  Workflow,
-  X,
-  XCircle,
-  Zap,
-} from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
-import { Badge } from '@/components/ui/badge';
+import {
+  AccountTree,
+  AutoAwesome,
+  Bolt,
+  Build,
+  Cancel,
+  ChatBubble,
+  CheckCircle,
+  ChevronDown as ChevronDownIcon,
+  ChevronRight as ChevronRightIcon,
+  Code,
+  Database,
+  Dns,
+  ErrorIcon,
+  InsertDriveFile,
+  Memory as MemoryIcon,
+  OpenInNew,
+  Schedule,
+  Search as SearchIcon,
+  SmartToy,
+  Terminal,
+  Terminal2,
+} from '@/components/icons';
+import {
+  LearnMoreButton,
+  ResourceEmptyState,
+  ResourceErrorState,
+  ResourceNoResults,
+  ResourceSearchInput,
+} from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -43,19 +45,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Spinner } from '@/components/ui/spinner';
+import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
-import { useNamespace } from '@/providers/NamespaceProvider';
 import { cn } from '@/lib/utils';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
-type SessionType = 'workflow' | 'team' | 'agent';
 type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
-type WorkflowStepType = 'dag' | 'steps' | 'container' | 'script' | 'suspend';
+type WorkflowStepType =
+  | 'dag'
+  | 'steps'
+  | 'retry'
+  | 'container'
+  | 'script'
+  | 'suspend';
 type SortOrder = 'newest' | 'oldest';
 type TeamStepType =
   | 'orchestrator'
@@ -67,6 +76,13 @@ type TeamStepType =
 const sortOrderItems = [
   { label: 'Newest First', value: 'newest' },
   { label: 'Oldest First', value: 'oldest' },
+];
+
+const statusFilterItems = [
+  { label: 'All', value: 'all' },
+  { label: 'Running', value: 'Running' },
+  { label: 'Succeeded', value: 'Succeeded' },
+  { label: 'Failed', value: 'Failed' },
 ];
 
 interface WorkflowStepDetail {
@@ -151,75 +167,218 @@ interface TeamSession extends BaseSession {
 
 type Session = WorkflowSession | TeamSession;
 
+const STATUS_LABELS: Record<StepStatus, string> = {
+  pending: 'Pending',
+  running: 'Running',
+  succeeded: 'Succeeded',
+  failed: 'Failed',
+  skipped: 'Skipped',
+};
+
+function getStatusBorderClass(status: StepStatus): string {
+  switch (status) {
+    case 'succeeded':
+      return 'border-l-stroke-status-success';
+    case 'failed':
+      return 'border-l-stroke-status-error';
+    case 'running':
+      return 'border-l-stroke-status-focus';
+    default:
+      return 'border-l-stroke-divider';
+  }
+}
+
 function getStatusIcon(status: StepStatus) {
   switch (status) {
     case 'succeeded':
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      return (
+        <IconShell size="sm" className="text-status-success">
+          <CheckCircle />
+        </IconShell>
+      );
     case 'failed':
-      return <XCircle className="h-4 w-4 text-red-500" />;
+      return (
+        <IconShell size="sm" className="text-status-error">
+          <ErrorIcon />
+        </IconShell>
+      );
     case 'running':
-      return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
-    case 'pending':
-      return <Circle className="text-muted-foreground h-4 w-4" />;
+      return (
+        <IconShell size="sm" className="text-fg-secondary" asChild>
+          <Spinner size="sm" />
+        </IconShell>
+      );
     case 'skipped':
-      return <Circle className="h-4 w-4 text-yellow-500" />;
-  }
-}
-
-function getWorkflowTypeIcon(type: WorkflowStepType) {
-  switch (type) {
-    case 'dag':
-      return <GitBranch className="h-4 w-4" />;
-    case 'steps':
-      return <Play className="h-4 w-4" />;
-    case 'container':
-      return <Container className="h-4 w-4" />;
-    case 'script':
-      return <FileCode className="h-4 w-4" />;
-    case 'suspend':
-      return <Clock className="h-4 w-4" />;
-  }
-}
-
-function getTeamTypeIcon(type: TeamStepType) {
-  switch (type) {
-    case 'orchestrator':
-      return <Users className="h-4 w-4" />;
-    case 'agent':
-      return <Bot className="h-4 w-4" />;
-    case 'delegation':
-      return <GitBranch className="h-4 w-4" />;
-    case 'tool-call':
-      return <Workflow className="h-4 w-4" />;
-    case 'response':
-      return <MessageSquare className="h-4 w-4" />;
-  }
-}
-
-function getSessionTypeIcon(type: SessionType) {
-  switch (type) {
-    case 'workflow':
-      return <Workflow className="h-4 w-4" />;
-    case 'team':
-      return <Users className="h-4 w-4" />;
-    case 'agent':
-      return <Bot className="h-4 w-4" />;
-  }
-}
-
-function getStatusBadgeVariant(
-  status: StepStatus,
-): 'success' | 'error' | 'alternative' | 'high-emphasis' {
-  switch (status) {
-    case 'succeeded':
-      return 'success';
-    case 'failed':
-      return 'error';
-    case 'running':
-      return 'alternative';
+      return (
+        <IconShell size="sm" variant="secondary">
+          <Cancel />
+        </IconShell>
+      );
     default:
-      return 'high-emphasis';
+      return (
+        <IconShell size="sm" variant="secondary">
+          <Schedule />
+        </IconShell>
+      );
   }
+}
+
+function DurationLabel({ duration }: { readonly duration: string }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      <IconShell size="sm" variant="secondary">
+        <Schedule />
+      </IconShell>
+      <span className="paragraph-small-primary text-fg-secondary whitespace-nowrap">
+        {duration}
+      </span>
+    </div>
+  );
+}
+
+function StatusLabel({ status }: { readonly status: StepStatus }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {getStatusIcon(status)}
+      <span className="paragraph-small-primary text-fg-secondary whitespace-nowrap">
+        {STATUS_LABELS[status]}
+      </span>
+    </div>
+  );
+}
+
+function TreeConnector({ isLast }: { readonly isLast: boolean }) {
+  return (
+    <div className="relative w-5 shrink-0 self-stretch" aria-hidden="true">
+      <div
+        className={cn(
+          'bg-stroke-divider absolute top-0 left-0 w-px',
+          isLast ? 'h-5' : 'h-full',
+        )}
+      />
+      <div className="bg-stroke-divider absolute top-5 left-0 h-px w-5" />
+    </div>
+  );
+}
+
+function TraceRow({
+  title,
+  subtitle,
+  status,
+  duration,
+  isOpen,
+  isEmphasised,
+  onToggle,
+}: {
+  readonly title: string;
+  readonly subtitle?: string;
+  readonly status: StepStatus;
+  readonly duration?: string;
+  readonly isOpen: boolean;
+  readonly isEmphasised: boolean;
+  readonly onToggle?: () => void;
+}) {
+  const content = (
+    <>
+      <div className="flex min-w-0 flex-1 items-center gap-2 pr-5">
+        {onToggle ? (
+          <IconShell size="default" variant="secondary">
+            {isOpen ? <ChevronDownIcon /> : <ChevronRightIcon />}
+          </IconShell>
+        ) : (
+          <span className="size-6 shrink-0" aria-hidden="true" />
+        )}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            className={cn(
+              'label-regular-primary min-w-0 truncate text-left',
+              isEmphasised ? 'text-fg-primary' : 'text-fg-secondary',
+            )}
+            title={title}>
+            {title}
+          </span>
+          {subtitle && (
+            <span
+              className="paragraph-small-primary text-fg-tertiary min-w-0 truncate text-left"
+              title={subtitle}>
+              {subtitle}
+            </span>
+          )}
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-3">
+        {duration && <DurationLabel duration={duration} />}
+        <StatusLabel status={status} />
+      </div>
+    </>
+  );
+
+  const rowClass = cn(
+    'flex w-full min-w-0 items-center justify-between border-l-2 p-2 transition-colors',
+    getStatusBorderClass(status),
+    isOpen && 'bg-stateslayer-overlay-pressed',
+  );
+
+  if (!onToggle) {
+    return <div className={rowClass}>{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={isOpen}
+      aria-label={`${title}, ${isOpen ? 'collapse' : 'expand'}`}
+      className={cn(
+        rowClass,
+        'hover:bg-stateslayer-overlay-hover cursor-pointer text-left',
+      )}>
+      {content}
+    </button>
+  );
+}
+
+function LogEntryBlock({
+  icon,
+  label,
+  children,
+}: {
+  readonly icon: React.ReactNode;
+  readonly label: string;
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-1 py-2 pr-2">
+      <div className="flex items-center gap-1">
+        <IconShell size="sm" variant="secondary">
+          {icon}
+        </IconShell>
+        <span className="paragraph-small-primary text-fg-secondary">
+          {label}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-col gap-1 pl-5">{children}</div>
+    </div>
+  );
+}
+
+function LogEntryRow({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
+  return (
+    <div className="flex w-full min-w-0 items-start gap-1">
+      <span className="paragraph-small-primary text-fg-secondary shrink-0">
+        {label}
+      </span>
+      <span className="paragraph-small-primary text-fg-primary min-w-0 break-words">
+        {value}
+      </span>
+    </div>
+  );
 }
 
 function WorkflowStepDetail({
@@ -304,141 +463,121 @@ function WorkflowStepDetail({
     detail.podName,
     shouldFetchLogs,
   ]);
+
   return (
-    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-2 text-sm sm:p-3">
+    <div className="flex w-full min-w-0 flex-col pl-10">
       {detail.image && (
-        <div className="flex items-start gap-2">
-          <Container className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Image</span>
-            <p className="font-mono text-xs break-all">{detail.image}</p>
-          </div>
-        </div>
+        <LogEntryBlock icon={<Dns />} label="Image">
+          <span className="paragraph-small-primary text-fg-primary break-all">
+            {detail.image}
+          </span>
+        </LogEntryBlock>
       )}
 
       {detail.command && (
-        <div className="flex items-start gap-2">
-          <Terminal className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Command</span>
-            <p className="font-mono text-xs break-all">
-              {detail.command.join(' ')} {detail.args?.join(' ')}
-            </p>
-          </div>
-        </div>
+        <LogEntryBlock icon={<Code />} label="Command">
+          <span className="paragraph-small-primary text-fg-primary break-all">
+            {detail.command.join(' ')} {detail.args?.join(' ')}
+          </span>
+        </LogEntryBlock>
       )}
 
       {detail.inputs && Object.keys(detail.inputs).length > 0 && (
-        <div className="flex items-start gap-2">
-          <FileText className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Inputs</span>
-            <div className="bg-background mt-1 rounded border p-2">
-              {Object.entries(detail.inputs).map(([key, value]) => (
-                <div
-                  key={key}
-                  className="flex flex-col gap-1 font-mono text-xs break-all sm:flex-row sm:gap-2">
-                  <span className="text-muted-foreground shrink-0">{key}:</span>
-                  <span className="break-all">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <LogEntryBlock icon={<InsertDriveFile />} label="Inputs">
+          {Object.entries(detail.inputs).map(([key, value]) => (
+            <LogEntryRow key={key} label={`${key}:`} value={value} />
+          ))}
+        </LogEntryBlock>
       )}
 
       {detail.outputs && Object.keys(detail.outputs).length > 0 && (
-        <div className="flex items-start gap-2">
-          <Zap className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Outputs</span>
-            <div className="bg-background mt-1 rounded border p-2">
-              {Object.entries(detail.outputs).map(([key, value]) => (
-                <div
-                  key={key}
-                  className="flex flex-col gap-1 font-mono text-xs break-all sm:flex-row sm:gap-2">
-                  <span className="text-muted-foreground shrink-0">{key}:</span>
-                  <span className="break-all">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <LogEntryBlock icon={<InsertDriveFile />} label="Outputs">
+          {Object.entries(detail.outputs).map(([key, value]) => (
+            <LogEntryRow key={key} label={`${key}:`} value={value} />
+          ))}
+        </LogEntryBlock>
       )}
+
       {message && (
-        <div className="flex items-start gap-2">
-          <AlertCircle className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Message</span>
-            <div className="bg-background mt-1 rounded border p-2">
-              <div className="font-mono text-xs break-all">
-                <span>{message}</span>
-              </div>
-            </div>
+        <LogEntryBlock icon={<ErrorIcon />} label="Message">
+          <div className="bg-fill-onsurface-ui-1 w-full p-2">
+            <p className="paragraph-regular-primary text-fg-secondary break-words">
+              {message}
+            </p>
           </div>
-        </div>
+        </LogEntryBlock>
       )}
 
       {shouldFetchLogs && (
-        <div className="flex items-start gap-2">
-          <Terminal className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Logs</span>
-            <div className="mt-1 max-h-64 overflow-auto rounded border bg-black p-2 sm:p-3">
-              {loadingLogs && (
-                <div className="flex items-center gap-2">
-                  <RefreshCw className="h-3 w-3 animate-spin text-gray-400" />
-                  <span className="font-mono text-xs text-gray-400">
-                    Loading logs...
-                  </span>
-                </div>
-              )}
-              {logsError && (
-                <div className="flex flex-col gap-2">
-                  <div className="font-mono text-xs text-yellow-400">
-                    {logsError}
-                  </div>
-                  {detail.workflowName && detail.nodeId && detail.namespace && (
-                    <a
-                      href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs break-all text-blue-400 underline hover:text-blue-300">
-                      View logs in Argo UI
-                      <ExternalLink className="h-3 w-3 shrink-0" />
-                    </a>
-                  )}
-                </div>
-              )}
-              {logs && !loadingLogs && !logsError && (
-                <pre className="font-mono text-xs break-all whitespace-pre-wrap text-gray-100">
-                  {logs}
-                </pre>
-              )}
-              {!logs && !loadingLogs && !logsError && (
-                <div className="font-mono text-xs text-gray-500">
-                  No logs available
-                </div>
-              )}
-            </div>
+        <LogEntryBlock icon={<Terminal2 />} label="Logs">
+          <div className="bg-fill-onsurface-ui-1 max-h-64 w-full overflow-auto p-2">
+            {loadingLogs && (
+              <div className="flex items-center gap-2">
+                <Spinner size="sm" className="text-fg-tertiary" />
+                <span className="paragraph-small-primary text-fg-tertiary">
+                  Loading logs...
+                </span>
+              </div>
+            )}
+            {logsError && (
+              <div className="flex flex-col items-start gap-2">
+                <p className="paragraph-small-primary text-fg-warning">
+                  {logsError}
+                </p>
+                <Button variant="ghost" size="xs" asChild>
+                  <a
+                    href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+                    target="_blank"
+                    rel="noopener noreferrer">
+                    View logs in Argo UI
+                    <IconShell size="sm">
+                      <OpenInNew />
+                    </IconShell>
+                  </a>
+                </Button>
+              </div>
+            )}
+            {!loadingLogs && !logsError && (
+              <pre className="paragraph-regular-primary text-fg-secondary break-words whitespace-pre-wrap">
+                {logs || 'No logs available'}
+              </pre>
+            )}
           </div>
-        </div>
+        </LogEntryBlock>
+      )}
+
+      {detail.exitCode !== undefined && (
+        <LogEntryBlock icon={<Code />} label="Exit code">
+          <span className="paragraph-small-primary text-fg-primary">
+            {detail.exitCode}
+          </span>
+        </LogEntryBlock>
       )}
 
       {detail.resources && (
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+        <div className="flex w-full flex-wrap items-start gap-6 py-2 pr-2">
           {detail.resources.cpu && (
             <div className="flex items-center gap-1">
-              <Cpu className="text-muted-foreground h-3 w-3" />
-              <span className="text-muted-foreground text-xs">CPU:</span>
-              <span className="text-xs">{detail.resources.cpu}</span>
+              <IconShell size="sm" variant="secondary">
+                <MemoryIcon />
+              </IconShell>
+              <span className="paragraph-small-primary text-fg-secondary">
+                CPU:{' '}
+                <span className="text-fg-primary">{detail.resources.cpu}</span>
+              </span>
             </div>
           )}
           {detail.resources.memory && (
             <div className="flex items-center gap-1">
-              <HardDrive className="text-muted-foreground h-3 w-3" />
-              <span className="text-muted-foreground text-xs">Memory:</span>
-              <span className="text-xs">{detail.resources.memory}</span>
+              <IconShell size="sm" variant="secondary">
+                <Database />
+              </IconShell>
+              <span className="paragraph-small-primary text-fg-secondary">
+                Memory:{' '}
+                <span className="text-fg-primary">
+                  {detail.resources.memory}
+                </span>
+              </span>
             </div>
           )}
         </div>
@@ -447,99 +586,88 @@ function WorkflowStepDetail({
   );
 }
 
-function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
+function TeamStepDetail({
+  detail,
+  message,
+}: {
+  readonly detail: TeamStepDetail;
+  readonly message?: string;
+}) {
   return (
-    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-2 text-sm sm:p-3">
+    <div className="flex w-full min-w-0 flex-col pl-10">
       {detail.model && (
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-1">
-            <Bot className="text-muted-foreground h-3 w-3" />
-            <span className="text-muted-foreground text-xs">Model:</span>
-            <span className="text-xs font-medium break-all">
-              {detail.model}
-            </span>
-          </div>
-          {detail.tokensUsed && (
-            <div className="flex items-center gap-1">
-              <Zap className="text-muted-foreground h-3 w-3" />
-              <span className="text-muted-foreground text-xs">Tokens:</span>
-              <span className="text-xs whitespace-nowrap">
-                {detail.tokensUsed.input.toLocaleString()} in /{' '}
-                {detail.tokensUsed.output.toLocaleString()} out
-              </span>
-            </div>
-          )}
-        </div>
+        <LogEntryBlock icon={<SmartToy />} label="Model">
+          <span className="paragraph-small-primary text-fg-primary break-all">
+            {detail.model}
+          </span>
+        </LogEntryBlock>
+      )}
+
+      {detail.tokensUsed && (
+        <LogEntryBlock icon={<Bolt />} label="Tokens">
+          <LogEntryRow
+            label="input:"
+            value={detail.tokensUsed.input.toLocaleString()}
+          />
+          <LogEntryRow
+            label="output:"
+            value={detail.tokensUsed.output.toLocaleString()}
+          />
+        </LogEntryBlock>
       )}
 
       {detail.input && (
-        <div className="flex items-start gap-2">
-          <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Input</span>
-            <div className="bg-background mt-1 rounded border p-2">
-              <p className="text-xs break-all whitespace-pre-wrap">
-                {detail.input}
-              </p>
-            </div>
-          </div>
-        </div>
+        <LogEntryBlock icon={<ChatBubble />} label="Input">
+          <span className="paragraph-small-primary text-fg-primary break-words whitespace-pre-wrap">
+            {detail.input}
+          </span>
+        </LogEntryBlock>
       )}
 
       {detail.thinking && (
-        <div className="flex items-start gap-2">
-          <Bot className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Thinking</span>
-            <div className="bg-background mt-1 rounded border border-blue-200 p-2 dark:border-blue-800">
-              <p className="text-xs break-all whitespace-pre-wrap text-blue-600 italic dark:text-blue-400">
-                {detail.thinking}
-              </p>
-            </div>
-          </div>
-        </div>
+        <LogEntryBlock icon={<AutoAwesome />} label="Thinking">
+          <span className="paragraph-small-primary text-fg-secondary break-words whitespace-pre-wrap italic">
+            {detail.thinking}
+          </span>
+        </LogEntryBlock>
       )}
 
       {detail.toolInput && (
-        <div className="flex items-start gap-2">
-          <Workflow className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Tool Input</span>
-            <div className="bg-background mt-1 overflow-auto rounded border p-2">
-              <pre className="text-xs break-all whitespace-pre-wrap">
-                {JSON.stringify(detail.toolInput, null, 2)}
-              </pre>
-            </div>
+        <LogEntryBlock icon={<Build />} label="Tool input">
+          <div className="bg-fill-onsurface-ui-1 w-full overflow-auto p-2">
+            <pre className="paragraph-small-primary text-fg-secondary break-words whitespace-pre-wrap">
+              {JSON.stringify(detail.toolInput, null, 2)}
+            </pre>
           </div>
-        </div>
+        </LogEntryBlock>
       )}
 
       {detail.toolOutput !== undefined && (
-        <div className="flex items-start gap-2">
-          <Zap className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Tool Output</span>
-            <div className="bg-background mt-1 overflow-auto rounded border p-2">
-              <pre className="text-xs break-all whitespace-pre-wrap">
-                {JSON.stringify(detail.toolOutput, null, 2)}
-              </pre>
-            </div>
+        <LogEntryBlock icon={<Bolt />} label="Tool output">
+          <div className="bg-fill-onsurface-ui-1 w-full overflow-auto p-2">
+            <pre className="paragraph-small-primary text-fg-secondary break-words whitespace-pre-wrap">
+              {JSON.stringify(detail.toolOutput, null, 2)}
+            </pre>
           </div>
-        </div>
+        </LogEntryBlock>
       )}
 
       {detail.output && (
-        <div className="flex items-start gap-2">
-          <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="text-muted-foreground text-xs">Output</span>
-            <div className="bg-background mt-1 rounded border border-green-200 p-2 dark:border-green-800">
-              <p className="text-xs break-all whitespace-pre-wrap">
-                {detail.output}
-              </p>
-            </div>
+        <LogEntryBlock icon={<ChatBubble />} label="Output">
+          <span className="paragraph-small-primary text-fg-primary break-words whitespace-pre-wrap">
+            {detail.output}
+          </span>
+        </LogEntryBlock>
+      )}
+
+      {message && (
+        <LogEntryBlock icon={<ErrorIcon />} label="Message">
+          <div className="bg-fill-onsurface-ui-1 w-full p-2">
+            <p className="paragraph-regular-primary text-fg-secondary break-words">
+              {message}
+            </p>
           </div>
-        </div>
+        </LogEntryBlock>
       )}
     </div>
   );
@@ -558,6 +686,8 @@ function WorkflowStepNode({
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
 
+  const isExpandable = Boolean(hasDetail || hasChildren);
+
   const isParallelContainer =
     step.type === 'steps' &&
     hasChildren &&
@@ -571,123 +701,40 @@ function WorkflowStepNode({
           <WorkflowStepNode
             key={child.id}
             step={child}
-            depth={depth + 1}
-            isLast={index === step.children!.length - 1}
+            depth={depth}
+            isLast={isLast && index === step.children!.length - 1}
           />
         ))}
       </>
     );
   }
 
-  const isParallelNode =
-    step.type === 'dag' || (hasChildren && step.children!.length > 1);
-
-  const childDepth = isParallelNode ? depth + 1 : depth;
-
-  const getBorderColor = () => {
-    if (step.status === 'running') return 'border-l-blue-500';
-    if (step.status === 'succeeded') return 'border-l-green-500';
-    if (step.status === 'failed') return 'border-l-red-500';
-    return 'border-l-border';
-  };
-
   return (
-    <div className={cn('relative flex min-w-0', depth > 0 && 'ml-3 sm:ml-5')}>
-      {depth > 0 && (
-        <>
-          <div className="absolute top-0 -left-3 h-full w-3 sm:-left-5 sm:w-5">
-            <div
-              className="bg-border absolute top-0 left-0 w-px"
-              style={{ height: isLast ? '16px' : '100%' }}
+    <div className={cn('flex w-full min-w-0', depth > 0 && 'pl-5')}>
+      {depth > 0 && <TreeConnector isLast={isLast} />}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TraceRow
+          title={step.displayName}
+          status={step.status}
+          duration={step.duration}
+          isOpen={showDetail}
+          isEmphasised={showDetail || !!hasChildren}
+          onToggle={isExpandable ? () => setShowDetail(!showDetail) : undefined}
+        />
+
+        {hasChildren &&
+          showDetail &&
+          step.children!.map((child, index) => (
+            <WorkflowStepNode
+              key={child.id}
+              step={child}
+              depth={depth + 1}
+              isLast={index === step.children!.length - 1}
             />
-          </div>
-          <div className="bg-border absolute top-4 -left-3 h-px w-2 sm:-left-5 sm:w-3" />
-        </>
-      )}
-
-      <div
-        className={cn(
-          'min-w-0 flex-1 overflow-hidden',
-          !hasChildren && 'pb-2.5',
-        )}>
-        <div
-          className={cn(
-            'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col gap-2 rounded-md border border-l-4 px-2 py-2 transition-all sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-2.5',
-            getBorderColor(),
-            step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
-            step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
-          )}>
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
-            {hasDetail ? (
-              <button
-                onClick={() => setShowDetail(!showDetail)}
-                className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors hover:cursor-pointer"
-                aria-label={showDetail ? 'Hide details' : 'Show details'}>
-                {showDetail ? (
-                  <ChevronDown className="text-muted-foreground h-4 w-4" />
-                ) : (
-                  <ChevronRight className="text-muted-foreground h-4 w-4" />
-                )}
-              </button>
-            ) : (
-              <div className="w-4 shrink-0" />
-            )}
-
-            <div className="flex shrink-0 items-center gap-2">
-              {getStatusIcon(step.status)}
-              <div className="text-muted-foreground">
-                {getWorkflowTypeIcon(step.type)}
-              </div>
-            </div>
-            <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden sm:flex-row sm:items-center sm:gap-2">
-              <span
-                className="line-clamp-1 text-sm font-medium break-all"
-                title={step.displayName}>
-                {step.displayName}
-              </span>
-              {step.name !== step.displayName && (
-                <span
-                  className="text-muted-foreground line-clamp-1 font-mono text-xs break-all"
-                  title={step.name}>
-                  {step.name}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2 self-end sm:gap-3 sm:self-auto">
-            {step.duration && (
-              <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
-                <Clock className="h-3.5 w-3.5" />
-                {step.duration}
-              </span>
-            )}
-
-            <Badge
-              variant={getStatusBadgeVariant(step.status)}
-              className="text-xs font-medium whitespace-nowrap">
-              {step.status}
-            </Badge>
-          </div>
-        </div>
+          ))}
 
         {hasDetail && showDetail && (
-          <div className="mt-3 ml-2 sm:ml-6">
-            <WorkflowStepDetail detail={step.detail!} message={step.message} />
-          </div>
-        )}
-
-        {hasChildren && (
-          <div>
-            {step.children!.map((child, index) => (
-              <WorkflowStepNode
-                key={child.id}
-                step={child}
-                depth={childDepth}
-                isLast={index === step.children!.length - 1}
-              />
-            ))}
-          </div>
+          <WorkflowStepDetail detail={step.detail!} message={step.message} />
         )}
       </div>
     </div>
@@ -706,113 +753,37 @@ function TeamStepNode({
   const [showDetail, setShowDetail] = useState(false);
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
-
-  const getBorderColor = () => {
-    if (step.status === 'running') return 'border-l-blue-500';
-    if (step.status === 'succeeded') return 'border-l-green-500';
-    if (step.status === 'failed') return 'border-l-red-500';
-    return 'border-l-border';
-  };
+  const isExpandable = Boolean(hasDetail || step.message || hasChildren);
 
   return (
-    <div className={cn('relative flex', depth > 0 && 'ml-3 sm:ml-5')}>
-      {depth > 0 && (
-        <>
-          <div className="absolute top-0 -left-3 h-full w-3 sm:-left-5 sm:w-5">
-            <div
-              className="bg-border absolute top-0 left-0 w-px"
-              style={{ height: isLast ? '16px' : '100%' }}
+    <div className={cn('flex w-full min-w-0', depth > 0 && 'pl-5')}>
+      {depth > 0 && <TreeConnector isLast={isLast} />}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TraceRow
+          title={step.displayName}
+          subtitle={
+            step.agentName === step.displayName ? undefined : step.agentName
+          }
+          status={step.status}
+          duration={step.duration}
+          isOpen={showDetail}
+          isEmphasised={showDetail || !!hasChildren}
+          onToggle={isExpandable ? () => setShowDetail(!showDetail) : undefined}
+        />
+
+        {hasChildren &&
+          showDetail &&
+          step.children!.map((child, index) => (
+            <TeamStepNode
+              key={child.id}
+              step={child}
+              depth={depth + 1}
+              isLast={index === step.children!.length - 1}
             />
-          </div>
-          <div className="bg-border absolute top-4 -left-3 h-px w-2 sm:-left-5 sm:w-3" />
-        </>
-      )}
+          ))}
 
-      <div className="min-w-0 flex-1 pb-2.5">
-        <div
-          className={cn(
-            'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col gap-2 rounded-md border border-l-4 px-2 py-2 transition-all sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-2.5',
-            getBorderColor(),
-            step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
-            step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
-          )}>
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
-            {hasDetail ? (
-              <button
-                onClick={() => setShowDetail(!showDetail)}
-                className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors"
-                aria-label={showDetail ? 'Hide details' : 'Show details'}>
-                {showDetail ? (
-                  <ChevronDown className="text-muted-foreground h-4 w-4" />
-                ) : (
-                  <ChevronRight className="text-muted-foreground h-4 w-4" />
-                )}
-              </button>
-            ) : (
-              <div className="w-4 shrink-0" />
-            )}
-
-            <div className="flex shrink-0 items-center gap-2">
-              {getStatusIcon(step.status)}
-              <div className="text-muted-foreground">
-                {getTeamTypeIcon(step.type)}
-              </div>
-            </div>
-            <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden sm:flex-row sm:items-center sm:gap-2">
-              <span
-                className="truncate text-sm font-medium"
-                title={step.displayName}>
-                {step.displayName}
-              </span>
-              <span
-                className="text-muted-foreground truncate font-mono text-xs"
-                title={step.agentName}>
-                {step.agentName}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap items-center gap-2 self-end sm:gap-3 sm:self-auto">
-            {step.message && (
-              <span
-                className="text-muted-foreground max-w-[200px] truncate text-xs"
-                title={step.message}>
-                {step.message}
-              </span>
-            )}
-
-            {step.duration && (
-              <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
-                <Clock className="h-3.5 w-3.5" />
-                {step.duration}
-              </span>
-            )}
-
-            <Badge
-              variant={getStatusBadgeVariant(step.status)}
-              className="text-xs font-medium whitespace-nowrap">
-              {step.status}
-            </Badge>
-          </div>
-        </div>
-
-        {hasDetail && showDetail && (
-          <div className="mt-3 ml-2 sm:ml-6">
-            <TeamStepDetail detail={step.detail!} />
-          </div>
-        )}
-
-        {hasChildren && (
-          <div className="mt-0">
-            {step.children!.map((child, index) => (
-              <TeamStepNode
-                key={child.id}
-                step={child}
-                depth={depth + 1}
-                isLast={index === step.children!.length - 1}
-              />
-            ))}
-          </div>
+        {isExpandable && showDetail && (
+          <TeamStepDetail detail={step.detail ?? {}} message={step.message} />
         )}
       </div>
     </div>
@@ -827,77 +798,48 @@ function SessionDetailView({
   isLoading?: boolean;
 }) {
   return (
-    <Card className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
-      <CardHeader className="shrink-0 border-b">
-        <div className="mb-3 flex min-w-0 flex-col items-start gap-3 lg:flex-row lg:gap-4">
-          <div className="flex w-full min-w-0 flex-1 items-start gap-2 overflow-hidden sm:gap-3">
-            <div className="text-muted-foreground mt-1 shrink-0">
-              {getSessionTypeIcon(session.type)}
+    <div className="border-fill-onsurface-ui-1 flex h-full min-h-0 min-w-0 flex-1 flex-col border">
+      <div className="bg-surface-secondary flex h-10 shrink-0 items-center justify-between gap-3 px-3">
+        <span
+          className="paragraph-regular-primary text-fg-primary min-w-0 flex-1 truncate"
+          title={session.name}>
+          {session.name}
+        </span>
+        <div className="flex shrink-0 items-center gap-3">
+          {isLoading && (
+            <div className="flex items-center gap-1">
+              <Spinner size="sm" className="text-fg-tertiary" />
+              <span className="paragraph-small-primary text-fg-secondary">
+                Updating
+              </span>
             </div>
-            <div className="min-w-0 flex-1 overflow-hidden">
-              <CardTitle
-                className="truncate text-lg sm:text-xl"
-                title={session.name}>
-                {session.name}
-              </CardTitle>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge
-                  variant={getStatusBadgeVariant(session.status)}
-                  className="font-medium">
-                  {session.status}
-                </Badge>
-                <Badge
-                  variant="alternative"
-                  className="text-xs font-medium capitalize">
-                  {session.type}
-                </Badge>
-                <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-                  <Clock className="h-3.5 w-3.5" />
-                  {session.duration}
-                </span>
-                {isLoading && (
-                  <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    Updating
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full shrink-0 flex-wrap items-center gap-2 lg:w-auto">
-            <span className="text-muted-foreground text-xs whitespace-nowrap sm:text-sm">
-              {new Date(session.startedAt).toLocaleString()}
-            </span>
-            {session.type === 'workflow' &&
-              session.namespace &&
-              session.uid && (
-                <a
-                  href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="View in Argo Workflows">
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <ExternalLink className="h-4 w-4" />
-                    <span className="hidden sm:inline">View in Argo</span>
-                    <span className="sm:hidden">Argo</span>
-                  </Button>
-                </a>
-              )}
-          </div>
+          )}
+          <StatusLabel status={session.status} />
+          {session.type === 'workflow' && session.namespace && session.uid && (
+            <Button variant="outline" size="xs" asChild>
+              <a
+                href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
+                target="_blank"
+                rel="noopener noreferrer">
+                View in Argo
+                <IconShell size="sm">
+                  <OpenInNew />
+                </IconShell>
+              </a>
+            </Button>
+          )}
         </div>
-      </CardHeader>
-      <CardContent className="min-w-0 overflow-x-hidden px-3 pt-2 sm:px-6 sm:pt-3">
-        <div className="min-w-0 overflow-hidden">
-          {session.type === 'workflow'
-            ? session.steps.map(step => (
-                <WorkflowStepNode key={step.id} step={step} />
-              ))
-            : session.steps.map(step => (
-                <TeamStepNode key={step.id} step={step} />
-              ))}
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4">
+        {session.type === 'workflow'
+          ? session.steps.map(step => (
+              <WorkflowStepNode key={step.id} step={step} />
+            ))
+          : session.steps.map(step => (
+              <TeamStepNode key={step.id} step={step} />
+            ))}
+      </div>
+    </div>
   );
 }
 
@@ -912,47 +854,38 @@ function SessionListItem({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       title={session.name}
+      aria-current={isSelected ? 'true' : undefined}
       className={cn(
-        'hover:bg-accent/50 flex w-full items-start gap-2 rounded-lg border p-2 text-left transition-all hover:cursor-pointer sm:gap-3 sm:p-3',
-        isSelected && 'bg-accent border-primary shadow-sm',
+        'flex w-full min-w-0 cursor-pointer items-center px-3 py-2 text-left transition-colors',
+        isSelected
+          ? 'bg-fill-onsurface-ui-1'
+          : 'hover:bg-stateslayer-overlay-hover',
       )}>
-      <div className="text-muted-foreground mt-0.5 shrink-0">
-        {getSessionTypeIcon(session.type)}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="mb-1.5 flex items-start gap-2">
-          <span
-            className="truncate text-sm leading-tight font-medium"
-            title={session.name}>
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <span data-testid="session-status" data-status={session.status}>
+              {getStatusIcon(session.status)}
+              <span className="sr-only">{STATUS_LABELS[session.status]}</span>
+            </span>
+            <span className="paragraph-small-primary text-fg-secondary">
+              {new Date(session.startedAt).toLocaleString()}
+            </span>
+          </div>
+          <span className="paragraph-regular-primary text-fg-primary w-full truncate">
             {session.name}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge
-            variant={getStatusBadgeVariant(session.status)}
-            className="h-5 text-xs font-medium">
-            {session.status}
-          </Badge>
-          <Badge
-            variant="alternative"
-            className="h-5 text-xs font-medium capitalize">
+        <div className="flex min-w-0 items-center justify-between gap-1">
+          <DurationLabel duration={session.duration} />
+          <span className="label-small-primary text-fg-secondary py-1 capitalize">
             {session.type}
-          </Badge>
-        </div>
-        <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-          <Clock className="h-3 w-3 shrink-0" />
-          <span className="font-medium whitespace-nowrap">
-            {session.duration}
-          </span>
-          <span>·</span>
-          <span className="whitespace-nowrap">
-            {new Date(session.startedAt).toLocaleTimeString()}
           </span>
         </div>
       </div>
-      <div className="mt-0.5 shrink-0">{getStatusIcon(session.status)}</div>
     </button>
   );
 }
@@ -971,8 +904,156 @@ const normalizeStatus = (status: string): string => {
   return statusMap[status.toLowerCase()] || status;
 };
 
-export function SessionsSection() {
-  const { namespace } = useNamespace();
+function TemplateOptions({
+  templateNames,
+  filteredTemplateNames,
+  query,
+  onSelect,
+}: {
+  readonly templateNames: string[];
+  readonly filteredTemplateNames: string[];
+  readonly query: string;
+  readonly onSelect: (templateName: string) => void;
+}) {
+  if (templateNames.length === 0) {
+    return (
+      <div className="paragraph-small-primary text-fg-tertiary px-2 py-3 text-center">
+        No workflow templates found yet.
+        <br />
+        Type to enter a custom value.
+      </div>
+    );
+  }
+
+  if (filteredTemplateNames.length === 0) {
+    return (
+      <div className="paragraph-small-primary text-fg-tertiary px-2 py-3 text-center">
+        No templates match &ldquo;{query}&rdquo;
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-h-[300px] overflow-y-auto py-1">
+      {filteredTemplateNames.map(templateName => (
+        <button
+          key={templateName}
+          type="button"
+          onClick={() => onSelect(templateName)}
+          className="hover:bg-stateslayer-overlay-hover paragraph-regular-primary text-fg-primary w-full cursor-pointer truncate px-2 py-1.5 text-left transition-colors">
+          {templateName}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SessionsBody({
+  error,
+  isLoading,
+  sessions,
+  selectedSessionId,
+  onSelectSession,
+  selectedSession,
+  isDetailLoading,
+  hasActiveFilters,
+  onClearFilters,
+}: {
+  readonly error: Error | null;
+  readonly isLoading: boolean;
+  readonly sessions: Session[];
+  readonly selectedSessionId: string | null;
+  readonly onSelectSession: (sessionId: string) => void;
+  readonly selectedSession?: Session;
+  readonly isDetailLoading: boolean;
+  readonly hasActiveFilters: boolean;
+  readonly onClearFilters: () => void;
+}) {
+  if (error) {
+    return (
+      <ResourceErrorState
+        title="Couldn't load workflow runs"
+        description={`Error: ${error.message}`}
+      />
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="text-fg-secondary flex flex-1 flex-col items-center justify-center gap-4">
+        <Spinner className="text-fg-tertiary" />
+        <span className="label-large-primary">Loading sessions...</span>
+      </div>
+    );
+  }
+
+  if (sessions.length === 0 && hasActiveFilters) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4">
+        <ResourceNoResults
+          icon={<SearchIcon className="size-full" />}
+          message="No workflow runs found matching your filters"
+        />
+        <Button variant="outline" onClick={onClearFilters}>
+          Clear filters
+        </Button>
+      </div>
+    );
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <ResourceEmptyState
+        icon={<Terminal className="size-full" />}
+        title="No workflow runs yet"
+        description={
+          <>
+            <p className="mb-2">You haven&apos;t created any sessions yet.</p>
+            <p>Get started by creating your session to see workflow runs.</p>
+          </>
+        }
+        actions={<LearnMoreButton href={ARGO_WORKFLOWS_DOCS_URL} />}
+      />
+    );
+  }
+
+  return (
+    <div className="flex max-h-[calc(100vh-10rem)] min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-6">
+      <div className="flex h-full min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto lg:w-[261px]">
+        {sessions.map(session => (
+          <SessionListItem
+            key={session.id}
+            session={session}
+            isSelected={session.id === selectedSessionId}
+            onClick={() => onSelectSession(session.id)}
+          />
+        ))}
+      </div>
+      <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+        {selectedSession ? (
+          <SessionDetailView
+            session={selectedSession}
+            isLoading={isDetailLoading}
+          />
+        ) : (
+          <div className="border-fill-onsurface-ui-1 flex flex-1 items-center justify-center border">
+            <ResourceNoResults
+              icon={<AccountTree className="size-full" />}
+              message="Select a session to view details"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function SessionsSection({
+  onCountChange,
+}: {
+  readonly onCountChange?: (count: number) => void;
+}) {
+  const { namespace, isNamespaceResolved } = useNamespace();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1101,6 +1182,12 @@ export function SessionsSection() {
     }
   }, [filteredAndSortedSessions, selectedSessionId]);
 
+  const sessionCount = filteredAndSortedSessions.length;
+
+  useEffect(() => {
+    onCountChange?.(sessionCount);
+  }, [onCountChange, sessionCount]);
+
   const selectedSessionFromList = filteredAndSortedSessions.find(
     s => s.id === selectedSessionId,
   );
@@ -1165,6 +1252,8 @@ export function SessionsSection() {
     (statusFilter && statusFilter !== 'all') ||
     sortOrder !== 'newest';
 
+  const isLoading = loading || !isNamespaceResolved;
+
   const clearFilters = () => {
     setWorkflowNameInput('');
     setWorkflowTemplateNameInput('');
@@ -1174,24 +1263,29 @@ export function SessionsSection() {
 
   return (
     <ErrorBoundary>
-      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-        <div className="bg-muted/20 flex flex-col gap-1.5 rounded-md py-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <div className="relative min-w-0 flex-1">
-              <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
+      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex w-full flex-col gap-3 pb-1 lg:flex-row lg:items-end">
+          <ResourceSearchInput
+            value={workflowNameInput}
+            onChange={setWorkflowNameInput}
+            placeholder="Search"
+            testId="workflow-runs-search"
+            className="w-full lg:max-w-[493px] lg:flex-1"
+          />
+
+          <div
+            className="flex w-full flex-col gap-2 lg:w-[197px]"
+            ref={templateInputRef}>
+            <label
+              htmlFor="workflow-template-filter"
+              className="label-regular-primary text-fg-secondary">
+              Template
+            </label>
+            <div className="relative">
               <Input
-                type="text"
-                placeholder="Search workflows..."
-                value={workflowNameInput}
-                onChange={e => setWorkflowNameInput(e.target.value)}
-                className="bg-background h-8 border-0 pl-8 text-sm shadow-sm"
-              />
-            </div>
-            <div className="relative min-w-0 flex-1" ref={templateInputRef}>
-              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 h-3.5 w-3.5 -translate-y-1/2" />
-              <Input
-                type="text"
-                placeholder="Search templates..."
+                id="workflow-template-filter"
+                type="search"
+                placeholder="All templates"
                 value={workflowTemplateNameInput}
                 onChange={e => {
                   setWorkflowTemplateNameInput(e.target.value);
@@ -1202,183 +1296,93 @@ export function SessionsSection() {
                 onFocus={() => {
                   setTemplateDropdownOpen(true);
                 }}
-                className="bg-background h-8 border-0 pr-8 pl-8 text-sm shadow-sm"
               />
               {templateDropdownOpen && (
-                <div className="bg-popover text-popover-foreground animate-in fade-in-0 zoom-in-95 absolute z-50 mt-1 w-full rounded-md border shadow-md">
-                  {uniqueWorkflowTemplateNames.length === 0 ? (
-                    <div className="text-muted-foreground px-2 py-3 text-center text-sm">
-                      No workflow templates found yet.
-                      <br />
-                      Type to enter a custom value.
-                    </div>
-                  ) : filteredTemplateNames.length > 0 ? (
-                    <div className="max-h-[300px] overflow-y-auto py-1">
-                      <div className="text-muted-foreground px-2 py-1.5 text-xs font-semibold">
-                        Available Templates ({filteredTemplateNames.length})
-                      </div>
-                      <div className="border-border my-1 border-t" />
-                      {filteredTemplateNames.map(templateName => (
-                        <button
-                          key={templateName}
-                          onClick={() => {
-                            setWorkflowTemplateNameInput(templateName);
-                            setTemplateDropdownOpen(false);
-                          }}
-                          className="hover:bg-accent w-full cursor-pointer rounded-sm px-2 py-1.5 text-left text-sm transition-colors">
-                          {templateName}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground px-2 py-3 text-center text-sm">
-                      No templates match &ldquo;{workflowTemplateNameInput}
-                      &rdquo;
-                    </div>
-                  )}
+                <div className="bg-surface-secondary border-stroke-divider animate-in fade-in-0 shadow-elevation-2 absolute z-50 mt-1 w-full border">
+                  <TemplateOptions
+                    templateNames={uniqueWorkflowTemplateNames}
+                    filteredTemplateNames={filteredTemplateNames}
+                    query={workflowTemplateNameInput}
+                    onSelect={templateName => {
+                      setWorkflowTemplateNameInput(templateName);
+                      setTemplateDropdownOpen(false);
+                    }}
+                  />
                 </div>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-2 md:ml-auto md:shrink-0">
-              <Select
-                value={statusFilter || 'all'}
-                onValueChange={(value) => setStatusFilter(value as string)}>
-                <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    <div className="flex items-center gap-2">
-                      <Circle className="text-muted-foreground h-4 w-4" />
-                      <span>All Statuses</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="Running">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      <span>Running</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="Succeeded">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                      <span>Succeeded</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="Failed">
-                    <div className="flex items-center gap-2">
-                      <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                      <span>Failed</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                items={sortOrderItems}
-                value={sortOrder}
-                onValueChange={value => setSortOrder(value as SortOrder)}>
-                <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {sortOrderItems.map(item => (
-                    <SelectItem key={item.value} value={item.value}>
-                      <SelectItemText>{item.label}</SelectItemText>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearFilters}
-                title="Clear Filters"
-                className="h-8 w-full border-2 px-2 hover:cursor-pointer sm:w-auto"
-                disabled={!hasActiveFilters}>
-                <X className="h-3.5 w-3.5" />
-                <span className="sm:inline">Clear Filters</span>
-              </Button>
-            </div>
           </div>
-          <div className="mt-3 flex items-center justify-between text-xs">
-            <span className="text-muted-foreground font-medium">
-              {filteredAndSortedSessions.length} session
-              {filteredAndSortedSessions.length !== 1 ? 's' : ''}
+
+          <div className="flex w-full flex-col gap-2 lg:w-[197px]">
+            <span
+              id="workflow-sort-label"
+              className="label-regular-primary text-fg-secondary">
+              Sort
             </span>
+            <Select
+              items={sortOrderItems}
+              value={sortOrder}
+              onValueChange={value => setSortOrder(value as SortOrder)}>
+              <SelectTrigger
+                aria-labelledby="workflow-sort-label"
+                className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {sortOrderItems.map(item => (
+                  <SelectItem key={item.value} value={item.value}>
+                    <SelectItemText>{item.label}</SelectItemText>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          <div className="flex w-full flex-col gap-2 lg:w-[197px]">
+            <span
+              id="workflow-status-label"
+              className="label-regular-primary text-fg-secondary">
+              Status
+            </span>
+            <Select
+              items={statusFilterItems}
+              value={statusFilter || 'all'}
+              onValueChange={value => setStatusFilter(value as string)}>
+              <SelectTrigger
+                aria-labelledby="workflow-status-label"
+                className="w-full">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusFilterItems.map(item => (
+                  <SelectItem key={item.value} value={item.value}>
+                    <SelectItemText>{item.label}</SelectItemText>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            variant="ghost"
+            onClick={clearFilters}
+            disabled={!hasActiveFilters}
+            className="shrink-0">
+            Clear filters
+          </Button>
         </div>
 
-        {error ? (
-          <Card className="flex flex-1 items-center justify-center">
-            <div className="flex flex-col items-center gap-4 p-8 text-center">
-              <AlertCircle className="h-16 w-16 text-red-500 opacity-80" />
-              <div className="flex flex-col gap-2">
-                <span className="text-base font-semibold">
-                  Error: {error.message}
-                </span>
-              </div>
-            </div>
-          </Card>
-        ) : loading ? (
-          <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-4">
-            <RefreshCw className="h-10 w-10 animate-spin" />
-            <span className="text-base font-medium">Loading sessions...</span>
-          </div>
-        ) : filteredAndSortedSessions.length > 0 ? (
-          <div className="flex max-h-[calc(100vh-10rem)] min-h-0 flex-1 flex-col gap-3 lg:flex-row lg:gap-4">
-            <div className="flex h-full min-h-0 w-full flex-col gap-3 overflow-y-auto pr-2 lg:w-64 lg:max-w-[24rem] lg:min-w-[16rem] xl:w-80 2xl:w-96">
-              {filteredAndSortedSessions.map(session => (
-                <SessionListItem
-                  key={session.id}
-                  session={session}
-                  isSelected={session.id === selectedSessionId}
-                  onClick={() => setSelectedSessionId(session.id)}
-                />
-              ))}
-            </div>
-            <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-              {selectedSession ? (
-                <SessionDetailView
-                  session={selectedSession}
-                  isLoading={loadingDetail && useRealData}
-                />
-              ) : (
-                <Card className="flex flex-1 items-center justify-center">
-                  <div className="text-muted-foreground flex flex-col items-center gap-3">
-                    <Workflow className="h-12 w-12 opacity-20" />
-                    <span className="text-base font-medium">
-                      Select a session to view details
-                    </span>
-                  </div>
-                </Card>
-              )}
-            </div>
-          </div>
-        ) : (
-          <Card className="flex flex-1 items-center justify-center">
-            <div className="text-muted-foreground flex flex-col items-center gap-4 p-8">
-              {hasActiveFilters ? (
-                <>
-                  <Search className="h-16 w-16 opacity-20" />
-                  <span className="text-center text-base font-medium">
-                    No workflow runs found matching your filters
-                  </span>
-                  <Button variant="outline" onClick={clearFilters}>
-                    Clear filters
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Workflow className="h-16 w-16 opacity-20" />
-                  <span className="text-center text-base font-medium">
-                    No {sourceFilter === 'all' ? '' : sourceFilter} workflow
-                    runs to display
-                  </span>
-                </>
-              )}
-            </div>
-          </Card>
-        )}
+        <SessionsBody
+          error={error}
+          isLoading={isLoading}
+          sessions={filteredAndSortedSessions}
+          selectedSessionId={selectedSessionId}
+          onSelectSession={setSelectedSessionId}
+          selectedSession={selectedSession}
+          isDetailLoading={loadingDetail && useRealData}
+          hasActiveFilters={Boolean(hasActiveFilters)}
+          onClearFilters={clearFilters}
+        />
       </div>
     </ErrorBoundary>
   );
