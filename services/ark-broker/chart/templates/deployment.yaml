@@ -1,3 +1,6 @@
+{{- if and .Values.persistence.enabled (gt (int .Values.replicaCount) 1) }}
+{{- fail "persistence.enabled=true requires replicaCount=1: the file store is a single append-only log on a ReadWriteOnce volume, and multiple broker replicas writing it duplicate or lose records. Use replicaCount=1, or a Postgres/Redis backend for HA." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,6 +9,13 @@ metadata:
     {{- include "ark-broker.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  {{- if .Values.persistence.enabled }}
+  # File persistence mounts a ReadWriteOnce PVC; a rolling update would briefly
+  # run two brokers appending to the same store and duplicate records. Recreate
+  # guarantees a single writer.
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "ark-broker.selectorLabels" . | nindent 6 }}

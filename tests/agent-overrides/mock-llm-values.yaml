@@ -84,7 +84,7 @@ config:
           "choices": [{
             "message": {
               "role": "assistant",
-              "content": {{jmes request body.messages[-1].content}}
+              "content": {{jmes request body.messages[-1]}}
             },
             "finish_reason": "stop"
           }]
