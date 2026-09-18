@@ -8,13 +8,23 @@ import (
 
 // ArkConfigSpec defines cluster-wide Ark defaults. The singleton
 // object named "default" is consulted by admission webhooks when
-// a Query is created without an explicit ttl.
+// a Query is created without an explicit ttl or memory.
 type ArkConfigSpec struct {
 	// QueryTTL is the default TTL injected into Query resources
 	// that do not specify spec.ttl. If unset, the hardcoded
 	// fallback of 720h is used.
 	// +kubebuilder:validation:Optional
 	QueryTTL *metav1.Duration `json:"queryTTL,omitempty"`
+	// DefaultMemory names the Memory injected into Query resources
+	// that do not specify spec.memory, and only when a Memory with
+	// that name exists in the Query namespace. Only name is
+	// meaningful: the Memory is always resolved in the Query own
+	// namespace, and an explicit namespace is rejected because a
+	// cluster-wide value would commingle conversation history
+	// across tenants. If unset, no memory is injected and
+	// resolution falls back to the Memory named "default".
+	// +kubebuilder:validation:Optional
+	DefaultMemory *MemoryRef `json:"defaultMemory,omitempty"`
 }
 
 // ArkConfigStatus is reserved for future status reporting. Currently empty.
@@ -24,6 +34,7 @@ type ArkConfigStatus struct{}
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="QueryTTL",type=string,JSONPath=`.spec.queryTTL`
+// +kubebuilder:printcolumn:name="DefaultMemory",type=string,JSONPath=`.spec.defaultMemory.name`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // ArkConfig is the Schema for cluster-wide Ark defaults.
