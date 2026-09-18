@@ -134,8 +134,18 @@ describeIntegration('redis chunk backend — HTTP parity', () => {
     expect(allKeys).toHaveLength(0);
   });
 
-  it('POST /stream/:id/complete returns 404 for unknown query', async () => {
-    await request(app).post('/stream/no-such-query/complete').expect(404);
+  it('POST /stream/:id/complete stores [DONE] for a query with no chunks', async () => {
+    // A completion for a query that never streamed a chunk must still terminate
+    // the stream so a connected consumer does not hang.
+    const q = 'redis-parity-complete-no-chunks';
+    await request(app).post(`/stream/${q}/complete`).expect(200);
+
+    const events = await consumeSSE(
+      app,
+      `/stream/${q}?from-beginning=true`,
+      5000
+    );
+    expect(events).toContain('[DONE]');
   });
 
   it('GET /stream paginate returns correct items after cursor', async () => {
