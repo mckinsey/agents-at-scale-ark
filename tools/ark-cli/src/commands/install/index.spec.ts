@@ -1570,6 +1570,377 @@ describe('install command', () => {
     });
   });
 
+  describe('service dependencies (requires)', () => {
+    const brokerService = {
+      name: 'ark-broker',
+      helmReleaseName: 'ark-broker',
+      chartPath: './charts/ark-broker',
+    };
+    const tenantService = {
+      name: 'ark-tenant',
+      helmReleaseName: 'ark-tenant',
+      chartPath: './charts/ark-tenant',
+      requires: ['ark-broker'],
+    };
+
+    it('installs a required dependency before the requested service', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-tenant']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+      expect(helmInstallCalls).toHaveLength(2);
+      expect(helmInstallCalls[0][1]).toContain('ark-broker');
+      expect(helmInstallCalls[1][1]).toContain('ark-tenant');
+      expect(mockOutput.success).toHaveBeenCalledWith(
+        'ark-broker installed successfully'
+      );
+      expect(mockOutput.success).toHaveBeenCalledWith(
+        'ark-tenant installed successfully'
+      );
+    });
+
+    it('does not install a required dependency twice when it is also requested explicitly', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-broker', 'ark-tenant']);
+
+      const brokerInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('ark-broker')
+      );
+      expect(brokerInstallCalls).toHaveLength(1);
+    });
+
+    it('skips dependency installation and warns when --no-deps is passed', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-tenant', '--no-deps']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+      expect(helmInstallCalls).toHaveLength(1);
+      expect(helmInstallCalls[0][1]).toContain('ark-tenant');
+      expect(mockOutput.warning).toHaveBeenCalledWith(
+        expect.stringContaining('--no-deps')
+      );
+    });
+
+    it('does not loop on a circular requires chain', async () => {
+      const serviceA = {
+        name: 'service-a',
+        helmReleaseName: 'service-a',
+        chartPath: './charts/service-a',
+        requires: ['service-b'],
+      };
+      const serviceB = {
+        name: 'service-b',
+        helmReleaseName: 'service-b',
+        chartPath: './charts/service-b',
+        requires: ['service-a'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'service-a': serviceA,
+        'service-b': serviceB,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'service-a']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+      expect(helmInstallCalls).toHaveLength(2);
+    });
+
+    it('does not warn on --no-deps when the requested service has no dependency to skip', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-broker', '--no-deps']);
+
+      expect(mockOutput.warning).not.toHaveBeenCalled();
+    });
+
+    it('passes the dependency override args to helm when --no-deps skips a requires', async () => {
+      const tenantWithOverride = {
+        ...tenantService,
+        dependencyOverrideArgs: ['--set', 'memory.requireBroker=false'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantWithOverride,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-tenant', '--no-deps']);
+
+      const tenantInstallCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('ark-tenant')
+      );
+      expect(tenantInstallCall).toBeDefined();
+      expect(tenantInstallCall![1].join(' ')).toContain(
+        '--set memory.requireBroker=false'
+      );
+    });
+
+    // The override must key on the dependency actually being absent, not on
+    // --no-deps having been passed: with both named, the broker IS installed
+    // alongside, so overriding its preflight away would be wrong. `= skipDeps`
+    // passed every other test in this file.
+    it('does not pass the override when --no-deps is given but the dependency is installed alongside', async () => {
+      const tenantWithOverride = {
+        ...tenantService,
+        dependencyOverrideArgs: ['--set', 'memory.requireBroker=false'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantWithOverride,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync([
+        'node',
+        'test',
+        'ark-broker',
+        'ark-tenant',
+        '--no-deps',
+      ]);
+
+      const tenantInstallCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('ark-tenant')
+      );
+      expect(tenantInstallCall).toBeDefined();
+      expect(tenantInstallCall![1].join(' ')).not.toContain(
+        'memory.requireBroker=false'
+      );
+    });
+
+    // The mirror: without --no-deps and with the dependency present, the
+    // override must also stay off. `missingRequires = true` passed everything.
+    it('does not pass the override on a normal install that pulls the dependency in', async () => {
+      const tenantWithOverride = {
+        ...tenantService,
+        dependencyOverrideArgs: ['--set', 'memory.requireBroker=false'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-broker': brokerService,
+        'ark-tenant': tenantWithOverride,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-tenant']);
+
+      const tenantInstallCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('ark-tenant')
+      );
+      expect(tenantInstallCall).toBeDefined();
+      expect(tenantInstallCall![1].join(' ')).not.toContain(
+        'memory.requireBroker=false'
+      );
+    });
+
+    it('skips (with a warning) a dependency that is not installable, without failing the install', async () => {
+      const tenantWithMissingDep = {
+        ...tenantService,
+        requires: ['missing-dep'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-tenant': tenantWithMissingDep,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-tenant']);
+
+      expect(mockOutput.warning).toHaveBeenCalledWith(
+        expect.stringContaining('missing-dep')
+      );
+      expect(mockOutput.error).not.toHaveBeenCalledWith(
+        "service 'missing-dep' not found"
+      );
+      expect(mockOutput.success).toHaveBeenCalledWith(
+        'ark-tenant installed successfully'
+      );
+    });
+  });
+
+  describe('requires ordering outside the named-service path', () => {
+    it('installs a required dependency before the mandatory service that needs it in interactive mode', async () => {
+      Object.assign(mockArkServices, {
+        'ark-broker': {
+          name: 'ark-broker',
+          helmReleaseName: 'ark-broker',
+          chartPath: './charts/ark-broker',
+          category: 'service',
+          description: 'Broker',
+          enabled: true,
+          mandatory: true,
+        },
+        'ark-tenant': {
+          name: 'ark-tenant',
+          helmReleaseName: 'ark-tenant',
+          chartPath: './charts/ark-tenant',
+          category: 'core',
+          description: 'Tenant',
+          enabled: true,
+          mandatory: true,
+          requires: ['ark-broker'],
+        },
+      });
+      Object.assign(mockArkDependencies, {
+        'cert-manager-repo': {
+          name: 'cert-manager-repo',
+          command: 'helm',
+          args: ['repo', 'add', 'jetstack', 'https://charts.jetstack.io'],
+          description: 'Add Jetstack Helm repository',
+        },
+        'helm-repo-update': {
+          name: 'helm-repo-update',
+          command: 'helm',
+          args: ['repo', 'update'],
+          description: 'Update Helm repositories',
+        },
+        'cert-manager': {
+          name: 'cert-manager',
+          command: 'helm',
+          args: ['upgrade', '--install', 'cert-manager', 'jetstack/cert-manager'],
+          description: 'Certificate management',
+        },
+        'gateway-api-crds': {
+          name: 'gateway-api-crds',
+          command: 'kubectl',
+          args: ['apply', '-f', 'https://example.com/gateway-api.yaml'],
+          description: 'Gateway API CRDs',
+        },
+      });
+      mockGetInstallableServices.mockReturnValue(mockArkServices);
+      mockPrompt.mockResolvedValue({components: []});
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+      const brokerIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('ark-broker')
+      );
+      const tenantIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('ark-tenant')
+      );
+      expect(brokerIndex).toBeGreaterThanOrEqual(0);
+      expect(tenantIndex).toBeGreaterThan(brokerIndex);
+    });
+
+    it('installs a required dependency before its dependent in -y mode even against alphabetical order', async () => {
+      // 'graph-a' requires 'graph-z' — alphabetical order alone would install
+      // the dependent first, which is exactly the bug this test guards against.
+      const mockServices = {
+        'graph-a': {
+          name: 'graph-a',
+          helmReleaseName: 'graph-a',
+          chartPath: './charts/graph-a',
+          category: 'service',
+          requires: ['graph-z'],
+        },
+        'graph-z': {
+          name: 'graph-z',
+          helmReleaseName: 'graph-z',
+          chartPath: './charts/graph-z',
+          category: 'service',
+        },
+      };
+      mockGetInstallableServices.mockReturnValue(mockServices);
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', '-y']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+      const zIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('graph-z')
+      );
+      const aIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('graph-a')
+      );
+      expect(zIndex).toBeGreaterThanOrEqual(0);
+      expect(aIndex).toBeGreaterThan(zIndex);
+    });
+
+    it('applies the dependency override in -y mode when a requires is not installable', async () => {
+      // Mirrors a dependency disabled via .arkrc.yaml: getInstallableServices
+      // never returns it, so resolveServiceOrder drops it with a warning
+      // rather than installing it — the dependent still needs the override.
+      const mockServices = {
+        'graph-a': {
+          name: 'graph-a',
+          helmReleaseName: 'graph-a',
+          chartPath: './charts/graph-a',
+          category: 'service',
+          requires: ['graph-z'],
+          dependencyOverrideArgs: ['--set', 'requireGraphZ=false'],
+        },
+      };
+      mockGetInstallableServices.mockReturnValue(mockServices);
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', '-y']);
+
+      const aInstallCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('graph-a')
+      );
+      expect(aInstallCall).toBeDefined();
+      expect(aInstallCall![1]).toEqual(
+        expect.arrayContaining(['--set', 'requireGraphZ=false'])
+      );
+    });
+  });
+
   describe('version validation', () => {
     it('rejects invalid ARK version format', async () => {
       const command = createInstallCommand(mockConfig);

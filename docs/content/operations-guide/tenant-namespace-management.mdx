@@ -10,18 +10,19 @@ Set your kubectl context to the target namespace and use the Ark CLI to install:
 kubectl create namespace tenant-a
 kubectl config set-context --current --namespace=tenant-a
 ark install ark-tenant
-ark install ark-broker
 ark install ark-api
 ark install ark-dashboard
 ```
 
-This installs the tenant chart (service account, roles, builtin tools), the broker (per-tenant message and session storage), the API layer, and the dashboard. You can then open the dashboard with:
+`ark-tenant` declares `ark-broker` as a dependency, so the `ark install ark-tenant` above also installs the broker (per-tenant message, streaming, and session storage) first. The remaining two commands install the API layer and the dashboard, which you can then open with:
 
 ```bash
 ark dashboard
 ```
 
 > The Ark CLI uses your current kubectl context namespace. You can also install the charts directly with Helm — see the [Deploying Ark](/operations-guide/deploying-ark) guide.
+
+A namespace without a broker silently loses conversation history: queries succeed, but the assistant never recalls a previous turn. To make that failure loud instead, a direct `helm install ark-tenant` refuses to install into a namespace with no broker Service. `ark install ark-tenant` never hits that refusal: it installs `ark-broker` first, and with `--no-deps` it passes `--set memory.requireBroker=false` so the tenant provisions without one. An existing tenant running `helm upgrade` is never blocked by the check either. Pass `--set memory.requireBroker=false` to a direct Helm install to provision a tenant without a broker anyway.
 
 If a `Memory` named `default` already exists in the namespace from a previous manual setup, `ark install ark-broker` leaves it untouched rather than failing on ownership metadata, so it keeps pointing wherever it already pointed. Annotate and label it for Helm to adopt instead: `kubectl annotate memory default meta.helm.sh/release-name=ark-broker meta.helm.sh/release-namespace=<namespace> --overwrite && kubectl label memory default app.kubernetes.io/managed-by=Helm --overwrite`.
 
@@ -37,14 +38,12 @@ Install two full tenants:
 kubectl create namespace tenant-a
 kubectl config set-context --current --namespace=tenant-a
 ark install ark-tenant
-ark install ark-broker
 ark install ark-api
 ark install ark-dashboard
 
 kubectl create namespace tenant-b
 kubectl config set-context --current --namespace=tenant-b
 ark install ark-tenant
-ark install ark-broker
 ark install ark-api
 ark install ark-dashboard
 ```
