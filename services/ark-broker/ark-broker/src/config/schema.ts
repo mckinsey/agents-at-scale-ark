@@ -11,6 +11,11 @@ export const envSchema = z
     PORT: z.coerce.number().int().nonnegative().default(8080),
     HOST: z.string().default('0.0.0.0'),
     REQUEST_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(0),
+    SHUTDOWN_DRAIN_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(10000),
     MESSAGE_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
     EVENT_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
     CHUNK_MAX_BYTES: z.coerce.number().int().positive().default(33554432),
