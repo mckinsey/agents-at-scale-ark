@@ -2,7 +2,11 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { A2AEditor } from '@/components/editors/a2a-editor';
+import { A2AEditor, buildHeader } from '@/components/editors/a2a-editor';
+
+vi.mock('@/lib/services/secrets-hooks', () => ({
+  useGetAllSecrets: () => ({ data: [] }),
+}));
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
@@ -62,9 +66,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'valid-name');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'not-a-valid-url');
 
       const createButton = screen.getByRole('button', { name: /create/i });
@@ -83,9 +85,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'valid-name');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'https://example.com');
 
       const pollingInput = screen.getByPlaceholderText('e.g., 60');
@@ -114,9 +114,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'my-a2a-server');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'https://example.com/api');
 
       const createButton = screen.getByRole('button', { name: /create/i });
@@ -145,9 +143,7 @@ describe('A2AEditor', () => {
       const descInput = screen.getByPlaceholderText('what this server does');
       await user.type(descInput, 'My A2A server description');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'https://example.com/api');
 
       const pollingInput = screen.getByPlaceholderText('e.g., 60');
@@ -206,9 +202,7 @@ describe('A2AEditor', () => {
       const nameInput = screen.getByPlaceholderText('e.g., deep-research');
       await user.type(nameInput, 'my-a2a-server');
 
-      const urlInput = screen.getByPlaceholderText(
-        /https:\/\/agentspace-a2a/i,
-      );
+      const urlInput = screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i);
       await user.type(urlInput, 'https://example.com/api');
 
       await user.click(screen.getByRole('button', { name: /create/i }));
@@ -243,6 +237,142 @@ describe('A2AEditor', () => {
       await user.click(cancelButton);
 
       expect(defaultProps.onOpenChange).toHaveBeenCalledWith(false);
+    });
+  });
+
+  describe('headers', () => {
+    const fillRequiredFields = async (
+      user: ReturnType<typeof userEvent.setup>,
+    ) => {
+      await user.type(
+        screen.getByPlaceholderText('e.g., deep-research'),
+        'my-a2a-server',
+      );
+      await user.type(
+        screen.getByPlaceholderText(/https:\/\/agentspace-a2a/i),
+        'https://example.com/api',
+      );
+    };
+
+    it('should submit an inline header and drop blank rows', async () => {
+      const user = userEvent.setup();
+      render(<A2AEditor {...defaultProps} />);
+
+      await fillRequiredFields(user);
+      await user.type(
+        screen.getByPlaceholderText('e.g., Authorization'),
+        'Authorization',
+      );
+      await user.type(
+        screen.getByPlaceholderText('e.g., Bearer token'),
+        'Bearer abc',
+      );
+      await user.click(screen.getByRole('button', { name: 'Add header' }));
+      await user.click(screen.getByRole('button', { name: /create/i }));
+
+      await waitFor(() => {
+        expect(defaultProps.onSave).toHaveBeenCalled();
+      });
+      const config = vi.mocked(defaultProps.onSave).mock.calls[0][0];
+      expect(config.spec.headers).toEqual([
+        { name: 'Authorization', value: { value: 'Bearer abc' } },
+      ]);
+    });
+
+    it('should block submit until a half-filled row is completed', async () => {
+      const user = userEvent.setup();
+      render(<A2AEditor {...defaultProps} />);
+
+      await fillRequiredFields(user);
+      await user.type(
+        screen.getByPlaceholderText('e.g., Authorization'),
+        'X-Test',
+      );
+      await user.click(screen.getByRole('button', { name: /create/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Header value is required'),
+        ).toBeInTheDocument();
+      });
+      expect(defaultProps.onSave).not.toHaveBeenCalled();
+
+      await user.type(
+        screen.getByPlaceholderText('e.g., Bearer token'),
+        'filled',
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText('Header value is required'),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it('should omit headers when the row is deleted', async () => {
+      const user = userEvent.setup();
+      render(<A2AEditor {...defaultProps} />);
+
+      await fillRequiredFields(user);
+      await user.type(
+        screen.getByPlaceholderText('e.g., Authorization'),
+        'Authorization',
+      );
+      await user.click(screen.getByRole('button', { name: 'Delete header' }));
+      await user.click(screen.getByRole('button', { name: /create/i }));
+
+      await waitFor(() => {
+        expect(defaultProps.onSave).toHaveBeenCalled();
+      });
+      const config = vi.mocked(defaultProps.onSave).mock.calls[0][0];
+      expect(config.spec.headers).toBeUndefined();
+    });
+
+    it('should clear the name error once a header name is typed', async () => {
+      const user = userEvent.setup();
+      render(<A2AEditor {...defaultProps} />);
+
+      await fillRequiredFields(user);
+      await user.type(
+        screen.getByPlaceholderText('e.g., Bearer token'),
+        'only-a-value',
+      );
+      await user.click(screen.getByRole('button', { name: /create/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Header name is required')).toBeInTheDocument();
+      });
+
+      await user.type(
+        screen.getByPlaceholderText('e.g., Authorization'),
+        'X-Name',
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText('Header name is required'),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it('should map direct and secret rows onto the spec shape', () => {
+      expect(
+        buildHeader({ key: 'r', name: 'A', type: 'direct', value: 'inline' }),
+      ).toEqual({ name: 'A', value: { value: 'inline' } });
+
+      expect(
+        buildHeader({
+          key: 'r',
+          name: 'A',
+          type: 'secret',
+          value: 'my-secret',
+        }),
+      ).toEqual({
+        name: 'A',
+        value: {
+          valueFrom: { secretKeyRef: { name: 'my-secret', key: 'token' } },
+        },
+      });
     });
   });
 });
