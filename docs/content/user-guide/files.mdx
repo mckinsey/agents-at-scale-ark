@@ -57,7 +57,51 @@ To upload a file, drag and drop it into the upload area or click to browse. Ente
 
 ### File Size Limitations
 
-The File Gateway service enforces a 1MB limit for file uploads, see the [File Gateway Service documentation](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/#file-size-limitations) for more.
+Uploads are capped at 1MB. Two components enforce this independently:
+
+| Component | Limit | Scope |
+| --- | --- | --- |
+| Dashboard | 1MB | The browser rejects the file before uploading. |
+| ark-api | `PROXY_MAX_UPLOAD_BYTES`, default 1048576 | Every upload proxied to the file gateway, including direct API calls. |
+
+The dashboard check is a convenience, not a control — calling the API directly bypasses it. The ark-api cap is the enforced limit.
+
+To change it, set `PROXY_MAX_UPLOAD_BYTES` (in bytes) on the ark-api deployment:
+
+```yaml
+# services/ark-api/chart/values.yaml
+app:
+  env:
+    - name: PROXY_MAX_UPLOAD_BYTES
+      value: "5242880" # 5MB
+```
+
+Or at install time:
+
+```bash
+helm upgrade --install ark-api services/ark-api/chart \
+  --set-string app.env[0].name=PROXY_MAX_UPLOAD_BYTES \
+  --set-string app.env[0].value=5242880
+```
+
+The cap applies only to file-gateway uploads (`POST` to the `files` path). A2A and MCP proxy traffic is unaffected. Oversized uploads get `413` with the maximum in the response body.
+
+The cap measures the whole upload request, not the file on its own. Multipart framing
+and the other form fields add a few hundred bytes, so a file of exactly 1MB is
+rejected even though the dashboard allowed it. Leave a little headroom, or raise
+`PROXY_MAX_UPLOAD_BYTES` above the file size you want to accept.
+
+Raising the cap on ark-api does not raise it in the dashboard, which keeps its own 1MB check, and the File Gateway service applies its own limit — see the [File Gateway Service documentation](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/#file-size-limitations).
+
+### Upload and Download Checks
+
+ark-api inspects file-gateway traffic in both directions. Uploads are checked for content that does not match its declared type: a file whose bytes are HTML, PDF, ZIP, RTF, an executable, or SVG, but whose name says otherwise, is rejected with `400`. Detection reads magic bytes rather than trusting the extension, and the filename is authoritative when present because that is what gets stored. Files that are genuinely what they claim pass through, and formats Ark does not treat as active are not checked.
+
+Headers are read with the same parser the web server uses, so the filename these checks compare against is the one the file is stored under. An upload whose multipart boundary cannot be parsed is rejected with `400` rather than forwarded unchecked.
+
+SVG uploads are sanitized rather than rejected, so ordinary illustration files keep working while scripts and external references are stripped. An SVG that cannot be parsed at all is rejected with `400`.
+
+Downloads are always served as attachments with `Content-Disposition`, `X-Content-Type-Options: nosniff`, and — for SVG — a restrictive `Content-Security-Policy`. HTML and XML content types are replaced with `application/octet-stream`. Forcing a save rather than a render is the primary control: it neutralizes stored cross-site scripting for any file type, with sanitization and CSP layered on top.
 
 ## Connecting Files to Agents
 
