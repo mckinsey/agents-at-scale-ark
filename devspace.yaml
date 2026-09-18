@@ -38,6 +38,7 @@ dependencies:
 #        For example: ENABLE_CERT_MANAGER=false devspace dev
 #        For PostgreSQL controller backend: STORAGE_BACKEND=postgresql devspace dev
 #        For Postgres message backend: BROKER_MESSAGE_BACKEND=postgres devspace dev
+#        For SSO with a local Dex and two hardcoded users: ENABLE_SSO=true devspace dev
 vars:
   STORAGE_BACKEND:
     source: env
@@ -57,6 +58,19 @@ vars:
   ENABLE_ARGO:
     source: env
     default: false
+  ENABLE_SSO:
+    source: env
+    default: false
+  # Dex host and port. The issuer URL is composed from these as
+  # http://$SSO_DEX_HOST:$SSO_DEX_PORT/dex and must be identical here, in
+  # services/ark-api/devspace.yaml and in services/ark-dashboard/devspace.yaml:
+  # the browser and the pods both resolve that one URL, by different routes.
+  SSO_DEX_HOST:
+    source: env
+    default: "dex.default.svc.cluster.local"
+  SSO_DEX_PORT:
+    source: env
+    default: "5556"
 
 commands:
   routes:
@@ -71,6 +85,17 @@ commands:
       echo "Port-forward running in background (PID: $PID)"
     else
       echo "Failed to start port-forward. Is the gateway deployed?"
+    fi
+  sso-forward: |-
+    kill $(lsof -ti :${SSO_DEX_PORT}) 2>/dev/null || true
+    echo "Starting Dex port-forward on localhost:${SSO_DEX_PORT}..."
+    nohup kubectl port-forward -n default service/dex ${SSO_DEX_PORT}:${SSO_DEX_PORT} > /dev/null 2>&1 &
+    sleep 1
+    PID=$(lsof -ti :${SSO_DEX_PORT})
+    if [ -n "$PID" ]; then
+      echo "Port-forward running in background (PID: $PID)"
+    else
+      echo "Failed to start port-forward. Is Dex deployed (ENABLE_SSO=true)?"
     fi
 
 profiles:
@@ -134,6 +159,25 @@ profiles:
         value:
           argo-workflows:
             path: ./services/argo-workflows
+  - name: enable-sso
+    activation:
+      - vars:
+          ENABLE_SSO: true
+    patches:
+      - op: add
+        path: deployments
+        value:
+          ark-dex-dev:
+            namespace: default
+            helm:
+              chart:
+                path: ./charts/ark-dex-dev
+              # Release name fixes the Deployment name the pipeline waits on.
+              # The Service name is fixed by the chart, not by the release.
+              releaseName: dex
+              upgradeArgs: [ "--install" ]
+              values:
+                issuer: "http://${SSO_DEX_HOST}:${SSO_DEX_PORT}/dex"
 
 functions:
   # Probe the cert-manager admission webhook end-to-end before deploying any
@@ -230,6 +274,27 @@ pipelines:
       create_deployments ark-tenant
     fi
 
+    # Dex must be up before ark-api: with AUTH_MODE=sso the auth middleware builds
+    # its token validator at startup. Deploying it here also keeps the login
+    # available for the whole session, not only once the dependencies are done.
+    if [ "${ENABLE_SSO}" == "true" ]; then
+      if ! grep -q "${SSO_DEX_HOST}" /etc/hosts; then
+        echo ""
+        echo "ERROR: SSO mode needs ${SSO_DEX_HOST} to resolve on this machine."
+        echo "The browser reaches Dex through a port-forward and the pods reach it"
+        echo "through cluster DNS, so both must use the same URL. Add the entry with:"
+        echo ""
+        echo "  echo \"127.0.0.1  ${SSO_DEX_HOST}\" | sudo tee -a /etc/hosts"
+        echo ""
+        exit 1
+      fi
+      create_deployments ark-dex-dev
+      kubectl rollout status deployment/dex -n "${DEVSPACE_NAMESPACE:-default}" --timeout=120s
+      kill $(lsof -ti :${SSO_DEX_PORT}) 2>/dev/null || true
+      nohup kubectl port-forward -n "${DEVSPACE_NAMESPACE:-default}" service/dex ${SSO_DEX_PORT}:${SSO_DEX_PORT} > /dev/null 2>&1 &
+      echo "SSO enabled. Log in as admin@ark.local or viewer@ark.local, password arkdev123."
+    fi
+
     if [ "${ENABLE_ARGO}" == "true" ]; then
       run_dependency_pipelines argo-workflows --pipeline=deploy
     fi
@@ -287,6 +352,27 @@ pipelines:
         ensure_tool_api
       fi
       create_deployments ark-tenant
+    fi
+
+    # Dex must be up before ark-api: with AUTH_MODE=sso the auth middleware builds
+    # its token validator at startup. Deploying it here also keeps the login
+    # available for the whole session, not only once the dependencies are done.
+    if [ "${ENABLE_SSO}" == "true" ]; then
+      if ! grep -q "${SSO_DEX_HOST}" /etc/hosts; then
+        echo ""
+        echo "ERROR: SSO mode needs ${SSO_DEX_HOST} to resolve on this machine."
+        echo "The browser reaches Dex through a port-forward and the pods reach it"
+        echo "through cluster DNS, so both must use the same URL. Add the entry with:"
+        echo ""
+        echo "  echo \"127.0.0.1  ${SSO_DEX_HOST}\" | sudo tee -a /etc/hosts"
+        echo ""
+        exit 1
+      fi
+      create_deployments ark-dex-dev
+      kubectl rollout status deployment/dex -n "${DEVSPACE_NAMESPACE:-default}" --timeout=120s
+      kill $(lsof -ti :${SSO_DEX_PORT}) 2>/dev/null || true
+      nohup kubectl port-forward -n "${DEVSPACE_NAMESPACE:-default}" service/dex ${SSO_DEX_PORT}:${SSO_DEX_PORT} > /dev/null 2>&1 &
+      echo "SSO enabled. Log in as admin@ark.local or viewer@ark.local, password arkdev123."
     fi
 
     if [ "${ENABLE_ARGO}" == "true" ]; then
