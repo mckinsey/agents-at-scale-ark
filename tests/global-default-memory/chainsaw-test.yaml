@@ -1,0 +1,203 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: global-default-memory
+  labels:
+    etcd-only: "true"
+spec:
+  description: ArkConfig defaultMemory - injected into spec.memory only when the named Memory has resolved an address in the query namespace, only at create, and never over an explicit value
+  concurrent: false
+  steps:
+  - name: setup
+    try:
+    - script:
+        content: kubectl delete arkconfig default --ignore-not-found || true
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-arkconfig.yaml
+    # The singleton is cluster-scoped, so it has to go even if a later step
+    # fails. Hanging this off setup rather than the last step means it runs
+    # wherever the test stops.
+    cleanup:
+    - script:
+        content: kubectl delete arkconfig default --ignore-not-found || true
+
+  - name: assert-no-injection-without-memory
+    try:
+    - apply:
+        file: manifests/a03-query-no-memory.yaml
+    # queryTTL comes from the same ArkConfig read and is injected
+    # unconditionally. Asserting it proves the config had reached the webhook
+    # when this query was admitted, so the absent spec.memory below means the
+    # gate declined rather than the config not being visible yet.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-no-memory
+          spec:
+            ttl: 3h0m0s
+    - script:
+        timeout: 30s
+        content: |
+          set -eu
+          MEMORY=$(kubectl get query test-query-no-memory -n $NAMESPACE -o jsonpath='{.spec.memory}')
+          if [ -n "$MEMORY" ]; then
+            echo "FAIL spec.memory was injected into a namespace with no Memory: '$MEMORY'"
+            exit 1
+          fi
+          echo "OK spec.memory left unset where the Memory does not exist"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-no-memory
+
+  - name: assert-no-injection-when-memory-unresolved
+    try:
+    - apply:
+        file: manifests/a04-memory-unresolved.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Memory
+          metadata:
+            name: default
+          status:
+            phase: error
+    - apply:
+        file: manifests/a05-query-unresolved.yaml
+    - script:
+        timeout: 30s
+        content: |
+          set -eu
+          MEMORY=$(kubectl get query test-query-unresolved-memory -n $NAMESPACE -o jsonpath='{.spec.memory}')
+          if [ -n "$MEMORY" ]; then
+            echo "FAIL spec.memory was injected for a Memory with no lastResolvedAddress: '$MEMORY'"
+            exit 1
+          fi
+          echo "OK spec.memory left unset where the Memory never resolved"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Memory
+        name: default
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-unresolved-memory
+    # Every Memory here points somewhere unreachable, and the Query finalizer
+    # retries broker cleanup for five minutes against a Memory it can still
+    # see. Deleting the Memory while the step still owns it keeps teardown off
+    # that path, whatever order chainsaw tears the rest down in.
+    finally:
+    - script:
+        timeout: 60s
+        content: kubectl delete memory default -n $NAMESPACE --ignore-not-found
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: assert-injection-with-memory
+    try:
+    - apply:
+        file: manifests/a06-memory-resolved.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Memory
+          metadata:
+            name: default
+          status:
+            phase: ready
+    - apply:
+        file: manifests/a07-query-injected.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-injected-memory
+          spec:
+            memory:
+              name: default
+    # The same Memory is now resolvable, but the query admitted before it
+    # existed must not be back-filled: spec.memory records what a query ran
+    # with, so an update may not rewrite it.
+    - script:
+        timeout: 30s
+        content: |
+          set -eu
+          kubectl annotate query test-query-no-memory -n $NAMESPACE \
+            ark.mckinsey.com/e2e-touch=1 --overwrite
+          MEMORY=$(kubectl get query test-query-no-memory -n $NAMESPACE -o jsonpath='{.spec.memory}')
+          if [ -n "$MEMORY" ]; then
+            echo "FAIL an update back-filled spec.memory on a query that ran without one: '$MEMORY'"
+            exit 1
+          fi
+          echo "OK update left spec.memory unset"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-injected-memory
+    finally:
+    - script:
+        timeout: 60s
+        content: kubectl delete memory default -n $NAMESPACE --ignore-not-found
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: assert-explicit-memory-preserved
+    try:
+    - apply:
+        file: manifests/a08-memory-explicit.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Memory
+          metadata:
+            name: chosen-by-hand
+          status:
+            phase: ready
+    - apply:
+        file: manifests/a09-query-explicit.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-explicit-memory
+          spec:
+            memory:
+              name: chosen-by-hand
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-explicit-memory
+    finally:
+    - script:
+        timeout: 60s
+        content: kubectl delete memory chosen-by-hand -n $NAMESPACE --ignore-not-found
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

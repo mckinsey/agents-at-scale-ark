@@ -1,7 +1,11 @@
 import unittest
 from urllib.parse import quote
 
+from fastapi import HTTPException
+
 from ark_api.utils.file_gateway_security import (
+    _iter_multipart_parts,
+    _parse_multipart_headers,
     is_file_gateway_download,
     is_file_gateway_upload,
     sanitize_file_gateway_upload,
@@ -110,6 +114,35 @@ class TestFileGatewaySecurity(unittest.TestCase):
         self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
         self.assertNotIn("Content-Security-Policy", headers)
 
+    def test_secure_download_does_not_decode_path_twice(self):
+        # The ASGI server already decoded the path; a file genuinely named
+        # "a%20b.svg" must keep its percent sequence, not become "a b.svg".
+        _, headers = secure_file_gateway_download(
+            b'<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
+            {"content-type": "image/svg+xml"},
+            "uploads/a%20b.svg/download",
+        )
+
+        self.assertIn('filename="a%20b.svg"', headers["Content-Disposition"])
+
+    def test_secure_download_drops_stale_content_encoding(self):
+        # httpx already decoded the body, so a surviving gzip header would make the
+        # browser try to gunzip plain bytes.
+        body = b'{"ok":true}' * 20
+        content, headers = secure_file_gateway_download(
+            body,
+            {
+                "content-type": "application/json",
+                "content-encoding": "gzip",
+                "content-length": "42",
+            },
+            "uploads/report.json/download",
+        )
+
+        self.assertEqual(content, body)
+        self.assertNotIn("content-encoding", {key.lower() for key in headers})
+        self.assertEqual(headers["Content-Length"], str(len(body)))
+
     def test_secure_download_neutralizes_malicious_filename(self):
         # Attacker-controlled name with quotes + CRLF (url-decoded from the path).
         path = "uploads/" + quote('x".svg\r\nSet-Cookie: p=1') + "/download"
@@ -148,3 +181,253 @@ class TestFileGatewaySecurity(unittest.TestCase):
         )
 
         self.assertEqual(headers["content-type"], "image/png")
+
+
+def _upload_body(disposition: bytes, content: bytes, extra_headers: bytes = b"") -> bytes:
+    return (
+        b"--B\r\n" + disposition + extra_headers + b"\r\n\r\n" + content + b"\r\n--B--\r\n"
+    )
+
+
+UPLOAD_CONTENT_TYPE = "multipart/form-data; boundary=B"
+
+
+class TestUploadTypeChecks(unittest.TestCase):
+    def test_rejects_html_disguised_as_png(self):
+        body = _upload_body(
+            b'Content-Disposition: form-data; name="file"; filename="report.png"',
+            b"<html><script>alert(document.domain)</script></html>",
+            b"\r\nContent-Type: image/png",
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE)
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("content is html", ctx.exception.detail)
+
+    def test_rejects_office_document_disguised_as_text(self):
+        body = _upload_body(
+            b'Content-Disposition: form-data; name="file"; filename="notes.txt"',
+            b"PK\x03\x04\x14\x00\x06\x00payload",
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE)
+
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_allows_honestly_named_active_file(self):
+        html = b"<!DOCTYPE html><html><body>hello</body></html>"
+        body = _upload_body(
+            b'Content-Disposition: form-data; name="file"; filename="page.html"',
+            html,
+            b"\r\nContent-Type: text/html",
+        )
+
+        self.assertEqual(sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE), body)
+
+    def test_allows_real_image_and_leaves_it_untouched(self):
+        body = _upload_body(
+            b'Content-Disposition: form-data; name="file"; filename="photo.png"',
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 16,
+        )
+
+        self.assertEqual(sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE), body)
+
+    def test_svg_is_sanitized_rather_than_rejected(self):
+        body = _upload_body(
+            b'Content-Disposition: form-data; name="file"; filename="icon.svg"',
+            MALICIOUS_SVG,
+            b"\r\nContent-Type: image/svg+xml",
+        )
+
+        sanitized = sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE)
+
+        self.assertNotIn(b"<script", sanitized.lower())
+        self.assertIn(b"<svg", sanitized.lower())
+
+    def test_form_field_holding_markup_is_not_a_file(self):
+        # "prefix" has no filename, so it is a form field and skips the type check.
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="prefix"\r\n\r\n'
+            b"<html><body>not a file</body></html>\r\n"
+            b'--B\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\n\r\n'
+            b"\x89PNG\r\n\x1a\n\r\n--B--\r\n"
+        )
+
+        self.assertEqual(sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE), body)
+
+    def test_unquoted_filename_is_parsed(self):
+        # RFC 2045 token form: previously parsed as None, which read as an inert
+        # declaration and would now reject a legitimately named .html upload.
+        for disposition, expected in (
+            (b'Content-Disposition: form-data; name="file"; filename="a.html"', "a.html"),
+            (b"Content-Disposition: form-data; name=file; filename=a.html", "a.html"),
+            (b"Content-Disposition: form-data; name='file'; filename='a.html'", "a.html"),
+            (b'Content-Disposition: form-data; name="file"; filename = "a.html"', "a.html"),
+        ):
+            with self.subTest(disposition=disposition):
+                filename, _ = _parse_multipart_headers(disposition.decode())
+                self.assertEqual(filename, expected)
+
+    def test_unquoted_html_upload_is_accepted(self):
+        html = b"<!DOCTYPE html><html><body>hi</body></html>"
+        body = _upload_body(
+            b"Content-Disposition: form-data; name=file; filename=page.html", html
+        )
+
+        self.assertEqual(sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE), body)
+
+
+DISGUISED_HTML = b"<!doctype html><html><script>alert(1)</script></html>"
+
+
+class TestUploadHeaderParsing(unittest.TestCase):
+    """The declared-type check is only worth as much as the header parse behind it.
+
+    Each case below is a body that the ASGI server parses as a real file upload, so
+    a parse here that disagrees with the server's leaves the check reading the wrong
+    filename - or skipped altogether - while the file still lands in the store.
+    """
+
+    def _assert_blocked(self, body: bytes, content_type: str = UPLOAD_CONTENT_TYPE):
+        """Asserts the declared-type check fired, not merely that something 400'd.
+
+        There are two 400 paths in this function now, so a status-only assertion would
+        stay green if a boundary regression meant the type check never ran at all.
+        """
+        with self.assertRaises(HTTPException) as ctx:
+            sanitize_file_gateway_upload(body, content_type)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("content is html", str(ctx.exception.detail))
+
+    def test_boundary_with_linear_white_space_is_still_checked(self):
+        # Legal around a MIME parameter, and python_multipart accepts it, so a regex
+        # on a literal "boundary=" would read no boundary and forward unchecked.
+        body = _upload_body(
+            b'Content-Disposition: form-data; name="file"; filename="evil.png"',
+            DISGUISED_HTML,
+            b"\r\nContent-Type: image/png",
+        )
+        for content_type in (
+            "multipart/form-data; boundary = B",
+            "multipart/form-data; boundary\t=B",
+            'multipart/form-data; name="boundary=FAKE"; boundary=B',
+        ):
+            with self.subTest(content_type=content_type):
+                self._assert_blocked(body, content_type)
+
+    def test_multipart_without_usable_boundary_is_refused(self):
+        with self.assertRaises(HTTPException) as ctx:
+            sanitize_file_gateway_upload(b"anything", "multipart/form-data")
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_filename_comes_only_from_content_disposition(self):
+        # A decoy header line carrying "filename=a.html" made the sniffed html agree
+        # with the declared type, so the file passed and was stored as evil.png.
+        body = _upload_body(
+            b'Content-Disposition: form-data; name="file"; filename="evil.png"',
+            DISGUISED_HTML,
+            b"\r\nContent-Type: image/png",
+        )
+        decoyed = body.replace(b"--B\r\n", b"--B\r\nX-A: filename=a.html\r\n", 1)
+
+        self._assert_blocked(decoyed)
+        self.assertEqual(
+            _parse_multipart_headers(
+                'X-A: filename=a.html\r\n'
+                'Content-Disposition: form-data; name="file"; filename="evil.png"'
+            )[0],
+            "evil.png",
+        )
+
+    def test_filename_inside_a_quoted_name_does_not_win(self):
+        self._assert_blocked(
+            _upload_body(
+                b'Content-Disposition: form-data; name="filename=a.html; z"; '
+                b'filename="evil.png"',
+                DISGUISED_HTML,
+                b"\r\nContent-Type: image/png",
+            )
+        )
+
+    def test_last_filename_parameter_wins(self):
+        # Matches what the server stores; taking the first would compare against a
+        # name nothing downstream uses.
+        self._assert_blocked(
+            _upload_body(
+                b'Content-Disposition: form-data; name="file"; '
+                b'filename="a.html"; filename="evil.png"',
+                DISGUISED_HTML,
+                b"\r\nContent-Type: image/png",
+            )
+        )
+
+    def test_rfc5987_extended_filename_is_decoded(self):
+        self._assert_blocked(
+            _upload_body(
+                b"Content-Disposition: form-data; name=\"file\"; "
+                b"filename*=UTF-8''evil.png",
+                DISGUISED_HTML,
+                b"\r\nContent-Type: image/png",
+            )
+        )
+        self.assertEqual(
+            _parse_multipart_headers(
+                "Content-Disposition: form-data; filename*=UTF-8''ca%CC%80fe.svg"
+            )[0],
+            "càfe.svg",
+        )
+
+    def test_lf_only_framing_is_checked(self):
+        # Go's mime/multipart tolerates LF-only framing deliberately, so a body the
+        # file-gateway accepts must not yield zero parts here and pass unchecked.
+        body = (
+            b"--B\n"
+            b'Content-Disposition: form-data; name="file"; filename="evil.png"\n'
+            b"Content-Type: image/png\n\n" + DISGUISED_HTML + b"\n--B--\n"
+        )
+
+        self._assert_blocked(body)
+
+
+class TestMultipartFraming(unittest.TestCase):
+    def test_empty_bodied_part_survives_a_sanitised_upload(self):
+        # Stripping a run of line breaks left no header terminator, so the part was
+        # skipped and _rebuild_multipart dropped the field. Every SVG upload rebuilds,
+        # because ET.tostring rewrites the declaration, so this fired on clean files.
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>x</script><rect/></svg>'
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="prefix"\r\n\r\n\r\n'
+            b'--B\r\nContent-Disposition: form-data; name="file"; filename="a.svg"\r\n'
+            b"Content-Type: image/svg+xml\r\n\r\n" + svg + b"\r\n--B--\r\n"
+        )
+
+        out = sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE)
+
+        self.assertNotIn(b"<script", out)
+        self.assertIn(b'name="prefix"', out)
+
+    def test_text_part_keeps_its_trailing_newlines(self):
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="note"\r\n\r\nhello\r\n\r\n'
+            b"--B--\r\n"
+        )
+
+        parts = list(_iter_multipart_parts(body, "B"))
+
+        self.assertEqual([content for _, content in parts], [b"hello\r\n"])
+
+    def test_lf_cr_lf_header_terminator_is_still_sanitised(self):
+        # This skip route bypassed sanitising, not just the declared-type check, so a
+        # script-bearing SVG was forwarded untouched.
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>x</script><rect/></svg>'
+        body = (
+            b'--B\r\nContent-Disposition: form-data; name="file"; filename="a.svg"\r\n'
+            b"Content-Type: image/svg+xml\n\r\n" + svg + b"\r\n--B--\r\n"
+        )
+
+        out = sanitize_file_gateway_upload(body, UPLOAD_CONTENT_TYPE)
+
+        self.assertNotIn(b"<script", out)

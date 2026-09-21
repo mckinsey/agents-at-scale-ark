@@ -6,6 +6,5 @@ spec:
   address:
     valueFrom:
       serviceRef:
-        name: ark-broker
-        namespace: default
-        port: http
+        name: broker-that-does-not-exist
+        port: "8080"

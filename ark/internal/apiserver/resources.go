@@ -10,12 +10,13 @@ import (
 )
 
 type ResourceDef struct {
-	Kind         string
-	Resource     string
-	SingularName string
-	Version      string
-	NewFunc      func() runtime.Object
-	NewListFunc  func() runtime.Object
+	Kind          string
+	Resource      string
+	SingularName  string
+	Version       string
+	ClusterScoped bool
+	NewFunc       func() runtime.Object
+	NewListFunc   func() runtime.Object
 }
 
 var V1Alpha1Resources = []ResourceDef{
@@ -50,6 +51,10 @@ var V1Alpha1Resources = []ResourceDef{
 	{
 		Kind: "A2ATask", Resource: "a2atasks", SingularName: "a2atask", Version: "v1alpha1",
 		NewFunc: func() runtime.Object { return &arkv1alpha1.A2ATask{} }, NewListFunc: func() runtime.Object { return &arkv1alpha1.A2ATaskList{} },
+	},
+	{
+		Kind: "ArkConfig", Resource: "arkconfigs", SingularName: "arkconfig", Version: "v1alpha1", ClusterScoped: true,
+		NewFunc: func() runtime.Object { return &arkv1alpha1.ArkConfig{} }, NewListFunc: func() runtime.Object { return &arkv1alpha1.ArkConfigList{} },
 	},
 }
 
