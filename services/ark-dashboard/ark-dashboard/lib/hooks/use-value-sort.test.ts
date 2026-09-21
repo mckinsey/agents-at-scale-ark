@@ -1,7 +1,20 @@
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { timestampValue, useValueSort } from './use-value-sort';
+
+let currentParams = new URLSearchParams();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    replace: (target: string) => {
+      currentParams = new URLSearchParams(target.split('?')[1] ?? '');
+    },
+    push: vi.fn(),
+  }),
+  usePathname: () => '/queries',
+  useSearchParams: () => currentParams,
+}));
 
 interface Row {
   readonly id: string;
@@ -37,12 +50,35 @@ describe('timestampValue', () => {
   });
 });
 
-describe('useValueSort', () => {
-  it('sorts newest first by default', () => {
-    const { result } = renderHook(() => useValueSort(rows, getCreatedTime));
+const renderSort = <T>(
+  items: readonly T[],
+  getValue: (item: T) => number,
+  initialDirection?: 'asc' | 'desc',
+) => {
+  const view = renderHook(() =>
+    useValueSort(items, getValue, initialDirection),
+  );
+  return {
+    get current() {
+      return view.result.current;
+    },
+    toggle: () => {
+      act(() => view.result.current.toggleSortDirection());
+      view.rerender();
+    },
+  };
+};
 
-    expect(result.current.sortDirection).toBe('desc');
-    expect(ids(result.current.sortedItems)).toEqual([
+describe('useValueSort', () => {
+  beforeEach(() => {
+    currentParams = new URLSearchParams();
+  });
+
+  it('sorts newest first by default', () => {
+    const sort = renderSort(rows, getCreatedTime);
+
+    expect(sort.current.sortDirection).toBe('desc');
+    expect(ids(sort.current.sortedItems)).toEqual([
       'newest',
       'middle',
       'oldest',
@@ -51,31 +87,29 @@ describe('useValueSort', () => {
   });
 
   it('toggles between newest first and oldest first', () => {
-    const { result } = renderHook(() => useValueSort(rows, getCreatedTime));
+    const sort = renderSort(rows, getCreatedTime);
 
-    act(() => result.current.toggleSortDirection());
+    sort.toggle();
 
-    expect(result.current.sortDirection).toBe('asc');
-    expect(ids(result.current.sortedItems)).toEqual([
+    expect(sort.current.sortDirection).toBe('asc');
+    expect(ids(sort.current.sortedItems)).toEqual([
       'undated',
       'oldest',
       'middle',
       'newest',
     ]);
 
-    act(() => result.current.toggleSortDirection());
+    sort.toggle();
 
-    expect(result.current.sortDirection).toBe('desc');
-    expect(ids(result.current.sortedItems)[0]).toBe('newest');
+    expect(sort.current.sortDirection).toBe('desc');
+    expect(ids(sort.current.sortedItems)[0]).toBe('newest');
   });
 
   it('honours the initial direction', () => {
-    const { result } = renderHook(() =>
-      useValueSort(rows, getCreatedTime, 'asc'),
-    );
+    const sort = renderSort(rows, getCreatedTime, 'asc');
 
-    expect(result.current.sortDirection).toBe('asc');
-    expect(ids(result.current.sortedItems)[0]).toBe('undated');
+    expect(sort.current.sortDirection).toBe('asc');
+    expect(ids(sort.current.sortedItems)[0]).toBe('undated');
   });
 
   it('keeps rows with a broken date from disturbing the rest of the order', () => {
@@ -85,11 +119,9 @@ describe('useValueSort', () => {
       { id: 'newest', createdAt: '2025-01-01T00:00:00Z' },
       { id: 'oldest', createdAt: '2023-01-01T00:00:00Z' },
     ];
-    const { result } = renderHook(() =>
-      useValueSort(withBroken, getCreatedTime),
-    );
+    const sort = renderSort(withBroken, getCreatedTime);
 
-    expect(ids(result.current.sortedItems)).toEqual([
+    expect(ids(sort.current.sortedItems)).toEqual([
       'newest',
       'middle',
       'oldest',
@@ -99,27 +131,55 @@ describe('useValueSort', () => {
 
   it('keeps ties in source order in both directions', () => {
     const tied: Row[] = [{ id: 'first' }, { id: 'second' }, { id: 'third' }];
-    const { result } = renderHook(() => useValueSort(tied, getCreatedTime));
+    const sort = renderSort(tied, getCreatedTime);
 
-    expect(ids(result.current.sortedItems)).toEqual([
-      'first',
-      'second',
-      'third',
-    ]);
+    expect(ids(sort.current.sortedItems)).toEqual(['first', 'second', 'third']);
 
-    act(() => result.current.toggleSortDirection());
+    sort.toggle();
 
-    expect(ids(result.current.sortedItems)).toEqual([
-      'first',
-      'second',
-      'third',
-    ]);
+    expect(ids(sort.current.sortedItems)).toEqual(['first', 'second', 'third']);
   });
 
   it('leaves the source array untouched', () => {
     const source = [...rows];
-    renderHook(() => useValueSort(source, getCreatedTime));
+    renderSort(source, getCreatedTime);
 
     expect(ids(source)).toEqual(ids(rows));
+  });
+
+  it('reads the direction from the URL so a shared link sorts the same way', () => {
+    currentParams = new URLSearchParams('sort=asc');
+
+    const sort = renderSort(rows, getCreatedTime);
+
+    expect(sort.current.sortDirection).toBe('asc');
+    expect(ids(sort.current.sortedItems)[0]).toBe('undated');
+  });
+
+  it('writes the direction to the URL so it survives leaving the screen', () => {
+    const sort = renderSort(rows, getCreatedTime);
+
+    sort.toggle();
+
+    expect(currentParams.get('sort')).toBe('asc');
+  });
+
+  it('falls back to the initial direction for an unusable URL value', () => {
+    currentParams = new URLSearchParams('sort=sideways');
+
+    const sort = renderSort(rows, getCreatedTime);
+
+    expect(sort.current.sortDirection).toBe('desc');
+  });
+
+  it('keeps the direction under a caller-supplied param key', () => {
+    const view = renderHook(() =>
+      useValueSort(rows, getCreatedTime, 'desc', 'messageSort'),
+    );
+
+    act(() => view.result.current.toggleSortDirection());
+
+    expect(currentParams.get('messageSort')).toBe('asc');
+    expect(currentParams.has('sort')).toBe(false);
   });
 });

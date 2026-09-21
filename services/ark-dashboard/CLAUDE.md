@@ -102,6 +102,47 @@ app; that is the allowlist's entire purpose, so only genuinely app-wide scoping
 params belong there. Anything page-local needs no registration — pass it in the
 target href.
 
+#### URL-backed screen state
+
+A screen's filters, sorting and pagination live in the query string via
+`useUrlState` from `@/lib/hooks/use-url-state`. The URL is the **single source of
+truth**: never mirror a key it owns in a local `useState`.
+
+A mirror seeded once at mount goes stale the moment the URL moves on its own —
+browser back/forward, a namespace switch, another writer on the same page — and
+the effect that syncs it then writes the stale value back, undoing the
+navigation. This was reintroduced across eight screens before being removed.
+
+```typescript
+// ❌ WRONG - a mount-only mirror that writes itself back over the URL
+const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
+const [searchInput, setSearchInput] = useState(filters.q);
+const debounced = useDebounce(searchInput, 300);
+useEffect(() => {
+  if (debounced !== filters.q) setFilters({ q: debounced });
+}, [debounced, filters.q, setFilters]);
+
+// ✅ CORRECT - the hook owns the debounce, so there is nothing to keep in sync
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+};
+const [filters, setFilters, committedFilters] = useUrlState(URL_STATE_SPEC);
+```
+
+Use the three return values for what each is for:
+
+- `filters` — reads back a keystroke at once. Bind inputs and in-memory
+  filtering to this.
+- `setFilters(updates, { flush })` — several calls in one commit compose into a
+  single navigation. Pass `flush` when the change is a decision rather than
+  typing (clearing filters, picking from a dropdown).
+- `committedFilters` — the URL only. Key a **server query** off this, or it
+  refetches on every keystroke.
+
+Writes use `router.replace`, so changing a filter does not add a history entry
+and the browser back button leaves the screen rather than stepping back through
+each filter.
+
 ### Namespace-scoped data
 
 The namespace is **explicit data, never ambient**. The API client does not inject

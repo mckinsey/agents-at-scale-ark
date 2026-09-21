@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useDelayedLoading } from '@/lib/hooks';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 type StatusFilter = 'All' | 'True' | 'False';
@@ -38,6 +39,17 @@ const STATUS_ITEMS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
   { value: 'True', label: 'Active' },
   { value: 'False', label: 'Error' },
 ];
+
+function parseStatusFilter(raw: string): StatusFilter {
+  const match = STATUS_ITEMS.find(item => item.value === raw);
+  return match ? match.value : 'All';
+}
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  status: { default: 'All', parse: parseStatusFilter },
+  origin: { default: 'All' },
+};
 
 export interface ResourceListItem {
   id: string;
@@ -97,9 +109,7 @@ export function ResourceListSection<T extends ResourceListItem>({
 }: ResourceListSectionProps<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
-  const [originFilterValue, setOriginFilterValue] = useState('All');
+  const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
   const showLoading = useDelayedLoading(loading);
   const { readOnlyMode, namespace } = useNamespace();
 
@@ -116,22 +126,22 @@ export function ResourceListSection<T extends ResourceListItem>({
   }, [originFilter, items]);
 
   const filteredItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = filters.q.trim().toLowerCase();
     return items.filter(item => {
       const matchesSearch =
         !q ||
         item.name.toLowerCase().includes(q) ||
         (item.description?.toLowerCase().includes(q) ?? false);
       const matchesStatus =
-        statusFilter === 'All' ||
-        (item.available ?? 'Unknown') === statusFilter;
+        filters.status === 'All' ||
+        (item.available ?? 'Unknown') === filters.status;
       const matchesOrigin =
         !originFilter ||
-        originFilterValue === 'All' ||
-        originFilter.getValue(item) === originFilterValue;
+        filters.origin === 'All' ||
+        originFilter.getValue(item) === filters.origin;
       return matchesSearch && matchesStatus && matchesOrigin;
     });
-  }, [items, searchQuery, statusFilter, originFilter, originFilterValue]);
+  }, [items, filters.q, filters.status, originFilter, filters.origin]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -181,9 +191,9 @@ export function ResourceListSection<T extends ResourceListItem>({
   const isEmpty = !loading && items.length === 0;
 
   const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
-  const statusLabel = STATUS_ITEMS.find(s => s.value === statusFilter)?.label;
+  const statusLabel = STATUS_ITEMS.find(s => s.value === filters.status)?.label;
   const noResultsMessage =
-    statusFilter === 'All'
+    filters.status === 'All'
       ? `No ${pluralLabel} match your search.`
       : `There are no ${statusLabel} ${pluralLabel} at the moment.`;
 
@@ -238,7 +248,10 @@ export function ResourceListSection<T extends ResourceListItem>({
       {!showLoading && !isEmpty && (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
           <div className="flex flex-none items-end gap-3">
-            <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+            <ResourceSearchInput
+              value={filters.q}
+              onChange={q => setFilters({ q })}
+            />
             {originFilter && (
               <div className="flex w-48 flex-col gap-2">
                 <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
@@ -249,8 +262,10 @@ export function ResourceListSection<T extends ResourceListItem>({
                     value,
                     label: value,
                   }))}
-                  value={originFilterValue}
-                  onValueChange={value => setOriginFilterValue(String(value))}>
+                  value={filters.origin}
+                  onValueChange={value =>
+                    setFilters({ origin: String(value) })
+                  }>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="All" />
                   </SelectTrigger>
@@ -270,8 +285,10 @@ export function ResourceListSection<T extends ResourceListItem>({
               </span>
               <Select
                 items={STATUS_ITEMS}
-                value={statusFilter}
-                onValueChange={v => setStatusFilter(v as StatusFilter)}>
+                value={filters.status}
+                onValueChange={v =>
+                  setFilters({ status: parseStatusFilter(String(v)) })
+                }>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="All" />
                 </SelectTrigger>

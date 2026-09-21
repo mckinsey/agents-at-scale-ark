@@ -47,7 +47,7 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
-import { useDebounce } from '@/lib/hooks/use-debounce';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
@@ -84,6 +84,17 @@ const statusFilterItems = [
   { label: 'Succeeded', value: 'Succeeded' },
   { label: 'Failed', value: 'Failed' },
 ];
+
+function parseSortOrder(raw: string): SortOrder {
+  return raw === 'oldest' ? 'oldest' : 'newest';
+}
+
+const URL_STATE_SPEC = {
+  workflowName: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  workflowTemplateName: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  status: { default: 'all', parse: normalizeStatus },
+  sort: { default: 'newest', parse: parseSortOrder },
+};
 
 interface WorkflowStepDetail {
   image?: string;
@@ -890,7 +901,7 @@ function SessionListItem({
   );
 }
 
-const normalizeStatus = (status: string): string => {
+function normalizeStatus(status: string): string {
   if (!status || status === 'all') return 'all';
 
   const statusMap: Record<string, string> = {
@@ -902,7 +913,7 @@ const normalizeStatus = (status: string): string => {
   };
 
   return statusMap[status.toLowerCase()] || status;
-};
+}
 
 function TemplateOptions({
   templateNames,
@@ -1065,73 +1076,27 @@ export function SessionsSection({
   );
   const [useRealData] = useState(true);
 
-  const [workflowNameInput, setWorkflowNameInput] = useState(
-    searchParams.get('workflowName') || '',
-  );
-  const [workflowTemplateNameInput, setWorkflowTemplateNameInput] = useState(
-    searchParams.get('workflowTemplateName') || '',
-  );
-  const [statusFilter, setStatusFilter] = useState(
-    normalizeStatus(searchParams.get('status') || 'all'),
-  );
-  const [sortOrder, setSortOrder] = useState<SortOrder>(
-    (searchParams.get('sort') as SortOrder) || 'newest',
-  );
+  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
+  const statusFilter = urlState.status;
+  const sortOrder = urlState.sort;
+
+  const workflowNameInput = urlState.workflowName;
+  const workflowTemplateNameInput = urlState.workflowTemplateName;
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const templateInputRef = useRef<HTMLDivElement>(null);
 
-  const debouncedWorkflowName = useDebounce(workflowNameInput, 500);
-  const debouncedWorkflowTemplateName = useDebounce(
-    workflowTemplateNameInput,
-    500,
-  );
-
   const filters = useMemo(
     () => ({
-      workflowName: debouncedWorkflowName || undefined,
-      workflowTemplateName: debouncedWorkflowTemplateName || undefined,
+      workflowName: committedState.workflowName || undefined,
+      workflowTemplateName: committedState.workflowTemplateName || undefined,
       status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
     }),
-    [debouncedWorkflowName, debouncedWorkflowTemplateName, statusFilter],
+    [
+      committedState.workflowName,
+      committedState.workflowTemplateName,
+      statusFilter,
+    ],
   );
-
-  // Update URL when filters or sort change
-  useEffect(() => {
-    const params = new URLSearchParams();
-
-    // Preserve namespace parameter
-    const namespaceParam = searchParams.get('namespace');
-    if (namespaceParam) {
-      params.set('namespace', namespaceParam);
-    }
-
-    if (debouncedWorkflowName) {
-      params.set('workflowName', debouncedWorkflowName);
-    }
-    if (debouncedWorkflowTemplateName) {
-      params.set('workflowTemplateName', debouncedWorkflowTemplateName);
-    }
-    if (statusFilter && statusFilter !== 'all') {
-      params.set('status', statusFilter.toLowerCase());
-    }
-    if (sortOrder !== 'newest') {
-      params.set('sort', sortOrder);
-    }
-
-    const queryString = params.toString();
-    if (queryString === searchParams.toString()) {
-      return;
-    }
-    const newUrl = queryString ? `?${queryString}` : window.location.pathname;
-    router.replace(newUrl, { scroll: false });
-  }, [
-    searchParams,
-    debouncedWorkflowName,
-    debouncedWorkflowTemplateName,
-    statusFilter,
-    sortOrder,
-    router,
-  ]);
 
   const {
     workflows,
@@ -1255,10 +1220,15 @@ export function SessionsSection({
   const isLoading = loading || !isNamespaceResolved;
 
   const clearFilters = () => {
-    setWorkflowNameInput('');
-    setWorkflowTemplateNameInput('');
-    setStatusFilter('all');
-    setSortOrder('newest');
+    setUrlState(
+      {
+        workflowName: '',
+        workflowTemplateName: '',
+        status: 'all',
+        sort: 'newest',
+      },
+      { flush: true },
+    );
   };
 
   return (
@@ -1267,7 +1237,7 @@ export function SessionsSection({
         <div className="flex w-full flex-col gap-3 pb-1 lg:flex-row lg:items-end">
           <ResourceSearchInput
             value={workflowNameInput}
-            onChange={setWorkflowNameInput}
+            onChange={workflowName => setUrlState({ workflowName })}
             placeholder="Search"
             testId="workflow-runs-search"
             className="w-full lg:max-w-[493px] lg:flex-1"
@@ -1288,7 +1258,7 @@ export function SessionsSection({
                 placeholder="All templates"
                 value={workflowTemplateNameInput}
                 onChange={e => {
-                  setWorkflowTemplateNameInput(e.target.value);
+                  setUrlState({ workflowTemplateName: e.target.value });
                   if (!templateDropdownOpen) {
                     setTemplateDropdownOpen(true);
                   }
@@ -1304,7 +1274,10 @@ export function SessionsSection({
                     filteredTemplateNames={filteredTemplateNames}
                     query={workflowTemplateNameInput}
                     onSelect={templateName => {
-                      setWorkflowTemplateNameInput(templateName);
+                      setUrlState(
+                        { workflowTemplateName: templateName },
+                        { flush: true },
+                      );
                       setTemplateDropdownOpen(false);
                     }}
                   />
@@ -1322,7 +1295,9 @@ export function SessionsSection({
             <Select
               items={sortOrderItems}
               value={sortOrder}
-              onValueChange={value => setSortOrder(value as SortOrder)}>
+              onValueChange={value =>
+                setUrlState({ sort: parseSortOrder(String(value)) })
+              }>
               <SelectTrigger
                 aria-labelledby="workflow-sort-label"
                 className="w-full">
@@ -1347,7 +1322,9 @@ export function SessionsSection({
             <Select
               items={statusFilterItems}
               value={statusFilter || 'all'}
-              onValueChange={value => setStatusFilter(value as string)}>
+              onValueChange={value =>
+                setUrlState({ status: String(value).toLowerCase() })
+              }>
               <SelectTrigger
                 aria-labelledby="workflow-status-label"
                 className="w-full">

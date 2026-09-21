@@ -1,32 +1,61 @@
 'use client';
 
 import { useSetAtom } from 'jotai';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
-import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
+import {
+  lastListUrlAtom,
+  settingsEntryUrlAtom,
+} from '@/atoms/navigation-history';
+import { APP_SCOPED_PARAMS } from '@/lib/utils/param-scope';
+
+const SETTINGS_PREFIX = '/settings';
+
+function isListRoute(pathname: string): boolean {
+  return pathname.split('/').filter(Boolean).length === 1;
+}
+
+function buildReturnUrl(
+  pathname: string,
+  searchParams: URLSearchParams,
+): string {
+  const params = new URLSearchParams(searchParams.toString());
+  for (const key of APP_SCOPED_PARAMS) {
+    params.delete(key);
+  }
+  const queryString = params.toString();
+  return queryString ? `${pathname}?${queryString}` : pathname;
+}
 
 export function NavigationTracker() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const setSettingsEntryUrl = useSetAtom(settingsEntryUrlAtom);
-  const previousPathname = useRef<string | null>(null);
+  const setLastListUrl = useSetAtom(lastListUrlAtom);
+  const previousUrl = useRef<string | null>(null);
 
   useEffect(() => {
-    const isEnteringSettings =
-      pathname.startsWith('/settings') &&
-      previousPathname.current !== null &&
-      !previousPathname.current.startsWith('/settings');
+    const returnUrl = buildReturnUrl(pathname, searchParams);
 
-    if (isEnteringSettings) {
-      setSettingsEntryUrl(previousPathname.current);
-    }
-
-    if (!pathname.startsWith('/settings')) {
+    if (pathname.startsWith(SETTINGS_PREFIX)) {
+      const entry = previousUrl.current;
+      if (entry !== null && !entry.startsWith(SETTINGS_PREFIX)) {
+        setSettingsEntryUrl(entry);
+      }
+    } else {
       setSettingsEntryUrl(null);
+      if (isListRoute(pathname)) {
+        setLastListUrl(previous =>
+          previous[pathname] === returnUrl
+            ? previous
+            : { ...previous, [pathname]: returnUrl },
+        );
+      }
     }
 
-    previousPathname.current = pathname;
-  }, [pathname, setSettingsEntryUrl]);
+    previousUrl.current = returnUrl;
+  }, [pathname, searchParams, setSettingsEntryUrl, setLastListUrl]);
 
   return null;
 }

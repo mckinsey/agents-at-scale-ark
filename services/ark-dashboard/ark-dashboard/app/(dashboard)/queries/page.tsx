@@ -1,7 +1,6 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Autorenew, DatabaseSearch } from '@/components/icons';
@@ -16,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Pagination } from '@/components/ui/pagination';
 import { DOCS_URLS } from '@/lib/constants/docs';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useListQueries } from '@/lib/services/queries-hooks';
 import {
   DEFAULT_PAGE_SIZE,
@@ -24,17 +24,19 @@ import {
 } from '@/lib/utils/pagination';
 
 const PAGE_SIZE_OPTIONS = [10, 15, 25, 50, 100];
-const SEARCH_DEBOUNCE_MS = 400;
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  page: { default: 1, parse: parsePage },
+  pageSize: { default: DEFAULT_PAGE_SIZE, parse: parsePageSize },
+};
 
 export default function QueriesPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
 
-  const page = parsePage(searchParams.get('page'));
-  const pageSize = parsePageSize(searchParams.get('pageSize'));
-  const urlSearch = searchParams.get('q') ?? '';
-
-  const [searchInput, setSearchInput] = useState<string>(urlSearch);
+  const page = urlState.page;
+  const pageSize = urlState.pageSize;
+  const urlSearch = committedState.q;
 
   const queriesQuery = useListQueries({
     page,
@@ -47,60 +49,23 @@ export default function QueriesPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const isEmpty = !isLoading && !isError && total === 0 && !urlSearch;
 
-  const searchParamsRef = useRef(searchParams);
-  useEffect(() => {
-    searchParamsRef.current = searchParams;
-  }, [searchParams]);
-
-  const updateParams = useCallback(
-    (next: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParamsRef.current.toString());
-      for (const [key, value] of Object.entries(next)) {
-        if (value === null || value === '') {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      }
-      const qs = params.toString();
-      router.replace(qs ? `?${qs}` : '?');
-    },
-    [router],
-  );
-
-  useEffect(() => {
-    if (searchInput === urlSearch) return;
-    const t = setTimeout(() => {
-      updateParams({ q: searchInput || null, page: null });
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [searchInput, urlSearch, updateParams]);
-
-  useEffect(() => {
-    setSearchInput(urlSearch);
-  }, [urlSearch]);
-
   useEffect(() => {
     if (total === 0) return;
     if (page > totalPages) {
-      updateParams({ page: null });
+      setUrlState({ page: 1 });
     }
-  }, [page, total, totalPages, updateParams]);
+  }, [page, total, totalPages, setUrlState]);
 
   const handlePageChange = (next: number) => {
-    updateParams({ page: next === 1 ? null : String(next) });
+    setUrlState({ page: next });
   };
 
   const handlePageSizeChange = (next: number) => {
-    updateParams({
-      pageSize: next === DEFAULT_PAGE_SIZE ? null : String(next),
-      page: null,
-    });
+    setUrlState({ pageSize: next });
   };
 
   const handleClearSearch = () => {
-    setSearchInput('');
-    updateParams({ q: null, page: null });
+    setUrlState({ q: '' }, { flush: true });
   };
 
   return (
@@ -143,8 +108,8 @@ export default function QueriesPage() {
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
           <div className="flex flex-none items-center">
             <ResourceSearchInput
-              value={searchInput}
-              onChange={setSearchInput}
+              value={urlState.q}
+              onChange={q => setUrlState({ q })}
               placeholder="Search query text..."
               className="w-[493px]"
             />

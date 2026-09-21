@@ -1,11 +1,9 @@
 'use client';
 
 import copy from 'copy-to-clipboard';
-import { useAtom } from 'jotai';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { MultiTabPreviewDialog } from '@/components/file-preview/multi-tab-preview-dialog';
@@ -52,6 +50,7 @@ import {
 } from '@/components/ui/table';
 import { useMultiFilePreview } from '@/hooks/use-multi-file-preview';
 import { DOCS_URLS } from '@/lib/constants/docs';
+import { useUrlState } from '@/lib/hooks/use-url-state';
 import { filesService } from '@/lib/services/files';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useGetFilesCount } from '@/lib/services/files-count-hooks';
@@ -77,6 +76,10 @@ function formatBytes(bytes: number): string {
   }
   return `${size.toFixed(2)} ${units[unitIndex]}`;
 }
+
+const URL_STATE_SPEC = {
+  prefix: { default: '' },
+};
 
 function parseBreadcrumbs(prefix: string): string[] {
   if (!prefix) return [];
@@ -115,7 +118,12 @@ function RowActionsMenu({ children }: Readonly<{ children: React.ReactNode }>) {
 
 export function FilesSection() {
   const { namespace } = useNamespace();
-  const [prefix, setPrefix] = useAtom(filesBrowserPrefixAtom);
+  const [urlState, setUrlState] = useUrlState(URL_STATE_SPEC);
+  const prefix = urlState.prefix;
+  const setPrefix = useCallback(
+    (next: string) => setUrlState({ prefix: next }),
+    [setUrlState],
+  );
   const [uploading, setUploading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{

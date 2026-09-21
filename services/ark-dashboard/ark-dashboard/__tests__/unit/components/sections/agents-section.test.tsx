@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
 import { AgentsSection } from '@/components/sections/agents-section';
 import { toast } from '@/components/ui/sonner';
 import type { AgentListItem } from '@/lib/services';
@@ -9,6 +10,16 @@ import type { AgentListItem } from '@/lib/services';
 const mockList = vi.fn();
 const mockDeleteById = vi.fn();
 const mockReadOnly = { value: false };
+
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock();
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
 
 vi.mock('@/lib/services', () => ({
   agentsService: {

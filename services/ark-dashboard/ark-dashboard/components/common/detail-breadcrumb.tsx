@@ -1,3 +1,8 @@
+'use client';
+
+import { useAtomValue } from 'jotai';
+
+import { lastListUrlAtom } from '@/atoms/navigation-history';
 import { ChevronLeft } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -23,6 +28,9 @@ export function DetailBreadcrumb({
   current,
   className,
 }: Readonly<DetailBreadcrumbProps>) {
+  const lastListUrl = useAtomValue(lastListUrlAtom);
+  const resolvedBackHref = lastListUrl[backHref] ?? backHref;
+
   return (
     <nav
       aria-label="Breadcrumb"
@@ -31,7 +39,7 @@ export function DetailBreadcrumb({
         className,
       )}>
       <NamespacedLink
-        href={backHref}
+        href={resolvedBackHref}
         className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
         <IconShell size="sm" className="opacity-100">
           <ChevronLeft />

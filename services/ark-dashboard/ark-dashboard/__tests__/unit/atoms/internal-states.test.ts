@@ -2,7 +2,6 @@ import { createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  filesBrowserPrefixAtom,
   lastConversationIdAtom,
   openChatWindowsAtom,
 } from '@/atoms/internal-states';
@@ -20,36 +19,6 @@ describe('Internal States Atoms', () => {
   afterEach(() => {
     sessionStorage.clear();
     localStorage.clear();
-  });
-
-  describe('filesBrowserPrefixAtom', () => {
-    it('should default to empty string', () => {
-      const value = store.get(filesBrowserPrefixAtom);
-      expect(value).toBe('');
-    });
-
-    it('should be updatable to a directory path', () => {
-      store.set(filesBrowserPrefixAtom, 'documents/reports/');
-      const value = store.get(filesBrowserPrefixAtom);
-      expect(value).toBe('documents/reports/');
-    });
-
-    it('should be updatable back to root', () => {
-      store.set(filesBrowserPrefixAtom, 'documents/');
-      expect(store.get(filesBrowserPrefixAtom)).toBe('documents/');
-
-      store.set(filesBrowserPrefixAtom, '');
-      expect(store.get(filesBrowserPrefixAtom)).toBe('');
-    });
-
-    it('should persist value across store recreations (page refresh)', () => {
-      store.set(filesBrowserPrefixAtom, 'documents/reports/');
-      expect(store.get(filesBrowserPrefixAtom)).toBe('documents/reports/');
-
-      const newStore = createStore();
-      const valueAfterRefresh = newStore.get(filesBrowserPrefixAtom);
-      expect(valueAfterRefresh).toBe('documents/reports/');
-    });
   });
 
   describe('lastConversationIdAtom', () => {

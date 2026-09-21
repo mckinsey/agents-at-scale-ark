@@ -37,6 +37,7 @@ import { Tag } from '@/components/ui/tag';
 import { TagToggle } from '@/components/ui/tag-toggle';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { useDelayedLoading } from '@/lib/hooks';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import type {
   ExportItem,
   ResourceExportData,
@@ -46,6 +47,11 @@ import { exportService } from '@/lib/services/export';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 type TabValue = ResourceType | 'all';
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  tab: { default: 'all' },
+};
 
 type ExportAction = 'selected' | 'all';
 
@@ -170,9 +176,8 @@ export default function ExportPage() {
   const [exportingAction, setExportingAction] = useState<ExportAction | null>(
     null,
   );
-  const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [lastExportTime, setLastExportTime] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [urlState, setUrlState] = useUrlState(URL_STATE_SPEC);
   const showLoading = useDelayedLoading(isLoading);
 
   const loadResources = useCallback(async () => {
@@ -209,7 +214,7 @@ export default function ExportPage() {
   }, [resources]);
 
   const searchedRows = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = urlState.q.trim().toLowerCase();
     if (!query) {
       return allRows;
     }
@@ -218,14 +223,14 @@ export default function ExportPage() {
         row.item.name.toLowerCase().includes(query) ||
         (row.item.description?.toLowerCase().includes(query) ?? false),
     );
-  }, [allRows, searchQuery]);
+  }, [allRows, urlState.q]);
 
   const visibleRows = useMemo(() => {
-    if (activeTab === 'all') {
+    if (urlState.tab === 'all') {
       return searchedRows;
     }
-    return searchedRows.filter(row => row.meta.type === activeTab);
-  }, [searchedRows, activeTab]);
+    return searchedRows.filter(row => row.meta.type === urlState.tab);
+  }, [searchedRows, urlState.tab]);
 
   const tabCounts = useMemo(() => {
     const counts = new Map<TabValue, number>(
@@ -324,11 +329,12 @@ export default function ExportPage() {
   };
 
   const activeTabLabel =
-    activeTab === 'all'
+    urlState.tab === 'all'
       ? 'resources'
-      : (RESOURCES.find(meta => meta.type === activeTab)?.label ?? 'resources');
+      : (RESOURCES.find(meta => meta.type === urlState.tab)?.label ??
+        'resources');
 
-  const noResultsMessage = searchQuery.trim()
+  const noResultsMessage = urlState.q.trim()
     ? 'No resources match your search.'
     : `There are no ${activeTabLabel} to export.`;
 
@@ -359,7 +365,10 @@ export default function ExportPage() {
 
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
-          <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+          <ResourceSearchInput
+            value={urlState.q}
+            onChange={q => setUrlState({ q })}
+          />
           {lastExportTime && (
             <span className="text-fg-tertiary text-xs leading-4">
               Last export: {formatLastExportTime()}
@@ -370,10 +379,10 @@ export default function ExportPage() {
           <TagToggle
             size="default"
             className={TAG_CLASSES}
-            pressed={activeTab === 'all'}
+            pressed={urlState.tab === 'all'}
             onPressedChange={pressed => {
               if (pressed) {
-                setActiveTab('all');
+                setUrlState({ tab: 'all' });
               }
             }}>
             All ({tabCounts.get('all') ?? 0})
@@ -385,15 +394,17 @@ export default function ExportPage() {
                 key={meta.type}
                 size="default"
                 className={TAG_CLASSES}
-                pressed={activeTab === meta.type}
+                pressed={urlState.tab === meta.type}
                 onPressedChange={pressed => {
                   if (pressed) {
-                    setActiveTab(meta.type);
+                    setUrlState({ tab: meta.type });
                   }
                 }}>
                 <IconShell
                   size="sm"
-                  variant={activeTab === meta.type ? 'primary' : 'secondary'}>
+                  variant={
+                    urlState.tab === meta.type ? 'primary' : 'secondary'
+                  }>
                   <Icon />
                 </IconShell>
                 {meta.label} ({tabCounts.get(meta.type) ?? 0})
