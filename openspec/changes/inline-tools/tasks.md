@@ -1,4 +1,29 @@
+Prerequisites, merged to `main` before phase 1: the change spec itself, and
+PR #3507 (the pre-existing typed Tool PUT whitelist bug).
+
+Each phase is its own stack of PRs on `main` and merges before the next phase
+opens; phases are not stacked on each other. See the OpenSpec change workflow
+in the repository `CLAUDE.md`.
+
 ## 1. Phase 1: schema and mandatory author admission
+
+Phase 1 ships as six PRs, in this order. 1.1-1.5 are one PR because a schema
+that accepts `type: inline` without its mandatory admission is a state the
+spec forbids, and the author policy is the security decision reviewers must
+see whole:
+
+1. `p1-policy` — `internal/inlinetools` author decision and its tests, pure
+   logic with no Kubernetes wiring (security review).
+2. `p1-schema` — tasks 1.1, 1.2, 1.4, 1.5: inline shape and status fields,
+   shared validation, admission wiring on both backends, chart flag, render
+   guard and RBAC.
+3. `p1-controller` — task 1.6: authoring-only Pending path and source event.
+4. `p1-api` — tasks 2.1, 2.2: ark-api inline fields, language-only list
+   projection, impersonation requirement on typed and generic routes.
+5. `p1-dashboard-service` — task 2.3 service layer: inline spec building,
+   update call, `Available` condition summary.
+6. `p1-dashboard-ui` — tasks 2.3 form, 2.4, 2.5: form fields, edit route,
+   badge, Pending banner, tests.
 
 - [x] 1.1 Add the inline Tool shape and the new `ToolStatus` fields (`resolvedAddress` and `conditions`, with an `Available` condition type and the closed reason set, plus a `Pending` value for the existing `state`), and deep-copy support; regenerate CRDs, Helm copies, SDK models, and API types. Existing `state`/`message` behaviour for other Tool types stays unchanged.
 - [x] 1.2 Add shared structural validation for language, UTF-8 source size, object input schemas, subtype exclusivity, and delete/recreate-only inline type transitions; test boundary and multibyte cases.
