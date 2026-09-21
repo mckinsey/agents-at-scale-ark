@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-no-memory
+spec:
+  input: "no memory exists in this namespace yet"
+  target:
+    type: agent
+    name: placeholder-agent

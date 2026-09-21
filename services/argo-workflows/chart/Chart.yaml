@@ -11,6 +11,11 @@ dependencies:
   - name: argo-workflows
     version: 0.45.26
     repository: https://argoproj.github.io/argo-helm
+  # When bumping this pin, keep `ark-tenant.memory.requireBroker: false` in
+  # values.yaml. From the version that introduced the broker preflight, the
+  # tenant chart refuses a fresh install into a namespace with no broker
+  # Service, which this chart's namespaces do not have. The override is inert
+  # at 0.1.40 and starts being load-bearing at that bump.
   - name: ark-tenant
     version: 0.1.40
     repository: oci://ghcr.io/mckinsey/agents-at-scale-ark/charts
