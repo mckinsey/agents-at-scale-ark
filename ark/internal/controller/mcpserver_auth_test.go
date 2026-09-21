@@ -51,6 +51,21 @@ type fakeMCPServerOpts struct {
 	compliant              bool
 	brokenResourceMetadata bool
 	brokenAuthServer       bool
+	issuerPath             string
+}
+
+func (o fakeMCPServerOpts) issuer(host string) string {
+	if o.issuerPath == "" {
+		return host
+	}
+	return host + "/" + o.issuerPath
+}
+
+func (o fakeMCPServerOpts) authServerMetadataPath() string {
+	if o.issuerPath == "" {
+		return "/.well-known/oauth-authorization-server"
+	}
+	return "/.well-known/oauth-authorization-server/" + o.issuerPath
 }
 
 // fakeMCPServer serves the minimal surface a protected MCP server
@@ -85,17 +100,17 @@ func fakeMCPServerWithOpts(opts fakeMCPServerOpts) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"resource":                 host + "/mcp",
 			"resource_name":            "Fake MCP (Test)",
-			"authorization_servers":    []string{host},
+			"authorization_servers":    []string{opts.issuer(host)},
 			"bearer_methods_supported": []string{"header"},
 		})
 	})
 
-	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(opts.authServerMetadataPath(), func(w http.ResponseWriter, r *http.Request) {
 		if opts.brokenAuthServer {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		host := "http://" + r.Host
+		host := opts.issuer("http://" + r.Host)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"issuer":                           host,
@@ -212,7 +227,7 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationDiscoveryFailed))
 	})
 
-	It("populates authorization state even when auth server metadata fetch fails", func() {
+	It("surfaces state=DiscoveryFailed when auth server metadata yields no usable endpoints", func() {
 		srv := fakeMCPServerWithOpts(fakeMCPServerOpts{compliant: true, brokenAuthServer: true})
 		defer srv.Close()
 
@@ -242,12 +257,71 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
 
 		Expect(out.Status.Authorization).NotTo(BeNil())
-		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateRequired))
+		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateDiscoveryFailed))
 		Expect(out.Status.Authorization.Resource).To(Equal(srv.URL + "/mcp"))
-		Expect(out.Status.Authorization.ResourceName).To(Equal("Fake MCP (Test)"))
-		Expect(out.Status.Authorization.AuthorizationServers).To(ConsistOf(srv.URL))
 		Expect(out.Status.Authorization.AuthorizationEndpoint).To(BeEmpty())
 		Expect(out.Status.Authorization.TokenEndpoint).To(BeEmpty())
+
+		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
+		Expect(avail).NotTo(BeNil())
+		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationDiscoveryFailed))
+		Expect(avail.Message).To(ContainSubstring("authorization_endpoint and token_endpoint"))
+	})
+
+	It("keeps state=Required for a machine-managed server whose authorization server advertises no authorization_endpoint", func() {
+		srv := newMachineMCPServer(machineMCPOpts{advertiseClientCredentials: true})
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-cc-no-authz-endpoint"
+		createMachineMCPServer(ctx, name, srv.URL+"/mcp", srv.privateKey)
+
+		r := newMachineReconciler()
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+
+		Expect(out.Status.Authorization).NotTo(BeNil())
+		Expect(out.Status.Authorization.State).NotTo(Equal(arkv1alpha1.MCPServerAuthorizationStateDiscoveryFailed))
+		Expect(out.Status.Authorization.AuthorizationEndpoint).To(BeEmpty())
+		Expect(out.Status.Authorization.TokenEndpoint).To(Equal(srv.URL + "/token"))
+	})
+
+	It("discovers endpoints for an issuer with a path component via RFC 8414 path insertion", func() {
+		srv := fakeMCPServerWithOpts(fakeMCPServerOpts{compliant: true, issuerPath: "login/oauth"})
+		defer srv.Close()
+
+		const name = "mcp-auth-path-issuer"
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, mcpServer)
+		})
+
+		r := &MCPServerReconciler{
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+			Eventing:  eventnoop.NewProvider(),
+		}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+
+		issuer := srv.URL + "/login/oauth"
+		Expect(out.Status.Authorization).NotTo(BeNil())
+		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateRequired))
+		Expect(out.Status.Authorization.AuthorizationServers).To(ConsistOf(issuer))
+		Expect(out.Status.Authorization.AuthorizationEndpoint).To(Equal(issuer + "/authorize"))
+		Expect(out.Status.Authorization.TokenEndpoint).To(Equal(issuer + "/token"))
 
 		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
 		Expect(avail).NotTo(BeNil())

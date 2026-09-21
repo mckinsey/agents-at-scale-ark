@@ -49,8 +49,10 @@ const (
 	// returns HTTP 401 but fails to advertise OAuth metadata per
 	// RFC 9728 — e.g. missing or malformed WWW-Authenticate header, or
 	// the protected resource metadata endpoint is unreachable / returns
-	// an invalid document. The dashboard cannot offer an authorize flow
-	// in this state, so it is surfaced as a failure, not a success.
+	// an invalid document — or when the authorization server does not
+	// advertise the RFC 8414 authorization and token endpoints a browser
+	// flow needs. The dashboard cannot offer an authorize flow in this
+	// state, so it is surfaced as a failure, not a success.
 	MCPServerReasonAuthorizationDiscoveryFailed = "AuthorizationDiscoveryFailed"
 
 	// MCPServerReasonAuthorized indicates the controller successfully
@@ -356,6 +358,39 @@ func (r *MCPServerReconciler) handleClientCreationError(ctx context.Context, mcp
 	return requeue, nil
 }
 
+func applyAuthorizationServerMetadata(ctx context.Context, authStatus *arkv1alpha1.MCPServerAuthorizationStatus, issuers []string, timeout time.Duration) {
+	if len(issuers) == 0 {
+		return
+	}
+
+	log := logf.FromContext(ctx)
+	issuer := issuers[0]
+
+	as, err := arkmcp.FetchAuthorizationServerMetadata(ctx, issuer, timeout)
+	switch {
+	case err != nil:
+		// RFC 8414 metadata is advisory for surfacing state; a failure
+		// here is logged but does not invalidate the AuthorizationRequired
+		// signal, because the resource metadata itself was valid.
+		log.Info("authorization server metadata fetch failed, continuing with resource metadata only", "issuer", issuer, "error", err.Error())
+	case as == nil:
+		// Some upstreams return 200 with an empty body; oauthex surfaces
+		// (nil, nil). Treat the same as a fetch failure — metadata is
+		// advisory, no panic.
+		log.Info("authorization server metadata was empty, continuing with resource metadata only", "issuer", issuer)
+	default:
+		authStatus.AuthorizationEndpoint = as.AuthorizationEndpoint
+		authStatus.TokenEndpoint = as.TokenEndpoint
+		authStatus.RegistrationEndpoint = as.RegistrationEndpoint
+		authStatus.GrantTypesSupported = as.GrantTypesSupported
+		authStatus.TokenEndpointAuthMethodsSupported = as.TokenEndpointAuthMethodsSupported
+		authStatus.TokenEndpointAuthSigningAlgValuesSupported = as.TokenEndpointAuthSigningAlgValuesSupported
+		if len(as.ScopesSupported) > 0 {
+			authStatus.ScopesSupported = as.ScopesSupported
+		}
+	}
+}
+
 // handleAuthorizationRequired runs RFC 9728 + RFC 8414 discovery using
 // the WWW-Authenticate challenge captured by the MCP transport. On
 // success it populates status.authorization and sets the
@@ -405,30 +440,15 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 		authStatus.Resource = mcpServer.Status.ResolvedAddress
 	}
 
-	if len(rm.AuthorizationServers) > 0 {
-		as, err := arkmcp.FetchAuthorizationServerMetadata(ctx, rm.AuthorizationServers[0], timeout)
-		switch {
-		case err != nil:
-			// RFC 8414 metadata is advisory for surfacing state; a failure
-			// here is logged but does not invalidate the AuthorizationRequired
-			// signal, because the resource metadata itself was valid.
-			log.Info("authorization server metadata fetch failed, continuing with resource metadata only", "issuer", rm.AuthorizationServers[0], "error", err.Error())
-		case as == nil:
-			// Some upstreams return 200 with an empty body; oauthex surfaces
-			// (nil, nil). Treat the same as a fetch failure — metadata is
-			// advisory, no panic.
-			log.Info("authorization server metadata was empty, continuing with resource metadata only", "issuer", rm.AuthorizationServers[0])
-		default:
-			authStatus.AuthorizationEndpoint = as.AuthorizationEndpoint
-			authStatus.TokenEndpoint = as.TokenEndpoint
-			authStatus.RegistrationEndpoint = as.RegistrationEndpoint
-			authStatus.GrantTypesSupported = as.GrantTypesSupported
-			authStatus.TokenEndpointAuthMethodsSupported = as.TokenEndpointAuthMethodsSupported
-			authStatus.TokenEndpointAuthSigningAlgValuesSupported = as.TokenEndpointAuthSigningAlgValuesSupported
-			if len(as.ScopesSupported) > 0 {
-				authStatus.ScopesSupported = as.ScopesSupported
-			}
+	applyAuthorizationServerMetadata(ctx, authStatus, rm.AuthorizationServers, timeout)
+
+	if !isMachineManaged(mcpServer) && (authStatus.AuthorizationEndpoint == "" || authStatus.TokenEndpoint == "") {
+		issuer := "none advertised"
+		if len(rm.AuthorizationServers) > 0 {
+			issuer = rm.AuthorizationServers[0]
 		}
+		reason := fmt.Sprintf("authorization server (%s) did not advertise the RFC 8414 authorization_endpoint and token_endpoint required to start an authorization flow", issuer)
+		return r.reconcileConditionsAuthorizationDiscoveryFailed(ctx, mcpServer, reason)
 	}
 
 	now := metav1.Now()
@@ -462,10 +482,11 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 
 // reconcileConditionsAuthorizationDiscoveryFailed sets conditions when
 // the server returned 401 but we could not extract a usable OAuth
-// metadata document. status.authorization is populated with
-// State=DiscoveryFailed only — metadata fields are left empty so the
-// dashboard cannot mistakenly drive an OAuth flow without a valid
-// authorization server.
+// metadata document, or the authorization server advertised no
+// authorization and token endpoints for a browser flow.
+// status.authorization is populated with State=DiscoveryFailed only —
+// metadata fields are left empty so the dashboard cannot mistakenly
+// drive an OAuth flow without a valid authorization server.
 func (r *MCPServerReconciler) reconcileConditionsAuthorizationDiscoveryFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, reason string) error {
 	log := logf.FromContext(ctx)
 	mcpServer.Status.ToolCount = 0
