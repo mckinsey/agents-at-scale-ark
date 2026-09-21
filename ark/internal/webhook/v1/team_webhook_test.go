@@ -126,8 +126,8 @@ var _ = Describe("Team Webhook", func() {
 			Expect(err).ToNot(HaveOccurred(), "selector strategy with graph should allow multiple edges from same source")
 		})
 
-		It("Should reject graph edges with invalid member names for selector strategy", func() {
-			By("creating a selector team with graph referencing non-existent members")
+		It("Should reject a graph edge whose 'to' member is not in the team", func() {
+			By("creating a selector team with a graph edge pointing at a non-existent member")
 			maxTurns := 10
 			obj.Spec.Strategy = validation.StrategySelector
 			obj.Spec.MaxTurns = &maxTurns
@@ -139,13 +139,35 @@ var _ = Describe("Team Webhook", func() {
 			}
 			obj.Spec.Graph = &arkv1alpha1.TeamGraphSpec{
 				Edges: []arkv1alpha1.TeamGraphEdge{
-					{From: "researcher", To: "nonexistent"}, // Invalid member name
+					{From: "researcher", To: "nonexistent"},
 				},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred(), "should reject graph edges with invalid member names")
-			Expect(err.Error()).To(ContainSubstring("not found in team members"))
+			Expect(err.Error()).To(ContainSubstring("'to' member 'nonexistent' not found in team members"))
+		})
+
+		It("Should reject a graph edge whose 'from' member is not in the team", func() {
+			By("creating a selector team with a graph edge originating from a non-existent member")
+			maxTurns := 10
+			obj.Spec.Strategy = validation.StrategySelector
+			obj.Spec.MaxTurns = &maxTurns
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+			}
+			obj.Spec.Selector = &arkv1alpha1.TeamSelectorSpec{
+				Agent: "coordinator",
+			}
+			obj.Spec.Graph = &arkv1alpha1.TeamGraphSpec{
+				Edges: []arkv1alpha1.TeamGraphEdge{
+					{From: "nonexistent", To: "researcher"},
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred(), "should reject graph edges with invalid member names")
+			Expect(err.Error()).To(ContainSubstring("'from' member 'nonexistent' not found in team members"))
 		})
 
 		It("Should require graph to have at least one edge when provided for selector strategy", func() {
