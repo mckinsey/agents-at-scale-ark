@@ -66,23 +66,42 @@ Uploads are capped at 1MB. Two components enforce this independently:
 
 The dashboard check is a convenience, not a control — calling the API directly bypasses it. The ark-api cap is the enforced limit.
 
-To change it, set `PROXY_MAX_UPLOAD_BYTES` (in bytes) on the ark-api deployment:
+`PROXY_MAX_UPLOAD_BYTES` is already defined in `services/ark-api/chart/values.yaml`, under `app.env`, alongside the deployment's other environment variables (CORS, OIDC, `AUTH_MODE`, the A2A agent card host/port, and more). Helm treats `app.env` as a single list value: an override that doesn't repeat every entry replaces the whole list rather than adding to it, so the override must always carry the complete list.
+
+If you're editing the checked-out chart directly, change the `value` of the existing entry in place:
 
 ```yaml
 # services/ark-api/chart/values.yaml
 app:
   env:
+    # ...
+    - name: PROXY_MAX_UPLOAD_BYTES
+      value: "5242880" # was 1048576 (1MB)
+    # ...
+```
+
+At install time, pass a values file with the complete `app.env` list — copy it from `values.yaml` and change only this entry — rather than a single `--set`:
+
+```yaml
+# my-overrides.yaml
+app:
+  env:
+    - name: CORS_ORIGINS
+      value: "*"
+    - name: OIDC_ISSUER_URL
+      value: ""
+    # ...every other entry from services/ark-api/chart/values.yaml...
     - name: PROXY_MAX_UPLOAD_BYTES
       value: "5242880" # 5MB
 ```
 
-Or at install time:
-
 ```bash
-helm upgrade --install ark-api services/ark-api/chart \
-  --set-string app.env[0].name=PROXY_MAX_UPLOAD_BYTES \
-  --set-string app.env[0].value=5242880
+helm upgrade --install ark-api services/ark-api/chart -f my-overrides.yaml
 ```
+
+Other top-level settings (image, resources, security context) don't need repeating in `my-overrides.yaml` — only `app.env` is a list, so it's the only key this rule applies to.
+
+Don't reach for `--set-string app.env[0].value=...` instead: with no `-f` supplying the rest of the list, that single `--set` *is* the entire override for `app.env`, so it silently drops every other environment variable the deployment relies on, including `CORS_ORIGINS`, `AUTH_MODE`, and the OIDC and A2A agent card settings.
 
 The cap applies only to file-gateway uploads (`POST` to the `files` path). A2A and MCP proxy traffic is unaffected. Oversized uploads get `413` with the maximum in the response body.
 
