@@ -540,6 +540,51 @@ describe('FilesSection', () => {
     });
   });
 
+  describe('Load error state', () => {
+    it('shows an error state instead of the empty state when the root load fails', async () => {
+      mockUseListFiles.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isFetching: false,
+        isError: true,
+        error: new Error('service unavailable'),
+        refetch: vi.fn(),
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
+
+      renderWithProviders(<FilesSection />);
+
+      const alert = await screen.findByRole('alert');
+      expect(
+        within(alert).getByText(/couldn't load files/i),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/no files yet/i)).not.toBeInTheDocument();
+    });
+
+    it('calls refetch when the retry button is clicked', async () => {
+      const refetch = vi.fn();
+      mockUseListFiles.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isFetching: false,
+        isError: true,
+        error: new Error('service unavailable'),
+        refetch,
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
+
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      renderWithProviders(<FilesSection />);
+
+      await user.click(await screen.findByRole('button', { name: /retry/i }));
+      expect(refetch).toHaveBeenCalled();
+    });
+  });
+
   describe('File Upload', () => {
     const getFileInput = () =>
       screen.getByLabelText(/browse files/i, {

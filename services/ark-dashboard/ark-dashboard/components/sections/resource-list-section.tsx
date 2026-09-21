@@ -8,13 +8,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { toast } from '@/components/ui/sonner';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { NamespacedLink } from '@/components/namespaced-link';
 import {
   LearnMoreButton,
   ResourceEmptyState,
+  ResourceErrorState,
   ResourceNoResults,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { useDelayedLoading } from '@/lib/hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -97,6 +98,7 @@ export function ResourceListSection<T extends ResourceListItem>({
 }: ResourceListSectionProps<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [originFilterValue, setOriginFilterValue] = useState('All');
@@ -105,6 +107,7 @@ export function ResourceListSection<T extends ResourceListItem>({
 
   const loadItemsRef = useRef(loadItems);
   loadItemsRef.current = loadItems;
+  const hasLoadedOnce = useRef(false);
 
   const originFilterOptions = useMemo(() => {
     if (!originFilter) return [];
@@ -137,13 +140,15 @@ export function ResourceListSection<T extends ResourceListItem>({
     setLoading(true);
     try {
       setItems(await loadItemsRef.current());
-    } catch (error) {
-      console.error('Failed to load data:', error);
+      setError(null);
+      hasLoadedOnce.current = true;
+    } catch (err) {
+      const normalizedError =
+        err instanceof Error ? err : new Error('An unexpected error occurred');
+      console.error('Failed to load data:', normalizedError);
+      setError(normalizedError);
       toast.error('Failed to Load Data', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
+        description: normalizedError.message,
       });
     } finally {
       setLoading(false);
@@ -168,17 +173,18 @@ export function ResourceListSection<T extends ResourceListItem>({
       } finally {
         setLoading(false);
       }
-    } catch (error) {
+    } catch (err) {
       toast.error(`Failed to Delete ${entityLabel}`, {
         description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
+          err instanceof Error ? err.message : 'An unexpected error occurred',
       });
     }
   };
 
-  const isEmpty = !loading && items.length === 0;
+  const hasError = Boolean(error);
+  const loadFailed = hasError && !hasLoadedOnce.current;
+  const refreshFailed = hasError && hasLoadedOnce.current;
+  const isEmpty = !loading && !hasError && items.length === 0;
 
   const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
   const statusLabel = STATUS_ITEMS.find(s => s.value === statusFilter)?.label;
@@ -188,7 +194,7 @@ export function ResourceListSection<T extends ResourceListItem>({
       : `There are no ${statusLabel} ${pluralLabel} at the moment.`;
 
   return (
-    <div className="flex h-full w-full content-shell flex-col">
+    <div className="content-shell flex h-full w-full flex-col">
       <ResourcePageHeader
         icon={icon}
         title={
@@ -216,7 +222,15 @@ export function ResourceListSection<T extends ResourceListItem>({
           <div className="py-8 text-center">Loading...</div>
         </div>
       )}
-      {!showLoading && isEmpty && (
+      {!showLoading && loadFailed && (
+        <ResourceErrorState
+          className="mt-5"
+          title={`Couldn't load ${pluralLabel}`}
+          description={error?.message}
+          onRetry={reload}
+        />
+      )}
+      {!showLoading && !loadFailed && isEmpty && (
         <ResourceEmptyState
           icon={icon}
           title={emptyTitle}
@@ -235,10 +249,20 @@ export function ResourceListSection<T extends ResourceListItem>({
           }
         />
       )}
-      {!showLoading && !isEmpty && (
+      {!showLoading && !loadFailed && !isEmpty && (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+          {refreshFailed && (
+            <ResourceErrorState
+              title={`Couldn't refresh ${pluralLabel}`}
+              description="Showing the last loaded version."
+              onRetry={reload}
+            />
+          )}
           <div className="flex flex-none items-end gap-3">
-            <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+            <ResourceSearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+            />
             {originFilter && (
               <div className="flex w-48 flex-col gap-2">
                 <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
