@@ -371,7 +371,7 @@ The runner SHALL drain output incrementally with bounded buffers/logging, enforc
 
 ### Requirement: Dashboard authoring persists and reports honest status
 
-Typed ark-api Tool endpoints SHALL preserve inline source/language through create, detail read, and PUT update. Handwritten DTOs, generated SDK models, and dashboard serialization SHALL all support the fields. Because the typed update replaces `spec` wholesale from the handwritten model, that model SHALL carry every Tool subtype, not only the ones it lists today: a PUT SHALL NOT drop `spec.mcp` or `spec.builtin` from an existing Tool. List responses SHALL expose language for the badge without including script source.
+Typed ark-api Tool endpoints SHALL preserve inline source/language through create, detail read, and PUT update. Handwritten DTOs, generated SDK models, and dashboard serialization SHALL all support the fields. Because the typed update replaces `spec` wholesale from the handwritten model, that model SHALL carry every Tool subtype: a PUT SHALL NOT drop any subtype block from an existing Tool. Completing that whitelist is a pre-existing fix delivered separately (PR #3507) and is a prerequisite of this change; adding `inline` SHALL NOT reintroduce the defect for any subtype. List responses SHALL expose language for the badge without including script source.
 
 The existing Add Tool flow SHALL offer Inline, a required monospace source textarea, and a required language selector with no default. Client validation SHALL check non-whitespace source and UTF-8 byte size without trimming persisted source; server validation remains authoritative. Source/language edits SHALL persist to the active namespace and round-trip when reopened. Admission failures SHALL be visible, and the `Available` condition's reason SHALL drive the message shown for a Pending Tool.
 
@@ -386,9 +386,10 @@ The authoring-first release SHALL provision no runners or usable execution endpo
 
 #### Scenario: Typed update preserves other subtypes
 
-- **GIVEN** an existing `mcp` or `builtin` Tool
+- **GIVEN** an existing Tool of any non-inline subtype
 - **WHEN** it is updated through the typed PUT endpoint
 - **THEN** its subtype configuration SHALL survive the round trip
+- **AND** adding `inline` to the model SHALL NOT drop or narrow any other subtype block
 
 #### Scenario: Edit and reopen
 
