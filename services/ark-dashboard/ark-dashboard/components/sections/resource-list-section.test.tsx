@@ -48,12 +48,17 @@ function renderSection(loadItems: () => Promise<Item[]>) {
       emptyDescription="Create your first agent"
       loadItems={loadItems}
       deleteItem={vi.fn().mockResolvedValue(undefined)}
-      renderTable={items => (
-        <ul>
-          {items.map(i => (
-            <li key={i.id}>{i.name}</li>
-          ))}
-        </ul>
+      renderTable={(items, _onDelete, reload) => (
+        <div>
+          <button type="button" onClick={reload}>
+            trigger-reload
+          </button>
+          <ul>
+            {items.map(i => (
+              <li key={i.id}>{i.name}</li>
+            ))}
+          </ul>
+        </div>
       )}
     />,
   );
@@ -93,5 +98,23 @@ describe('ResourceListSection', () => {
 
     expect(await screen.findByText('No Agents Yet')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps stale data and shows a refresh banner when a refresh fails', async () => {
+    const loadItems = vi
+      .fn<() => Promise<Item[]>>()
+      .mockResolvedValueOnce([{ id: '1', name: 'agent-one' }])
+      .mockRejectedValueOnce(new Error('refresh blew up'));
+
+    const user = userEvent.setup();
+    renderSection(loadItems);
+
+    expect(await screen.findByText('agent-one')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'trigger-reload' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/couldn't refresh agents/i);
+    expect(screen.getByText('agent-one')).toBeInTheDocument();
   });
 });

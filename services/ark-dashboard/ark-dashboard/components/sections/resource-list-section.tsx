@@ -181,6 +181,11 @@ export function ResourceListSection<T extends ResourceListItem>({
     }
   };
 
+  // loadFailed: the first load never succeeded, so there is nothing to show —
+  // the error replaces the list. refreshFailed: a later reload failed but we
+  // still hold the previously loaded items — keep showing them under a banner
+  // rather than discarding valid data. This mirrors the a2a-servers/events
+  // sections and prevents a transient error from rendering the empty state.
   const hasError = Boolean(error);
   const loadFailed = hasError && !hasLoadedOnce.current;
   const refreshFailed = hasError && hasLoadedOnce.current;

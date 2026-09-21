@@ -360,6 +360,10 @@ export function FilesSection() {
 
   const breadcrumbs = parseBreadcrumbs(prefix);
   const hasFiles = allFiles.length > 0 || allDirectories.length > 0;
+  // A nested-path error is not a real error: the effect above resets the
+  // prefix to root and refetches (the directory likely no longer exists), so
+  // only a root-level error surfaces the error state. refreshFailed keeps the
+  // already-loaded files visible under a banner instead of discarding them.
   const loadFailed = listFilesError && prefix === '' && !hasFiles;
   const refreshFailed = listFilesError && hasFiles;
 
