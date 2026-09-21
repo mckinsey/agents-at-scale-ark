@@ -78,6 +78,10 @@ type QueryRecorder interface {
 
 type ToolRecorder interface {
 	OperationTracker
+	// InlineSourceChanged records that an inline Tool's executable source moved to
+	// a new revision. Audit logging can be off on the PostgreSQL backend, so this
+	// event is a required trail, not a convenience.
+	InlineSourceChanged(ctx context.Context, obj runtime.Object, reason string)
 }
 
 type MemoryRecorder interface {

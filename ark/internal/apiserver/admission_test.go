@@ -112,7 +112,7 @@ func newAgentAdmissionStorage(backend storage.Backend) *AdmissionStorage {
 		NewListFunc: func() runtime.Object { return &arkv1alpha1.AgentList{} },
 	}
 	inner := registry.NewGenericStorage(backend, NewRegistryTypeConverter(), cfg, GetPrinterColumnRegistry())
-	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}))
+	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), nil)
 }
 
 func agent(name string) *arkv1alpha1.Agent {

@@ -351,7 +351,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			MaxConcurrentQueries:    cfg.maxConcurrentQueries,
 			MaxConcurrentReconciles: cfg.maxConcurrentReconciles,
 		}},
-		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Eventing: eventingProvider}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},
 		{"A2AServer", &controller.A2AServerReconciler{
 			Client:   mgr.GetClient(),
@@ -405,6 +405,7 @@ func setupWebhooks(mgr ctrl.Manager) {
 		{"Query", webhookv1.SetupQueryWebhookWithManager},
 		{"ArkConfig", webhookv1.SetupArkConfigWebhookWithManager},
 		{"Tool", webhookv1.SetupToolWebhookWithManager},
+		{"InlineTool", webhookv1.SetupInlineToolWebhookWithManager},
 		{"Model", webhookv1.SetupModelWebhookWithManager},
 		{"MCPServer", webhookv1.SetupMCPServerWebhookWithManager},
 		{"A2AServer", webhookv1prealpha1.SetupA2AServerWebhookWithManager},

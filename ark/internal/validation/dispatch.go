@@ -33,6 +33,20 @@ func (v *Validator) Validate(ctx context.Context, obj runtime.Object) ([]string,
 	return nil, nil
 }
 
+// ValidateTransition checks rules that need the stored object as well as the
+// submitted one. Callers that have the old object must run it before Validate.
+func ValidateTransition(oldObj, newObj runtime.Object) error {
+	oldTool, ok := oldObj.(*arkv1alpha1.Tool)
+	if !ok {
+		return nil
+	}
+	newTool, ok := newObj.(*arkv1alpha1.Tool)
+	if !ok {
+		return nil
+	}
+	return ValidateToolTransition(oldTool, newTool)
+}
+
 func ApplyDefaults(ctx context.Context, obj runtime.Object, lookup ArkConfigLookup) {
 	switch o := obj.(type) {
 	case *arkv1alpha1.Agent:

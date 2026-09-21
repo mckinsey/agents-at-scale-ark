@@ -35,6 +35,7 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/apiserver/metrics"
 	"mckinsey.com/ark/internal/apiserver/registry"
+	"mckinsey.com/ark/internal/inlinetools"
 	"mckinsey.com/ark/internal/storage"
 	"mckinsey.com/ark/internal/storage/postgresql"
 	"mckinsey.com/ark/internal/validation"
@@ -321,6 +322,7 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 
 	lookup := &validation.StorageLookup{Backend: s.backend, K8sClient: s.config.K8sClient}
 	v := validation.NewValidator(lookup)
+	inlineReviewer := s.inlineReviewer()
 
 	v1alpha1Storage := make(map[string]rest.Storage)
 	for _, res := range V1Alpha1Resources {
@@ -332,7 +334,7 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewListFunc:  res.NewListFunc,
 		}
 		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-		v1alpha1Storage[res.Resource] = NewAdmissionStorage(inner, v)
+		v1alpha1Storage[res.Resource] = NewAdmissionStorage(inner, v, inlineReviewer)
 		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = v1alpha1Storage
@@ -347,7 +349,7 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewListFunc:  res.NewListFunc,
 		}
 		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-		v1prealpha1Storage[res.Resource] = NewAdmissionStorage(inner, v)
+		v1prealpha1Storage[res.Resource] = NewAdmissionStorage(inner, v, inlineReviewer)
 		v1prealpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = v1prealpha1Storage
@@ -357,6 +359,23 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	}
 
 	return nil
+}
+
+// inlineReviewer backs the inline author permission. Without authentication there
+// is no subject to review, and without a host config there is nothing to ask, so
+// both cases return a reviewer that denies instead of one that is skipped.
+func (s *Server) inlineReviewer() inlinetools.Reviewer {
+	if s.config.AuthMode != AuthModeDelegated {
+		return inlinetools.Reject(fmt.Sprintf("inline tool authoring requires request authentication (auth mode %q)", s.config.AuthMode))
+	}
+	if s.config.RestConfig == nil {
+		return inlinetools.Reject("inline tool authoring cannot be authorized: no host cluster config is available for SubjectAccessReview")
+	}
+	clientset, err := kubernetes.NewForConfig(s.config.RestConfig)
+	if err != nil {
+		return inlinetools.Reject(fmt.Sprintf("inline tool authoring cannot be authorized: %v", err))
+	}
+	return &inlinetools.SARReviewer{Create: clientset.AuthorizationV1().SubjectAccessReviews().Create}
 }
 
 func (s *Server) NeedLeaderElection() bool {

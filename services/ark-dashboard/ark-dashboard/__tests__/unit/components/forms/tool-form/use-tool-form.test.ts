@@ -1,9 +1,18 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  ToolFormMode,
+  type ToolFormValues,
+} from '@/components/forms/tool-form/types';
+import { useToolForm } from '@/components/forms/tool-form/use-tool-form';
+import { toast } from '@/components/ui/sonner';
+import { agentsService, teamsService, toolsService } from '@/lib/services';
+
 vi.mock('@/lib/services', () => ({
   toolsService: {
     create: vi.fn(),
+    update: vi.fn(),
     getDetail: vi.fn(),
   },
   agentsService: {
@@ -31,15 +40,6 @@ vi.mock('@/providers/NamespaceProvider', () => ({
   })),
 }));
 
-import { toast } from '@/components/ui/sonner';
-import { agentsService, teamsService, toolsService } from '@/lib/services';
-
-import { useToolForm } from '@/components/forms/tool-form/use-tool-form';
-import {
-  ToolFormMode,
-  type ToolFormValues,
-} from '@/components/forms/tool-form/types';
-
 const mockToolsService = vi.mocked(toolsService);
 const mockAgentsService = vi.mocked(agentsService);
 const mockTeamsService = vi.mocked(teamsService);
@@ -55,6 +55,8 @@ function values(overrides: Partial<ToolFormValues> = {}): ToolFormValues {
     httpUrl: '',
     selectedAgent: '',
     selectedTeam: '',
+    inlineSource: '',
+    inlineLanguage: '',
     ...overrides,
   };
 }
@@ -64,11 +66,14 @@ beforeEach(() => {
   mockAgentsService.list.mockResolvedValue([]);
   mockTeamsService.getAll.mockResolvedValue([]);
   mockToolsService.create.mockResolvedValue(undefined);
+  mockToolsService.update.mockResolvedValue(undefined);
 });
 
 describe('useToolForm', () => {
   it('initializes with empty defaults and not saving', () => {
-    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE }),
+    );
     expect(result.current.state.saving).toBe(false);
     expect(result.current.state.selectedType).toBe('');
     expect(result.current.form.getValues('name')).toBe('');
@@ -76,7 +81,9 @@ describe('useToolForm', () => {
 
   it('creates a tool and calls onSuccess on submit', async () => {
     const onSuccess = vi.fn();
-    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE, onSuccess }));
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE, onSuccess }),
+    );
 
     await act(async () => {
       await result.current.actions.onSubmit(values());
@@ -95,7 +102,9 @@ describe('useToolForm', () => {
   });
 
   it('includes the url for http tools', async () => {
-    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE }),
+    );
 
     await act(async () => {
       await result.current.actions.onSubmit(
@@ -110,7 +119,9 @@ describe('useToolForm', () => {
   });
 
   it('includes agent/team for agent and team tools', async () => {
-    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE }),
+    );
 
     await act(async () => {
       await result.current.actions.onSubmit(
@@ -134,7 +145,9 @@ describe('useToolForm', () => {
   });
 
   it('rejects invalid input schema JSON without calling create', async () => {
-    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE }),
+    );
 
     await act(async () => {
       await result.current.actions.onSubmit(values({ inputSchema: '{bad' }));
@@ -148,12 +161,12 @@ describe('useToolForm', () => {
   });
 
   it('rejects invalid annotations JSON without calling create', async () => {
-    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE }),
+    );
 
     await act(async () => {
-      await result.current.actions.onSubmit(
-        values({ annotations: '{bad' }),
-      );
+      await result.current.actions.onSubmit(values({ annotations: '{bad' }));
     });
 
     expect(mockToast.error).toHaveBeenCalledWith(
@@ -166,7 +179,9 @@ describe('useToolForm', () => {
   it('shows an error toast when create fails', async () => {
     mockToolsService.create.mockRejectedValue(new Error('Network error'));
     const onSuccess = vi.fn();
-    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE, onSuccess }));
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE, onSuccess }),
+    );
 
     await act(async () => {
       await result.current.actions.onSubmit(values());
@@ -182,7 +197,9 @@ describe('useToolForm', () => {
 
   it('loads agents when type becomes agent', async () => {
     mockAgentsService.list.mockResolvedValue([{ name: 'agent-1' }] as never);
-    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE }),
+    );
 
     act(() => {
       result.current.form.setValue('type', 'agent');
@@ -199,7 +216,9 @@ describe('useToolForm', () => {
 
   it('loads teams when type becomes team', async () => {
     mockTeamsService.getAll.mockResolvedValue([{ name: 'team-1' }] as never);
-    const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE }),
+    );
 
     act(() => {
       result.current.form.setValue('type', 'team');
@@ -237,7 +256,10 @@ describe('useToolForm — view mode', () => {
     );
 
     await waitFor(() => {
-      expect(mockToolsService.getDetail).toHaveBeenCalledWith('default', 'my-tool');
+      expect(mockToolsService.getDetail).toHaveBeenCalledWith(
+        'default',
+        'my-tool',
+      );
     });
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -250,5 +272,136 @@ describe('useToolForm — view mode', () => {
     expect(result.current.form.getValues('httpUrl')).toBe('https://x.dev');
     expect(result.current.form.getValues('inputSchema')).toContain('"a": 1');
     expect(result.current.form.getValues('annotations')).toContain('"note"');
+  });
+});
+
+describe('useToolForm \u2014 inline authoring', () => {
+  const inlineSource = '\nprint(1)  \n\n';
+  const inlineDetail = {
+    name: 'csv',
+    description: 'count rows',
+    spec: {
+      type: 'inline',
+      inputSchema: { type: 'object' },
+      inline: { source: inlineSource, language: 'python' },
+    },
+    status: {
+      state: 'Pending',
+      conditions: [
+        { type: 'Available', status: 'False', reason: 'RuntimeNotInstalled' },
+      ],
+    },
+  };
+
+  it('creates an inline tool with its source and language', async () => {
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.CREATE }),
+    );
+
+    await act(async () => {
+      await result.current.actions.onSubmit(
+        values({
+          type: 'inline',
+          inlineSource,
+          inlineLanguage: 'python',
+        }),
+      );
+    });
+
+    expect(mockToolsService.create).toHaveBeenCalledWith(
+      'default',
+      expect.objectContaining({
+        type: 'inline',
+        // Untrimmed: whitespace is part of the script.
+        inlineSource,
+        inlineLanguage: 'python',
+      }),
+    );
+  });
+
+  it('round-trips source and language when reopened', async () => {
+    mockToolsService.getDetail.mockResolvedValue(inlineDetail as never);
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.VIEW, toolName: 'csv' }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    expect(result.current.form.getValues('inlineSource')).toBe(inlineSource);
+    expect(result.current.form.getValues('inlineLanguage')).toBe('python');
+  });
+
+  it('loads the stored tool in edit mode and saves through update', async () => {
+    mockToolsService.getDetail.mockResolvedValue(inlineDetail as never);
+    const onSuccess = vi.fn();
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.EDIT, toolName: 'csv', onSuccess }),
+    );
+
+    await waitFor(() => {
+      expect(mockToolsService.getDetail).toHaveBeenCalledWith('default', 'csv');
+    });
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.actions.onSubmit(
+        values({
+          name: 'csv',
+          type: 'inline',
+          inlineSource: 'print(2)',
+          inlineLanguage: 'bash',
+        }),
+      );
+    });
+
+    expect(mockToolsService.update).toHaveBeenCalledWith(
+      'default',
+      'csv',
+      expect.objectContaining({
+        type: 'inline',
+        inlineSource: 'print(2)',
+        inlineLanguage: 'bash',
+      }),
+    );
+    expect(mockToolsService.create).not.toHaveBeenCalled();
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an admission denial from the server', async () => {
+    mockToolsService.getDetail.mockResolvedValue(inlineDetail as never);
+    mockToolsService.update.mockRejectedValue(
+      new Error('user "alice" is not permitted to author inline tools'),
+    );
+    const onSuccess = vi.fn();
+    const { result } = renderHook(() =>
+      useToolForm({ mode: ToolFormMode.EDIT, toolName: 'csv', onSuccess }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.actions.onSubmit(
+        values({
+          name: 'csv',
+          type: 'inline',
+          inlineSource: 'print(2)',
+          inlineLanguage: 'bash',
+        }),
+      );
+    });
+
+    expect(mockToast.error).toHaveBeenCalledWith(
+      'Failed to Update Tool',
+      expect.objectContaining({
+        description: expect.stringContaining('not permitted'),
+      }),
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 });

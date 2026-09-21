@@ -4,13 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
+// MaxInlineSourceBytes bounds spec.inline.source. The CRD's maxLength counts
+// characters, so the byte limit has to be enforced here as well.
+const MaxInlineSourceBytes = 65536
+
+var InlineLanguages = []string{"bash", "python", "node", "ts"}
+
 func ValidateTool(tool *arkv1alpha1.Tool) ([]string, error) {
+	if err := validateInlineExclusivity(&tool.Spec); err != nil {
+		return nil, err
+	}
+
 	if tool.Spec.InputSchema != nil {
 		if err := validateInputSchema(tool.Spec.InputSchema.Raw); err != nil {
 			return nil, fmt.Errorf("invalid inputSchema: %v", err)
@@ -28,9 +40,81 @@ func ValidateTool(tool *arkv1alpha1.Tool) ([]string, error) {
 		return validateTeamToolRef(tool.Spec.Team.Name)
 	case ToolTypeBuiltin:
 		return validateBuiltinTool(tool.Name)
+	case ToolTypeInline:
+		return validateInlineTool(tool)
 	default:
-		return nil, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp, agent, team, builtin", tool.Spec.Type)
+		return nil, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp, agent, team, builtin, inline", tool.Spec.Type)
 	}
+}
+
+// ValidateToolTransition rejects updates that cross the inline/non-inline type
+// boundary. Converting would leave the runner's owned children ambiguous, so v1
+// requires delete and recreate.
+func ValidateToolTransition(oldTool, newTool *arkv1alpha1.Tool) error {
+	oldType, newType := oldTool.Spec.Type, newTool.Spec.Type
+	if oldType == newType {
+		return nil
+	}
+	if oldType != ToolTypeInline && newType != ToolTypeInline {
+		return nil
+	}
+	return fmt.Errorf("cannot change tool type from '%s' to '%s': delete and recreate the tool instead", oldType, newType)
+}
+
+// validateInlineExclusivity keeps spec.inline and the other subtype blocks apart,
+// in both directions.
+func validateInlineExclusivity(spec *arkv1alpha1.ToolSpec) error {
+	if spec.Type != ToolTypeInline {
+		if spec.Inline != nil {
+			return fmt.Errorf("spec.inline is only valid for inline type tools, not '%s'", spec.Type)
+		}
+		return nil
+	}
+	set := []struct {
+		field string
+		used  bool
+	}{
+		{"http", spec.HTTP != nil},
+		{"mcp", spec.MCP != nil},
+		{"agent", spec.Agent != nil},
+		{"team", spec.Team != nil},
+		{"builtin", spec.Builtin != nil},
+	}
+	for _, s := range set {
+		if s.used {
+			return fmt.Errorf("inline tools must not set spec.%s", s.field)
+		}
+	}
+	return nil
+}
+
+func validateInlineTool(tool *arkv1alpha1.Tool) ([]string, error) {
+	inline := tool.Spec.Inline
+	if inline == nil {
+		return nil, fmt.Errorf("inline spec is required for inline type")
+	}
+	if strings.TrimSpace(inline.Source) == "" {
+		return nil, fmt.Errorf("inline source is required and must not be whitespace only")
+	}
+	if len(inline.Source) > MaxInlineSourceBytes {
+		return nil, fmt.Errorf("inline source is %d UTF-8 bytes, exceeding the %d byte limit: use an MCPServer for larger tools", len(inline.Source), MaxInlineSourceBytes)
+	}
+	if inline.Language == "" {
+		return nil, fmt.Errorf("inline language is required: supported languages are: %v", InlineLanguages)
+	}
+	if !slices.Contains(InlineLanguages, inline.Language) {
+		return nil, fmt.Errorf("unsupported inline language '%s': supported languages are: %v", inline.Language, InlineLanguages)
+	}
+	if tool.Spec.InputSchema != nil {
+		var schema jsonschema.Schema
+		if err := json.Unmarshal(tool.Spec.InputSchema.Raw, &schema); err != nil {
+			return nil, fmt.Errorf("invalid inputSchema: %v", err)
+		}
+		if schema.Type != "" && schema.Type != "object" {
+			return nil, fmt.Errorf("inline inputSchema must describe a JSON object, got '%s'", schema.Type)
+		}
+	}
+	return nil, nil
 }
 
 func validateHTTP(httpSpec *arkv1alpha1.HTTPSpec) ([]string, error) {
