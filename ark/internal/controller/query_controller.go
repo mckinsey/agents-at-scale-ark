@@ -102,7 +102,7 @@ const (
 	// defaultQueryTimeout mirrors the CRD default on Query.spec.timeout so
 	// callers without an explicit value get the same budget the apiserver's
 	// mutating admission would compute.
-	defaultQueryTimeout = 5 * time.Minute
+	defaultQueryTimeout = 30 * time.Minute
 )
 
 type QueryReconciler struct {

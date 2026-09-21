@@ -115,7 +115,7 @@ The chart-provided `ark-query` `WorkflowTemplate` is the recommended way to call
 | --- | --- | --- | --- |
 | `target` | Yes | - | `type/name`, where type is `agent`, `team`, `model`, or `tool` (e.g. `agent/weather-agent`). |
 | `input` | Yes | - | The message to send to the target. |
-| `timeout` | No | `5m` | How long to wait for the Query to complete. |
+| `timeout` | No | `30m` | How long to wait for the Query to complete. |
 | `parameters` | No | `[]` | JSON array of `{name,value}` objects. |
 | `ttl` | No | (unset) | Time-to-live for the created Query. |
 | `session-id` | No | `wf-<workflow-name>` | Session ID to associate with the Query. |
