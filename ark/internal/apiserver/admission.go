@@ -15,10 +15,10 @@ import (
 type AdmissionStorage struct {
 	*registry.GenericStorage
 	validator *validation.Validator
-	lookup    validation.ArkConfigLookup
+	lookup    validation.DefaultsLookup
 }
 
-func NewAdmissionStorage(inner *registry.GenericStorage, validator *validation.Validator, lookup validation.ArkConfigLookup) *AdmissionStorage {
+func NewAdmissionStorage(inner *registry.GenericStorage, validator *validation.Validator, lookup validation.DefaultsLookup) *AdmissionStorage {
 	return &AdmissionStorage{GenericStorage: inner, validator: validator, lookup: lookup}
 }
 

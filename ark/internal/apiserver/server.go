@@ -329,7 +329,7 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	return nil
 }
 
-func resourceStorage(backend storage.Backend, converter storage.TypeConverter, resources []ResourceDef, v *validation.Validator, lookup validation.ArkConfigLookup) map[string]rest.Storage {
+func resourceStorage(backend storage.Backend, converter storage.TypeConverter, resources []ResourceDef, v *validation.Validator, lookup validation.DefaultsLookup) map[string]rest.Storage {
 	printerColumns := GetPrinterColumnRegistry()
 	out := make(map[string]rest.Storage, 2*len(resources))
 	for _, res := range resources {
