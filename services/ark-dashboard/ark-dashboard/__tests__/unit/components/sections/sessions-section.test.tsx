@@ -1,22 +1,20 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionsSection } from '@/components/sections/sessions-section';
 import {
-  mapArgoWorkflowsToSessions,
   mapArgoWorkflowToSession,
+  mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
+import { workflowsService } from '@/lib/services/workflows';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 
+const mockUseNamespace = vi.fn();
+
 vi.mock('@/providers/NamespaceProvider', () => ({
-  useNamespace: () => ({
-    namespace: 'default',
-    isNamespaceResolved: true,
-    isPending: false,
-    readOnlyMode: false,
-  }),
+  useNamespace: () => mockUseNamespace(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -29,8 +27,15 @@ vi.mock('@/lib/services/workflows-hooks', () => ({
   useWorkflow: vi.fn(),
 }));
 
+vi.mock('@/lib/services/workflows', () => ({
+  workflowsService: {
+    getPodLogs: vi.fn().mockRejectedValue(new Error('pod gone')),
+    getWorkflowLogs: vi.fn().mockRejectedValue(new Error('404 not found')),
+  },
+}));
+
 vi.mock('@/lib/hooks/use-debounce', () => ({
-  useDebounce: vi.fn((value) => value),
+  useDebounce: vi.fn(value => value),
 }));
 
 vi.mock('@/lib/services/workflow-mapper', () => ({
@@ -81,9 +86,7 @@ const mockWorkflow = {
           ],
         },
         outputs: {
-          parameters: [
-            { name: 'processed-records', value: '5432' },
-          ],
+          parameters: [{ name: 'processed-records', value: '5432' }],
         },
       },
       'step-2': {
@@ -135,7 +138,8 @@ const mockFailedWorkflow = {
         phase: 'Failed',
         startedAt: '2024-01-15T11:00:10Z',
         finishedAt: '2024-01-15T11:02:00Z',
-        message: 'Error: Connection timeout to database server at db.example.com:5432',
+        message:
+          'Error: Connection timeout to database server at db.example.com:5432',
         templateName: 'process-data-template',
         outputs: {
           exitCode: '1',
@@ -222,6 +226,12 @@ describe('SessionsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     currentSearch = '';
+    mockUseNamespace.mockReturnValue({
+      namespace: 'default',
+      isNamespaceResolved: true,
+      isPending: false,
+      readOnlyMode: false,
+    });
     mockRouter.replace.mockImplementation((url: string) => {
       currentSearch = url.split('?')[1] ?? '';
     });
@@ -230,7 +240,7 @@ describe('SessionsSection', () => {
       () => new URLSearchParams(currentSearch) as any,
     );
 
-    vi.mocked(mapArgoWorkflowsToSessions).mockImplementation((workflows) =>
+    vi.mocked(mapArgoWorkflowsToSessions).mockImplementation(workflows =>
       workflows.map((w: any) => ({
         id: w.metadata.name,
         name: w.metadata.name,
@@ -242,7 +252,7 @@ describe('SessionsSection', () => {
         steps: [],
         namespace: w.metadata.namespace,
         uid: w.metadata.uid,
-      }))
+      })),
     );
 
     vi.mocked(mapArgoWorkflowToSession).mockImplementation((workflow: any) => ({
@@ -274,7 +284,9 @@ describe('SessionsSection', () => {
               acc[p.name] = p.value;
               return acc;
             }, {}),
-            exitCode: node.outputs?.exitCode ? parseInt(node.outputs.exitCode) : undefined,
+            exitCode: node.outputs?.exitCode
+              ? parseInt(node.outputs.exitCode)
+              : undefined,
             workflowName: workflow.metadata.name,
             nodeId: node.id,
             namespace: workflow.metadata.namespace,
@@ -296,6 +308,31 @@ describe('SessionsSection', () => {
       loading: false,
       error: null,
     } as any);
+  });
+
+  describe('Namespace', () => {
+    it('should use the namespace resolved by the provider', () => {
+      render(<SessionsSection />);
+
+      expect(useWorkflows).toHaveBeenCalledWith('default', expect.any(Object));
+    });
+
+    it('should not fall back to an assumed namespace before one resolves', () => {
+      mockUseNamespace.mockReturnValue({
+        namespace: '',
+        isNamespaceResolved: false,
+        isPending: true,
+        readOnlyMode: false,
+      });
+
+      render(<SessionsSection />);
+
+      expect(useWorkflows).toHaveBeenCalledWith('', expect.any(Object));
+      expect(useWorkflows).not.toHaveBeenCalledWith(
+        'default',
+        expect.any(Object),
+      );
+    });
   });
 
   describe('Loading, Empty, and Error States', () => {
@@ -322,7 +359,7 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      expect(screen.getByText('No workflow runs to display')).toBeInTheDocument();
+      expect(screen.getByText('No workflow runs yet')).toBeInTheDocument();
     });
 
     it('should show filtered empty state when filters applied', async () => {
@@ -333,14 +370,16 @@ describe('SessionsSection', () => {
         error: null,
         refetch: vi.fn(),
       } as any);
-      
+
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflows...');
+      const searchInput = screen.getByPlaceholderText('Search');
       await user.type(searchInput, 'nonexistent');
 
       await waitFor(() => {
-        expect(screen.getByText(/no workflow runs found matching/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/no workflow runs found matching/i),
+        ).toBeInTheDocument();
       });
     });
 
@@ -354,7 +393,9 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      expect(screen.getByText(/Error: Failed to fetch workflows/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Error: Failed to fetch workflows/i),
+      ).toBeInTheDocument();
     });
 
     it('should handle network errors gracefully', () => {
@@ -376,10 +417,11 @@ describe('SessionsSection', () => {
       render(<SessionsSection />);
 
       const allButtons = screen.getAllByRole('button');
-      const sessionButtons = allButtons.filter(btn => 
-        btn.title === 'test-workflow-123' ||
-        btn.title === 'failed-workflow-456' ||
-        btn.title === 'running-workflow-789'
+      const sessionButtons = allButtons.filter(
+        btn =>
+          btn.title === 'test-workflow-123' ||
+          btn.title === 'failed-workflow-456' ||
+          btn.title === 'running-workflow-789',
       );
 
       expect(sessionButtons).toHaveLength(3);
@@ -388,20 +430,24 @@ describe('SessionsSection', () => {
     it('should show exact session count', () => {
       render(<SessionsSection />);
 
-      expect(screen.getByText('3 sessions')).toBeInTheDocument();
+      const sessionCards = screen
+        .getAllByRole('button')
+        .filter(button =>
+          [
+            'test-workflow-123',
+            'failed-workflow-456',
+            'running-workflow-789',
+          ].includes(button.title),
+        );
+      expect(sessionCards).toHaveLength(3);
     });
 
     it('should display correct status badges for each type of session', () => {
       render(<SessionsSection />);
 
-      const succeededBadges = screen.getAllByText('succeeded');
-      expect(succeededBadges.length).toBeGreaterThanOrEqual(1);
-
-      const failedBadges = screen.getAllByText('failed');
-      expect(failedBadges.length).toBeGreaterThanOrEqual(1);
-      
-      const runningBadges = screen.getAllByText('running');
-      expect(runningBadges.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Succeeded').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Failed').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
     });
 
     it('should display workflow type badge for each session', () => {
@@ -415,14 +461,16 @@ describe('SessionsSection', () => {
       render(<SessionsSection />);
 
       await waitFor(() => {
-        const sessionList = screen.getAllByRole('button').filter(btn => 
-          btn.title && (
-            btn.title === 'test-workflow-123' ||
-            btn.title === 'failed-workflow-456' ||
-            btn.title === 'running-workflow-789'
-          )
-        );
-        
+        const sessionList = screen
+          .getAllByRole('button')
+          .filter(
+            btn =>
+              btn.title &&
+              (btn.title === 'test-workflow-123' ||
+                btn.title === 'failed-workflow-456' ||
+                btn.title === 'running-workflow-789'),
+          );
+
         expect(sessionList[0]).toHaveAttribute('title', 'running-workflow-789');
       });
     });
@@ -432,18 +480,19 @@ describe('SessionsSection', () => {
     it('should pass workflow name filter to API', async () => {
       const user = userEvent.setup();
       const mockUseWorkflows = vi.mocked(useWorkflows);
-      
+
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflows...');
+      const searchInput = screen.getByPlaceholderText('Search');
       await user.type(searchInput, 'failed');
 
       await waitFor(() => {
-        const lastCall = mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
+        const lastCall =
+          mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
         expect(lastCall[1]).toEqual(
           expect.objectContaining({
             workflowName: 'failed',
-          })
+          }),
         );
       });
     });
@@ -451,22 +500,24 @@ describe('SessionsSection', () => {
     it('should pass status filter to API', async () => {
       const user = userEvent.setup();
       const mockUseWorkflows = vi.mocked(useWorkflows);
-      
+
       render(<SessionsSection />);
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const statusSelect = comboboxes[0];
+      const statusSelect = screen.getByRole('combobox', { name: 'Status' });
       await user.click(statusSelect);
 
-      const failedOption = await screen.findByRole('option', { name: /failed/i });
+      const failedOption = await screen.findByRole('option', {
+        name: /failed/i,
+      });
       await user.click(failedOption);
 
       await waitFor(() => {
-        const lastCall = mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
+        const lastCall =
+          mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
         expect(lastCall[1]).toEqual(
           expect.objectContaining({
             status: 'Failed',
-          })
+          }),
         );
       });
     });
@@ -474,18 +525,19 @@ describe('SessionsSection', () => {
     it('should pass template name filter to API', async () => {
       const user = userEvent.setup();
       const mockUseWorkflows = vi.mocked(useWorkflows);
-      
+
       render(<SessionsSection />);
 
-      const templateInput = screen.getByPlaceholderText('Search templates...');
+      const templateInput = screen.getByPlaceholderText('All templates');
       await user.type(templateInput, 'ml-training');
 
       await waitFor(() => {
-        const lastCall = mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
+        const lastCall =
+          mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
         expect(lastCall[1]).toEqual(
           expect.objectContaining({
             workflowTemplateName: 'ml-training',
-          })
+          }),
         );
       });
     });
@@ -495,15 +547,18 @@ describe('SessionsSection', () => {
       const mockUseWorkflows = vi.mocked(useWorkflows);
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflows...');
+      const searchInput = screen.getByPlaceholderText('Search');
       await user.type(searchInput, 'test');
 
-      const clearButton = screen.getByRole('button', { name: /clear filters/i });
+      const clearButton = screen.getByRole('button', {
+        name: /clear filters/i,
+      });
       await user.click(clearButton);
 
       await waitFor(() => {
         expect(searchInput).toHaveValue('');
-        const lastCall = mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
+        const lastCall =
+          mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
         expect(lastCall[1]).toEqual({});
       });
     });
@@ -511,7 +566,9 @@ describe('SessionsSection', () => {
     it('should disable clear filters button when no active filters', () => {
       render(<SessionsSection />);
 
-      const clearButton = screen.getByRole('button', { name: /clear filters/i });
+      const clearButton = screen.getByRole('button', {
+        name: /clear filters/i,
+      });
       expect(clearButton).toBeDisabled();
     });
 
@@ -519,11 +576,13 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflows...');
+      const searchInput = screen.getByPlaceholderText('Search');
       await user.type(searchInput, 'test');
 
       await waitFor(() => {
-        const clearButton = screen.getByRole('button', { name: /clear filters/i });
+        const clearButton = screen.getByRole('button', {
+          name: /clear filters/i,
+        });
         expect(clearButton).not.toBeDisabled();
       });
     });
@@ -531,24 +590,31 @@ describe('SessionsSection', () => {
     it('should sort sessions by newest first by default', () => {
       render(<SessionsSection />);
 
-      const sessionButtons = screen.getAllByRole('button').filter(btn => 
-        btn.title === 'test-workflow-123' ||
-        btn.title === 'failed-workflow-456' ||
-        btn.title === 'running-workflow-789'
+      const sessionButtons = screen
+        .getAllByRole('button')
+        .filter(
+          btn =>
+            btn.title === 'test-workflow-123' ||
+            btn.title === 'failed-workflow-456' ||
+            btn.title === 'running-workflow-789',
+        );
+
+      expect(sessionButtons[0]).toHaveAttribute(
+        'title',
+        'running-workflow-789',
       );
-      
-      expect(sessionButtons[0]).toHaveAttribute('title', 'running-workflow-789');
     });
 
     it('should allow changing sort order to oldest first', async () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const sortSelect = comboboxes[1];
+      const sortSelect = screen.getByRole('combobox', { name: 'Sort' });
       await user.click(sortSelect);
 
-      const oldestOption = await screen.findByRole('option', { name: /oldest first/i });
+      const oldestOption = await screen.findByRole('option', {
+        name: /oldest first/i,
+      });
       expect(oldestOption).toBeInTheDocument();
       await user.click(oldestOption);
 
@@ -557,7 +623,6 @@ describe('SessionsSection', () => {
       });
     });
   });
-
 
   describe('Step Details and Expansion', () => {
     it('should show step details button for each step', async () => {
@@ -570,7 +635,9 @@ describe('SessionsSection', () => {
       render(<SessionsSection />);
 
       await waitFor(() => {
-        const expandButtons = screen.getAllByRole('button', { name: /show details|hide details/i });
+        const expandButtons = screen.getAllByRole('button', {
+          name: /expand|collapse/i,
+        });
         expect(expandButtons).toHaveLength(2);
       });
     });
@@ -589,13 +656,17 @@ describe('SessionsSection', () => {
         expect(screen.getByText('Process Data')).toBeInTheDocument();
       });
 
-      const expandButton = screen.getAllByRole('button', { name: /show details/i })[0];
+      const expandButton = screen.getAllByRole('button', {
+        name: /expand/i,
+      })[0];
       await user.click(expandButton);
 
       await waitFor(() => {
         expect(screen.getByText('Inputs')).toBeInTheDocument();
         expect(screen.getByText(/input-file/i)).toBeInTheDocument();
-        expect(screen.getByText(/s3:\/\/bucket\/data\.csv/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/s3:\/\/bucket\/data\.csv/i),
+        ).toBeInTheDocument();
         expect(screen.getByText(/batch-size/i)).toBeInTheDocument();
         expect(screen.getByText('1000')).toBeInTheDocument();
       });
@@ -615,7 +686,9 @@ describe('SessionsSection', () => {
         expect(screen.getByText('Process Data')).toBeInTheDocument();
       });
 
-      const expandButton = screen.getAllByRole('button', { name: /show details/i })[0];
+      const expandButton = screen.getAllByRole('button', {
+        name: /expand/i,
+      })[0];
       await user.click(expandButton);
 
       await waitFor(() => {
@@ -635,19 +708,25 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      const failedSessionButton = screen.getByRole('button', { name: /failed-workflow-456/i });
+      const failedSessionButton = screen.getByRole('button', {
+        name: /failed-workflow-456/i,
+      });
       await user.click(failedSessionButton);
 
       await waitFor(() => {
         expect(screen.getByText('Process Data')).toBeInTheDocument();
       });
 
-      const expandButton = screen.getAllByRole('button', { name: /show details/i })[0];
+      const expandButton = screen.getAllByRole('button', {
+        name: /expand/i,
+      })[0];
       await user.click(expandButton);
 
       await waitFor(() => {
         expect(screen.getByText('Message')).toBeInTheDocument();
-        expect(screen.getByText(/Connection timeout to database server/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/Connection timeout to database server/i),
+        ).toBeInTheDocument();
       });
     });
 
@@ -665,7 +744,9 @@ describe('SessionsSection', () => {
         expect(screen.getByText('Process Data')).toBeInTheDocument();
       });
 
-      const expandButton = screen.getAllByRole('button', { name: /show details/i })[0];
+      const expandButton = screen.getAllByRole('button', {
+        name: /expand/i,
+      })[0];
       await user.click(expandButton);
 
       await waitFor(() => {
@@ -689,14 +770,18 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      const failedSessionButton = screen.getByRole('button', { name: /failed-workflow-456/i });
+      const failedSessionButton = screen.getByRole('button', {
+        name: /failed-workflow-456/i,
+      });
       await user.click(failedSessionButton);
 
       await waitFor(() => {
         expect(screen.getByText('Process Data')).toBeInTheDocument();
       });
 
-      const expandButton = screen.getAllByRole('button', { name: /show details/i })[0];
+      const expandButton = screen.getAllByRole('button', {
+        name: /expand/i,
+      })[0];
       await user.click(expandButton);
 
       await waitFor(() => {
@@ -706,17 +791,18 @@ describe('SessionsSection', () => {
     });
   });
 
-
   describe('Template Filter', () => {
     it('should show template dropdown with available templates', async () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const templateInput = screen.getByPlaceholderText('Search templates...');
+      const templateInput = screen.getByPlaceholderText('All templates');
       await user.click(templateInput);
 
       await waitFor(() => {
-        expect(screen.getByText('data-processing-template')).toBeInTheDocument();
+        expect(
+          screen.getByText('data-processing-template'),
+        ).toBeInTheDocument();
         expect(screen.getByText('ml-training-template')).toBeInTheDocument();
       });
     });
@@ -725,12 +811,14 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const templateInput = screen.getByPlaceholderText('Search templates...');
+      const templateInput = screen.getByPlaceholderText('All templates');
       await user.type(templateInput, 'ml');
 
       await waitFor(() => {
         expect(screen.getByText('ml-training-template')).toBeInTheDocument();
-        expect(screen.queryByText('data-processing-template')).not.toBeInTheDocument();
+        expect(
+          screen.queryByText('data-processing-template'),
+        ).not.toBeInTheDocument();
       });
     });
 
@@ -739,7 +827,7 @@ describe('SessionsSection', () => {
       const mockUseWorkflows = vi.mocked(useWorkflows);
       render(<SessionsSection />);
 
-      const templateInput = screen.getByPlaceholderText('Search templates...');
+      const templateInput = screen.getByPlaceholderText('All templates');
       await user.click(templateInput);
 
       const mlTemplate = await screen.findByText('ml-training-template');
@@ -747,11 +835,12 @@ describe('SessionsSection', () => {
 
       await waitFor(() => {
         expect(templateInput).toHaveValue('ml-training-template');
-        const lastCall = mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
+        const lastCall =
+          mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
         expect(lastCall[1]).toEqual(
           expect.objectContaining({
             workflowTemplateName: 'ml-training-template',
-          })
+          }),
         );
       });
     });
@@ -766,11 +855,13 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      const templateInput = screen.getByPlaceholderText('Search templates...');
+      const templateInput = screen.getByPlaceholderText('All templates');
       templateInput.focus();
 
       waitFor(() => {
-        expect(screen.getByText(/No workflow templates found/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/No workflow templates found/i),
+        ).toBeInTheDocument();
       });
     });
   });
@@ -780,13 +871,13 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflows...');
+      const searchInput = screen.getByPlaceholderText('Search');
       await user.type(searchInput, 'test');
 
       await waitFor(() => {
         expect(mockRouter.replace).toHaveBeenCalledWith(
           expect.stringContaining('workflowName=test'),
-          expect.any(Object)
+          expect.any(Object),
         );
       });
     });
@@ -795,17 +886,18 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const statusSelect = comboboxes[0];
+      const statusSelect = screen.getByRole('combobox', { name: 'Status' });
       await user.click(statusSelect);
 
-      const failedOption = await screen.findByRole('option', { name: /failed/i });
+      const failedOption = await screen.findByRole('option', {
+        name: /failed/i,
+      });
       await user.click(failedOption);
 
       await waitFor(() => {
         expect(mockRouter.replace).toHaveBeenCalledWith(
           expect.stringContaining('status=failed'),
-          expect.any(Object)
+          expect.any(Object),
         );
       });
     });
@@ -814,17 +906,18 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const comboboxes = screen.getAllByRole('combobox');
-      const sortSelect = comboboxes[1];
+      const sortSelect = screen.getByRole('combobox', { name: 'Sort' });
       await user.click(sortSelect);
 
-      const oldestOption = await screen.findByRole('option', { name: /oldest first/i });
+      const oldestOption = await screen.findByRole('option', {
+        name: /oldest first/i,
+      });
       await user.click(oldestOption);
 
       await waitFor(() => {
         expect(mockRouter.replace).toHaveBeenCalledWith(
           expect.stringContaining('sort=oldest'),
-          expect.any(Object)
+          expect.any(Object),
         );
       });
     });
@@ -833,14 +926,19 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflows...');
+      const searchInput = screen.getByPlaceholderText('Search');
       await user.type(searchInput, 'test');
 
-      const clearButton = screen.getByRole('button', { name: /clear filters/i });
+      const clearButton = screen.getByRole('button', {
+        name: /clear filters/i,
+      });
       await user.click(clearButton);
 
       await waitFor(() => {
-        const lastCall = mockRouter.replace.mock.calls[mockRouter.replace.mock.calls.length - 1];
+        const lastCall =
+          mockRouter.replace.mock.calls[
+            mockRouter.replace.mock.calls.length - 1
+          ];
         expect(lastCall[0]).not.toContain('workflowName');
       });
     });
@@ -884,7 +982,7 @@ describe('SessionsSection', () => {
       render(<SessionsSection />);
 
       await waitFor(() => {
-        const succeededBadges = screen.getAllByText('succeeded');
+        const succeededBadges = screen.getAllByText('Succeeded');
         expect(succeededBadges.length).toBeGreaterThanOrEqual(1);
       });
     });
@@ -917,7 +1015,7 @@ describe('SessionsSection', () => {
         const argoLink = screen.getByRole('link', { name: /view in argo/i });
         expect(argoLink).toHaveAttribute(
           'href',
-          'http://localhost:2746/workflows/default/test-workflow-123?uid=abc-123-def'
+          'http://localhost:2746/workflows/default/test-workflow-123?uid=abc-123-def',
         );
         expect(argoLink).toHaveAttribute('target', '_blank');
         expect(argoLink).toHaveAttribute('rel', 'noopener noreferrer');
@@ -950,6 +1048,296 @@ describe('SessionsSection', () => {
 
       const loadingText = screen.queryByText(/updating/i);
       expect(loadingText).toBeInTheDocument();
+    });
+  });
+
+  describe('Team Sessions', () => {
+    const teamSession = {
+      id: 'team-session-1',
+      name: 'team-session-1',
+      type: 'team',
+      status: 'running',
+      startedAt: '2024-01-15T10:00:00Z',
+      duration: '2m 10s',
+      steps: [
+        {
+          id: 'step-orchestrator',
+          agentName: 'orchestrator-agent',
+          displayName: 'Plan work',
+          type: 'orchestrator',
+          status: 'succeeded',
+          duration: '10s',
+          detail: { model: 'gpt-4', tokensUsed: { input: 120, output: 45 } },
+          children: [
+            {
+              id: 'step-writer',
+              agentName: 'writer-agent',
+              displayName: 'Draft answer',
+              type: 'agent',
+              status: 'skipped',
+              duration: '5s',
+              message: 'Skipped by policy',
+            },
+          ],
+        },
+        {
+          id: 'step-reviewer',
+          agentName: 'reviewer-agent',
+          displayName: 'reviewer-agent',
+          type: 'response',
+          status: 'pending',
+        },
+        {
+          id: 'step-monitor',
+          agentName: 'monitor-agent',
+          displayName: 'Watch progress',
+          type: 'agent',
+          status: 'running',
+          duration: '30s',
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
+        teamSession,
+      ] as any);
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: null,
+        loading: false,
+        error: null,
+      } as any);
+    });
+
+    it('should render team steps with the agent name as a subtitle', () => {
+      render(<SessionsSection />);
+
+      expect(screen.getByText('Plan work')).toBeInTheDocument();
+      expect(screen.getByText('orchestrator-agent')).toBeInTheDocument();
+      expect(screen.getByText('Watch progress')).toBeInTheDocument();
+      expect(screen.getByText('reviewer-agent')).toBeInTheDocument();
+    });
+
+    it('should keep child steps collapsed until the parent is expanded', async () => {
+      const user = userEvent.setup();
+      render(<SessionsSection />);
+
+      expect(screen.queryByText('Draft answer')).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole('button', { name: /Plan work, expand/i }),
+      );
+
+      expect(screen.getByText('Draft answer')).toBeInTheDocument();
+      expect(screen.getByText('gpt-4')).toBeInTheDocument();
+    });
+
+    it('should show a team step message when the step is expanded', async () => {
+      const user = userEvent.setup();
+      render(<SessionsSection />);
+
+      await user.click(
+        screen.getByRole('button', { name: /Plan work, expand/i }),
+      );
+      await user.click(
+        screen.getByRole('button', { name: /Draft answer, expand/i }),
+      );
+
+      expect(screen.getByText('Skipped by policy')).toBeInTheDocument();
+    });
+  });
+
+  describe('Uncovered branches', () => {
+    it('should seed filters from the URL and keep the namespace param', () => {
+      vi.mocked(useSearchParams).mockImplementation(
+        () => new URLSearchParams('namespace=ns-1&status=failed') as any,
+      );
+
+      render(<SessionsSection />);
+
+      const lastCall =
+        vi.mocked(useWorkflows).mock.calls[
+          vi.mocked(useWorkflows).mock.calls.length - 1
+        ];
+      expect(lastCall[1]).toEqual(
+        expect.objectContaining({ status: 'Failed' }),
+      );
+    });
+
+    it('should open the template dropdown on typing and close it on an outside click', async () => {
+      render(<SessionsSection />);
+
+      const templateInput = screen.getByPlaceholderText('All templates');
+      fireEvent.change(templateInput, { target: { value: 'zzz' } });
+
+      await waitFor(() => {
+        expect(screen.getByText(/No templates match/i)).toBeInTheDocument();
+      });
+
+      fireEvent.mouseDown(document.body);
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText(/No templates match/i),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it('should flatten parallel step groups and nest expandable children', async () => {
+      const user = userEvent.setup();
+      vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
+        {
+          id: 'tree-workflow',
+          name: 'tree-workflow',
+          type: 'workflow',
+          status: 'succeeded',
+          startedAt: '2024-01-15T10:00:00Z',
+          duration: '1m',
+          steps: [
+            {
+              id: 'group',
+              name: '[0]',
+              displayName: '[0]',
+              type: 'steps',
+              status: 'succeeded',
+              children: [
+                {
+                  id: 'fan-a',
+                  name: 'fan-a',
+                  displayName: 'fan-a',
+                  type: 'container',
+                  status: 'succeeded',
+                },
+                {
+                  id: 'fan-b',
+                  name: 'fan-b',
+                  displayName: 'fan-b',
+                  type: 'container',
+                  status: 'succeeded',
+                },
+              ],
+            },
+            {
+              id: 'parent',
+              name: 'parent',
+              displayName: 'nested-parent',
+              type: 'dag',
+              status: 'succeeded',
+              children: [
+                {
+                  id: 'child',
+                  name: 'child',
+                  displayName: 'nested-child',
+                  type: 'container',
+                  status: 'succeeded',
+                },
+              ],
+            },
+          ],
+        },
+      ] as any);
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: null,
+        loading: false,
+        error: null,
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(screen.getByText('fan-a')).toBeInTheDocument();
+      expect(screen.getByText('fan-b')).toBeInTheDocument();
+      expect(screen.queryByText('[0]')).not.toBeInTheDocument();
+      expect(screen.queryByText('nested-child')).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole('button', { name: /nested-parent, expand/i }),
+      );
+
+      expect(screen.getByText('nested-child')).toBeInTheDocument();
+    });
+
+    it('should report an error when step logs cannot be loaded', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: mockWorkflow,
+        loading: false,
+        error: null,
+      } as any);
+
+      render(<SessionsSection />);
+
+      const expandButton = screen.getAllByRole('button', {
+        name: /expand/i,
+      })[0];
+      await user.click(expandButton);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Logs not available/i)).toBeInTheDocument();
+      });
+    });
+
+    it('should fall back to archived logs and skip fetching without pod details', async () => {
+      const user = userEvent.setup();
+      vi.mocked(workflowsService.getPodLogs).mockRejectedValueOnce(
+        new Error('pod gone'),
+      );
+      vi.mocked(workflowsService.getWorkflowLogs).mockResolvedValueOnce(
+        'archived log line',
+      );
+      vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
+        {
+          id: 'logs-workflow',
+          name: 'logs-workflow',
+          type: 'workflow',
+          status: 'succeeded',
+          startedAt: '2024-01-15T10:00:00Z',
+          duration: '1m',
+          steps: [
+            {
+              id: 'with-logs',
+              name: 'with-logs',
+              displayName: 'with-logs',
+              type: 'container',
+              status: 'succeeded',
+              detail: {
+                podName: 'logs-workflow-with-logs-123',
+                workflowName: 'logs-workflow',
+                nodeId: 'node-1',
+                namespace: 'default',
+              },
+            },
+            {
+              id: 'no-logs',
+              name: 'no-logs',
+              displayName: 'no-logs',
+              type: 'container',
+              status: 'succeeded',
+              detail: { image: 'alpine:3.20' },
+            },
+          ],
+        },
+      ] as any);
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: null,
+        loading: false,
+        error: null,
+      } as any);
+
+      render(<SessionsSection />);
+
+      await user.click(
+        screen.getByRole('button', { name: /with-logs, expand/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('archived log line')).toBeInTheDocument();
+      });
+
+      await user.click(
+        screen.getByRole('button', { name: /no-logs, expand/i }),
+      );
+
+      expect(screen.getByText('alpine:3.20')).toBeInTheDocument();
     });
   });
 });
