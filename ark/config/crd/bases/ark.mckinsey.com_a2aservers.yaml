@@ -138,12 +138,14 @@ spec:
               allowedEndpointHosts:
                 description: |-
                   AllowedEndpointHosts lists hosts the agent card may redirect requests to
-                  when endpointResolution is "cardUrl". The host of spec.address is always
+                  when endpointResolution is "cardUrl". The origin of spec.address is always
                   allowed. Entries are hostnames, optionally prefixed with "*." to match
-                  one level of subdomain.
+                  one level of subdomain and optionally suffixed with ":port". An entry
+                  without a port matches any port on that host. A downgrade from https to
+                  http is never allowed.
                 items:
-                  maxLength: 253
-                  pattern: ^(\*\.)?[a-zA-Z0-9]([-a-zA-Z0-9]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([-a-zA-Z0-9]*[a-zA-Z0-9])?)*$
+                  maxLength: 259
+                  pattern: ^(\*\.)?[a-zA-Z0-9]([-a-zA-Z0-9]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([-a-zA-Z0-9]*[a-zA-Z0-9])?)*(:[0-9]{1,5})?$
                   type: string
                 type: array
               description:
@@ -156,7 +158,9 @@ spec:
                   "address" uses spec.address unchanged. "cardPath" keeps the scheme, host
                   and port from spec.address and takes only the path from the agent card.
                   "cardUrl" uses the agent card URL as written, which requires the card
-                  host to match spec.address or be listed in allowedEndpointHosts.
+                  origin (scheme, host and port) to match spec.address or the card host to
+                  be listed in allowedEndpointHosts. In both card modes the card URL must be
+                  an absolute http or https URL without userinfo.
                 enum:
                 - address
                 - cardPath

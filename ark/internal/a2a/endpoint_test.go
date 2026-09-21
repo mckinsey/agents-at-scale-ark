@@ -3,6 +3,7 @@
 package a2a
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -97,8 +98,26 @@ func TestCardTransportURLErrorNamesDeclaredTransports(t *testing.T) {
 	assert.Contains(t, err.Error(), "HTTP+JSON")
 }
 
+func TestUsesCardEndpoint(t *testing.T) {
+	assert.False(t, UsesCardEndpoint(""))
+	assert.False(t, UsesCardEndpoint(EndpointResolutionAddress))
+	assert.True(t, UsesCardEndpoint(EndpointResolutionCardPath))
+	assert.True(t, UsesCardEndpoint(EndpointResolutionCardURL))
+}
+
+func TestResolveUnsupportedTransport(t *testing.T) {
+	resolved := ResolveUnsupportedTransport("http://weather:8000/", errors.New("agent card declares no JSONRPC interface, only GRPC"))
+
+	assert.Equal(t, "http://weather:8000", resolved.URL)
+	assert.Equal(t, ReasonUnsupportedTransport, resolved.Reason)
+	assert.Empty(t, resolved.Rejected)
+	assert.Contains(t, resolved.Message, "GRPC")
+	assert.Contains(t, resolved.Message, "spec.address")
+}
+
 func TestResolveEndpoint(t *testing.T) {
 	const address = "http://weather.default.svc.cluster.local:8000"
+	const secureAddress = "https://weather.default.svc.cluster.local"
 
 	tests := []struct {
 		name         string
@@ -160,6 +179,20 @@ func TestResolveEndpoint(t *testing.T) {
 			expectedURL: address + "/a2a/v1",
 		},
 		{
+			name:        "card path normalizes dot segments and repeated slashes",
+			address:     address,
+			cardURL:     "https://weather.example.com/a//b/./c/",
+			mode:        EndpointResolutionCardPath,
+			expectedURL: address + "/a/b/c",
+		},
+		{
+			name:        "card path keeps percent encoding",
+			address:     address,
+			cardURL:     "https://weather.example.com/a2a/my%20agent",
+			mode:        EndpointResolutionCardPath,
+			expectedURL: address + "/a2a/my%20agent",
+		},
+		{
 			name:        "card path with a rootless card falls back to the address",
 			address:     address,
 			cardURL:     "https://weather.example.com/",
@@ -167,11 +200,40 @@ func TestResolveEndpoint(t *testing.T) {
 			expectedURL: address,
 		},
 		{
-			name:        "card path with a relative card url still yields the path",
+			name:        "card path rejects a path that escapes the root",
+			address:     address,
+			cardURL:     "https://weather.example.com/../../admin",
+			mode:        EndpointResolutionCardPath,
+			expectedURL: address,
+			expectedRej: "https://weather.example.com/../../admin",
+			expectedRsn: ReasonInvalidAgentCardURL,
+		},
+		{
+			name:        "card path rejects a relative card url",
 			address:     address,
 			cardURL:     "/a2a/v1",
 			mode:        EndpointResolutionCardPath,
-			expectedURL: address + "/a2a/v1",
+			expectedURL: address,
+			expectedRej: "/a2a/v1",
+			expectedRsn: ReasonInvalidAgentCardURL,
+		},
+		{
+			name:        "card path rejects a card url with userinfo",
+			address:     address,
+			cardURL:     "https://user:secret@weather.example.com/a2a/v1",
+			mode:        EndpointResolutionCardPath,
+			expectedURL: address,
+			expectedRej: "https://user:secret@weather.example.com/a2a/v1",
+			expectedRsn: ReasonInvalidAgentCardURL,
+		},
+		{
+			name:        "card path rejects a non http scheme",
+			address:     address,
+			cardURL:     "grpc://weather.example.com/a2a/v1",
+			mode:        EndpointResolutionCardPath,
+			expectedURL: address,
+			expectedRej: "grpc://weather.example.com/a2a/v1",
+			expectedRsn: ReasonInvalidAgentCardURL,
 		},
 		{
 			name:        "empty card url is reported",
@@ -182,18 +244,63 @@ func TestResolveEndpoint(t *testing.T) {
 			expectedRsn: ReasonNoAgentCardURL,
 		},
 		{
-			name:        "card url on the same host is accepted",
+			name:        "card url on the same origin is accepted",
 			address:     address,
 			cardURL:     "http://weather.default.svc.cluster.local:8000/a2a/v1",
 			mode:        EndpointResolutionCardURL,
 			expectedURL: "http://weather.default.svc.cluster.local:8000/a2a/v1",
 		},
 		{
-			name:        "card url on the same host but a different port is accepted",
-			address:     address,
-			cardURL:     "https://weather.default.svc.cluster.local:9443/a2a/v1",
+			name:        "card url with the implicit default port matches an explicit one",
+			address:     secureAddress + ":443",
+			cardURL:     "https://weather.default.svc.cluster.local/a2a/v1",
 			mode:        EndpointResolutionCardURL,
-			expectedURL: "https://weather.default.svc.cluster.local:9443/a2a/v1",
+			expectedURL: "https://weather.default.svc.cluster.local/a2a/v1",
+		},
+		{
+			name:        "card url with a different port on the same host is rejected",
+			address:     address,
+			cardURL:     "http://weather.default.svc.cluster.local:9000/a2a/v1",
+			mode:        EndpointResolutionCardURL,
+			expectedURL: address,
+			expectedRej: "http://weather.default.svc.cluster.local:9000/a2a/v1",
+			expectedRsn: ReasonCrossOriginNotAllow,
+		},
+		{
+			name:        "card url with a different scheme on the same host is rejected",
+			address:     address,
+			cardURL:     "https://weather.default.svc.cluster.local:8000/a2a/v1",
+			mode:        EndpointResolutionCardURL,
+			expectedURL: address,
+			expectedRej: "https://weather.default.svc.cluster.local:8000/a2a/v1",
+			expectedRsn: ReasonCrossOriginNotAllow,
+		},
+		{
+			name:        "card url downgrading https to http is rejected",
+			address:     secureAddress,
+			cardURL:     "http://weather.default.svc.cluster.local/a2a/v1",
+			mode:        EndpointResolutionCardURL,
+			expectedURL: secureAddress,
+			expectedRej: "http://weather.default.svc.cluster.local/a2a/v1",
+			expectedRsn: ReasonCrossOriginNotAllow,
+		},
+		{
+			name:         "allowlisted host cannot downgrade https to http",
+			address:      secureAddress,
+			cardURL:      "http://weather.example.com/a2a/v1",
+			mode:         EndpointResolutionCardURL,
+			allowedHosts: []string{"weather.example.com"},
+			expectedURL:  secureAddress,
+			expectedRej:  "http://weather.example.com/a2a/v1",
+			expectedRsn:  ReasonSchemeDowngrade,
+		},
+		{
+			name:         "allowlisted host may upgrade http to https",
+			address:      address,
+			cardURL:      "https://weather.example.com/a2a/v1",
+			mode:         EndpointResolutionCardURL,
+			allowedHosts: []string{"weather.example.com"},
+			expectedURL:  "https://weather.example.com/a2a/v1",
 		},
 		{
 			name:        "card url on another host is rejected without an allowlist",
@@ -213,12 +320,38 @@ func TestResolveEndpoint(t *testing.T) {
 			expectedURL:  "https://weather.example.com/a2a/v1",
 		},
 		{
-			name:         "card url on an allowed host is accepted",
+			name:         "allowlist entry without a port matches any port",
+			address:      address,
+			cardURL:      "https://weather.example.com:8443/a2a/v1",
+			mode:         EndpointResolutionCardURL,
+			allowedHosts: []string{"weather.example.com"},
+			expectedURL:  "https://weather.example.com:8443/a2a/v1",
+		},
+		{
+			name:         "allowlist entry with a port matches that port",
+			address:      address,
+			cardURL:      "https://weather.example.com:8443/a2a/v1",
+			mode:         EndpointResolutionCardURL,
+			allowedHosts: []string{"weather.example.com:8443"},
+			expectedURL:  "https://weather.example.com:8443/a2a/v1",
+		},
+		{
+			name:         "allowlist entry with a port matches the implicit default port",
 			address:      address,
 			cardURL:      "https://weather.example.com/a2a/v1",
 			mode:         EndpointResolutionCardURL,
-			allowedHosts: []string{"weather.example.com"},
+			allowedHosts: []string{"weather.example.com:443"},
 			expectedURL:  "https://weather.example.com/a2a/v1",
+		},
+		{
+			name:         "allowlist entry with a port rejects another port",
+			address:      address,
+			cardURL:      "https://weather.example.com:9443/a2a/v1",
+			mode:         EndpointResolutionCardURL,
+			allowedHosts: []string{"weather.example.com:8443"},
+			expectedURL:  address,
+			expectedRej:  "https://weather.example.com:9443/a2a/v1",
+			expectedRsn:  ReasonCrossOriginNotAllow,
 		},
 		{
 			name:         "allowlist matching is case insensitive",
@@ -235,6 +368,14 @@ func TestResolveEndpoint(t *testing.T) {
 			mode:         EndpointResolutionCardURL,
 			allowedHosts: []string{"*.agents.example.com"},
 			expectedURL:  "https://weather.agents.example.com/a2a/v1",
+		},
+		{
+			name:         "wildcard with a port matches that port",
+			address:      address,
+			cardURL:      "https://weather.agents.example.com:8443/a2a/v1",
+			mode:         EndpointResolutionCardURL,
+			allowedHosts: []string{"*.agents.example.com:8443"},
+			expectedURL:  "https://weather.agents.example.com:8443/a2a/v1",
 		},
 		{
 			name:         "wildcard does not match deeper subdomains",
@@ -257,6 +398,22 @@ func TestResolveEndpoint(t *testing.T) {
 			expectedRsn:  ReasonCrossOriginNotAllow,
 		},
 		{
+			name:        "card url with userinfo on the same origin is rejected",
+			address:     address,
+			cardURL:     "http://attacker:tok@weather.default.svc.cluster.local:8000/a2a/v1",
+			mode:        EndpointResolutionCardURL,
+			expectedURL: address,
+			expectedRej: "http://attacker:tok@weather.default.svc.cluster.local:8000/a2a/v1",
+			expectedRsn: ReasonInvalidAgentCardURL,
+		},
+		{
+			name:        "card url strips query and fragment",
+			address:     address,
+			cardURL:     "http://weather.default.svc.cluster.local:8000/a2a/v1/?x=1#f",
+			mode:        EndpointResolutionCardURL,
+			expectedURL: "http://weather.default.svc.cluster.local:8000/a2a/v1",
+		},
+		{
 			name:        "relative card url is rejected in cardUrl mode",
 			address:     address,
 			cardURL:     "/a2a/v1",
@@ -272,6 +429,15 @@ func TestResolveEndpoint(t *testing.T) {
 			mode:        EndpointResolutionCardURL,
 			expectedURL: address,
 			expectedRej: "file:///etc/passwd",
+			expectedRsn: ReasonInvalidAgentCardURL,
+		},
+		{
+			name:        "opaque url is rejected",
+			address:     address,
+			cardURL:     "mailto:agent@example.com",
+			mode:        EndpointResolutionCardURL,
+			expectedURL: address,
+			expectedRej: "mailto:agent@example.com",
 			expectedRsn: ReasonInvalidAgentCardURL,
 		},
 		{
@@ -292,6 +458,15 @@ func TestResolveEndpoint(t *testing.T) {
 			expectedRej: "https://weather.example.com/a2a/v1",
 			expectedRsn: ReasonInvalidAddress,
 		},
+		{
+			name:        "address with a non http scheme cannot be overridden",
+			address:     "grpc://weather.default.svc.cluster.local:8000",
+			cardURL:     "https://weather.example.com/a2a/v1",
+			mode:        EndpointResolutionCardURL,
+			expectedURL: "grpc://weather.default.svc.cluster.local:8000",
+			expectedRej: "https://weather.example.com/a2a/v1",
+			expectedRsn: ReasonInvalidAddress,
+		},
 	}
 
 	for _, tt := range tests {
@@ -302,6 +477,48 @@ func TestResolveEndpoint(t *testing.T) {
 			assert.Equal(t, tt.expectedRej, resolved.Rejected)
 			assert.Equal(t, tt.expectedRsn, resolved.Reason)
 			assert.NotEmpty(t, resolved.Message)
+			assert.NotContains(t, resolved.URL, "@")
+		})
+	}
+}
+
+func TestValidateAllowedEndpointHost(t *testing.T) {
+	valid := []string{
+		"agents.example.com",
+		"localhost",
+		"a.b.c",
+		"*.agents.example.com",
+		"agents.example.com:8443",
+		"*.agents.example.com:443",
+		"weather-svc.default.svc.cluster.local",
+	}
+	for _, entry := range valid {
+		t.Run("valid "+entry, func(t *testing.T) {
+			assert.NoError(t, ValidateAllowedEndpointHost(entry))
+		})
+	}
+
+	invalid := []string{
+		"",
+		"   ",
+		"*",
+		"*.",
+		"*.example.com.",
+		".example.com",
+		"agents..example.com",
+		"-agents.example.com",
+		"https://agents.example.com",
+		"agents.example.com/rpc",
+		"user@agents.example.com",
+		"agents.example.com:0",
+		"agents.example.com:70000",
+		"agents.example.com:abc",
+		"agents.example.com:",
+		"agents.example.com:8443:1",
+	}
+	for _, entry := range invalid {
+		t.Run("invalid "+entry, func(t *testing.T) {
+			assert.Error(t, ValidateAllowedEndpointHost(entry))
 		})
 	}
 }
