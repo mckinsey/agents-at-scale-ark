@@ -31,15 +31,15 @@ spec:
             timeout: 90s
             content: |
               set -eu
-              for i in $(seq 1 40); do
-                if kubectl logs -n ark-system deployment/ark-apiserver --tail=-1 2>/dev/null \
+              for i in $(seq 1 20); do
+                if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
                   | grep '"name":"audit-proxied-agent"' \
                   | grep -q '"verb":"create"'; then
                   echo "OK create of audit-proxied-agent is audited"
                   exit 0
                 fi
-                sleep 2
+                sleep 1
               done
               echo "FAIL no create audit record for audit-proxied-agent"
               exit 1
@@ -51,15 +51,15 @@ spec:
             content: |
               set -eu
               kubectl annotate agent audit-proxied-agent -n $NAMESPACE audit-test=touched --overwrite
-              for i in $(seq 1 40); do
-                if kubectl logs -n ark-system deployment/ark-apiserver --tail=-1 2>/dev/null \
+              for i in $(seq 1 20); do
+                if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
                   | grep '"name":"audit-proxied-agent"' \
                   | grep -Eq '"verb":"(update|patch)"'; then
                   echo "OK update of audit-proxied-agent is audited"
                   exit 0
                 fi
-                sleep 2
+                sleep 1
               done
               echo "FAIL no update audit record for audit-proxied-agent"
               exit 1
@@ -74,15 +74,15 @@ spec:
             content: |
               set -eu
               kubectl delete agent audit-proxied-agent -n $NAMESPACE
-              for i in $(seq 1 40); do
-                if kubectl logs -n ark-system deployment/ark-apiserver --tail=-1 2>/dev/null \
+              for i in $(seq 1 20); do
+                if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
                   | grep '"name":"audit-proxied-agent"' \
                   | grep -q '"verb":"delete"'; then
                   echo "OK delete of audit-proxied-agent is audited"
                   exit 0
                 fi
-                sleep 2
+                sleep 1
               done
               echo "FAIL no delete audit record for audit-proxied-agent"
               exit 1
@@ -160,15 +160,15 @@ spec:
               esac
               # The direct path never transits the main kube-apiserver, so an audit
               # record for this name can only come from the aggregated apiserver itself.
-              for i in $(seq 1 40); do
-                if kubectl logs -n ark-system deployment/ark-apiserver --tail=-1 2>/dev/null \
+              for i in $(seq 1 20); do
+                if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
                   | grep '"name":"audit-direct-agent"' \
                   | grep -q '"verb":"create"'; then
                   echo "OK direct-path create is audited by the aggregated apiserver"
                   exit 0
                 fi
-                sleep 2
+                sleep 1
               done
               echo "FAIL direct-path create of audit-direct-agent was not audited"
               exit 1
