@@ -12,7 +12,7 @@ The `ExecutionEngineRequest` SHALL include an `mcpServers` field containing a li
 #### Scenario: Agent with inline tools
 
 - **WHEN** an agent references an inline Tool whose `Available` condition is `True` for its current generation
-- **THEN** the SDK SHALL emit an `MCPServerConfig` with that activator URL, transport `http`, and a namespace/UID-qualified connection identity
+- **THEN** the SDK SHALL emit an `MCPServerConfig` with that activator URL, transport `http`, a namespace/UID-qualified connection identity, and a `timeout` covering the 60-second activation and 30-second execution budgets rather than the model's 30-second default
 - **AND** its `tools` allowlist SHALL contain the authored Tool name
 - **AND** resolution SHALL require no synthetic MCPServer resource and SHALL NOT start a runner
 
