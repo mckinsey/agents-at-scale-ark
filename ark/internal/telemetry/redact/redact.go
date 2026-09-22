@@ -27,7 +27,7 @@ var keyAnchoredPattern = regexp.MustCompile(
 // their closing quote, so a JSON-embedded cookie value doesn't swallow trailing structure
 // (e.g. the closing '}'). Kept separate from keyAnchoredPattern for that reason.
 var cookiePattern = regexp.MustCompile(
-	`(?i)(?P<key>['"]?(?:cookie|set-cookie)['"]?)(?P<sep>\s*:\s*)(?P<val>'[^']*'|"[^"]*"|[^\r\n]+)`,
+	`(?i)(?P<key>['"]?(?:cookie|set-cookie)['"]?)(?P<sep>\s*[=:]\s*)(?P<val>'[^']*'|"[^"]*"|[^\r\n]+)`,
 )
 
 // userinfoBoundary bounds the user/password segments of a URL's userinfo. It excludes

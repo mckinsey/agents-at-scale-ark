@@ -58,7 +58,7 @@ SENSITIVE_PATTERNS = re.compile(
 # alternatives still take priority and stay bounded by their closing quote, so a
 # JSON-embedded cookie value doesn't swallow trailing structure (e.g. a closing '}').
 COOKIE_PATTERN = re.compile(
-    r"(?P<key>['\"]?(?:cookie|set-cookie)['\"]?)(?P<sep>\s*:\s*)"
+    r"(?P<key>['\"]?(?:cookie|set-cookie)['\"]?)(?P<sep>\s*[=:]\s*)"
     r"(?P<val>'[^']*'|\"[^\"]*\"|[^\r\n]+)",
     re.IGNORECASE,
 )
