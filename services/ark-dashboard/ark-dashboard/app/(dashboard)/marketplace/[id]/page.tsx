@@ -1,21 +1,21 @@
 'use client';
 
-import {
-  ArrowLeft,
-  CheckCircle,
-  ExternalLink,
-  GitBranch,
-  Package,
-  Star,
-  Terminal,
-} from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
-import { PageHeader } from '@/components/common/page-header';
+import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
+import {
+  ArrowBack,
+  CheckCircle,
+  Code,
+  InsertDriveFile,
+  OpenInNew,
+  Storefront,
+  Terminal,
+} from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -79,18 +79,12 @@ export default function MarketplaceDetailPage() {
   };
 
   const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      observability: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
-      tools: 'bg-green-500/10 text-green-700 dark:text-green-400',
-      'mcp-servers': 'bg-purple-500/10 text-purple-700 dark:text-purple-400',
-      agents: 'bg-orange-500/10 text-orange-700 dark:text-orange-400',
-      models: 'bg-pink-500/10 text-pink-700 dark:text-pink-400',
-      workflows: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
-      integrations: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+    const hues: Record<string, string> = {
+      agents: 'text-blue-500',
+      workflows: 'text-pink-500',
+      'mcp-servers': 'text-violet-500',
     };
-    return (
-      colors[category] || 'bg-gray-500/10 text-gray-700 dark:text-gray-400'
-    );
+    return hues[category] ?? '';
   };
 
   const formatDownloads = (count: number) => {
@@ -108,16 +102,16 @@ export default function MarketplaceDetailPage() {
     return (
       <div className="container p-6">
         <div className="text-center">
-          <Package className="text-muted-foreground mx-auto h-12 w-12" />
+          <Storefront className="text-fg-secondary mx-auto h-12 w-12" />
           <h2 className="mt-4 text-lg font-semibold">Item not found</h2>
-          <p className="text-muted-foreground mt-2 text-sm">
+          <p className="text-fg-secondary mt-2 text-sm">
             The marketplace item you&apos;re looking for doesn&apos;t exist.
           </p>
           <Button
             onClick={() => push(marketplaceReturnHref)}
             variant="outline"
             className="mt-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
+            <ArrowBack className="mr-2 h-4 w-4" />
             Back to Marketplace
           </Button>
         </div>
@@ -127,33 +121,31 @@ export default function MarketplaceDetailPage() {
 
   return (
     <div className="bg-background min-h-screen">
-      <PageHeader currentPage={item.name} />
       <main className="container space-y-8 p-6 py-8">
-        <div className="flex items-center gap-4">
-          <Button
-            onClick={() => push(marketplaceReturnHref)}
-            variant="ghost"
-            size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
-        </div>
+        <DetailBreadcrumb
+          backHref="/marketplace"
+          backLabel="Marketplace"
+          current={item.name}
+        />
 
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <div>
               <div className="flex items-start gap-4">
-                <div className="bg-muted flex h-16 w-16 items-center justify-center rounded-lg text-3xl">
+                <div className="bg-surface-bg-tertiary flex h-16 w-16 items-center justify-center text-3xl">
                   {item.icon || '📦'}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <h1 className="text-3xl font-bold">{item.name}</h1>
                     {item.status === 'installed' && (
-                      <CheckCircle className="h-6 w-6 text-green-600" />
+                      <CheckCircle
+                        data-testid="installed-marker"
+                        className="text-fg-success h-6 w-6"
+                      />
                     )}
                   </div>
-                  <p className="text-muted-foreground mt-2 text-lg">
+                  <p className="text-fg-secondary mt-2 text-lg">
                     {item.shortDescription}
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -163,13 +155,7 @@ export default function MarketplaceDetailPage() {
                       {item.category.replace('-', ' ')}
                     </Badge>
                     <Badge outline>{item.type}</Badge>
-                    {item.featured && (
-                      <Badge
-                        variant="warning"
-                        className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400">
-                        Featured
-                      </Badge>
-                    )}
+                    {item.featured && <Badge variant="warning">Featured</Badge>}
                   </div>
                 </div>
               </div>
@@ -239,11 +225,11 @@ export default function MarketplaceDetailPage() {
                   <CardContent className="space-y-4">
                     {item.installCommand && (
                       <div>
-                        <p className="text-muted-foreground mb-2 text-sm">
+                        <p className="text-fg-secondary mb-2 text-sm">
                           Run the following command to install:
                         </p>
-                        <div className="bg-muted flex items-center gap-2 rounded-lg p-3 font-mono text-sm">
-                          <Terminal className="text-muted-foreground h-4 w-4" />
+                        <div className="bg-surface-bg-tertiary paragraph-code-text flex items-center gap-2 p-3">
+                          <Terminal className="text-fg-secondary h-4 w-4" />
                           <code className="flex-1">{item.installCommand}</code>
                         </div>
                       </div>
@@ -277,7 +263,7 @@ export default function MarketplaceDetailPage() {
                           <div key={index}>
                             <div className="flex items-center gap-2">
                               <Badge outline>{entry.version}</Badge>
-                              <span className="text-muted-foreground text-sm">
+                              <span className="text-fg-secondary text-sm">
                                 {entry.date}
                               </span>
                             </div>
@@ -314,7 +300,7 @@ export default function MarketplaceDetailPage() {
                         disabled={uninstallMutation.isPending}>
                         Uninstall
                       </Button>
-                      <p className="text-muted-foreground text-center text-xs">
+                      <p className="text-fg-secondary text-center text-xs">
                         Currently installed
                       </p>
                     </div>
@@ -339,9 +325,9 @@ export default function MarketplaceDetailPage() {
                               variant="outline"
                               className="w-full justify-start"
                               onClick={() => window.open(ui.url, '_blank')}>
-                              <ExternalLink className="mr-2 h-4 w-4" />
+                              <OpenInNew className="mr-2 h-4 w-4" />
                               {ui.label}
-                              <ExternalLink className="ml-auto h-3 w-3" />
+                              <OpenInNew className="ml-auto h-3 w-3" />
                             </Button>
                           ))}
                         </div>
@@ -352,28 +338,25 @@ export default function MarketplaceDetailPage() {
 
                   <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Version</span>
+                      <span className="text-fg-secondary">Version</span>
                       <span className="font-medium">v{item.version}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Downloads</span>
+                      <span className="text-fg-secondary">Downloads</span>
                       <span className="font-medium">
                         {formatDownloads(item.downloads)}
                       </span>
                     </div>
                     {item.rating && (
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Rating</span>
-                        <div className="flex items-center gap-1">
-                          <Star className="h-4 w-4 fill-current text-yellow-500" />
-                          <span className="font-medium">
-                            {item.rating.toFixed(1)}
-                          </span>
-                        </div>
+                        <span className="text-fg-secondary">Rating</span>
+                        <span className="text-fg-primary font-medium">
+                          {item.rating.toFixed(1)}
+                        </span>
                       </div>
                     )}
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Author</span>
+                      <span className="text-fg-secondary">Author</span>
                       <span className="font-medium">{item.author}</span>
                     </div>
                   </div>
@@ -390,9 +373,9 @@ export default function MarketplaceDetailPage() {
                             <Button
                               variant="outline"
                               className="w-full justify-start">
-                              <GitBranch className="mr-2 h-4 w-4" />
+                              <Code className="mr-2 h-4 w-4" />
                               View Repository
-                              <ExternalLink className="ml-auto h-3 w-3" />
+                              <OpenInNew className="ml-auto h-3 w-3" />
                             </Button>
                           </Link>
                         )}
@@ -404,9 +387,9 @@ export default function MarketplaceDetailPage() {
                             <Button
                               variant="outline"
                               className="w-full justify-start">
-                              <ExternalLink className="mr-2 h-4 w-4" />
+                              <InsertDriveFile className="mr-2 h-4 w-4" />
                               Documentation
-                              <ExternalLink className="ml-auto h-3 w-3" />
+                              <OpenInNew className="ml-auto h-3 w-3" />
                             </Button>
                           </Link>
                         )}
@@ -437,15 +420,12 @@ export default function MarketplaceDetailPage() {
 function MarketplaceDetailSkeleton() {
   return (
     <div className="bg-background min-h-screen">
-      <PageHeader currentPage="Loading..." />
       <main className="container space-y-8 p-6 py-8">
-        <div className="flex items-center gap-4">
-          <Skeleton className="h-9 w-20" />
-        </div>
+        <Skeleton className="h-5 w-48" />
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <div className="flex items-start gap-4">
-              <Skeleton className="h-16 w-16 rounded-lg" />
+              <Skeleton className="h-16 w-16" />
               <div className="flex-1 space-y-2">
                 <Skeleton className="h-8 w-48" />
                 <Skeleton className="h-5 w-full max-w-md" />

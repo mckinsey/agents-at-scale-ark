@@ -1,15 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useRouter, useParams } from 'next/navigation';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { useParams, useRouter } from 'next/navigation';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { MarketplaceItemDetail } from '@/lib/api/generated/marketplace-types';
 import {
   useGetMarketplaceItemById,
   useInstallMarketplaceItem,
   useUninstallMarketplaceItem,
 } from '@/lib/services/marketplace-hooks';
-import type { MarketplaceItemDetail } from '@/lib/api/generated/marketplace-types';
 
 import MarketplaceDetailPage from './page';
 
@@ -23,12 +23,6 @@ vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/marketplace/test-item'),
   useParams: vi.fn(() => ({ id: 'test-item' })),
   useSearchParams: vi.fn(() => new URLSearchParams()),
-}));
-
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: vi.fn(({ currentPage }) => (
-    <div data-testid="page-header">{currentPage}</div>
-  )),
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -66,7 +60,7 @@ function renderWithProviders(ui: React.ReactElement) {
     },
   });
   return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
   );
 }
 
@@ -94,7 +88,8 @@ function setupMocks(overrides?: {
     refresh: vi.fn(),
   });
 
-  const itemData = overrides?.item === null ? undefined : (overrides?.item ?? baseItem);
+  const itemData =
+    overrides?.item === null ? undefined : (overrides?.item ?? baseItem);
 
   mockUseGetMarketplaceItemById.mockReturnValue({
     data: itemData,
@@ -126,7 +121,9 @@ describe('MarketplaceDetailPage', () => {
 
     renderWithProviders(<MarketplaceDetailPage />);
 
-    expect(screen.getByRole('heading', { name: 'Phoenix Observability' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Phoenix Observability' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Observability for AI agents')).toBeInTheDocument();
     expect(screen.getAllByText('observability').length).toBeGreaterThan(0);
     expect(screen.getByText('service')).toBeInTheDocument();
@@ -162,7 +159,7 @@ describe('MarketplaceDetailPage', () => {
 
     expect(toast.error).toHaveBeenCalledWith(
       'Failed to load marketplace item',
-      { description: 'Network failure' }
+      { description: 'Network failure' },
     );
   });
 
@@ -207,14 +204,20 @@ describe('MarketplaceDetailPage', () => {
     renderWithProviders(<MarketplaceDetailPage />);
 
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Installation' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('tab', { name: 'Installation' }),
+    ).toBeInTheDocument();
   });
 
   it('shows Changelog tab only when item has changelog entries', () => {
     const itemWithChangelog = {
       ...baseItem,
       changelog: [
-        { version: '2.1.0', date: '2025-06-01', changes: ['Added tracing support'] },
+        {
+          version: '2.1.0',
+          date: '2025-06-01',
+          changes: ['Added tracing support'],
+        },
       ],
     };
     setupMocks({ item: itemWithChangelog });
@@ -229,11 +232,16 @@ describe('MarketplaceDetailPage', () => {
 
     renderWithProviders(<MarketplaceDetailPage />);
 
-    expect(screen.queryByRole('tab', { name: 'Changelog' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('tab', { name: 'Changelog' }),
+    ).not.toBeInTheDocument();
   });
 
   it('shows repository link when item.repository exists', () => {
-    const itemWithRepo = { ...baseItem, repository: 'https://github.com/example/repo' };
+    const itemWithRepo = {
+      ...baseItem,
+      repository: 'https://github.com/example/repo',
+    };
     setupMocks({ item: itemWithRepo });
 
     renderWithProviders(<MarketplaceDetailPage />);
@@ -242,7 +250,10 @@ describe('MarketplaceDetailPage', () => {
   });
 
   it('shows documentation link when item.documentation exists', () => {
-    const itemWithDocs = { ...baseItem, documentation: 'https://docs.example.com' };
+    const itemWithDocs = {
+      ...baseItem,
+      documentation: 'https://docs.example.com',
+    };
     setupMocks({ item: itemWithDocs });
 
     renderWithProviders(<MarketplaceDetailPage />);
@@ -250,15 +261,13 @@ describe('MarketplaceDetailPage', () => {
     expect(screen.getByText('Documentation')).toBeInTheDocument();
   });
 
-  it('navigates back to marketplace when back button is clicked', async () => {
+  it('links back to the marketplace list from the breadcrumb', () => {
     setupMocks();
 
     renderWithProviders(<MarketplaceDetailPage />);
 
-    const backButton = screen.getByRole('button', { name: /Back/i });
-    await userEvent.click(backButton);
-
-    expect(mockPush).toHaveBeenCalledWith('/marketplace');
+    const backLink = screen.getByRole('link', { name: /Marketplace/i });
+    expect(backLink).toHaveAttribute('href', '/marketplace');
   });
 
   it('shows Featured badge when item.featured is true', () => {
@@ -284,8 +293,7 @@ describe('MarketplaceDetailPage', () => {
 
     const { container } = renderWithProviders(<MarketplaceDetailPage />);
 
-    const checkCircle = container.querySelector('[class*="lucide"][class*="check"]');
-    expect(checkCircle).toBeInTheDocument();
+    expect(screen.getByTestId('installed-marker')).toBeInTheDocument();
   });
 
   it('navigates to marketplace from not-found back button', async () => {
@@ -293,7 +301,9 @@ describe('MarketplaceDetailPage', () => {
 
     renderWithProviders(<MarketplaceDetailPage />);
 
-    const backButton = screen.getByRole('button', { name: /Back to Marketplace/i });
+    const backButton = screen.getByRole('button', {
+      name: /Back to Marketplace/i,
+    });
     await userEvent.click(backButton);
 
     expect(mockPush).toHaveBeenCalledWith('/marketplace');
@@ -313,7 +323,9 @@ describe('MarketplaceDetailPage', () => {
 
       renderWithProviders(<MarketplaceDetailPage />);
 
-      const uiButton = screen.getByRole('button', { name: /phoenix dashboard/i });
+      const uiButton = screen.getByRole('button', {
+        name: /phoenix dashboard/i,
+      });
       expect(uiButton).toBeInTheDocument();
 
       fireEvent.click(uiButton);
@@ -335,23 +347,27 @@ describe('MarketplaceDetailPage', () => {
 
       renderWithProviders(<MarketplaceDetailPage />);
 
-      expect(screen.getByRole('button', { name: /^Phoenix$/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /minio console/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /^Phoenix$/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /minio console/i }),
+      ).toBeInTheDocument();
     });
 
     it('does not render UI buttons when item is not installed', () => {
       const availableItemWithUI = {
         ...baseItem,
         status: 'available' as const,
-        uis: [
-          { url: 'https://phoenix.example.com', label: 'Phoenix' },
-        ],
+        uis: [{ url: 'https://phoenix.example.com', label: 'Phoenix' }],
       };
       setupMocks({ item: availableItemWithUI });
 
       renderWithProviders(<MarketplaceDetailPage />);
 
-      expect(screen.queryByRole('button', { name: /phoenix/i })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /phoenix/i }),
+      ).not.toBeInTheDocument();
     });
 
     it('does not render UI buttons section when uis array is empty', () => {
@@ -364,7 +380,9 @@ describe('MarketplaceDetailPage', () => {
 
       renderWithProviders(<MarketplaceDetailPage />);
 
-      expect(screen.getByRole('button', { name: /uninstall/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /uninstall/i }),
+      ).toBeInTheDocument();
     });
 
     it('does not render UI buttons when uis is undefined', () => {
@@ -376,7 +394,9 @@ describe('MarketplaceDetailPage', () => {
 
       renderWithProviders(<MarketplaceDetailPage />);
 
-      expect(screen.getByRole('button', { name: /uninstall/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /uninstall/i }),
+      ).toBeInTheDocument();
     });
 
     it('opens URL in new tab when UI button is clicked', () => {
@@ -384,9 +404,7 @@ describe('MarketplaceDetailPage', () => {
       const installedItemWithUI = {
         ...baseItem,
         status: 'installed' as const,
-        uis: [
-          { url: 'https://test.example.com/ui', label: 'Test UI' },
-        ],
+        uis: [{ url: 'https://test.example.com/ui', label: 'Test UI' }],
       };
       setupMocks({ item: installedItemWithUI });
 
@@ -403,15 +421,15 @@ describe('MarketplaceDetailPage', () => {
       const installedItemWithUI = {
         ...baseItem,
         status: 'installed' as const,
-        uis: [
-          { url: 'https://phoenix.example.com', label: 'Phoenix' },
-        ],
+        uis: [{ url: 'https://phoenix.example.com', label: 'Phoenix' }],
       };
       setupMocks({ item: installedItemWithUI });
 
       renderWithProviders(<MarketplaceDetailPage />);
 
-      const uninstallButton = screen.getByRole('button', { name: /uninstall/i });
+      const uninstallButton = screen.getByRole('button', {
+        name: /uninstall/i,
+      });
       const phoenixButton = screen.getByRole('button', { name: /phoenix/i });
       const versionText = screen.getByText(/Version/i);
 
