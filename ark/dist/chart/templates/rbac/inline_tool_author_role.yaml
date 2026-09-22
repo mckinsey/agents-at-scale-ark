@@ -1,0 +1,30 @@
+{{- if .Values.rbac.enable }}
+# The dedicated inline authoring permission, checked by SubjectAccessReview on
+# every inline Tool create and spec update.
+#
+# `inlinetools` is a virtual resource: it has no CRD and nothing serves it. It
+# exists only so the permission is separable from `tools` — a subject holding
+# tool-editor-role can manage Tools without gaining the ability to store
+# executable source. Nothing in this chart binds this role: granting it is an
+# explicit administrator action, and it is deliberately not added to
+# tool-editor-role, tool-admin-role, or ark-api's service account.
+#
+# Bind it per namespace, since the check is namespace scoped:
+#
+#   kubectl create rolebinding alice-inline-author \
+#     --clusterrole=inline-tool-author-role \
+#     --user=alice --namespace=team-a
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: inline-tool-author-role
+rules:
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - inlinetools
+  verbs:
+  - use
+{{- end -}}

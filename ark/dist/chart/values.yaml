@@ -121,6 +121,15 @@ webhook:
   timeoutSeconds: 30
   failurePolicy: Fail
 
+# [INLINE TOOLS]: Authoring of Tools with type "inline" (short scripts run by an
+# Ark-managed runner). Off by default: enabling it lets subjects holding the
+# dedicated "use inlinetools" permission store executable code. Enabling it
+# requires an enforceable admission path - the Ark webhooks on the etcd backend,
+# or the embedded apiserver on postgresql. No runner runtime ships in this
+# release, so authored inline Tools stay Pending.
+inlineTools:
+  enabled: false
+
 # [PROMETHEUS]: Create a ServiceMonitor so Prometheus scrapes controller
 # metrics. Enabled by default, but the ServiceMonitor only renders when the
 # Prometheus Operator CRDs (monitoring.coreos.com/v1) are present, so it is a
