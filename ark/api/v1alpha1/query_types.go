@@ -92,7 +92,7 @@ type QuerySpec struct {
 	// Default is resolved by the mutating webhook from ArkConfig/default
 	// (spec.queryTTL), falling back to 720h when ArkConfig is absent.
 	TTL *metav1.Duration `json:"ttl,omitempty"`
-	// +kubebuilder:default="5m"
+	// +kubebuilder:default="30m"
 	// Timeout for query execution (e.g., "30s", "5m", "1h")
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 	// +kubebuilder:validation:Optional

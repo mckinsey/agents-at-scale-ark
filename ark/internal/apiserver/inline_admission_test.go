@@ -39,7 +39,7 @@ func newToolAdmissionStorage(backend storage.Backend, reviewer inlinetools.Revie
 		NewListFunc: func() runtime.Object { return &arkv1alpha1.ToolList{} },
 	}
 	inner := registry.NewGenericStorage(backend, NewRegistryTypeConverter(), cfg, GetPrinterColumnRegistry())
-	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), reviewer)
+	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), nil, reviewer)
 }
 
 func inlineToolObject(name, source string) *arkv1alpha1.Tool {

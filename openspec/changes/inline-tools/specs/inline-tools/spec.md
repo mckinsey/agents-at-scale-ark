@@ -131,7 +131,7 @@ Inline Tools SHALL attach through existing `Agent.spec.tools`. Their resolution 
 
 ### Requirement: Inline resolution reuses existing MCP invocation types
 
-The controller SHALL publish an internal activator URL in `Tool.status.resolvedAddress` and SHALL add `status.conditions` to `ToolStatus`, both new fields. Usability SHALL be reported by a single `Available` condition, matching the condition type Agent, Team, and MCPServer already use, whose `reason` SHALL come from a closed set — `RuntimeNotInstalled`, `ConflictingNetworkPolicy`, `ActivatorUnavailable`, `ProvisioningFailed` — with human detail in `message` and the applicable generation in the condition's own `observedGeneration`. No top-level `observedGeneration` field SHALL be added. `status.state` SHALL retain its existing role for status indicators and SHALL gain `Pending` alongside `Ready`. Readers SHALL treat a `resolvedAddress` as unusable unless `Available` is `True` with an `observedGeneration` equal to `metadata.generation`. Go `CreateToolExecutor` SHALL adapt inline Tools into existing MCP client configuration and `MCPExecutor`; the Python SDK's `_build_mcp_servers` SHALL emit existing `MCPServerConfig` records as specified by the `mcp-server-resolution` delta. The stored Tool SHALL remain inline; no synthetic MCPServer or duplicate Tool SHALL be created.
+The controller SHALL publish an internal activator URL in `Tool.status.resolvedAddress` and SHALL add `status.conditions` to `ToolStatus`, both new fields. Usability SHALL be reported by a single `Available` condition, matching the condition type Agent, Team, and MCPServer already use, whose `reason` SHALL come from a closed set: `Available` when the condition is `True`, and `RuntimeNotInstalled`, `ConflictingNetworkPolicy`, `ActivatorUnavailable` or `ProvisioningFailed` when it is `False`, with human detail in `message` and the applicable generation in the condition's own `observedGeneration`. No top-level `observedGeneration` field SHALL be added. `status.state` SHALL retain its existing role for status indicators and SHALL gain `Pending` alongside `Ready`. Readers SHALL treat a `resolvedAddress` as unusable unless `Available` is `True` with an `observedGeneration` equal to `metadata.generation`. Go `CreateToolExecutor` SHALL adapt inline Tools into existing MCP client configuration and `MCPExecutor`; the Python SDK's `_build_mcp_servers` SHALL emit existing `MCPServerConfig` records as specified by the `mcp-server-resolution` delta. The stored Tool SHALL remain inline; no synthetic MCPServer or duplicate Tool SHALL be created.
 
 Connections SHALL use transport `http` (MCP Streamable HTTP), a namespace/UID-qualified connection identity, and the authored Tool name as the original MCP tool name. The Go adapter SHALL qualify the pooled client identity by Tool UID, because `MCPClientPool` keys clients by server namespace and name alone. Unresolved or stale status SHALL NOT supply a usable connection. Existing tracing, events, result/error handling, and supported attachment transformations SHALL be reused. HTTP tools SHALL retain their separate HTTP execution path.
 
@@ -168,6 +168,8 @@ The source ConfigMap SHALL have a stable name (`<tool>-source` when it fits), ke
 
 `Available=True` SHALL mean that the current endpoint/configuration and runtime prerequisites are usable, not that a runner pod is warm. Because `status.resolvedAddress` points at the activator, an unavailable activator Deployment SHALL set `Available=False` with reason `ActivatorUnavailable` and no usable endpoint. Missing runner components, a conflicting NetworkPolicy, and provisioning errors SHALL likewise set `Available=False` with their own reason and a message, and `state` SHALL read `Pending` in each case. Inline reconciliation SHALL process edits and child drift even if the Tool was already available. Ordinary reconciliation SHALL NOT overwrite the activator's active replica count.
 
+Disabling the feature SHALL block authoring and invocation without uninstalling the activator or stopping Tool reconciliation, and the controller SHALL perform the scale-down after a bounded drain while disabled. The single-scaling-authority rule SHALL apply while the feature is enabled; it SHALL NOT leave runner pods with nothing authorised to scale them down. Uninstalling the components SHALL be a separate step, valid once no inline Tools remain.
+
 #### Scenario: Initial and repeated reconciliation
 
 - **WHEN** an inline Tool is reconciled repeatedly with runtime prerequisites satisfied
@@ -199,8 +201,6 @@ The source ConfigMap SHALL have a stable name (`<tool>-source` when it fits), ke
 - **THEN** it disables service-account token automounting, runs non-root as UID 65532, and uses `seccompProfile: RuntimeDefault`
 - **AND** container security contexts set read-only root filesystems, no privilege escalation, and all capabilities dropped
 - **AND** CPU and memory limits are 500m and 256Mi, with requests explicitly set below them (50m and 64Mi) so a cold start is schedulable, and no secrets or host namespaces/host paths
-
-Disabling the feature SHALL block authoring and invocation without uninstalling the activator or stopping Tool reconciliation, and the controller SHALL perform the scale-down after a bounded drain while disabled. The single-scaling-authority rule SHALL apply while the feature is enabled; it SHALL NOT leave runner pods with nothing authorised to scale them down. Uninstalling the components SHALL be a separate step, valid once no inline Tools remain.
 
 #### Scenario: Disable, delete, and downgrade
 
@@ -297,7 +297,7 @@ Only valid `tools/call` requests SHALL activate a backend, after feature-enablem
 
 ### Requirement: Activation and idle scaling have one authority
 
-The activator SHALL run as a singleton Deployment independently of controller replica count in v1, using `strategy: Recreate` so no two activators run concurrently during a rollout, under its own ServiceAccount. Its namespaced rules SHALL be bound per namespace through RoleBindings honouring `controllerManager.watchNamespaces`, as the controller's are, and SHALL NOT be granted by a blanket ClusterRoleBinding. Its write access SHALL be limited to the `scale` subresource of runner Deployments it owns; it SHALL require no Secret access and no write access to Tool specs. It SHALL coalesce simultaneous cold starts, track pending/active calls, and scale a runner to one replica for invocation. It SHALL scale back to zero only after 60 seconds since the last completed call with no pending or active work. Discovery traffic SHALL NOT refresh this clock.
+The activator SHALL run as a singleton Deployment independently of controller replica count in v1, using `strategy: Recreate` so no two activators run concurrently during a rollout, under its own ServiceAccount. Its namespaced rules SHALL be bound per namespace through RoleBindings honouring `controllerManager.watchNamespaces`, as the controller's are when that list is non-empty, and SHALL NOT be granted by a blanket ClusterRoleBinding. Because the controller chart falls back to a cluster-wide ClusterRoleBinding when `controllerManager.watchNamespaces` is empty (its default), and no Ark component holds RBAC write access to create RoleBindings at runtime, enabling `inlineTools` SHALL require a non-empty `controllerManager.watchNamespaces` and SHALL fail installation rather than emit a cluster-wide binding. Its write access SHALL be limited to the `scale` subresource of runner Deployments it owns; it SHALL require no Secret access and no write access to Tool specs. It SHALL coalesce simultaneous cold starts, track pending/active calls, and scale a runner to one replica for invocation. It SHALL scale back to zero only after 60 seconds since the last completed call with no pending or active work. Discovery traffic SHALL NOT refresh this clock.
 
 Activation SHALL have a 60-second deadline shortened by the caller's remaining budget; script execution SHALL have a separate 30-second limit, also bounded by the caller. Handshake timeout SHALL NOT accidentally become the complete invocation budget. Cancellation SHALL propagate to backend work. Restarts/uncertain responses SHALL NOT automatically replay scripts, and recovered runners SHALL be reconciled conservatively before idle scale-down.
 
@@ -371,7 +371,7 @@ The runner SHALL drain output incrementally with bounded buffers/logging, enforc
 
 ### Requirement: Dashboard authoring persists and reports honest status
 
-Typed ark-api Tool endpoints SHALL preserve inline source/language through create, detail read, and PUT update. Handwritten DTOs, generated SDK models, and dashboard serialization SHALL all support the fields. Because the typed update replaces `spec` wholesale from the handwritten model, that model SHALL carry every Tool subtype: a PUT SHALL NOT drop any subtype block from an existing Tool. Completing that whitelist is a pre-existing fix delivered separately (PR #3507) and is a prerequisite of this change; adding `inline` SHALL NOT reintroduce the defect for any subtype. List responses SHALL expose language for the badge without including script source.
+Typed ark-api Tool endpoints SHALL preserve inline source/language through create, detail read, and PUT update. Handwritten DTOs, generated SDK models, and dashboard serialization SHALL all support the fields. Because the typed update replaces `spec` wholesale from the handwritten model, that model SHALL carry every Tool subtype, not only the ones it lists today: a PUT SHALL NOT drop `spec.mcp` or `spec.builtin` from an existing Tool. List responses SHALL expose language for the badge without including script source.
 
 The existing Add Tool flow SHALL offer Inline, a required monospace source textarea, and a required language selector with no default. Client validation SHALL check non-whitespace source and UTF-8 byte size without trimming persisted source; server validation remains authoritative. Source/language edits SHALL persist to the active namespace and round-trip when reopened. Admission failures SHALL be visible, and the `Available` condition's reason SHALL drive the message shown for a Pending Tool.
 
@@ -386,10 +386,9 @@ The authoring-first release SHALL provision no runners or usable execution endpo
 
 #### Scenario: Typed update preserves other subtypes
 
-- **GIVEN** an existing Tool of any non-inline subtype
+- **GIVEN** an existing `mcp` or `builtin` Tool
 - **WHEN** it is updated through the typed PUT endpoint
 - **THEN** its subtype configuration SHALL survive the round trip
-- **AND** adding `inline` to the model SHALL NOT drop or narrow any other subtype block
 
 #### Scenario: Edit and reopen
 

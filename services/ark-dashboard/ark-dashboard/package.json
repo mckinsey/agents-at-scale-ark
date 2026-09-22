@@ -111,6 +111,9 @@
     "js-yaml": "^4.3.1",
     "tar": "^7.5.11",
     "minimatch": "^10.2.3",
+    "@eslint/eslintrc": {
+      "minimatch": "^3.1.5"
+    },
     "picomatch": "^4.0.4",
     "rollup": "4.59.0",
     "flatted": "^3.4.2",

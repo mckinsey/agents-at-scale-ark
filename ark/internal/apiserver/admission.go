@@ -24,10 +24,11 @@ type AdmissionStorage struct {
 	// not run the CRD webhook chain for aggregated resources, so this path has to
 	// reach the same decision in-process.
 	inlineReviewer inlinetools.Reviewer
+	lookup         validation.DefaultsLookup
 }
 
-func NewAdmissionStorage(inner *registry.GenericStorage, validator *validation.Validator, inlineReviewer inlinetools.Reviewer) *AdmissionStorage {
-	return &AdmissionStorage{GenericStorage: inner, validator: validator, inlineReviewer: inlineReviewer}
+func NewAdmissionStorage(inner *registry.GenericStorage, validator *validation.Validator, lookup validation.DefaultsLookup, inlineReviewer inlinetools.Reviewer) *AdmissionStorage {
+	return &AdmissionStorage{GenericStorage: inner, validator: validator, lookup: lookup, inlineReviewer: inlineReviewer}
 }
 
 // admitInline applies the shared inline decision using the authenticated request
@@ -70,7 +71,7 @@ func (s *AdmissionStorage) Create(ctx context.Context, obj runtime.Object, creat
 	if err := s.admitInline(ctx, obj, nil); err != nil {
 		return nil, err
 	}
-	validation.ApplyDefaults(ctx, obj, nil)
+	validation.ApplyDefaults(ctx, obj, s.lookup)
 	warnings, err := s.validator.Validate(ctx, obj)
 	if err != nil {
 		return nil, err
@@ -89,7 +90,7 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 		if err := s.admitInline(ctx, obj, nil); err != nil {
 			return err
 		}
-		validation.ApplyDefaults(ctx, obj, nil)
+		validation.ApplyDefaults(ctx, obj, s.lookup)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)
@@ -109,7 +110,7 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 		if err := s.admitInline(ctx, obj, old); err != nil {
 			return err
 		}
-		validation.ApplyDefaults(ctx, obj, nil)
+		validation.ApplyDefaults(ctx, obj, s.lookup)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)

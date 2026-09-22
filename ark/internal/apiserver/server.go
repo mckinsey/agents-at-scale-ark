@@ -318,41 +318,11 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
 	apiGroupInfo.NegotiatedSerializer = jsonOnlyNegotiatedSerializer{Codecs}
 
-	printerColumns := GetPrinterColumnRegistry()
-
 	lookup := &validation.StorageLookup{Backend: s.backend, K8sClient: s.config.K8sClient}
 	v := validation.NewValidator(lookup)
 	inlineReviewer := s.inlineReviewer()
-
-	v1alpha1Storage := make(map[string]rest.Storage)
-	for _, res := range V1Alpha1Resources {
-		cfg := registry.ResourceConfig{
-			Kind:         res.Kind,
-			Resource:     res.Resource,
-			SingularName: res.SingularName,
-			NewFunc:      res.NewFunc,
-			NewListFunc:  res.NewListFunc,
-		}
-		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-		v1alpha1Storage[res.Resource] = NewAdmissionStorage(inner, v, inlineReviewer)
-		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
-	}
-	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = v1alpha1Storage
-
-	v1prealpha1Storage := make(map[string]rest.Storage)
-	for _, res := range V1PreAlpha1Resources {
-		cfg := registry.ResourceConfig{
-			Kind:         res.Kind,
-			Resource:     res.Resource,
-			SingularName: res.SingularName,
-			NewFunc:      res.NewFunc,
-			NewListFunc:  res.NewListFunc,
-		}
-		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-		v1prealpha1Storage[res.Resource] = NewAdmissionStorage(inner, v, inlineReviewer)
-		v1prealpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
-	}
-	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = v1prealpha1Storage
+	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = resourceStorage(s.backend, converter, V1Alpha1Resources, v, lookup, inlineReviewer)
+	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = resourceStorage(s.backend, converter, V1PreAlpha1Resources, v, lookup, inlineReviewer)
 
 	if err := server.InstallAPIGroup(&apiGroupInfo); err != nil {
 		return fmt.Errorf("failed to install API group: %w", err)
@@ -376,6 +346,25 @@ func (s *Server) inlineReviewer() inlinetools.Reviewer {
 		return inlinetools.Reject(fmt.Sprintf("inline tool authoring cannot be authorized: %v", err))
 	}
 	return &inlinetools.SARReviewer{Create: clientset.AuthorizationV1().SubjectAccessReviews().Create}
+}
+
+func resourceStorage(backend storage.Backend, converter storage.TypeConverter, resources []ResourceDef, v *validation.Validator, lookup validation.DefaultsLookup, inlineReviewer inlinetools.Reviewer) map[string]rest.Storage {
+	printerColumns := GetPrinterColumnRegistry()
+	out := make(map[string]rest.Storage, 2*len(resources))
+	for _, res := range resources {
+		cfg := registry.ResourceConfig{
+			Kind:          res.Kind,
+			Resource:      res.Resource,
+			SingularName:  res.SingularName,
+			ClusterScoped: res.ClusterScoped,
+			NewFunc:       res.NewFunc,
+			NewListFunc:   res.NewListFunc,
+		}
+		inner := registry.NewGenericStorage(backend, converter, cfg, printerColumns)
+		out[res.Resource] = NewAdmissionStorage(inner, v, lookup, inlineReviewer)
+		out[res.Resource+"/status"] = registry.NewStatusStorage(backend, converter, cfg)
+	}
+	return out
 }
 
 func (s *Server) NeedLeaderElection() bool {

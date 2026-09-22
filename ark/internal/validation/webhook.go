@@ -32,7 +32,7 @@ func (wv *WebhookValidator) ValidateDelete(_ context.Context, _ runtime.Object) 
 }
 
 type WebhookDefaulter struct {
-	Lookup ArkConfigLookup
+	Lookup DefaultsLookup
 }
 
 var _ webhook.CustomDefaulter = &WebhookDefaulter{}

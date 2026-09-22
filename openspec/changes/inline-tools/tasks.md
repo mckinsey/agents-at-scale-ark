@@ -1,44 +1,19 @@
-Prerequisites, merged to `main` before phase 1: the change spec itself, and
-PR #3507 (the pre-existing typed Tool PUT whitelist bug).
-
-Each phase is its own stack of PRs on `main` and merges before the next phase
-opens; phases are not stacked on each other. See the OpenSpec change workflow
-in the repository `CLAUDE.md`.
-
 ## 1. Phase 1: schema and mandatory author admission
 
-Phase 1 ships as six PRs, in this order. 1.1-1.5 are one PR because a schema
-that accepts `type: inline` without its mandatory admission is a state the
-spec forbids, and the author policy is the security decision reviewers must
-see whole:
-
-1. `p1-policy` — `internal/inlinetools` author decision and its tests, pure
-   logic with no Kubernetes wiring (security review).
-2. `p1-schema` — tasks 1.1, 1.2, 1.4, 1.5: inline shape and status fields,
-   shared validation, admission wiring on both backends, chart flag, render
-   guard and RBAC.
-3. `p1-controller` — task 1.6: authoring-only Pending path and source event.
-4. `p1-api` — tasks 2.1, 2.2: ark-api inline fields, language-only list
-   projection, impersonation requirement on typed and generic routes.
-5. `p1-dashboard-service` — task 2.3 service layer: inline spec building,
-   update call, `Available` condition summary.
-6. `p1-dashboard-ui` — tasks 2.3 form, 2.4, 2.5: form fields, edit route,
-   badge, Pending banner, tests.
-
-- [x] 1.1 Add the inline Tool shape and the new `ToolStatus` fields (`resolvedAddress` and `conditions`, with an `Available` condition type and the closed reason set, plus a `Pending` value for the existing `state`), and deep-copy support; regenerate CRDs, Helm copies, SDK models, and API types. Existing `state`/`message` behaviour for other Tool types stays unchanged.
-- [x] 1.2 Add shared structural validation for language, UTF-8 source size, object input schemas, subtype exclusivity, and delete/recreate-only inline type transitions; test boundary and multibyte cases.
-- [x] 1.3 Implement the namespace-scoped author policy with complete authenticated identity and fail-closed SubjectAccessReview handling; stamp the admitted subject and timestamp annotations and emit an event on source change through the existing eventing provider; test grants, denied/error/timeout results, namespace mismatch, and that a requester cannot forge the authorship annotations.
-- [x] 1.4 Wire mandatory inline security admission into CRD and PostgreSQL paths with `inlineTools.enabled` defaulting false; test skip labels, fail-open settings, optional plugins, authentication-disabled mode, PATCH/apply, status, metadata, and deletion behavior.
-- [x] 1.5 Add least-privilege RBAC and explicit administrator binding examples without extending existing Tool-editor or ark-api author privileges; verify both backend chart configurations reject unchecked inline writes.
-- [x] 1.6 Add the authoring-only controller path: inline Tools remain Pending with a runtime-not-installed reason and no runners/endpoints; test that other Tool types retain existing behavior.
+- [ ] 1.1 Add the inline Tool shape and the new `ToolStatus` fields (`resolvedAddress` and `conditions`, with an `Available` condition type and the closed reason set covering both the `True` case and the failure cases, plus a `Pending` value for the existing `state`), and deep-copy support; regenerate CRDs, Helm copies, SDK models, and API types. Existing `state`/`message` behaviour for other Tool types stays unchanged.
+- [ ] 1.2 Add shared structural validation for language, UTF-8 source size, object input schemas, subtype exclusivity, and delete/recreate-only inline type transitions; test boundary and multibyte cases.
+- [ ] 1.3 Implement the namespace-scoped author policy with complete authenticated identity and fail-closed SubjectAccessReview handling; stamp the admitted subject and timestamp annotations through a mutating admission path for Tool, which does not exist yet (the Tool webhook is validating only and `validation.ApplyDefaults` has no `Tool` case, so both a mutating webhook entry and that case are needed), and emit an event on source change through the existing eventing provider; test grants, denied/error/timeout results, namespace mismatch, and that a requester cannot forge the authorship annotations.
+- [ ] 1.4 Wire mandatory inline security admission into CRD and PostgreSQL paths with `inlineTools.enabled` defaulting false; test skip labels, fail-open settings, optional plugins, authentication-disabled mode, PATCH/apply, status, metadata, and deletion behavior.
+- [ ] 1.5 Add least-privilege RBAC and explicit administrator binding examples without extending existing Tool-editor or ark-api author privileges; verify both backend chart configurations reject unchecked inline writes.
+- [ ] 1.6 Add the authoring-only controller path: inline Tools remain Pending with a runtime-not-installed reason and no runners/endpoints; test that other Tool types retain existing behavior.
 
 ## 2. Phase 1: API and dashboard authoring
 
-- [x] 2.1 Extend handwritten Tool request/response models and serialization for source/language roundtrips. The typed-PUT whitelist bug (`update_tool` replaces `spec` wholesale from a `ToolSpec` that omitted `mcp`/`builtin`) is pre-existing and independent of inline tools: it is fixed in PR #3507, a prerequisite of this task, so `inline` is added to a complete whitelist. Regression-test that inline survives a typed update without dropping or narrowing another subtype; add language-only list metadata and test create, GET, PUT, list, and delete in the selected namespace.
-- [x] 2.2 Require authenticated user impersonation without fallback for inline authoring in typed Tool and generic resource write paths; test both old/new objects, API keys, missing identity, disabled impersonation, denial with fallback enabled, and unchanged non-inline behavior.
-- [x] 2.3 Extend the existing tool form and service mapping with Inline, required language, a monospace source textarea, UTF-8 byte validation, and exact source preservation; add persisted edit/reopen support without a new editor dependency.
-- [x] 2.4 Add the inline/language badge and read the `Available` condition as `a2a-servers.ts` does, branching on `reason` so a policy conflict, a missing runtime, and an unavailable activator read differently, with the explicit not-yet-executable message; verify the list does not fetch every script body.
-- [x] 2.5 Add API/form tests and a dashboard flow covering authorized create/edit/reopen, source validation, admission denial, and honest Pending status. Consult `tests/CLAUDE.md` and the dashboard testing conventions before implementing tests.
+- [ ] 2.1 Extend handwritten Tool request/response models and serialization for source/language roundtrips, and fix the existing bug where `ToolSpec` omits `mcp`/`builtin` while `update_tool` replaces `spec` wholesale, so a typed PUT silently drops those blocks; regression-test an `mcp` and a `builtin` Tool surviving a typed update; add language-only list metadata and test create, GET, PUT, list, and delete in the selected namespace.
+- [ ] 2.2 Require authenticated user impersonation without fallback for inline authoring in typed Tool and generic resource write paths; test both old/new objects, API keys, missing identity, disabled impersonation, denial with fallback enabled, and unchanged non-inline behavior.
+- [ ] 2.3 Extend the existing tool form and service mapping with Inline, required language, a monospace source textarea, UTF-8 byte validation, and exact source preservation; add persisted edit/reopen support without a new editor dependency.
+- [ ] 2.4 Add the inline/language badge, give inline Tools their own list Type value in `getToolTypeKey`/`TOOL_TYPE_LABELS` rather than the `built-in` default, and read the `Available` condition by walking `status.conditions` as `a2a-servers.ts` does, then branch on its `reason`, which is new dashboard behaviour, so a policy conflict, a missing runtime, and an unavailable activator read differently, with the explicit not-yet-executable message; verify the list does not fetch every script body.
+- [ ] 2.5 Add API/form tests and a dashboard flow covering authorized create/edit/reopen, source validation, admission denial, and honest Pending status. Consult `tests/CLAUDE.md` and the dashboard testing conventions before implementing tests.
 
 ## 3. Phase 2: runner contract and images
 
@@ -58,8 +33,8 @@ see whole:
 ## 5. Phase 3: runner networking and activation
 
 - [ ] 5.1 Reconcile the runner NetworkPolicy and detect conflicting policies by reading those selecting the runner's labels; test the optional tenant allow-all policy, the Pending reason naming it, recovery when it is narrowed, and re-evaluation after policy/label changes. Send no probe traffic and add no runtime enforcement gate.
-- [ ] 5.2 Package a singleton activator alongside the operator using `strategy: Recreate`, with internal-only ingress restrictions and its own ServiceAccount, bound per namespace via RoleBindings honouring `controllerManager.watchNamespaces` as the controller's rules are, limited to the `scale` subresource of owned runner Deployments with no Secret or Tool-spec write access; verify that controller replica count does not create multiple active scaling authorities and that a rollout never runs two activators.
-- [ ] 5.3 Serve stateless MCP initialization, notifications, ping, and discovery from Tool metadata; test that connecting/listing attached tools starts no runners, never exposes source, and does not refresh idle timers.
+- [ ] 5.2 Package a singleton activator alongside the operator using `strategy: Recreate`, with internal-only ingress restrictions and its own ServiceAccount, bound per namespace via RoleBindings honouring `controllerManager.watchNamespaces` as the controller's rules are, requiring a non-empty `controllerManager.watchNamespaces` and failing installation rather than falling back to a cluster-wide binding, limited to the `scale` subresource of owned runner Deployments with no Secret or Tool-spec write access; verify that controller replica count does not create multiple active scaling authorities and that a rollout never runs two activators.
+- [ ] 5.3 Serve stateless MCP initialization, notifications, ping, and discovery from Tool metadata, advertising an empty-object schema for a Tool with no `inputSchema`; test that connecting/listing attached tools starts no runners, never exposes source, and does not refresh idle timers.
 - [ ] 5.4 Implement valid-call activation with feature, published-endpoint, current UID/revision and ownership checks and backend connection after readiness; test stale routes, unknown tool names, arbitrary-target rejection, concurrent cold starts, and starting only the selected Tool.
 - [ ] 5.5 Implement pending/active accounting, 60-second idle scale-down, separate activation/execution deadlines, and cancellation; test active-call protection, conservative restart recovery, no late execution after abandonment, and no replay after uncertain responses.
 

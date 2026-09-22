@@ -47,6 +47,19 @@ class InlineSpec(BaseModel):
     language: str
 
 
+# update_tool assigns spec wholesale from this model, so every block a Tool can
+# carry has to be listed here. A field missing from this list is silently
+# dropped from the stored Tool on a typed PUT.
+#
+# The subtype blocks are all Dict[str, Any] rather than being typed per
+# subtype. This model is a passthrough to the Tool CR, whose schema and webhook
+# are the authority on their shape, and a narrower value type here does not add
+# validation - it only rejects or mangles specs the cluster would accept. That
+# is not hypothetical: http was Dict[str, str], and an http spec carrying
+# headers or bodyParameters (both lists) failed the request outright. agent,
+# team and builtin happen to hold only {name: str} today, so str-valued
+# mappings work for them by luck rather than by design; uniform Any means a new
+# nested field in any subtype cannot reintroduce this bug.
 class ToolSpec(BaseModel):
     description: str
     input_schema: Optional[Dict[str, Any]] = Field(None, alias="inputSchema")
@@ -55,10 +68,13 @@ class ToolSpec(BaseModel):
     tags: Optional[List[str]] = None
     implementation: Optional[Dict[str, Any]] = None
     parameters: Optional[List[ToolParameter]] = None
+    annotations: Optional[Dict[str, Any]] = None
     type: str
-    http: Optional[Dict[str, str]] = None
-    agent: Optional[Dict[str, str]] = None
-    team: Optional[Dict[str, str]] = None
+    http: Optional[Dict[str, Any]] = None
+    mcp: Optional[Dict[str, Any]] = None
+    agent: Optional[Dict[str, Any]] = None
+    team: Optional[Dict[str, Any]] = None
+    builtin: Optional[Dict[str, Any]] = None
     inline: Optional[InlineSpec] = None
 
 

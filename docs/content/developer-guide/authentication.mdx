@@ -561,6 +561,17 @@ See `samples/rbac-test-bindings.yaml` for a complete example covering all resour
 5. **Disable fallback** — Set `fallback: false`. K8s RBAC is now fully enforced.
 6. **Rollback** — Set `enabled: false` to revert to SA-based access.
 
+### Local development setup with Dex
+
+The quickest way to exercise the SSO path end to end is the DevSpace SSO profile, which deploys Dex with two hardcoded users and wires impersonation for you:
+
+```bash
+echo "127.0.0.1  dex.default.svc.cluster.local" | sudo tee -a /etc/hosts
+ENABLE_SSO=true devspace dev
+```
+
+See [Local Development](/developer-guide/local-development) for the users and what each can do. Note that Dex static passwords carry no `groups` claim, so the RBAC bindings match on username; use the Keycloak setup below to test group-based bindings such as `samples/rbac-test-bindings.yaml`.
+
 ### Local development setup with Keycloak
 
 For local testing, you can run Keycloak as an OIDC provider via Docker:

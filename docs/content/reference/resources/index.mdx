@@ -21,7 +21,7 @@ Ark extends Kubernetes with custom resources (CRDs) in the `ark.mckinsey.com` AP
 | [A2AServers](./a2aserver) | `A2AServer` | `v1prealpha1` | Remote Agent-to-Agent servers; discovered agents become `Agent` resources. |
 | [A2ATask](./a2atask) | `A2ATask` | `v1alpha1` | Tracks an async task dispatched to an A2A agent. |
 | [ExecutionEngine](./executionengine) | `ExecutionEngine` | `v1prealpha1` | Pluggable external runtime that executes agents via the A2A protocol. |
-| ArkConfig | `ArkConfig` | `v1alpha1` | Cluster-scoped configuration singleton (e.g. default query TTL). |
+| ArkConfig | `ArkConfig` | `v1alpha1` | Cluster-scoped configuration singleton (default query TTL, default Memory). |
 
 Every resource is namespaced except `ArkConfig`, which is cluster-scoped. `A2AServer` and `ExecutionEngine` are served under `ark.mckinsey.com/v1prealpha1`; the rest under `v1alpha1`.
 

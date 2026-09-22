@@ -180,6 +180,29 @@ func TestValidateAgentToolApproval(t *testing.T) {
 			approval:  &arkv1alpha1.ToolApprovalConfig{Required: true, OnTimeout: "bogus"},
 			expectErr: true,
 		},
+		{
+			name: "valid argument matcher",
+			approval: &arkv1alpha1.ToolApprovalConfig{
+				Required:        true,
+				ArgumentMatches: []arkv1alpha1.ArgumentMatch{{Argument: "path", Pattern: "^/var/run/secrets"}},
+			},
+		},
+		{
+			name: "matcher with empty argument is rejected",
+			approval: &arkv1alpha1.ToolApprovalConfig{
+				Required:        true,
+				ArgumentMatches: []arkv1alpha1.ArgumentMatch{{Argument: "", Pattern: "x"}},
+			},
+			expectErr: true,
+		},
+		{
+			name: "matcher with invalid regex is rejected",
+			approval: &arkv1alpha1.ToolApprovalConfig{
+				Required:        true,
+				ArgumentMatches: []arkv1alpha1.ArgumentMatch{{Argument: "path", Pattern: "([unclosed"}},
+			},
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
