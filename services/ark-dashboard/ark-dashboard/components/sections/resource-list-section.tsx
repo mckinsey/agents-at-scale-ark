@@ -156,6 +156,9 @@ export function ResourceListSection<T extends ResourceListItem>({
   }, []);
 
   useEffect(() => {
+    hasLoadedOnce.current = false;
+    setItems([]);
+    setError(null);
     reload();
   }, [namespace, reload]);
 

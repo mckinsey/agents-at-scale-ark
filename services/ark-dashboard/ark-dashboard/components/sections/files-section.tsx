@@ -162,6 +162,12 @@ export function FilesSection() {
     filesCount === undefined ? 'Files' : `Files (${filesCount})`;
 
   useEffect(() => {
+    setAllFiles([]);
+    setAllDirectories([]);
+    setNextToken(undefined);
+  }, [namespace]);
+
+  useEffect(() => {
     if (listFilesData && !listFilesError) {
       setAllFiles(listFilesData.files);
       setAllDirectories(listFilesData.directories);

@@ -6,9 +6,11 @@ import { agentsService, toolsService } from '@/lib/services';
 
 import { ToolsSection } from './tools-section';
 
+let currentNamespace = 'default';
+
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
-    namespace: 'default',
+    namespace: currentNamespace,
     isNamespaceResolved: true,
     isPending: false,
     readOnlyMode: false,
@@ -40,6 +42,7 @@ const mockAgentsService = vi.mocked(agentsService);
 describe('ToolsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    currentNamespace = 'default';
     mockAgentsService.getAll.mockResolvedValue([]);
   });
 
@@ -77,5 +80,26 @@ describe('ToolsSection', () => {
 
     expect(await screen.findByText(/no tools yet/i)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('replaces the list (loadFailed) when a load fails right after a namespace switch', async () => {
+    // First namespace loads with zero tools (empty state, no table to render),
+    // then a switch whose fetch fails must show loadFailed, not refreshFailed.
+    mockToolsService.getAll
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('forbidden in bar'));
+
+    const { rerender } = render(<ToolsSection />);
+
+    expect(await screen.findByText(/no tools yet/i)).toBeInTheDocument();
+
+    currentNamespace = 'bar';
+    rerender(<ToolsSection />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/couldn't load tools/i);
+    expect(
+      screen.queryByText(/showing the last loaded version/i),
+    ).not.toBeInTheDocument();
   });
 });

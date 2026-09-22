@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceListItem } from './resource-list-section';
 import { ResourceListSection } from './resource-list-section';
 
+let currentNamespace = 'default';
+
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
-    namespace: 'default',
+    namespace: currentNamespace,
     isNamespaceResolved: true,
     isPending: false,
     readOnlyMode: false,
@@ -67,6 +69,7 @@ function renderSection(loadItems: () => Promise<Item[]>) {
 describe('ResourceListSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    currentNamespace = 'default';
   });
 
   it('renders the error state (not the empty state) when the load fails', async () => {
@@ -116,5 +119,44 @@ describe('ResourceListSection', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/couldn't refresh agents/i);
     expect(screen.getByText('agent-one')).toBeInTheDocument();
+  });
+
+  it('replaces the list (loadFailed) when a load fails right after a namespace switch', async () => {
+    const loadItems = vi
+      .fn<() => Promise<Item[]>>()
+      .mockResolvedValueOnce([{ id: '1', name: 'foo-agent' }])
+      .mockRejectedValueOnce(new Error('forbidden in bar'));
+
+    const { rerender } = renderSection(loadItems);
+
+    expect(await screen.findByText('foo-agent')).toBeInTheDocument();
+
+    currentNamespace = 'bar';
+    rerender(
+      <ResourceListSection<Item>
+        icon={<span>icon</span>}
+        title="Agents"
+        subtitle="Manage agents"
+        createHref="/agents/new"
+        createLabel="Create agent"
+        learnMoreUrl="https://example.com"
+        entityLabel="Agent"
+        emptyTitle="No Agents Yet"
+        emptyDescription="Create your first agent"
+        loadItems={loadItems}
+        deleteItem={vi.fn().mockResolvedValue(undefined)}
+        renderTable={items => (
+          <ul>
+            {items.map(i => (
+              <li key={i.id}>{i.name}</li>
+            ))}
+          </ul>
+        )}
+      />,
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/couldn't load agents/i);
+    expect(screen.queryByText('foo-agent')).not.toBeInTheDocument();
   });
 });

@@ -92,6 +92,9 @@ export function ToolsSection() {
   }, [namespace]);
 
   useEffect(() => {
+    hasLoadedOnce.current = false;
+    setTools([]);
+    setError(null);
     loadData();
   }, [loadData]);
 
