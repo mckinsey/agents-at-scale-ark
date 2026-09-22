@@ -1136,7 +1136,16 @@ export function useChatSession({
         // never the notice — for exactly the faults the notice reports. The
         // stream breaking does not cancel the query, so it still finishes and
         // records its verdict for this lookup to read.
-        if (isChatStreamingEnabled && !aborted) {
+        // Not on a turn that paused for tool approval: handleStreamChatResponse
+        // returns normally when it sees an approval request, but the query has
+        // not dispatched yet, so the poll is guaranteed to find no verdict and
+        // just burns its budget. pollAfterApproval reads the verdict off the
+        // terminal response once the user answers.
+        if (
+          isChatStreamingEnabled &&
+          !aborted &&
+          !pendingApprovalQueryRef.current
+        ) {
           refreshMemoryNotice(lastQueryName.current);
         }
       }

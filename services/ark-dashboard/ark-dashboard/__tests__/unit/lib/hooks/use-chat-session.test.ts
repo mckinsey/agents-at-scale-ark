@@ -954,6 +954,34 @@ describe('useChatSession', () => {
       );
     });
 
+    // The turn pauses waiting on the user, so the query has not dispatched and
+    // the poll would spend its whole budget finding nothing.
+    it('does not look the notice up on a turn that paused for tool approval', async () => {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          {
+            type: 'tool_approval_request',
+            taskId: 'task-1',
+            toolCalls: [
+              {
+                id: 'call-1',
+                type: 'function',
+                function: { name: 'test-tool', arguments: '{}' },
+              },
+            ],
+          },
+        ]),
+      );
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockResolveMemoryNotice).not.toHaveBeenCalled();
+    });
+
     it('does not look the notice up when the user aborted the turn', async () => {
       mockStreamChatResponse.mockImplementation(async function* () {
         const err = new Error('Aborted');
