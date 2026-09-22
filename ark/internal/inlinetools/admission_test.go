@@ -313,3 +313,22 @@ func TestSARReviewerSurfacesEvaluationError(t *testing.T) {
 		t.Fatalf("expected a denial carrying the evaluation error, got allowed=%v reason=%q err=%v", allowed, reason, err)
 	}
 }
+
+// A SubjectAccessReview that cannot be created is not an allow: the caller has
+// to see the transport failure so admission fails closed.
+func TestSARReviewerSurfacesTransportFailure(t *testing.T) {
+	reviewer := &SARReviewer{Create: func(_ context.Context, _ *authorizationv1.SubjectAccessReview, _ metav1.CreateOptions) (*authorizationv1.SubjectAccessReview, error) {
+		return nil, errors.New("connection refused")
+	}}
+
+	allowed, reason, err := reviewer.Allowed(context.Background(), "team-a", *alice())
+	if allowed {
+		t.Fatal("a failed review must not allow the write")
+	}
+	if err == nil || !strings.Contains(err.Error(), "connection refused") {
+		t.Fatalf("err = %v, want the transport failure", err)
+	}
+	if reason != "" {
+		t.Fatalf("reason = %q, want empty on a transport failure", reason)
+	}
+}

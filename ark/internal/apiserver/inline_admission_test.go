@@ -248,3 +248,42 @@ func TestInlineUpdate_TypeConversionIsRejected(t *testing.T) {
 		t.Fatalf("expected delete/recreate guidance, got %v", err)
 	}
 }
+
+type extraCapturingReviewer struct {
+	subject inlinetools.Subject
+}
+
+func (r *extraCapturingReviewer) Allowed(_ context.Context, _ string, subject inlinetools.Subject) (bool, string, error) {
+	r.subject = subject
+	return true, "", nil
+}
+
+// The SubjectAccessReview has to carry the requester's extra attributes, or an
+// authorizer keyed on them (scopes, impersonation provenance) decides on a
+// different subject than the one making the request.
+func TestInlineCreate_RequesterExtraReachesTheReview(t *testing.T) {
+	t.Setenv(inlinetools.EnabledEnvVar, "true")
+	reviewer := &extraCapturingReviewer{}
+	s := newToolAdmissionStorage(newFakeBackend(), reviewer)
+
+	ctx := genericrequest.WithRequestInfo(context.Background(), &genericrequest.RequestInfo{
+		Namespace: nsTeamA, Resource: "tools", APIGroup: arkv1alpha1.GroupVersion.Group,
+	})
+	ctx = genericrequest.WithUser(ctx, &user.DefaultInfo{
+		Name:   userAlice,
+		UID:    "uid-1",
+		Groups: []string{"team-a"},
+		Extra:  map[string][]string{"scopes.authorization.openshift.io": {"user:info"}},
+	})
+
+	if _, err := s.Create(ctx, inlineToolObject(), noopValidation(), &metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	extra, ok := reviewer.subject.Extra["scopes.authorization.openshift.io"]
+	if !ok || len(extra) != 1 || extra[0] != "user:info" {
+		t.Fatalf("expected the requester's extra to reach the review, got %+v", reviewer.subject.Extra)
+	}
+	if reviewer.subject.UID != "uid-1" {
+		t.Fatalf("expected the requester UID to reach the review, got %q", reviewer.subject.UID)
+	}
+}

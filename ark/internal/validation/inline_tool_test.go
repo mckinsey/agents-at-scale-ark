@@ -138,6 +138,23 @@ func TestValidateToolTransition(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("rejects an inline conversion through the dispatcher", func(t *testing.T) {
+		stored := &arkv1alpha1.Tool{Spec: arkv1alpha1.ToolSpec{Type: arkv1alpha1.ToolTypeHTTP}}
+		submitted := &arkv1alpha1.Tool{Spec: arkv1alpha1.ToolSpec{
+			Type:   arkv1alpha1.ToolTypeInline,
+			Inline: &arkv1alpha1.InlineSpec{Source: "print(1)", Language: "python"},
+		}}
+		if err := ValidateTransition(stored, submitted); err == nil {
+			t.Fatal("expected the dispatcher to reject a conversion into inline")
+		}
+	})
+
+	t.Run("ignores a stored Tool replaced by another kind", func(t *testing.T) {
+		if err := ValidateTransition(&arkv1alpha1.Tool{}, &arkv1alpha1.Agent{}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func requireErrorContains(t *testing.T, tool *arkv1alpha1.Tool, want string) {
