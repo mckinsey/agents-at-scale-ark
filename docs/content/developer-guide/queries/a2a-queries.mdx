@@ -73,6 +73,57 @@ kubectl describe a2atask $(kubectl get a2atasks -l ark.mckinsey.com/query-name=e
 
 The A2ATask will show phase `completed` with the message history and artifacts from the A2A protocol interaction.
 
+## Artifacts
+
+An A2A agent can return multiple text artifacts from a single task. Ark preserves all of them, but `status.response.content` and `status.response.raw` expose them differently, and picking the wrong field is a common source of confusion.
+
+Ark turns each text artifact into its own assistant message, in artifact order, deduplicated by artifact name or ID. That message list is what you get in `status.response.raw`. `status.response.content` is the final assistant message, so for a multi-artifact reply it holds only the last artifact.
+
+Given an agent that returns three artifacts named `alpha`, `beta` and `gamma`:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: multi-artifact-example
+spec:
+  target:
+  - name: multi-artifact-agent
+    type: agent
+  input: "return three sections"
+EOF
+
+kubectl wait --for=condition=Completed query/multi-artifact-example --timeout=60s
+```
+
+`content` carries the last artifact only:
+
+```bash
+kubectl get query multi-artifact-example -o jsonpath='{.status.response.content}'
+# SECTION_GAMMA
+```
+
+`raw` carries all three, in order:
+
+```bash
+kubectl get query multi-artifact-example -o jsonpath='{.status.response.raw}' | jq -r '.[].content'
+# SECTION_ALPHA
+# SECTION_BETA
+# SECTION_GAMMA
+```
+
+This is intended behavior, not truncation. `content` mirrors OpenAI chat-completions semantics, where the answer is the final assistant message, and many consumers rely on it being a single answer rather than a concatenation.
+
+Choose the field to match what you need:
+
+- **One canonical answer**: read `status.response.content`. Correct for single-artifact agents and for agents whose last artifact is the summary.
+- **Every artifact**: read `status.response.raw` and iterate the message array. Required for agents that split their output across artifacts.
+
+If your consumer needs a single string containing everything, join the `raw` messages yourself, or have the agent return one artifact whose text already combines the sections.
+
+See [issue #3180](https://github.com/mckinsey/agents-at-scale-ark/issues/3180) for the discussion behind this contract.
+
 ## Stateful Messages
 
 Ark sends `spec.conversationId` to all execution engines as the A2A `contextId`. This is the primary mechanism for conversation threading — use it for multi-turn interactions with any engine (completions or named).

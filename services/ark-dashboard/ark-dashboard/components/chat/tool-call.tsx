@@ -56,7 +56,7 @@ function ExpandableSection({
       </button>
       {isExpanded && (
         <div className="mt-1 pl-5">
-          <pre className="text-fg-tertiary overflow-x-auto p-2 text-xs">
+          <pre className="text-fg-tertiary overflow-hidden p-2 text-xs break-words whitespace-pre-wrap">
             {hasError ? rawContent : JSON.stringify(parsedContent, null, 2)}
           </pre>
         </div>
@@ -180,7 +180,7 @@ function CardVariant({
           </button>
           {isInputExpanded && (
             <div className="mt-1 px-2">
-              <pre className="bg-surface-bg-tertiary text-fg-tertiary overflow-x-auto p-2 text-xs">
+              <pre className="bg-surface-bg-tertiary text-fg-tertiary overflow-hidden p-2 text-xs break-words whitespace-pre-wrap">
                 {parseArgsError
                   ? toolCall.function.arguments
                   : JSON.stringify(parsedArgs, null, 2)}
@@ -203,7 +203,7 @@ function CardVariant({
             </button>
             {isOutputExpanded && (
               <div className="mt-1 px-2">
-                <pre className="bg-surface-bg-tertiary text-fg-tertiary overflow-x-auto p-2 text-xs">
+                <pre className="bg-surface-bg-tertiary text-fg-tertiary overflow-hidden p-2 text-xs break-words whitespace-pre-wrap">
                   {parseResultError
                     ? toolCall.result
                     : JSON.stringify(parsedResult, null, 2)}

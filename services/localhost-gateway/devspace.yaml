@@ -8,8 +8,10 @@ vars:
 
 pipelines:
   deploy: |-
+    apply_nginx_gateway_fabric_crds
     create_deployments --all
   dev: |-
+    apply_nginx_gateway_fabric_crds
     create_deployments --all
 
     echo "Waiting for gateway to be ready to port-forward..."
@@ -18,12 +20,15 @@ pipelines:
       sleep 10
     done
 
+functions:
+  apply_nginx_gateway_fabric_crds: |-
+    helm dependency build ./chart
+    CRD_TMP=$(mktemp -d)
+    tar -xzf ./chart/charts/nginx-gateway-fabric-*.tgz -C "$CRD_TMP" nginx-gateway-fabric/crds
+    kubectl apply -f "$CRD_TMP/nginx-gateway-fabric/crds/"
+    rm -rf "$CRD_TMP"
+
 deployments:
-  nginx-gateway-fabric:
-    namespace: default
-    kubectl:
-      manifests:
-        - "https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml"
   localhost-gateway:
     namespace: ark-system
     helm:

@@ -2,7 +2,6 @@ import { createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  experimentalFeaturesDialogOpenAtom,
   filesBrowserPrefixAtom,
   lastConversationIdAtom,
   openChatWindowsAtom,
@@ -21,27 +20,6 @@ describe('Internal States Atoms', () => {
   afterEach(() => {
     sessionStorage.clear();
     localStorage.clear();
-  });
-
-  describe('experimentalFeaturesDialogOpenAtom', () => {
-    it('should default to false', () => {
-      const value = store.get(experimentalFeaturesDialogOpenAtom);
-      expect(value).toBe(false);
-    });
-
-    it('should be updatable to true', () => {
-      store.set(experimentalFeaturesDialogOpenAtom, true);
-      const value = store.get(experimentalFeaturesDialogOpenAtom);
-      expect(value).toBe(true);
-    });
-
-    it('should be updatable back to false', () => {
-      store.set(experimentalFeaturesDialogOpenAtom, true);
-      expect(store.get(experimentalFeaturesDialogOpenAtom)).toBe(true);
-
-      store.set(experimentalFeaturesDialogOpenAtom, false);
-      expect(store.get(experimentalFeaturesDialogOpenAtom)).toBe(false);
-    });
   });
 
   describe('filesBrowserPrefixAtom', () => {
@@ -144,7 +122,10 @@ describe('Internal States Atoms', () => {
     });
 
     it('should return empty array when sessionStorage has non-array JSON', () => {
-      sessionStorage.setItem('open-chat-windows', JSON.stringify({ name: 'agent-1' }));
+      sessionStorage.setItem(
+        'open-chat-windows',
+        JSON.stringify({ name: 'agent-1' }),
+      );
       const value = store.get(openChatWindowsAtom);
       expect(value).toEqual([]);
     });

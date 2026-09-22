@@ -27,7 +27,7 @@ export function DetailBreadcrumb({
     <nav
       aria-label="Breadcrumb"
       className={cn(
-        'flex items-center gap-1 text-sm leading-5 tracking-[-0.112px]',
+        'label-regular-primary flex items-center gap-1',
         className,
       )}>
       <NamespacedLink
@@ -41,7 +41,7 @@ export function DetailBreadcrumb({
       <span aria-hidden="true" className="text-fg-secondary">
         /
       </span>
-      <span aria-current="page" className="text-fg-secondary">
+      <span aria-current="page" className="text-fg-secondary break-all">
         {current}
       </span>
     </nav>
