@@ -94,6 +94,12 @@ audit:
   # Full audit.k8s.io/v1 Policy YAML. Overrides `level` and the default exclusions.
   policy: ""
 
+# Inline Tool authoring (type "inline" short scripts). Off by default; must match the
+# controller chart's inlineTools.enabled, since both write paths enforce it separately.
+# Inline authoring is rejected outright when request authentication is disabled.
+inlineTools:
+  enabled: false
+
 # Admission enforcement — the supported enforcement point in apiserver mode, since the
 # kube-apiserver runs no webhook chain on aggregated resources. Two independent mechanisms, each
 # with the same two knobs: `enabled` wires it, `required` makes it a startup precondition rather

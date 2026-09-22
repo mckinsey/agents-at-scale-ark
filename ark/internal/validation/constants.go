@@ -21,6 +21,7 @@ const (
 	ToolTypeAgent   = "agent"
 	ToolTypeTeam    = "team"
 	ToolTypeBuiltin = "builtin"
+	ToolTypeInline  = "inline"
 )
 
 const (

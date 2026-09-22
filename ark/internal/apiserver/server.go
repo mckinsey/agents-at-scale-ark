@@ -35,6 +35,7 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/apiserver/metrics"
 	"mckinsey.com/ark/internal/apiserver/registry"
+	"mckinsey.com/ark/internal/inlinetools"
 	"mckinsey.com/ark/internal/storage"
 	"mckinsey.com/ark/internal/storage/postgresql"
 	"mckinsey.com/ark/internal/validation"
@@ -319,8 +320,9 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 
 	lookup := &validation.StorageLookup{Backend: s.backend, K8sClient: s.config.K8sClient}
 	v := validation.NewValidator(lookup)
-	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = resourceStorage(s.backend, converter, V1Alpha1Resources, v, lookup)
-	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = resourceStorage(s.backend, converter, V1PreAlpha1Resources, v, lookup)
+	inlineReviewer := s.inlineReviewer()
+	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = resourceStorage(s.backend, converter, V1Alpha1Resources, v, lookup, inlineReviewer)
+	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = resourceStorage(s.backend, converter, V1PreAlpha1Resources, v, lookup, inlineReviewer)
 
 	if err := server.InstallAPIGroup(&apiGroupInfo); err != nil {
 		return fmt.Errorf("failed to install API group: %w", err)
@@ -329,7 +331,24 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	return nil
 }
 
-func resourceStorage(backend storage.Backend, converter storage.TypeConverter, resources []ResourceDef, v *validation.Validator, lookup validation.DefaultsLookup) map[string]rest.Storage {
+// inlineReviewer backs the inline author permission. Without authentication there
+// is no subject to review, and without a host config there is nothing to ask, so
+// both cases return a reviewer that denies instead of one that is skipped.
+func (s *Server) inlineReviewer() inlinetools.Reviewer {
+	if s.config.AuthMode != AuthModeDelegated {
+		return inlinetools.Reject(fmt.Sprintf("inline tool authoring requires request authentication (auth mode %q)", s.config.AuthMode))
+	}
+	if s.config.RestConfig == nil {
+		return inlinetools.Reject("inline tool authoring cannot be authorized: no host cluster config is available for SubjectAccessReview")
+	}
+	clientset, err := kubernetes.NewForConfig(s.config.RestConfig)
+	if err != nil {
+		return inlinetools.Reject(fmt.Sprintf("inline tool authoring cannot be authorized: %v", err))
+	}
+	return &inlinetools.SARReviewer{Create: clientset.AuthorizationV1().SubjectAccessReviews().Create}
+}
+
+func resourceStorage(backend storage.Backend, converter storage.TypeConverter, resources []ResourceDef, v *validation.Validator, lookup validation.DefaultsLookup, inlineReviewer inlinetools.Reviewer) map[string]rest.Storage {
 	printerColumns := GetPrinterColumnRegistry()
 	out := make(map[string]rest.Storage, 2*len(resources))
 	for _, res := range resources {
@@ -342,7 +361,7 @@ func resourceStorage(backend storage.Backend, converter storage.TypeConverter, r
 			NewListFunc:   res.NewListFunc,
 		}
 		inner := registry.NewGenericStorage(backend, converter, cfg, printerColumns)
-		out[res.Resource] = NewAdmissionStorage(inner, v, lookup)
+		out[res.Resource] = NewAdmissionStorage(inner, v, lookup, inlineReviewer)
 		out[res.Resource+"/status"] = registry.NewStatusStorage(backend, converter, cfg)
 	}
 	return out
