@@ -268,4 +268,19 @@ describe('Streaming API', () => {
       expect(events[3]).toBe('[DONE]');
     });
   });
+
+  describe('Completion with no chunks', () => {
+    it('stores [DONE] and terminates a consumer even when nothing streamed', async () => {
+      // Every chunk write failed mid-query, so no chunk ever reached the broker,
+      // but the executor still sends the completion. The broker must terminate
+      // the stream so a consumer that connected does not hang.
+      const queryId = 'never-streamed';
+
+      const res = await request(app).post(`/stream/${queryId}/complete`);
+      expect(res.status).toBe(200);
+
+      const events = await consumeStream(queryId, {fromBeginning: true});
+      expect(events).toContain('[DONE]');
+    });
+  });
 });
