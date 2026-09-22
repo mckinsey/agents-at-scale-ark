@@ -47,8 +47,13 @@ func (h *inlineToolHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	// The request namespace is the server-validated one; a body claiming another
-	// namespace must not move the permission check.
+	// namespace must not move the permission check. A mismatch is rejected rather
+	// than silently rewritten, matching internal/apiserver/admission.go so both
+	// storage backends answer the same request the same way.
 	if req.Namespace != "" {
+		if tool.Namespace != "" && tool.Namespace != req.Namespace {
+			return admission.Denied(fmt.Sprintf("tool namespace %q does not match request namespace %q", tool.Namespace, req.Namespace))
+		}
 		tool.Namespace = req.Namespace
 	}
 

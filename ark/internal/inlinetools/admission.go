@@ -118,10 +118,22 @@ func stampAuthorship(tool *arkv1alpha1.Tool, username string) {
 	tool.Annotations[arkv1alpha1.AnnotationInlineAuthoredAt] = Now().Format(time.RFC3339)
 }
 
+// preserveAuthorship makes the stored object the only source of authorship on a
+// metadata-only update. A stored key is copied forward; a key the stored object
+// does not carry is deleted rather than left at whatever the requester sent.
+//
+// The delete matters because stampAuthorship is skipped on this path: there is no
+// new authoring event to attribute, so without it a requester could name an
+// author by adding the annotation in a no-op spec update. A stored inline Tool
+// with no stamp can only come from a write that bypassed this admission path
+// (ENABLE_WEBHOOKS=false, a direct etcd write, a future migration), so this is
+// defence in depth for phase 1 rather than a reachable hole — but it keeps the
+// invariant true for every entry point phase 2 adds.
 func preserveAuthorship(tool, oldTool *arkv1alpha1.Tool) {
 	for _, key := range []string{arkv1alpha1.AnnotationInlineAuthoredBy, arkv1alpha1.AnnotationInlineAuthoredAt} {
 		stored, ok := oldTool.Annotations[key]
 		if !ok {
+			delete(tool.Annotations, key)
 			continue
 		}
 		if tool.Annotations == nil {

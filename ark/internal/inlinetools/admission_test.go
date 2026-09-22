@@ -203,6 +203,26 @@ func TestAdmitMetadataOnlyUpdateNeedsNoGrant(t *testing.T) {
 	}
 }
 
+func TestAdmitMetadataOnlyUpdateDropsUnstoredAuthorship(t *testing.T) {
+	enable(t)
+	stored := tool("team-a", "print(1)") // no authorship: written outside admission
+	updated := tool("team-a", "print(1)")
+	updated.Annotations = map[string]string{
+		arkv1alpha1.AnnotationInlineAuthoredBy: "root",
+		arkv1alpha1.AnnotationInlineAuthoredAt: "1998-02-02T00:00:00Z",
+	}
+
+	if err := Admit(context.Background(), updated, stored, nil, &fakeReviewer{allowed: false}); err != nil {
+		t.Fatalf("a metadata-only update must use ordinary permissions: %v", err)
+	}
+	if got, ok := updated.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy]; ok {
+		t.Fatalf("expected a requester-supplied author to be dropped, got %q", got)
+	}
+	if got, ok := updated.Annotations[arkv1alpha1.AnnotationInlineAuthoredAt]; ok {
+		t.Fatalf("expected a requester-supplied timestamp to be dropped, got %q", got)
+	}
+}
+
 func TestAdmitSourceUpdateNeedsGrant(t *testing.T) {
 	enable(t)
 	stored := tool("team-a", "print(1)")

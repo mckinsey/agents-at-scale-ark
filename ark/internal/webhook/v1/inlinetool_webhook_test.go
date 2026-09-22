@@ -108,14 +108,30 @@ func TestInlineWebhookUsesRequestNamespace(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "true")
 	handler, reviewer := newHandler(t, true)
 
-	tool := inlineFixture()
-	tool.Namespace = "team-b" // body claims another namespace
-	resp := handler.Handle(context.Background(), inlineToolRequest(t, tool, nil))
+	resp := handler.Handle(context.Background(), inlineToolRequest(t, inlineFixture(), nil))
 	if !resp.Allowed {
 		t.Fatalf("expected the write to be allowed: %v", resp.Result)
 	}
 	if reviewer.namespace != "team-a" {
 		t.Fatalf("expected the review in the request namespace, got %q", reviewer.namespace)
+	}
+}
+
+func TestInlineWebhookDeniesNamespaceMismatch(t *testing.T) {
+	t.Setenv(inlinetools.EnabledEnvVar, "true")
+	handler, reviewer := newHandler(t, true)
+
+	tool := inlineFixture()
+	tool.Namespace = "team-b" // body claims another namespace
+	resp := handler.Handle(context.Background(), inlineToolRequest(t, tool, nil))
+	if resp.Allowed {
+		t.Fatal("expected a namespace mismatch to be rejected, not silently rewritten")
+	}
+	if reviewer.namespace != "" {
+		t.Fatalf("expected no review for a rejected request, got %q", reviewer.namespace)
+	}
+	if msg := resp.Result.Message; !strings.Contains(msg, "does not match request namespace") {
+		t.Fatalf("expected an explicit mismatch message, got %q", msg)
 	}
 }
 
