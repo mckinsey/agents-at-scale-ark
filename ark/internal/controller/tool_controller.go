@@ -17,9 +17,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/inlinetools"
 )
 
 // inlineRuntimeNotInstalledMessage is what an author sees until the runner
@@ -62,6 +64,9 @@ func (r *ToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if tool.Spec.Type == arkv1alpha1.ToolTypeInline {
+		if !tool.DeletionTimestamp.IsZero() {
+			return r.finalizeInline(ctx, tool)
+		}
 		return r.reconcileInline(ctx, tool)
 	}
 
@@ -77,6 +82,14 @@ func (r *ToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 // activator that fronts it is not part of this release, so the Tool stays
 // Pending.
 func (r *ToolReconciler) reconcileInline(ctx context.Context, tool *arkv1alpha1.Tool) (ctrl.Result, error) {
+	// The finalizer goes on before any child exists, so a Tool deleted mid-way
+	// through provisioning still has its children removed.
+	if controllerutil.AddFinalizer(tool, InlineFinalizer) {
+		if err := r.Update(ctx, tool); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to add the inline finalizer: %v", err)
+		}
+	}
+
 	r.emitSourceChange(ctx, tool)
 
 	verdict := r.evaluateInline(ctx, tool)
@@ -88,6 +101,14 @@ func (r *ToolReconciler) reconcileInline(ctx context.Context, tool *arkv1alpha1.
 	}
 	if verdict.reason == arkv1alpha1.ToolReasonProvisioningFailed {
 		return ctrl.Result{}, fmt.Errorf("%s", verdict.message)
+	}
+
+	// Disabling the feature does not stop reconciliation, because the runner a
+	// previous call scaled up would then have nothing authorised to scale it
+	// down. The endpoint is already cleared above; this ends the pods.
+	if !inlinetools.Enabled() {
+		retry, err := r.drainInlineRunner(ctx, tool)
+		return ctrl.Result{RequeueAfter: retry}, err
 	}
 	return ctrl.Result{}, nil
 }

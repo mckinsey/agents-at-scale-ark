@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -70,6 +71,11 @@ func inlineTool(mutate func(*arkv1alpha1.Tool)) *arkv1alpha1.Tool {
 func inlineScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
+	// The inline path reads and writes the runner's workload objects, so the
+	// fixture needs the core/apps types as well as the Ark ones.
+	if err := clientgoscheme.AddToScheme(s); err != nil {
+		t.Fatalf("add scheme: %v", err)
+	}
 	if err := arkv1alpha1.AddToScheme(s); err != nil {
 		t.Fatalf("add scheme: %v", err)
 	}
