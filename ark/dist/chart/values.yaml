@@ -129,6 +129,13 @@ webhook:
 # release, so authored inline Tools stay Pending.
 inlineTools:
   enabled: false
+  runner:
+    image:
+      # One image per language runtime; the controller appends -bash, -python or
+      # -node (which also runs TypeScript). There is no per-tool override.
+      repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-inline-runner
+      # tag defaults to .Chart.AppVersion if not specified
+      tag: ""
 
 # [PROMETHEUS]: Create a ServiceMonitor so Prometheus scrapes controller
 # metrics. Enabled by default, but the ServiceMonitor only renders when the
