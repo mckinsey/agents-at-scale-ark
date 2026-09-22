@@ -134,7 +134,7 @@ ark query agent/my-agent "What was the last message?" --conversation-id "my-conv
 - **sessionId**: Groups related queries for tracking and telemetry purposes.
 - **conversationId**: Conversation threading identifier sent to all execution engines as A2A `contextId`. The completions engine uses it for memory continuity; named engines can use it for their own session management.
 
-When creating a query in the dashboard it is also possible to specify the memory resource. The dashboard chat window keeps its transcript client-side. It also threads a `conversationId` once it has one — but it only ever gets one because a memory backend minted it, so in a namespace with no working memory the chat has no `conversationId` at all and each turn starts from nothing.
+When creating a query in the dashboard it is also possible to specify the memory resource. The dashboard chat window keeps its transcript client-side, and every turn also carries a `conversationId`: the chat does not set one, but the A2A layer generates a context ID at dispatch and the executor uses that, so a query has one even on a brand-new conversation in a namespace with no memory backend at all.
 
 ## Telling when memory is not working
 
@@ -154,7 +154,7 @@ kubectl get query <name> -o jsonpath='{.status.conditions[?(@.type=="MemoryUnava
 Two limits on that signal, both of which the `ark status` check below exists to cover:
 
 - A query that **failed to dispatch** carries neither condition. An unresolved `Memory` is exactly that case: the query errors with `failed to create memory client`, and no memory condition is written.
-- `MemoryUnavailable` requires a `conversationId` on the query, since it means "continuity was expected and not delivered". A dashboard chat in a namespace that never had a working memory never obtains one, so the notice below does not appear there — it appears when a chat that *had* continuity loses the backend.
+- `MemoryUnavailable` requires a `conversationId`, since it means "continuity was expected and not delivered". Every dashboard chat turn has one — the A2A layer generates a context ID at dispatch even when the chat supplies none — so this covers a namespace that never had a memory backend as well as one that lost it.
 
 Two surfaces read this for you:
 
