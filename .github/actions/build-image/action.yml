@@ -30,6 +30,9 @@ inputs:
     description: 'Dockerfile name (default: Dockerfile)'
     required: false
     default: 'Dockerfile'
+  target:
+    description: 'Optional Dockerfile stage to build (multi-stage images)'
+    required: false
   build-args:
     description: 'Additional build arguments (multiline string)'
     required: false
@@ -61,6 +64,7 @@ runs:
       with:
         context: ${{ inputs.path }}
         file: ${{ inputs.path }}/${{ inputs.dockerfile }}
+        target: ${{ inputs.target }}
         platforms: ${{ inputs.platforms }}
         push: ${{ inputs.push }}
         tags: ${{ inputs.registry && format('{0}/{1}:{2}', inputs.registry, inputs.image, inputs.tag) || format('{0}:{1}', inputs.image, inputs.tag) }}

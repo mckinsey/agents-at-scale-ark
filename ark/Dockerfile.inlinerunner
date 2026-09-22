@@ -1,0 +1,44 @@
+# Inline tool runner images. One static Go runner, one stage per language
+# runtime. Build a language with --target: bash, python, or node (the node
+# image also runs TypeScript, which Node strips itself).
+FROM golang:1.26.6-bookworm AS builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+
+WORKDIR /workspace
+ENV GOTOOLCHAIN=auto
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+COPY cmd/inlinerunner/ cmd/inlinerunner/
+COPY api/ api/
+COPY internal/ internal/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GOTOOLCHAIN=auto go build \
+    -ldflags "-X main.Version=${VERSION} -X main.GitCommit=${GIT_COMMIT}" \
+    -a -o inlinerunner cmd/inlinerunner/main.go
+
+# bash: the only image with a shell, so it is also the only one that needs a
+# user created. jq and coreutils are the documented toolset.
+FROM alpine:3.23 AS bash
+RUN apk add --no-cache bash jq coreutils \
+    && adduser -D -H -u 65532 nonroot
+COPY --from=builder /workspace/inlinerunner /inlinerunner
+USER 65532:65532
+EXPOSE 8080
+ENTRYPOINT ["/inlinerunner"]
+
+FROM gcr.io/distroless/python3-debian12:nonroot AS python
+COPY --from=builder /workspace/inlinerunner /inlinerunner
+EXPOSE 8080
+ENTRYPOINT ["/inlinerunner"]
+
+# node serves both the node and ts languages: Node 24 strips TypeScript types
+# natively, so there is no loader to vendor and no second base to pin.
+FROM gcr.io/distroless/nodejs24-debian12:nonroot AS node
+COPY --from=builder /workspace/inlinerunner /inlinerunner
+EXPOSE 8080
+ENTRYPOINT ["/inlinerunner"]
