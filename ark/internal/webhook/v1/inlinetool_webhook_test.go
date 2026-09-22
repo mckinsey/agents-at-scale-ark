@@ -150,7 +150,7 @@ func TestInlineWebhookAllowsNonInlineTools(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "false")
 	handler, reviewer := newHandler(t, false)
 
-	http := &arkv1alpha1.Tool{
+	httpTool := &arkv1alpha1.Tool{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: "Tool"},
 		ObjectMeta: metav1.ObjectMeta{Name: "fetch", Namespace: "team-a"},
 		Spec: arkv1alpha1.ToolSpec{
@@ -158,7 +158,7 @@ func TestInlineWebhookAllowsNonInlineTools(t *testing.T) {
 			HTTP: &arkv1alpha1.HTTPSpec{URL: "https://example.com"},
 		},
 	}
-	resp := handler.Handle(context.Background(), inlineToolRequest(t, http, nil))
+	resp := handler.Handle(context.Background(), inlineToolRequest(t, httpTool, nil))
 	if !resp.Allowed {
 		t.Fatalf("expected non-inline tools to be unaffected: %v", resp.Result)
 	}
