@@ -9,9 +9,22 @@ import "regexp"
 const redactedPlaceholder = "[REDACTED]"
 
 var keyAnchoredPattern = regexp.MustCompile(
-	`(?i)(?P<key>['"]?(?:access_token|refresh_token|client_secret|code_verifier|authorization)['"]?)` +
+	`(?i)(?P<key>['"]?(?:access_token|refresh_token|client_secret|code_verifier|authorization|` +
+		`password|passwd|api_key|apikey|api-key|secret|client_key|aws_secret_access_key|` +
+		`secret_access_key|private_key|cookie|token)['"]?)` +
 		`(?P<sep>\s*[=:]\s*)` +
 		`(?P<val>'[^']*'|"[^"]*"|(?:[Bb]earer|[Bb]asic)\s+[^\s,;]+|[^\s,;&}'"]+)`,
+)
+
+// Matches credentials embedded as URL userinfo (scheme://user:<secret>@host), which the
+// key-anchored pattern above cannot see since there is no key=value pair. Scheme and user
+// are preserved; only the password segment is replaced. Each delimiter (://, :, @) is
+// matched in either its literal or percent-encoded form (%3A/%2F/%40), since the same DSN
+// reaches the uvicorn access log still URL-encoded when it arrived as a query parameter,
+// while it reaches application-level logs already decoded by the framework.
+var userinfoPattern = regexp.MustCompile(
+	`(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*(?:://|%3[Aa]%2[Ff]%2[Ff]))` +
+		`(?P<user>[^\s@]*?)(?P<colon>:|%3[Aa])(?P<pass>[^\s@]+?)(?P<at>@|%40)`,
 )
 
 // Case-sensitive by design: the prefixes are what keep false positives low.
@@ -33,6 +46,9 @@ var shapePattern = regexp.MustCompile(
 func Redact(s string) string {
 	if keyAnchoredPattern.MatchString(s) {
 		s = keyAnchoredPattern.ReplaceAllString(s, "${key}${sep}"+redactedPlaceholder)
+	}
+	if userinfoPattern.MatchString(s) {
+		s = userinfoPattern.ReplaceAllString(s, "${scheme}${user}${colon}"+redactedPlaceholder+"${at}")
 	}
 	if shapePattern.MatchString(s) {
 		s = shapePattern.ReplaceAllString(s, redactedPlaceholder)

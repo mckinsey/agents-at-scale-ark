@@ -20,6 +20,18 @@ SENSITIVE_KEYS = frozenset({
     "client_secret",
     "code_verifier",
     "authorization",
+    "password",
+    "passwd",
+    "api_key",
+    "apikey",
+    "api-key",
+    "secret",
+    "client_key",
+    "aws_secret_access_key",
+    "secret_access_key",
+    "private_key",
+    "cookie",
+    "token",
 })
 
 # Value group matches a quoted string, a `Bearer <token>` pair, or an unquoted
@@ -50,6 +62,18 @@ _SHAPE_ALTERNATIVES = [
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----",  # PEM
 ]
 SHAPE_PATTERNS = re.compile("|".join(_SHAPE_ALTERNATIVES))
+
+# Credentials embedded as URL userinfo (scheme://user:<secret>@host), e.g. a Postgres DSN.
+# There is no key=value pair here, so SENSITIVE_PATTERNS can't see it. Scheme and user are
+# preserved; only the password segment is replaced. Each delimiter (://, :, @) is matched in
+# either its literal or percent-encoded form (%3A/%2F/%40): the uvicorn access logger sees
+# the DSN still URL-encoded when it arrived as a query parameter, while application-level
+# logs see it already decoded by the framework. Kept in sync with userinfoPattern in
+# ark/internal/telemetry/redact/redact.go.
+USERINFO_PATTERN = re.compile(
+    r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*(?:://|%3[Aa]%2[Ff]%2[Ff]))"
+    r"(?P<user>[^\s@]*?)(?P<colon>:|%3[Aa])(?P<pass>[^\s@]+?)(?P<at>@|%40)"
+)
 
 REDACTED = "[REDACTED]"
 
@@ -86,6 +110,10 @@ def _safe_get_message(record: logging.LogRecord) -> str:
 def _redact_string(s: str) -> str:
     s = SENSITIVE_PATTERNS.sub(
         lambda m: f"{m.group('key')}{m.group('sep')}{REDACTED}",
+        s,
+    )
+    s = USERINFO_PATTERN.sub(
+        lambda m: f"{m.group('scheme')}{m.group('user')}{m.group('colon')}{REDACTED}{m.group('at')}",
         s,
     )
     return SHAPE_PATTERNS.sub(REDACTED, s)
