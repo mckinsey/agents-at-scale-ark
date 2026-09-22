@@ -2164,7 +2164,10 @@ class TestTeamsEndpoint(unittest.TestCase):
                     {"name": "backend-dev", "type": "agent"},
                 ],
             },
-            "status": {"phase": "Ready"},
+            "status": {
+                "phase": "Ready",
+                "conditions": [{"type": "Available", "status": "True"}],
+            },
         }
 
         mock_team2 = Mock()
@@ -2174,7 +2177,10 @@ class TestTeamsEndpoint(unittest.TestCase):
                 "strategy": "selector",
                 "members": [{"name": "researcher", "type": "agent"}],
             },
-            "status": {"phase": "pending"},
+            "status": {
+                "phase": "pending",
+                "conditions": [{"type": "Available", "status": "False"}],
+            },
         }
 
         # Mock the API response
@@ -2195,12 +2201,14 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["strategy"], "sequential")
         self.assertEqual(data["items"][0]["members_count"], 2)
         self.assertEqual(data["items"][0]["status"], "Ready")
+        self.assertEqual(data["items"][0]["available"], "True")
 
         # Check second team
         self.assertEqual(data["items"][1]["name"], "research-team")
         self.assertEqual(data["items"][1]["strategy"], "selector")
         self.assertEqual(data["items"][1]["members_count"], 1)
         self.assertEqual(data["items"][1]["status"], "pending")
+        self.assertEqual(data["items"][1]["available"], "False")
 
     @patch("ark_api.api.v1.teams.with_ark_client")
     def test_list_teams_empty(self, mock_ark_client):
