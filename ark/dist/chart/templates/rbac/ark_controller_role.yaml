@@ -124,4 +124,46 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
+# Inline tool runners. Granted unconditionally, not gated on
+# inlineTools.enabled: disabling the feature is exactly when the controller has
+# to scale surviving runners to zero and clean up children, so withdrawing the
+# access with the flag would strand the pods and finalizers it must remove.
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 {{- end -}}
