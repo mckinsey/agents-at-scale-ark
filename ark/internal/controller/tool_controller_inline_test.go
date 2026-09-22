@@ -150,12 +150,12 @@ func TestReconcileInlineDoesNotReemitForAReconciledGeneration(t *testing.T) {
 func TestReconcileInlineSettledToolIsLeftAlone(t *testing.T) {
 	tool := inlineTool(func(tool *arkv1alpha1.Tool) {
 		tool.Status.State = arkv1alpha1.ToolStatePending
-		tool.Status.Message = inlineRuntimeNotInstalledMessage
+		tool.Status.Message = inlineDisabledMessage
 		tool.Status.Conditions = []metav1.Condition{{
 			Type:               arkv1alpha1.ToolConditionAvailable,
 			Status:             metav1.ConditionFalse,
 			Reason:             arkv1alpha1.ToolReasonRuntimeNotInstalled,
-			Message:            inlineRuntimeNotInstalledMessage,
+			Message:            inlineDisabledMessage,
 			ObservedGeneration: 1,
 			LastTransitionTime: metav1.Now(),
 		}}

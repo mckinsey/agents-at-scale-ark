@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,13 +20,25 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
-	"mckinsey.com/ark/internal/inlinetools"
 )
 
 // inlineRuntimeNotInstalledMessage is what an author sees until the runner
 // runtime exists. It has to say "not executable" rather than imply a transient
 // wait, because in the authoring-first release there is nothing to wait for.
 const inlineRuntimeNotInstalledMessage = "Inline tool runtime is not installed: the tool is stored but not executable yet"
+
+// inlineDisabledMessage and inlineAvailableMessage are the other two states an
+// author sees. Available deliberately says nothing about a running pod: a
+// callable inline tool normally has none.
+const (
+	inlineDisabledMessage  = "Inline tools are disabled on this installation: the tool is stored but not executable yet"
+	inlineAvailableMessage = "Inline tool is callable; its runner starts on the first call"
+)
+
+// inlineActivatorRetry is how long to wait before re-checking an activator that
+// is missing or has no available replica. There is no watch for it: a periodic
+// re-check only runs while the Tool is unusable.
+const inlineActivatorRetry = 30 * time.Second
 
 type ToolReconciler struct {
 	client.Client
@@ -66,39 +79,46 @@ func (r *ToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 func (r *ToolReconciler) reconcileInline(ctx context.Context, tool *arkv1alpha1.Tool) (ctrl.Result, error) {
 	r.emitSourceChange(ctx, tool)
 
-	reason, message := arkv1alpha1.ToolReasonRuntimeNotInstalled, inlineRuntimeNotInstalledMessage
-	var provisionErr error
-	if inlinetools.Enabled() {
-		if provisionErr = r.reconcileInlineChildren(ctx, tool); provisionErr != nil {
-			reason, message = arkv1alpha1.ToolReasonProvisioningFailed, provisionErr.Error()
-		}
-	}
-
-	if err := r.setInlineUnavailable(ctx, tool, reason, message); err != nil {
+	verdict := r.evaluateInline(ctx, tool)
+	if err := r.setInlineStatus(ctx, tool, verdict); err != nil {
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{}, provisionErr
+	if verdict.reason == arkv1alpha1.ToolReasonActivatorUnavailable {
+		return ctrl.Result{RequeueAfter: inlineActivatorRetry}, nil
+	}
+	if verdict.reason == arkv1alpha1.ToolReasonProvisioningFailed {
+		return ctrl.Result{}, fmt.Errorf("%s", verdict.message)
+	}
+	return ctrl.Result{}, nil
 }
 
-// setInlineUnavailable records that the Tool is stored but not callable, with
-// the reason a reader can branch on. No endpoint is advertised while it is set.
-func (r *ToolReconciler) setInlineUnavailable(ctx context.Context, tool *arkv1alpha1.Tool, reason, message string) error {
+// setInlineStatus writes the verdict. The address is only ever stored together
+// with Available=True for the generation just evaluated, so a reader that
+// checks the condition can never act on an address from an older spec.
+func (r *ToolReconciler) setInlineStatus(ctx context.Context, tool *arkv1alpha1.Tool, verdict inlineVerdict) error {
+	status, state, address := metav1.ConditionFalse, arkv1alpha1.ToolStatePending, ""
+	if verdict.available {
+		status, state, address = metav1.ConditionTrue, arkv1alpha1.ToolStateReady, verdict.address
+	}
+
 	// A settled inline tool is not rewritten, mirroring the Ready short-circuit
-	// on the non-inline path. Children are still reconciled above, and a changed
-	// reason or message is still a transition worth recording.
+	// on the non-inline path. Children are still reconciled above, and any change
+	// of verdict is still a transition worth recording.
 	if c := meta.FindStatusCondition(tool.Status.Conditions, arkv1alpha1.ToolConditionAvailable); c != nil &&
-		c.ObservedGeneration == tool.Generation && c.Reason == reason && c.Message == message {
+		c.ObservedGeneration == tool.Generation && c.Status == status &&
+		c.Reason == verdict.reason && c.Message == verdict.message &&
+		tool.Status.ResolvedAddress == address {
 		return nil
 	}
 
-	tool.Status.State = arkv1alpha1.ToolStatePending
-	tool.Status.Message = message
-	tool.Status.ResolvedAddress = ""
+	tool.Status.State = state
+	tool.Status.ResolvedAddress = address
+	tool.Status.Message = verdict.message
 	meta.SetStatusCondition(&tool.Status.Conditions, metav1.Condition{
 		Type:               arkv1alpha1.ToolConditionAvailable,
-		Status:             metav1.ConditionFalse,
-		Reason:             reason,
-		Message:            message,
+		Status:             status,
+		Reason:             verdict.reason,
+		Message:            verdict.message,
 		ObservedGeneration: tool.Generation,
 	})
 
