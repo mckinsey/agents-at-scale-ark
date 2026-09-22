@@ -16,6 +16,7 @@ A `Tool` is something an agent can call: an HTTP API, a function on an MCP serve
 | **`agent`** | Another agent, called as a tool | You author it (wraps an existing Agent). |
 | **`team`** | A team, called as a tool | You author it (wraps an existing Team). |
 | **`builtin`** | A system function (`terminate`, `noop`) | **Auto-seeded** by the install; you reference it by name. |
+| **`inline`** | A short script stored in the tool itself | You author it. Off by default and needs an administrator grant — see [Inline tools](#inline-tools). |
 
 ## Create a tool
 
@@ -28,7 +29,7 @@ A `Tool` is something an agent can call: an HTTP API, a function on an MCP serve
 | Field | Notes |
 | --- | --- |
 | **Name** | Required. Lowercase, k8s name rules. |
-| **Type** | `HTTP`, `MCP`, `Agent`, or `Team`. (Built-in tools aren't created here — they ship with the install.) |
+| **Type** | `HTTP`, `MCP`, `Agent`, `Team`, or `Inline`. (Built-in tools aren't created here — they ship with the install.) |
 | **Description** | What the tool does. The LLM reads this to decide when to call it — keep it task-oriented. |
 | **Input Schema (JSON)** | A JSON Schema describing the arguments the LLM must supply. |
 | **Annotations (JSON)** | Optional MCP-style hints (`readOnlyHint`, `destructiveHint`, `title`, …). |
@@ -205,6 +206,46 @@ spec:
 ```
 
 The set of built-in implementations is fixed in Ark's code — `terminate` and `noop` are the only ones, and you reference them rather than defining new ones.
+
+## Inline tools
+
+An inline tool carries its own script instead of pointing at something you host:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: word-count
+spec:
+  type: inline
+  description: "Counts the words in the supplied text"
+  inputSchema:
+    type: object
+    properties:
+      text: { type: string }
+    required: ["text"]
+  inline:
+    language: python      # bash | python | node | ts
+    source: |
+      import json, sys
+      print(len(json.load(sys.stdin)["text"].split()))
+```
+
+In the dashboard, pick **Inline** in the Add Tool form, choose a language, and paste the source. The tools list shows a language badge.
+
+Two things to know before you try it:
+
+- **Inline tools are not callable yet.** No runner ships in this release, so an authored inline tool stays `Pending` with reason `RuntimeNotInstalled`. The dashboard says so on the tool.
+- **Authoring is off by default and permission-gated.** An administrator must enable `inlineTools.enabled` in the Ark chart (and the ark-apiserver chart on the PostgreSQL backend), then grant you the `inline-tool-author-role` in your namespace:
+
+  ```bash
+  kubectl create rolebinding inline-authors \
+    --clusterrole=inline-tool-author-role \
+    --user=alice@example.com \
+    --namespace=default
+  ```
+
+Without both, the write is denied — `tools/create` on its own never permits storing executable code. Ark stamps the author and time on every inline write as `ark.mckinsey.com/inline-authored-by` and `ark.mckinsey.com/inline-authored-at`. Source is limited to 65536 bytes; use an MCP server for anything bigger. Full details: [Reference → Tools → Inline tools](/reference/resources/tools#inline-tools).
 
 ## Attach a tool to an agent
 
