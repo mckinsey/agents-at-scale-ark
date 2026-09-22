@@ -37,7 +37,7 @@ func (f *fakeReviewer) Allowed(ctx context.Context, namespace string, subject Su
 	return f.allowed, f.reason, f.err
 }
 
-func tool(namespace string, source string) *arkv1alpha1.Tool {
+func tool(namespace, source string) *arkv1alpha1.Tool {
 	return &arkv1alpha1.Tool{
 		ObjectMeta: metav1.ObjectMeta{Name: "csv", Namespace: namespace},
 		Spec: arkv1alpha1.ToolSpec{
@@ -47,9 +47,11 @@ func tool(namespace string, source string) *arkv1alpha1.Tool {
 	}
 }
 
+const userAlice = "alice"
+
 func alice() *Subject {
 	return &Subject{
-		Username: "alice",
+		Username: userAlice,
 		UID:      "uid-1",
 		Groups:   []string{"team-a"},
 		Extra:    map[string]authorizationv1.ExtraValue{"scopes": {"write"}},
@@ -76,7 +78,7 @@ func TestAdmitAllowsAuthorizedAuthor(t *testing.T) {
 	if err := Admit(context.Background(), inline, nil, alice(), reviewer); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := inline.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy]; got != "alice" {
+	if got := inline.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy]; got != userAlice {
 		t.Fatalf("expected authorship annotation for alice, got %q", got)
 	}
 	if inline.Annotations[arkv1alpha1.AnnotationInlineAuthoredAt] == "" {
@@ -168,7 +170,7 @@ func TestAdmitOverwritesForgedAuthorship(t *testing.T) {
 	if err := Admit(context.Background(), inline, nil, alice(), &fakeReviewer{allowed: true}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := inline.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy]; got != "alice" {
+	if got := inline.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy]; got != userAlice {
 		t.Fatalf("expected the submitted author to be replaced, got %q", got)
 	}
 	if got := inline.Annotations[arkv1alpha1.AnnotationInlineAuthoredAt]; got == "1999-01-01T00:00:00Z" {
@@ -180,7 +182,7 @@ func TestAdmitMetadataOnlyUpdateNeedsNoGrant(t *testing.T) {
 	enable(t)
 	stored := tool("team-a", "print(1)")
 	stored.Annotations = map[string]string{
-		arkv1alpha1.AnnotationInlineAuthoredBy: "alice",
+		arkv1alpha1.AnnotationInlineAuthoredBy: userAlice,
 		arkv1alpha1.AnnotationInlineAuthoredAt: "2024-01-01T00:00:00Z",
 	}
 	updated := tool("team-a", "print(1)")
@@ -193,7 +195,7 @@ func TestAdmitMetadataOnlyUpdateNeedsNoGrant(t *testing.T) {
 	if len(reviewer.namespaces) != 0 {
 		t.Fatal("expected no author review for a metadata-only update")
 	}
-	if updated.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy] != "alice" {
+	if updated.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy] != userAlice {
 		t.Fatal("expected stored authorship to survive a metadata-only update")
 	}
 	if updated.Annotations[arkv1alpha1.AnnotationInlineAuthoredAt] != "2024-01-01T00:00:00Z" {
@@ -215,7 +217,7 @@ func TestAdmitSourceUpdateNeedsGrant(t *testing.T) {
 	if err := Admit(context.Background(), updated, stored, alice(), allowing); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if updated.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy] != "alice" {
+	if updated.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy] != userAlice {
 		t.Fatal("expected the source change to record its author")
 	}
 }
@@ -274,7 +276,7 @@ func TestSARReviewerBuildsTheReview(t *testing.T) {
 	if attrs.Group != AuthGroup || attrs.Resource != AuthResource || attrs.Verb != AuthVerb || attrs.Namespace != "team-a" {
 		t.Fatalf("unexpected review attributes: %+v", attrs)
 	}
-	if captured.Spec.User != "alice" || captured.Spec.UID != "uid-1" {
+	if captured.Spec.User != userAlice || captured.Spec.UID != "uid-1" {
 		t.Fatalf("expected the authenticated subject to be forwarded: %+v", captured.Spec)
 	}
 }

@@ -38,7 +38,7 @@ func newHandler(t *testing.T, allowed bool) (*inlineToolHandler, *stubReviewer) 
 	return &inlineToolHandler{decoder: admission.NewDecoder(scheme), reviewer: reviewer}, reviewer
 }
 
-func inlineToolRequest(t *testing.T, tool *arkv1alpha1.Tool, namespace string, labels map[string]string) admission.Request {
+func inlineToolRequest(t *testing.T, tool *arkv1alpha1.Tool, labels map[string]string) admission.Request {
 	t.Helper()
 	tool.Labels = labels
 	raw, err := json.Marshal(tool)
@@ -47,7 +47,7 @@ func inlineToolRequest(t *testing.T, tool *arkv1alpha1.Tool, namespace string, l
 	}
 	return admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
 		Operation: admissionv1.Create,
-		Namespace: namespace,
+		Namespace: "team-a",
 		Object:    runtime.RawExtension{Raw: raw},
 		UserInfo:  authenticationv1.UserInfo{Username: "alice", UID: "uid-1", Groups: []string{"team-a"}},
 	}}
@@ -68,7 +68,7 @@ func TestInlineWebhookStampsAuthorship(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "true")
 	handler, _ := newHandler(t, true)
 
-	resp := handler.Handle(context.Background(), inlineToolRequest(t, inlineFixture(), "team-a", nil))
+	resp := handler.Handle(context.Background(), inlineToolRequest(t, inlineFixture(), nil))
 	if !resp.Allowed {
 		t.Fatalf("expected the write to be allowed: %v", resp.Result)
 	}
@@ -87,7 +87,7 @@ func TestInlineWebhookDeniesWithoutGrant(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "true")
 	handler, _ := newHandler(t, false)
 
-	resp := handler.Handle(context.Background(), inlineToolRequest(t, inlineFixture(), "team-a", nil))
+	resp := handler.Handle(context.Background(), inlineToolRequest(t, inlineFixture(), nil))
 	if resp.Allowed {
 		t.Fatal("expected the write to be denied")
 	}
@@ -98,7 +98,7 @@ func TestInlineWebhookIgnoresSkipLabel(t *testing.T) {
 	handler, _ := newHandler(t, false)
 
 	labels := map[string]string{"ark.mckinsey.com/skip-webhook-validation": "true"}
-	resp := handler.Handle(context.Background(), inlineToolRequest(t, inlineFixture(), "team-a", labels))
+	resp := handler.Handle(context.Background(), inlineToolRequest(t, inlineFixture(), labels))
 	if resp.Allowed {
 		t.Fatal("the skip label must not bypass the inline security gate")
 	}
@@ -110,7 +110,7 @@ func TestInlineWebhookUsesRequestNamespace(t *testing.T) {
 
 	tool := inlineFixture()
 	tool.Namespace = "team-b" // body claims another namespace
-	resp := handler.Handle(context.Background(), inlineToolRequest(t, tool, "team-a", nil))
+	resp := handler.Handle(context.Background(), inlineToolRequest(t, tool, nil))
 	if !resp.Allowed {
 		t.Fatalf("expected the write to be allowed: %v", resp.Result)
 	}
@@ -123,7 +123,7 @@ func TestInlineWebhookDeniesWhenDisabled(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "false")
 	handler, _ := newHandler(t, true)
 
-	resp := handler.Handle(context.Background(), inlineToolRequest(t, inlineFixture(), "team-a", nil))
+	resp := handler.Handle(context.Background(), inlineToolRequest(t, inlineFixture(), nil))
 	if resp.Allowed {
 		t.Fatal("expected inline authoring to be rejected while disabled")
 	}
@@ -141,7 +141,7 @@ func TestInlineWebhookAllowsNonInlineTools(t *testing.T) {
 			HTTP: &arkv1alpha1.HTTPSpec{URL: "https://example.com"},
 		},
 	}
-	resp := handler.Handle(context.Background(), inlineToolRequest(t, http, "team-a", nil))
+	resp := handler.Handle(context.Background(), inlineToolRequest(t, http, nil))
 	if !resp.Allowed {
 		t.Fatalf("expected non-inline tools to be unaffected: %v", resp.Result)
 	}

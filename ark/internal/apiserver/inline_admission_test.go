@@ -42,9 +42,11 @@ func newToolAdmissionStorage(backend storage.Backend, reviewer inlinetools.Revie
 	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), nil, reviewer)
 }
 
-func inlineToolObject(name, source string) *arkv1alpha1.Tool {
+const userAlice = "alice"
+
+func inlineToolObject(source string) *arkv1alpha1.Tool {
 	return &arkv1alpha1.Tool{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ObjectMeta: metav1.ObjectMeta{Name: "csv"},
 		Spec: arkv1alpha1.ToolSpec{
 			Type:        "inline",
 			Description: "count rows",
@@ -53,7 +55,7 @@ func inlineToolObject(name, source string) *arkv1alpha1.Tool {
 	}
 }
 
-func toolContext(ns string, username string) context.Context {
+func toolContext(ns, username string) context.Context {
 	ctx := genericrequest.WithRequestInfo(context.Background(), &genericrequest.RequestInfo{
 		Namespace: ns,
 		Resource:  "tools",
@@ -75,7 +77,7 @@ func TestInlineCreate_AllowedAuthorIsRecorded(t *testing.T) {
 	reviewer := &toolReviewer{allowed: true}
 	s := newToolAdmissionStorage(backend, reviewer)
 
-	obj, err := s.Create(toolContext(nsTeamA, "alice"), inlineToolObject("csv", "print(1)"), noopValidation(), &metav1.CreateOptions{})
+	obj, err := s.Create(toolContext(nsTeamA, userAlice), inlineToolObject("print(1)"), noopValidation(), &metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -83,13 +85,13 @@ func TestInlineCreate_AllowedAuthorIsRecorded(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected object %T", obj)
 	}
-	if created.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy] != "alice" {
+	if created.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy] != userAlice {
 		t.Fatalf("expected the admitted author to be recorded, got %v", created.Annotations)
 	}
 	if len(reviewer.namespaces) != 1 || reviewer.namespaces[0] != nsTeamA {
 		t.Fatalf("expected one review in %q, got %v", nsTeamA, reviewer.namespaces)
 	}
-	if reviewer.subjects[0] != "alice" {
+	if reviewer.subjects[0] != userAlice {
 		t.Fatalf("expected the request user to be reviewed, got %q", reviewer.subjects[0])
 	}
 }
@@ -99,7 +101,7 @@ func TestInlineCreate_DeniedWriteIsNotPersisted(t *testing.T) {
 	backend := newFakeBackend()
 	s := newToolAdmissionStorage(backend, &toolReviewer{allowed: false})
 
-	_, err := s.Create(toolContext(nsTeamA, "alice"), inlineToolObject("csv", "print(1)"), noopValidation(), &metav1.CreateOptions{})
+	_, err := s.Create(toolContext(nsTeamA, userAlice), inlineToolObject("print(1)"), noopValidation(), &metav1.CreateOptions{})
 	if err == nil {
 		t.Fatal("expected the create to be denied")
 	}
@@ -112,7 +114,7 @@ func TestInlineCreate_RequiresAuthenticatedIdentity(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "true")
 	s := newToolAdmissionStorage(newFakeBackend(), &toolReviewer{allowed: true})
 
-	_, err := s.Create(toolContext(nsTeamA, ""), inlineToolObject("csv", "print(1)"), noopValidation(), &metav1.CreateOptions{})
+	_, err := s.Create(toolContext(nsTeamA, ""), inlineToolObject("print(1)"), noopValidation(), &metav1.CreateOptions{})
 	if err == nil || !strings.Contains(err.Error(), "authenticated user identity") {
 		t.Fatalf("expected a missing-identity rejection, got %v", err)
 	}
@@ -122,7 +124,7 @@ func TestInlineCreate_RejectedWhenDisabled(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "false")
 	s := newToolAdmissionStorage(newFakeBackend(), &toolReviewer{allowed: true})
 
-	_, err := s.Create(toolContext(nsTeamA, "alice"), inlineToolObject("csv", "print(1)"), noopValidation(), &metav1.CreateOptions{})
+	_, err := s.Create(toolContext(nsTeamA, userAlice), inlineToolObject("print(1)"), noopValidation(), &metav1.CreateOptions{})
 	if err == nil || !strings.Contains(err.Error(), "disabled") {
 		t.Fatalf("expected a disabled-feature rejection, got %v", err)
 	}
@@ -133,7 +135,7 @@ func TestInlineCreate_RejectedWithoutAuthorizationBackend(t *testing.T) {
 	// What an authentication-disabled aggregated apiserver installs.
 	s := newToolAdmissionStorage(newFakeBackend(), inlinetools.Reject("authentication is disabled"))
 
-	_, err := s.Create(toolContext(nsTeamA, "alice"), inlineToolObject("csv", "print(1)"), noopValidation(), &metav1.CreateOptions{})
+	_, err := s.Create(toolContext(nsTeamA, userAlice), inlineToolObject("print(1)"), noopValidation(), &metav1.CreateOptions{})
 	if err == nil || !strings.Contains(err.Error(), "authentication is disabled") {
 		t.Fatalf("expected the reject reviewer's reason to surface, got %v", err)
 	}
@@ -144,9 +146,9 @@ func TestInlineCreate_BodyNamespaceCannotMoveTheCheck(t *testing.T) {
 	reviewer := &toolReviewer{allowed: true}
 	s := newToolAdmissionStorage(newFakeBackend(), reviewer)
 
-	tool := inlineToolObject("csv", "print(1)")
+	tool := inlineToolObject("print(1)")
 	tool.Namespace = "team-b"
-	_, err := s.Create(toolContext(nsTeamA, "alice"), tool, noopValidation(), &metav1.CreateOptions{})
+	_, err := s.Create(toolContext(nsTeamA, userAlice), tool, noopValidation(), &metav1.CreateOptions{})
 	if err == nil || !strings.Contains(err.Error(), "does not match request namespace") {
 		t.Fatalf("expected a namespace mismatch rejection, got %v", err)
 	}
@@ -164,7 +166,7 @@ func TestNonInlineToolIsUnaffected(t *testing.T) {
 			HTTP: &arkv1alpha1.HTTPSpec{URL: "https://example.com", Method: "GET"},
 		},
 	}
-	if _, err := s.Create(toolContext(nsTeamA, "alice"), http, noopValidation(), &metav1.CreateOptions{}); err != nil {
+	if _, err := s.Create(toolContext(nsTeamA, userAlice), http, noopValidation(), &metav1.CreateOptions{}); err != nil {
 		t.Fatalf("expected non-inline creation to be unaffected: %v", err)
 	}
 	if len(reviewer.namespaces) != 0 {
@@ -183,7 +185,7 @@ func (u toolUpdate) UpdatedObject(_ context.Context, _ runtime.Object) (runtime.
 
 func storeInlineTool(t *testing.T, s *AdmissionStorage, ctx context.Context) *arkv1alpha1.Tool {
 	t.Helper()
-	obj, err := s.Create(ctx, inlineToolObject("csv", "print(1)"), noopValidation(), &metav1.CreateOptions{})
+	obj, err := s.Create(ctx, inlineToolObject("print(1)"), noopValidation(), &metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("seed create: %v", err)
 	}
@@ -192,7 +194,7 @@ func storeInlineTool(t *testing.T, s *AdmissionStorage, ctx context.Context) *ar
 
 func TestInlineUpdate_SourceChangeRequiresTheGrant(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "true")
-	ctx := toolContext(nsTeamA, "alice")
+	ctx := toolContext(nsTeamA, userAlice)
 	reviewer := &toolReviewer{allowed: true}
 	s := newToolAdmissionStorage(newFakeBackend(), reviewer)
 	stored := storeInlineTool(t, s, ctx)
@@ -209,7 +211,7 @@ func TestInlineUpdate_SourceChangeRequiresTheGrant(t *testing.T) {
 
 func TestInlineUpdate_MetadataOnlyKeepsAuthorship(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "true")
-	ctx := toolContext(nsTeamA, "alice")
+	ctx := toolContext(nsTeamA, userAlice)
 	reviewer := &toolReviewer{allowed: true}
 	s := newToolAdmissionStorage(newFakeBackend(), reviewer)
 	stored := storeInlineTool(t, s, ctx)
@@ -225,14 +227,14 @@ func TestInlineUpdate_MetadataOnlyKeepsAuthorship(t *testing.T) {
 		t.Fatalf("a metadata-only update must not need the author permission: %v", err)
 	}
 	updated := obj.(*arkv1alpha1.Tool)
-	if updated.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy] != "alice" {
+	if updated.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy] != userAlice {
 		t.Fatalf("expected stored authorship to survive, got %v", updated.Annotations)
 	}
 }
 
 func TestInlineUpdate_TypeConversionIsRejected(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "true")
-	ctx := toolContext(nsTeamA, "alice")
+	ctx := toolContext(nsTeamA, userAlice)
 	s := newToolAdmissionStorage(newFakeBackend(), &toolReviewer{allowed: true})
 	stored := storeInlineTool(t, s, ctx)
 
