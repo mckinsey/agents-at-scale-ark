@@ -141,7 +141,45 @@ Use the three return values for what each is for:
 
 Writes use `router.replace`, so changing a filter does not add a history entry
 and the browser back button leaves the screen rather than stepping back through
-each filter.
+each filter. Never write a filter with `router.push` - that is the pattern this
+replaced, and it fills history with one entry per keystroke.
+
+A screen may hold more than one `useUrlState` (a page's own spec plus a sort key
+inside a child). Writes from all of them accumulate against one pending URL per
+pathname, so they compose instead of overwriting; that accumulator is module
+state, which is why tests that leave a navigation unlanded call
+`resetPendingParams`.
+
+#### Returning to a list
+
+Every back control resolves its target through `useListReturnHref` from
+`@/lib/hooks/use-list-return-href`, which maps a list route to the URL that list
+was last left in:
+
+```typescript
+// ❌ WRONG - returns to an unfiltered page one
+<NamespacedLink href={listHref}>Back</NamespacedLink>
+push('/sessions');
+
+// ✅ CORRECT - returns the list as the user left it
+const returnHref = useListReturnHref(listHref);
+<NamespacedLink href={returnHref}>Back</NamespacedLink>
+```
+
+It falls back to the bare route when the list has not been visited since the page
+was loaded, so a deep-linked detail page invents no filters. The recorded URL
+carries no namespace, so the active one is applied rather than a stale one.
+
+**Sidebar entries are deliberately not resolved.** `app-sidebar.tsx` navigates to
+a bare `/${sectionKey}`, so a sidebar click opens a screen in its default state.
+That is the documented platform behaviour, not an oversight - see the
+`url-param-scoping` spec and `docs/content/user-guide/dashboard.mdx`. `/files`
+once compensated with its own `sessionStorage` copy of the current folder; that
+copy is gone, and the folder lives in the URL like any other screen state.
+
+If this is ever changed, change it for the whole sidebar and update the spec and
+the user guide with it. One section restoring while the rest do not is the
+behaviour this convention exists to prevent.
 
 ### Namespace-scoped data
 

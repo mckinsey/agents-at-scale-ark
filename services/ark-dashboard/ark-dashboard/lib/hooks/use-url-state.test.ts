@@ -1,22 +1,33 @@
 import { act, renderHook } from '@testing-library/react';
-import { usePathname, useSearchParams } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useUrlState } from './use-url-state';
+import {
+  applyAppRouterNavigations,
+  deferAppRouterLanding,
+  getAppRouterMock,
+  resetAppRouterMock,
+} from '@/__tests__/setup/mock-app-router';
 
-const mockReplace = vi.fn();
-const mockPush = vi.fn();
+import { resetPendingParams, useUrlState } from './use-url-state';
 
-vi.mock('next/navigation', () => ({
-  useRouter: vi.fn(() => ({ push: mockPush, replace: mockReplace })),
-  usePathname: vi.fn(() => '/agents'),
-  useSearchParams: vi.fn(() => new URLSearchParams('namespace=test-ns')),
-}));
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock('/agents');
+});
+
+const router = getAppRouterMock();
 
 const setUrl = (query: string) => {
-  vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams(query) as unknown as ReturnType<typeof useSearchParams>,
-  );
+  resetAppRouterMock(query);
+  // An unlanded write is remembered per screen, so without this one test's
+  // pending URL becomes the next one's starting point.
+  resetPendingParams();
+};
+
+const lastTarget = () => {
+  const calls = router.replace.mock.calls;
+  return new URL(String(calls[calls.length - 1][0]), 'http://localhost');
 };
 
 const spec = {
@@ -25,15 +36,28 @@ const spec = {
   page: { default: 1, parse: (raw: string) => Number.parseInt(raw, 10) },
 } as const;
 
+const sortSpec = {
+  sort: { default: 'desc' },
+} as const;
+
 const debouncedSpec = {
   q: { default: '', debounceMs: 400 },
   status: { default: 'All' },
 } as const;
 
+const pagedDebouncedSpec = {
+  q: { default: '', debounceMs: 400 },
+  page: { default: 1, parse: (raw: string) => Number.parseInt(raw, 10) },
+} as const;
+
+const twoDebouncedSpec = {
+  q: { default: '', debounceMs: 400 },
+  owner: { default: '', debounceMs: 400 },
+} as const;
+
 describe('useUrlState', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(usePathname).mockReturnValue('/agents');
     setUrl('namespace=test-ns');
   });
 
@@ -61,7 +85,7 @@ describe('useUrlState', () => {
     const { result } = renderHook(() => useUrlState(spec));
     act(() => result.current[1]({ q: 'alpha' }));
 
-    const target = new URL(mockReplace.mock.calls[0][0], 'http://localhost');
+    const target = lastTarget();
     expect(target.searchParams.get('namespace')).toBe('test-ns');
     expect(target.searchParams.get('unrelated')).toBe('keep');
     expect(target.searchParams.get('q')).toBe('alpha');
@@ -73,7 +97,7 @@ describe('useUrlState', () => {
     const { result } = renderHook(() => useUrlState(spec));
     act(() => result.current[1]({ q: '', status: 'All' }));
 
-    const target = new URL(mockReplace.mock.calls[0][0], 'http://localhost');
+    const target = lastTarget();
     expect(target.searchParams.has('q')).toBe(false);
     expect(target.searchParams.has('status')).toBe(false);
     expect(target.searchParams.get('namespace')).toBe('test-ns');
@@ -85,7 +109,7 @@ describe('useUrlState', () => {
     const { result } = renderHook(() => useUrlState(spec));
     act(() => result.current[1]({ status: 'True' }));
 
-    const target = new URL(mockReplace.mock.calls[0][0], 'http://localhost');
+    const target = lastTarget();
     expect(target.searchParams.has('page')).toBe(false);
     expect(target.searchParams.get('status')).toBe('True');
   });
@@ -96,7 +120,7 @@ describe('useUrlState', () => {
     const { result } = renderHook(() => useUrlState(spec));
     act(() => result.current[1]({ page: 4 }));
 
-    const target = new URL(mockReplace.mock.calls[0][0], 'http://localhost');
+    const target = lastTarget();
     expect(target.searchParams.get('page')).toBe('4');
     expect(target.searchParams.get('status')).toBe('True');
   });
@@ -105,16 +129,16 @@ describe('useUrlState', () => {
     const { result } = renderHook(() => useUrlState(spec));
     act(() => result.current[1]({ q: 'alpha' }));
 
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(mockReplace.mock.calls[0][1]).toEqual({ scroll: false });
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(router.push).not.toHaveBeenCalled();
+    expect(router.replace.mock.calls[0][1]).toEqual({ scroll: false });
   });
 
   it('writes a router-relative path so the deployment base path survives', () => {
     const { result } = renderHook(() => useUrlState(spec));
     act(() => result.current[1]({ q: 'alpha' }));
 
-    expect(mockReplace.mock.calls[0][0]).toMatch(/^\/agents\?/);
+    expect(router.replace.mock.calls[0][0]).toMatch(/^\/agents\?/);
   });
 
   it('does not navigate when the update leaves the query unchanged', () => {
@@ -123,7 +147,7 @@ describe('useUrlState', () => {
     const { result } = renderHook(() => useUrlState(spec));
     act(() => result.current[1]({ q: 'alpha' }));
 
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it('drops the query string entirely once nothing is left to carry', () => {
@@ -132,7 +156,7 @@ describe('useUrlState', () => {
     const { result } = renderHook(() => useUrlState(spec));
     act(() => result.current[1]({ q: '' }));
 
-    expect(mockReplace).toHaveBeenCalledWith('/agents', { scroll: false });
+    expect(router.replace).toHaveBeenCalledWith('/agents', { scroll: false });
   });
 
   it('ignores keys the spec does not declare', () => {
@@ -144,7 +168,7 @@ describe('useUrlState', () => {
       }>),
     );
 
-    const target = new URL(mockReplace.mock.calls[0][0], 'http://localhost');
+    const target = lastTarget();
     expect(target.searchParams.has('nope')).toBe(false);
   });
 
@@ -160,7 +184,7 @@ describe('useUrlState', () => {
     );
     act(() => result.current[1]({ q: 'alpha' }));
 
-    const target = new URL(mockReplace.mock.calls[0][0], 'http://localhost');
+    const target = lastTarget();
     expect(target.searchParams.has('offset')).toBe(false);
   });
 
@@ -172,8 +196,38 @@ describe('useUrlState', () => {
       result.current[1]({ status: 'True' });
     });
 
-    const calls = mockReplace.mock.calls;
-    const target = new URL(calls[calls.length - 1][0], 'http://localhost');
+    const target = lastTarget();
+    expect(target.searchParams.get('q')).toBe('alpha');
+    expect(target.searchParams.get('status')).toBe('True');
+  });
+
+  it('composes writes from two instances on one screen while the first is in flight', () => {
+    setUrl('pageSize=10');
+    deferAppRouterLanding();
+
+    const { result } = renderHook(() => ({
+      screen: useUrlState(spec),
+      sorting: useUrlState(sortSpec),
+    }));
+
+    act(() => result.current.sorting[1]({ sort: 'asc' }));
+    act(() => result.current.screen[1]({ page: 2 }));
+
+    const target = lastTarget();
+    expect(target.searchParams.get('sort')).toBe('asc');
+    expect(target.searchParams.get('page')).toBe('2');
+    expect(target.searchParams.get('pageSize')).toBe('10');
+  });
+
+  it('rebases on the landed URL once a write arrives', () => {
+    deferAppRouterLanding();
+    const { result } = renderHook(() => useUrlState(spec));
+
+    act(() => result.current[1]({ q: 'alpha' }));
+    act(() => applyAppRouterNavigations());
+    act(() => result.current[1]({ status: 'True' }));
+
+    const target = lastTarget();
     expect(target.searchParams.get('q')).toBe('alpha');
     expect(target.searchParams.get('status')).toBe('True');
   });
@@ -185,15 +239,31 @@ describe('useUrlState', () => {
     act(() => result.current[1]({ q: 'a' }));
     act(() => result.current[1]({ q: 'al' }));
     act(() => result.current[1]({ q: 'alpha' }));
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
 
     act(() => {
       vi.advanceTimersByTime(400);
     });
 
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    const target = new URL(mockReplace.mock.calls[0][0], 'http://localhost');
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(lastTarget().searchParams.get('q')).toBe('alpha');
+  });
+
+  it('flushes two debounced keys as a single write', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useUrlState(twoDebouncedSpec));
+
+    act(() => result.current[1]({ q: 'alpha' }));
+    act(() => result.current[1]({ owner: 'me' }));
+
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    const target = lastTarget();
     expect(target.searchParams.get('q')).toBe('alpha');
+    expect(target.searchParams.get('owner')).toBe('me');
   });
 
   it('reads a pending draft back immediately while the URL still holds the old value', () => {
@@ -215,7 +285,7 @@ describe('useUrlState', () => {
     act(() => result.current[1]({ q: 'beta' }));
     expect(result.current[0].q).toBe('beta');
 
-    setUrl('q=gamma');
+    act(() => setUrl('q=gamma'));
     rerender();
 
     expect(result.current[0].q).toBe('gamma');
@@ -224,7 +294,7 @@ describe('useUrlState', () => {
       vi.advanceTimersByTime(1000);
     });
 
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it('writes at once when flush is requested, carrying any draft with it', () => {
@@ -234,10 +304,52 @@ describe('useUrlState', () => {
     act(() => result.current[1]({ q: 'alpha' }));
     act(() => result.current[1]({ status: 'True' }, { flush: true }));
 
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    const target = new URL(mockReplace.mock.calls[0][0], 'http://localhost');
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    const target = lastTarget();
     expect(target.searchParams.get('status')).toBe('True');
     expect(target.searchParams.get('q')).toBe('alpha');
+  });
+
+  it('resets the page when a page change carries a live search draft', () => {
+    vi.useFakeTimers();
+    setUrl('page=2');
+    const { result } = renderHook(() => useUrlState(pagedDebouncedSpec));
+
+    act(() => result.current[1]({ q: 'seed' }));
+    act(() => result.current[1]({ page: 3 }));
+
+    const target = lastTarget();
+    expect(target.searchParams.get('q')).toBe('seed');
+    expect(target.searchParams.has('page')).toBe(false);
+  });
+
+  it('resets the page when a debounced filter lands on its own', () => {
+    vi.useFakeTimers();
+    setUrl('page=4');
+    const { result } = renderHook(() => useUrlState(pagedDebouncedSpec));
+
+    act(() => result.current[1]({ q: 'seed' }));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+
+    const target = lastTarget();
+    expect(target.searchParams.get('q')).toBe('seed');
+    expect(target.searchParams.has('page')).toBe(false);
+  });
+
+  it('does not write a draft that was still pending when the screen unmounted', () => {
+    vi.useFakeTimers();
+    const { result, unmount } = renderHook(() => useUrlState(debouncedSpec));
+
+    act(() => result.current[1]({ q: 'alpha' }));
+    unmount();
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it('recomputes when a default supplied by a prop changes', () => {

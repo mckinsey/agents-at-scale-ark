@@ -74,6 +74,13 @@ export default function MarketplacePage() {
 
   const totalItems = data?.items.length || 0;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+  useEffect(() => {
+    if (!data) return;
+    if (urlState.page > Math.max(1, totalPages)) {
+      setUrlState({ page: 1 });
+    }
+  }, [data, totalPages, urlState.page, setUrlState]);
   const startIndex = (urlState.page - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentItems = data?.items.slice(startIndex, endIndex) || [];

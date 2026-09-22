@@ -41,6 +41,73 @@ type Drafts = Readonly<Record<string, Draft>>;
 const DEFAULT_PAGE_KEY = 'page';
 const NO_DRAFTS: Drafts = {};
 
+interface PendingParams {
+  landed: string;
+  pending: string;
+}
+
+/**
+ * The query string each screen will hold once every write issued against it has
+ * landed, keyed by pathname. Shared between instances on purpose: a screen may
+ * mount more than one `useUrlState` - a page's own spec plus a sort key inside a
+ * child - and those are two writers to one URL. A per-instance accumulator lets
+ * the second write build on a base that predates the first and drop it.
+ */
+const pendingParamsByPath = new Map<string, PendingParams>();
+
+/** Live instances per pathname, so the entry above can be dropped with them. */
+const instanceCountByPath = new Map<string, number>();
+
+function retainPath(pathname: string): void {
+  instanceCountByPath.set(pathname, (instanceCountByPath.get(pathname) ?? 0) + 1);
+}
+
+function releasePath(pathname: string): void {
+  const remaining = (instanceCountByPath.get(pathname) ?? 1) - 1;
+  if (remaining > 0) {
+    instanceCountByPath.set(pathname, remaining);
+    return;
+  }
+  // Nothing is left to build on it. Keeping it would hand a screen revisited at
+  // the same query string a base that never landed.
+  instanceCountByPath.delete(pathname);
+  pendingParamsByPath.delete(pathname);
+}
+
+/** Rebases on the landed URL once per change, however many instances render. */
+function syncPendingParams(pathname: string, landed: string): void {
+  const entry = pendingParamsByPath.get(pathname);
+  if (!entry || entry.landed !== landed) {
+    pendingParamsByPath.set(pathname, { landed, pending: landed });
+  }
+}
+
+function readPendingParams(pathname: string, landed: string): string {
+  return pendingParamsByPath.get(pathname)?.pending ?? landed;
+}
+
+function writePendingParams(
+  pathname: string,
+  landed: string,
+  pending: string,
+): void {
+  const entry = pendingParamsByPath.get(pathname);
+  if (entry) {
+    entry.pending = pending;
+    return;
+  }
+  pendingParamsByPath.set(pathname, { landed, pending });
+}
+
+/**
+ * Drops the accumulator. Tests only: without it one test's unlanded write is the
+ * next test's base.
+ */
+export function resetPendingParams(): void {
+  pendingParamsByPath.clear();
+  instanceCountByPath.clear();
+}
+
 function readParam(spec: UrlParamSpec, raw: string | null): unknown {
   if (raw === null || raw === '') {
     return spec.default;
@@ -99,9 +166,11 @@ function retainLiveDrafts(drafts: Drafts, params: URLSearchParams): Drafts {
  * Returns `[values, setValues, committedValues]`:
  * - `values` — draft where one is live, else the URL. Bind inputs and
  *   in-memory filtering to this.
- * - `setValues(updates, { flush })` — writes are accumulated, so several calls
- *   in one commit compose into a single navigation instead of overwriting each
- *   other. Setting any key other than the page key resets the page.
+ * - `setValues(updates, { flush })` — writes are accumulated across calls and
+ *   across instances on the same screen, so they compose into a single
+ *   navigation instead of overwriting each other. A write that moves any key
+ *   other than the page key resets the page, even when that key is a draft
+ *   carried along by an explicit page change.
  * - `committedValues` — the URL only, never a draft. Use this to key a server
  *   query so it refetches once per pause rather than once per keystroke.
  */
@@ -129,13 +198,7 @@ export function useUrlState<TSpec extends UrlStateSpec>(
   // The query string as it will be once every write issued so far has landed.
   // `searchParams` lags a write by a render, so reading it per call would make
   // two writes in one commit build on the same stale base and lose the first.
-  const searchParamsString = searchParams.toString();
-  const lastSeenParamsRef = useRef(searchParamsString);
-  const pendingParamsRef = useRef(searchParamsString);
-  if (lastSeenParamsRef.current !== searchParamsString) {
-    lastSeenParamsRef.current = searchParamsString;
-    pendingParamsRef.current = searchParamsString;
-  }
+  syncPendingParams(pathname, searchParams.toString());
 
   const [drafts, setDrafts] = useState<Drafts>(NO_DRAFTS);
   const liveDrafts = retainLiveDrafts(drafts, searchParams);
@@ -147,6 +210,11 @@ export function useUrlState<TSpec extends UrlStateSpec>(
       setDrafts(liveDrafts);
     }
   }, [liveDrafts, drafts]);
+
+  useEffect(() => {
+    retainPath(pathname);
+    return () => releasePath(pathname);
+  }, [pathname]);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -194,7 +262,10 @@ export function useUrlState<TSpec extends UrlStateSpec>(
   const commit = useCallback(
     (updates: Record<string, unknown>) => {
       const current = specRef.current;
-      const base = pendingParamsRef.current;
+      const base = readPendingParams(
+        pathname,
+        searchParamsRef.current.toString(),
+      );
       const params = new URLSearchParams(base);
       const keys = Object.keys(updates).filter(key => current[key]);
       if (keys.length === 0) {
@@ -205,10 +276,9 @@ export function useUrlState<TSpec extends UrlStateSpec>(
         writeParam(params, key, current[key], updates[key]);
       }
 
-      const resetsPage =
-        current[pageKey] &&
-        !keys.includes(pageKey) &&
-        keys.some(key => key !== pageKey);
+      // Any key but the page moving resets the page, including one carried in
+      // from a draft, so a filter cannot land while the page stays behind.
+      const resetsPage = current[pageKey] && keys.some(key => key !== pageKey);
       if (resetsPage) {
         writeParam(params, pageKey, current[pageKey], current[pageKey].default);
       }
@@ -218,7 +288,7 @@ export function useUrlState<TSpec extends UrlStateSpec>(
         return;
       }
 
-      pendingParamsRef.current = queryString;
+      writePendingParams(pathname, base, queryString);
       router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
         scroll: false,
       });
@@ -293,7 +363,9 @@ export function useUrlState<TSpec extends UrlStateSpec>(
       }
 
       if (hasDeferred) {
-        const base = new URLSearchParams(pendingParamsRef.current);
+        const base = new URLSearchParams(
+          readPendingParams(pathname, searchParamsRef.current.toString()),
+        );
         const keys = Object.keys(deferred);
         const next: Record<string, Draft> = { ...draftsRef.current };
         for (const key of keys) {
@@ -311,7 +383,7 @@ export function useUrlState<TSpec extends UrlStateSpec>(
         timerRef.current = setTimeout(() => flushDraftsRef.current(), delay);
       }
     },
-    [commit],
+    [commit, pathname],
   );
 
   return [values, setValues, committedValues] as const;

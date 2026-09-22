@@ -1,11 +1,9 @@
 'use client';
 
-import { useAtomValue } from 'jotai';
-
-import { lastListUrlAtom } from '@/atoms/navigation-history';
 import { ChevronLeft } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconShell } from '@/components/ui/icon-shell';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { cn } from '@/lib/utils';
 
 interface DetailBreadcrumbProps {
@@ -28,8 +26,7 @@ export function DetailBreadcrumb({
   current,
   className,
 }: Readonly<DetailBreadcrumbProps>) {
-  const lastListUrl = useAtomValue(lastListUrlAtom);
-  const resolvedBackHref = lastListUrl[backHref] ?? backHref;
+  const resolvedBackHref = useListReturnHref(backHref);
 
   return (
     <nav

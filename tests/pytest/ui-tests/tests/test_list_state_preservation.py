@@ -53,6 +53,15 @@ class TestListStatePreservation:
         resources["agent_name"] = result["name"]
         return result["name"]
 
+    def _teardown(self, page: Page, resources: dict) -> None:
+        if not resources["agent_name"]:
+            return
+
+        agents = AgentsPage(page)
+        agents.navigate_to_agents_tab()
+        agents.delete_agent_with_verification(resources["agent_name"])
+        resources["agent_name"] = None
+
     def _open_filtered_agents(self, page: Page, search_term: str) -> str:
         agents = AgentsPage(page)
         agents.navigate_to_agents_tab()
@@ -200,3 +209,5 @@ class TestListStatePreservation:
             "browser back should land on the filtered list, not on an intermediate "
             f"filter state; got {page.url}"
         )
+
+        self._teardown(page, list_state_resources)

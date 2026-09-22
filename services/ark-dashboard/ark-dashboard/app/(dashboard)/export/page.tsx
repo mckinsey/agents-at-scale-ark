@@ -48,11 +48,6 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 type TabValue = ResourceType | 'all';
 
-const URL_STATE_SPEC = {
-  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
-  tab: { default: 'all' },
-};
-
 type ExportAction = 'selected' | 'all';
 
 interface ResourceMeta {
@@ -86,6 +81,15 @@ const RESOURCES: readonly ResourceMeta[] = [
     icon: AccountTree,
   },
 ];
+
+function parseTab(raw: string): TabValue {
+  return RESOURCES.some(meta => meta.type === raw) ? (raw as TabValue) : 'all';
+}
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  tab: { default: 'all', parse: parseTab },
+};
 
 const TAG_CLASSES =
   'h-8 !px-2 bg-surface-bg-secondary text-fg-secondary ' +

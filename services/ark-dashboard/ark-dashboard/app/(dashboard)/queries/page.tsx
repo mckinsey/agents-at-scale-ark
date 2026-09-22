@@ -50,11 +50,11 @@ export default function QueriesPage() {
   const isEmpty = !isLoading && !isError && total === 0 && !urlSearch;
 
   useEffect(() => {
-    if (total === 0) return;
+    if (!data) return;
     if (page > totalPages) {
       setUrlState({ page: 1 });
     }
-  }, [page, total, totalPages, setUrlState]);
+  }, [data, page, totalPages, setUrlState]);
 
   const handlePageChange = (next: number) => {
     setUrlState({ page: next });

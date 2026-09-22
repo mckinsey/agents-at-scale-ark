@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   useGetMarketplaceItemById,
@@ -32,6 +33,7 @@ import {
 export default function MarketplaceDetailPage() {
   const params = useParams();
   const { push } = useNamespacedNavigation();
+  const marketplaceReturnHref = useListReturnHref('/marketplace');
   const id = params.id as string;
 
   const { data: item, isPending, error } = useGetMarketplaceItemById(id);
@@ -112,7 +114,7 @@ export default function MarketplaceDetailPage() {
             The marketplace item you&apos;re looking for doesn&apos;t exist.
           </p>
           <Button
-            onClick={() => push('/marketplace')}
+            onClick={() => push(marketplaceReturnHref)}
             variant="outline"
             className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -129,7 +131,7 @@ export default function MarketplaceDetailPage() {
       <main className="container space-y-8 p-6 py-8">
         <div className="flex items-center gap-4">
           <Button
-            onClick={() => push('/marketplace')}
+            onClick={() => push(marketplaceReturnHref)}
             variant="ghost"
             size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />

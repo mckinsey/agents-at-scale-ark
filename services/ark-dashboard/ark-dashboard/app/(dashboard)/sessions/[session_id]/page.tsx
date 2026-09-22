@@ -8,6 +8,7 @@ import {
   buildUrlWithoutNewSessionParams,
   hasNewSessionParams,
 } from '@/lib/utils/session-params';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,9 +45,11 @@ export default function SessionDetailPage() {
     router.replace(buildUrlWithoutNewSessionParams(searchParams, pathname));
   }, [searchParams, router, pathname]);
 
+  const sessionsReturnHref = useListReturnHref('/sessions');
+
   const handleBackToSessions = useCallback(() => {
-    push('/sessions');
-  }, [push]);
+    push(sessionsReturnHref);
+  }, [push, sessionsReturnHref]);
 
   // Skip API call for new sessions (avoid 404 errors)
   const { data: backendSession, isLoading, isError } = useGetSession(session_id, {

@@ -125,6 +125,13 @@ export function ResourceListSection<T extends ResourceListItem>({
     return ['All', ...Array.from(values).sort((a, b) => a.localeCompare(b))];
   }, [originFilter, items]);
 
+  // The options are discovered from the data, so the URL cannot be validated by
+  // a parser at read time. A value that is not on offer reads as no filter
+  // rather than filtering every row away.
+  const originValue = originFilterOptions.includes(filters.origin)
+    ? filters.origin
+    : 'All';
+
   const filteredItems = useMemo(() => {
     const q = filters.q.trim().toLowerCase();
     return items.filter(item => {
@@ -137,11 +144,11 @@ export function ResourceListSection<T extends ResourceListItem>({
         (item.available ?? 'Unknown') === filters.status;
       const matchesOrigin =
         !originFilter ||
-        filters.origin === 'All' ||
-        originFilter.getValue(item) === filters.origin;
+        originValue === 'All' ||
+        originFilter.getValue(item) === originValue;
       return matchesSearch && matchesStatus && matchesOrigin;
     });
-  }, [items, filters.q, filters.status, originFilter, filters.origin]);
+  }, [items, filters.q, filters.status, originFilter, originValue]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -262,7 +269,7 @@ export function ResourceListSection<T extends ResourceListItem>({
                     value,
                     label: value,
                   }))}
-                  value={filters.origin}
+                  value={originValue}
                   onValueChange={value =>
                     setFilters({ origin: String(value) })
                   }>

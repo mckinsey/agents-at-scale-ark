@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
@@ -1065,8 +1064,6 @@ export function SessionsSection({
   readonly onCountChange?: (count: number) => void;
 }) {
   const { namespace, isNamespaceResolved } = useNamespace();
-  const router = useRouter();
-  const searchParams = useSearchParams();
 
   // Note: sourceFilter is currently unused but reserved for future support of Team sessions
   // Currently only workflow sessions are implemented

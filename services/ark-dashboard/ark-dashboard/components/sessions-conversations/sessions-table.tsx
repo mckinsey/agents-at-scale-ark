@@ -123,6 +123,13 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
   const errorSessions = data?.statusCounts?.error ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalSessions / PAGE_SIZE));
 
+  useEffect(() => {
+    if (!data) return;
+    if (filters.page > totalPages) {
+      setFilters({ page: 1 });
+    }
+  }, [data, filters.page, totalPages, setFilters]);
+
   if (isLoading && sessions.length === 0) {
     return (
       <div className="flex flex-1 flex-col gap-4">
