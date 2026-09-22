@@ -5,7 +5,7 @@ description: Memory CRD reference — spec, status, and the HTTP backend contrac
 
 # Memory
 
-A `Memory` points Ark at an HTTP service that stores conversation history keyed by `conversationId` / `queryId`. The CRD is backend-agnostic — any service that implements the [Memory HTTP API](#memory-http-api) can back it (a database, queue, or other store). The in-cluster [ark-broker](/reference/broker) is the reference implementation. Queries reference a `Memory` via `spec.memory.name`; when unset, resolution falls back to a `Memory` named `default` in the same namespace.
+A `Memory` points Ark at an HTTP service that stores conversation history keyed by `conversationId` / `queryId`. The CRD is backend-agnostic — any service that implements the [Memory HTTP API](#memory-http-api) can back it (a database, queue, or other store). The in-cluster [ark-broker](/reference/broker) is the reference implementation. Queries reference a `Memory` via `spec.memory.name`. When unset, the mutating webhook fills it in from `ArkConfig/default.spec.defaultMemory` if that names a `Memory` that exists in the query namespace; otherwise resolution falls back at execution time to a `Memory` named `default` in the same namespace.
 
 ## Spec
 
@@ -63,7 +63,31 @@ The controller resolves the address and records the result in `status.lastResolv
 
 ## Using memory from a query
 
-A query selects a `Memory` via `spec.memory.name`. If a `Memory` named `default` exists in the namespace, it is used automatically for queries that don't name one. Memory works with all query target types — agents, models, and tools. When a `conversationId` is provided, messages are persisted to the memory chain regardless of the target type.
+A query selects a `Memory` via `spec.memory.name`. If a `Memory` named `default` exists in the namespace, it is used automatically for queries that don't name one — unless `ArkConfig` names a different one (see below). Memory works with all query target types — agents, models, and tools. When a `conversationId` is provided, messages are persisted to the memory chain regardless of the target type.
+
+### Declaring the default for the whole cluster
+
+Set `spec.defaultMemory` on the cluster-scoped `ArkConfig` singleton, and the mutating webhook writes `spec.memory` onto each new query that doesn't name one:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: ArkConfig
+metadata:
+  name: default
+spec:
+  defaultMemory:
+    name: default
+```
+
+Only `name` is accepted — the `Memory` is always resolved in the namespace of the query being defaulted. A namespace here would point every tenant at one backend and mix their conversation history, so the validating webhook rejects it.
+
+Three conditions bound the injection:
+
+- **The `Memory` must already exist in the query namespace and carry a `status.lastResolvedAddress`.** Naming one that has not resolved makes queries fail outright, so the webhook skips those namespaces. This is not a safety net for the name `default`: the executor's own fallback also resolves that name by existence alone, so an unresolved `Memory/default` fails the namespace's queries whether or not the field was injected — fix the `Memory`, don't rely on the default being skipped. The webhook reads through a cache, so a `Memory` and a query applied in the same instant can miss each other; the next query picks it up.
+- **The field is injected at creation only.** Updating an older query never back-fills it, so `spec.memory` records what that query actually ran with, and changing `ArkConfig` affects new queries only.
+- **The PostgreSQL storage backend does not serve `ArkConfig`.** No default is injected there; resolution falls back to the `Memory` named `default`.
+
+With the field injected, `kubectl get query <name> -o jsonpath='{.spec.memory}'` answers which memory a query used without reading executor logs.
 
 Memory in a query to a tool:
 

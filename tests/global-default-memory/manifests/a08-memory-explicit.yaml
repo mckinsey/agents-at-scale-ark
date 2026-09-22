@@ -1,0 +1,7 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Memory
+metadata:
+  name: chosen-by-hand
+spec:
+  address:
+    value: http://memory-not-reachable.invalid:8080

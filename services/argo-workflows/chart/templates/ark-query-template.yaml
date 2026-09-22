@@ -30,7 +30,7 @@ data:
               - name: target
               - name: input
               - name: timeout
-                value: "5m"
+                value: "30m"
               - name: ttl
                 value: ""
               - name: parameters

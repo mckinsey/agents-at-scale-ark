@@ -39,7 +39,8 @@ spec:
       # Install ark-tenant for RBAC
       - script:
           content: |
-            helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+            helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait \
+              --set memory.requireBroker=false
           env:
           - name: NAMESPACE
             value: ($namespace)
