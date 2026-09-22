@@ -45,12 +45,16 @@ responses, and model output/answer content.
 ## Credential redaction
 
 Ark redacts credentials from log records (and OTel trace span attributes) before they are
-emitted, using three pattern-based passes: **key-anchored** — `key=value` / `key: value` text and
-structured fields for a known key set — **URL userinfo** — the `<secret>` segment of
-`scheme://user:<secret>@host` (e.g. a database DSN), regardless of the key name in front of it —
-and **shape-based** — standalone tokens matching well-known, prefixed credential formats (JWTs,
-provider API keys, PEM private-key blocks). It is pattern-based, not full content classification:
-it does **not** detect opaque/unknown secrets or PII embedded in free text.
+emitted, using four pattern-based passes, applied in this order: **shape-based** (first, so a
+self-contained anchor like a full PEM block is fully consumed before a narrower pass can eat
+only its prefix) — standalone tokens matching well-known, prefixed credential formats (JWTs,
+provider API keys, PEM private-key blocks) — **key-anchored** — `key=value` / `key: value` text
+and structured fields for a known key set — **cookie/set-cookie** — the whole `;`-separated
+header value, not just the first pair, since `Cookie: a=1; session=<secret>` would otherwise
+only redact `a=1` — and **URL userinfo** — the `<secret>` segment of `scheme://user:<secret>@host`
+(e.g. a database DSN), regardless of the key name in front of it, matched separately for its
+literal and fully percent-encoded forms. It is pattern-based, not full content classification: it
+does **not** detect opaque/unknown secrets or PII embedded in free text.
 
 - **ark-api** — a `SensitiveDataFilter` redacts the keys `access_token`, `refresh_token`,
   `client_secret`, `code_verifier`, `authorization`, `password`, `passwd`, `api_key`, `apikey`,
@@ -72,11 +76,22 @@ it does **not** detect opaque/unknown secrets or PII embedded in free text.
   `password`, `token`, `secret`, and `apiKey` fields.
 - **Controller** — query input/output is truncated to 48 characters in operation data; full
   payloads are not logged at info level.
-- **OTel traces** — the controller and completions engine apply the **same three-pass redaction**
-  (key-anchored + URL userinfo + shape-based) to span attributes (prompts, model messages, tool-call arguments,
-  query input/output) before export to any telemetry backend, sharing the same patterns and
+- **OTel traces** — the controller and completions engine apply the **same four-pass redaction**
+  (shape-based + key-anchored + cookie + URL userinfo) to span attributes (prompts, model
+  messages, tool-call arguments, query input/output) before export to any telemetry backend,
+  sharing the same patterns and
   [test vectors](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/internal/telemetry/redact/testdata/credential-redaction.json)
   as the ark-api filter. See [trace redaction](/developer-guide/observability#credential-redaction-in-traces).
+
+**Known trade-offs**, kept rather than "fixed" because narrowing them would remove coverage that
+already existed for the original OAuth-shaped keys, or would only shift the same risk elsewhere:
+- The `key: value` (colon) form matches plain prose and YAML too, not just credential
+  assignments — `resolving secret: my-secret-name` or `the token: expired` get partially redacted
+  even though neither is a credential. This is how `authorization: Bearer …` has always worked;
+  narrowing colon-matching now would be a separate, larger behavior change.
+- An unquoted value stops at the first whitespace, so a human-typed passphrase with spaces
+  (`password=my pass phrase`) only has its first word redacted. This was never a problem for the
+  original keys, whose values are always opaque and space-free.
 
 <Callout type="warning">
 Redaction covers the credential **keys and known token formats listed above**, not every
