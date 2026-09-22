@@ -234,14 +234,16 @@ When writing tests for any service, consult `tests/CLAUDE.md` for comprehensive 
 # OpenSpec Change Workflow (worktrees + stacked PRs)
 
 Implement an OpenSpec change one phase at a time. Each phase is its own short
-stack of small PRs based on `main`, created with the `github/gh-stack`
-extension, and **merged before the next phase opens**.
+stack of small PRs, created with the `github/gh-stack` extension, based on
+`main` when the previous phase has merged.
 
-Phases are not stacked on each other. They depend on each other's code, not
-just the spec, so a tower of every phase's branches makes one review comment
-at the bottom rebase everything above it. Merge order carries the dependency
-instead, which works because an unfinished feature should be inert by default
-(see the disabled-by-default flag rule below).
+Prefer to merge a phase before the next opens: merge order carries the
+dependency, which works because an unfinished feature should be inert by
+default (see the disabled-by-default flag rule below). When phase N's PR is
+still open and phase N+1 cannot wait, base phase N+1 on phase N's branch and
+set that branch as the PR base. The cost is real — a review comment at the
+bottom rebases everything above it — so stack across phases only while the
+lower phase is genuinely in flight, and rebase onto `main` once it merges.
 
 Before the first phase:
 
@@ -271,7 +273,9 @@ Then:
    before the draft is marked ready (`gh stack submit --open`).
 4. After a lower PR merges: `gh stack sync` then `gh stack rebase`.
 5. When the whole phase has merged, remove the worktree
-   (`git worktree remove ../<dir>`) and start the next phase from `main`.
+   (`git worktree remove ../<dir>`) and start the next phase from `main`. If a
+   later phase was stacked on this one, rebase it onto `main` and repoint its
+   PR base.
 
 Rules:
 
