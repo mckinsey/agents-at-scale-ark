@@ -161,6 +161,14 @@ const (
 	ToolTypeInline  = "inline"
 )
 
+// Inline languages. The runner's interpreter dispatch keys on these exact values.
+const (
+	InlineLanguageBash       = "bash"
+	InlineLanguagePython     = "python"
+	InlineLanguageNode       = "node"
+	InlineLanguageTypeScript = "ts"
+)
+
 // Tool state constants
 const (
 	ToolStateReady = "Ready"
