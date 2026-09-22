@@ -1086,11 +1086,12 @@ export function useChatSession({
       setIsProcessing(true);
       beginMemoryNoticeTurn();
 
+      let aborted = false;
+
       try {
         if (isChatStreamingEnabled) {
           await handleStreamChatResponse(userMessage, apiParameters);
           await ensureConversationId();
-          refreshMemoryNotice(lastQueryName.current);
         } else {
           await handlePollChatResponse(userMessage, apiParameters);
         }
@@ -1100,6 +1101,7 @@ export function useChatSession({
 
         if (err instanceof Error) {
           if (err.name === 'AbortError') {
+            aborted = true;
             return;
           }
           if (err.message.includes('Failed to fetch')) {
@@ -1125,6 +1127,18 @@ export function useChatSession({
         setIsProcessing(false);
         setProcessingPhase(undefined);
         setStatusText(undefined);
+
+        // In `finally`, not after the stream, because the failure path is the
+        // one that matters most: ark-api resolves the chunk stream's broker
+        // from the Memory resource, so a memory fault severe enough to set
+        // either condition also 503s the stream. Running the lookup only on
+        // success meant the default configuration showed a broker error and
+        // never the notice — for exactly the faults the notice reports. The
+        // stream breaking does not cancel the query, so it still finishes and
+        // records its verdict for this lookup to read.
+        if (isChatStreamingEnabled && !aborted) {
+          refreshMemoryNotice(lastQueryName.current);
+        }
       }
     },
     [

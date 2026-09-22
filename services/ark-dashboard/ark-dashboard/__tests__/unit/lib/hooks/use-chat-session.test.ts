@@ -927,6 +927,49 @@ describe('useChatSession', () => {
       expect(mockResolveMemoryNotice).toHaveBeenCalledWith('default', 'test-query');
     });
 
+    // ark-api resolves the chunk stream's broker from the Memory resource, so
+    // the faults this notice reports are the same ones that 503 the stream.
+    // Looking the notice up only on the success path meant it never appeared
+    // in the default configuration.
+    it('still surfaces the notice when the chat stream itself fails', async () => {
+      // The query is created first and only then does the chunk fetch 503, so
+      // lastQueryName is set and there is a finished query to read back.
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new Error('Failed to connect to stream: Service Unavailable');
+      });
+      mockResolveMemoryNotice.mockResolvedValue(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+      expect(mockResolveMemoryNotice).toHaveBeenCalledWith(
+        expect.any(String),
+        'test-query',
+      );
+    });
+
+    it('does not look the notice up when the user aborted the turn', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        throw err;
+      });
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockResolveMemoryNotice).not.toHaveBeenCalled();
+    });
+
     it('leaves the notice null when a streamed turn reports no problem', async () => {
       streamedTurn();
       mockResolveMemoryNotice.mockResolvedValue(settled(null));
