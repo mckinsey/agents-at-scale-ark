@@ -198,17 +198,7 @@ func (r *A2AServerReconciler) reconcileConditionsReady(ctx context.Context, a2aS
 
 // updateStatusWithConditions updates the A2AServer status
 func (r *A2AServerReconciler) updateStatusWithConditions(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-	err := r.Status().Update(ctx, a2aServer)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		logf.FromContext(ctx).Error(err, "failed to update A2AServer status")
-	}
-	return err
+	return updateStatusIgnoringDeleted(ctx, r.Client, a2aServer, "A2AServer")
 }
 
 func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, agentCard *arka2a.A2AAgentCard) (bool, error) {

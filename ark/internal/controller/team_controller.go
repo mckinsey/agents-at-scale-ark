@@ -122,18 +122,7 @@ func (r *TeamReconciler) setCondition(team *arkv1alpha1.Team, conditionType stri
 }
 
 func (r *TeamReconciler) updateStatus(ctx context.Context, team *arkv1alpha1.Team) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	err := r.Status().Update(ctx, team)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		logf.FromContext(ctx).Error(err, "failed to update team status")
-	}
-	return err
+	return updateStatusIgnoringDeleted(ctx, r.Client, team, "team")
 }
 
 // teamAgentMemberIndexer returns agent member names for field-based Team lookups.
@@ -164,7 +153,8 @@ func (r *TeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *TeamReconciler) findTeamsForAgent(ctx context.Context, obj client.Object) []reconcile.Request {
 	var teams arkv1alpha1.TeamList
-	if err := r.List(ctx, &teams,
+	if err := r.List(
+		ctx, &teams,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.members.agent.name": obj.GetName()},
 	); err != nil {

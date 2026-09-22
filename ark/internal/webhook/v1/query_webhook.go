@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -14,7 +15,7 @@ import (
 func SetupQueryWebhookWithManager(mgr ctrl.Manager) error {
 	lookup := &validation.WebhookLookup{Client: mgr.GetClient()}
 	v := validation.NewValidator(lookup)
-	return ctrl.NewWebhookManagedBy(mgr).For(&arkv1alpha1.Query{}).
+	return ctrl.NewWebhookManagedBy[runtime.Object](mgr, &arkv1alpha1.Query{}).
 		WithDefaulter(&validation.WebhookDefaulter{Lookup: lookup}).
 		WithValidator(&validation.WebhookValidator{V: v}).
 		Complete()

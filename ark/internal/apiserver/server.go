@@ -467,7 +467,7 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 	serverConfig.FeatureGate = utilfeature.DefaultFeatureGate
 
 	admissionOpts, gates := s.admissionOptionsFor(plan, admissionInformers)
-	if err := admissionOpts.ApplyTo(serverConfig, admissionInformers, kubeClient, dynClient, serverConfig.FeatureGate); err != nil {
+	if err := admissionOpts.ApplyTo(serverConfig, admissionInformers, kubeClient, dynClient, serverConfig.FeatureGate, serverConfig.EffectiveVersion); err != nil {
 		return nil, fmt.Errorf("failed to apply admission options: %w", err)
 	}
 

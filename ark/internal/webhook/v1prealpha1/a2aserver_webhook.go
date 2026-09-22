@@ -1,6 +1,7 @@
 package v1prealpha1
 
 import (
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
@@ -11,8 +12,7 @@ import (
 
 func SetupA2AServerWebhookWithManager(mgr ctrl.Manager) error {
 	v := validation.NewValidator(&validation.WebhookLookup{Client: mgr.GetClient()})
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&arkv1prealpha1.A2AServer{}).
+	return ctrl.NewWebhookManagedBy[runtime.Object](mgr, &arkv1prealpha1.A2AServer{}).
 		WithValidator(&validation.WebhookValidator{V: v}).
 		Complete()
 }

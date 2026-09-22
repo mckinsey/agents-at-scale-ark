@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -12,7 +11,7 @@ type WebhookValidator struct {
 	V *Validator
 }
 
-var _ webhook.CustomValidator = &WebhookValidator{}
+var _ admission.Validator[runtime.Object] = &WebhookValidator{}
 
 func (wv *WebhookValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	warnings, err := wv.V.Validate(ctx, obj)
@@ -32,7 +31,7 @@ type WebhookDefaulter struct {
 	Lookup DefaultsLookup
 }
 
-var _ webhook.CustomDefaulter = &WebhookDefaulter{}
+var _ admission.Defaulter[runtime.Object] = &WebhookDefaulter{}
 
 func (d *WebhookDefaulter) Default(ctx context.Context, obj runtime.Object) error {
 	ApplyDefaults(ctx, obj, d.Lookup)

@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,7 +46,7 @@ func (m *mockEventRecorder) AnnotatedEventf(object runtime.Object, eventAnnotati
 		annotations: eventAnnotations,
 		eventType:   eventtype,
 		reason:      reason,
-		message:     messageFmt,
+		message:     fmt.Sprintf(messageFmt, args...),
 		obj:         object,
 	})
 }
