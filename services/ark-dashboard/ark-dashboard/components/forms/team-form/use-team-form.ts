@@ -7,7 +7,7 @@ import * as z from 'zod';
 
 import { toast } from '@/components/ui/sonner';
 import type { components } from '@/lib/api/generated/types';
-import type { Agent, Team, TeamMember } from '@/lib/services';
+import type { AgentListItem, Team, TeamMember } from '@/lib/services';
 import { agentsService, teamsService } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -82,7 +82,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
   );
   const [saving, setSaving] = useState(false);
   const [team, setTeam] = useState<Team | null>(null);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<TeamMember[]>([]);
   const [initialMembers, setInitialMembers] = useState<TeamMember[]>([]);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
@@ -115,7 +115,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
         ) {
           const [teamData, agentsData] = await Promise.all([
             teamsService.getByName(namespace, teamName),
-            agentsService.getAll(namespace),
+            agentsService.listWithTools(namespace),
           ]);
 
           if (!teamData) {
@@ -146,12 +146,13 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             selectorPrompt:
               teamData.selector?.selectorPrompt ||
               (teamData.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
-            enableTerminateTool: teamData.selector?.enableTerminateTool ?? false,
+            enableTerminateTool:
+              teamData.selector?.enableTerminateTool ?? false,
             terminatePrompt:
               teamData.selector?.terminatePrompt || DEFAULT_TERMINATE_PROMPT,
           });
         } else {
-          const agentsData = await agentsService.getAll(namespace);
+          const agentsData = await agentsService.listWithTools(namespace);
           setAgents(agentsData);
         }
       } catch (error) {
@@ -185,26 +186,30 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
       setSaving(true);
       try {
         if (mode === TeamFormMode.VIEW && team) {
-          const updatedTeam = await teamsService.updateById(namespace, team.id, {
-            description: values.description || undefined,
-            members: selectedMembers.length > 0 ? selectedMembers : undefined,
-            strategy: values.strategy || undefined,
-            loops: values.loops,
-            maxTurns: values.maxTurns ? parseInt(values.maxTurns) : null,
-            selector:
-              values.selectorAgent ||
-              values.selectorPrompt ||
-              values.enableTerminateTool !== undefined ||
-              values.terminatePrompt
-                ? {
-                    agent: values.selectorAgent || undefined,
-                    selectorPrompt: values.selectorPrompt || undefined,
-                    enableTerminateTool: values.enableTerminateTool,
-                    terminatePrompt: values.terminatePrompt || undefined,
-                  }
-                : null,
-            graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
-          });
+          const updatedTeam = await teamsService.updateById(
+            namespace,
+            team.id,
+            {
+              description: values.description || undefined,
+              members: selectedMembers.length > 0 ? selectedMembers : undefined,
+              strategy: values.strategy || undefined,
+              loops: values.loops,
+              maxTurns: values.maxTurns ? parseInt(values.maxTurns) : null,
+              selector:
+                values.selectorAgent ||
+                values.selectorPrompt ||
+                values.enableTerminateTool !== undefined ||
+                values.terminatePrompt
+                  ? {
+                      agent: values.selectorAgent || undefined,
+                      selectorPrompt: values.selectorPrompt || undefined,
+                      enableTerminateTool: values.enableTerminateTool,
+                      terminatePrompt: values.terminatePrompt || undefined,
+                    }
+                  : null,
+              graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
+            },
+          );
 
           setTeam(updatedTeam);
           setInitialMembers(selectedMembers);

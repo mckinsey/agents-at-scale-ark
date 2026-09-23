@@ -1,8 +1,10 @@
 """Kubernetes models API endpoints."""
 import logging
 
+from enum import Enum
+
 from fastapi import APIRouter, Depends, Query, Request
-from typing import Optional
+from typing import List, Optional
 
 from kubernetes_asyncio.client import CustomObjectsApi
 
@@ -28,17 +30,45 @@ from ...models.models import (
 )
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
-from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION, VIEW_DESCRIPTION
 from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/models", tags=["models"])
 
+
+class ModelView(str, Enum):
+    """Detail level for model list responses."""
+    SUMMARY = "summary"
+    WITH_SECRETS = "with-secrets"
+
 # CRD configuration
 VERSION = "v1alpha1"
 MODEL_CRD_GROUP = "ark.mckinsey.com"
 MODEL_CRD_PLURAL = "models"
+
+
+def extract_secret_refs(spec: dict) -> List[str]:
+    """Collect names of secrets referenced by a model's config valueFrom entries."""
+    names = []
+    config = spec.get("config", {})
+    if not isinstance(config, dict):
+        return names
+    for provider_config in config.values():
+        if not isinstance(provider_config, dict):
+            continue
+        for value_obj in provider_config.values():
+            if not isinstance(value_obj, dict):
+                continue
+            value_from = value_obj.get("valueFrom")
+            if not isinstance(value_from, dict):
+                continue
+            secret_key_ref = value_from.get("secretKeyRef")
+            name = secret_key_ref.get("name") if isinstance(secret_key_ref, dict) else None
+            if name and name not in names:
+                names.append(name)
+    return names
 
 
 def get_provider_from_spec(spec: dict) -> str:
@@ -53,8 +83,12 @@ def get_provider_from_spec(spec: dict) -> str:
     return ""
 
 
-def model_to_response(model: dict) -> ModelResponse:
-    """Convert a Kubernetes Model CR to a response model."""
+def model_to_response(model: dict, view: ModelView = ModelView.SUMMARY) -> ModelResponse:
+    """Convert a Kubernetes Model CR to a response model.
+
+    The with-secrets view carries the names of secrets the model references so a
+    list caller can compute secret usage without a per-model detail fetch.
+    """
     metadata = model.get("metadata", {})
     spec = model.get("spec", {})
     status = model.get("status", {})
@@ -63,13 +97,18 @@ def model_to_response(model: dict) -> ModelResponse:
     conditions = status.get("conditions", [])
     availability = extract_availability_from_conditions(conditions, "ModelAvailable")
 
+    secret_refs = None
+    if view is ModelView.WITH_SECRETS:
+        secret_refs = extract_secret_refs(spec)
+
     return ModelResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         provider=get_provider_from_spec(spec),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else "",
         available=availability,
-        annotations=metadata.get("annotations", {})
+        annotations=metadata.get("annotations", {}),
+        secret_refs=secret_refs
     )
 
 
@@ -115,12 +154,13 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
 
 @router.get("", response_model=ModelListResponse)
 @handle_k8s_errors(operation="list", resource_type="model")
-async def list_models(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
+async def list_models(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), view: ModelView = Query(ModelView.SUMMARY, description=VIEW_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelListResponse:
     """
     List a page of Model CRs in a namespace.
 
     Args:
         namespace: The namespace to list models from
+        view: response detail level; 'with-secrets' adds referenced secret names
         pagination: limit and continue token for server-side pagination
 
     Returns:
@@ -131,7 +171,7 @@ async def list_models(request: Request, namespace: Optional[str] = Query(None, d
             limit=pagination.limit, continue_token=pagination.continue_token
         )
 
-        model_list = [model_to_response(model.to_dict()) for model in page.items]
+        model_list = [model_to_response(model.to_dict(), view) for model in page.items]
 
         return ModelListResponse(
             items=model_list,

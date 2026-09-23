@@ -1038,6 +1038,49 @@ class TestAgentsEndpoint(unittest.TestCase):
         )
 
     @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_list_agents_with_tools_view(self, mock_ark_client):
+        """With-tools view trims heavy fields but carries the referenced tool names."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "test-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/origin": "dashboard",
+                    "ark.mckinsey.com/a2a-server-skills": '[{"heavy": "payload"}]',
+                },
+            },
+            "spec": {
+                "description": "Test agent",
+                "prompt": "You are a helpful assistant",
+                "tools": [
+                    {"type": "custom", "name": "search"},
+                    {"type": "custom", "name": "terminate"},
+                    {"type": "custom"},
+                ],
+            },
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([mock_agent]))
+
+        response = self.client.get("/v1/agents?namespace=default&view=with-tools")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        item = data["items"][0]
+        # Trimmed like summary
+        self.assertIsNone(item["prompt"])
+        self.assertEqual(
+            item["annotations"], {"ark.mckinsey.com/origin": "dashboard"}
+        )
+        # Tool names carried; entries without a name are skipped
+        self.assertEqual(item["tool_names"], ["search", "terminate"])
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
     def test_list_agents_empty(self, mock_ark_client):
         """Test listing agents when none exist in the namespace."""
         # Setup async context manager mock
@@ -1426,6 +1469,42 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][1]["type"], "completions")
         self.assertEqual(data["items"][1]["model"], "anthropic.claude-v2")
         self.assertEqual(data["items"][1]["available"], "False")
+        # Default (summary) view does not carry secret refs
+        self.assertIsNone(data["items"][0]["secret_refs"])
+
+    @patch("ark_api.api.v1.models.with_ark_client")
+    def test_list_models_with_secrets_view(self, mock_ark_client):
+        """With-secrets view carries the names of secrets referenced by the config."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_model = Mock()
+        mock_model.to_dict.return_value = {
+            "metadata": {"name": "gpt-4-model", "namespace": "default"},
+            "spec": {
+                "provider": "openai",
+                "model": {"value": "gpt-4"},
+                "config": {
+                    "openai": {
+                        "apiKey": {
+                            "valueFrom": {
+                                "secretKeyRef": {"name": "openai-key", "key": "token"}
+                            }
+                        },
+                        "baseUrl": {"value": "https://api.openai.com"},
+                    }
+                },
+            },
+            "status": {"conditions": [{"type": "ModelAvailable", "status": "True"}]},
+        }
+
+        mock_client.models.a_list_page = AsyncMock(return_value=_page([mock_model]))
+
+        response = self.client.get("/v1/models?namespace=default&view=with-secrets")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["items"][0]["secret_refs"], ["openai-key"])
 
     @patch("ark_api.api.v1.models.with_ark_client")
     def test_list_models_empty(self, mock_ark_client):
