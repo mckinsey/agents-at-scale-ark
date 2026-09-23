@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { toast } from '@/components/ui/sonner';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -28,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { useDelayedLoading } from '@/lib/hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -68,8 +68,19 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly emptyDescription: ReactNode;
   readonly headerActions?: ReactNode;
   readonly originFilter?: ResourceListFilter<T>;
-  readonly loadItems: () => Promise<T[]>;
-  readonly deleteItem: (id: string) => Promise<unknown>;
+  /**
+   * Legacy uncontrolled data source. Provide this OR the controlled
+   * `items`/`onDelete` pair. When controlled props are supplied they win and
+   * the internal useState/useEffect loading path is bypassed (React Query
+   * owns the data). Spike: only agents is controlled for now.
+   */
+  readonly loadItems?: () => Promise<T[]>;
+  readonly deleteItem?: (id: string) => Promise<unknown>;
+  // Controlled mode (React Query): the caller owns fetching + caching.
+  readonly items?: T[];
+  readonly loading?: boolean;
+  readonly onDelete?: (id: string) => void;
+  readonly onReload?: () => void;
   readonly renderTable: (
     items: T[],
     onDelete: (id: string) => void,
@@ -93,15 +104,25 @@ export function ResourceListSection<T extends ResourceListItem>({
   originFilter,
   loadItems,
   deleteItem,
+  items: controlledItems,
+  loading: controlledLoading,
+  onDelete: controlledOnDelete,
+  onReload: controlledOnReload,
   renderTable,
 }: ResourceListSectionProps<T>) {
-  const [items, setItems] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Controlled mode is active when the caller drives data via React Query.
+  const isControlled = controlledItems !== undefined;
+
+  const [internalItems, setInternalItems] = useState<T[]>([]);
+  const [internalLoading, setInternalLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [originFilterValue, setOriginFilterValue] = useState('All');
-  const showLoading = useDelayedLoading(loading);
   const { readOnlyMode, namespace } = useNamespace();
+
+  const items = isControlled ? controlledItems : internalItems;
+  const loading = isControlled ? (controlledLoading ?? false) : internalLoading;
+  const showLoading = useDelayedLoading(loading);
 
   const loadItemsRef = useRef(loadItems);
   loadItemsRef.current = loadItems;
@@ -134,9 +155,13 @@ export function ResourceListSection<T extends ResourceListItem>({
   }, [items, searchQuery, statusFilter, originFilter, originFilterValue]);
 
   const reload = useCallback(async () => {
-    setLoading(true);
+    if (isControlled) {
+      controlledOnReload?.();
+      return;
+    }
+    setInternalLoading(true);
     try {
-      setItems(await loadItemsRef.current());
+      setInternalItems(await loadItemsRef.current!());
     } catch (error) {
       console.error('Failed to load data:', error);
       toast.error('Failed to Load Data', {
@@ -146,27 +171,33 @@ export function ResourceListSection<T extends ResourceListItem>({
             : 'An unexpected error occurred',
       });
     } finally {
-      setLoading(false);
+      setInternalLoading(false);
     }
-  }, []);
+  }, [isControlled, controlledOnReload]);
 
   useEffect(() => {
+    if (isControlled) return;
     reload();
-  }, [namespace, reload]);
+  }, [namespace, reload, isControlled]);
 
   const handleDelete = async (id: string) => {
+    if (isControlled) {
+      // The mutation hook owns success/error toasts and cache invalidation.
+      controlledOnDelete?.(id);
+      return;
+    }
     try {
       const item = items.find(i => i.id === id);
       if (!item) {
         throw new Error(`${entityLabel} not found`);
       }
-      await deleteItem(id);
+      await deleteItem!(id);
       toast.success(`${entityLabel} deleted successfully`);
-      setLoading(true);
+      setInternalLoading(true);
       try {
-        setItems(await loadItemsRef.current());
+        setInternalItems(await loadItemsRef.current!());
       } finally {
-        setLoading(false);
+        setInternalLoading(false);
       }
     } catch (error) {
       toast.error(`Failed to Delete ${entityLabel}`, {
@@ -188,7 +219,7 @@ export function ResourceListSection<T extends ResourceListItem>({
       : `There are no ${statusLabel} ${pluralLabel} at the moment.`;
 
   return (
-    <div className="flex h-full w-full content-shell flex-col">
+    <div className="content-shell flex h-full w-full flex-col">
       <ResourcePageHeader
         icon={icon}
         title={
@@ -238,7 +269,10 @@ export function ResourceListSection<T extends ResourceListItem>({
       {!showLoading && !isEmpty && (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
           <div className="flex flex-none items-end gap-3">
-            <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+            <ResourceSearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+            />
             {originFilter && (
               <div className="flex w-48 flex-col gap-2">
                 <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
