@@ -2,9 +2,10 @@
 
 Attached globally by ``core.config.setup_logging``. Passes, in order: shape-based (JWTs,
 provider API keys, PEM private keys), key-anchored (``key=value`` / ``Bearer <token>``),
-cookie/set-cookie (redacts the whole ;-separated header, not just the first pair), and
-userinfo (``scheme://user:<secret>@host``, literal and percent-encoded). Kept in sync with
-the Go trace redactor (``ark/internal/telemetry/redact``) via shared testdata fixtures. Not
+cookie/set-cookie header form (redacts the whole ;-separated header, not just the first
+pair) and query-param form (bounded like every other key), and userinfo
+(``scheme://user:<secret>@host``, literal and percent-encoded). Kept in sync with the Go
+trace redactor (``ark/internal/telemetry/redact``) via shared testdata fixtures. Not
 content-level DLP: opaque secrets and PII are not detected.
 """
 from __future__ import annotations
@@ -56,10 +57,23 @@ SENSITIVE_PATTERNS = re.compile(
 # so unlike every other key above, the unquoted value must run to end of line rather than
 # stopping at the first ';' -- otherwise every pair past the first leaks. The quoted
 # alternatives still take priority and stay bounded by their closing quote, so a
-# JSON-embedded cookie value doesn't swallow trailing structure (e.g. a closing '}').
-COOKIE_PATTERN = re.compile(
-    r"(?P<key>['\"]?(?:cookie|set-cookie)['\"]?)(?P<sep>\s*[=:]\s*)"
-    r"(?P<val>'[^']*'|\"[^\"]*\"|[^\r\n]+)",
+# JSON-embedded cookie value doesn't swallow trailing structure (e.g. a closing '}'). The
+# \[REDACTED\] alternative keeps this idempotent: without it, a second pass over an
+# already-redacted `cookie: [REDACTED]` would (the quotes from the first pass are gone) fall
+# through to the unquoted, end-of-line branch and eat everything after it on the line too.
+COOKIE_HEADER_PATTERN = re.compile(
+    r"(?P<key>['\"]?(?:cookie|set-cookie)['\"]?)(?P<sep>\s*:\s*)"
+    r"(?P<val>'[^']*'|\"[^\"]*\"|\[REDACTED\]|[^\r\n]+)",
+    re.IGNORECASE,
+)
+
+# The query-parameter form (?cookie=...) is bounded the same way as every other key: unlike
+# the header form above, its value must NOT run to end of line, or a cookie passed as a query
+# parameter would swallow the rest of the request line -- including the HTTP version and
+# status code that follow it in an access log line.
+COOKIE_PARAM_PATTERN = re.compile(
+    r"(?P<key>['\"]?(?:cookie|set-cookie)['\"]?)(?P<sep>\s*=\s*)"
+    r"(?P<val>'[^']*'|\"[^\"]*\"|[^\s,;&}'\"]+)",
     re.IGNORECASE,
 )
 
@@ -159,7 +173,11 @@ def _redact_string(s: str) -> str:
         lambda m: f"{m.group('key')}{m.group('sep')}{REDACTED}",
         s,
     )
-    s = COOKIE_PATTERN.sub(
+    s = COOKIE_HEADER_PATTERN.sub(
+        lambda m: f"{m.group('key')}{m.group('sep')}{REDACTED}",
+        s,
+    )
+    s = COOKIE_PARAM_PATTERN.sub(
         lambda m: f"{m.group('key')}{m.group('sep')}{REDACTED}",
         s,
     )

@@ -25,9 +25,22 @@ var keyAnchoredPattern = regexp.MustCompile(
 // so unlike every other key here the unquoted value must run to end of line rather than
 // stopping at the first ';'. The quoted alternatives still take priority and stay bounded by
 // their closing quote, so a JSON-embedded cookie value doesn't swallow trailing structure
-// (e.g. the closing '}'). Kept separate from keyAnchoredPattern for that reason.
-var cookiePattern = regexp.MustCompile(
-	`(?i)(?P<key>['"]?(?:cookie|set-cookie)['"]?)(?P<sep>\s*[=:]\s*)(?P<val>'[^']*'|"[^"]*"|[^\r\n]+)`,
+// (e.g. the closing '}'). The \[REDACTED\] alternative keeps this idempotent: without it, a
+// second pass over an already-redacted `cookie: [REDACTED]` would (the quotes from the first
+// pass are gone) fall through to the unquoted, end-of-line branch and eat everything after it
+// on the line too. Kept separate from keyAnchoredPattern for the end-of-line behavior.
+var cookieHeaderPattern = regexp.MustCompile(
+	`(?i)(?P<key>['"]?(?:cookie|set-cookie)['"]?)(?P<sep>\s*:\s*)` +
+		`(?P<val>'[^']*'|"[^"]*"|\[REDACTED\]|[^\r\n]+)`,
+)
+
+// The query-parameter form (?cookie=...) is bounded the same way as every other key: unlike
+// the header form above, its value must NOT run to end of line, or a cookie passed as a query
+// parameter would swallow the rest of the request line -- including the HTTP version and
+// status code that follow it in an access log line.
+var cookieParamPattern = regexp.MustCompile(
+	`(?i)(?P<key>['"]?(?:cookie|set-cookie)['"]?)(?P<sep>\s*=\s*)` +
+		`(?P<val>'[^']*'|"[^"]*"|[^\s,;&}'"]+)`,
 )
 
 // userinfoBoundary bounds the user/password segments of a URL's userinfo. It excludes
@@ -89,8 +102,11 @@ func Redact(s string) string {
 	if keyAnchoredPattern.MatchString(s) {
 		s = keyAnchoredPattern.ReplaceAllString(s, "${key}${sep}"+redactedPlaceholder)
 	}
-	if cookiePattern.MatchString(s) {
-		s = cookiePattern.ReplaceAllString(s, "${key}${sep}"+redactedPlaceholder)
+	if cookieHeaderPattern.MatchString(s) {
+		s = cookieHeaderPattern.ReplaceAllString(s, "${key}${sep}"+redactedPlaceholder)
+	}
+	if cookieParamPattern.MatchString(s) {
+		s = cookieParamPattern.ReplaceAllString(s, "${key}${sep}"+redactedPlaceholder)
 	}
 	if strings.Contains(s, "@") || strings.Contains(s, "%40") {
 		s = userinfoLiteralPattern.ReplaceAllString(s, "${scheme}${user}${colon}"+redactedPlaceholder+"${at}")
