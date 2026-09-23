@@ -125,10 +125,28 @@ webhook:
 # Ark-managed runner). Off by default: enabling it lets subjects holding the
 # dedicated "use inlinetools" permission store executable code. Enabling it
 # requires an enforceable admission path - the Ark webhooks on the etcd backend,
-# or the embedded apiserver on postgresql. No runner runtime ships in this
-# release, so authored inline Tools stay Pending.
+# or the embedded apiserver on postgresql. Install the activator separately so
+# disabling authoring/invocation does not remove runtime cleanup support.
 inlineTools:
   enabled: false
+  activator:
+    enabled: false
+    # Empty namespace means the Helm release namespace. Add other executor
+    # workloads explicitly; every entry must have non-empty pod labels.
+    allowedCallers:
+      - namespace: ""
+        podLabels:
+          control-plane: ark-controller
+      - namespace: ""
+        podLabels:
+          app: ark-completions
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
   runner:
     image:
       # One image per language runtime; the controller appends -bash, -python or
