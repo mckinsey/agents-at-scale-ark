@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	k8sopenapi "k8s.io/apiextensions-apiserver/pkg/generated/openapi"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 	"k8s.io/kube-openapi/pkg/validation/spec"
 	"sigs.k8s.io/yaml"
@@ -37,60 +38,37 @@ var (
 	definitions map[string]openapicommon.OpenAPIDefinition
 )
 
-// canonicalName converts a Go import-path-style type name like
-// "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta" into the JSON-friendly form
-// "io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta" that kube-apiserver and the
-// SSA fieldmanager expect for $ref lookups. Without this conversion, our CRD
-// schemas reference io.k8s... but the apiextensions-apiserver generator returns
-// keys in Go-style — every UPDATE then logs "[SHOULD NOT HAPPEN] failed to update
-// managedFields ... no type found matching: io.k8s..." silently corrupting SSA
-// field-manager attribution.
-func canonicalName(goImportName string) string {
-	parts := strings.Split(goImportName, "/")
-	if len(parts) > 0 && strings.Contains(parts[0], ".") {
-		dotParts := strings.Split(parts[0], ".")
-		// reverse domain segments (k8s.io -> io.k8s)
-		for i, j := 0, len(dotParts)-1; i < j; i, j = i+1, j-1 {
-			dotParts[i], dotParts[j] = dotParts[j], dotParts[i]
-		}
-		parts[0] = strings.Join(dotParts, ".")
-	}
-	return strings.Join(parts, ".")
-}
+// objectMetaModelName and listMetaModelName are the canonical OpenAPI model
+// names (e.g. io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta) the apiserver
+// keys its definitions and $refs under. Since k8s 0.37 the generated openapi
+// map and ref callback both speak this canonical form via OpenAPIModelName(),
+// so we use it directly instead of hand-converting Go import paths.
+var (
+	objectMetaModelName = metav1.ObjectMeta{}.OpenAPIModelName()
+	listMetaModelName   = metav1.ListMeta{}.OpenAPIModelName()
+)
 
 func loadCRDDefinitions() {
 	definitions = make(map[string]openapicommon.OpenAPIDefinition)
 
-	// The ref callback drives every $ref string the auto-generated k8s schemas embed.
-	// genericapiserver.BuildOpenAPIDefinitionsForResources stores schemas under
-	// canonical reverse-domain names (e.g. io.k8s.apimachinery...) — if our $refs
-	// embed Go-style names instead, the SMD typeconverter can't resolve them at
-	// fieldmanager time and every Create/Update logs:
-	//   [SHOULD NOT HAPPEN] failed to update managedFields ... no type found matching
-	// Make the callback emit canonical refs so the embedded $refs match the keys
-	// the spec components dict will actually use.
+	// The generated k8s schemas embed their $refs by canonical model name, so
+	// emit refs verbatim; re-deriving them would corrupt names the SMD
+	// typeconverter later resolves at fieldmanager time.
 	ref := func(name string) spec.Ref {
-		return spec.MustCreateRef("#/definitions/" + canonicalName(name))
+		return spec.MustCreateRef("#/definitions/" + name)
 	}
-	k8sDefs := k8sopenapi.GetOpenAPIDefinitions(ref)
-	// Register every k8s definition under both Go-style (used by the spec builder's
-	// internal lookup `o.definitions[name]`) and canonical (used by the SMD lookup at
-	// fieldmanager time). The two keys point at the same value.
-	for k, v := range k8sDefs {
+	for k, v := range k8sopenapi.GetOpenAPIDefinitions(ref) {
 		definitions[k] = v
-		if canonical := canonicalName(k); canonical != k {
-			definitions[canonical] = v
-		}
 	}
 
 	objectMetaRef := spec.Schema{
 		SchemaProps: spec.SchemaProps{
-			Ref: spec.MustCreateRef("#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta"),
+			Ref: spec.MustCreateRef("#/definitions/" + objectMetaModelName),
 		},
 	}
 	listMetaRef := spec.Schema{
 		SchemaProps: spec.SchemaProps{
-			Ref: spec.MustCreateRef("#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.ListMeta"),
+			Ref: spec.MustCreateRef("#/definitions/" + listMetaModelName),
 		},
 	}
 
@@ -141,13 +119,13 @@ func loadCRDFile(filename string, objectMetaSchema, listMetaSchema *spec.Schema)
 		// type found matching: io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta".
 		definitions[resourceKey] = openapicommon.OpenAPIDefinition{
 			Schema:       schema,
-			Dependencies: []string{"k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			Dependencies: []string{objectMetaModelName},
 		}
 
 		listKey := resourceKey + "List"
 		listDef := schemaForList(&schema, listMetaSchema)
 		listDef.Dependencies = []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta",
+			listMetaModelName,
 			resourceKey,
 		}
 		definitions[listKey] = listDef

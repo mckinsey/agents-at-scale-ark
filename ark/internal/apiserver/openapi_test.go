@@ -3,9 +3,11 @@
 package apiserver
 
 import (
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
 func TestGetOpenAPIDefinitions(t *testing.T) {
@@ -28,6 +30,54 @@ func TestGetOpenAPIDefinitions(t *testing.T) {
 	}
 
 	t.Logf("Loaded %d definitions", len(defs))
+}
+
+// TestDefinitionsAreClosed reproduces, at unit level, the aggregated apiserver's
+// "failed to install API group: unable to get openapi models: cannot find model
+// definition for ..." startup failure. Every declared Dependency and every $ref
+// embedded in a schema must resolve to a key in the map; a mismatch (e.g. a
+// Go-style meta name after k8s moved to canonical OpenAPIModelName keys) only
+// surfaces at apiserver boot in postgres mode, which unit and etcd tests miss.
+func TestDefinitionsAreClosed(t *testing.T) {
+	defs := GetOpenAPIDefinitions(nil)
+
+	for name, def := range defs {
+		for _, dep := range def.Dependencies {
+			if _, ok := defs[dep]; !ok {
+				t.Errorf("definition %q declares dependency %q missing from the definitions map", name, dep)
+			}
+		}
+		for _, r := range collectRefs(&def.Schema) {
+			if _, ok := defs[r]; !ok {
+				t.Errorf("definition %q references %q missing from the definitions map", name, r)
+			}
+		}
+	}
+}
+
+// collectRefs returns the definition names every $ref in the schema points at.
+func collectRefs(s *spec.Schema) []string {
+	if s == nil {
+		return nil
+	}
+	var refs []string
+	if ptr := s.Ref.GetPointer(); ptr != nil && !ptr.IsEmpty() {
+		refs = append(refs, strings.TrimPrefix(s.Ref.String(), "#/definitions/"))
+	}
+	for i := range s.Properties {
+		p := s.Properties[i]
+		refs = append(refs, collectRefs(&p)...)
+	}
+	if s.Items != nil {
+		refs = append(refs, collectRefs(s.Items.Schema)...)
+		for i := range s.Items.Schemas {
+			refs = append(refs, collectRefs(&s.Items.Schemas[i])...)
+		}
+	}
+	if s.AdditionalProperties != nil {
+		refs = append(refs, collectRefs(s.AdditionalProperties.Schema)...)
+	}
+	return refs
 }
 
 func TestModelSchemaHasProperStructure(t *testing.T) {
