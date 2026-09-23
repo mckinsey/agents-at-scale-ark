@@ -553,6 +553,50 @@ async def _resolve_mcp_server(
     )
 
 
+INLINE_TRANSPORT = "http"
+INLINE_TIMEOUT = "90s"
+
+
+def _inline_mcp_server(tool_crd: Any, tool_name: str, namespace: str) -> Optional[MCPServerConfig]:
+    """Adapt a resolved inline Tool to an MCP connection.
+
+    Returns None when the Tool has no usable published endpoint, so a stale or
+    unavailable runtime is skipped rather than connected to.
+    """
+    metadata = getattr(tool_crd, "metadata", None)
+    uid = _get_attr_or_key(metadata, "uid")
+    generation = _get_attr_or_key(metadata, "generation")
+    status = getattr(tool_crd, "status", None)
+    address = _get_attr_or_key(status, "resolved_address", "resolvedAddress")
+    conditions = _get_attr_or_key(status, "conditions") or []
+
+    available = next(
+        (c for c in conditions if _get_attr_or_key(c, "type") == "Available"), None
+    )
+    if (
+        not uid
+        or not address
+        or not generation
+        or available is None
+        or _get_attr_or_key(available, "status") != "True"
+        or _get_attr_or_key(available, "observed_generation", "observedGeneration") != generation
+    ):
+        logger.warning(
+            f"Inline tool '{tool_name}' has no available endpoint for its current "
+            f"generation and was skipped"
+        )
+        return None
+
+    return MCPServerConfig(
+        name=f"inline-{namespace}-{tool_name}-{uid}",
+        url=address,
+        transport=INLINE_TRANSPORT,
+        timeout=INLINE_TIMEOUT,
+        headers={},
+        tools=[tool_name],
+    )
+
+
 async def _build_mcp_servers(
     ark: Any,
     agent: Any,
@@ -563,6 +607,7 @@ async def _build_mcp_servers(
         return []
 
     server_tools: dict[str, list[str]] = {}
+    inline_servers: list[MCPServerConfig] = []
     dropped: list[str] = []
     for agent_tool in agent.spec.tools:
         tool_name = getattr(agent_tool, "name", None)
@@ -574,6 +619,12 @@ async def _build_mcp_servers(
             tool_spec = tool_crd.spec
 
             tool_type = getattr(tool_spec, "type", None)
+            if tool_type == "inline":
+                inline_server = _inline_mcp_server(tool_crd, tool_name, namespace)
+                if inline_server:
+                    inline_servers.append(inline_server)
+                continue
+
             if tool_type != "mcp":
                 if tool_type:
                     dropped.append(f"{tool_name} ({tool_type})")
@@ -604,7 +655,7 @@ async def _build_mcp_servers(
             f"tools were not available to the agent: {', '.join(dropped)}"
         )
 
-    servers: list[MCPServerConfig] = []
+    servers: list[MCPServerConfig] = list(inline_servers)
     for server_name, tool_names in server_tools.items():
         server_config = await _resolve_mcp_server(ark, server_name, namespace, impersonation)
         if server_config:
