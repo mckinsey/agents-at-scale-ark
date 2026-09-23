@@ -226,9 +226,12 @@ function QueryViewMode({
             current={query.name}
           />
           <div className="flex items-center gap-3">
-            <a href={eventsHref} target="_blank" rel="noopener noreferrer">
+            <NamespacedLink
+              href={eventsHref}
+              target="_blank"
+              rel="noopener noreferrer">
               <Button variant="outline">View events</Button>
-            </a>
+            </NamespacedLink>
             <NamespacedLink href="/query/new">
               <Button>New Query</Button>
             </NamespacedLink>

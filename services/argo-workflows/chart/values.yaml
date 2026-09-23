@@ -59,6 +59,8 @@ argo-workflows:
 
   # Executor resources - these are the pods that execute steps.
   executor:
+    image:
+      tag: v3.7.2-nonroot
     resources:
       requests:
         memory: "128Mi"
@@ -84,6 +86,16 @@ roleBindings:
 # 'roleBindings' config is sufficient.
 ark-tenant:
   enabled: false
+  # This subchart provisions RBAC for a workflow-orchestration namespace, not
+  # a full conversational Ark tenant, so it should not require (or wait on) a
+  # broker Service the way `ark install ark-tenant` does.
+  #
+  # Inert at the ark-tenant version currently pinned in Chart.yaml, which has
+  # neither this value nor the preflight it disables. Set here so the bump that
+  # introduces the preflight does not break this chart; do not drop it when
+  # bumping the pin.
+  memory:
+    requireBroker: false
   serviceAccount:
     # No need to create this service account - the argo chart creates it.
     create: false

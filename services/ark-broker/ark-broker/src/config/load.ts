@@ -12,6 +12,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       port: parsed.PORT,
       host: parsed.HOST,
       requestTimeoutMs: parsed.REQUEST_TIMEOUT_MS,
+      shutdownDrainTimeoutMs: parsed.SHUTDOWN_DRAIN_TIMEOUT_MS,
     }),
     limits: Object.freeze({
       messageMaxBytes: parsed.MESSAGE_MAX_BYTES,
@@ -43,6 +44,8 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       statementTimeoutMs: parsed.DATABASE_STATEMENT_TIMEOUT_MS,
       debugQueries: parsed.DATABASE_DEBUG_QUERIES,
       sslRootCertPath: parsed.DATABASE_SSL_ROOT_CERT_PATH,
+      reapIntervalSeconds: parsed.ROW_REAP_INTERVAL_SECONDS,
+      reapBatchSize: parsed.ROW_REAP_BATCH_SIZE,
     }),
     redis: Object.freeze({
       url: parsed.REDIS_URL,

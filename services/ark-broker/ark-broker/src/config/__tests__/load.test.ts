@@ -9,6 +9,7 @@ describe('loadConfig', () => {
     expect(cfg.server.port).toBe(8080);
     expect(cfg.server.host).toBe('0.0.0.0');
     expect(cfg.server.requestTimeoutMs).toBe(0);
+    expect(cfg.server.shutdownDrainTimeoutMs).toBe(10000);
     expect(cfg.limits.messageMaxBytes).toBe(104857600);
     expect(cfg.limits.eventMaxBytes).toBe(104857600);
     expect(cfg.limits.chunkMaxBytes).toBe(33554432);
@@ -46,6 +47,7 @@ describe('loadConfig', () => {
       PORT: '9000',
       HOST: '127.0.0.1',
       REQUEST_TIMEOUT_MS: '5000',
+      SHUTDOWN_DRAIN_TIMEOUT_MS: '2000',
       MESSAGE_MAX_BYTES: '1048576',
       EVENT_MAX_BYTES: '2097152',
       CHUNK_MAX_BYTES: '524288',
@@ -62,6 +64,7 @@ describe('loadConfig', () => {
     expect(cfg.server.port).toBe(9000);
     expect(cfg.server.host).toBe('127.0.0.1');
     expect(cfg.server.requestTimeoutMs).toBe(5000);
+    expect(cfg.server.shutdownDrainTimeoutMs).toBe(2000);
     expect(cfg.limits.messageMaxBytes).toBe(1048576);
     expect(cfg.limits.eventMaxBytes).toBe(2097152);
     expect(cfg.limits.chunkMaxBytes).toBe(524288);
@@ -142,6 +145,35 @@ describe('loadConfig', () => {
       expect(cfg.database.poolMax).toBe(20);
       expect(cfg.database.connectTimeoutMs).toBe(5000);
       expect(cfg.database.statementTimeoutMs).toBe(60000);
+    });
+
+    it('defaults reaper interval and batch size', () => {
+      const cfg = loadConfig({});
+
+      expect(cfg.database.reapIntervalSeconds).toBe(3600);
+      expect(cfg.database.reapBatchSize).toBe(10000);
+    });
+
+    it('honors custom reaper values', () => {
+      const cfg = loadConfig({
+        ROW_REAP_INTERVAL_SECONDS: '60',
+        ROW_REAP_BATCH_SIZE: '500',
+      });
+
+      expect(cfg.database.reapIntervalSeconds).toBe(60);
+      expect(cfg.database.reapBatchSize).toBe(500);
+    });
+
+    it('rejects ROW_REAP_INTERVAL_SECONDS above the Node timer range', () => {
+      expect(() =>
+        loadConfig({ROW_REAP_INTERVAL_SECONDS: '2592000'})
+      ).toThrow();
+    });
+
+    it('accepts ROW_REAP_INTERVAL_SECONDS=0 to disable reaping', () => {
+      const cfg = loadConfig({ROW_REAP_INTERVAL_SECONDS: '0'});
+
+      expect(cfg.database.reapIntervalSeconds).toBe(0);
     });
 
     it('honors MESSAGE_VISIBILITY_TTL_SECONDS', () => {
