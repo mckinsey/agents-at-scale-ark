@@ -1,0 +1,195 @@
+{{- $enabled := eq (include "chart.inlineToolsEnabled" .) "true" -}}
+{{- if and $enabled (not .Values.inlineTools.activator.enabled) -}}
+{{- fail "inlineTools.enabled requires inlineTools.activator.enabled=true; keep the activator installed when disabling invocation" -}}
+{{- end -}}
+{{- if .Values.inlineTools.activator.enabled -}}
+{{- if .Values.networkPolicy.enable -}}
+{{- fail "inlineTools.activator.enabled conflicts with networkPolicy.enable: ark-system-baseline permits unselected callers; replace its protections with appropriately scoped policies before disabling it and installing the activator" -}}
+{{- end -}}
+{{- if not .Values.controllerManager.watchNamespaces -}}
+{{- fail "inlineTools.activator.enabled requires non-empty controllerManager.watchNamespaces; cluster-wide activator bindings are not supported" -}}
+{{- end -}}
+{{- if not (has .Release.Namespace .Values.controllerManager.watchNamespaces) -}}
+{{- fail "controllerManager.watchNamespaces must include the release namespace for inline activator availability checks" -}}
+{{- end -}}
+{{- range .Values.controllerManager.watchNamespaces -}}
+{{- if or (gt (len .) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" .)) -}}
+{{- fail "controllerManager.watchNamespaces must contain valid, non-empty namespace names" -}}
+{{- end -}}
+{{- end -}}
+{{- if not .Values.rbac.enable -}}
+{{- fail "inlineTools.activator.enabled requires rbac.enable=true for its dedicated namespaced permissions" -}}
+{{- end -}}
+{{- if not .Values.inlineTools.activator.allowedCallers -}}
+{{- fail "inlineTools.activator.allowedCallers must select at least one executor workload" -}}
+{{- end -}}
+{{- range .Values.inlineTools.activator.allowedCallers -}}
+{{- if or (not (kindIs "map" .podLabels)) (not .podLabels) -}}
+{{- fail "every inlineTools.activator.allowedCallers entry requires non-empty podLabels" -}}
+{{- end -}}
+{{- $namespace := .namespace | default $.Release.Namespace -}}
+{{- if or (gt (len $namespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $namespace)) -}}
+{{- fail "inlineTools.activator.allowedCallers namespaces must be valid namespace names" -}}
+{{- end -}}
+{{- end -}}
+{{- $labels := merge (dict "app.kubernetes.io/name" "ark-inline-activator") (include "chart.labels" . | fromYaml) -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ark-inline-activator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ark-inline-activator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ark-inline-activator
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml $labels | nindent 8 }}
+    spec:
+      serviceAccountName: ark-inline-activator
+      terminationGracePeriodSeconds: 95
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: activator
+          image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.controllerManager.container.image.pullPolicy | default "IfNotPresent" }}
+          command: ["/manager"]
+          args: ["--role=inline-activator"]
+          env:
+            - name: ARK_INLINE_TOOLS_ENABLED
+              value: {{ $enabled | quote }}
+            - name: ARK_INLINE_ACTIVATOR_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: ARK_WATCH_NAMESPACES
+              value: {{ join "," .Values.controllerManager.watchNamespaces | quote }}
+            - name: AUTOMEMLIMIT
+              value: "0.9"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            initialDelaySeconds: 60
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.inlineTools.activator.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ark-inline-activator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ark-inline-activator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ark-inline-activator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ark-inline-activator
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range .Values.inlineTools.activator.allowedCallers }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .namespace | default $.Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .podLabels | nindent 14 }}
+        {{- end }}
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-inline-activator
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+rules:
+  - apiGroups: [ark.mckinsey.com]
+    resources: [tools]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [services, pods]
+    verbs: [get]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [deployments/scale]
+    verbs: [update]
+{{- range .Values.controllerManager.watchNamespaces | uniq }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-inline-activator
+  namespace: {{ . }}
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-inline-activator
+subjects:
+  - kind: ServiceAccount
+    name: ark-inline-activator
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- end }}

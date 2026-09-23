@@ -208,13 +208,40 @@ kubectl create rolebinding inline-authors \
 
 Writes through ark-api additionally require impersonation, so inline source is never stored under ark-api's service account. Ark stamps `ark.mckinsey.com/inline-authored-by` and `ark.mckinsey.com/inline-authored-at` on each admitted write as a durable authorship record independent of audit logging. See [Reference → Tools → Inline tools](/reference/resources/tools#inline-tools).
 
+#### Install the singleton activator
+
+Install the runtime independently of the authoring/invocation flag. In the controller chart, set:
+
+```yaml
+controllerManager:
+  watchNamespaces: [ark-system, tenant-1]
+inlineTools:
+  enabled: false
+  activator:
+    enabled: true
+```
+
+Create the watched namespaces first and include the Helm release namespace. The chart rejects an empty scope, disabled RBAC, or invocation enabled without the activator installed; it never grants the activator a cluster-wide binding. On upgrade, retain these values and merge new chart defaults, for example with Helm's `--reset-then-reuse-values`.
+
+The activator reuses the controller image with `--role=inline-activator`, a dedicated ServiceAccount, and exactly one replica regardless of controller replica count. Its `Recreate` strategy prevents overlapping scaling authorities during rollout; shutdown waits up to 90 seconds for accepted HTTP calls, within a 95-second pod termination grace period. Do not scale it above one replica or force-delete its pod: Recreate orders Deployment rollouts, not manual pod replacement or node-partition recovery. A rollout can briefly interrupt availability; uncertain calls must not be replayed.
+
+A dedicated ClusterRole is bound only through a RoleBinding in each watched namespace. It grants Tool `get`, Deployment `get/list`, Service/Pod/ReplicaSet `get`, EndpointSlice `list`, and Deployment `scale` `update`; it grants no Secret access or Tool writes. RBAC cannot filter by labels or owner references: these credentials can scale **any** Deployment in a bound namespace. The activator's UID, ownership and revision checks restrict normal operation to owned runners; a compromised activator remains privileged across those namespaces.
+
+The Service is internal-only. A mandatory ingress NetworkPolicy admits TCP 8080 from the release namespace's `control-plane: ark-controller` and `app: ark-completions` pods by default. To allow other executor workloads, replace `inlineTools.activator.allowedCallers` with entries containing `namespace` and non-empty `podLabels`; an empty namespace means the release namespace. Replacing that list replaces the defaults, so retain every required caller. Administrators must prevent additive policies from widening this boundary and protect these labels; it is not per-user authentication.
+
+The chart rejects installing the activator with `networkPolicy.enable=true`, even with invocation disabled: its `ark-system-baseline` policy allows every same-namespace pod to reach the activator. Before disabling that option, replace the baseline, webhook, metrics and ingress protections it installs with appropriately scoped policies that do not widen activator ingress. The guard catches this known chart conflict only, not other administrator policies, and does not verify CNI enforcement.
+
 #### Runner infrastructure
 
 With the feature enabled, the controller provisions one ConfigMap, ServiceAccount, Service, NetworkPolicy and Deployment per inline tool, in the tool's namespace. The Deployment starts at zero replicas, so an authored-but-unused tool costs no pods. Runner images are fixed per language and not overridable per tool:
 
 ```yaml
+controllerManager:
+  watchNamespaces: [ark-system, tenant-1]
 inlineTools:
   enabled: true
+  activator:
+    enabled: true
   runner:
     image:
       repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-inline-runner
@@ -236,7 +263,7 @@ The policy-conflict decision checks pod selectors, not a policy's metadata label
 
 The controller checks policies against both the runner template and live runner pod labels. A conflict clears `status.resolvedAddress` and reports `Available=False`, reason `ConflictingNetworkPolicy`, with the policy name and an instruction to narrow it. Narrowing or deleting the policy restores availability once other runtime prerequisites are met. Policy and pod-label changes trigger re-evaluation; a 30-second API-only refresh also recovers missed events. If required policy or pod reads fail, the tool remains Pending with `ProvisioningFailed`. Removing identifying labels from a runner pod also blocks availability until an administrator restores them.
 
-The controller needs read-only access to Pods and ReplicaSets to follow runner ownership even after labels change. It changes only the policy it owns, never a tenant policy. **Rollout status:** runtime packaging and executor integration remain incomplete; inline tools are disabled by default.
+The controller needs read-only access to Pods and ReplicaSets to follow runner ownership even after labels change. It changes only the policy it owns, never a tenant policy. **Rollout status:** executor integration remains incomplete; inline tools are disabled by default.
 
 An enforcing CNI is still required. On a non-enforcing CNI, outbound script connections and direct runner access may succeed despite the policy. Standard NetworkPolicy also has node-local traffic exceptions: administrators must protect node and metadata-service access and control who can change workload labels or policies. These restrictions are not per-user authentication, and Ark sends no traffic probes or synthetic control connections to verify them.
 
@@ -244,7 +271,7 @@ An enforcing CNI is still required. On a non-enforcing CNI, outbound script conn
 
 The activator's stateless MCP handler serves initialization, notifications, ping, and `tools/list` from the current Tool metadata. Each namespace/name/UID route advertises only that Tool's name, description, input schema and annotations; an omitted schema becomes `{"type":"object"}`. Source is never included. Discovery does not read runner resources, invoke a call, or refresh an idle timer.
 
-Routes outside the explicitly watched namespaces, deleted/recreated Tools, and unknown names are rejected. API read failures and malformed schemas fail closed. Only `tools/call` reaches the separate invocation handler. **Rollout status:** the metadata handler and invocation lifecycle are implemented; singleton packaging remains pending.
+Routes outside the explicitly watched namespaces, deleted/recreated Tools, and unknown names are rejected. API read failures and malformed schemas fail closed. Only `tools/call` reaches the separate invocation handler.
 
 Stateless `tools/call` work is tied to its HTTP request lifetime. Disconnecting cancels the invocation context and terminates a running script's process group rather than waiting for the execution limit. Cancellation cannot roll back effects already dispatched; treat a lost response as uncertain execution.
 
@@ -260,13 +287,13 @@ Activation, including the handshake, has a 60-second budget. Execution then has 
 
 On restart, existing warm owned runners receive a fresh 60-second grace period before idle cleanup. Scale writes use the scale subresource with optimistic concurrency, and failed reads or changed ownership prevent the write. The controller alone performs bounded drain while the feature is disabled. Backend calls are sent once: uncertain responses are not replayed.
 
-**Rollout status:** singleton packaging and executor integration remain pending. Keep inline tools disabled until runtime support is installed.
+**Rollout status:** executor integration remains pending. Keep inline tools disabled in production until that integration is available.
 
 #### Disabling, deleting and downgrading
 
 Order matters, because a runner Deployment outlives the flag that created it:
 
-1. **Disable authoring and invocation:** set `inlineTools.enabled=false` and upgrade. The controller withdraws each tool's endpoint immediately, then scales any running runner to zero after a bounded drain so work already in flight is not cut off mid-call. Reconciliation deliberately keeps running while disabled — it is what scales those pods down — and the controller keeps its workload permissions for the same reason.
+1. **Disable authoring and invocation:** set `inlineTools.enabled=false`, retain `inlineTools.activator.enabled=true`, and upgrade. The controller withdraws each tool's endpoint immediately, then scales any running runner to zero after a bounded drain so work already in flight is not cut off mid-call. Reconciliation deliberately keeps running while disabled — it is what scales those pods down — and the controller keeps its workload permissions for the same reason.
 2. **Delete the inline tools:** `kubectl delete tool <name>`. The controller removes the owned children itself rather than relying on garbage collection, so this behaves the same on the etcd and PostgreSQL backends. Verify before continuing:
 
    ```bash
@@ -274,7 +301,7 @@ Order matters, because a runner Deployment outlives the flag that created it:
    kubectl get deploy,svc,cm,netpol -A -l app.kubernetes.io/name=ark-inline-runner
    ```
 
-3. **Only then replace or downgrade the operator.** Reverting to a release that does not understand `type: inline` does not stop surviving runner pods or make them inert — nothing would be left to reconcile or delete them. Removing the runtime components is valid once no inline tools remain.
+3. **Only then replace or downgrade the operator.** Reverting to a release that does not understand `type: inline` does not stop surviving runner pods or make them inert — nothing would be left to reconcile or delete them. Set `inlineTools.activator.enabled=false` to remove the runtime only after no inline tools or owned runner resources remain.
 
 ### Setting Up Tenant Namespaces
 
