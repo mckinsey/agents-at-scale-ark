@@ -373,11 +373,11 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(
+	if r.List(
 		ctx, &agentList,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.tools.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)
@@ -385,11 +385,11 @@ func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Obje
 
 func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(
+	if r.List(
 		ctx, &agentList,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.modelRef.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)
@@ -397,11 +397,11 @@ func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Obj
 
 func (r *AgentReconciler) findAgentsForExecutionEngine(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(
+	if r.List(
 		ctx, &agentList,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.executionEngine.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)

@@ -153,11 +153,11 @@ func (r *TeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *TeamReconciler) findTeamsForAgent(ctx context.Context, obj client.Object) []reconcile.Request {
 	var teams arkv1alpha1.TeamList
-	if err := r.List(
+	if r.List(
 		ctx, &teams,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.members.agent.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return []reconcile.Request{}
 	}
 
