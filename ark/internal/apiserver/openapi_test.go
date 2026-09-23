@@ -62,7 +62,7 @@ func collectRefs(s *spec.Schema) []string {
 	}
 	var refs []string
 	if ptr := s.Ref.GetPointer(); ptr != nil && !ptr.IsEmpty() {
-		refs = append(refs, strings.TrimPrefix(s.Ref.String(), "#/definitions/"))
+		refs = append(refs, strings.TrimPrefix(s.Ref.String(), definitionsRefPrefix))
 	}
 	for i := range s.Properties {
 		p := s.Properties[i]

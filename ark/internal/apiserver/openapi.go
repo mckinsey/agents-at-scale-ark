@@ -18,6 +18,10 @@ import (
 //go:embed crds/*.yaml
 var crdFS embed.FS
 
+// definitionsRefPrefix is the JSON-pointer prefix every OpenAPI $ref in the
+// definitions map is keyed under.
+const definitionsRefPrefix = "#/definitions/"
+
 type crdFile struct {
 	Spec struct {
 		Names struct {
@@ -55,7 +59,7 @@ func loadCRDDefinitions() {
 	// emit refs verbatim; re-deriving them would corrupt names the SMD
 	// typeconverter later resolves at fieldmanager time.
 	ref := func(name string) spec.Ref {
-		return spec.MustCreateRef("#/definitions/" + name)
+		return spec.MustCreateRef(definitionsRefPrefix + name)
 	}
 	for k, v := range k8sopenapi.GetOpenAPIDefinitions(ref) {
 		definitions[k] = v
@@ -63,12 +67,12 @@ func loadCRDDefinitions() {
 
 	objectMetaRef := spec.Schema{
 		SchemaProps: spec.SchemaProps{
-			Ref: spec.MustCreateRef("#/definitions/" + objectMetaModelName),
+			Ref: spec.MustCreateRef(definitionsRefPrefix + objectMetaModelName),
 		},
 	}
 	listMetaRef := spec.Schema{
 		SchemaProps: spec.SchemaProps{
-			Ref: spec.MustCreateRef("#/definitions/" + listMetaModelName),
+			Ref: spec.MustCreateRef(definitionsRefPrefix + listMetaModelName),
 		},
 	}
 
