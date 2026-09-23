@@ -984,12 +984,58 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["description"], "Test agent")
         self.assertEqual(data["items"][0]["model_ref"], "gpt-4")
         self.assertEqual(data["items"][0]["available"], "True")
+        # Full view (default) keeps the prompt
+        self.assertEqual(
+            data["items"][0]["prompt"], "You are a helpful assistant"
+        )
 
         # Check second agent
         self.assertEqual(data["items"][1]["name"], "another-agent")
         self.assertEqual(data["items"][1]["description"], "Another test agent")
         self.assertIsNone(data["items"][1]["model_ref"])
         self.assertEqual(data["items"][1]["available"], "False")
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_list_agents_summary_view(self, mock_ark_client):
+        """Summary view omits prompt and keeps only the origin annotation."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "test-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/origin": "dashboard",
+                    "ark.mckinsey.com/a2a-server-skills": '[{"heavy": "payload"}]',
+                },
+            },
+            "spec": {
+                "description": "Test agent",
+                "prompt": "You are a helpful assistant",
+                "modelRef": {"name": "gpt-4"},
+            },
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([mock_agent]))
+
+        response = self.client.get("/v1/agents?namespace=default&view=summary")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        item = data["items"][0]
+        # Fields the list UI renders survive
+        self.assertEqual(item["name"], "test-agent")
+        self.assertEqual(item["description"], "Test agent")
+        self.assertEqual(item["model_ref"], "gpt-4")
+        self.assertEqual(item["available"], "True")
+        # Heavy fields are stripped
+        self.assertIsNone(item["prompt"])
+        self.assertEqual(
+            item["annotations"], {"ark.mckinsey.com/origin": "dashboard"}
+        )
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_list_agents_empty(self, mock_ark_client):

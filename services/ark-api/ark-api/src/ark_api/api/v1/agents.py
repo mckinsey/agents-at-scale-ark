@@ -3,6 +3,8 @@ import logging
 import json
 import re
 
+from enum import Enum
+
 from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
@@ -20,20 +22,30 @@ from ...models.agents import (
     AgentDetailResponse,
 )
 from ...models.common import extract_availability_from_conditions
-from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
+from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION, ORIGIN_ANNOTATION
 from .exceptions import handle_k8s_errors
 from .pagination import PaginationParams
-from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION, VIEW_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
+
+class AgentView(str, Enum):
+    """Detail level for agent list responses."""
+    FULL = "full"
+    SUMMARY = "summary"
+
 # CRD configuration
 VERSION = "v1alpha1"
 
-def agent_to_response(agent: dict) -> AgentResponse:
-    """Convert a Kubernetes Agent CR to a response model."""
+def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentResponse:
+    """Convert a Kubernetes Agent CR to a response model.
+
+    In summary view the heavy fields the list UI never renders are omitted:
+    prompt is dropped and annotations are reduced to the origin key.
+    """
     metadata = agent.get("metadata", {})
     spec = agent.get("spec", {})
     status = agent.get("status", {})
@@ -47,14 +59,24 @@ def agent_to_response(agent: dict) -> AgentResponse:
     conditions = status.get("conditions", [])
     availability = extract_availability_from_conditions(conditions, "Available")
 
+    annotations = metadata.get("annotations", {})
+    prompt = spec.get("prompt")
+    if view is AgentView.SUMMARY:
+        prompt = None
+        annotations = {
+            key: value
+            for key, value in annotations.items()
+            if key == ORIGIN_ANNOTATION
+        }
+
     return AgentResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
         model_ref=model_ref,
-        prompt=spec.get("prompt"),
+        prompt=prompt,
         available=availability,
-        annotations=metadata.get("annotations", {})
+        annotations=annotations
     )
 
 SKILLS_ANNOTATION_REGEX = re.compile(r'a2a\..*\/skills$')
@@ -107,12 +129,13 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
 
 @router.get("", response_model=AgentListResponse)
 @handle_k8s_errors(operation="list", resource_type="agent")
-async def list_agents(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentListResponse:
+async def list_agents(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), view: AgentView = Query(AgentView.FULL, description=VIEW_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentListResponse:
     """
     List a page of Agent CRs in a namespace.
 
     Args:
         namespace: The namespace to list agents from (defaults to current context)
+        view: response detail level; 'summary' omits heavy fields for list rendering
         pagination: limit and continue token for server-side pagination
 
     Returns:
@@ -123,7 +146,7 @@ async def list_agents(request: Request, namespace: Optional[str] = Query(None, d
             limit=pagination.limit, continue_token=pagination.continue_token
         )
 
-        agent_list = [agent_to_response(agent.to_dict()) for agent in page.items]
+        agent_list = [agent_to_response(agent.to_dict(), view) for agent in page.items]
 
         return AgentListResponse(
             items=agent_list,

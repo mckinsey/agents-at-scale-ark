@@ -71,7 +71,7 @@ describe('agentsService', () => {
       const result = await agentsService.list('default')
 
       expect(apiClient.get).toHaveBeenCalledTimes(1)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`, { params: { limit: 100, namespace: 'default' } })
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`, { params: { limit: 100, namespace: 'default', view: 'summary' } })
 
       expect(result).toHaveLength(2)
       expect(result[0]).toMatchObject({ id: 'agent1', name: 'agent1' })

@@ -66,6 +66,7 @@ export const agentsService = {
   async list(namespace: string): Promise<AgentListItem[]> {
     const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`, {
       namespace,
+      view: 'summary',
     });
 
     return items.map(item => ({ ...item, id: item.name }));

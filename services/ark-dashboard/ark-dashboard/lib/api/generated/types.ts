@@ -233,6 +233,7 @@ export interface paths {
          *
          *     Args:
          *         namespace: The namespace to list agents from (defaults to current context)
+         *         view: response detail level; 'summary' omits heavy fields for list rendering
          *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
@@ -2839,6 +2840,12 @@ export interface components {
             serviceRef?: components["schemas"]["AgentServiceRef"] | null;
         };
         /**
+         * AgentView
+         * @description Detail level for agent list responses.
+         * @enum {string}
+         */
+        AgentView: "full" | "summary";
+        /**
          * AnthropicConfig
          * @description Anthropic model configuration.
          */
@@ -5306,6 +5313,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Response detail level: 'full' (default) returns every field; 'summary' omits heavy fields (prompt, non-essential annotations) for list rendering */
+                view?: components["schemas"]["AgentView"];
                 /** @description Maximum number of items to return per page */
                 limit?: number;
                 /** @description Continuation token returned by the previous page */
