@@ -43,6 +43,7 @@ export class PostgresMessageStream
     'message',
     'created_at',
   ];
+  protected readonly notifyChannel = 'ark_broker_messages';
 
   constructor(logger: Logger, db: Db, ttlSeconds: number) {
     super(logger, db, ttlSeconds);
@@ -76,6 +77,7 @@ export class PostgresMessageStream
     `;
     const item = rowToBrokerItem(rows[0]!);
     this.emitter.emit('item', item);
+    await this.notifyAppended([item.sequenceNumber]);
     return item;
   }
 
@@ -102,6 +104,7 @@ export class PostgresMessageStream
     for (const item of items) {
       this.emitter.emit('item', item);
     }
+    await this.notifyAppended(items.map((item) => item.sequenceNumber));
     return items;
   }
 
