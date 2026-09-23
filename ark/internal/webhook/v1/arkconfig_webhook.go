@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -12,7 +11,7 @@ import (
 
 func SetupArkConfigWebhookWithManager(mgr ctrl.Manager) error {
 	v := validation.NewValidator(&validation.WebhookLookup{Client: mgr.GetClient()})
-	return ctrl.NewWebhookManagedBy[runtime.Object](mgr, &arkv1alpha1.ArkConfig{}).
-		WithValidator(&validation.WebhookValidator{V: v}).
+	return ctrl.NewWebhookManagedBy(mgr, &arkv1alpha1.ArkConfig{}).
+		WithValidator(&validation.WebhookValidator[*arkv1alpha1.ArkConfig]{V: v}).
 		Complete()
 }

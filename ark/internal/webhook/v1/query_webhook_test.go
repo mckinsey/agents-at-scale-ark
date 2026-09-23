@@ -18,7 +18,7 @@ var _ = Describe("Query Webhook", func() {
 	var (
 		obj       *arkv1alpha1.Query
 		oldObj    *arkv1alpha1.Query
-		validator *validation.WebhookValidator
+		validator *validation.WebhookValidator[*arkv1alpha1.Query]
 	)
 
 	BeforeEach(func() {
@@ -26,7 +26,7 @@ var _ = Describe("Query Webhook", func() {
 		Expect(arkv1alpha1.AddToScheme(s)).To(Succeed())
 
 		fakeClient := fake.NewClientBuilder().WithScheme(s).Build()
-		validator = &validation.WebhookValidator{
+		validator = &validation.WebhookValidator[*arkv1alpha1.Query]{
 			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
 		}
 

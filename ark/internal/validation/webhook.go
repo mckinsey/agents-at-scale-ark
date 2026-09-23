@@ -7,33 +7,29 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-type WebhookValidator struct {
+type WebhookValidator[T runtime.Object] struct {
 	V *Validator
 }
 
-var _ admission.Validator[runtime.Object] = &WebhookValidator{}
-
-func (wv *WebhookValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (wv *WebhookValidator[T]) ValidateCreate(ctx context.Context, obj T) (admission.Warnings, error) {
 	warnings, err := wv.V.Validate(ctx, obj)
 	return admission.Warnings(warnings), err
 }
 
-func (wv *WebhookValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+func (wv *WebhookValidator[T]) ValidateUpdate(ctx context.Context, _, newObj T) (admission.Warnings, error) {
 	warnings, err := wv.V.Validate(ctx, newObj)
 	return admission.Warnings(warnings), err
 }
 
-func (wv *WebhookValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (wv *WebhookValidator[T]) ValidateDelete(_ context.Context, _ T) (admission.Warnings, error) {
 	return nil, nil
 }
 
-type WebhookDefaulter struct {
+type WebhookDefaulter[T runtime.Object] struct {
 	Lookup DefaultsLookup
 }
 
-var _ admission.Defaulter[runtime.Object] = &WebhookDefaulter{}
-
-func (d *WebhookDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+func (d *WebhookDefaulter[T]) Default(ctx context.Context, obj T) error {
 	ApplyDefaults(ctx, obj, d.Lookup)
 	return nil
 }
