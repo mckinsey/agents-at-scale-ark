@@ -29,14 +29,14 @@
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
     "@vitejs/plugin-react": "^6.1.1",
-    "@vitest/coverage-v8": "^5.0.0",
+    "@vitest/coverage-v8": "^5.0.1",
     "http-server": "^14.1.1",
     "js-yaml": "^4.3.1",
     "jsdom": "^30.0.1",
     "linkinator": "^7.6.1",
     "pagefind": "^1.5.2",
     "picomatch": "^4.0.4",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   },
   "optionalDependencies": {
     "@napi-rs/simple-git-linux-arm64-gnu": "^1.1.0",
