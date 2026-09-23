@@ -449,6 +449,11 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 
 	applyAuthorizationServerMetadata(ctx, authStatus, rm.AuthorizationServers, timeout)
 
+	// This gate is deliberately limited to authorization_endpoint and
+	// token_endpoint. Do not extend it to registration_endpoint: servers
+	// like GitHub have no dynamic client registration and rely on
+	// pre-provisioned client credentials supplied later. They must stay
+	// in the Required state, not be misclassified as DiscoveryFailed.
 	if !isMachineManaged(mcpServer) && (authStatus.AuthorizationEndpoint == "" || authStatus.TokenEndpoint == "") {
 		issuer := "none advertised"
 		if len(rm.AuthorizationServers) > 0 {
