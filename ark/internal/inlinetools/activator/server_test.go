@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -109,6 +110,58 @@ func TestDiscoveryDoesNotInvokeOrMaintainRunnerState(t *testing.T) {
 	}
 	assert.Zero(t, calls.Load(), "only invocation can start a runner or refresh its idle clock")
 	assert.Positive(t, reader.reads.Load())
+}
+
+func TestHTTPDisconnectCancelsPendingInvocationWithoutLateExecution(t *testing.T) {
+	started, canceled, ready := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	cleanup := make(chan struct{})
+	var executions atomic.Int32
+	handler, err := Handler(discoveryClient(t, discoveryTool()), []string{"tenant"}, func(ctx context.Context, _ types.NamespacedName, _ types.UID, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		close(started)
+		select {
+		case <-ctx.Done():
+			close(canceled)
+			return nil, ctx.Err()
+		case <-ready:
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			executions.Add(1)
+			return &mcp.CallToolResult{}, nil
+		case <-cleanup:
+			return nil, fmt.Errorf("test cleanup")
+		}
+	})
+	require.NoError(t, err)
+	server := httptest.NewServer(handler)
+	defer func() { close(cleanup); server.Close() }()
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "v1"}, nil)
+	session, err := mcpClient.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: server.URL + testRoute}, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "echo"}); done <- err }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("invocation did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("caller did not cancel")
+	}
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP cancellation did not reach invocation")
+	}
+	close(ready)
+	assert.Zero(t, executions.Load(), "later readiness must not revive an abandoned call")
 }
 
 func TestDiscoveryIsStatelessAndReadsCurrentMetadata(t *testing.T) {
