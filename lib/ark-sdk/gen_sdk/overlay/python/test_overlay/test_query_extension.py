@@ -1336,6 +1336,19 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(servers, [])
                 self.assertTrue(any("csv-summarise" in msg for msg in log.output))
 
+    async def test_denied_inline_tool_read_is_skipped_not_retried(self):
+        ark = AsyncMock()
+        ark.tools.a_get = AsyncMock(
+            side_effect=Exception('tools.ark.mckinsey.com "csv-summarise" is forbidden')
+        )
+
+        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+            servers = await _build_mcp_servers(ark, self._agent(["csv-summarise"]), "default")
+
+        self.assertEqual(servers, [])
+        self.assertTrue(any("forbidden" in msg for msg in log.output))
+        ark.tools.a_get.assert_awaited_once_with("csv-summarise", "default")
+
 
 class TestExtensionConstants(unittest.TestCase):
     def test_uri_matches_github_path(self):
