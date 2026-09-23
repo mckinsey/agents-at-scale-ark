@@ -36,6 +36,7 @@ class AgentView(str, Enum):
     """Detail level for agent list responses."""
     FULL = "full"
     SUMMARY = "summary"
+    WITH_TOOLS = "with-tools"
 
 # CRD configuration
 VERSION = "v1alpha1"
@@ -43,8 +44,10 @@ VERSION = "v1alpha1"
 def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentResponse:
     """Convert a Kubernetes Agent CR to a response model.
 
-    In summary view the heavy fields the list UI never renders are omitted:
-    prompt is dropped and annotations are reduced to the origin key.
+    Trimmed views omit the heavy fields the list UI never renders: prompt is
+    dropped and annotations are reduced to the origin key. The with-tools view
+    is a trimmed view that additionally carries the referenced tool names so a
+    list caller can compute tool usage without a per-agent detail fetch.
     """
     metadata = agent.get("metadata", {})
     spec = agent.get("spec", {})
@@ -61,13 +64,22 @@ def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentRes
 
     annotations = metadata.get("annotations", {})
     prompt = spec.get("prompt")
-    if view is AgentView.SUMMARY:
+    trimmed = view in (AgentView.SUMMARY, AgentView.WITH_TOOLS)
+    if trimmed:
         prompt = None
         annotations = {
             key: value
             for key, value in annotations.items()
             if key == ORIGIN_ANNOTATION
         }
+
+    tool_names = None
+    if view is AgentView.WITH_TOOLS:
+        tool_names = [
+            tool["name"]
+            for tool in spec.get("tools", [])
+            if isinstance(tool, dict) and tool.get("name")
+        ]
 
     return AgentResponse(
         name=metadata.get("name", ""),
@@ -76,7 +88,8 @@ def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentRes
         model_ref=model_ref,
         prompt=prompt,
         available=availability,
-        annotations=annotations
+        annotations=annotations,
+        tool_names=tool_names
     )
 
 SKILLS_ANNOTATION_REGEX = re.compile(r'a2a\..*\/skills$')

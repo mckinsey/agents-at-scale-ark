@@ -102,6 +102,7 @@ class ModelResponse(BaseModel):
     model: str
     available: Optional[AvailabilityStatus] = None
     annotations: Optional[Dict[str, str]] = None
+    secret_refs: Optional[List[str]] = None
 
 
 class ModelListResponse(PaginatedListResponse):

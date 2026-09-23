@@ -1217,6 +1217,7 @@ export interface paths {
          *
          *     Args:
          *         namespace: The namespace to list models from
+         *         view: response detail level; 'with-secrets' adds referenced secret names
          *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
@@ -2773,6 +2774,8 @@ export interface components {
             namespace: string;
             /** Prompt */
             prompt?: string | null;
+            /** Tool Names */
+            tool_names?: string[] | null;
         };
         /**
          * AgentSecretKeyRef
@@ -2844,7 +2847,7 @@ export interface components {
          * @description Detail level for agent list responses.
          * @enum {string}
          */
-        AgentView: "full" | "summary";
+        AgentView: "full" | "summary" | "with-tools";
         /**
          * AnthropicConfig
          * @description Anthropic model configuration.
@@ -4262,6 +4265,8 @@ export interface components {
              * @enum {string}
              */
             provider: "openai" | "azure" | "bedrock" | "anthropic";
+            /** Secret Refs */
+            secret_refs?: string[] | null;
             /**
              * Type
              * @default completions
@@ -4292,6 +4297,12 @@ export interface components {
                 };
             } | null;
         };
+        /**
+         * ModelView
+         * @description Detail level for model list responses.
+         * @enum {string}
+         */
+        ModelView: "summary" | "with-secrets";
         /**
          * NamespaceCreateRequest
          * @description Request model for creating a namespace.
@@ -7334,6 +7345,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Response detail level: 'full' (default) returns every field; 'summary' omits heavy fields (prompt, non-essential annotations) for list rendering */
+                view?: components["schemas"]["ModelView"];
                 /** @description Maximum number of items to return per page */
                 limit?: number;
                 /** @description Continuation token returned by the previous page */
