@@ -49,7 +49,7 @@
 ## 6. Phase 3: existing MCP execution integration
 
 - [x] 6.1 Adapt Go `CreateToolExecutor` to return the existing MCP executor for resolved inline Tools, qualifying the pooled client identity by Tool UID since `MCPClientPool` keys on server namespace and name alone; test agent attachments, direct Tool queries, and an inline Tool sharing a name with an MCPServer in one namespace, preserving supported aliases, partial arguments, approvals, and tool events.
-- [ ] 6.2 Extend SDK `_build_mcp_servers` to emit inline `MCPServerConfig` entries with distinct connection identities and one-tool allowlists; test mixed types, ordinary MCP grouping, stale status, unavailable resources, and existing query/executor identity without privilege escalation.
+- [x] 6.2 Extend SDK `_build_mcp_servers` to emit inline `MCPServerConfig` entries with distinct connection identities and one-tool allowlists; test mixed types, ordinary MCP grouping, stale status, unavailable resources, and existing query/executor identity without privilege escalation.
 - [ ] 6.3 Preserve MCP `isError` through shared result handling for existing MCP and inline Tools; test model-visible failure and existing error events without a separate inline invocation implementation.
 - [ ] 6.4 Verify invocation requires no dedicated author grant or new per-user credential and does not bypass the execution engine's existing resource/allowlist/approval checks; retain ordinary HTTP/MCP authentication behavior.
 
