@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -27,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { toast } from '@/components/ui/sonner';
 import { useDelayedLoading } from '@/lib/hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -68,19 +60,11 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly emptyDescription: ReactNode;
   readonly headerActions?: ReactNode;
   readonly originFilter?: ResourceListFilter<T>;
-  /**
-   * Legacy uncontrolled data source. Provide this OR the controlled
-   * `items`/`onDelete` pair. When controlled props are supplied they win and
-   * the internal useState/useEffect loading path is bypassed (React Query
-   * owns the data). Spike: only agents is controlled for now.
-   */
-  readonly loadItems?: () => Promise<T[]>;
-  readonly deleteItem?: (id: string) => Promise<unknown>;
-  // Controlled mode (React Query): the caller owns fetching + caching.
-  readonly items?: T[];
-  readonly loading?: boolean;
-  readonly onDelete?: (id: string) => void;
-  readonly onReload?: () => void;
+  // Data is owned by the caller via React Query (fetching + caching).
+  readonly items: T[];
+  readonly loading: boolean;
+  readonly onDelete: (id: string) => void;
+  readonly onReload: () => void;
   readonly renderTable: (
     items: T[],
     onDelete: (id: string) => void,
@@ -102,30 +86,18 @@ export function ResourceListSection<T extends ResourceListItem>({
   emptyDescription,
   headerActions,
   originFilter,
-  loadItems,
-  deleteItem,
-  items: controlledItems,
-  loading: controlledLoading,
-  onDelete: controlledOnDelete,
-  onReload: controlledOnReload,
+  items,
+  loading,
+  onDelete,
+  onReload,
   renderTable,
 }: ResourceListSectionProps<T>) {
-  // Controlled mode is active when the caller drives data via React Query.
-  const isControlled = controlledItems !== undefined;
-
-  const [internalItems, setInternalItems] = useState<T[]>([]);
-  const [internalLoading, setInternalLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [originFilterValue, setOriginFilterValue] = useState('All');
-  const { readOnlyMode, namespace } = useNamespace();
+  const { readOnlyMode } = useNamespace();
 
-  const items = isControlled ? controlledItems : internalItems;
-  const loading = isControlled ? (controlledLoading ?? false) : internalLoading;
   const showLoading = useDelayedLoading(loading);
-
-  const loadItemsRef = useRef(loadItems);
-  loadItemsRef.current = loadItems;
 
   const originFilterOptions = useMemo(() => {
     if (!originFilter) return [];
@@ -153,61 +125,6 @@ export function ResourceListSection<T extends ResourceListItem>({
       return matchesSearch && matchesStatus && matchesOrigin;
     });
   }, [items, searchQuery, statusFilter, originFilter, originFilterValue]);
-
-  const reload = useCallback(async () => {
-    if (isControlled) {
-      controlledOnReload?.();
-      return;
-    }
-    setInternalLoading(true);
-    try {
-      setInternalItems(await loadItemsRef.current!());
-    } catch (error) {
-      console.error('Failed to load data:', error);
-      toast.error('Failed to Load Data', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
-      });
-    } finally {
-      setInternalLoading(false);
-    }
-  }, [isControlled, controlledOnReload]);
-
-  useEffect(() => {
-    if (isControlled) return;
-    reload();
-  }, [namespace, reload, isControlled]);
-
-  const handleDelete = async (id: string) => {
-    if (isControlled) {
-      // The mutation hook owns success/error toasts and cache invalidation.
-      controlledOnDelete?.(id);
-      return;
-    }
-    try {
-      const item = items.find(i => i.id === id);
-      if (!item) {
-        throw new Error(`${entityLabel} not found`);
-      }
-      await deleteItem!(id);
-      toast.success(`${entityLabel} deleted successfully`);
-      setInternalLoading(true);
-      try {
-        setInternalItems(await loadItemsRef.current!());
-      } finally {
-        setInternalLoading(false);
-      }
-    } catch (error) {
-      toast.error(`Failed to Delete ${entityLabel}`, {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
-      });
-    }
-  };
 
   const isEmpty = !loading && items.length === 0;
 
@@ -324,7 +241,7 @@ export function ResourceListSection<T extends ResourceListItem>({
             <ResourceNoResults icon={icon} message={noResultsMessage} />
           ) : (
             <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-              {renderTable(filteredItems, handleDelete, reload)}
+              {renderTable(filteredItems, onDelete, onReload)}
             </ScrollArea>
           )}
         </div>
