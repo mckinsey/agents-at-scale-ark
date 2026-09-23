@@ -29,6 +29,7 @@ interface ResourceSearchInputProps {
   readonly onChange: (value: string) => void;
   readonly placeholder?: string;
   readonly className?: string;
+  readonly testId?: string;
 }
 
 export function ResourceSearchInput({
@@ -36,6 +37,7 @@ export function ResourceSearchInput({
   onChange,
   placeholder = 'Search',
   className,
+  testId,
 }: ResourceSearchInputProps) {
   return (
     <div className={cn('relative w-[304px] max-w-full', className)}>
@@ -46,6 +48,7 @@ export function ResourceSearchInput({
       </span>
       <Input
         type="search"
+        data-testid={testId}
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -85,7 +88,7 @@ export function ResourceEmptyState({
               {description}
             </div>
           </div>
-          <div className="flex items-start gap-3 [&>*]:min-w-[100px] [&_button]:min-w-[100px]">
+          <div className="flex items-start gap-3 [&_button]:min-w-[100px] [&>*]:min-w-[100px]">
             {actions}
           </div>
         </div>

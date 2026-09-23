@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -49,11 +48,11 @@ func (s *StatusStorage) New() runtime.Object {
 func (s *StatusStorage) Destroy() {}
 
 func (s *StatusStorage) NamespaceScoped() bool {
-	return true
+	return !s.config.ClusterScoped
 }
 
 func (s *StatusStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
-	namespace := getNamespaceFromContext(ctx)
+	namespace := s.config.namespace(ctx)
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
@@ -65,7 +64,7 @@ func (s *StatusStorage) Get(ctx context.Context, name string, options *metav1.Ge
 
 func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	start := time.Now()
-	namespace := getNamespaceFromContext(ctx)
+	namespace := s.config.namespace(ctx)
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
@@ -103,13 +102,6 @@ func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.Up
 		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
 	}
 	return result, false, nil
-}
-
-func getNamespaceFromContext(ctx context.Context) string {
-	if reqInfo, ok := genericrequest.RequestInfoFrom(ctx); ok {
-		return reqInfo.Namespace
-	}
-	return defaultNamespace
 }
 
 func copyStatusOnly(dst, src runtime.Object) error {

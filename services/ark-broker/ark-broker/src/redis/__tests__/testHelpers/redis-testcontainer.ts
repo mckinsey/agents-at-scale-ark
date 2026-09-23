@@ -110,10 +110,15 @@ export async function startRedisContainerTls(): Promise<
 
 function useRedisContainerFrom(
   starter: () => Promise<StartedRedisTestContainer>
-): {client: () => RedisClient; connectionUrl: () => string} {
+): {
+  client: () => RedisClient;
+  connectionUrl: () => string;
+  onStop: (fn: () => Promise<void>) => void;
+} {
   let _client: RedisClient;
   let _stop: () => Promise<void>;
   let _connectionUrl: string;
+  const stops: Array<() => Promise<void>> = [];
 
   beforeAll(async () => {
     const started = await starter();
@@ -123,6 +128,7 @@ function useRedisContainerFrom(
   });
 
   afterAll(async () => {
+    for (const stop of stops) await stop();
     await _client.quit();
     await _stop();
   });
@@ -131,12 +137,17 @@ function useRedisContainerFrom(
     await _client.flushall();
   });
 
-  return {client: () => _client, connectionUrl: () => _connectionUrl};
+  return {
+    client: () => _client,
+    connectionUrl: () => _connectionUrl,
+    onStop: (fn) => stops.push(fn),
+  };
 }
 
 export function useRedisContainer(): {
   client: () => RedisClient;
   connectionUrl: () => string;
+  onStop: (fn: () => Promise<void>) => void;
 } {
   return useRedisContainerFrom(startRedisContainer);
 }

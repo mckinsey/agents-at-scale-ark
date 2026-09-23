@@ -1165,7 +1165,12 @@ describe('PostgresSessionsStorage', () => {
         // A test that fails before releasing would otherwise leave this
         // transaction holding a pooled connection for the rest of the file, and
         // the next test to need one blocks instead of reporting the failure.
-        await Promise.race([released, sleep(GATE_MAX_HOLD_MS)]);
+        const expiry = setTimeout(release, GATE_MAX_HOLD_MS);
+        try {
+          await released;
+        } finally {
+          clearTimeout(expiry);
+        }
         if (onRelease) await onRelease(sql);
       });
       // Keeps an unreleased gate from surfacing as an unhandled rejection; the
