@@ -14,10 +14,13 @@ export interface AccessibleNamespace {
 
 const SA_DIR = '/var/run/secrets/kubernetes.io/serviceaccount';
 
-// Namespace annotations used for the display name / description / dashboard URL,
-// each with a fallback when unset.
-const DISPLAY_NAME_ANNOTATION = 'ark.mckinsey.com/display-name';
-const DESCRIPTION_ANNOTATION = 'ark.mckinsey.com/namespace-description';
+// Namespace annotations used for the landing-page card name / description /
+// dashboard URL, each with a fallback when unset. The `landing-page*` keys
+// replace the older `demo*` keys — a namespace opts into the landing page with
+// the `ark.mckinsey.com/landing-page=true` label (see ARK_TENANT_NAMESPACE_SELECTOR).
+// The label has no bearing on dashboard editability (that is RBAC-only).
+const DISPLAY_NAME_ANNOTATION = 'ark.mckinsey.com/landing-page-name';
+const DESCRIPTION_ANNOTATION = 'ark.mckinsey.com/landing-page-description';
 const DASHBOARD_URL_ANNOTATION = 'ark.mckinsey.com/dashboard-url';
 
 // Per-SSAR socket timeout. Without this a stalled apiserver connection never

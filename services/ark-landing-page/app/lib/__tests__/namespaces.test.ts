@@ -69,8 +69,8 @@ beforeEach(() => {
         metadata: {
           name: 'tenant-a',
           annotations: {
-            'ark.mckinsey.com/display-name': 'Tenant A',
-            'ark.mckinsey.com/namespace-description': 'Workspace A',
+            'ark.mckinsey.com/landing-page-name': 'Tenant A',
+            'ark.mckinsey.com/landing-page-description': 'Workspace A',
             'ark.mckinsey.com/dashboard-url': 'https://custom/tenant-a',
           },
         },

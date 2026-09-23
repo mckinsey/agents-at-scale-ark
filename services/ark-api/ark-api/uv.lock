@@ -221,7 +221,7 @@ wheels = [
 
 [[package]]
 name = "ark-api"
-version = "0.1.68"
+version = "0.1.69"
 source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
@@ -309,7 +309,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.68-py3-none-any.whl", hash = "sha256:ff6a4831836602a1437bd28ba7b80be80bd5a31ab08a005d7b25e62f352a13c3" },
+    { filename = "ark_sdk-0.1.68-py3-none-any.whl", hash = "sha256:f3b1dfe436390f8297853e62656b86869c39d2a118da48a430e121ab5afa22d9" },
 ]
 
 [package.metadata]
@@ -1155,8 +1155,8 @@ name = "httpcore2"
 version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11" },
-    { name = "truststore" },
+    { name = "h11", marker = "sys_platform != 'emscripten'" },
+    { name = "truststore", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/ad/f4f0e57345f1870f3e8cb624e058d7eca6e5a27d33bcc3311d9b618734cd/httpcore2-2.12.0.tar.gz", hash = "sha256:9293522bba0aa7c4c8e9e3f040c16575bd8868e155a77fa30c7a9085a5eae648", size = 67548, upload-time = "2026-08-18T13:22:08.211Z" }
 wheels = [

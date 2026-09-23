@@ -108,10 +108,15 @@ class TestContextEndpoint(unittest.TestCase):
     @patch("ark_api.api.v1.namespaces.get_current_context")
     @patch("ark_api.api.v1.namespaces.create_api_client")
     @patch("ark_api.api.v1.namespaces.client.CoreV1Api")
-    def test_get_context_with_valid_namespace(
+    def test_get_context_demo_label_does_not_force_read_only(
         self, mock_v1_api, mock_api_client, mock_get_current_context
     ):
-        """Test context with valid namespace parameter."""
+        """A namespace label must NOT make the context read-only.
+
+        The `ark.mckinsey.com/demo` (now `landing-page`) label only affects
+        landing-page visibility; editability is governed by RBAC. read_only_mode
+        reflects the deployment-wide READ_ONLY_MODE env only (default false).
+        """
         mock_get_current_context.return_value = {
             "namespace": "default",
             "cluster": "test-cluster",
@@ -133,7 +138,8 @@ class TestContextEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["namespace"], "kyc-demo")
-        self.assertEqual(data["read_only_mode"], True)  # Demo namespace has read_only
+        # Label present, but read_only_mode stays False (no env READ_ONLY_MODE).
+        self.assertEqual(data["read_only_mode"], False)
 
     @patch("ark_api.api.v1.namespaces.get_current_context")
     @patch("ark_api.api.v1.namespaces.create_api_client")

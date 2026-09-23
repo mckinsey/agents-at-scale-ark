@@ -12,6 +12,7 @@ from ark_api.core.permissions import (
     UNAVAILABLE_REASON,
     build_ark_rules,
     get_ark_permissions,
+    user_can_edit,
 )
 
 
@@ -199,6 +200,33 @@ class TestGetArkPermissions(unittest.IsolatedAsyncioTestCase):
         # Exception text must not leak to the client.
         self.assertEqual(result.reason, UNAVAILABLE_REASON)
         self.assertNotIn("boom", result.reason or "")
+
+
+class TestUserCanEdit(unittest.IsolatedAsyncioTestCase):
+    """user_can_edit drives the dashboard's per-user read-only gate."""
+
+    async def _run(self, access):
+        api, cm = _mock_helper(access=access)
+        with patch(
+            "ark_api.api.v1.client_utils.get_impersonating_api_client", return_value=cm
+        ), patch(
+            "ark_api.core.permissions.client.AuthorizationV1Api", return_value=api
+        ):
+            return await user_can_edit(
+                ImpersonationConfig(username="u", groups=["g"]), "default"
+            )
+
+    async def test_true_when_user_can_create_a_resource(self):
+        # Admin: create allowed on at least one core resource -> can edit.
+        self.assertTrue(await self._run(_access_review(allowed_resources={"agents"})))
+
+    async def test_false_when_no_create_allowed(self):
+        # Reader: no create anywhere -> read-only.
+        self.assertFalse(await self._run(_access_review(allowed_resources=set())))
+
+    async def test_fails_open_on_error(self):
+        # If the check errors, do NOT falsely lock out (API still enforces RBAC).
+        self.assertTrue(await self._run(_access_review(raises=RuntimeError("boom"))))
 
 
 if __name__ == "__main__":

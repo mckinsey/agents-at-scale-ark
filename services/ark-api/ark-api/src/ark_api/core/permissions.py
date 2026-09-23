@@ -118,3 +118,32 @@ async def _can_i(authz, namespace: str, resource: str, verb: str) -> bool:
         )
     )
     return bool(review.status and review.status.allowed)
+
+
+async def user_can_edit(
+    impersonation: ImpersonationConfig, namespace: str
+) -> bool:
+    """Whether the impersonated user may write ARK resources in the namespace.
+
+    A namespace-wide "can edit" signal for the dashboard's read-only gate:
+    True if the user can `create` at least one core ARK resource. Uses
+    SubjectAccessReview (a concrete yes/no every authorizer answers, including
+    the EKS webhook authorizer) rather than rule enumeration, so it is reliable
+    where SelfSubjectRulesReview is incomplete.
+
+    Fails OPEN (returns True) if the check itself errors: the dashboard then
+    shows controls enabled and ark-api still enforces RBAC on the real write —
+    better than falsely locking out a user who actually has access.
+    """
+    from ..api.v1.client_utils import get_impersonating_api_client
+
+    try:
+        async with get_impersonating_api_client(impersonation) as api:
+            authz = client.AuthorizationV1Api(api)
+            for resource in ESSENTIAL_RESOURCES:
+                if await _can_i(authz, namespace, resource, "create"):
+                    return True
+            return False
+    except Exception as e:
+        logger.warning("Edit-permission check failed: %s", e)
+        return True
