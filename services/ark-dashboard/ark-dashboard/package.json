@@ -128,5 +128,9 @@
     "form-data": "^4.0.6",
     "vite": "^8.0.16",
     "sharp": "^0.35.0"
+  },
+  "optionalDependencies": {
+    "@emnapi/core": "1.11.3",
+    "@emnapi/runtime": "1.11.3"
   }
 }

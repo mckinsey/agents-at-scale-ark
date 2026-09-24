@@ -54,5 +54,9 @@
     "postcss": "^8.5.18",
     "ws": "^8.21.0",
     "sharp": "^0.35.0"
+  },
+  "optionalDependencies": {
+    "@emnapi/core": "1.11.3",
+    "@emnapi/runtime": "1.11.3"
   }
 }
