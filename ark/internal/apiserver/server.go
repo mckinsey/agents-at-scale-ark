@@ -233,6 +233,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create PostgreSQL backend: %w", err)
 	}
 	close(s.backendReady)
+	s.backend.StartNotifyListener()
 	klog.Infof("Using PostgreSQL storage backend: %s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
 
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
@@ -316,8 +317,6 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
 	apiGroupInfo.NegotiatedSerializer = jsonOnlyNegotiatedSerializer{Codecs}
 
-	printerColumns := GetPrinterColumnRegistry()
-
 	lookup := &validation.StorageLookup{Backend: s.backend, K8sClient: s.config.K8sClient}
 	v := validation.NewValidator(lookup)
 	// Aggregated APIs skip admission webhooks, so authorize a Query's requested
@@ -334,41 +333,33 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 		v.SAAuthorizer = &validation.ServiceAccountAuthorizer{Client: authzClient}
 	}
 
-	v1alpha1Storage := make(map[string]rest.Storage)
-	for _, res := range V1Alpha1Resources {
-		cfg := registry.ResourceConfig{
-			Kind:         res.Kind,
-			Resource:     res.Resource,
-			SingularName: res.SingularName,
-			NewFunc:      res.NewFunc,
-			NewListFunc:  res.NewListFunc,
-		}
-		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-		v1alpha1Storage[res.Resource] = NewAdmissionStorage(inner, v)
-		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
-	}
-	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = v1alpha1Storage
-
-	v1prealpha1Storage := make(map[string]rest.Storage)
-	for _, res := range V1PreAlpha1Resources {
-		cfg := registry.ResourceConfig{
-			Kind:         res.Kind,
-			Resource:     res.Resource,
-			SingularName: res.SingularName,
-			NewFunc:      res.NewFunc,
-			NewListFunc:  res.NewListFunc,
-		}
-		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-		v1prealpha1Storage[res.Resource] = NewAdmissionStorage(inner, v)
-		v1prealpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
-	}
-	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = v1prealpha1Storage
+	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = resourceStorage(s.backend, converter, V1Alpha1Resources, v, lookup)
+	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = resourceStorage(s.backend, converter, V1PreAlpha1Resources, v, lookup)
 
 	if err := server.InstallAPIGroup(&apiGroupInfo); err != nil {
 		return fmt.Errorf("failed to install API group: %w", err)
 	}
 
 	return nil
+}
+
+func resourceStorage(backend storage.Backend, converter storage.TypeConverter, resources []ResourceDef, v *validation.Validator, lookup validation.DefaultsLookup) map[string]rest.Storage {
+	printerColumns := GetPrinterColumnRegistry()
+	out := make(map[string]rest.Storage, 2*len(resources))
+	for _, res := range resources {
+		cfg := registry.ResourceConfig{
+			Kind:          res.Kind,
+			Resource:      res.Resource,
+			SingularName:  res.SingularName,
+			ClusterScoped: res.ClusterScoped,
+			NewFunc:       res.NewFunc,
+			NewListFunc:   res.NewListFunc,
+		}
+		inner := registry.NewGenericStorage(backend, converter, cfg, printerColumns)
+		out[res.Resource] = NewAdmissionStorage(inner, v, lookup)
+		out[res.Resource+"/status"] = registry.NewStatusStorage(backend, converter, cfg)
+	}
+	return out
 }
 
 func (s *Server) NeedLeaderElection() bool {
@@ -425,48 +416,73 @@ func (s *Server) anyRequired(p admissionPlan) bool {
 }
 
 func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiserver.Config) (informers.SharedInformerFactory, error) {
-	// Contradictory rather than merely redundant: honouring either one silently discards the
-	// operator's other instruction, and this is the class of misconfiguration where guessing
-	// means serving unenforced. Checked per mechanism, because "CEL off, webhooks mandatory" is
-	// a coherent request, not a contradiction.
-	if s.config.CELDisabled && s.config.CELRequired {
-		return nil, fmt.Errorf("CEL policy enforcement cannot be both disabled (policy.cel.enabled=false) and required (policy.cel.required=true); set at most one")
-	}
-	if !s.config.ThirdPartyWebhooks && s.config.ThirdPartyWebhooksRequired {
-		return nil, fmt.Errorf("third-party admission webhooks cannot be both disabled (policy.thirdPartyWebhooks.enabled=false) and required (policy.thirdPartyWebhooks.required=true); set at most one")
+	if err := s.validateAdmissionConfig(); err != nil {
+		return nil, err
 	}
 
-	plan := admissionPlan{cel: !s.config.CELDisabled, webhooks: s.config.ThirdPartyWebhooks}
-	if !plan.any() {
-		klog.Info("Admission enforcement disabled by configuration (policy.cel.enabled=false, policy.thirdPartyWebhooks.enabled=false); the apiserver will not watch cluster-wide policy or webhook objects — Ark in-process validation and audit remain active")
-		return nil, nil
-	}
-
-	if s.config.RestConfig == nil {
-		if s.anyRequired(plan) {
-			return nil, fmt.Errorf("admission enforcement is required but no host REST config is available to build the admission plugins' clients")
-		}
-		klog.Warning("No host REST config available; admission enforcement disabled — Ark in-process validation and audit remain active")
-		return nil, nil
-	}
-
-	kubeClient, err := kubernetes.NewForConfig(s.config.RestConfig)
+	plan, kubeClient, err := s.resolveAdmissionPlan(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build kube client for admission: %w", err)
-	}
-
-	if plan.cel {
-		if plan.cel, err = s.resolveCELSupport(ctx, kubeClient.Discovery()); err != nil {
-			return nil, err
-		}
-	}
-	if plan, err = s.resolveWatchPermissions(ctx, kubeClient.AuthorizationV1(), plan); err != nil {
 		return nil, err
 	}
 	if !plan.any() {
 		return nil, nil
 	}
 
+	return s.wireAdmissionPlugins(serverConfig, plan, kubeClient)
+}
+
+// validateAdmissionConfig rejects per-mechanism config that is contradictory rather than merely
+// redundant: honouring either one silently discards the operator's other instruction, and this is
+// the class of misconfiguration where guessing means serving unenforced. Checked per mechanism,
+// because "CEL off, webhooks mandatory" is a coherent request, not a contradiction.
+func (s *Server) validateAdmissionConfig() error {
+	if s.config.CELDisabled && s.config.CELRequired {
+		return fmt.Errorf("CEL policy enforcement cannot be both disabled (policy.cel.enabled=false) and required (policy.cel.required=true); set at most one")
+	}
+	if !s.config.ThirdPartyWebhooks && s.config.ThirdPartyWebhooksRequired {
+		return fmt.Errorf("third-party admission webhooks cannot be both disabled (policy.thirdPartyWebhooks.enabled=false) and required (policy.thirdPartyWebhooks.required=true); set at most one")
+	}
+	return nil
+}
+
+// resolveAdmissionPlan builds the plan the apiserver will actually enforce, after config, host
+// capability and RBAC have each had a chance to veto. It returns an empty plan (any()==false) when
+// enforcement is not wired, or an error when a mechanism marked required is vetoed. The returned
+// client is nil whenever the plan is empty.
+func (s *Server) resolveAdmissionPlan(ctx context.Context) (admissionPlan, kubernetes.Interface, error) {
+	plan := admissionPlan{cel: !s.config.CELDisabled, webhooks: s.config.ThirdPartyWebhooks}
+	if !plan.any() {
+		klog.Info("Admission enforcement disabled by configuration (policy.cel.enabled=false, policy.thirdPartyWebhooks.enabled=false); the apiserver will not watch cluster-wide policy or webhook objects — Ark in-process validation and audit remain active")
+		return admissionPlan{}, nil, nil
+	}
+
+	if s.config.RestConfig == nil {
+		if s.anyRequired(plan) {
+			return admissionPlan{}, nil, fmt.Errorf("admission enforcement is required but no host REST config is available to build the admission plugins' clients")
+		}
+		klog.Warning("No host REST config available; admission enforcement disabled — Ark in-process validation and audit remain active")
+		return admissionPlan{}, nil, nil
+	}
+
+	kubeClient, err := kubernetes.NewForConfig(s.config.RestConfig)
+	if err != nil {
+		return admissionPlan{}, nil, fmt.Errorf("failed to build kube client for admission: %w", err)
+	}
+
+	if plan.cel {
+		if plan.cel, err = s.resolveCELSupport(ctx, kubeClient.Discovery()); err != nil {
+			return admissionPlan{}, nil, err
+		}
+	}
+	if plan, err = s.resolveWatchPermissions(ctx, kubeClient.AuthorizationV1(), plan); err != nil {
+		return admissionPlan{}, nil, err
+	}
+	return plan, kubeClient, nil
+}
+
+// wireAdmissionPlugins applies the resolved plan to serverConfig, building the dynamic client and
+// shared informers the plugins need and registering each mechanism's readiness gate.
+func (s *Server) wireAdmissionPlugins(serverConfig *genericapiserver.Config, plan admissionPlan, kubeClient kubernetes.Interface) (informers.SharedInformerFactory, error) {
 	dynClient, err := dynamic.NewForConfig(s.config.RestConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build dynamic client for admission: %w", err)
@@ -490,7 +506,7 @@ func (s *Server) applyAdmission(ctx context.Context, serverConfig *genericapiser
 	serverConfig.FeatureGate = utilfeature.DefaultFeatureGate
 
 	admissionOpts, gates := s.admissionOptionsFor(plan, admissionInformers)
-	if err := admissionOpts.ApplyTo(serverConfig, admissionInformers, kubeClient, dynClient, serverConfig.FeatureGate); err != nil {
+	if err := admissionOpts.ApplyTo(serverConfig, admissionInformers, kubeClient, dynClient, serverConfig.FeatureGate, serverConfig.EffectiveVersion); err != nil {
 		return nil, fmt.Errorf("failed to apply admission options: %w", err)
 	}
 

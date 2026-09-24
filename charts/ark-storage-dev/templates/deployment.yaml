@@ -67,6 +67,24 @@ spec:
                   key: password
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+          startupProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, {{ .Values.user | quote }}, -d, {{ .Values.database | quote }}]
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 60
+          livenessProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, {{ .Values.user | quote }}, -d, {{ .Values.database | quote }}]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, {{ .Values.user | quote }}, -d, {{ .Values.database | quote }}]
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

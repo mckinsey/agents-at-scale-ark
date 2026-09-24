@@ -80,6 +80,10 @@ export default {
     title: 'Deploy ARK',
     href: '/operations-guide/deploying-ark'
   },
+  authentication: {
+    title: 'Configure authentication and SSO',
+    href: '/developer-guide/authentication'
+  },
   'multi-tenant-dashboard': {
     title: 'Host the dashboard for multiple namespaces',
     href: '/operations-guide/multi-tenant-dashboard-hosting'

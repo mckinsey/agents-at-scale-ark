@@ -13,6 +13,7 @@ export type ServerConfig = Readonly<{
   port: number;
   host: string;
   requestTimeoutMs: number;
+  shutdownDrainTimeoutMs: number;
 }>;
 
 export type LimitsConfig = Readonly<{
@@ -56,6 +57,8 @@ export type DatabaseConfig = Readonly<{
   statementTimeoutMs: number;
   debugQueries: boolean;
   sslRootCertPath?: string;
+  reapIntervalSeconds: number;
+  reapBatchSize: number;
 }>;
 
 export type RedisConfig = Readonly<{

@@ -133,6 +133,9 @@ const defaultArkServices: ServiceCollection = {
     category: 'core',
     chartPath: `${REGISTRY_BASE}/ark-tenant:${CHART_VERSION}`,
     installArgs: [],
+    // Without a broker, a tenant loses conversation history (issue #2642).
+    requires: ['ark-broker'],
+    dependencyOverrideArgs: ['--set', 'memory.requireBroker=false'],
   },
 
   'ark-api': {

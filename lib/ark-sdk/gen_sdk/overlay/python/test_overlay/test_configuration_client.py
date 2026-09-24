@@ -4,17 +4,21 @@ from unittest.mock import Mock, AsyncMock, patch, call
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.rest import ApiException
 
+from ark_sdk.annotations import (
+    ARK_RESOURCE_TYPE_ANNOTATION,
+    CONFIGURATION_RESOURCE_TYPE,
+)
 from ark_sdk.k8s import ConfigurationClient
 from ark_sdk.labels import (
-    ARK_RESOURCE_TYPE_LABEL,
-    CONFIGURATION_LABEL_SELECTOR,
     labels_to_tags,
     strip_tag_labels,
     tags_to_labels,
+    validate_legacy_tag,
     validate_tag,
+    validate_updated_tags,
 )
 
-MARKER_LABELS = {ARK_RESOURCE_TYPE_LABEL: "configuration"}
+MARKER_ANNOTATIONS = {ARK_RESOURCE_TYPE_ANNOTATION: CONFIGURATION_RESOURCE_TYPE}
 
 OWNER_REFERENCE = client.V1OwnerReference(
     api_version="ark.mckinsey.com/v1alpha1",
@@ -33,8 +37,8 @@ def _config_map(name="github-mcp-url", uid="uuid-1234", value="https://example.t
         namespace="test-namespace",
         uid=uid,
         resource_version=resource_version,
-        labels={**MARKER_LABELS, **(labels or {})},
-        annotations=annotations or {},
+        labels=labels or {},
+        annotations={**MARKER_ANNOTATIONS, **(annotations or {})},
         owner_references=owner_references,
         finalizers=finalizers,
     )
@@ -55,7 +59,6 @@ class TestLabelHelpers(unittest.TestCase):
 
     def test_labels_to_tags_ignores_other_labels(self):
         labels = {
-            **MARKER_LABELS,
             "ark.mckinsey.com/label.mcp": "true",
             "app.kubernetes.io/managed-by": "Helm",
         }
@@ -63,13 +66,11 @@ class TestLabelHelpers(unittest.TestCase):
 
     def test_strip_tag_labels_keeps_every_label_it_does_not_own(self):
         labels = {
-            **MARKER_LABELS,
             "ark.mckinsey.com/label.mcp": "true",
             "ark.mckinsey.com/managed-by": "ark-api",
             "app.kubernetes.io/managed-by": "Helm",
         }
         self.assertEqual(strip_tag_labels(labels), {
-            **MARKER_LABELS,
             "ark.mckinsey.com/managed-by": "ark-api",
             "app.kubernetes.io/managed-by": "Helm",
         })
@@ -88,6 +89,24 @@ class TestLabelHelpers(unittest.TestCase):
             validate_tag("a" * 100)
         self.assertIn("too long", str(context.exception))
 
+    def test_validate_legacy_tag_accepts_hyphenated_tags(self):
+        self.assertEqual(validate_legacy_tag("mcp-servers"), "mcp-servers")
+
+    def test_validate_legacy_tag_rejects_spaces(self):
+        with self.assertRaises(ValueError):
+            validate_legacy_tag("mcp servers")
+
+    def test_validate_updated_tags_keeps_unchanged_legacy_tag(self):
+        """A tag already on the resource is grandfathered even if not alphanumeric."""
+        result = validate_updated_tags(["mcp-servers", "prod"], existing_tags=["mcp-servers"])
+        self.assertEqual(result, ["mcp-servers", "prod"])
+
+    def test_validate_updated_tags_rejects_new_non_alphanumeric_tag(self):
+        """A tag that isn't already on the resource must be alphanumeric-only."""
+        with self.assertRaises(ValueError) as context:
+            validate_updated_tags(["mcp-servers"], existing_tags=[])
+        self.assertIn("mcp-servers", str(context.exception))
+
 
 class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
     """Test cases for ConfigurationClient."""
@@ -101,23 +120,31 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
     async def test_list_filters_by_configuration_marker(self, mock_v1_api, mock_api_client):
-        """Only ConfigMaps Ark marked as configurations may be listed."""
+        """Only ConfigMaps carrying the configuration marker annotation are listed."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
 
+        marked = _config_map(name="github-mcp-url")
+        unmarked = _config_map(name="kube-root-ca.crt")
+        unmarked.metadata.annotations = {}
+
         mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.list_namespaced_config_map = AsyncMock(return_value=Mock(items=[]))
+        mock_api_instance.list_namespaced_config_map = AsyncMock(
+            return_value=Mock(items=[marked, unmarked])
+        )
 
-        await self.client.list_configurations()
+        result = await self.client.list_configurations()
 
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["items"][0]["name"], "github-mcp-url")
         mock_api_instance.list_namespaced_config_map.assert_called_once_with(
             namespace="test-namespace",
-            label_selector=CONFIGURATION_LABEL_SELECTOR
+            label_selector=None
         )
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
     async def test_list_combines_extra_label_selector(self, mock_v1_api, mock_api_client):
-        """A caller-supplied selector narrows the marker selector, never replaces it."""
+        """A caller-supplied selector is passed straight through for tag filtering."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
 
         mock_api_instance = mock_v1_api.return_value
@@ -127,7 +154,7 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
 
         mock_api_instance.list_namespaced_config_map.assert_called_once_with(
             namespace="test-namespace",
-            label_selector=f"{CONFIGURATION_LABEL_SELECTOR},ark.mckinsey.com/label.mcp=true"
+            label_selector="ark.mckinsey.com/label.mcp=true"
         )
 
     @patch('ark_sdk.k8s.ApiClient')
@@ -166,7 +193,7 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
 
         plain = _config_map(name="kube-root-ca.crt")
-        plain.metadata.labels = {}
+        plain.metadata.annotations = {}
 
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.read_namespaced_config_map = AsyncMock(return_value=plain)
@@ -196,10 +223,10 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
         body = mock_api_instance.create_namespaced_config_map.call_args.kwargs["body"]
         self.assertEqual(body.data, {"value": "https://example.test/mcp/"})
         self.assertEqual(body.metadata.labels, {
-            ARK_RESOURCE_TYPE_LABEL: "configuration",
             "ark.mckinsey.com/label.mcp": "true",
         })
         self.assertEqual(body.metadata.annotations, {
+            ARK_RESOURCE_TYPE_ANNOTATION: CONFIGURATION_RESOURCE_TYPE,
             "ark.mckinsey.com/description": "GitHub remote MCP endpoint",
             "ark.mckinsey.com/alias": "github-mcp",
         })
@@ -235,11 +262,11 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
 
         body = mock_api_instance.replace_namespaced_config_map.call_args.kwargs["body"]
         self.assertEqual(body.metadata.labels, {
-            ARK_RESOURCE_TYPE_LABEL: "configuration",
             "ark.mckinsey.com/label.mcp": "true",
             "app.kubernetes.io/managed-by": "Helm",
         })
         self.assertEqual(body.metadata.annotations, {
+            ARK_RESOURCE_TYPE_ANNOTATION: CONFIGURATION_RESOURCE_TYPE,
             "ark.mckinsey.com/description": "new",
             "kubectl.kubernetes.io/last-applied-configuration": "{}",
         })
@@ -290,10 +317,46 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
 
         body = mock_api_instance.replace_namespaced_config_map.call_args.kwargs["body"]
         self.assertEqual(body.metadata.labels, {
-            ARK_RESOURCE_TYPE_LABEL: "configuration",
             "ark.mckinsey.com/label.mcp": "true",
             "ark.mckinsey.com/managed-by": "ark-api",
         })
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_keeps_pre_existing_legacy_tag_untouched(self, mock_v1_api, mock_api_client):
+        """A tag created before the alphanumeric-only rule survives an update that doesn't touch it."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+
+        existing = _config_map(labels={"ark.mckinsey.com/label.mcp-servers": "true"})
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_config_map = AsyncMock(return_value=existing)
+        mock_api_instance.replace_namespaced_config_map = AsyncMock(return_value=_config_map())
+
+        await self.client.update_configuration(
+            name="github-mcp-url", value="v", labels=["mcp-servers"]
+        )
+
+        body = mock_api_instance.replace_namespaced_config_map.call_args.kwargs["body"]
+        self.assertEqual(body.metadata.labels, {
+            "ark.mckinsey.com/label.mcp-servers": "true",
+        })
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_rejects_new_non_alphanumeric_tag(self, mock_v1_api, mock_api_client):
+        """Adding a genuinely new tag must still satisfy the alphanumeric-only rule."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+
+        existing = _config_map(labels={})
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_config_map = AsyncMock(return_value=existing)
+
+        with self.assertRaises(ValueError):
+            await self.client.update_configuration(
+                name="github-mcp-url", value="v", labels=["mcp-servers"]
+            )
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
@@ -319,7 +382,7 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
 
         plain = _config_map(name="kube-root-ca.crt")
-        plain.metadata.labels = {}
+        plain.metadata.annotations = {}
 
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.read_namespaced_config_map = AsyncMock(return_value=plain)

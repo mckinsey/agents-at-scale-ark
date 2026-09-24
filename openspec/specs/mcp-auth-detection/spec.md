@@ -17,7 +17,7 @@ The `MCPServer` CRD (v1alpha1) SHALL include a new optional `status.authorizatio
 - `registrationEndpoint` (`string`, optional) — the `registration_endpoint` from RFC 8414 (indicates RFC 7591 dynamic client registration support).
 - `authorizationEndpoint` (`string`, optional) — `authorization_endpoint` from RFC 8414.
 - `tokenEndpoint` (`string`, optional) — `token_endpoint` from RFC 8414.
-- `lastDiscovered` (`metav1.Time`, optional) — timestamp of the last successful discovery probe.
+- `lastDiscovered` (`metav1.Time`, optional) — time the authorization block was last recomputed and persisted; unchanged polls do not advance it.
 
 These fields are **read-only outputs** of the controller; no spec-side inputs are added in this change.
 
@@ -25,7 +25,7 @@ These fields are **read-only outputs** of the controller; no spec-side inputs ar
 
 - **GIVEN** an `MCPServer` resource with `spec.address.value = https://mcp.notion.com/mcp` and no authorization headers configured
 - **WHEN** the controller reconciles and the initial MCP `initialize` call returns HTTP 401 with `WWW-Authenticate: Bearer realm="OAuth", resource_metadata="https://mcp.notion.com/.well-known/oauth-protected-resource/mcp"`
-- **THEN** the controller SHALL fetch the resource metadata URL and the `authorization_servers[0]` `/.well-known/oauth-authorization-server` metadata
+- **THEN** the controller SHALL fetch the resource metadata URL and the `authorization_servers[0]` metadata, trying the well-known locations mandated by the MCP authorization specification in order (RFC 8414 `/.well-known/oauth-authorization-server` with path insertion, then OpenID Connect discovery) and finally the legacy path-appended RFC 8414 location
 - **AND** populate `status.authorization.state = "Required"`, `resource`, `resourceMetadataURL`, `resourceName`, `authorizationServers`, `registrationEndpoint`, `authorizationEndpoint`, `tokenEndpoint`, `scopesSupported`, `grantTypesSupported`, `lastDiscovered`
 - **AND** NOT set `status.toolCount` (auth-required servers never list tools)
 
@@ -42,12 +42,24 @@ These fields are **read-only outputs** of the controller; no spec-side inputs ar
 - **THEN** the controller SHALL set `Available=False` with `reason: AuthorizationDiscoveryFailed` and a message including the underlying fetch/parse error
 - **AND** SHALL populate `status.authorization` with `state: DiscoveryFailed` and the `resource` / `lastDiscovered` fields only
 
-#### Scenario: Authorization server metadata endpoint is unreachable
+#### Scenario: Authorization server metadata yields no usable endpoints
 
-- **WHEN** RFC 9728 metadata was fetched successfully but the subsequent RFC 8414 `oauth-authorization-server` endpoint cannot be reached
-- **THEN** the controller SHALL still set `Available=False` with `reason: AuthorizationRequired`
-- **AND** SHALL populate `status.authorization` with the RFC 9728 fields only (leaving `authorizationEndpoint`, `tokenEndpoint`, `registrationEndpoint`, `grantTypesSupported` empty)
+- **WHEN** RFC 9728 metadata was fetched successfully but no authorization server metadata location responds, or the document omits `authorization_endpoint` or `token_endpoint`
+- **AND** `spec.authorization.clientCredentials` is not set
+- **THEN** the controller SHALL set `Available=False` with `reason: AuthorizationDiscoveryFailed` and a message naming the issuer and the missing endpoints
+- **AND** SHALL populate `status.authorization` with `state: DiscoveryFailed` and the `resource` / `lastDiscovered` fields only
 - **AND** SHALL log the RFC 8414 fetch failure at INFO level
+
+#### Scenario: Machine-managed server whose authorization server advertises no authorization_endpoint
+
+- **WHEN** `spec.authorization.clientCredentials` is set and the authorization server metadata lacks `authorization_endpoint`
+- **THEN** the controller SHALL keep `state: Required` with the discovered `tokenEndpoint`, because the client_credentials grant needs no browser redirect
+
+#### Scenario: Status changes are persisted regardless of condition transitions
+
+- **WHEN** a reconcile changes any `status` field other than `authorization.lastDiscovered`, such as `authorization.expiresAt`, `authorization.resource`, or `toolCount`
+- **THEN** the controller SHALL persist the status even if no condition changed
+- **AND** a reconcile that leaves every other status field unchanged SHALL NOT write the status
 
 #### Scenario: MCP server response is not an auth failure
 

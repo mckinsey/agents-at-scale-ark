@@ -51,6 +51,24 @@ describe('modelsService', () => {
     });
   });
 
+  describe('list', () => {
+    it('scopes the paginated list to the namespace without hydrating each item', async () => {
+      vi.mocked(fetchAllPages).mockResolvedValue([
+        { name: 'gpt-4', provider: 'openai' },
+      ]);
+
+      const result = await modelsService.list(NAMESPACE);
+
+      expect(fetchAllPages).toHaveBeenCalledWith('/api/v1/models', {
+        namespace: NAMESPACE,
+      });
+      expect(apiClient.get).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        { name: 'gpt-4', provider: 'openai', id: 'gpt-4' },
+      ]);
+    });
+  });
+
   describe('getByName', () => {
     it('requests the model in the namespace and adds an id', async () => {
       const get = vi.spyOn(apiClient, 'get').mockResolvedValue(DETAIL);

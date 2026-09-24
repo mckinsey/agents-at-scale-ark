@@ -61,7 +61,7 @@ function consumeSSE(
 }
 
 describeIntegration('redis chunk backend — HTTP parity', () => {
-  const {client, connectionUrl} = useRedisContainer();
+  const {client, connectionUrl, onStop} = useRedisContainer();
   let app: Express;
 
   beforeAll(() => {
@@ -70,12 +70,17 @@ describeIntegration('redis chunk backend — HTTP parity', () => {
       REDIS_URL: connectionUrl(),
     });
     const redis = createRedis(config, logger);
+    const chunks = createChunkStream(config, logger, redis);
+    onStop(async () => {
+      chunks.close?.();
+      await redis.quit();
+    });
     app = buildApp({
       config,
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
-      chunkStream: createChunkStream(config, logger, redis),
+      chunkStream: chunks,
       eventStream: createEventStream(config, logger),
       sessionsStorage: createSessionsStorage(config, logger),
       redis,
@@ -134,8 +139,18 @@ describeIntegration('redis chunk backend — HTTP parity', () => {
     expect(allKeys).toHaveLength(0);
   });
 
-  it('POST /stream/:id/complete returns 404 for unknown query', async () => {
-    await request(app).post('/stream/no-such-query/complete').expect(404);
+  it('POST /stream/:id/complete stores [DONE] for a query with no chunks', async () => {
+    // A completion for a query that never streamed a chunk must still terminate
+    // the stream so a connected consumer does not hang.
+    const q = 'redis-parity-complete-no-chunks';
+    await request(app).post(`/stream/${q}/complete`).expect(200);
+
+    const events = await consumeSSE(
+      app,
+      `/stream/${q}?from-beginning=true`,
+      5000
+    );
+    expect(events).toContain('[DONE]');
   });
 
   it('GET /stream paginate returns correct items after cursor', async () => {

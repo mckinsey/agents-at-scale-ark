@@ -62,7 +62,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
     queryKey: ['agents', namespace],
-    queryFn: () => agentsService.getAll(namespace),
+    queryFn: () => agentsService.list(namespace),
     enabled: Boolean(namespace),
   });
 
@@ -241,7 +241,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="bg-surface-bg-secondary sm:max-w-[600px] flex h-[700px] max-h-[90vh] flex-col gap-10 border-0 p-12"
+        className="bg-surface-bg-secondary sm:max-w-[600px] flex h-[700px] max-h-[90vh] flex-col gap-10 p-12"
         showCloseButton={false}
       >
         <DialogHeader>
@@ -306,10 +306,16 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
           <Separator className="bg-stroke-divider" />
           <div className="flex items-center justify-end">
             <div className="flex gap-3">
-              <Button variant="outline" onClick={handleClose} className="min-w-[92px]">
+              <Button
+                variant="outline"
+                data-testid="session-dialog-cancel"
+                onClick={handleClose}
+                className="min-w-[92px]"
+              >
                 Cancel
               </Button>
               <Button
+                data-testid="session-dialog-create"
                 onClick={handleCreate}
                 disabled={!selectedParticipant}
                 className="min-w-[92px]"

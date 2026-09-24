@@ -1,6 +1,6 @@
 import mermaid from 'mermaid';
 import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { CollapsibleCodeBlock } from '@/components/chat/collapsible-code-block';
@@ -22,6 +22,45 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// Only same-origin, inline (data:image/), or local blob: image sources may load.
+// Anything with a scheme or a protocol-relative prefix can silently fetch from an
+// attacker host on render, turning a rendered image into a data-exfiltration channel
+// (the src carries the payload in its query string). Mirrors the href policy applied
+// to SVG uploads server-side.
+const isSafeImageSrc = (src: string | undefined): boolean => {
+  if (!src) return false;
+  // Browsers fold \ to / when parsing an http(s) URL, so "/\evil.com/x.png"
+  // loads from evil.com. A src from markdown arrives already percent-encoded as
+  // %5C by mdast-to-hast, so the fold is a no-op there; it matters for a src that
+  // skips that normalization, as raw HTML would. Note this only polices the src:
+  // an external reference can also ride in on another attribute, which is why the
+  // img renderer below forwards a fixed set rather than spreading.
+  const trimmed = src.trim().replace(/\\/g, '/');
+  if (trimmed.startsWith('//')) return false;
+  if (/^data:image\//i.test(trimmed) || trimmed.startsWith('blob:'))
+    return true;
+  return !/^[a-z][a-z0-9+.-]*:/i.test(trimmed);
+};
+
+// react-markdown's default transform strips data: and blob: URLs before the img
+// renderer runs. Preserve those two for image sources so inline rasters and local
+// blobs still render; everything else keeps the default link/URL sanitization, and
+// the img renderer enforces the external-source policy on what remains.
+const imageAwareUrlTransform = (
+  value: string,
+  key: string,
+  node: { tagName?: string },
+): string => {
+  if (
+    key === 'src' &&
+    node.tagName === 'img' &&
+    (/^data:image\//i.test(value) || value.startsWith('blob:'))
+  ) {
+    return value;
+  }
+  return defaultUrlTransform(value);
+};
+
 export const renderMarkdown = (
   content: string,
   options?: { defaultCodeCollapsed?: boolean },
@@ -30,6 +69,7 @@ export const renderMarkdown = (
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
+      urlTransform={imageAwareUrlTransform}
       components={{
         a: ({ href, children, ...props }) => (
           <a
@@ -41,6 +81,31 @@ export const renderMarkdown = (
             {children}
           </a>
         ),
+        // Only these attributes are forwarded. Spreading the rest would let an
+        // external reference through on srcSet or style even when the src passes,
+        // and React emits a <link rel="preload"> for srcSet, so that fetch would
+        // fire before the element mounts.
+        img: ({ src, alt, title, width, height }) => {
+          const source = typeof src === 'string' ? src : undefined;
+          if (isSafeImageSrc(source)) {
+            return (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={source}
+                alt={alt || ''}
+                title={title}
+                width={width}
+                height={height}
+                className="max-w-full"
+              />
+            );
+          }
+          return (
+            <span className="inline-flex items-center gap-1 rounded border border-current/20 px-2 py-0.5 text-xs text-current/60">
+              external image blocked{alt ? `: ${alt}` : ''}
+            </span>
+          );
+        },
         h1: ({ children, ...props }) => (
           <h1 className="mt-6 mb-4 text-2xl font-bold first:mt-0" {...props}>
             {children}

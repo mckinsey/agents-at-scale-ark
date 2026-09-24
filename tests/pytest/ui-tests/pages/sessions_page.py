@@ -15,8 +15,8 @@ class SessionsPage(BasePage):
     NEW_SESSION_BUTTON = "button:has-text('New session')"
     SESSION_DIALOG = "[role='dialog']:has-text('Create new session')"
     DIALOG_SEARCH_INPUT = "[role='dialog'] input[placeholder*='Search']"
-    DIALOG_CREATE_BUTTON = "[role='dialog'] button:has-text('Create')"
-    DIALOG_CANCEL_BUTTON = "[role='dialog'] button:has-text('Cancel')"
+    DIALOG_CREATE_BUTTON = "[data-testid='session-dialog-create']"
+    DIALOG_CANCEL_BUTTON = "[data-testid='session-dialog-cancel']"
     BACK_TO_SESSIONS_BUTTON = "button:has-text('Back to all sessions')"
     HISTORY_TAB = "[role='tab']:has-text('History')"
     CONVERSATION_SIDEBAR = "[data-testid='conversation-sidebar']"
@@ -31,7 +31,7 @@ class SessionsPage(BasePage):
 
     def navigate_to_session_history(self) -> None:
         dashboard = DashboardPage(self.page)
-        dashboard.navigate_to_section("session-history")
+        dashboard.navigate_to_section("sessions")
         self.wait_for_load_state("domcontentloaded")
         self.wait_for_navigation_complete()
 
@@ -375,7 +375,7 @@ class SessionsPage(BasePage):
         return 0
 
     def cancel_session_dialog(self) -> None:
-        cancel = self.page.locator("[role='dialog'] button:has-text('Cancel')").first
+        cancel = self.page.locator(self.DIALOG_CANCEL_BUTTON).first
         cancel.wait_for(state="visible", timeout=5000)
         cancel.click()
         self.wait_for_modal_close()

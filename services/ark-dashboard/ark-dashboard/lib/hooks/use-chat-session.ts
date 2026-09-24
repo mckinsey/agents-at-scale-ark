@@ -26,7 +26,11 @@ import {
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
-import type { ChatResponse } from '@/lib/services/chat';
+import type {
+  ChatResponse,
+  MemoryNotice,
+  MemoryNoticeLookup,
+} from '@/lib/services/chat';
 import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
@@ -126,6 +130,7 @@ interface UseChatSessionReturn {
   isWaitingForApprovalResponse: boolean;
 
   error: string | null;
+  memoryNotice: MemoryNotice | null;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -291,6 +296,7 @@ export function useChatSession({
     useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
@@ -327,6 +333,70 @@ export function useChatSession({
       }
     };
   }, []);
+
+  // Bumped by anything that makes an outstanding notice irrelevant, and
+  // snapshotted at the start of each turn. `lastQueryName` alone is not enough:
+  // it still holds the finished query's name after a target switch or a New
+  // chat, and a late result would write the notice straight back. Snapshotting
+  // at the start of the turn rather than at the lookup covers a switch that
+  // happens while the turn is still running, which is most of the window.
+  const noticeEpochRef = useRef(0);
+  const turnEpochRef = useRef(0);
+
+  const discardMemoryNotice = useCallback(() => {
+    noticeEpochRef.current += 1;
+    setMemoryNotice(null);
+  }, []);
+
+  const beginMemoryNoticeTurn = useCallback(() => {
+    turnEpochRef.current = noticeEpochRef.current;
+  }, []);
+
+  const applyMemoryLookup = useCallback(
+    (lookup: MemoryNoticeLookup | undefined, queryName: string) => {
+      // No unmount guard: React 19 makes a state update on an unmounted
+      // component a no-op, and a guard nothing can observe is a guard nothing
+      // can test.
+      if (
+        !lookup?.settled ||
+        noticeEpochRef.current !== turnEpochRef.current ||
+        lastQueryName.current !== queryName
+      ) {
+        return;
+      }
+      setMemoryNotice(lookup.notice);
+    },
+    [],
+  );
+
+  // The notice describes the last turn of one conversation; switching target
+  // must not carry it over to the next one.
+  useEffect(() => {
+    discardMemoryNotice();
+  }, [chatKey, discardMemoryNotice]);
+
+  // Deliberately not awaited: the stream has already delivered the answer, and
+  // the controller writes the memory conditions a beat later, so blocking the
+  // turn on that write would only keep the composer disabled for no reason.
+  const refreshMemoryNotice = useCallback(
+    (queryName: string) => {
+      if (!queryName) {
+        return;
+      }
+      void (async () => {
+        try {
+          applyMemoryLookup(
+            await chatService.resolveMemoryNotice(namespace, queryName),
+            queryName,
+          );
+        } catch {
+          // Best effort. The turn already produced an answer, so a failed
+          // lookup must not turn it into a chat error.
+        }
+      })();
+    },
+    [applyMemoryLookup, namespace],
+  );
 
   useEffect(() => {
     const id = setTimeout(scrollToBottom, 100);
@@ -826,7 +896,6 @@ export function useChatSession({
         name,
         sessionId,
         conversationId,
-        undefined,
         queryTimeout,
         apiParameters,
       );
@@ -848,6 +917,7 @@ export function useChatSession({
           setProcessingPhase(result.status);
 
           if (result.terminal) {
+            applyMemoryLookup(result.memoryLookup, query.name);
             const fullQuery = await chatService.getQuery(
               namespace,
               query.name,
@@ -975,6 +1045,7 @@ export function useChatSession({
       }
     },
     [
+      applyMemoryLookup,
       buildChatMessages,
       chatMessages,
       name,
@@ -1013,6 +1084,9 @@ export function useChatSession({
       ]);
 
       setIsProcessing(true);
+      beginMemoryNoticeTurn();
+
+      let aborted = false;
 
       try {
         if (isChatStreamingEnabled) {
@@ -1027,6 +1101,7 @@ export function useChatSession({
 
         if (err instanceof Error) {
           if (err.name === 'AbortError') {
+            aborted = true;
             return;
           }
           if (err.message.includes('Failed to fetch')) {
@@ -1052,15 +1127,38 @@ export function useChatSession({
         setIsProcessing(false);
         setProcessingPhase(undefined);
         setStatusText(undefined);
+
+        // In `finally`, not after the stream, because the failure path is the
+        // one that matters most: ark-api resolves the chunk stream's broker
+        // from the Memory resource, so a memory fault severe enough to set
+        // either condition also 503s the stream. Running the lookup only on
+        // success meant the default configuration showed a broker error and
+        // never the notice — for exactly the faults the notice reports. The
+        // stream breaking does not cancel the query, so it still finishes and
+        // records its verdict for this lookup to read.
+        // Not on a turn that paused for tool approval: handleStreamChatResponse
+        // returns normally when it sees an approval request, but the query has
+        // not dispatched yet, so the poll is guaranteed to find no verdict and
+        // just burns its budget. pollAfterApproval reads the verdict off the
+        // terminal response once the user answers.
+        if (
+          isChatStreamingEnabled &&
+          !aborted &&
+          !pendingApprovalQueryRef.current
+        ) {
+          refreshMemoryNotice(lastQueryName.current);
+        }
       }
     },
     [
+      beginMemoryNoticeTurn,
       ensureConversationId,
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
       missingParameters,
       name,
+      refreshMemoryNotice,
       resumeAutoScroll,
       toApiParameters,
       type,
@@ -1087,7 +1185,14 @@ export function useChatSession({
       },
     }));
     setError(null);
-  }, [chatKey, name, setChatHistory, setLastConversationId]);
+    discardMemoryNotice();
+  }, [
+    chatKey,
+    discardMemoryNotice,
+    name,
+    setChatHistory,
+    setLastConversationId,
+  ]);
 
   const cancelQuery = useCallback(async () => {
     chatStreamAbortControllerRef.current.abort();
@@ -1149,6 +1254,7 @@ export function useChatSession({
   const applyTerminalResult = useCallback(
     (result: ChatResponse, messageIndex: number, queryName: string): void => {
       stopPollingRef.current = null;
+      applyMemoryLookup(result.memoryLookup, queryName);
 
       if (result.status === 'done') {
         if (result.messages && result.messages.length > 0) {
@@ -1173,7 +1279,7 @@ export function useChatSession({
 
       setIsProcessing(false);
     },
-    [updateChatMessages, setIsProcessing],
+    [updateChatMessages, setIsProcessing, applyMemoryLookup],
   );
 
   const pollAfterApproval = useCallback(async () => {
@@ -1241,6 +1347,7 @@ export function useChatSession({
     processingPhase,
     statusText,
     error,
+    memoryNotice,
     sendMessage,
     clearChat,
     messagesEndRef,

@@ -4,38 +4,33 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-type WebhookValidator struct {
+type WebhookValidator[T runtime.Object] struct {
 	V *Validator
 }
 
-var _ webhook.CustomValidator = &WebhookValidator{}
-
-func (wv *WebhookValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (wv *WebhookValidator[T]) ValidateCreate(ctx context.Context, obj T) (admission.Warnings, error) {
 	warnings, err := wv.V.Validate(ctx, obj)
 	return admission.Warnings(warnings), err
 }
 
-func (wv *WebhookValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (wv *WebhookValidator[T]) ValidateUpdate(ctx context.Context, oldObj, newObj T) (admission.Warnings, error) {
 	ctx = ServiceAccountAuthzContextForUpdate(ctx, oldObj, newObj)
 	warnings, err := wv.V.Validate(ctx, newObj)
 	return admission.Warnings(warnings), err
 }
 
-func (wv *WebhookValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (wv *WebhookValidator[T]) ValidateDelete(_ context.Context, _ T) (admission.Warnings, error) {
 	return nil, nil
 }
 
-type WebhookDefaulter struct {
-	Lookup ArkConfigLookup
+type WebhookDefaulter[T runtime.Object] struct {
+	Lookup DefaultsLookup
 }
 
-var _ webhook.CustomDefaulter = &WebhookDefaulter{}
-
-func (d *WebhookDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+func (d *WebhookDefaulter[T]) Default(ctx context.Context, obj T) error {
 	ApplyDefaults(ctx, obj, d.Lookup)
 	return nil
 }

@@ -58,7 +58,7 @@ Each conversation has a **New Chat** action (bottom-right of the panel) that sta
 | | **Target** | Required. Pick an agent, team, model, or tool. |
 | | **Session ID** | Optional. Groups related queries for tracking and telemetry. **Auto-generated** if you leave it blank. |
 | | **Conversation ID** | Optional. Threads multiple queries into one conversation. **Auto-generated** if you leave it blank. |
-| **Configuration** | **Timeout** | Default `5m`. Format: `30s`, `5m`, `1h`. |
+| **Configuration** | **Timeout** | Default `30m`. Format: `30s`, `5m`, `1h`. |
 | | **TTL** | How long the Query resource sticks around after completing. Default comes from `ArkConfig/default.spec.queryTTL` (720h fallback). |
 | | **Memory** | Optional. Pick a `Memory` resource so the conversation history is persisted under `conversationId`. |
 | | **Streaming** | Stream the response into the **Status & Results** panel instead of waiting for the final message. |
@@ -241,7 +241,7 @@ kubectl get query my-q -o jsonpath='{.status.response.content}'
 Common causes:
 
 - A2A / executor returned a 500 — usually the agent's tools or model are misconfigured; check `kubectl describe agent <name>` for the model/tool resolution path.
-- Timeout exceeded — bump `spec.timeout` (default `5m`); see the [Reference → Timeout](/reference/resources/query#timeout).
+- Timeout exceeded — bump `spec.timeout` (default `30m`); see the [Reference → Timeout](/reference/resources/query#timeout).
 
 **Query never starts (`phase: pending` forever).** The controller couldn't dispatch — usually because the controller pod is restarting or the ark-completions executor isn't reachable. `kubectl get pods -n ark-system` and check `ark-controller` + `ark-completions` are both `Running`.
 

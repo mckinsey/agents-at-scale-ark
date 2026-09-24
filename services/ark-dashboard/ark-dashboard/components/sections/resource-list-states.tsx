@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { Search } from '@/components/icons';
+import { Search, Warning } from '@/components/icons';
 import { Button, wrapTextNodes } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ interface ResourceSearchInputProps {
   readonly onChange: (value: string) => void;
   readonly placeholder?: string;
   readonly className?: string;
+  readonly testId?: string;
 }
 
 export function ResourceSearchInput({
@@ -36,6 +37,7 @@ export function ResourceSearchInput({
   onChange,
   placeholder = 'Search',
   className,
+  testId,
 }: ResourceSearchInputProps) {
   return (
     <div className={cn('relative w-[304px] max-w-full', className)}>
@@ -46,6 +48,7 @@ export function ResourceSearchInput({
       </span>
       <Input
         type="search"
+        data-testid={testId}
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -80,12 +83,14 @@ export function ResourceEmptyState({
                 {icon}
               </IconShell>
             </div>
-            <p className="text-fg-primary text-xl leading-7">{title}</p>
-            <div className="text-fg-secondary text-center text-base leading-6 tracking-[-0.128px]">
+            <p className="headings-h3-regular text-fg-primary">{title}</p>
+            <div className="label-large-primary text-fg-secondary text-center">
               {description}
             </div>
           </div>
-          <div className="flex items-start gap-3">{actions}</div>
+          <div className="flex items-start gap-3 [&_button]:min-w-[100px] [&>*]:min-w-[100px]">
+            {actions}
+          </div>
         </div>
       </div>
     </div>
@@ -106,9 +111,40 @@ export function ResourceNoResults({ icon, message }: ResourceNoResultsProps) {
           {icon}
         </IconShell>
       </div>
-      <p className="text-fg-secondary text-base leading-6 tracking-[-0.128px]">
-        {message}
-      </p>
+      <p className="label-large-primary text-fg-secondary">{message}</p>
+    </div>
+  );
+}
+
+interface ResourceErrorStateProps {
+  readonly title: string;
+  readonly description?: ReactNode;
+  readonly className?: string;
+}
+
+export function ResourceErrorState({
+  title,
+  description,
+  className,
+}: Readonly<ResourceErrorStateProps>) {
+  return (
+    <div
+      role="alert"
+      className={cn(
+        'border-status-error/30 bg-status-error/10 flex flex-none items-start gap-2 border px-3 py-2',
+        className,
+      )}>
+      <IconShell size="sm" className="text-fg-error mt-0.5 shrink-0">
+        <Warning />
+      </IconShell>
+      <div>
+        <p className="label-regular-primary text-fg-error">{title}</p>
+        {description ? (
+          <p className="paragraph-regular-primary text-fg-secondary mt-1">
+            {description}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

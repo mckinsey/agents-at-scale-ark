@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import * as z from 'zod';
 
 import type {
@@ -13,10 +12,33 @@ import type {
 } from '@/lib/services/mcp-servers';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
+import {
+  EMPTY_HEADER_ROW,
+  type HeaderData,
+  generateUniqueKey,
+} from '../shared/header-rows';
+
+export {
+  EMPTY_HEADER_ROW,
+  generateUniqueKey,
+  useHeaderRows,
+  validateHeaders,
+} from '../shared/header-rows';
+export type {
+  HeaderData,
+  HeaderError,
+  HeaderRows,
+} from '../shared/header-rows';
+
 export const CONFIGURATION_VALUE_KEY = 'value';
 
 export type AddressMode =
-  | { kind: 'configuration'; originalName?: string; originalKey?: string }
+  | {
+      kind: 'configuration';
+      originalName?: string;
+      originalKey?: string;
+      literalUrl?: string;
+    }
   | { kind: 'service'; serviceRef: MCPServerServiceRef };
 
 export type UrlFieldState =
@@ -34,11 +56,13 @@ export type UrlFieldState =
     };
 
 export function createFormSchema(addressMode: AddressMode) {
+  const hasLiteralFallback =
+    addressMode.kind === 'configuration' && !!addressMode.literalUrl;
   return z.object({
     name: kubernetesNameSchema,
-    description: z.string().min(1, 'Description is required'),
+    description: z.string().optional(),
     configurationName:
-      addressMode.kind === 'service'
+      addressMode.kind === 'service' || hasLiteralFallback
         ? z.string()
         : z.string().min(1, 'URL is required'),
     transport: z.enum(['http', 'sse'], {
@@ -48,28 +72,6 @@ export function createFormSchema(addressMode: AddressMode) {
 }
 
 export type FormValues = z.infer<ReturnType<typeof createFormSchema>>;
-
-export type HeaderData = {
-  key: string;
-  name: string;
-  type: 'direct' | 'secret';
-  value: string;
-};
-
-export type HeaderError = { nameError?: string; valueError?: string };
-
-export const EMPTY_HEADER_ROW: HeaderData = {
-  key: 'row-1',
-  name: '',
-  type: 'direct',
-  value: '',
-};
-
-export function generateUniqueKey() {
-  const randomValue = globalThis.crypto.getRandomValues(new Uint32Array(1))[0];
-  const generatedSuffix = randomValue % 100000;
-  return `row-${Date.now()}-${generatedSuffix}`;
-}
 
 export function buildHeader(header: HeaderData): MCPHeader {
   if (header.type === 'direct') {
@@ -121,7 +123,10 @@ export function mapDetailAddress(
       resolvedAddress: resolvedAddress ?? '',
     };
   }
-  return { kind: 'literal', url: addressSource?.value ?? resolvedAddress ?? '' };
+  return {
+    kind: 'literal',
+    url: addressSource?.value ?? resolvedAddress ?? '',
+  };
 }
 
 export function buildUpdateAddressMode(urlState: UrlFieldState): AddressMode {
@@ -135,6 +140,9 @@ export function buildUpdateAddressMode(urlState: UrlFieldState): AddressMode {
       originalKey: urlState.configurationKey,
     };
   }
+  if (urlState.kind === 'literal') {
+    return { kind: 'configuration', literalUrl: urlState.url };
+  }
   return { kind: 'configuration' };
 }
 
@@ -145,7 +153,10 @@ export function buildAddress(
   if (addressMode.kind === 'service') {
     return { valueFrom: { serviceRef: addressMode.serviceRef } };
   }
-  const { originalName, originalKey } = addressMode;
+  const { originalName, originalKey, literalUrl } = addressMode;
+  if (!values.configurationName && literalUrl) {
+    return { value: literalUrl };
+  }
   const key =
     originalKey && values.configurationName === originalName
       ? originalKey
@@ -166,105 +177,9 @@ export function buildSpec(
   addressMode: AddressMode,
 ): MCPServerSpec {
   return {
-    description: values.description,
+    description: values.description?.trim() || undefined,
     transport: values.transport,
     address: buildAddress(values, addressMode),
     headers: headers.map(buildHeader),
   };
 }
-
-export function validateHeaders(headers: HeaderData[]): {
-  errors: Record<string, HeaderError>;
-  hasErrors: boolean;
-  nonEmptyHeaders: HeaderData[];
-} {
-  const nonEmptyHeaders = headers.filter(
-    row => row.name.trim() !== '' || row.value.trim() !== '',
-  );
-
-  const errors: Record<string, HeaderError> = {};
-  let hasErrors = false;
-  nonEmptyHeaders.forEach(header => {
-    const headerError: HeaderError = {};
-    if (header.name.trim() === '') {
-      headerError.nameError = 'Header name is required';
-      hasErrors = true;
-    }
-    if (header.value.trim() === '') {
-      headerError.valueError = 'Header value is required';
-      hasErrors = true;
-    }
-    if (headerError.nameError || headerError.valueError) {
-      errors[header.key] = headerError;
-    }
-  });
-
-  return { errors, hasErrors, nonEmptyHeaders };
-}
-
-export function useHeaderRows(initial: HeaderData[] = [EMPTY_HEADER_ROW]) {
-  const [headers, setHeaders] = useState<HeaderData[]>(initial);
-  const [headerErrors, setHeaderErrors] = useState<
-    Record<string, HeaderError>
-  >({});
-
-  const updateRow = (index: number, updated: Partial<HeaderData>) => {
-    setHeaders(prev =>
-      prev.map((row, i) => (i === index ? { ...row, ...updated } : row)),
-    );
-  };
-
-  const addRow = () => {
-    setHeaders(prev => [
-      ...prev,
-      { key: generateUniqueKey(), name: '', type: 'direct', value: '' },
-    ]);
-  };
-
-  const deleteRow = (key: string) => {
-    setHeaders(prev => prev.filter(header => header.key !== key));
-    setHeaderErrors(prev => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  };
-
-  const clearRowError = (key: string, updated: Partial<HeaderData>) => {
-    setHeaderErrors(prev => {
-      if (!prev[key]) {
-        return prev;
-      }
-      const next = { ...prev };
-      if (updated.name !== undefined && next[key].nameError) {
-        delete next[key].nameError;
-        if (!next[key].valueError) delete next[key];
-      }
-      if (updated.value !== undefined && next[key]?.valueError) {
-        delete next[key].valueError;
-        if (!next[key]?.nameError) delete next[key];
-      }
-      return next;
-    });
-  };
-
-  const validate = (): HeaderData[] | null => {
-    const { errors, hasErrors, nonEmptyHeaders } = validateHeaders(headers);
-    setHeaderErrors(errors);
-    return hasErrors ? null : nonEmptyHeaders;
-  };
-
-  return {
-    headers,
-    setHeaders,
-    headerErrors,
-    setHeaderErrors,
-    updateRow,
-    addRow,
-    deleteRow,
-    clearRowError,
-    validate,
-  };
-}
-
-export type HeaderRows = ReturnType<typeof useHeaderRows>;

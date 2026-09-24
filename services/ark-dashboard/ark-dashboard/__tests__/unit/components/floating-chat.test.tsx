@@ -44,6 +44,9 @@ vi.mock('@/lib/services', () => ({
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
     getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
+    resolveMemoryNotice: vi
+      .fn()
+      .mockResolvedValue({ settled: true, notice: null }),
   },
   agentsService: {
     getByName: vi.fn().mockResolvedValue({ parameters: [] }),
@@ -789,7 +792,6 @@ describe('FloatingChat', () => {
           'Test Agent',
           expect.any(String),
           undefined, // conversationId
-          undefined, // enableStreaming
           '5m', // timeout
           undefined, // parameters
         );
@@ -918,7 +920,6 @@ describe('FloatingChat', () => {
           'agent',
           'Test Agent',
           expect.any(String),
-          undefined,
           undefined,
           '5m',
           undefined, // parameters

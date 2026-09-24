@@ -34,7 +34,10 @@ import {
   BROKER_STREAM_PROBE_QUERY_KEY,
   useBrokerStreamProbe,
 } from '@/lib/services/broker-streams-hooks';
-import { type Memory, memoriesService } from '@/lib/services/memories';
+import {
+  type MemoryListItem,
+  memoriesService,
+} from '@/lib/services/memories';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 const STREAM_PAGE_SIZE = 1000;
@@ -141,7 +144,7 @@ function BrokerStreamTab({
 }
 
 export default function BrokerPage() {
-  const [memories, setMemories] = useState<Memory[]>([]);
+  const [memories, setMemories] = useState<MemoryListItem[]>([]);
   const [selectedMemory, setSelectedMemory] = useState<string>('default');
   const [loading, setLoading] = useState(true);
   const [hasMemoriesError, setHasMemoriesError] = useState(false);
