@@ -105,6 +105,24 @@ false
 {{- end -}}
 {{- end -}}
 
+{{/*
+Inline tool authoring must never be installable without an enforceable author
+check. On etcd that check is the mandatory inline webhook, so disabled Ark
+webhooks would leave inline writes unchecked; on postgresql the embedded
+apiserver enforces it in-process. Fail the render rather than ship a cluster
+where the schema accepts inline but nothing authorises it.
+*/}}
+{{- define "chart.inlineToolsEnabled" -}}
+{{- if .Values.inlineTools.enabled -}}
+{{- if and (eq .Values.storage.backend "etcd") (ne (include "chart.arkWebhooksEnabled" .) "true") -}}
+{{- fail "inlineTools.enabled requires webhook.enable=true on the etcd storage backend: inline authoring cannot be enforced without the inline admission webhook" -}}
+{{- end -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}
+
 {{- define "ark.watchNamespaceSelector" -}}
 {{- with .Values.controllerManager.watchNamespaces -}}
 namespaceSelector:
