@@ -4,11 +4,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionsSection } from '@/components/sections/sessions-section';
+import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
+import { resetNodeLogStore } from '@/lib/services/workflow-logs-store';
 import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
-import { workflowsService } from '@/lib/services/workflows';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 
 const mockUseNamespace = vi.fn();
@@ -27,11 +28,8 @@ vi.mock('@/lib/services/workflows-hooks', () => ({
   useWorkflow: vi.fn(),
 }));
 
-vi.mock('@/lib/services/workflows', () => ({
-  workflowsService: {
-    getPodLogs: vi.fn().mockRejectedValue(new Error('pod gone')),
-    getWorkflowLogs: vi.fn().mockRejectedValue(new Error('404 not found')),
-  },
+vi.mock('@/lib/services/workflow-logs', () => ({
+  fetchNodeLogWindow: vi.fn().mockRejectedValue(new Error('404 not found')),
 }));
 
 vi.mock('@/lib/hooks/use-debounce', () => ({
@@ -225,6 +223,7 @@ describe('SessionsSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetNodeLogStore();
     currentSearch = '';
     mockUseNamespace.mockReturnValue({
       namespace: 'default',
@@ -1258,6 +1257,9 @@ describe('SessionsSection', () => {
 
     it('should report an error when step logs cannot be loaded', async () => {
       const user = userEvent.setup();
+      vi.mocked(fetchNodeLogWindow).mockRejectedValue(
+        new Error('404 not found'),
+      );
       vi.mocked(useWorkflow).mockReturnValue({
         workflow: mockWorkflow,
         loading: false,
@@ -1278,12 +1280,15 @@ describe('SessionsSection', () => {
 
     it('should fall back to archived logs and skip fetching without pod details', async () => {
       const user = userEvent.setup();
-      vi.mocked(workflowsService.getPodLogs).mockRejectedValueOnce(
-        new Error('pod gone'),
-      );
-      vi.mocked(workflowsService.getWorkflowLogs).mockResolvedValueOnce(
-        'archived log line',
-      );
+      vi.mocked(fetchNodeLogWindow).mockResolvedValueOnce({
+        content: 'archived log line',
+        line_count: 1,
+        byte_count: 18,
+        has_more_before: false,
+        truncated: false,
+        first_timestamp: null,
+        last_timestamp: null,
+      });
       vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
         {
           id: 'logs-workflow',

@@ -3,6 +3,7 @@ import os
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
+from kubernetes_asyncio.client.rest import ApiException
 
 os.environ["AUTH_MODE"] = "open"
 
@@ -1549,6 +1550,246 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(review_arg.spec.resource_attributes.namespace, "context-ns")
         self.assertEqual(review_arg.spec.resource_attributes.verb, "get")
         self.assertEqual(review_arg.spec.resource_attributes.resource, "configmaps")
+
+
+class FakeLogStreamContent:
+    """Minimal stand-in for an aiohttp response body."""
+
+    def __init__(self, data: bytes, chunk_size: int = 4096):
+        self.data = data
+        self.chunk_size = chunk_size
+
+    def iter_chunked(self, _size):
+        async def generator():
+            for start in range(0, len(self.data), self.chunk_size):
+                yield self.data[start:start + self.chunk_size]
+        return generator()
+
+
+class FakeLogStream:
+    """Minimal stand-in for a streamed pod log response."""
+
+    def __init__(self, data: bytes, status: int = 200):
+        self.status = status
+        self.content = FakeLogStreamContent(data)
+        self.released = False
+
+    def release(self):
+        self.released = True
+
+
+def build_log_bytes(total_lines: int, text: str = "line") -> bytes:
+    lines = [
+        f"2024-01-01T00:00:{index % 60:02d}.{index:09d}Z {text} {index}"
+        for index in range(total_lines)
+    ]
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def make_log_stream_reader(total_lines: int, streams: list):
+    """Return a read_namespaced_pod_log stub honouring tail_lines."""
+    async def reader(**kwargs):
+        lines = build_log_bytes(total_lines).split(b"\n")[:-1]
+        tail_lines = kwargs.get("tail_lines")
+        if tail_lines is not None:
+            lines = lines[-tail_lines:]
+        stream = FakeLogStream(b"\n".join(lines) + b"\n")
+        streams.append((kwargs, stream))
+        return stream
+    return reader
+
+
+class TestPodLogWindowEndpoint(unittest.TestCase):
+    """Test cases for the windowed pod log endpoints."""
+
+    def setUp(self):
+        from ark_api.main import app
+        self.client = TestClient(app)
+
+    def _mock_core_v1(self, mock_core_v1_cls, total_lines):
+        streams = []
+        mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod_log = make_log_stream_reader(total_lines, streams)
+        mock_core_v1_cls.return_value = mock_core_v1
+        return mock_core_v1, streams
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_tail_page_returns_newest_lines(self, mock_core_v1_cls, mock_api_client):
+        """The default page is the tail of the log."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 2500)
+
+        response = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window?max_lines=1000"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        lines = body["content"].splitlines()
+        self.assertEqual(body["line_count"], 1000)
+        self.assertEqual(lines[0], "line 1500")
+        self.assertEqual(lines[-1], "line 2499")
+        self.assertTrue(body["has_more_before"])
+        self.assertFalse(body["truncated"])
+        self.assertEqual(streams[0][0]["tail_lines"], 1000)
+        self.assertTrue(streams[0][1].released)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_skip_tail_lines_pages_backwards_without_gaps(self, mock_core_v1_cls, mock_api_client):
+        """Paging backwards yields contiguous, non-overlapping windows."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        self._mock_core_v1(mock_core_v1_cls, 2500)
+
+        second = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?max_lines=1000&skip_tail_lines=1000"
+        ).json()
+        third = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?max_lines=1000&skip_tail_lines=2000"
+        ).json()
+
+        self.assertEqual(second["content"].splitlines()[0], "line 500")
+        self.assertEqual(second["content"].splitlines()[-1], "line 1499")
+        self.assertTrue(second["has_more_before"])
+
+        self.assertEqual(third["line_count"], 500)
+        self.assertEqual(third["content"].splitlines()[0], "line 0")
+        self.assertEqual(third["content"].splitlines()[-1], "line 499")
+        self.assertFalse(third["has_more_before"])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_page_past_start_of_log_is_empty(self, mock_core_v1_cls, mock_api_client):
+        """Skipping past the start of the log returns nothing."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        self._mock_core_v1(mock_core_v1_cls, 2500)
+
+        body = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?max_lines=1000&skip_tail_lines=2500"
+        ).json()
+
+        self.assertEqual(body["line_count"], 0)
+        self.assertEqual(body["content"], "")
+        self.assertFalse(body["has_more_before"])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_byte_cap_keeps_newest_lines_and_stays_contiguous(self, mock_core_v1_cls, mock_api_client):
+        """A byte-capped page keeps its newest lines and the next page abuts it."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        self._mock_core_v1(mock_core_v1_cls, 2500)
+
+        first = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?max_lines=1000&max_bytes=2048"
+        ).json()
+
+        self.assertTrue(first["truncated"])
+        self.assertLess(first["line_count"], 1000)
+        self.assertLessEqual(first["byte_count"], 2048)
+        self.assertEqual(first["content"].splitlines()[-1], "line 2499")
+
+        second = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            f"?max_lines=1000&max_bytes=2048&skip_tail_lines={first['line_count']}"
+        ).json()
+
+        oldest_kept = int(first["content"].splitlines()[0].split()[-1])
+        newest_older = int(second["content"].splitlines()[-1].split()[-1])
+        self.assertEqual(newest_older, oldest_kept - 1)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_since_timestamp_returns_only_newer_lines(self, mock_core_v1_cls, mock_api_client):
+        """Live tail polling returns only lines newer than the cursor."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 50)
+
+        body = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?since_timestamp=2024-01-01T00:00:45.000000045Z"
+        ).json()
+
+        self.assertEqual(body["content"].splitlines(), [f"line {index}" for index in range(46, 50)])
+        self.assertEqual(body["last_timestamp"], "2024-01-01T00:00:49.000000049Z")
+        self.assertFalse(body["has_more_before"])
+        self.assertNotIn("tail_lines", streams[0][0])
+        self.assertGreater(streams[0][0]["since_seconds"], 0)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_timestamps_are_always_requested_and_stripped(self, mock_core_v1_cls, mock_api_client):
+        """Timestamps drive the cursor but never reach the rendered content."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 3)
+
+        body = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+        ).json()
+
+        self.assertTrue(streams[0][0]["timestamps"])
+        self.assertEqual(body["content"], "line 0\nline 1\nline 2")
+        self.assertEqual(body["first_timestamp"], "2024-01-01T00:00:00.000000000Z")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_workflow_log_window_resolves_node_to_pod(self, mock_core_v1_cls, mock_api_client):
+        """The workflow route falls back to a label lookup when the node is not a pod."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_core_v1, _ = self._mock_core_v1(mock_core_v1_cls, 5)
+        mock_core_v1.read_namespaced_pod = AsyncMock(
+            side_effect=ApiException(status=404, reason="Not Found")
+        )
+        pod = Mock()
+        pod.metadata.name = "test-workflow-step-abc123"
+        pod_list = Mock()
+        pod_list.items = [pod]
+        mock_core_v1.list_namespaced_pod = AsyncMock(return_value=pod_list)
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/"
+            "test-workflow/step-abc123/log/window"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["line_count"], 5)
+        mock_core_v1.list_namespaced_pod.assert_awaited_once()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_workflow_log_window_reports_deleted_pod(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
+        """A finished node with no pod explains how to archive logs."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(
+            side_effect=ApiException(status=404, reason="Not Found")
+        )
+        pod_list = Mock()
+        pod_list.items = []
+        mock_core_v1.list_namespaced_pod = AsyncMock(return_value=pod_list)
+        mock_core_v1_cls.return_value = mock_core_v1
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+        mock_workflow = Mock()
+        mock_workflow.to_dict.return_value = {
+            "status": {"nodes": {"node": {"type": "Pod", "phase": "Succeeded"}}}
+        }
+        mock_workflow_resource = AsyncMock()
+        mock_workflow_resource.get = AsyncMock(return_value=mock_workflow)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_workflow_resource)
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf/node/log/window"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("archiveLogs", response.json()["detail"])
 
 
 if __name__ == "__main__":

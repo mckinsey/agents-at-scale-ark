@@ -1,12 +1,18 @@
 """Generic Kubernetes resources API endpoints."""
 import logging
+import re
 import yaml
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from collections import deque
+from datetime import datetime, timezone
+from math import ceil
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 from typing import Optional
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client import CoreV1Api
+from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.dynamic import DynamicClient
 from ark_sdk.k8s import get_context
 from ark_sdk.impersonation import ImpersonationConfig
@@ -16,6 +22,7 @@ from ...constants.query_param_descriptions import (
     NAMESPACE_DESCRIPTION,
     LABEL_SELECTOR_DESCRIPTION,
 )
+from ...models.pod_logs import LogWindow
 from ...models.resources import AccessReviewRequest, AccessReviewResponse
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
@@ -745,3 +752,337 @@ async def get_workflow_logs(
                     content=f"Failed to fetch logs: {str(e)}",
                     status_code=500
                 )
+
+
+LOG_STREAM_CHUNK_BYTES = 65536
+LOG_WINDOW_DEFAULT_MAX_LINES = 1000
+LOG_WINDOW_MAX_LINES_LIMIT = 10000
+LOG_WINDOW_DEFAULT_MAX_BYTES = 1024 * 1024
+LOG_WINDOW_MAX_BYTES_LIMIT = 16 * 1024 * 1024
+LOG_WINDOW_SINCE_SLACK_SECONDS = 2
+POD_DELETED_MESSAGE = (
+    "Pod has been deleted. Logs are no longer available.\n\n"
+    "To preserve logs, enable 'archiveLogs: true' in your workflow spec "
+    "with artifact storage configured."
+)
+LOG_TIMESTAMP_PATTERN = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?Z?")
+
+
+def _normalize_log_timestamp(timestamp: str) -> str:
+    match = LOG_TIMESTAMP_PATTERN.fullmatch(timestamp)
+    if not match:
+        return timestamp
+    fraction = (match.group(2) or "").ljust(9, "0")[:9]
+    return f"{match.group(1)}.{fraction}Z"
+
+
+def _parse_log_timestamp(timestamp: str) -> Optional[datetime]:
+    if not LOG_TIMESTAMP_PATTERN.fullmatch(timestamp):
+        return None
+    normalized = _normalize_log_timestamp(timestamp)
+    try:
+        return datetime.fromisoformat(f"{normalized[:26]}+00:00")
+    except ValueError:
+        return None
+
+
+def _split_log_line(raw_line: str) -> tuple[Optional[str], str]:
+    timestamp, separator, text = raw_line.partition(" ")
+    if separator and _parse_log_timestamp(timestamp) is not None:
+        return timestamp, text
+    return None, raw_line
+
+
+def _since_seconds_for(since_timestamp: str) -> Optional[int]:
+    parsed = _parse_log_timestamp(since_timestamp)
+    if parsed is None:
+        return None
+    elapsed = (datetime.now(timezone.utc) - parsed).total_seconds()
+    return max(1, ceil(elapsed) + LOG_WINDOW_SINCE_SLACK_SECONDS)
+
+
+class _LogWindowCollector:
+    """Collects a bounded slice of a log stream while counting every line.
+
+    ``keep_newest`` picks which end survives the byte budget: history pages
+    keep the newest lines of the window so they sit flush against what the
+    client already holds, while append pages keep the oldest new lines so the
+    client's timestamp cursor advances without leaving a gap.
+    """
+
+    def __init__(self, max_lines: int, max_bytes: int, min_timestamp: Optional[str], keep_newest: bool):
+        self.max_lines = max_lines
+        self.max_bytes = max_bytes
+        self.min_timestamp = _normalize_log_timestamp(min_timestamp) if min_timestamp else None
+        self.keep_newest = keep_newest
+        self.lines: deque[str] = deque()
+        self.timestamps: deque[Optional[str]] = deque()
+        self.admitted = 0
+        self.dropped_from_front = 0
+        self.total_lines = 0
+        self.byte_count = 0
+        self.truncated = False
+
+    @property
+    def done(self) -> bool:
+        return not self.keep_newest and (self.admitted >= self.max_lines or self.truncated)
+
+    def _is_newer_than_cursor(self, timestamp: Optional[str]) -> bool:
+        if self.min_timestamp is None:
+            return True
+        if timestamp is None:
+            return False
+        return _normalize_log_timestamp(timestamp) > self.min_timestamp
+
+    def add(self, raw_line: str) -> None:
+        timestamp, text = _split_log_line(raw_line)
+        if not self._is_newer_than_cursor(timestamp):
+            return
+
+        self.total_lines += 1
+        if self.admitted >= self.max_lines or self.done:
+            return
+
+        if len(text.encode("utf-8")) > self.max_bytes:
+            text = text.encode("utf-8")[: self.max_bytes].decode("utf-8", errors="ignore")
+            self.truncated = True
+
+        self.lines.append(text)
+        self.timestamps.append(timestamp)
+        self.admitted += 1
+        self.byte_count += len(text.encode("utf-8")) + 1
+
+        while self.byte_count > self.max_bytes and len(self.lines) > 1:
+            if not self.keep_newest:
+                self.truncated = True
+                self.lines.pop()
+                self.timestamps.pop()
+                self.admitted -= 1
+                break
+            dropped = self.lines.popleft()
+            self.timestamps.popleft()
+            self.byte_count -= len(dropped.encode("utf-8")) + 1
+            self.dropped_from_front += 1
+            self.truncated = True
+
+    def count_discarded(self, chunk: bytes) -> None:
+        if self.min_timestamp is None:
+            self.total_lines += chunk.count(b"\n")
+
+    def build(self, skip_tail_lines: int, page_is_capped: bool) -> LogWindow:
+        lines = list(self.lines)
+        timestamps = list(self.timestamps)
+
+        if page_is_capped:
+            window_end = max(0, self.total_lines - skip_tail_lines)
+            keep = max(0, min(len(lines), window_end - self.dropped_from_front))
+            lines = lines[:keep]
+            timestamps = timestamps[:keep]
+
+        known_timestamps = [value for value in timestamps if value]
+        content = "\n".join(lines)
+        has_more_before = (
+            page_is_capped and self.total_lines >= skip_tail_lines + self.max_lines
+        )
+
+        return LogWindow(
+            content=content,
+            line_count=len(lines),
+            first_timestamp=known_timestamps[0] if known_timestamps else None,
+            last_timestamp=known_timestamps[-1] if known_timestamps else None,
+            has_more_before=has_more_before,
+            truncated=self.truncated,
+            byte_count=len(content.encode("utf-8")),
+        )
+
+
+async def _open_pod_log_stream(core_v1: CoreV1Api, namespace: str, pod_name: str, **kwargs):
+    response = await core_v1.read_namespaced_pod_log(
+        name=pod_name,
+        namespace=namespace,
+        timestamps=True,
+        _preload_content=False,
+        **kwargs,
+    )
+    if not 200 <= response.status <= 299:
+        body = await response.text()
+        response.release()
+        raise ApiException(status=response.status, reason=body)
+    return response
+
+
+async def _collect_log_window(response, collector: _LogWindowCollector) -> None:
+    pending = b""
+    async for chunk in response.content.iter_chunked(LOG_STREAM_CHUNK_BYTES):
+        if collector.done:
+            break
+        if collector.admitted >= collector.max_lines and not pending:
+            collector.count_discarded(chunk)
+            continue
+        pending += chunk
+        *complete, pending = pending.split(b"\n")
+        for raw_line in complete:
+            collector.add(raw_line.decode("utf-8", errors="replace"))
+    if pending and not collector.done:
+        collector.add(pending.decode("utf-8", errors="replace"))
+
+
+async def _read_log_window(
+    core_v1: CoreV1Api,
+    namespace: str,
+    pod_name: str,
+    container: Optional[str],
+    max_lines: int,
+    skip_tail_lines: int,
+    since_timestamp: Optional[str],
+    max_bytes: int,
+) -> LogWindow:
+    """Read a bounded window of a pod log without buffering the whole log."""
+    since_seconds = _since_seconds_for(since_timestamp) if since_timestamp else None
+    is_history_page = since_seconds is None
+
+    stream_kwargs = {"container": container}
+    if is_history_page:
+        stream_kwargs["tail_lines"] = skip_tail_lines + max_lines
+    else:
+        stream_kwargs["since_seconds"] = since_seconds
+        stream_kwargs["limit_bytes"] = max_bytes
+
+    response = await _open_pod_log_stream(core_v1, namespace, pod_name, **stream_kwargs)
+    collector = _LogWindowCollector(
+        max_lines,
+        max_bytes,
+        since_timestamp if not is_history_page else None,
+        keep_newest=is_history_page,
+    )
+    try:
+        await _collect_log_window(response, collector)
+    finally:
+        response.release()
+
+    return collector.build(skip_tail_lines, page_is_capped=is_history_page)
+
+
+async def _resolve_workflow_pod_name(
+    core_v1: CoreV1Api,
+    namespace: str,
+    workflow_name: str,
+    node_id: str,
+) -> str:
+    """Resolve an Argo node ID to the pod holding its logs."""
+    try:
+        await core_v1.read_namespaced_pod(name=node_id, namespace=namespace)
+        return node_id
+    except ApiException:
+        pass
+
+    node_id_suffix = node_id.split("-")[-1]
+    pods = await core_v1.list_namespaced_pod(
+        namespace=namespace,
+        label_selector=f"workflows.argoproj.io/workflow={workflow_name}",
+    )
+    for pod in pods.items:
+        if pod.metadata.name.endswith(node_id_suffix):
+            return pod.metadata.name
+
+    raise HTTPException(status_code=404, detail=f"No pod found for node {node_id}")
+
+
+async def _workflow_node_unavailable_detail(
+    api,
+    namespace: str,
+    workflow_name: str,
+    node_id: str,
+) -> str:
+    dynamic_client = await DynamicClient(api)
+    workflow_resource = await dynamic_client.resources.get(
+        api_version="argoproj.io/v1alpha1",
+        kind="Workflow",
+    )
+    workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
+    nodes = workflow.to_dict().get("status", {}).get("nodes", {})
+    node = nodes.get(node_id)
+
+    if not node:
+        return f"Node {node_id} not found in workflow {workflow_name}"
+    if node.get("type") == "Pod" and node.get("phase") in ["Succeeded", "Failed", "Error"]:
+        return POD_DELETED_MESSAGE
+    return f"Logs are not available for node {node_id}"
+
+
+@router.get("/api/v1/namespaces/{namespace}/pods/{pod_name}/log/window")
+@handle_k8s_errors(operation="get", resource_type="pod logs")
+async def get_pod_log_window(
+    pod_name: str,
+    namespace: str,
+    container: Optional[str] = Query(None, description="Container name (defaults to first container)"),
+    max_lines: int = Query(LOG_WINDOW_DEFAULT_MAX_LINES, ge=1, le=LOG_WINDOW_MAX_LINES_LIMIT, description="Maximum lines in this page"),
+    skip_tail_lines: int = Query(0, ge=0, description="Lines to skip back from the end of the log"),
+    since_timestamp: Optional[str] = Query(None, description="Return only lines newer than this RFC3339 timestamp"),
+    max_bytes: int = Query(LOG_WINDOW_DEFAULT_MAX_BYTES, ge=1024, le=LOG_WINDOW_MAX_BYTES_LIMIT, description="Byte cap for this page"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> LogWindow:
+    """
+    Get a bounded window of a pod's logs.
+
+    Pages are anchored at the end of the log. Omit skip_tail_lines for the
+    tail, raise it by the returned line_count to walk backwards, or pass
+    since_timestamp to fetch only lines newer than an earlier page.
+
+    Examples:
+        - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log/window
+        - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log/window?skip_tail_lines=1000
+    """
+    async with get_impersonating_api_client(impersonation) as api:
+        core_v1 = CoreV1Api(api)
+        return await _read_log_window(
+            core_v1,
+            namespace,
+            pod_name,
+            container,
+            max_lines,
+            skip_tail_lines,
+            since_timestamp,
+            max_bytes,
+        )
+
+
+@router.get("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/{node_id}/log/window")
+async def get_workflow_log_window(
+    workflow_name: str,
+    node_id: str,
+    namespace: str,
+    container: Optional[str] = Query("main", description="Container name"),
+    max_lines: int = Query(LOG_WINDOW_DEFAULT_MAX_LINES, ge=1, le=LOG_WINDOW_MAX_LINES_LIMIT, description="Maximum lines in this page"),
+    skip_tail_lines: int = Query(0, ge=0, description="Lines to skip back from the end of the log"),
+    since_timestamp: Optional[str] = Query(None, description="Return only lines newer than this RFC3339 timestamp"),
+    max_bytes: int = Query(LOG_WINDOW_DEFAULT_MAX_BYTES, ge=1024, le=LOG_WINDOW_MAX_BYTES_LIMIT, description="Byte cap for this page"),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> LogWindow:
+    """
+    Get a bounded window of an Argo workflow node's logs.
+
+    Resolves the node to its pod, then pages exactly like the pod log window
+    endpoint. Returns 404 with guidance when the pod is already gone.
+
+    Examples:
+        - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log/window
+    """
+    async with get_impersonating_api_client(impersonation) as api:
+        core_v1 = CoreV1Api(api)
+        try:
+            pod_name = await _resolve_workflow_pod_name(core_v1, namespace, workflow_name, node_id)
+            return await _read_log_window(
+                core_v1,
+                namespace,
+                pod_name,
+                container,
+                max_lines,
+                skip_tail_lines,
+                since_timestamp,
+                max_bytes,
+            )
+        except (ApiException, HTTPException) as e:
+            logger.error(f"Failed to fetch log window for node {node_id}: {e}")
+            detail = await _workflow_node_unavailable_detail(api, namespace, workflow_name, node_id)
+            raise HTTPException(status_code=404, detail=detail)

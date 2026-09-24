@@ -1684,6 +1684,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/resources/api/v1/namespaces/{namespace}/pods/{pod_name}/log/window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pod Log Window
+         * @description Get a bounded window of a pod's logs.
+         *
+         *     Pages are anchored at the end of the log. Omit skip_tail_lines for the
+         *     tail, raise it by the returned line_count to walk backwards, or pass
+         *     since_timestamp to fetch only lines newer than an earlier page.
+         *
+         *     Examples:
+         *         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log/window
+         *         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log/window?skip_tail_lines=1000
+         */
+        get: operations["get_pod_log_window_v1_resources_api_v1_namespaces__namespace__pods__pod_name__log_window_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/api/{version}/{kind}": {
         parameters: {
             query?: never;
@@ -1834,6 +1862,32 @@ export interface paths {
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log
          */
         get: operations["get_workflow_logs_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name___node_id__log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/{node_id}/log/window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Workflow Log Window
+         * @description Get a bounded window of an Argo workflow node's logs.
+         *
+         *     Resolves the node to its pod, then pages exactly like the pod log window
+         *     endpoint. Returns 404 with guidance when the pod is already gone.
+         *
+         *     Examples:
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log/window
+         */
+        get: operations["get_workflow_log_window_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name___node_id__log_window_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3745,6 +3799,40 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
+        /**
+         * LogWindow
+         * @description A bounded slice of a pod log.
+         *
+         *     Pages are anchored at the end of the log: ``skip_tail_lines`` counts lines
+         *     backwards from the last line, and the window covers the ``max_lines``
+         *     immediately older than that point. ``has_more_before`` is a best-effort
+         *     hint that older lines exist, and is ``False`` once a page comes back short.
+         */
+        LogWindow: {
+            /**
+             * Byte Count
+             * @default 0
+             */
+            byte_count: number;
+            /** Content */
+            content: string;
+            /** First Timestamp */
+            first_timestamp?: string | null;
+            /**
+             * Has More Before
+             * @default false
+             */
+            has_more_before: boolean;
+            /** Last Timestamp */
+            last_timestamp?: string | null;
+            /** Line Count */
+            line_count: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
         /**
          * MCPServerAddressSource
          * @description Read model for spec.address: reports both fields as stored.
@@ -8411,6 +8499,49 @@ export interface operations {
             };
         };
     };
+    get_pod_log_window_v1_resources_api_v1_namespaces__namespace__pods__pod_name__log_window_get: {
+        parameters: {
+            query?: {
+                /** @description Container name (defaults to first container) */
+                container?: string | null;
+                /** @description Maximum lines in this page */
+                max_lines?: number;
+                /** @description Lines to skip back from the end of the log */
+                skip_tail_lines?: number;
+                /** @description Return only lines newer than this RFC3339 timestamp */
+                since_timestamp?: string | null;
+                /** @description Byte cap for this page */
+                max_bytes?: number;
+            };
+            header?: never;
+            path: {
+                pod_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogWindow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_core_resources_v1_resources_api__version___kind__get: {
         parameters: {
             query?: {
@@ -8628,6 +8759,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workflow_log_window_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name___node_id__log_window_get: {
+        parameters: {
+            query?: {
+                /** @description Container name */
+                container?: string | null;
+                /** @description Maximum lines in this page */
+                max_lines?: number;
+                /** @description Lines to skip back from the end of the log */
+                skip_tail_lines?: number;
+                /** @description Return only lines newer than this RFC3339 timestamp */
+                since_timestamp?: string | null;
+                /** @description Byte cap for this page */
+                max_bytes?: number;
+            };
+            header?: never;
+            path: {
+                workflow_name: string;
+                node_id: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogWindow"];
                 };
             };
             /** @description Validation Error */
