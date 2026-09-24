@@ -34,6 +34,7 @@ import {
   ResourceNoResults,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
+import { WorkflowNodeLogs } from '@/components/sections/workflow-node-logs';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
@@ -384,85 +385,34 @@ function LogEntryRow({
 function WorkflowStepDetail({
   detail,
   message,
+  status,
 }: {
   detail: WorkflowStepDetail;
   message?: string;
+  status: StepStatus;
 }) {
-  const [logs, setLogs] = useState<string>('');
-  const [loadingLogs, setLoadingLogs] = useState(false);
-  const [logsError, setLogsError] = useState<string | null>(null);
+  const shouldFetchLogs = Boolean(
+    detail.workflowName && detail.nodeId && detail.namespace,
+  );
 
-  const shouldFetchLogs =
-    detail.workflowName && detail.nodeId && detail.namespace;
-
-  useEffect(() => {
-    if (!shouldFetchLogs) return;
-
-    let cancelled = false;
-
-    const fetchLogs = async () => {
-      setLoadingLogs(true);
-      setLogsError(null);
-      try {
-        const { workflowsService } = await import('@/lib/services/workflows');
-        let logData = '';
-
-        // Try to get logs from pod first (more reliable for recent workflows)
-        if (detail.podName) {
-          try {
-            logData = await workflowsService.getPodLogs(
-              detail.namespace!,
-              detail.podName,
-            );
-          } catch {
-            // If pod logs fail, try archived workflow logs
-            console.debug('Pod logs not available, trying archived logs');
+  const logTarget = useMemo(
+    () =>
+      shouldFetchLogs
+        ? {
+            namespace: detail.namespace!,
+            workflowName: detail.workflowName!,
+            nodeId: detail.nodeId!,
+            podName: detail.podName,
           }
-        }
-
-        // If pod logs didn't work or no podName, try archived workflow logs
-        if (!logData) {
-          logData = await workflowsService.getWorkflowLogs(
-            detail.namespace!,
-            detail.workflowName!,
-            detail.nodeId!,
-          );
-        }
-
-        if (!cancelled) {
-          setLogs(logData);
-        }
-      } catch (error: unknown) {
-        if (!cancelled) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          if (errorMessage.includes('404')) {
-            setLogsError(
-              'Logs not available (pod terminated and logs not archived)',
-            );
-          } else {
-            setLogsError('Failed to load logs');
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingLogs(false);
-        }
-      }
-    };
-
-    void fetchLogs();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    detail.workflowName,
-    detail.nodeId,
-    detail.namespace,
-    detail.podName,
-    shouldFetchLogs,
-  ]);
+        : null,
+    [
+      detail.namespace,
+      detail.workflowName,
+      detail.nodeId,
+      detail.podName,
+      shouldFetchLogs,
+    ],
+  );
 
   return (
     <div className="flex w-full min-w-0 flex-col pl-10">
@@ -508,41 +458,13 @@ function WorkflowStepDetail({
         </LogEntryBlock>
       )}
 
-      {shouldFetchLogs && (
+      {logTarget && (
         <LogEntryBlock icon={<Terminal2 />} label="Logs">
-          <div className="bg-fill-onsurface-ui-1 max-h-64 w-full overflow-auto p-2">
-            {loadingLogs && (
-              <div className="flex items-center gap-2">
-                <Spinner size="sm" className="text-fg-tertiary" />
-                <span className="paragraph-small-primary text-fg-tertiary">
-                  Loading logs...
-                </span>
-              </div>
-            )}
-            {logsError && (
-              <div className="flex flex-col items-start gap-2">
-                <p className="paragraph-small-primary text-fg-warning">
-                  {logsError}
-                </p>
-                <Button variant="ghost" size="xs" asChild>
-                  <a
-                    href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
-                    target="_blank"
-                    rel="noopener noreferrer">
-                    View logs in Argo UI
-                    <IconShell size="sm">
-                      <OpenInNew />
-                    </IconShell>
-                  </a>
-                </Button>
-              </div>
-            )}
-            {!loadingLogs && !logsError && (
-              <pre className="paragraph-regular-primary text-fg-secondary break-words whitespace-pre-wrap">
-                {logs || 'No logs available'}
-              </pre>
-            )}
-          </div>
+          <WorkflowNodeLogs
+            target={logTarget}
+            isRunning={status === 'running' || status === 'pending'}
+            argoUrl={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+          />
         </LogEntryBlock>
       )}
 
@@ -734,7 +656,11 @@ function WorkflowStepNode({
           ))}
 
         {hasDetail && showDetail && (
-          <WorkflowStepDetail detail={step.detail!} message={step.message} />
+          <WorkflowStepDetail
+            detail={step.detail!}
+            message={step.message}
+            status={step.status}
+          />
         )}
       </div>
     </div>
