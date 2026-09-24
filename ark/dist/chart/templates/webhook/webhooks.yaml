@@ -11,6 +11,33 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
 webhooks:
+  # Inline tool security admission. Deliberately unlike its neighbours: no skip
+  # label, no namespace selector and a hardcoded Fail policy, because it carries
+  # the inline author permission check rather than schema convenience validation.
+  - name: minlinetool-v1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
+    clientConfig:
+      service:
+        name: ark-webhook-service
+        namespace: {{ .Release.Namespace }}
+        path: /admit-inline-ark-mckinsey-com-v1alpha1-tool
+    failurePolicy: Fail
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
+    sideEffects: None
+    admissionReviewVersions:
+      - v1
+    rules:
+      - operations:
+          - CREATE
+          - UPDATE
+        apiGroups:
+          - ark.mckinsey.com
+        apiVersions:
+          - v1alpha1
+        resources:
+          - tools
   - name: magent-v1.kb.io
     objectSelector:
       matchExpressions:
