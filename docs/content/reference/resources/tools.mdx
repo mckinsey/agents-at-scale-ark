@@ -1,11 +1,11 @@
 ---
 title: Tools
-description: Tool CRD reference — the five tool types, fields, templating, and validation
+description: Tool CRD reference — the tool types, fields, templating, and validation
 ---
 
 # Tool
 
-A `Tool` is a callable an agent can invoke: an HTTP endpoint, a function on an MCP server, another agent or team, or a built-in. For a task-oriented walkthrough see [User Guide → Tools and MCP servers](/user-guide/tools); this page is the field-by-field reference.
+A `Tool` is a callable an agent can invoke: an HTTP endpoint, a function on an MCP server, another agent or team, a built-in, or an inline script. For a task-oriented walkthrough see [User Guide → Tools and MCP servers](/user-guide/tools); this page is the field-by-field reference.
 
 ## Spec
 
@@ -17,7 +17,7 @@ kind: Tool
 metadata:
   name: example-tool
 spec:
-  # Required: one of http | mcp | agent | team | builtin
+  # Required: one of http | mcp | agent | team | builtin | inline
   type: http
 
   # Description the LLM reads to decide when to call the tool
@@ -44,13 +44,13 @@ spec:
     timeout: 30s
 ```
 
-The type-specific block must match `type`: `http` → `spec.http`, `mcp` → `spec.mcp`, `agent` → `spec.agent`, `team` → `spec.team`, `builtin` → `spec.builtin`. Each is documented below.
+The type-specific block must match `type`: `http` → `spec.http`, `mcp` → `spec.mcp`, `agent` → `spec.agent`, `team` → `spec.team`, `builtin` → `spec.builtin`, `inline` → `spec.inline`. Each is documented below.
 
 ## Fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `spec.type` | enum (`http`, `mcp`, `agent`, `team`, `builtin`) | yes | Which kind of tool this is. Drives which type-specific block is required. |
+| `spec.type` | enum (`http`, `mcp`, `agent`, `team`, `builtin`, `inline`) | yes | Which kind of tool this is. Drives which type-specific block is required. |
 | `spec.description` | string | no | Shown to the LLM as the tool description. Drives whether the model calls it. |
 | `spec.inputSchema` | JSON Schema | no | Schema for the arguments the LLM supplies. Validated as JSON Schema by the admission webhook. |
 | `spec.annotations` | object | no | MCP-style hints: `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`. |
@@ -59,8 +59,9 @@ The type-specific block must match `type`: `http` → `spec.http`, `mcp` → `sp
 | `spec.agent` | object | for `agent` | `{ name }` of the Agent to wrap. |
 | `spec.team` | object | for `team` | `{ name }` of the Team to wrap. |
 | `spec.builtin` | object | for `builtin` | `{ name }` — must be `terminate` or `noop`. |
+| `spec.inline` | object | for `inline` | `{ source, language }` — a short script (see [Inline tools](#inline-tools)). |
 
-`status.state` is `Ready` with message `Tool configuration is valid` when the tool is usable.
+`status.state` is `Ready` with message `Tool configuration is valid` when the tool is usable. Inline tools also report a single `Available` condition and `status.resolvedAddress`; see [Inline tools](#inline-tools).
 
 The `Tool` CRD defines no custom print columns, so `kubectl get tools` shows only `Name` and `Age`; use `kubectl describe tool <name>` or `-o yaml` to see `status.state`.
 
@@ -236,6 +237,92 @@ spec:
 | `terminate` | Ends the conversation / team turn with a final response. |
 | `noop` | Does nothing and returns success — useful for testing and debugging. |
 
+## Inline tools
+
+An inline tool carries its own script in the resource. The script is run by an Ark-managed runner rather than an endpoint you host.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: word-count
+spec:
+  type: inline
+  description: "Counts the words in the supplied text"
+  inputSchema:
+    type: object
+    properties:
+      text: { type: string }
+    required: ["text"]
+  inline:
+    language: python
+    source: |
+      import json, sys
+      args = json.load(sys.stdin)
+      print(len(args["text"].split()))
+```
+
+### `inline` fields
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `source` | yes | Script body. Must be non-empty and at most 65536 UTF-8 bytes — use an [MCPServer](/reference/resources/mcpserver) for anything larger. |
+| `language` | yes | Interpreter: `bash`, `python`, `node`, or `ts`. No default, and shebang lines are not used to pick one. |
+
+An inline tool must not also set `spec.http`, `spec.mcp`, `spec.agent`, `spec.team`, or `spec.builtin`, and `spec.inline` is rejected on any other type. A tool cannot be converted between `inline` and another type — delete and recreate it instead.
+
+### Status
+
+| Field | Value |
+| --- | --- |
+| `status.state` | `Pending` until the tool is usable, then `Ready`. |
+| `status.conditions[type=Available]` | `True` (reason `Available`) when callable, otherwise `False` with reason `RuntimeNotInstalled`, `ConflictingNetworkPolicy`, `ActivatorUnavailable`, or `ProvisioningFailed`. |
+| `status.resolvedAddress` | Internal activator address. Only meaningful while `Available` is `True` for the current `metadata.generation`. |
+
+**No inline runner ships in this release.** Authored inline tools stay `Pending` with reason `RuntimeNotInstalled`, so they cannot be called yet. The schema, admission and authoring UI exist so that authorship and permissions are in place before the runtime lands.
+
+### Enabling inline authoring
+
+Inline authoring is off by default and fails closed. Enable it per install:
+
+```yaml
+# ark chart values.yaml (and, in apiserver mode, the ark-apiserver chart)
+inlineTools:
+  enabled: true
+```
+
+The chart renders this as `ARK_INLINE_TOOLS_ENABLED` on the controller and the API server. Both write paths check it independently, so on the PostgreSQL backend set it in both charts or writes are denied by whichever path is still disabled.
+
+Enabling requires an enforceable admission path. On the `etcd` backend, `webhook.enable` must be `true` — the chart fails to render otherwise, rather than installing a cluster where the schema accepts inline source that nothing authorises. On the `postgresql` backend the embedded API server enforces it in-process.
+
+### Authorization
+
+Every inline create and every inline spec update is checked with a `SubjectAccessReview` for the verb `use` on the virtual resource `inlinetools.ark.mckinsey.com`, in the tool's namespace. `inlinetools` has no CRD and serves no traffic: it exists only so the permission is separable from `tools`, and holding `tools/create` never implies the ability to store executable code.
+
+The install ships an unbound `inline-tool-author-role` ClusterRole. Granting it is an explicit, per-namespace administrator action:
+
+```bash
+kubectl create rolebinding inline-authors \
+  --clusterrole=inline-tool-author-role \
+  --user=alice@example.com \
+  --namespace=default
+```
+
+The check is fail-closed in every direction: feature disabled, no authenticated identity, no authorization backend, no namespace, review error, or review timeout (10s) all deny the write. Metadata-only updates — labels and annotations with an unchanged spec — do not re-check the permission.
+
+Writes through ark-api must carry an end-user identity: inline authoring requires impersonation to be enabled and a username present, so inline source is never persisted under ark-api's service account.
+
+### Authorship annotations
+
+On each admitted inline spec write, admission stamps:
+
+| Annotation | Value |
+| --- | --- |
+| `ark.mckinsey.com/inline-authored-by` | Authenticated username of the author. |
+| `ark.mckinsey.com/inline-authored-at` | RFC 3339 UTC timestamp of the write. |
+
+Both are overwritten by admission, so a requester cannot set them, and both survive metadata-only updates. They are the durable authorship record independent of cluster audit logging.
+
 ## Referencing tools from an agent
 
 Agents reference tools in `spec.tools`, each with a `type` matching the Tool's type and the Tool's `name`:
@@ -283,6 +370,7 @@ Enforced by `ark/internal/validation/tool.go`:
 - `type: mcp` requires `mcp.mcpServerRef` and `mcp.toolName`.
 - `type: agent` requires `agent.name`; `type: team` requires `team.name`.
 - `type: builtin` requires the resource name to be a supported built-in (`terminate`, `noop`).
+- `type: inline` requires a non-whitespace `inline.source` of at most 65536 UTF-8 bytes and an `inline.language` of `bash`, `python`, `node`, or `ts`; its `inputSchema`, if set, must describe a JSON object. Changing a tool's type to or from `inline` is rejected.
 
 ## Related
 

@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -76,6 +77,50 @@ var _ = Describe("Tool Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedTool.Status.State).To(Equal("Ready"))
 			Expect(updatedTool.Status.Message).To(Equal("Tool configuration is valid"))
+			Expect(updatedTool.Status.Conditions).To(BeEmpty())
+		})
+	})
+
+	Context("When reconciling an inline tool without the runtime installed", func() {
+		const resourceName = "inline-resource"
+
+		ctx := context.Background()
+		typeNamespacedName := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+		BeforeEach(func() {
+			resource := &arkv1alpha1.Tool{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: arkv1alpha1.ToolSpec{
+					Type:   arkv1alpha1.ToolTypeInline,
+					Inline: &arkv1alpha1.InlineSpec{Source: "print(1)", Language: "python"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			resource := &arkv1alpha1.Tool{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("reports Pending with RuntimeNotInstalled and no endpoint", func() {
+			controllerReconciler := &ToolReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			updatedTool := &arkv1alpha1.Tool{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedTool)).To(Succeed())
+			Expect(updatedTool.Status.State).To(Equal(arkv1alpha1.ToolStatePending))
+			Expect(updatedTool.Status.Message).To(ContainSubstring("not executable yet"))
+			Expect(updatedTool.Status.ResolvedAddress).To(BeEmpty())
+
+			condition := meta.FindStatusCondition(updatedTool.Status.Conditions, arkv1alpha1.ToolConditionAvailable)
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal(arkv1alpha1.ToolReasonRuntimeNotInstalled))
+			Expect(condition.ObservedGeneration).To(Equal(updatedTool.Generation))
 		})
 	})
 })
