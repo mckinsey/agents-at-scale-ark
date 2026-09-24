@@ -13,6 +13,7 @@ export type ServerConfig = Readonly<{
   port: number;
   host: string;
   requestTimeoutMs: number;
+  shutdownDrainTimeoutMs: number;
 }>;
 
 export type LimitsConfig = Readonly<{
