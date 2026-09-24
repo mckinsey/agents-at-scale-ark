@@ -88,6 +88,8 @@ deployments:
             runAsNonRoot: false
         webhook:
           enable: true
+        inlineTools:
+          enabled: true
         completions:
           enabled: false
         telemetry:
