@@ -96,7 +96,7 @@ type InlineSpec struct {
 
 type ToolSpec struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=http;mcp;agent;team;builtin
+	// +kubebuilder:validation:Enum=http;mcp;agent;team;builtin;inline
 	Type string `json:"type"`
 	// Tool description
 	Description string `json:"description,omitempty"`

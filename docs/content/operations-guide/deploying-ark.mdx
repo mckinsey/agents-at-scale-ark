@@ -185,6 +185,29 @@ rbac:
 
 When enabled (default), the controller can impersonate any service account specified in queries. When disabled, queries can only run with the controller's own identity. If no `serviceAccount` is specified for a query, no impersonation will occur and the `ark-controller` will execute the query using its own service account.
 
+### Inline Tool Authoring
+
+Inline tools store executable source in the `Tool` resource. Authoring is disabled by default and fails closed:
+
+```yaml
+# values.yaml for ark-controller (and for ark-apiserver on the postgresql backend)
+inlineTools:
+  enabled: false
+```
+
+Enabling it renders `ARK_INLINE_TOOLS_ENABLED=true` on the controller and API server. Both write paths check the flag separately, so on the PostgreSQL backend set it in both charts. On the `etcd` backend it requires `webhook.enable=true` — the chart fails to render otherwise, since the inline admission webhook is what enforces the author check.
+
+Enabling the flag grants nobody anything. Every inline create and spec update is checked by `SubjectAccessReview` for `use` on `inlinetools.ark.mckinsey.com` in the tool's namespace, and the shipped `inline-tool-author-role` ClusterRole is unbound. Bind it per namespace, deliberately:
+
+```bash
+kubectl create rolebinding inline-authors \
+  --clusterrole=inline-tool-author-role \
+  --user=alice@example.com \
+  --namespace=tenant-1
+```
+
+Writes through ark-api additionally require impersonation, so inline source is never stored under ark-api's service account. Ark stamps `ark.mckinsey.com/inline-authored-by` and `ark.mckinsey.com/inline-authored-at` on each admitted write as a durable authorship record independent of audit logging. No inline runner ships in this release, so authored inline tools stay `Pending`. See [Reference → Tools → Inline tools](/reference/resources/tools#inline-tools).
+
 ### Setting Up Tenant Namespaces
 
 The `ark-tenant` Helm chart provisions namespaces for Ark workloads:
