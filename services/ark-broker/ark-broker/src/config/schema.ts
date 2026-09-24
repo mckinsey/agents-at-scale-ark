@@ -11,6 +11,11 @@ export const envSchema = z
     PORT: z.coerce.number().int().nonnegative().default(8080),
     HOST: z.string().default('0.0.0.0'),
     REQUEST_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(0),
+    SHUTDOWN_DRAIN_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(10000),
     MESSAGE_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
     EVENT_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
     CHUNK_MAX_BYTES: z.coerce.number().int().positive().default(33554432),
@@ -51,6 +56,13 @@ export const envSchema = z
       .int()
       .positive()
       .default(2592000),
+    ROW_REAP_INTERVAL_SECONDS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .max(2_147_483)
+      .default(3600),
+    ROW_REAP_BATCH_SIZE: z.coerce.number().int().positive().default(10000),
     DATABASE_DEBUG_QUERIES: z
       .string()
       .default('false')

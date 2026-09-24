@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fault-proxy-script
+data:
+  proxy.mjs: |
+    // Deterministic fault injector between the completions executor and the
+    // broker. It breaks the executor's chunk-stream POST (`POST /stream/<q>`) so
+    // the executor latches "abandoned", but forwards everything else — crucially
+    // the completion POST (`/stream/<q>/complete`) — to the real broker. This
+    // reproduces "broker chunk pipe died mid-query" while letting the short
+    // completion request through, exactly the scenario the fix must handle.
+    import http from 'node:http';
+    const HOST = process.env.BROKER_HOST || 'ark-broker';
+    const PORT = process.env.BROKER_PORT || '80';
+    // Never let a severed socket crash the proxy: it must stay up to forward the
+    // completion POST after breaking the chunk stream.
+    process.on('uncaughtException', (e) => console.log('proxy uncaught: ' + (e && e.message)));
+    const server = http.createServer((req, res) => {
+      req.on('error', () => {});
+      res.on('error', () => {});
+      if (req.method === 'POST' && /^\/stream\/[^/]+$/.test(req.url)) {
+        console.log('FAULT: breaking chunk stream ' + req.url);
+        try { res.writeHead(500); res.end(); } catch {}
+        const sock = req.socket;
+        setImmediate(() => { try { sock.destroy(); } catch {} });
+        return;
+      }
+      const fwd = http.request(
+        { host: HOST, port: PORT, path: req.url, method: req.method, headers: req.headers },
+        (pr) => { try { res.writeHead(pr.statusCode, pr.headers); } catch {} pr.pipe(res); }
+      );
+      fwd.on('error', (e) => { console.log('forward error: ' + (e && e.message)); try { if (!res.headersSent) res.writeHead(502); res.end(); } catch {} });
+      req.pipe(fwd);
+    });
+    server.on('clientError', (_e, sock) => { try { sock.destroy(); } catch {} });
+    server.listen(8080, () => console.log('fault-proxy :8080 -> ' + HOST + ':' + PORT));
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fault-proxy
+  labels: { app: fault-proxy }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: fault-proxy }
+  template:
+    metadata:
+      labels: { app: fault-proxy }
+    spec:
+      containers:
+      - name: proxy
+        image: node:22-alpine
+        command: ["node", "/app/proxy.mjs"]
+        env:
+        - { name: BROKER_HOST, value: ark-broker }
+        - { name: BROKER_PORT, value: "80" }
+        ports:
+        - containerPort: 8080
+        # Gate Deployment Available on the port actually serving, so the query
+        # never streams before the proxy accepts connections (connection-refused).
+        readinessProbe:
+          tcpSocket: { port: 8080 }
+          periodSeconds: 2
+          failureThreshold: 30
+        volumeMounts:
+        - { name: script, mountPath: /app }
+      volumes:
+      - name: script
+        configMap: { name: fault-proxy-script }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fault-proxy
+spec:
+  selector: { app: fault-proxy }
+  ports:
+  - { name: http, port: 80, targetPort: 8080 }
