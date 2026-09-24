@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -70,6 +71,28 @@ var _ = Describe("Team Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("emits a status-change event on a subsequent reconcile", func() {
+			controllerReconciler := &TeamReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			By("first reconcile initializes conditions (TeamCreated)")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("second reconcile flips availability for the missing member (StatusChanged)")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &arkv1alpha1.Team{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
+			cond := meta.FindStatusCondition(updated.Status.Conditions, TeamAvailable)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal("MemberNotFound"))
 		})
 	})
 
