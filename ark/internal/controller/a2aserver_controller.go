@@ -29,8 +29,9 @@ import (
 
 const (
 	// Condition types
-	A2AServerReady       = "Ready"
-	A2AServerDiscovering = "Discovering"
+	A2AServerReady            = "Ready"
+	A2AServerDiscovering      = "Discovering"
+	A2AServerEndpointOverride = "EndpointOverride"
 )
 
 type A2AServerReconciler struct {
@@ -114,6 +115,10 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
+	if err := r.reconcileEndpoint(ctx, &a2aServer, r.resolveEndpoint(&a2aServer, resolvedAddress, agentCard)); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Create/update agents and check if anything actually changed
 	agentsChanged, err := r.createAgentWithSkills(ctx, &a2aServer, agentCard)
 	if err != nil {
@@ -165,6 +170,53 @@ func (r *A2AServerReconciler) reconcileConditionsDiscoveryFailed(ctx context.Con
 		return r.updateStatusWithConditions(ctx, a2aServer)
 	}
 	return nil
+}
+
+func (r *A2AServerReconciler) resolveEndpoint(a2aServer *arkv1prealpha1.A2AServer, resolvedAddress string, agentCard *arka2a.A2AAgentCard) arka2a.ResolvedEndpoint {
+	mode := a2aServer.Spec.EndpointResolution
+	if !arka2a.UsesCardEndpoint(mode) {
+		return arka2a.ResolveEndpoint(resolvedAddress, "", mode, nil)
+	}
+
+	cardURL, err := arka2a.CardTransportURL(agentCard)
+	if err != nil {
+		return arka2a.ResolveUnsupportedTransport(resolvedAddress, err)
+	}
+	return arka2a.ResolveEndpoint(resolvedAddress, cardURL, mode, a2aServer.Spec.AllowedEndpointHosts)
+}
+
+// reconcileEndpoint persists the resolved endpoint and its condition when they change.
+func (r *A2AServerReconciler) reconcileEndpoint(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, resolved arka2a.ResolvedEndpoint) error {
+	conditionChanged := false
+	switch {
+	case !arka2a.UsesCardEndpoint(a2aServer.Spec.EndpointResolution):
+		conditionChanged = meta.RemoveStatusCondition(&a2aServer.Status.Conditions, A2AServerEndpointOverride)
+	case resolved.Reason == "":
+		conditionChanged = r.reconcileCondition(a2aServer, A2AServerEndpointOverride, metav1.ConditionTrue, "AgentCardEndpointApplied", resolved.Message)
+	default:
+		conditionChanged = r.reconcileCondition(a2aServer, A2AServerEndpointOverride, metav1.ConditionFalse, resolved.Reason, resolved.Message)
+		rejectionChanged := resolved.Rejected != "" && a2aServer.Status.RejectedEndpoint != resolved.Rejected
+		if conditionChanged || rejectionChanged {
+			r.emitEndpointRejected(ctx, a2aServer, resolved)
+		}
+	}
+
+	endpointChanged := a2aServer.Status.LastResolvedEndpoint != resolved.URL || a2aServer.Status.RejectedEndpoint != resolved.Rejected
+	a2aServer.Status.LastResolvedEndpoint = resolved.URL
+	a2aServer.Status.RejectedEndpoint = resolved.Rejected
+
+	if endpointChanged || conditionChanged {
+		return r.updateStatusWithConditions(ctx, a2aServer)
+	}
+	return nil
+}
+
+func (r *A2AServerReconciler) emitEndpointRejected(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, resolved arka2a.ResolvedEndpoint) {
+	if resolved.Reason == arka2a.ReasonUnsupportedTransport {
+		r.Eventing.A2aRecorder().UnsupportedTransport(ctx, a2aServer, resolved.Message)
+		return
+	}
+	r.Eventing.A2aRecorder().EndpointOverrideRejected(ctx, a2aServer, resolved.Message)
 }
 
 // reconcileConditionsAgentCreationFailed updates conditions when agent creation fails
@@ -261,7 +313,7 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 
 	agentAnnotations := map[string]string{
 		annotations.A2AServerName:         a2aServer.Name,
-		annotations.A2AServerAddress:      a2aServer.Status.LastResolvedAddress,
+		annotations.A2AServerAddress:      arka2a.RPCEndpoint(a2aServer),
 		annotations.A2AServerSkills:       string(skillsJSON),
 		annotations.A2AStreamingSupported: strconv.FormatBool(streamingSupported),
 	}
@@ -315,8 +367,8 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 		return false, fmt.Errorf("failed to get agent %s: %w", agentName, getErr)
 	}
 
-	// Only update if skills annotation has changed
-	if existingAgent.Annotations[annotations.A2AServerSkills] != agent.Annotations[annotations.A2AServerSkills] {
+	// Only update if the skills, endpoint or streaming annotations have changed
+	if agentAnnotationsChanged(existingAgent.Annotations, agent.Annotations) {
 		existingAgent.Spec = agent.Spec
 		existingAgent.Annotations = agent.Annotations
 		if err := r.Update(ctx, existingAgent); err != nil {
@@ -328,6 +380,15 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 	}
 
 	return false, nil
+}
+
+func agentAnnotationsChanged(existing, desired map[string]string) bool {
+	for _, key := range []string{annotations.A2AServerSkills, annotations.A2AServerAddress, annotations.A2AStreamingSupported} {
+		if existing[key] != desired[key] {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a2aServer arkv1prealpha1.A2AServer, agentsChanged bool) (ctrl.Result, error) {
