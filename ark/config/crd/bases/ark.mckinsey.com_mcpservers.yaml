@@ -419,8 +419,9 @@ spec:
                     type: array
                   lastDiscovered:
                     description: |-
-                      LastDiscovered is the timestamp of the most recent successful
-                      discovery probe against the server.
+                      LastDiscovered is the time this authorization block was last
+                      recomputed and persisted. Routine polls that leave the block
+                      unchanged do not advance it.
                     format: date-time
                     type: string
                   registrationEndpoint:
