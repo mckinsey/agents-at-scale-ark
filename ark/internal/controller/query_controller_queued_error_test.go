@@ -165,10 +165,11 @@ func TestRemainingBudget(t *testing.T) {
 		},
 		{
 			// The negative-sign convention every enforcement branch depends
-			// on: `remainingBudget <= 0` is the timeout trigger.
+			// on: `remainingBudget <= 0` is the timeout trigger. Uses an
+			// explicit timeout so the assertion is independent of the default.
 			name:          "elapsed budget returns negative",
 			creationAgo:   10 * time.Minute,
-			timeout:       nil, // default 5m — 10m ago → -5m
+			timeout:       &metav1.Duration{Duration: 5 * time.Minute}, // 5m budget, 10m elapsed → -5m
 			wantPositive:  false,
 			approxSeconds: -(5 * time.Minute).Seconds(),
 		},

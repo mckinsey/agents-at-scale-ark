@@ -476,7 +476,7 @@ func TestAdmissionStorage_Update_RejectedByArkValidation(t *testing.T) {
 	}
 }
 
-func newQueryAdmissionStorage(backend storage.Backend, lookup validation.ArkConfigLookup) *AdmissionStorage {
+func newQueryAdmissionStorage(backend storage.Backend, lookup validation.DefaultsLookup) *AdmissionStorage {
 	cfg := registry.ResourceConfig{
 		Kind: "Query", Resource: "queries", SingularName: "query",
 		NewFunc:     func() runtime.Object { return &arkv1alpha1.Query{} },

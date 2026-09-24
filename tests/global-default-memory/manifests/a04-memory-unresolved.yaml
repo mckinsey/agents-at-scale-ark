@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Memory
+metadata:
+  name: default
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: broker-that-does-not-exist
+        port: "8080"

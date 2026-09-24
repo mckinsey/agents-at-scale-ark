@@ -40,6 +40,7 @@ export class RedisChunkStream implements ChunkStream {
   private readonly prefix: string;
   private readonly ttlSeconds: number;
   private readonly logger: Logger;
+  private readonly subscriptions = new Set<() => void>();
 
   constructor(
     private readonly redis: Redis,
@@ -144,6 +145,25 @@ export class RedisChunkStream implements ChunkStream {
     const sub = this.redis.duplicate();
     let baseOrdinal = 0;
     let ordinalCounter = 0;
+    const unsubscribe = (): void => {
+      if (aborted) return;
+      aborted = true;
+      this.subscriptions.delete(unsubscribe);
+      if (sub.status === 'connecting' || sub.status === 'connect') {
+        const stop = (): void => {
+          sub.off('ready', stop);
+          sub.off('reconnecting', stop);
+          sub.off('end', stop);
+          sub.disconnect();
+        };
+        sub.once('ready', stop);
+        sub.once('reconnecting', stop);
+        sub.once('end', stop);
+        return;
+      }
+      sub.disconnect();
+    };
+    this.subscriptions.add(unsubscribe);
 
     const run = async (): Promise<void> => {
       const [existing, len] = await Promise.all([
@@ -184,17 +204,19 @@ export class RedisChunkStream implements ChunkStream {
         }
       }
 
-      await sub.disconnect();
-      await sub.quit();
+      unsubscribe();
     };
 
     run().catch((err: Error) => {
       if (!aborted) this.logger.error({err}, 'xread loop crashed');
+      unsubscribe();
     });
 
-    return (): void => {
-      aborted = true;
-    };
+    return unsubscribe;
+  }
+
+  close(): void {
+    for (const unsubscribe of this.subscriptions) unsubscribe();
   }
 
   async all(): Promise<BrokerItem<CompletionChunkData>[]> {

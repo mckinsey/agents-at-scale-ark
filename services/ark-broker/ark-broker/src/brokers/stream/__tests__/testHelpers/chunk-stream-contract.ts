@@ -23,6 +23,10 @@ export function runChunkStreamContract(factory: () => ChunkStream): void {
     stream = factory();
   });
 
+  afterEach(() => {
+    stream.close?.();
+  });
+
   describe('appendChunk / getByQuery', () => {
     it('stores chunks keyed by queryId', async () => {
       await stream.appendChunk('q1', textChunk);

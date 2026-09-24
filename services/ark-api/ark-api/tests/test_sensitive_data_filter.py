@@ -226,5 +226,17 @@ class TestShapeTokens(unittest.TestCase):
         self.assertIn(":8080", out)
 
 
+class TestRedactIdempotent(unittest.TestCase):
+    def test_idempotent(self):
+        for s in (
+            "access_token=secret123",
+            "bare " + "ghp_" + "A" * 36 + " here",
+            '{"cookie": "sid=x", "other": 2}',
+        ):
+            once = _redact_string(s)
+            twice = _redact_string(once)
+            self.assertEqual(once, twice, f"not idempotent for {s!r}: {once!r} vs {twice!r}")
+
+
 if __name__ == "__main__":
     unittest.main()

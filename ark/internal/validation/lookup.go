@@ -107,6 +107,7 @@ func (l *StorageLookup) GetArkConfig(ctx context.Context) (*arkv1alpha1.ArkConfi
 var (
 	_ ArkConfigLookup = (*WebhookLookup)(nil)
 	_ ArkConfigLookup = (*StorageLookup)(nil)
+	_ DefaultsLookup  = (*WebhookLookup)(nil)
 )
 
 func newArkObject(kind string) client.Object {

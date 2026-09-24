@@ -317,17 +317,11 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
 
       req.log.info({queryId: query_id}, 'marking query as complete');
 
-      if (!(await chunks.hasQuery(query_id))) {
-        res.status(404).json({
-          error: {
-            code: 'NOT_FOUND',
-            message: 'Stream not found',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
-        return;
-      }
-
+      // Complete even when no chunks ever landed (e.g. every chunk write failed
+      // mid-query). completeQuery appends the terminal [DONE], creating the
+      // stream if needed, so a consumer that connected before any chunk is still
+      // terminated and isComplete latches — otherwise the reader hangs and a
+      // later from-beginning reconnect replays and hangs too.
       if (await chunks.isComplete(query_id)) {
         res.json({
           status: 'already_completed',

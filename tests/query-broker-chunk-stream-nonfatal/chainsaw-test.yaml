@@ -1,0 +1,191 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-broker-chunk-stream-nonfatal
+  labels:
+    requires-images: "true"
+spec:
+  description: >
+    A broken chunk stream must not fail the query, and the broker's stream must
+    still be terminated for consumers. A fault proxy breaks the executor's
+    chunk-stream POST (forcing the abandon latch) but forwards the completion
+    POST to the broker; the query must reach done and the broker stream must
+    carry the [DONE] terminal (produced only by the completion signal).
+  steps:
+  - name: setup-broker
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-broker ../../services/ark-broker/chart \
+            --namespace $NAMESPACE \
+            ${ARK_BROKER_IMAGE:+--set app.image.repository=${ARK_BROKER_IMAGE}} \
+            ${ARK_BROKER_IMAGE_TAG:+--set app.image.tag=${ARK_BROKER_IMAGE_TAG}} \
+            --set streaming.enabled=false \
+            --set persistence.enabled=false \
+            --set restartController.enabled=false \
+            --set otelEndpoint.enabled=false \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app.kubernetes.io/name=ark-broker --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: setup-fault-proxy-and-streaming
+    try:
+    - apply:
+        file: manifests/fault-proxy.yaml
+    - apply:
+        file: manifests/streaming-config.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: fault-proxy
+        timeout: 120s
+        for:
+          condition:
+            name: Available
+            value: 'True'
+    # Deployment Available gates the pod, not the Service route: kube-proxy may
+    # not have programmed the endpoint yet, so the executor's first connect can
+    # be refused. Poll the Service from in-cluster until it actually answers.
+    - script:
+        timeout: 60s
+        content: |
+          BP=$(kubectl -n $NAMESPACE get pod -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | head -1)
+          for i in $(seq 1 30); do
+            if kubectl -n $NAMESPACE exec $BP -- sh -c \
+              'wget -S -T 3 -O /dev/null http://fault-proxy:80/ 2>&1 | grep -q "HTTP/"'; then
+              echo "fault-proxy service reachable"; exit 0
+            fi
+            echo "waiting for fault-proxy service routing ($i)"; sleep 2
+          done
+          echo "fault-proxy service never became reachable"; exit 1
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: run-query
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Memory
+        name: default
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.lastResolvedAddress}'
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-query.yaml
+    # The query must succeed even though every chunk-stream write fails.
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: nonfatal-query
+        timeout: 4m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: nonfatal-query
+          status:
+            phase: done
+            (response != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: nonfatal-query
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs deploy/fault-proxy --tail=50 || true
+          kubectl -n $NAMESPACE logs -l app.kubernetes.io/name=ark-broker --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: verify-fault-fired
+    # Guard against a false green: the abandon path must actually have been hit.
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          LOGS=$(kubectl -n $NAMESPACE logs deploy/fault-proxy --tail=200 2>&1)
+          echo "$LOGS"
+          echo "$LOGS" | grep -qF 'FAULT: breaking chunk stream' \
+            || { echo "fault proxy never broke a chunk stream — abandon path not exercised"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: verify-stream-terminated
+    # The contract: the completion POST reached the broker despite the abandoned
+    # chunk stream, so the broker stream carries [DONE]. On the pre-fix executor
+    # (completion suppressed when abandoned) this marker is absent and the step
+    # fails — a consumer would hang.
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          BROKER_POD=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | head -1)
+          # Bound the read: without a completion signal the stream has no terminal
+          # and the read blocks (the consumer-hang this fix prevents), so a short
+          # -T timeout turns that hang into a fast, clear failure.
+          RESULT=$(kubectl exec -n $NAMESPACE $BROKER_POD -- sh -c \
+            'wget -T 10 -O- "http://127.0.0.1:8080/stream/nonfatal-query?from-beginning=true" 2>/dev/null' || true)
+          echo "broker stream: $RESULT"
+          echo "$RESULT" | grep -qF '[DONE]' \
+            || { echo "no [DONE] terminal — completion signal was not delivered; consumers would hang"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall ark-broker --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
