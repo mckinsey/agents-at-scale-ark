@@ -10,7 +10,12 @@ import {
 } from '@/lib/services/mcp-servers-hooks';
 
 export function McpServersSection() {
-  const { data: servers = [], isPending, refetch } = useGetAllMcpServers();
+  const {
+    data: servers = [],
+    isPending,
+    error,
+    refetch,
+  } = useGetAllMcpServers();
   const deleteMcpServer = useDeleteMcpServer();
 
   return (
@@ -33,6 +38,7 @@ export function McpServersSection() {
       }
       items={servers}
       loading={isPending}
+      error={error}
       onDelete={id => deleteMcpServer.mutate(id)}
       onReload={() => refetch()}
       renderTable={(items, onDelete, reload) => (

@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentsSection } from '@/components/sections/agents-section';
+import { toast } from '@/components/ui/sonner';
 import type { AgentListItem } from '@/lib/services';
 
 const mockUseGetAllAgents = vi.fn();
@@ -71,10 +72,15 @@ const sampleAgents: AgentListItem[] = [
 ];
 
 const mockQueryResult = (
-  overrides: Partial<{ data: AgentListItem[]; isPending: boolean }> = {},
+  overrides: Partial<{
+    data: AgentListItem[];
+    isPending: boolean;
+    error: unknown;
+  }> = {},
 ) => ({
   data: overrides.data ?? [],
   isPending: overrides.isPending ?? false,
+  error: overrides.error ?? null,
   refetch: mockRefetch,
 });
 
@@ -141,5 +147,17 @@ describe('AgentsSection', () => {
     await screen.findByTestId('agents-table');
     const link = screen.getByRole('link', { name: /create agent/i });
     expect(link).toHaveAttribute('href', '/agents/new');
+  });
+
+  it('surfaces a load error via toast instead of a silent empty state', async () => {
+    mockUseGetAllAgents.mockReturnValue(
+      mockQueryResult({ data: [], error: new Error('boom') }),
+    );
+    render(<AgentsSection />);
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to Load agents', {
+        description: 'boom',
+      });
+    });
   });
 });

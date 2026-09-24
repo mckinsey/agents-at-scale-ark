@@ -7,7 +7,7 @@ import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDeleteTeam, useGetAllTeams } from '@/lib/services/teams-hooks';
 
 export function TeamsSection() {
-  const { data: teams = [], isPending, refetch } = useGetAllTeams();
+  const { data: teams = [], isPending, error, refetch } = useGetAllTeams();
   const deleteTeam = useDeleteTeam();
 
   return (
@@ -29,6 +29,7 @@ export function TeamsSection() {
       }
       items={teams}
       loading={isPending}
+      error={error}
       onDelete={id => deleteTeam.mutate(id)}
       onReload={() => refetch()}
       renderTable={(items, onDelete) => (

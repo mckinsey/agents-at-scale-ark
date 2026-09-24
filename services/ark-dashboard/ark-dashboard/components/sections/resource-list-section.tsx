@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { useDelayedLoading } from '@/lib/hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -63,6 +64,7 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   // Data is owned by the caller via React Query (fetching + caching).
   readonly items: T[];
   readonly loading: boolean;
+  readonly error?: unknown;
   readonly onDelete: (id: string) => void;
   readonly onReload: () => void;
   readonly renderTable: (
@@ -88,6 +90,7 @@ export function ResourceListSection<T extends ResourceListItem>({
   originFilter,
   items,
   loading,
+  error,
   onDelete,
   onReload,
   renderTable,
@@ -98,6 +101,16 @@ export function ResourceListSection<T extends ResourceListItem>({
   const { readOnlyMode } = useNamespace();
 
   const showLoading = useDelayedLoading(loading);
+
+  const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(`Failed to Load ${pluralLabel}`, {
+      description:
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+    });
+  }, [error, pluralLabel]);
 
   const originFilterOptions = useMemo(() => {
     if (!originFilter) return [];
@@ -128,7 +141,6 @@ export function ResourceListSection<T extends ResourceListItem>({
 
   const isEmpty = !loading && items.length === 0;
 
-  const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
   const statusLabel = STATUS_ITEMS.find(s => s.value === statusFilter)?.label;
   const noResultsMessage =
     statusFilter === 'All'
