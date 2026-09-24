@@ -116,4 +116,12 @@ rules:
   - get
   - list
   - watch
+# Needed by inline tool admission to evaluate the requesting subject's author
+# permission. Creating a review is not a grant of that permission.
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
 {{- end -}}
