@@ -12,6 +12,9 @@ class ToolResponse(BaseModel):
     labels: Optional[Dict[str, str]] = None
     annotations: Optional[Dict[str, str]] = None
     type: Optional[str] = None
+    # Language of an inline tool, for the list badge. Deliberately not the
+    # source: a list page must not download every script body.
+    language: Optional[str] = None
 
 
 class ToolListResponse(PaginatedListResponse):
@@ -37,6 +40,11 @@ class ToolParameter(BaseModel):
     enum: Optional[List[str]] = None
     format: Optional[str] = None
     pattern: Optional[str] = None
+
+
+class InlineSpec(BaseModel):
+    source: str
+    language: str
 
 
 # update_tool assigns spec wholesale from this model, so every block a Tool can
@@ -67,6 +75,7 @@ class ToolSpec(BaseModel):
     agent: Optional[Dict[str, Any]] = None
     team: Optional[Dict[str, Any]] = None
     builtin: Optional[Dict[str, Any]] = None
+    inline: Optional[InlineSpec] = None
 
 
 class ToolCreateRequest(BaseModel):

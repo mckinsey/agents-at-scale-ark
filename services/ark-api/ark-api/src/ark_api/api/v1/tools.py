@@ -10,6 +10,7 @@ from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.inline_tools import require_inline_authoring_identity
 
 from ...models.tools import (
     ToolResponse,
@@ -35,13 +36,17 @@ def tool_to_response(tool: dict) -> ToolResponse:
     metadata = tool.get("metadata", {})
     spec = tool.get("spec", {})
     
+    inline = spec.get("inline") or {}
+
     return ToolResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
         labels=metadata.get("labels"),
         annotations=metadata.get("annotations"),
-        type=spec.get("type")
+        type=spec.get("type"),
+        # Language only. The list page must not carry every script body.
+        language=inline.get("language")
     )
 
 
@@ -103,10 +108,10 @@ async def create_tool(request: Request, body: ToolCreateRequest, namespace: Opti
     Returns:
         ToolDetailResponse: The created tool details
     """
+    tool_spec = body.spec.model_dump(by_alias=True, exclude_none=True)
+    require_inline_authoring_identity(impersonation, tool_spec)
+
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-        # Build the tool spec
-        tool_spec = body.spec.model_dump(by_alias=True, exclude_none=True)
-        
         # Create the ToolV1alpha1 object
         tool_resource = ToolV1alpha1(
             metadata={
@@ -169,8 +174,12 @@ async def update_tool(request: Request, tool_name: str, body: ToolUpdateRequest,
             
         # Update spec if provided
         if body.spec is not None:
-            existing_dict["spec"] = body.spec.model_dump(by_alias=True, exclude_none=True)
-        
+            proposed_spec = body.spec.model_dump(by_alias=True, exclude_none=True)
+            # Both objects matter: a write that adds inline source and one that
+            # removes it are each an inline spec change.
+            require_inline_authoring_identity(impersonation, existing_dict.get("spec"), proposed_spec)
+            existing_dict["spec"] = proposed_spec
+
         # Update the tool
         updated_resource = ToolV1alpha1(**existing_dict)
         
