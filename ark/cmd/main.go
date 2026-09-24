@@ -361,7 +361,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			MaxConcurrentQueries:    cfg.maxConcurrentQueries,
 			MaxConcurrentReconciles: cfg.maxConcurrentReconciles,
 		}},
-		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Eventing: eventingProvider}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},
 		{"A2AServer", &controller.A2AServerReconciler{
 			Client:   mgr.GetClient(),

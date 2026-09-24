@@ -425,6 +425,7 @@ spec:
                 - agent
                 - team
                 - builtin
+                - inline
                 type: string
             required:
             - type
