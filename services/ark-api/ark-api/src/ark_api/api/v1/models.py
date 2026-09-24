@@ -49,25 +49,36 @@ MODEL_CRD_GROUP = "ark.mckinsey.com"
 MODEL_CRD_PLURAL = "models"
 
 
-def extract_secret_refs(spec: dict) -> List[str]:
-    """Collect names of secrets referenced by a model's config valueFrom entries."""
-    names = []
-    config = spec.get("config", {})
+def _secret_ref_name(value_obj: object) -> Optional[str]:
+    """Return the secretKeyRef name from a single config value, if present."""
+    if not isinstance(value_obj, dict):
+        return None
+    value_from = value_obj.get("valueFrom")
+    if not isinstance(value_from, dict):
+        return None
+    secret_key_ref = value_from.get("secretKeyRef")
+    if not isinstance(secret_key_ref, dict):
+        return None
+    return secret_key_ref.get("name")
+
+
+def _iter_config_values(config: object):
+    """Yield each leaf value object across a model config's provider sections."""
     if not isinstance(config, dict):
-        return names
+        return
     for provider_config in config.values():
         if not isinstance(provider_config, dict):
             continue
-        for value_obj in provider_config.values():
-            if not isinstance(value_obj, dict):
-                continue
-            value_from = value_obj.get("valueFrom")
-            if not isinstance(value_from, dict):
-                continue
-            secret_key_ref = value_from.get("secretKeyRef")
-            name = secret_key_ref.get("name") if isinstance(secret_key_ref, dict) else None
-            if name and name not in names:
-                names.append(name)
+        yield from provider_config.values()
+
+
+def extract_secret_refs(spec: dict) -> List[str]:
+    """Collect names of secrets referenced by a model's config valueFrom entries."""
+    names: List[str] = []
+    for value_obj in _iter_config_values(spec.get("config", {})):
+        name = _secret_ref_name(value_obj)
+        if name and name not in names:
+            names.append(name)
     return names
 
 
