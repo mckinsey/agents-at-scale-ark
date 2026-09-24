@@ -9,6 +9,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,6 +58,33 @@ func dataChangedPredicate() predicate.Predicate {
 			}
 		},
 	}
+}
+
+// updateStatusIgnoringDeleted writes obj's status, treating a mid-reconcile
+// deletion as success. The apiserver reports the lost object as NotFound, or as
+// a Conflict when the stale object still carries a UID precondition; in the
+// Conflict case a follow-up Get separates a genuine deletion (ignored) from an
+// optimistic-concurrency clash (returned, so the caller requeues). A cancelled
+// context is a no-op.
+func updateStatusIgnoringDeleted(ctx context.Context, c client.Client, obj client.Object, kind string) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	err := c.Status().Update(ctx, obj)
+	if err == nil {
+		return nil
+	}
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	if errors.IsConflict(err) {
+		probe := obj.DeepCopyObject().(client.Object)
+		if getErr := c.Get(ctx, client.ObjectKeyFromObject(obj), probe); errors.IsNotFound(getErr) {
+			return nil
+		}
+	}
+	logf.FromContext(ctx).Error(err, "failed to update "+kind+" status")
+	return err
 }
 
 // mapDependencyRequests lists resources in the changed object's namespace and

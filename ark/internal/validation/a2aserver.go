@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 func ValidateA2AServer(a2aserver *arkv1prealpha1.A2AServer) ([]string, error) {
@@ -23,11 +24,28 @@ func ValidateA2AServer(a2aserver *arkv1prealpha1.A2AServer) ([]string, error) {
 		}
 	}
 
+	for i, host := range a2aserver.Spec.AllowedEndpointHosts {
+		if err := arka2a.ValidateAllowedEndpointHost(host); err != nil {
+			allErrs = append(allErrs, fmt.Errorf("allowedEndpointHosts[%d]: %w", i, err))
+		}
+	}
+
 	if len(allErrs) > 0 {
 		return nil, fmt.Errorf("validation failed: %v", allErrs)
 	}
 
-	return nil, nil
+	return endpointResolutionWarnings(a2aserver.Spec), nil
+}
+
+func endpointResolutionWarnings(spec arkv1prealpha1.A2AServerSpec) []string {
+	usesAllowlist := spec.EndpointResolution == arka2a.EndpointResolutionCardURL
+	switch {
+	case len(spec.AllowedEndpointHosts) > 0 && !usesAllowlist:
+		return []string{fmt.Sprintf("spec.allowedEndpointHosts is ignored unless spec.endpointResolution is %q", arka2a.EndpointResolutionCardURL)}
+	case usesAllowlist && len(spec.AllowedEndpointHosts) == 0:
+		return []string{"spec.endpointResolution is \"cardUrl\" with no spec.allowedEndpointHosts, only agent card URLs on the origin of spec.address will be accepted"}
+	}
+	return nil
 }
 
 func validateA2AAddress(address arkv1prealpha1.ValueSource) error {
