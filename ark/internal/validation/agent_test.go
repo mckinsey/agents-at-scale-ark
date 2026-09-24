@@ -106,6 +106,32 @@ func TestValidateAgent(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts an inline tool attachment", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
+			Spec: arkv1alpha1.AgentSpec{
+				Tools: []arkv1alpha1.AgentTool{{Type: "inline", Name: "csv-summarise"}},
+			},
+		}
+		_, err := v.ValidateAgent(ctx, agent)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects inline tool without name", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
+			Spec: arkv1alpha1.AgentSpec{
+				Tools: []arkv1alpha1.AgentTool{{Type: "inline"}},
+			},
+		}
+		_, err := v.ValidateAgent(ctx, agent)
+		if err == nil {
+			t.Fatal("expected error for inline tool without name")
+		}
+	})
+
 	t.Run("rejects mcp tool without name", func(t *testing.T) {
 		agent := &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
