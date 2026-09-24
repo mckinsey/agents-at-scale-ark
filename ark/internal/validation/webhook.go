@@ -19,7 +19,10 @@ func (wv *WebhookValidator) ValidateCreate(ctx context.Context, obj runtime.Obje
 	return admission.Warnings(warnings), err
 }
 
-func (wv *WebhookValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+func (wv *WebhookValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	if err := ValidateTransition(oldObj, newObj); err != nil {
+		return nil, err
+	}
 	warnings, err := wv.V.Validate(ctx, newObj)
 	return admission.Warnings(warnings), err
 }
