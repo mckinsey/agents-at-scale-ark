@@ -28,6 +28,28 @@ const (
 	QueryTypeUser = "user"
 )
 
+// Query status phases, mirroring the status.phase enum.
+const (
+	QueryPhasePending       = "pending"
+	QueryPhaseProvisioning  = "provisioning"
+	QueryPhaseRunning       = "running"
+	QueryPhaseQueued        = "queued"
+	QueryPhaseInputRequired = "input-required"
+	QueryPhaseDone          = "done"
+	QueryPhaseError         = "error"
+	QueryPhaseCanceled      = "canceled"
+)
+
+// IsTerminalPhase reports whether a Query phase is terminal: the reconcile has
+// finished and no further status write is expected.
+func IsTerminalPhase(phase string) bool {
+	switch phase {
+	case QueryPhaseDone, QueryPhaseError, QueryPhaseCanceled:
+		return true
+	}
+	return false
+}
+
 type QueryTarget struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=agent;team;model;tool

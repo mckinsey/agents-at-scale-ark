@@ -90,6 +90,10 @@ func TestUpdateStatusPreservesErrorContentWhenCacheStripped(t *testing.T) {
 	require.NotNil(t, cond)
 	assert.Equal(t, "QueryErrored", cond.Reason)
 	assert.Equal(t, "boom: model timed out", cond.Message, "error message must come from the in-memory Response, not the cache-stripped refetch")
+
+	require.NotNil(t, got.Status.Response)
+	assert.Equal(t, "boom: model timed out", got.Status.Response.Content,
+		"persisted response content must come from the in-memory Response, not the cache-stripped refetch")
 }
 
 func TestUpdateStatusWithDurationDoesNotRetryPermanentError(t *testing.T) {

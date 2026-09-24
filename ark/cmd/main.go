@@ -252,9 +252,9 @@ func setupManager(cfg config) (ctrl.Manager, *certwatcher.CertWatcher, *certwatc
 	}
 
 	cacheOptions := cache.Options{
-		DefaultTransform: cachetransform.StripManagedFields(),
+		DefaultTransform: cachetransform.StripManagedFields,
 		ByObject: map[client.Object]cache.ByObject{
-			&arkv1alpha1.Query{}: {Transform: cachetransform.StripQuery()},
+			&arkv1alpha1.Query{}: {Transform: cachetransform.StripQuery},
 		},
 	}
 	if ns := watchNamespaces(); len(ns) > 0 {
