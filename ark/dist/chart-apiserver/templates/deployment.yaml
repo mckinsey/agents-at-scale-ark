@@ -78,6 +78,11 @@ spec:
               value: {{ .Values.policy.thirdPartyWebhooks.enabled | quote }}
             - name: ARK_APISERVER_POLICY_THIRD_PARTY_WEBHOOKS_REQUIRED
               value: {{ .Values.policy.thirdPartyWebhooks.required | quote }}
+            # Inline authoring is enforced in-process here: the host kube-apiserver runs no
+            # webhook chain on aggregated resources, so this env var and the controller's must
+            # agree for the two write paths to behave the same.
+            - name: ARK_INLINE_TOOLS_ENABLED
+              value: {{ .Values.inlineTools.enabled | quote }}
             {{- range $key, $value := .Values.extraEnv }}
             - name: {{ $key }}
               value: {{ $value | quote }}
