@@ -17,6 +17,9 @@ func (wv *WebhookValidator[T]) ValidateCreate(ctx context.Context, obj T) (admis
 }
 
 func (wv *WebhookValidator[T]) ValidateUpdate(ctx context.Context, oldObj, newObj T) (admission.Warnings, error) {
+	if err := ValidateTransition(oldObj, newObj); err != nil {
+		return nil, err
+	}
 	ctx = ServiceAccountAuthzContextForUpdate(ctx, oldObj, newObj)
 	warnings, err := wv.V.Validate(ctx, newObj)
 	return admission.Warnings(warnings), err

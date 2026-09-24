@@ -18,6 +18,7 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/apiserver/registry"
+	"mckinsey.com/ark/internal/inlinetools"
 	"mckinsey.com/ark/internal/storage"
 	"mckinsey.com/ark/internal/validation"
 )
@@ -113,7 +114,7 @@ func newAgentAdmissionStorage(backend storage.Backend) *AdmissionStorage {
 		NewListFunc: func() runtime.Object { return &arkv1alpha1.AgentList{} },
 	}
 	inner := registry.NewGenericStorage(backend, NewRegistryTypeConverter(), cfg, GetPrinterColumnRegistry())
-	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), nil)
+	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), nil, inlinetools.Reject("test"))
 }
 
 func agent(name string) *arkv1alpha1.Agent {
@@ -483,7 +484,7 @@ func newQueryAdmissionStorage(backend storage.Backend, lookup validation.Default
 		NewListFunc: func() runtime.Object { return &arkv1alpha1.QueryList{} },
 	}
 	inner := registry.NewGenericStorage(backend, NewRegistryTypeConverter(), cfg, GetPrinterColumnRegistry())
-	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), lookup)
+	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), lookup, inlinetools.Reject("test"))
 }
 
 func query(name string) *arkv1alpha1.Query {
@@ -542,7 +543,7 @@ func newArkConfigAdmissionStorage(backend storage.Backend) *AdmissionStorage {
 		NewListFunc: func() runtime.Object { return &arkv1alpha1.ArkConfigList{} },
 	}
 	inner := registry.NewGenericStorage(backend, NewRegistryTypeConverter(), cfg, GetPrinterColumnRegistry())
-	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), nil)
+	return NewAdmissionStorage(inner, validation.NewValidator(&nopLookup{}), nil, inlinetools.Reject("test"))
 }
 
 func clusterScopedContext() context.Context {
