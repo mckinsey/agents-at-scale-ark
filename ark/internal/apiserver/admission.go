@@ -63,15 +63,17 @@ func (s *AdmissionStorage) admitInline(ctx context.Context, obj, old runtime.Obj
 
 // Create order matters: PrepareForCreate, then Ark defaulting/validation, then the generic
 // admission callback inside GenericStorage.Create. Ark validators resolve valueFrom refs
-// against obj.GetNamespace(), so the object must be formed before they run.
+// against obj.GetNamespace(), so the object must be formed before they run. Defaulting runs
+// before admitInline so the inline author check compares a defaulted spec against the
+// defaulted stored one.
 func (s *AdmissionStorage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	if err := registry.PrepareForCreate(ctx, obj); err != nil {
 		return nil, err
 	}
+	validation.ApplyDefaults(ctx, obj, s.lookup)
 	if err := s.admitInline(ctx, obj, nil); err != nil {
 		return nil, err
 	}
-	validation.ApplyDefaults(ctx, obj, s.lookup)
 	warnings, err := s.validator.Validate(ctx, obj)
 	if err != nil {
 		return nil, err
@@ -87,10 +89,10 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 	// Each closure runs Ark's defaulting/validation, then chains to the generic
 	// validating-admission callback.
 	admissionCreate := func(ctx context.Context, obj runtime.Object) error {
+		validation.ApplyDefaults(ctx, obj, s.lookup)
 		if err := s.admitInline(ctx, obj, nil); err != nil {
 			return err
 		}
-		validation.ApplyDefaults(ctx, obj, s.lookup)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)
@@ -107,10 +109,10 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 		if err := validation.ValidateTransition(old, obj); err != nil {
 			return err
 		}
+		validation.ApplyDefaults(ctx, obj, s.lookup)
 		if err := s.admitInline(ctx, obj, old); err != nil {
 			return err
 		}
-		validation.ApplyDefaults(ctx, obj, s.lookup)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)
