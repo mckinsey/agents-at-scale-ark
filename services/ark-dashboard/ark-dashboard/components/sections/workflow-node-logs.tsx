@@ -187,7 +187,7 @@ export function WorkflowNodeLogs({
         )}
 
         {buffer.loaded && (
-          <div className="flex w-full flex-col">
+          <div className="flex w-max min-w-full flex-col">
             {buffer.hasMoreBefore ? (
               <Button
                 variant="ghost"
@@ -208,7 +208,7 @@ export function WorkflowNodeLogs({
             )}
 
             {buffer.pages.length === 0 && (
-              <pre className="paragraph-regular-primary text-fg-secondary break-words whitespace-pre-wrap">
+              <pre className="paragraph-regular-primary text-fg-secondary whitespace-pre">
                 No logs available
               </pre>
             )}
@@ -216,7 +216,7 @@ export function WorkflowNodeLogs({
             {buffer.pages.map((page, index) => (
               <pre
                 key={`${key}-page-${index}-${page.length}`}
-                className="paragraph-regular-primary text-fg-secondary break-words whitespace-pre-wrap">
+                className="paragraph-regular-primary text-fg-secondary whitespace-pre">
                 {page}
               </pre>
             ))}
