@@ -1,0 +1,77 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: csv-summarise
+spec:
+  type: inline
+  description: Count CSV rows and sum the amount column
+  inputSchema:
+    type: object
+    properties:
+      csv:
+        type: string
+        description: CSV content with an amount column
+    required: ["csv"]
+    additionalProperties: false
+  inline:
+    language: python
+    source: |
+      import csv
+      import io
+      import json
+      import sys
+      from decimal import Decimal
+
+      args = json.loads(sys.argv[1])
+      if not isinstance(args.get("csv"), str):
+          raise ValueError("csv must be a string")
+      reader = csv.DictReader(io.StringIO(args["csv"]))
+      if not reader.fieldnames or "amount" not in reader.fieldnames:
+          raise ValueError("CSV must contain an amount column")
+      count = 0
+      total = Decimal("0")
+      for row in reader:
+          amount = Decimal(row["amount"])
+          if not amount.is_finite():
+              raise ValueError("amount must be finite")
+          count += 1
+          total += amount
+      print(json.dumps({"rows": count, "total": str(total)}))
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: text-stats
+spec:
+  type: inline
+  description: Count the lines and characters in the supplied text
+  inputSchema:
+    type: object
+    properties:
+      text:
+        type: string
+        description: Text to measure
+    required: ["text"]
+    additionalProperties: false
+  inline:
+    language: bash
+    source: |
+      set -euo pipefail
+      jq -c '{lines: (.text | split("\n") | length),
+              characters: (.text | length)}' <<<"$1"
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: csv-analyst
+spec:
+  prompt: |
+    Summarise data the user pastes into the conversation. Pass the content to
+    the tools as text; they have no access to files or the network.
+
+    Be concise and report the tool result without preamble.
+  tools:
+    - type: inline
+      name: csv-summarise
+    - type: inline
+      name: text-stats

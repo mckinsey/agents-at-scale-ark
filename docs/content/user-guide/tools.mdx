@@ -233,6 +233,8 @@ spec:
 
 In the dashboard, pick **Inline** in the Add Tool form, choose a language, and paste the source. The tools list shows a language badge.
 
+For runnable examples — a Python CSV summariser, a bash text counter, and an agent that uses both — apply `samples/tools/inline-tools.yaml`. Both pass their data in as arguments, because a runner has no file mounts and no network access.
+
 Two things to know before you try it:
 
 - **Attach it like any other tool**, with `type: inline` in the agent's `spec.tools`. The default execution engine calls it over MCP once the tool reports `Available`; agents on an external execution engine can't call inline tools yet.
