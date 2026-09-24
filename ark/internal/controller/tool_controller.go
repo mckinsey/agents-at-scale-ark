@@ -56,6 +56,12 @@ func (r *ToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 func (r *ToolReconciler) reconcileInline(ctx context.Context, tool *arkv1alpha1.Tool) (ctrl.Result, error) {
 	r.emitSourceChange(ctx, tool)
 
+	// A settled inline tool is not rewritten, mirroring the Ready short-circuit
+	// on the non-inline path.
+	if conditionUpToDate(tool) {
+		return ctrl.Result{}, nil
+	}
+
 	tool.Status.State = arkv1alpha1.ToolStatePending
 	tool.Status.Message = inlineRuntimeNotInstalledMessage
 	tool.Status.ResolvedAddress = ""
@@ -77,7 +83,7 @@ func (r *ToolReconciler) reconcileInline(ctx context.Context, tool *arkv1alpha1.
 // can be disabled on the PostgreSQL backend, so this is the second trail the
 // authorship annotations need.
 //
-// ponytail: keyed on metadata.generation rather than a stored hash, because
+// NOTE: keyed on metadata.generation rather than a stored hash, because
 // phase 1 has no runner to carry the reconciled revision. A spec edit that does
 // not touch source therefore also emits. Phase 2 owns the pod-template source
 // hash; compare against that once it exists.

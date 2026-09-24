@@ -147,6 +147,34 @@ func TestReconcileInlineDoesNotReemitForAReconciledGeneration(t *testing.T) {
 	}
 }
 
+func TestReconcileInlineSettledToolIsLeftAlone(t *testing.T) {
+	tool := inlineTool(func(tool *arkv1alpha1.Tool) {
+		tool.Status.State = arkv1alpha1.ToolStatePending
+		tool.Status.Message = inlineRuntimeNotInstalledMessage
+		tool.Status.Conditions = []metav1.Condition{{
+			Type:               arkv1alpha1.ToolConditionAvailable,
+			Status:             metav1.ConditionFalse,
+			Reason:             arkv1alpha1.ToolReasonRuntimeNotInstalled,
+			Message:            inlineRuntimeNotInstalledMessage,
+			ObservedGeneration: 1,
+			LastTransitionTime: metav1.Now(),
+		}}
+	})
+	s := inlineScheme(t)
+	c := fake.NewClientBuilder().WithScheme(s).WithObjects(tool).WithStatusSubresource(tool).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(context.Context, client.Client, string, client.Object, ...client.SubResourceUpdateOption) error {
+				t.Fatal("a settled inline tool must not be written again")
+				return nil
+			},
+		}).Build()
+	r := &ToolReconciler{Client: c, Scheme: s}
+
+	if _, err := reconcileTool(t, r, tool); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+}
+
 func TestReconcileInlineEmitsAgainAfterASpecChange(t *testing.T) {
 	tool := inlineTool(func(tool *arkv1alpha1.Tool) {
 		tool.Generation = 2
