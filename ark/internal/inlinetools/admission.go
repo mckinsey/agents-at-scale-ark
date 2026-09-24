@@ -52,9 +52,6 @@ type Reviewer interface {
 	Allowed(ctx context.Context, namespace string, subject Subject) (bool, string, error)
 }
 
-// Now is overridable in tests.
-var Now = func() time.Time { return time.Now().UTC() }
-
 // Admit is the single decision both backends run for a Tool write.
 //
 // oldTool is the stored object on update and nil on create. It matters twice: a
@@ -115,7 +112,7 @@ func stampAuthorship(tool *arkv1alpha1.Tool, username string) {
 		tool.Annotations = map[string]string{}
 	}
 	tool.Annotations[arkv1alpha1.AnnotationInlineAuthoredBy] = username
-	tool.Annotations[arkv1alpha1.AnnotationInlineAuthoredAt] = Now().Format(time.RFC3339)
+	tool.Annotations[arkv1alpha1.AnnotationInlineAuthoredAt] = time.Now().UTC().Format(time.RFC3339)
 }
 
 // preserveAuthorship makes the stored object the only source of authorship on a
