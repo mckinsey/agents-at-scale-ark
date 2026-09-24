@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import unittest
+from datetime import datetime, timezone
+
 from ark_api.models.events import event_to_response
 
 
-class TestEventToResponse:
+class TestEventToResponse(unittest.TestCase):
     """Tests for event_to_response, covering both event API representations."""
 
     def test_legacy_core_v1_event(self):
@@ -27,17 +30,18 @@ class TestEventToResponse:
 
         r = event_to_response(event_dict)
 
-        assert r.involved_object_kind == "Team"
-        assert r.involved_object_name == "team-a"
-        assert r.reason == "StatusChanged"
-        assert r.message == "all good"
-        assert r.source_component == "team-controller"
-        assert r.source_host == "node-1"
-        assert r.count == 3
-        assert r.first_timestamp is not None
-        assert r.last_timestamp is not None
-        assert r.first_timestamp.hour == 10 and r.first_timestamp.minute == 0
-        assert r.last_timestamp.minute == 5
+        self.assertEqual(r.involved_object_kind, "Team")
+        self.assertEqual(r.involved_object_name, "team-a")
+        self.assertEqual(r.reason, "StatusChanged")
+        self.assertEqual(r.message, "all good")
+        self.assertEqual(r.source_component, "team-controller")
+        self.assertEqual(r.source_host, "node-1")
+        self.assertEqual(r.count, 3)
+        self.assertIsNotNone(r.first_timestamp)
+        self.assertIsNotNone(r.last_timestamp)
+        self.assertEqual(r.first_timestamp.hour, 10)
+        self.assertEqual(r.first_timestamp.minute, 0)
+        self.assertEqual(r.last_timestamp.minute, 5)
 
     def test_events_k8s_io_event_falls_back(self):
         """events.k8s.io/v1 events leave legacy fields empty; fall back to
@@ -53,7 +57,7 @@ class TestEventToResponse:
             "reason": "StatusChanged",
             "message": "all good",
             "involved_object": {"kind": "Team", "name": "team-b", "namespace": "default"},
-            # legacy fields empty (as returned by the core/v1 view of an events.k8s.io event)
+            # legacy fields empty (core/v1 view of an events.k8s.io event)
             "source": {},
             "first_timestamp": None,
             "last_timestamp": None,
@@ -68,15 +72,16 @@ class TestEventToResponse:
         r = event_to_response(event_dict)
 
         # timestamps fall back to event_time / series.last_observed_time
-        assert r.first_timestamp is not None
-        assert r.first_timestamp.minute == 0 and r.first_timestamp.second == 30
-        assert r.last_timestamp is not None
-        assert r.last_timestamp.minute == 9
+        self.assertIsNotNone(r.first_timestamp)
+        self.assertEqual(r.first_timestamp.minute, 0)
+        self.assertEqual(r.first_timestamp.second, 30)
+        self.assertIsNotNone(r.last_timestamp)
+        self.assertEqual(r.last_timestamp.minute, 9)
         # count from series
-        assert r.count == 4
+        self.assertEqual(r.count, 4)
         # source from reporting_*
-        assert r.source_component == "ark.mckinsey.com/team-controller"
-        assert r.source_host == "team-controller-abc"
+        self.assertEqual(r.source_component, "ark.mckinsey.com/team-controller")
+        self.assertEqual(r.source_host, "team-controller-abc")
 
     def test_empty_timestamps_fall_back_to_creation(self):
         """With neither legacy nor new timestamps, fall back to creation_timestamp
@@ -96,7 +101,35 @@ class TestEventToResponse:
 
         r = event_to_response(event_dict)
 
-        assert r.first_timestamp is not None
-        assert r.last_timestamp is not None
-        assert r.first_timestamp.hour == 12
-        assert r.count == 1
+        self.assertIsNotNone(r.first_timestamp)
+        self.assertIsNotNone(r.last_timestamp)
+        self.assertEqual(r.first_timestamp.hour, 12)
+        self.assertEqual(r.count, 1)
+
+    def test_datetime_object_and_unparseable_string_timestamps(self):
+        """_parse_ts accepts datetime objects as-is and treats an unparseable
+        string as absent (falling back to the next candidate)."""
+        created = datetime(2026, 9, 24, 13, 0, 0, tzinfo=timezone.utc)
+        event_dict = {
+            "metadata": {
+                "name": "evt-4",
+                "namespace": "default",
+                "uid": "uid-4",
+                "creation_timestamp": created,  # datetime object, not a string
+            },
+            "type": "Normal",
+            "reason": "StatusChanged",
+            "message": "msg",
+            "involved_object": {"kind": "Team", "name": "team-d"},
+            "first_timestamp": "not-a-timestamp",  # unparseable -> ignored
+        }
+
+        r = event_to_response(event_dict)
+
+        # unparseable first_timestamp falls back to the datetime creation_timestamp
+        self.assertEqual(r.first_timestamp, created)
+        self.assertEqual(r.last_timestamp, created)
+
+
+if __name__ == "__main__":
+    unittest.main()
