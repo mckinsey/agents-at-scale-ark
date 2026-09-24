@@ -98,6 +98,14 @@ export function WorkflowNodeLogs({
     });
   }, [key]);
 
+  const requestOlder = useCallback(() => {
+    const container = containerRef.current;
+    if (container) {
+      restoreOffsetRef.current = container.scrollHeight - container.scrollTop;
+    }
+    void loadOlder(key, targetRef.current);
+  }, [key]);
+
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -124,15 +132,21 @@ export function WorkflowNodeLogs({
       container.scrollTop = container.scrollHeight;
       rememberScroll();
     }
-  }, [buffer.pages, rememberScroll]);
 
-  const requestOlder = useCallback(() => {
-    const container = containerRef.current;
-    if (container) {
-      restoreOffsetRef.current = container.scrollHeight - container.scrollTop;
+    if (
+      container.scrollHeight <= container.clientHeight &&
+      buffer.hasMoreBefore &&
+      !buffer.loadingOlder
+    ) {
+      requestOlder();
     }
-    void loadOlder(key, targetRef.current);
-  }, [key]);
+  }, [
+    buffer.pages,
+    buffer.hasMoreBefore,
+    buffer.loadingOlder,
+    rememberScroll,
+    requestOlder,
+  ]);
 
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
@@ -188,23 +202,16 @@ export function WorkflowNodeLogs({
 
         {buffer.loaded && (
           <div className="flex w-max min-w-full flex-col">
-            {buffer.hasMoreBefore ? (
-              <Button
-                variant="ghost"
-                size="xs"
-                className="self-start"
-                disabled={buffer.loadingOlder}
-                onClick={requestOlder}>
-                {buffer.loadingOlder
-                  ? 'Loading older logs...'
-                  : 'Load older logs'}
-              </Button>
-            ) : (
-              buffer.pages.length > 0 && (
-                <span className="paragraph-small-primary text-fg-tertiary px-1">
-                  Start of log
-                </span>
-              )
+            {buffer.loadingOlder && (
+              <span className="paragraph-small-primary text-fg-tertiary px-1">
+                Loading older logs...
+              </span>
+            )}
+
+            {!buffer.hasMoreBefore && buffer.pages.length > 0 && (
+              <span className="paragraph-small-primary text-fg-tertiary px-1">
+                Start of log
+              </span>
             )}
 
             {buffer.pages.length === 0 && (

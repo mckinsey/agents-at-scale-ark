@@ -74,20 +74,20 @@ describe('WorkflowNodeLogs', () => {
     expect(screen.getByText('Start of log')).toBeInTheDocument();
   });
 
-  it('loads older logs when the load button is used', async () => {
+  it('loads older logs without waiting for a scroll when the page is not scrollable', async () => {
     vi.mocked(fetchNodeLogWindow)
       .mockResolvedValueOnce(windowOf('newer', true))
       .mockResolvedValueOnce(windowOf('older', false));
 
     await renderLogs();
-    await act(async () => {
-      screen.getByRole('button', { name: 'Load older logs' }).click();
-    });
 
     expect(vi.mocked(fetchNodeLogWindow).mock.calls[1][1]).toMatchObject({
       skipTailLines: 1,
     });
     expect(screen.getByText('older')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /older logs/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('loads older logs when the viewer is scrolled to the top', async () => {
