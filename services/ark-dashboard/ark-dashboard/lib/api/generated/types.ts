@@ -5194,6 +5194,8 @@ export interface components {
             labels?: {
                 [key: string]: string;
             } | null;
+            /** Language */
+            language?: string | null;
             /** Name */
             name: string;
             /** Namespace */
