@@ -26,6 +26,7 @@ from ...auth.generic_resources import (
     is_write_verb,
     require_generic_write_identity,
 )
+from ...auth.inline_tools import is_ark_tool, require_inline_authoring_identity
 from ...constants.query_param_descriptions import (
     NAMESPACE_DESCRIPTION,
     LABEL_SELECTOR_DESCRIPTION,
@@ -324,6 +325,10 @@ async def create_grouped_resource(
     api_version = f"{group}/{version}"
     logger.info(f"Creating resource: api_version={api_version}, kind={kind}, namespace={namespace}")
 
+    # The generic route must not be a way around the typed endpoint's inline rule.
+    if is_ark_tool(group, kind):
+        require_inline_authoring_identity(impersonation, body.get("spec"))
+
     async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
@@ -387,6 +392,12 @@ async def update_grouped_resource(
     api_version = f"{group}/{version}"
     logger.info(f"Updating resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
 
+    inline_gated = is_ark_tool(group, kind)
+    if inline_gated:
+        # Check the submitted object before any read, so an unauthorized write is
+        # rejected on the submitted spec alone.
+        require_inline_authoring_identity(impersonation, body.get("spec"))
+
     async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
@@ -396,9 +407,14 @@ async def update_grouped_resource(
         )
 
         metadata = body.setdefault("metadata", {})
-        if not metadata.get("resourceVersion"):
+        if not metadata.get("resourceVersion") or inline_gated:
             existing = await api_resource.get(name=resource_name, namespace=namespace)
-            metadata["resourceVersion"] = existing.metadata.resourceVersion
+            if not metadata.get("resourceVersion"):
+                metadata["resourceVersion"] = existing.metadata.resourceVersion
+            if inline_gated:
+                # A write that drops inline source is an inline change too, so the
+                # stored object decides as well as the submitted one.
+                require_inline_authoring_identity(impersonation, existing.to_dict().get("spec"))
 
         resource = await api_resource.replace(name=resource_name, body=body, namespace=namespace)
 
