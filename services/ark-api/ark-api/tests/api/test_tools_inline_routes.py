@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi.testclient import TestClient
+from kubernetes_asyncio.client.rest import ApiException
 
 os.environ["AUTH_MODE"] = "open"
 
@@ -48,6 +49,7 @@ class InlineRouteTestCase(unittest.TestCase):
 
     def tearDown(self):
         os.environ.pop("IMPERSONATION_ENABLED", None)
+        os.environ.pop("IMPERSONATION_FALLBACK", None)
         app.dependency_overrides.pop(get_impersonation_config, None)
 
     def as_user(self, username: str | None):
@@ -142,6 +144,22 @@ class TestTypedToolRoutes(InlineRouteTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         ark.tools.a_update.assert_awaited_once()
 
+
+    def test_denied_inline_write_is_not_retried_as_the_service_account(self):
+        # With IMPERSONATION_FALLBACK=true, handle_k8s_errors re-invokes the
+        # endpoint with impersonation=None after a 403. The guard must run
+        # again and refuse, rather than the write landing as ark-api's SA.
+        os.environ["IMPERSONATION_FALLBACK"] = "true"
+        self.as_user("alice")
+        ark = AsyncMock()
+        ark.tools.a_create = AsyncMock(side_effect=ApiException(status=403, reason="Forbidden"))
+
+        with patch("ark_api.api.v1.tools.with_ark_client") as ark_client:
+            ark_client.return_value.__aenter__.return_value = ark
+            response = self.client.post("/v1/tools", json={"name": "csv", "namespace": "default", "spec": INLINE_SPEC})
+
+        self.assertEqual(response.status_code, 403)
+        ark.tools.a_create.assert_awaited_once()
 
     def test_get_returns_the_inline_source(self):
         self.as_user("alice")
