@@ -16,3 +16,31 @@ XRAY-1051070 - CVE-2026-73086 / GHSA-xwg4-73v4-xw9w (nanoid integer overflow)
 - Verified at source, not just advisory data: nanoid 3.3.18 fillPool() still guards "if (bytes < 0) throw new RangeError", and nanoid()/random() feed it "(size |= 0)". The exploit input wraps to a negative value and is rejected before poolOffset is touched. Guard is unchanged since 3.3.12 (3.3.12->3.3.18 only relaxed the upper 1024 cap in the ESM build); not a regression. Matches OSV: affected = 3.3.0-3.3.11 and 4.0.0-5.1.10; 3.3.12-3.3.18 not affected.
 - Cannot upgrade to 5.1.11: nanoid is transitive, pulled only by postcss, which pins nanoid ^3.3.x (3.x line) even at its latest 8.5.26. nanoid 5.x is ESM-only and would break postcss's CommonJS require() and every Next.js/CLI build.
 - Remove this entry if Xray corrects its fixed-version metadata, or if nanoid moves onto a genuinely affected line.
+
+XRAY-1090872 - CVE-2026-93687 (braces@3.0.3)
+- Stack overflow in braces' recursive AST walkers, which lack depth guards: a deeply nested brace pattern under the character limit exhausts the call stack and crashes the process with an uncaught RangeError.
+- No fix available: 3.0.3 is the latest published release (https://github.com/micromatch/braces/issues/73 — upstream confirms no patched version exists yet).
+- ark-broker / ark-dashboard / ark-landing-page: braces is dev-only, pulled in transitively via micromatch/chokidar (file-watching and glob matching for Vite/Jest/ESLint), never invoked on attacker-controlled input in any deployed service.
+- docs: braces IS reachable from a production dependency here (nextra → fast-glob → micromatch → braces; nextra is listed under docs/package.json "dependencies", not devDependencies) — not exploitable for a different reason: docs/next.config.mjs sets `output: 'export'`, so docs ships as a fully static site with no Node.js server at request time. The glob only runs at build time over trusted repo content, never against external input.
+- Verified absent from ark-dashboard's actual runtime bundle: `find .next/standalone -path "*braces*"` returns nothing against a `output: 'standalone'` build, while it's present in the full build node_modules (control check passes) — Next.js's standalone trace only includes what the server entrypoint actually requires.
+- Remove this entry once micromatch/chokidar/nextra ship a release depending on a patched braces, or braces itself patches the recursion guard.
+
+XRAY-1092077 - CVE-2026-93690 (uri-js@4.4.1)
+- DoS in uri-js's removeDotSegments(): loops infinitely on a path segment starting with a Unicode line/paragraph separator, blocking the Node.js event loop until heap exhaustion.
+- No fix available: 4.4.1 is the latest published release.
+- Not runtime-exploitable in Ark: uri-js is pulled in transitively via ajv (JSON schema validation used by ESLint's own config validation and other build tooling — ajv/eslint are devDependencies in every package here), not invoked on attacker-controlled input by any deployed service. ark-broker's Dockerfile runs `npm ci --only=production` for its runtime image, excluding this chain entirely.
+- Verified absent from ark-dashboard's actual runtime bundle: `find .next/standalone -path "*uri-js*"` returns nothing against a `output: 'standalone'` build, while it's present in the full build node_modules (control check passes).
+- Remove this entry once ajv depends on a patched uri-js release, or uri-js itself patches removeDotSegments.
+
+XRAY-1092092 - CVE-2026-93749 (source-map-js@1.2.1)
+- DoS in source-map-js: fails to validate the per-section offset line value in indexed source maps, so an attacker-supplied source map with an extremely large offset causes synchronous event-loop blocking.
+- No fix available: 1.2.1 is the latest published release.
+- Not runtime-exploitable in Ark: source-map-js is pulled in transitively via postcss/magicast/css-tree/@tailwindcss/node (CSS/build-time source-map processing during `next build`/`docs build`), not something any deployed service parses from external input at runtime. docs uses `output: 'export'` (no server at all).
+- Build-verified, not just inferred: building ark-dashboard (`output: 'standalone'`) and inspecting the traced runtime bundle shows source-map-js is absent — `find .next/standalone -path "*source-map-js*"` returns nothing, while it is present in the full build node_modules (control check passes). The standalone trace pulls only the packages the server entrypoint actually requires.
+- Remove this entry once postcss/magicast/css-tree depend on a patched source-map-js release, or source-map-js itself adds offset validation.
+
+XRAY-1092096 - CVE-2026-93753 (deepmerge@4.3.1)
+- Prototype-poisoning in deepmerge's mergeObject(): fails to validate keys being written to the target object, letting a malicious source object in a merge operation inject properties onto the result's prototype.
+- No fix available: 4.3.1 is the latest published release.
+- Not runtime-exploitable in Ark: deepmerge is pulled in transitively via jest-config (test-runner configuration merging), a dev/test-only dependency. It isn't present in ark-dashboard's dependency tree at all; in ark-broker and ark-landing-page it's a devDependency-only path, and ark-broker's Dockerfile runs `npm ci --only=production` for its runtime image, excluding it from the deployed container.
+- Remove this entry once jest-config depends on a patched deepmerge release, or deepmerge itself validates merge keys.
