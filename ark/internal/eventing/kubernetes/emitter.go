@@ -6,39 +6,39 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/recorder"
 
 	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 )
 
 type KubernetesEventEmitter struct {
-	recorder record.EventRecorder
+	recorder recorder.EventRecorder
 }
 
-func NewKubernetesEventEmitter(recorder record.EventRecorder) eventing.EventEmitter {
+func NewKubernetesEventEmitter(rec recorder.EventRecorder) eventing.EventEmitter {
 	return &KubernetesEventEmitter{
-		recorder: recorder,
+		recorder: rec,
 	}
 }
 
 func (e *KubernetesEventEmitter) EmitNormal(ctx context.Context, obj runtime.Object, reason, message string) {
-	e.recorder.Event(obj, corev1.EventTypeNormal, reason, message)
+	e.recorder.Eventf(obj, nil, corev1.EventTypeNormal, reason, reason, "%s", message)
 }
 
 func (e *KubernetesEventEmitter) EmitWarning(ctx context.Context, obj runtime.Object, reason, message string) {
-	e.recorder.Event(obj, corev1.EventTypeWarning, reason, message)
+	e.recorder.Eventf(obj, nil, corev1.EventTypeWarning, reason, reason, "%s", message)
 }
 
 func (e *KubernetesEventEmitter) EmitStructured(ctx context.Context, obj runtime.Object, eventType, reason, message string, data any) {
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
-		e.recorder.Event(obj, eventType, reason, message)
+		e.recorder.Eventf(obj, nil, eventType, reason, reason, "%s", message)
 		return
 	}
 
 	eventAnnotations := map[string]string{
 		annotations.EventData: string(jsonBytes),
 	}
-	e.recorder.AnnotatedEventf(obj, eventAnnotations, eventType, reason, "%s", message)
+	e.recorder.AnnotatedEventf(obj, nil, eventAnnotations, eventType, reason, reason, "%s", message)
 }

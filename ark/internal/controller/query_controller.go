@@ -145,6 +145,7 @@ type QueryReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=memories,verbs=get
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=arkconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;list;watch;patch
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch;update
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
 
 func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

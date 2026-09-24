@@ -30,7 +30,7 @@ type Provider struct {
 }
 
 func NewProvider(mgr ctrl.Manager, k8sClient client.Client) *Provider {
-	recorder := mgr.GetEventRecorderFor("ark-controller")
+	recorder := mgr.GetEventRecorder("ark-controller")
 	k8sEmitter := k8seventing.NewKubernetesEventEmitter(recorder)
 
 	operationEmitter := k8sEmitter
