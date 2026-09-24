@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"mckinsey.com/ark/internal/apiserver/registry"
+	"mckinsey.com/ark/internal/inlinetools"
 	"mckinsey.com/ark/internal/validation"
 )
 
@@ -15,7 +16,7 @@ func TestResourceStorage_WrapsEveryResourceAndItsStatus(t *testing.T) {
 	v := validation.NewValidator(lookup)
 
 	for _, resources := range [][]ResourceDef{V1Alpha1Resources, V1PreAlpha1Resources} {
-		got := resourceStorage(backend, NewRegistryTypeConverter(), resources, v, lookup)
+		got := resourceStorage(backend, NewRegistryTypeConverter(), resources, v, lookup, inlinetools.Reject("test"))
 		if len(got) != 2*len(resources) {
 			t.Fatalf("storage map has %d entries, want %d", len(got), 2*len(resources))
 		}
