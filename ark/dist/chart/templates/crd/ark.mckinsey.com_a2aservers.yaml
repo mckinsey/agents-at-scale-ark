@@ -33,6 +33,10 @@ spec:
       jsonPath: .status.lastResolvedAddress
       name: Address
       type: string
+    - description: Endpoint used for A2A requests
+      jsonPath: .status.lastResolvedEndpoint
+      name: Endpoint
+      type: string
     - description: Age
       jsonPath: .metadata.creationTimestamp
       name: Age
@@ -137,8 +141,36 @@ spec:
                         type: object
                     type: object
                 type: object
+              allowedEndpointHosts:
+                description: |-
+                  AllowedEndpointHosts lists hosts the agent card may redirect requests to
+                  when endpointResolution is "cardUrl". The origin of spec.address is always
+                  allowed. Entries are hostnames, optionally prefixed with "*." to match
+                  one level of subdomain and optionally suffixed with ":port". An entry
+                  without a port matches any port on that host. A downgrade from https to
+                  http is never allowed.
+                items:
+                  maxLength: 259
+                  pattern: ^(\*\.)?[a-zA-Z0-9]([-a-zA-Z0-9]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([-a-zA-Z0-9]*[a-zA-Z0-9])?)*(:[0-9]{1,5})?$
+                  type: string
+                type: array
               description:
                 description: Description of the A2A server
+                type: string
+              endpointResolution:
+                default: address
+                description: |-
+                  EndpointResolution controls which URL Ark calls for A2A requests.
+                  "address" uses spec.address unchanged. "cardPath" keeps the scheme, host
+                  and port from spec.address and takes only the path from the agent card.
+                  "cardUrl" uses the agent card URL as written, which requires the card
+                  origin (scheme, host and port) to match spec.address or the card host to
+                  be listed in allowedEndpointHosts. In both card modes the card URL must be
+                  an absolute http or https URL without userinfo.
+                enum:
+                - address
+                - cardPath
+                - cardUrl
                 type: string
               headers:
                 description: Headers for authentication and other metadata
@@ -290,6 +322,17 @@ spec:
               lastResolvedAddress:
                 description: LastResolvedAddress contains the last resolved address
                   value
+                type: string
+              lastResolvedEndpoint:
+                description: |-
+                  LastResolvedEndpoint is the URL Ark sends A2A requests to. It equals
+                  LastResolvedAddress unless spec.endpointResolution selects the agent
+                  card URL and that URL is accepted.
+                type: string
+              rejectedEndpoint:
+                description: |-
+                  RejectedEndpoint records an agent card URL that was not accepted, so the
+                  requests continue to go to LastResolvedAddress.
                 type: string
             type: object
         type: object
