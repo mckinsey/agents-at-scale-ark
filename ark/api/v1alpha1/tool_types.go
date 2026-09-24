@@ -81,6 +81,19 @@ type ToolAnnotations struct {
 	Title string `json:"title,omitempty"`
 }
 
+// InlineSpec holds a short script executed by an Ark-managed runner.
+type InlineSpec struct {
+	// Script source. Limited to 65536 UTF-8 bytes; use an MCPServer for larger tools.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=65536
+	Source string `json:"source"`
+	// Interpreter for the script. There is no default and no shebang dispatch.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=bash;python;node;ts
+	Language string `json:"language"`
+}
+
 type ToolSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=http;mcp;agent;team;builtin
@@ -108,6 +121,11 @@ type ToolSpec struct {
 	// This field is required only if Type = "builtin".
 	// +kubebuilder:validation:Optional
 	Builtin *BuiltinToolRef `json:"builtin,omitempty"`
+	// Inline-specific configuration for inline script tools.
+	// This field is required only if Type = "inline".
+	// +kubebuilder:validation:Optional
+	Inline *InlineSpec `json:"inline,omitempty"`
+
 	// +kubebuilder:validation:Optional
 	// Approval configuration applied to every agent that uses this tool. An agent
 	// cannot unset Required or narrow ArgumentMatches, but Timeout and OnTimeout are
@@ -140,16 +158,44 @@ const (
 	ToolTypeAgent   = "agent"
 	ToolTypeTeam    = "team"
 	ToolTypeBuiltin = "builtin"
+	ToolTypeInline  = "inline"
 )
 
 // Tool state constants
 const (
 	ToolStateReady = "Ready"
+	// ToolStatePending means the Tool is not usable yet. Only inline Tools use it.
+	ToolStatePending = "Pending"
+)
+
+// Tool condition type and the closed set of reasons for it.
+const (
+	ToolConditionAvailable = "Available"
+
+	ToolReasonAvailable            = "Available"
+	ToolReasonRuntimeNotInstalled  = "RuntimeNotInstalled"
+	ToolReasonConflictingPolicy    = "ConflictingNetworkPolicy"
+	ToolReasonActivatorUnavailable = "ActivatorUnavailable"
+	ToolReasonProvisioningFailed   = "ProvisioningFailed"
+)
+
+// Inline authorship annotations, stamped by admission and not settable by requesters.
+const (
+	AnnotationInlineAuthoredBy = "ark.mckinsey.com/inline-authored-by"
+	AnnotationInlineAuthoredAt = "ark.mckinsey.com/inline-authored-at"
 )
 
 type ToolStatus struct {
 	State   string `json:"state,omitempty"`
 	Message string `json:"message,omitempty"`
+	// Internal activator address for inline tools. Unusable unless the Available
+	// condition is True for the current metadata.generation.
+	// +kubebuilder:validation:Optional
+	ResolvedAddress string `json:"resolvedAddress,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -209,6 +255,11 @@ func (in *ToolSpec) DeepCopyInto(out *ToolSpec) {
 		in, out := &in.Builtin, &out.Builtin
 		*out = new(BuiltinToolRef)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.Inline != nil {
+		in, out := &in.Inline, &out.Inline
+		*out = new(InlineSpec)
+		**out = **in
 	}
 	// Hand-written, so controller-gen skips ToolSpec entirely: a new pointer field
 	// has to be added here or DeepCopy() aliases it and a copy can mutate the gate
