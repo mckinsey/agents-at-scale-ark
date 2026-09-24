@@ -214,6 +214,25 @@ describe('WorkflowNodeLogs', () => {
     expect(container.scrollTop).toBe(2000);
   });
 
+  it('restores the scroll position after a collapse and re-expand', async () => {
+    vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('a\nb\nc'));
+
+    const { unmount } = await renderLogs();
+    const container = screen.getByTestId('workflow-node-logs-scroll');
+    stubScrollMetrics(container, 5000, 100);
+    container.scrollTop = 1800;
+    await act(async () => {
+      container.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+    unmount();
+
+    await renderLogs();
+
+    expect(screen.getByTestId('workflow-node-logs-scroll').scrollTop).toBe(
+      1800,
+    );
+  });
+
   it('offers the Argo UI link when the logs cannot be loaded', async () => {
     vi.mocked(fetchNodeLogWindow).mockRejectedValue(new Error('404'));
 

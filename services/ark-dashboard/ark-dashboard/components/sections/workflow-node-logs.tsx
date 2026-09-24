@@ -18,10 +18,12 @@ import type { LogWindowTarget } from '@/lib/services/workflow-logs';
 import {
   ensureLoaded,
   getNodeLogBuffer,
+  getNodeLogScrollState,
   getServerNodeLogBuffer,
   loadOlder,
   logBufferKey,
   pollTail,
+  setNodeLogScrollState,
   subscribeToNodeLogs,
 } from '@/lib/services/workflow-logs-store';
 
@@ -42,6 +44,12 @@ export function WorkflowNodeLogs({
   const key = useMemo(() => logBufferKey(target), [target]);
   const containerRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const savedScrollState = getNodeLogScrollState(key);
+  const restoreScrollTopRef = useRef(
+    savedScrollState && !savedScrollState.stickToBottom
+      ? savedScrollState.scrollTop
+      : undefined,
+  );
   const restoreOffsetRef = useRef<number | null>(null);
   const pageCountRef = useRef(0);
   const wasRunningRef = useRef(isRunning);
@@ -80,6 +88,16 @@ export function WorkflowNodeLogs({
     void pollTail(key, targetRef.current);
   }, [isRunning, buffer.loaded, key]);
 
+  const rememberScroll = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    setNodeLogScrollState(key, {
+      scrollTop: container.scrollTop,
+      stickToBottom: stickToBottomRef.current,
+    });
+  }, [key]);
+
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -91,13 +109,22 @@ export function WorkflowNodeLogs({
     if (restoreOffset !== null) {
       restoreOffsetRef.current = null;
       container.scrollTop = container.scrollHeight - restoreOffset;
+      rememberScroll();
+      return;
+    }
+
+    const restoreScrollTop = restoreScrollTopRef.current;
+    if (restoreScrollTop !== undefined && buffer.pages.length > 0) {
+      restoreScrollTopRef.current = undefined;
+      container.scrollTop = restoreScrollTop;
       return;
     }
 
     if (previousPageCount === 0 || stickToBottomRef.current) {
       container.scrollTop = container.scrollHeight;
+      rememberScroll();
     }
-  }, [buffer.pages]);
+  }, [buffer.pages, rememberScroll]);
 
   const requestOlder = useCallback(() => {
     const container = containerRef.current;
@@ -114,6 +141,7 @@ export function WorkflowNodeLogs({
     stickToBottomRef.current =
       container.scrollHeight - container.scrollTop - container.clientHeight <=
       STICK_TO_BOTTOM_THRESHOLD_PX;
+    rememberScroll();
 
     if (
       container.scrollTop <= SCROLL_TOP_THRESHOLD_PX &&
@@ -122,7 +150,7 @@ export function WorkflowNodeLogs({
     ) {
       requestOlder();
     }
-  }, [buffer.hasMoreBefore, buffer.loadingOlder, requestOlder]);
+  }, [buffer.hasMoreBefore, buffer.loadingOlder, rememberScroll, requestOlder]);
 
   if (buffer.error && buffer.pages.length === 0) {
     return (

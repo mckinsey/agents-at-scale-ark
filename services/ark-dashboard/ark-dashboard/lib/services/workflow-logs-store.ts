@@ -28,7 +28,13 @@ const EMPTY_BUFFER: NodeLogBuffer = {
   error: null,
 };
 
+export interface NodeLogScrollState {
+  scrollTop: number;
+  stickToBottom: boolean;
+}
+
 const buffers = new Map<string, NodeLogBuffer>();
+const scrollStates = new Map<string, NodeLogScrollState>();
 const listeners = new Map<string, Set<() => void>>();
 const inFlight = new Set<string>();
 
@@ -65,6 +71,7 @@ function evictLeastRecentlyUsed() {
     if (buffers.size <= MAX_CACHED_BUFFERS) return;
     if (!listeners.has(key) && !inFlight.has(key)) {
       buffers.delete(key);
+      scrollStates.delete(key);
     }
   }
 }
@@ -211,8 +218,22 @@ export async function pollTail(
   }
 }
 
+export function getNodeLogScrollState(
+  key: string,
+): NodeLogScrollState | undefined {
+  return scrollStates.get(key);
+}
+
+export function setNodeLogScrollState(
+  key: string,
+  state: NodeLogScrollState,
+): void {
+  scrollStates.set(key, state);
+}
+
 export function resetNodeLogStore(): void {
   buffers.clear();
+  scrollStates.clear();
   listeners.clear();
   inFlight.clear();
 }
