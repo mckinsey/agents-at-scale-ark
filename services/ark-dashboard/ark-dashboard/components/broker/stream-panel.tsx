@@ -10,7 +10,6 @@ import {
   useState,
 } from 'react';
 
-import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { ChevronDown, ChevronRight } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -67,7 +66,6 @@ interface StreamPanelProps {
   readonly isConnected: boolean;
   readonly autoScroll: boolean;
   readonly onAutoScrollChange: (next: boolean) => void;
-  readonly onPurge: () => void;
   readonly containerRef: React.RefObject<HTMLDivElement | null>;
   readonly error?: string | null;
   readonly children: ReactNode;
@@ -78,13 +76,11 @@ export function StreamPanel({
   isConnected,
   autoScroll,
   onAutoScrollChange,
-  onPurge,
   containerRef,
   error,
   children,
 }: Readonly<StreamPanelProps>) {
   const switchId = useId();
-  const [isPurgeDialogOpen, setIsPurgeDialogOpen] = useState(false);
 
   return (
     <div className="border-stroke-divider flex min-h-0 flex-1 flex-col gap-2 border p-5">
@@ -105,21 +101,6 @@ export function StreamPanel({
           </span>
         </div>
         <div className="flex items-center justify-end gap-5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-fg-secondary border-[0.5px]"
-            onClick={() => setIsPurgeDialogOpen(true)}>
-            Purge
-          </Button>
-          <ConfirmationDialog
-            open={isPurgeDialogOpen}
-            onOpenChange={setIsPurgeDialogOpen}
-            title={`Purge ${title}?`}
-            description={`This permanently deletes every ${title} record held by the broker for this memory. This cannot be undone.`}
-            confirmText="Purge"
-            onConfirm={onPurge}
-          />
           <div className="flex items-center gap-3">
             <Switch
               id={switchId}
