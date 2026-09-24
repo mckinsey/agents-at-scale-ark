@@ -11,6 +11,22 @@ spec:
     selector that fark, ark-cli and ark-api rely on — so the migration cannot
     silently break event consumers.
   steps:
+  - name: create-agent
+    try:
+    # The Team validating webhook requires each member agent to exist, so create
+    # the agent first. Its modelRef may point at a non-existent model; the agent
+    # webhook still admits it (availability is resolved later by the controller).
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: events-migration-agent
+          spec:
+            prompt: You are a test agent.
+            modelRef:
+              name: events-migration-model
+
   - name: create-team
     try:
     - apply:
