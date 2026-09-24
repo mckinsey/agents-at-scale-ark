@@ -33,6 +33,7 @@ resources:
 - tool_admin_role.yaml
 - tool_editor_role.yaml
 - tool_viewer_role.yaml
+- inline_tool_author_role.yaml
 - model_admin_role.yaml
 - model_editor_role.yaml
 - model_viewer_role.yaml

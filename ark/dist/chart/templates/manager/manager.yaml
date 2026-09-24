@@ -47,6 +47,8 @@ spec:
             value: "ark-controller"
           - name: ARK_MEMORY_HTTP_TIMEOUT_SECONDS
             value: "30"
+          - name: ARK_INLINE_TOOLS_ENABLED
+            value: {{ include "chart.inlineToolsEnabled" . | quote }}
           {{- with .Values.controllerManager.watchNamespaces }}
           - name: ARK_WATCH_NAMESPACES
             value: {{ join "," . | quote }}
