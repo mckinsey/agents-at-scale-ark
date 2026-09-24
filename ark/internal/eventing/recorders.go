@@ -69,6 +69,8 @@ type MCPServerRecorder interface {
 type TeamRecorder interface {
 	OperationTracker
 	TokenCollector
+	Created(ctx context.Context, obj runtime.Object)
+	StatusChanged(ctx context.Context, obj runtime.Object, message string)
 }
 
 type QueryRecorder interface {

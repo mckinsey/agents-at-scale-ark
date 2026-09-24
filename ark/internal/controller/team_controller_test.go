@@ -9,12 +9,12 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 )
 
 var _ = Describe("Team Controller", func() {
@@ -63,7 +63,7 @@ var _ = Describe("Team Controller", func() {
 			controllerReconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -80,7 +80,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			team := &arkv1alpha1.Team{
@@ -106,7 +106,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			agentName := "available-agent"
@@ -160,7 +160,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			teamName := "team-with-missing-agent"
@@ -189,7 +189,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			agentName := "agent-no-condition"
@@ -235,7 +235,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			agentName := "unavailable-agent"
@@ -289,7 +289,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			agent1Name := "agent-one"
@@ -388,7 +388,7 @@ var _ = Describe("Team Controller IsNotFound", func() {
 		controllerReconciler := &TeamReconciler{
 			Client:   k8sClient,
 			Scheme:   k8sClient.Scheme(),
-			Recorder: record.NewFakeRecorder(10),
+			Eventing: eventnoop.NewProvider(),
 		}
 
 		By("reconciling to initialize status")
