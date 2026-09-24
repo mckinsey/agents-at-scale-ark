@@ -391,4 +391,6 @@ The `/sessions` endpoint provides a live, event-sourced index of active sessions
 | GET | `/sessions?watch=true&session_id=X` | SSE stream filtered to one session |
 | DELETE | `/sessions/queries/{queryId}` | Remove one query from every session holding it |
 
+Clearing memory does not touch this index. `DELETE /conversations` — the dashboard's **Reset memory** — empties the message store and leaves every session, query and conversation summary standing, because a session's aggregates are folded from its own query rows rather than from messages. Removing a query from the index is what `DELETE /sessions/queries/{queryId}` above does, and the controller's finalizer calls it when a `Query` is deleted.
+
 Set `SESSIONS_FILE_PATH` to enable persistence to disk, or enable the [Sessions backend (Postgres)](#sessions-backend-postgres) to persist sessions in Postgres and share them across broker replicas.
