@@ -760,7 +760,9 @@ LOG_WINDOW_MAX_LINES_LIMIT = 10000
 LOG_WINDOW_DEFAULT_MAX_BYTES = 1024 * 1024
 LOG_WINDOW_MAX_BYTES_LIMIT = 16 * 1024 * 1024
 LOG_WINDOW_SINCE_SLACK_SECONDS = 2
-LOG_WINDOW_READ_OVERSHOOT_FACTOR = 8
+LOG_WINDOW_TAIL_GROWTH_FACTOR = 8
+LOG_WINDOW_TAIL_MAX_ATTEMPTS = 5
+LOG_WINDOW_HEAD_PROBE_BYTES = 64
 POD_DELETED_MESSAGE = (
     "Pod has been deleted. Logs are no longer available.\n\n"
     "To preserve logs, enable 'archiveLogs: true' in your workflow spec "
@@ -809,6 +811,10 @@ class _LogWindowCollector:
     keep the newest lines of the window so they sit flush against what the
     client already holds, while append pages keep the oldest new lines so the
     client's timestamp cursor advances without leaving a gap.
+
+    ``head_timestamp`` is the timestamp of the first line still retained by the
+    kubelet, which is how a page recognises that it has reached the start of
+    the log.
     """
 
     def __init__(
@@ -818,38 +824,47 @@ class _LogWindowCollector:
         min_timestamp: Optional[str],
         max_timestamp: Optional[str],
         keep_newest: bool,
-        max_read_bytes: Optional[int] = None,
+        head_timestamp: Optional[str] = None,
     ):
         self.read_limit = read_limit
         self.max_bytes = max_bytes
-        self.max_read_bytes = max_read_bytes
         self.min_timestamp = _normalize_log_timestamp(min_timestamp) if min_timestamp else None
         self.max_timestamp = _normalize_log_timestamp(max_timestamp) if max_timestamp else None
         self.keep_newest = keep_newest
+        self.head_timestamp = _normalize_log_timestamp(head_timestamp) if head_timestamp else None
         self.lines: deque[str] = deque()
         self.timestamps: deque[Optional[str]] = deque()
         self.admitted = 0
         self.lines_read = 0
         self.bytes_read = 0
         self.dropped_from_front = 0
-        self.over_read_budget = False
         self.reached_known_lines = False
+        self.first_read_timestamp: Optional[str] = None
         self.byte_count = 0
         self.truncated = False
 
     @property
     def done(self) -> bool:
-        if self.over_read_budget:
-            return True
         if self.keep_newest:
-            return self.lines_read >= self.read_limit
+            return self.max_timestamp is not None and self.reached_known_lines
         return self.admitted >= self.read_limit or self.truncated
 
     @property
-    def average_line_bytes(self) -> int:
-        if self.lines_read == 0:
-            return 0
-        return self.bytes_read // self.lines_read
+    def range_reaches_log_start(self) -> bool:
+        if self.head_timestamp is None or self.first_read_timestamp is None:
+            return False
+        return _normalize_log_timestamp(self.first_read_timestamp) <= self.head_timestamp
+
+    @property
+    def page_is_whole(self) -> bool:
+        """Whether the oldest served line is known to be a complete line.
+
+        The kubelet counts 16KB file chunks rather than logical lines, so the
+        oldest line of a tail range can be the tail end of a longer line. A
+        line is known to be whole once an older line was read and dropped, or
+        once the range reaches the start of the log.
+        """
+        return self.dropped_from_front > 0 or self.range_reaches_log_start
 
     def _within_cursors(self, timestamp: Optional[str]) -> bool:
         if self.min_timestamp is not None:
@@ -863,10 +878,10 @@ class _LogWindowCollector:
 
     def add(self, raw_line: str) -> None:
         timestamp, text = _split_log_line(raw_line)
+        if self.first_read_timestamp is None and timestamp is not None:
+            self.first_read_timestamp = timestamp
         self.lines_read += 1
         self.bytes_read += len(raw_line.encode("utf-8")) + 1
-        if self.max_read_bytes is not None and self.bytes_read > self.max_read_bytes:
-            self.over_read_budget = True
 
         if not self._within_cursors(timestamp):
             return
@@ -894,16 +909,19 @@ class _LogWindowCollector:
             self.byte_count -= len(dropped.encode("utf-8")) + 1
             self.dropped_from_front += 1
 
+        while self.keep_newest and len(self.lines) > self.read_limit:
+            dropped = self.lines.popleft()
+            self.timestamps.popleft()
+            self.byte_count -= len(dropped.encode("utf-8")) + 1
+            self.admitted -= 1
+            self.dropped_from_front += 1
+
     def build(self, expect_more_before: bool) -> LogWindow:
         lines = list(self.lines)
         known_timestamps = [value for value in self.timestamps if value]
         content = "\n".join(lines)
-        has_more_before = (
-            expect_more_before
-            and bool(lines)
-            and not self.reached_known_lines
-            and (self.lines_read >= self.read_limit or self.dropped_from_front > 0)
-        )
+        reached_log_start = self.dropped_from_front == 0 and self.range_reaches_log_start
+        has_more_before = expect_more_before and bool(lines) and not reached_log_start
 
         return LogWindow(
             content=content,
@@ -944,6 +962,29 @@ async def _collect_log_window(response, collector: _LogWindowCollector) -> None:
                 return
     if pending and not collector.done:
         collector.add(pending.decode("utf-8", errors="replace"))
+
+
+async def _read_log_head_timestamp(
+    core_v1: CoreV1Api,
+    namespace: str,
+    pod_name: str,
+    container: Optional[str],
+) -> Optional[str]:
+    """Timestamp of the oldest line the kubelet still retains."""
+    response = await _open_pod_log_stream(
+        core_v1,
+        namespace,
+        pod_name,
+        container=container,
+        limit_bytes=LOG_WINDOW_HEAD_PROBE_BYTES,
+    )
+    try:
+        head = await response.content.read(LOG_WINDOW_HEAD_PROBE_BYTES)
+    finally:
+        response.release()
+
+    timestamp, _ = _split_log_line(head.decode("utf-8", errors="replace"))
+    return timestamp
 
 
 async def _measure_boundary_line_bytes(
@@ -1051,27 +1092,29 @@ async def _read_history_window(
     before_timestamp: Optional[str],
     max_bytes: int,
 ) -> LogWindow:
-    """Read the page of lines sitting just older than ``skip_tail_lines``.
+    """Read the page of lines sitting just older than the client's cursor.
 
-    The page has to end flush against the lines the client already holds, so
-    the number of lines requested is sized up front from the line at that
-    boundary. A badly wrong estimate is caught by the read budget and retried
-    once with the line size actually observed.
+    ``tail_lines`` is only an estimate of how far back to start: the kubelet
+    counts 16KB file chunks, so a log with very long lines needs far more of
+    them than it has lines. ``before_timestamp`` is the real cursor, and the
+    request is retried with a larger tail until the page it produces is both
+    non-empty and known to start on a line boundary.
     """
+    head_timestamp = await _read_log_head_timestamp(core_v1, namespace, pod_name, container)
     line_bytes = await _measure_boundary_line_bytes(
         core_v1, namespace, pod_name, container, skip_tail_lines, max_bytes
     )
     read_limit = _lines_within_budget(line_bytes, max_bytes, max_lines)
-    max_read_bytes = max_bytes * LOG_WINDOW_READ_OVERSHOOT_FACTOR
+    tail_lines = skip_tail_lines + read_limit + 1
+    window = None
 
-    for attempt in range(2):
-        is_last_attempt = attempt == 1
+    for attempt in range(LOG_WINDOW_TAIL_MAX_ATTEMPTS):
         response = await _open_pod_log_stream(
             core_v1,
             namespace,
             pod_name,
             container=container,
-            tail_lines=skip_tail_lines + read_limit,
+            tail_lines=tail_lines,
         )
         collector = _LogWindowCollector(
             read_limit,
@@ -1079,19 +1122,21 @@ async def _read_history_window(
             None,
             before_timestamp,
             keep_newest=True,
-            max_read_bytes=None if is_last_attempt else max_read_bytes,
+            head_timestamp=head_timestamp,
         )
         try:
             await _collect_log_window(response, collector)
         finally:
             response.release()
 
-        if not collector.over_read_budget or is_last_attempt:
-            return collector.build(expect_more_before=True)
+        window = collector.build(expect_more_before=True)
+        is_last_attempt = attempt == LOG_WINDOW_TAIL_MAX_ATTEMPTS - 1
+        if is_last_attempt or collector.page_is_whole:
+            return window
 
-        read_limit = _lines_within_budget(collector.average_line_bytes, max_bytes, read_limit)
+        tail_lines *= LOG_WINDOW_TAIL_GROWTH_FACTOR
 
-    raise RuntimeError("log window read did not converge")
+    return window
 
 
 async def _resolve_workflow_pod_name(

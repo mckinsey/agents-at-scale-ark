@@ -1559,6 +1559,11 @@ class FakeLogStreamContent:
         self.data = data
         self.chunk_size = chunk_size
 
+    async def read(self, size):
+        data = self.data[:size]
+        self.data = self.data[size:]
+        return data
+
     def iter_chunked(self, _size):
         async def generator():
             for start in range(0, len(self.data), self.chunk_size):
@@ -1594,9 +1599,45 @@ def make_log_stream_reader(total_lines: int, streams: list, line_bytes: int = 0)
         tail_lines = kwargs.get("tail_lines")
         if tail_lines is not None:
             lines = lines[-tail_lines:]
-        stream = FakeLogStream(b"\n".join(lines) + b"\n")
+        data = b"\n".join(lines) + b"\n"
+        limit_bytes = kwargs.get("limit_bytes")
+        if limit_bytes is not None:
+            data = data[:limit_bytes]
+        stream = FakeLogStream(data)
         streams.append((kwargs, stream))
         return stream
+    return reader
+
+
+CRI_CHUNK_BYTES = 16384
+
+
+def make_chunked_log_stream_reader(lines, streams):
+    """Return a reader whose tail_lines counts 16KB CRI chunks, not lines."""
+    chunks = []
+    for timestamp, text in lines:
+        for start in range(0, len(text), CRI_CHUNK_BYTES):
+            chunks.append((timestamp, text[start:start + CRI_CHUNK_BYTES]))
+
+    async def reader(**kwargs):
+        tail_lines = kwargs.get("tail_lines")
+        selected = chunks[-tail_lines:] if tail_lines is not None else list(chunks)
+        parts = []
+        previous = None
+        for timestamp, text in selected:
+            if timestamp == previous:
+                parts[-1] += text
+            else:
+                parts.append(f"{timestamp} {text}")
+                previous = timestamp
+        data = ("\n".join(parts) + "\n").encode("utf-8") if parts else b""
+        limit_bytes = kwargs.get("limit_bytes")
+        if limit_bytes is not None:
+            data = data[:limit_bytes]
+        stream = FakeLogStream(data)
+        streams.append((kwargs, stream))
+        return stream
+
     return reader
 
 
@@ -1633,8 +1674,10 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         self.assertEqual(lines[-1], "line 2499")
         self.assertTrue(body["has_more_before"])
         self.assertFalse(body["truncated"])
-        self.assertEqual(streams[0][0]["tail_lines"], 1)
-        self.assertEqual(streams[-1][0]["tail_lines"], 1000)
+        self.assertEqual(streams[0][0]["limit_bytes"], 64)
+        self.assertNotIn("tail_lines", streams[0][0])
+        self.assertEqual(streams[1][0]["tail_lines"], 1)
+        self.assertEqual(streams[-1][0]["tail_lines"], 1001)
         self.assertTrue(all(stream.released for _, stream in streams))
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
@@ -1688,7 +1731,47 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         self.assertTrue(second["has_more_before"])
         self.assertNotEqual(first["first_timestamp"], second["first_timestamp"])
         self.assertLess(second["first_timestamp"], first["first_timestamp"])
-        self.assertLessEqual(max(stream[0]["tail_lines"] for stream in streams), 2)
+        self.assertLessEqual(max(stream[0].get("tail_lines", 0) for stream in streams), 3)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_chunked_long_lines_page_as_whole_lines(self, mock_core_v1_cls, mock_api_client):
+        """Lines split into several CRI chunks still page one whole line at a time."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        lines = [
+            (f"2024-01-01T00:00:0{index}.00000000{index}Z", chr(ord("a") + index) * 40000)
+            for index in range(4)
+        ]
+        mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod_log = make_chunked_log_stream_reader(lines, [])
+        mock_core_v1_cls.return_value = mock_core_v1
+
+        seen = []
+        skip = 0
+        before = None
+        for _ in range(len(lines) + 1):
+            query = f"max_lines=1000&max_bytes=50000&skip_tail_lines={skip}"
+            if before:
+                query += f"&before_timestamp={before}"
+            body = self.client.get(
+                f"/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window?{query}"
+            ).json()
+            seen.append(body)
+            if not body["has_more_before"]:
+                break
+            skip += body["line_count"]
+            before = body["first_timestamp"]
+
+        self.assertEqual(len(seen), 4)
+        self.assertFalse(seen[-1]["has_more_before"])
+        for index, body in enumerate(seen):
+            self.assertEqual(body["line_count"], 1)
+            self.assertEqual(body["first_timestamp"], lines[3 - index][0])
+
+        for index, body in enumerate(seen[:-1]):
+            self.assertEqual(body["content"], lines[3 - index][1])
+
+        self.assertTrue(lines[0][1].endswith(seen[-1]["content"]))
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
@@ -1762,7 +1845,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
             "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
         ).json()
 
-        self.assertTrue(streams[0][0]["timestamps"])
+        self.assertTrue(all(stream[0]["timestamps"] for stream in streams))
         self.assertEqual(body["content"], "line 0\nline 1\nline 2")
         self.assertEqual(body["first_timestamp"], "2024-01-01T00:00:00.000000000Z")
 
