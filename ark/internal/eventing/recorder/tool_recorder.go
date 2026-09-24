@@ -1,6 +1,10 @@
 package recorder
 
 import (
+	"context"
+
+	"k8s.io/apimachinery/pkg/runtime"
+
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/eventing/recorder/operations"
 )
@@ -15,4 +19,8 @@ func NewToolRecorder(emitter, operationEmitter eventing.EventEmitter) eventing.T
 		OperationTracker: operations.NewOperationTracker(operationEmitter),
 		emitter:          emitter,
 	}
+}
+
+func (t *toolRecorder) InlineSourceChanged(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitNormal(ctx, obj, "InlineSourceChanged", reason)
 }
