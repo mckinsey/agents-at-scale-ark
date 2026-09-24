@@ -28,6 +28,7 @@ function windowOf(
   overrides: Partial<{
     has_more_before: boolean;
     truncated: boolean;
+    first_timestamp: string | null;
     last_timestamp: string | null;
   }> = {},
 ) {
@@ -81,6 +82,24 @@ describe('workflow log store', () => {
     expect(vi.mocked(fetchNodeLogWindow).mock.calls[1][1]).toMatchObject({
       skipTailLines: 2,
     });
+  });
+
+  it('sends the oldest timestamp as the before cursor when paging older', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(
+        windowOf('c\nd', { has_more_before: true, first_timestamp: 't3' }),
+      )
+      .mockResolvedValueOnce(
+        windowOf('a\nb', { has_more_before: true, first_timestamp: 't1' }),
+      );
+
+    await ensureLoaded(key, target);
+    await loadOlder(key, target);
+
+    expect(vi.mocked(fetchNodeLogWindow).mock.calls[1][1]).toMatchObject({
+      beforeTimestamp: 't3',
+    });
+    expect(getNodeLogBuffer(key).oldestTimestamp).toBe('t1');
   });
 
   it('does not page past the start of the log', async () => {

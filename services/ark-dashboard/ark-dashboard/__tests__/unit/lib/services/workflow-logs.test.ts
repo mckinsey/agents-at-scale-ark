@@ -73,6 +73,30 @@ describe('workflowLogsService', () => {
     const [, options] = vi.mocked(apiClient.get).mock.calls[0];
     expect(options?.params).not.toHaveProperty('skip_tail_lines');
     expect(options?.params).not.toHaveProperty('since_timestamp');
+    expect(options?.params).not.toHaveProperty('before_timestamp');
+  });
+
+  it('sends the before cursor when paging backwards', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce(window);
+
+    await workflowLogsService.getPodLogWindow('test-namespace', 'pod-1', {
+      maxLines: 100,
+      maxBytes: 1024,
+      skipTailLines: 100,
+      beforeTimestamp: '2024-01-01T00:00:01Z',
+    });
+
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/v1/resources/api/v1/namespaces/test-namespace/pods/pod-1/log/window',
+      {
+        params: {
+          max_lines: 100,
+          max_bytes: 1024,
+          skip_tail_lines: 100,
+          before_timestamp: '2024-01-01T00:00:01Z',
+        },
+      },
+    );
   });
 });
 

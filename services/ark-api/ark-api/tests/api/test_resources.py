@@ -1580,16 +1580,17 @@ class FakeLogStream:
 
 def build_log_bytes(total_lines: int, text: str = "line") -> bytes:
     lines = [
-        f"2024-01-01T00:00:{index % 60:02d}.{index:09d}Z {text} {index}"
+        f"2024-01-01T{index // 3600:02d}:{index // 60 % 60:02d}:{index % 60:02d}.{index:09d}Z {text} {index}"
         for index in range(total_lines)
     ]
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def make_log_stream_reader(total_lines: int, streams: list):
+def make_log_stream_reader(total_lines: int, streams: list, line_bytes: int = 0):
     """Return a read_namespaced_pod_log stub honouring tail_lines."""
     async def reader(**kwargs):
-        lines = build_log_bytes(total_lines).split(b"\n")[:-1]
+        text = "x" * line_bytes if line_bytes else "line"
+        lines = build_log_bytes(total_lines, text).split(b"\n")[:-1]
         tail_lines = kwargs.get("tail_lines")
         if tail_lines is not None:
             lines = lines[-tail_lines:]
@@ -1606,10 +1607,10 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         from ark_api.main import app
         self.client = TestClient(app)
 
-    def _mock_core_v1(self, mock_core_v1_cls, total_lines):
+    def _mock_core_v1(self, mock_core_v1_cls, total_lines, line_bytes=0):
         streams = []
         mock_core_v1 = AsyncMock()
-        mock_core_v1.read_namespaced_pod_log = make_log_stream_reader(total_lines, streams)
+        mock_core_v1.read_namespaced_pod_log = make_log_stream_reader(total_lines, streams, line_bytes)
         mock_core_v1_cls.return_value = mock_core_v1
         return mock_core_v1, streams
 
@@ -1632,8 +1633,9 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         self.assertEqual(lines[-1], "line 2499")
         self.assertTrue(body["has_more_before"])
         self.assertFalse(body["truncated"])
-        self.assertEqual(streams[0][0]["tail_lines"], 1000)
-        self.assertTrue(streams[0][1].released)
+        self.assertEqual(streams[0][0]["tail_lines"], 1)
+        self.assertEqual(streams[-1][0]["tail_lines"], 1000)
+        self.assertTrue(all(stream.released for _, stream in streams))
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
@@ -1642,13 +1644,16 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
         self._mock_core_v1(mock_core_v1_cls, 2500)
 
+        first = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window?max_lines=1000"
+        ).json()
         second = self.client.get(
             "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
-            "?max_lines=1000&skip_tail_lines=1000"
+            f"?max_lines=1000&skip_tail_lines=1000&before_timestamp={first['first_timestamp']}"
         ).json()
         third = self.client.get(
             "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
-            "?max_lines=1000&skip_tail_lines=2000"
+            f"?max_lines=1000&skip_tail_lines=2000&before_timestamp={second['first_timestamp']}"
         ).json()
 
         self.assertEqual(second["content"].splitlines()[0], "line 500")
@@ -1662,6 +1667,31 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_lines_larger_than_the_byte_cap_still_page(self, mock_core_v1_cls, mock_api_client):
+        """Lines bigger than the byte budget page one at a time instead of stalling."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 40, line_bytes=4096)
+
+        first = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?max_lines=1000&max_bytes=4096"
+        ).json()
+        second = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            f"?max_lines=1000&max_bytes=4096&skip_tail_lines={first['line_count']}"
+            f"&before_timestamp={first['first_timestamp']}"
+        ).json()
+
+        self.assertEqual(first["line_count"], 1)
+        self.assertTrue(first["has_more_before"])
+        self.assertEqual(second["line_count"], 1)
+        self.assertTrue(second["has_more_before"])
+        self.assertNotEqual(first["first_timestamp"], second["first_timestamp"])
+        self.assertLess(second["first_timestamp"], first["first_timestamp"])
+        self.assertLessEqual(max(stream[0]["tail_lines"] for stream in streams), 2)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
     def test_page_past_start_of_log_is_empty(self, mock_core_v1_cls, mock_api_client):
         """Skipping past the start of the log returns nothing."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
@@ -1670,6 +1700,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         body = self.client.get(
             "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
             "?max_lines=1000&skip_tail_lines=2500"
+            "&before_timestamp=2024-01-01T00:00:00.000000000Z"
         ).json()
 
         self.assertEqual(body["line_count"], 0)
@@ -1688,7 +1719,6 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
             "?max_lines=1000&max_bytes=2048"
         ).json()
 
-        self.assertTrue(first["truncated"])
         self.assertLess(first["line_count"], 1000)
         self.assertLessEqual(first["byte_count"], 2048)
         self.assertEqual(first["content"].splitlines()[-1], "line 2499")
@@ -1696,6 +1726,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         second = self.client.get(
             "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
             f"?max_lines=1000&max_bytes=2048&skip_tail_lines={first['line_count']}"
+            f"&before_timestamp={first['first_timestamp']}"
         ).json()
 
         oldest_kept = int(first["content"].splitlines()[0].split()[-1])

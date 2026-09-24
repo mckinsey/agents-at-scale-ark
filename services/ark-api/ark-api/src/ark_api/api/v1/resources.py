@@ -760,6 +760,7 @@ LOG_WINDOW_MAX_LINES_LIMIT = 10000
 LOG_WINDOW_DEFAULT_MAX_BYTES = 1024 * 1024
 LOG_WINDOW_MAX_BYTES_LIMIT = 16 * 1024 * 1024
 LOG_WINDOW_SINCE_SLACK_SECONDS = 2
+LOG_WINDOW_READ_OVERSHOOT_FACTOR = 8
 POD_DELETED_MESSAGE = (
     "Pod has been deleted. Logs are no longer available.\n\n"
     "To preserve logs, enable 'archiveLogs: true' in your workflow spec "
@@ -802,7 +803,7 @@ def _since_seconds_for(since_timestamp: str) -> Optional[int]:
 
 
 class _LogWindowCollector:
-    """Collects a bounded slice of a log stream while counting every line.
+    """Collects a bounded slice of a log stream.
 
     ``keep_newest`` picks which end survives the byte budget: history pages
     keep the newest lines of the window so they sit flush against what the
@@ -810,37 +811,66 @@ class _LogWindowCollector:
     client's timestamp cursor advances without leaving a gap.
     """
 
-    def __init__(self, max_lines: int, max_bytes: int, min_timestamp: Optional[str], keep_newest: bool):
-        self.max_lines = max_lines
+    def __init__(
+        self,
+        read_limit: int,
+        max_bytes: int,
+        min_timestamp: Optional[str],
+        max_timestamp: Optional[str],
+        keep_newest: bool,
+        max_read_bytes: Optional[int] = None,
+    ):
+        self.read_limit = read_limit
         self.max_bytes = max_bytes
+        self.max_read_bytes = max_read_bytes
         self.min_timestamp = _normalize_log_timestamp(min_timestamp) if min_timestamp else None
+        self.max_timestamp = _normalize_log_timestamp(max_timestamp) if max_timestamp else None
         self.keep_newest = keep_newest
         self.lines: deque[str] = deque()
         self.timestamps: deque[Optional[str]] = deque()
         self.admitted = 0
+        self.lines_read = 0
+        self.bytes_read = 0
         self.dropped_from_front = 0
-        self.total_lines = 0
+        self.over_read_budget = False
+        self.reached_known_lines = False
         self.byte_count = 0
         self.truncated = False
 
     @property
     def done(self) -> bool:
-        return not self.keep_newest and (self.admitted >= self.max_lines or self.truncated)
-
-    def _is_newer_than_cursor(self, timestamp: Optional[str]) -> bool:
-        if self.min_timestamp is None:
+        if self.over_read_budget:
             return True
-        if timestamp is None:
-            return False
-        return _normalize_log_timestamp(timestamp) > self.min_timestamp
+        if self.keep_newest:
+            return self.lines_read >= self.read_limit
+        return self.admitted >= self.read_limit or self.truncated
+
+    @property
+    def average_line_bytes(self) -> int:
+        if self.lines_read == 0:
+            return 0
+        return self.bytes_read // self.lines_read
+
+    def _within_cursors(self, timestamp: Optional[str]) -> bool:
+        if self.min_timestamp is not None:
+            if timestamp is None or _normalize_log_timestamp(timestamp) <= self.min_timestamp:
+                return False
+        if self.max_timestamp is not None:
+            if timestamp is not None and _normalize_log_timestamp(timestamp) >= self.max_timestamp:
+                self.reached_known_lines = True
+                return False
+        return True
 
     def add(self, raw_line: str) -> None:
         timestamp, text = _split_log_line(raw_line)
-        if not self._is_newer_than_cursor(timestamp):
-            return
+        self.lines_read += 1
+        self.bytes_read += len(raw_line.encode("utf-8")) + 1
+        if self.max_read_bytes is not None and self.bytes_read > self.max_read_bytes:
+            self.over_read_budget = True
 
-        self.total_lines += 1
-        if self.admitted >= self.max_lines or self.done:
+        if not self._within_cursors(timestamp):
+            return
+        if not self.keep_newest and self.admitted >= self.read_limit:
             return
 
         if len(text.encode("utf-8")) > self.max_bytes:
@@ -853,8 +883,8 @@ class _LogWindowCollector:
         self.byte_count += len(text.encode("utf-8")) + 1
 
         while self.byte_count > self.max_bytes and len(self.lines) > 1:
+            self.truncated = True
             if not self.keep_newest:
-                self.truncated = True
                 self.lines.pop()
                 self.timestamps.pop()
                 self.admitted -= 1
@@ -863,26 +893,16 @@ class _LogWindowCollector:
             self.timestamps.popleft()
             self.byte_count -= len(dropped.encode("utf-8")) + 1
             self.dropped_from_front += 1
-            self.truncated = True
 
-    def count_discarded(self, chunk: bytes) -> None:
-        if self.min_timestamp is None:
-            self.total_lines += chunk.count(b"\n")
-
-    def build(self, skip_tail_lines: int, page_is_capped: bool) -> LogWindow:
+    def build(self, expect_more_before: bool) -> LogWindow:
         lines = list(self.lines)
-        timestamps = list(self.timestamps)
-
-        if page_is_capped:
-            window_end = max(0, self.total_lines - skip_tail_lines)
-            keep = max(0, min(len(lines), window_end - self.dropped_from_front))
-            lines = lines[:keep]
-            timestamps = timestamps[:keep]
-
-        known_timestamps = [value for value in timestamps if value]
+        known_timestamps = [value for value in self.timestamps if value]
         content = "\n".join(lines)
         has_more_before = (
-            page_is_capped and self.total_lines >= skip_tail_lines + self.max_lines
+            expect_more_before
+            and bool(lines)
+            and not self.reached_known_lines
+            and (self.lines_read >= self.read_limit or self.dropped_from_front > 0)
         )
 
         return LogWindow(
@@ -916,15 +936,52 @@ async def _collect_log_window(response, collector: _LogWindowCollector) -> None:
     async for chunk in response.content.iter_chunked(LOG_STREAM_CHUNK_BYTES):
         if collector.done:
             break
-        if collector.admitted >= collector.max_lines and not pending:
-            collector.count_discarded(chunk)
-            continue
         pending += chunk
         *complete, pending = pending.split(b"\n")
         for raw_line in complete:
             collector.add(raw_line.decode("utf-8", errors="replace"))
+            if collector.done:
+                return
     if pending and not collector.done:
         collector.add(pending.decode("utf-8", errors="replace"))
+
+
+async def _measure_boundary_line_bytes(
+    core_v1: CoreV1Api,
+    namespace: str,
+    pod_name: str,
+    container: Optional[str],
+    skip_tail_lines: int,
+    max_bytes: int,
+) -> int:
+    """Measure the newest line of the requested window without reading past it."""
+    response = await _open_pod_log_stream(
+        core_v1,
+        namespace,
+        pod_name,
+        container=container,
+        tail_lines=skip_tail_lines + 1,
+    )
+    measured = 0
+    try:
+        async for chunk in response.content.iter_chunked(LOG_STREAM_CHUNK_BYTES):
+            newline = chunk.find(b"\n")
+            if newline >= 0:
+                measured += newline
+                break
+            measured += len(chunk)
+            if measured >= max_bytes:
+                break
+    finally:
+        response.release()
+    return measured
+
+
+def _lines_within_budget(line_bytes: int, max_bytes: int, max_lines: int) -> int:
+    """How many lines of the measured size fit the byte budget."""
+    if line_bytes <= 0:
+        return max_lines
+    return max(1, min(max_lines, max_bytes // (line_bytes + 1)))
 
 
 async def _read_log_window(
@@ -935,32 +992,106 @@ async def _read_log_window(
     max_lines: int,
     skip_tail_lines: int,
     since_timestamp: Optional[str],
+    before_timestamp: Optional[str],
     max_bytes: int,
 ) -> LogWindow:
     """Read a bounded window of a pod log without buffering the whole log."""
     since_seconds = _since_seconds_for(since_timestamp) if since_timestamp else None
-    is_history_page = since_seconds is None
 
-    stream_kwargs = {"container": container}
-    if is_history_page:
-        stream_kwargs["tail_lines"] = skip_tail_lines + max_lines
-    else:
-        stream_kwargs["since_seconds"] = since_seconds
-        stream_kwargs["limit_bytes"] = max_bytes
+    if since_seconds is not None:
+        return await _read_appended_window(
+            core_v1, namespace, pod_name, container, max_lines, since_seconds, since_timestamp, max_bytes
+        )
 
-    response = await _open_pod_log_stream(core_v1, namespace, pod_name, **stream_kwargs)
+    return await _read_history_window(
+        core_v1, namespace, pod_name, container, max_lines, skip_tail_lines, before_timestamp, max_bytes
+    )
+
+
+async def _read_appended_window(
+    core_v1: CoreV1Api,
+    namespace: str,
+    pod_name: str,
+    container: Optional[str],
+    max_lines: int,
+    since_seconds: int,
+    since_timestamp: str,
+    max_bytes: int,
+) -> LogWindow:
+    response = await _open_pod_log_stream(
+        core_v1,
+        namespace,
+        pod_name,
+        container=container,
+        since_seconds=since_seconds,
+        limit_bytes=max_bytes,
+    )
     collector = _LogWindowCollector(
         max_lines,
         max_bytes,
-        since_timestamp if not is_history_page else None,
-        keep_newest=is_history_page,
+        since_timestamp,
+        None,
+        keep_newest=False,
     )
     try:
         await _collect_log_window(response, collector)
     finally:
         response.release()
 
-    return collector.build(skip_tail_lines, page_is_capped=is_history_page)
+    return collector.build(expect_more_before=False)
+
+
+async def _read_history_window(
+    core_v1: CoreV1Api,
+    namespace: str,
+    pod_name: str,
+    container: Optional[str],
+    max_lines: int,
+    skip_tail_lines: int,
+    before_timestamp: Optional[str],
+    max_bytes: int,
+) -> LogWindow:
+    """Read the page of lines sitting just older than ``skip_tail_lines``.
+
+    The page has to end flush against the lines the client already holds, so
+    the number of lines requested is sized up front from the line at that
+    boundary. A badly wrong estimate is caught by the read budget and retried
+    once with the line size actually observed.
+    """
+    line_bytes = await _measure_boundary_line_bytes(
+        core_v1, namespace, pod_name, container, skip_tail_lines, max_bytes
+    )
+    read_limit = _lines_within_budget(line_bytes, max_bytes, max_lines)
+    max_read_bytes = max_bytes * LOG_WINDOW_READ_OVERSHOOT_FACTOR
+
+    for attempt in range(2):
+        is_last_attempt = attempt == 1
+        response = await _open_pod_log_stream(
+            core_v1,
+            namespace,
+            pod_name,
+            container=container,
+            tail_lines=skip_tail_lines + read_limit,
+        )
+        collector = _LogWindowCollector(
+            read_limit,
+            max_bytes,
+            None,
+            before_timestamp,
+            keep_newest=True,
+            max_read_bytes=None if is_last_attempt else max_read_bytes,
+        )
+        try:
+            await _collect_log_window(response, collector)
+        finally:
+            response.release()
+
+        if not collector.over_read_budget or is_last_attempt:
+            return collector.build(expect_more_before=True)
+
+        read_limit = _lines_within_budget(collector.average_line_bytes, max_bytes, read_limit)
+
+    raise RuntimeError("log window read did not converge")
 
 
 async def _resolve_workflow_pod_name(
@@ -1019,6 +1150,7 @@ async def get_pod_log_window(
     max_lines: int = Query(LOG_WINDOW_DEFAULT_MAX_LINES, ge=1, le=LOG_WINDOW_MAX_LINES_LIMIT, description="Maximum lines in this page"),
     skip_tail_lines: int = Query(0, ge=0, description="Lines to skip back from the end of the log"),
     since_timestamp: Optional[str] = Query(None, description="Return only lines newer than this RFC3339 timestamp"),
+    before_timestamp: Optional[str] = Query(None, description="Return only lines older than this RFC3339 timestamp"),
     max_bytes: int = Query(LOG_WINDOW_DEFAULT_MAX_BYTES, ge=1024, le=LOG_WINDOW_MAX_BYTES_LIMIT, description="Byte cap for this page"),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> LogWindow:
@@ -1043,6 +1175,7 @@ async def get_pod_log_window(
             max_lines,
             skip_tail_lines,
             since_timestamp,
+            before_timestamp,
             max_bytes,
         )
 
@@ -1056,6 +1189,7 @@ async def get_workflow_log_window(
     max_lines: int = Query(LOG_WINDOW_DEFAULT_MAX_LINES, ge=1, le=LOG_WINDOW_MAX_LINES_LIMIT, description="Maximum lines in this page"),
     skip_tail_lines: int = Query(0, ge=0, description="Lines to skip back from the end of the log"),
     since_timestamp: Optional[str] = Query(None, description="Return only lines newer than this RFC3339 timestamp"),
+    before_timestamp: Optional[str] = Query(None, description="Return only lines older than this RFC3339 timestamp"),
     max_bytes: int = Query(LOG_WINDOW_DEFAULT_MAX_BYTES, ge=1024, le=LOG_WINDOW_MAX_BYTES_LIMIT, description="Byte cap for this page"),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> LogWindow:
@@ -1080,6 +1214,7 @@ async def get_workflow_log_window(
                 max_lines,
                 skip_tail_lines,
                 since_timestamp,
+                before_timestamp,
                 max_bytes,
             )
         except (ApiException, HTTPException) as e:

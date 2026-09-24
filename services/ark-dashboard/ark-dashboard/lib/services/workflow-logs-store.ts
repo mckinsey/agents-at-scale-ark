@@ -10,6 +10,7 @@ export interface NodeLogBuffer {
   hasMoreBefore: boolean;
   truncated: boolean;
   oldestSkipLines: number;
+  oldestTimestamp: string | null;
   lastTimestamp: string | null;
   error: string | null;
 }
@@ -24,6 +25,7 @@ const EMPTY_BUFFER: NodeLogBuffer = {
   hasMoreBefore: false,
   truncated: false,
   oldestSkipLines: 0,
+  oldestTimestamp: null,
   lastTimestamp: null,
   error: null,
 };
@@ -130,6 +132,7 @@ export async function ensureLoaded(
       hasMoreBefore: window.has_more_before,
       truncated: window.truncated,
       oldestSkipLines: window.line_count,
+      oldestTimestamp: window.first_timestamp ?? null,
       lastTimestamp: window.last_timestamp ?? null,
       error: null,
     });
@@ -154,6 +157,7 @@ export async function loadOlder(
     const window = await fetchNodeLogWindow(target, {
       maxLines: WORKFLOW_LOG_PAGE_LINES,
       skipTailLines: buffer.oldestSkipLines,
+      beforeTimestamp: buffer.oldestTimestamp ?? undefined,
     });
     const current = getNodeLogBuffer(key);
 
@@ -165,6 +169,7 @@ export async function loadOlder(
       hasMoreBefore: window.has_more_before,
       truncated: current.truncated || window.truncated,
       oldestSkipLines: current.oldestSkipLines + window.line_count,
+      oldestTimestamp: window.first_timestamp ?? current.oldestTimestamp,
       error: null,
     });
   } catch (error) {
@@ -199,6 +204,7 @@ export async function pollTail(
         hasMoreBefore: window.has_more_before,
         truncated: window.truncated,
         oldestSkipLines: window.line_count,
+        oldestTimestamp: window.first_timestamp ?? null,
         lastTimestamp: window.last_timestamp ?? null,
         error: null,
       });

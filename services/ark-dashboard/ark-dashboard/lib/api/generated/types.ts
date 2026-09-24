@@ -8510,6 +8510,8 @@ export interface operations {
                 skip_tail_lines?: number;
                 /** @description Return only lines newer than this RFC3339 timestamp */
                 since_timestamp?: string | null;
+                /** @description Return only lines older than this RFC3339 timestamp */
+                before_timestamp?: string | null;
                 /** @description Byte cap for this page */
                 max_bytes?: number;
             };
@@ -8783,6 +8785,8 @@ export interface operations {
                 skip_tail_lines?: number;
                 /** @description Return only lines newer than this RFC3339 timestamp */
                 since_timestamp?: string | null;
+                /** @description Return only lines older than this RFC3339 timestamp */
+                before_timestamp?: string | null;
                 /** @description Byte cap for this page */
                 max_bytes?: number;
             };

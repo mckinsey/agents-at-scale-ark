@@ -13,6 +13,7 @@ export interface LogWindowParams {
   maxBytes?: number;
   skipTailLines?: number;
   sinceTimestamp?: string;
+  beforeTimestamp?: string;
 }
 
 export interface LogWindowTarget {
@@ -36,6 +37,9 @@ function buildParams(
   }
   if (params.sinceTimestamp) {
     query.since_timestamp = params.sinceTimestamp;
+  }
+  if (params.beforeTimestamp) {
+    query.before_timestamp = params.beforeTimestamp;
   }
   if (params.container) {
     query.container = params.container;
