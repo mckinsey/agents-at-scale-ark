@@ -422,32 +422,6 @@ describeIntegration('postgres backend — HTTP integration', () => {
     await request(app).get('/conversations/missing-conv').expect(404);
   });
 
-  it('DELETE /messages purges every row without resetting the Postgres sequence', async () => {
-    await request(app)
-      .post('/messages')
-      .send({
-        conversation_id: 'purge-conv',
-        query_id: 'q1',
-        messages: ['a', 'b'],
-      })
-      .expect(200);
-
-    const deleteRes = await request(app).delete('/messages').expect(200);
-    expect(deleteRes.body.message).toBe('Memory purged');
-
-    const emptyRes = await request(app).get('/messages').expect(200);
-    expect(emptyRes.body.items).toEqual([]);
-
-    await request(app)
-      .post('/messages')
-      .send({conversation_id: 'purge-conv', query_id: 'q2', messages: ['c']})
-      .expect(200);
-
-    const afterRes = await request(app).get('/messages').expect(200);
-    expect(afterRes.body.items).toHaveLength(1);
-    expect(afterRes.body.items[0].sequence).toBe(3);
-  });
-
   it('DELETE /conversations/:conversationId removes only that conversation', async () => {
     await request(app)
       .post('/messages')
@@ -485,6 +459,15 @@ describeIntegration('postgres backend — HTTP integration', () => {
 
     const messagesRes = await request(app).get('/messages').expect(200);
     expect(messagesRes.body.items).toEqual([]);
+
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'wipe-conv-3', query_id: 'q3', messages: ['c']})
+      .expect(200);
+
+    const afterRes = await request(app).get('/messages').expect(200);
+    expect(afterRes.body.items).toHaveLength(1);
+    expect(afterRes.body.items[0].sequence).toBe(3);
   });
 
   it('GET /memory-status aggregates per-conversation counts via a single query', async () => {
