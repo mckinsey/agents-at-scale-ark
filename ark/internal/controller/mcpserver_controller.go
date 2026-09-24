@@ -534,17 +534,7 @@ func (r *MCPServerReconciler) reconcileConditionsReady(mcpServer *arkv1alpha1.MC
 
 // updateStatus updates the MCPServer status
 func (r *MCPServerReconciler) updateStatus(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-	err := r.Status().Update(ctx, mcpServer)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		logf.FromContext(ctx).Error(err, "failed to update MCPServer status")
-	}
-	return err
+	return updateStatusIgnoringDeleted(ctx, r.Client, mcpServer, "MCPServer")
 }
 
 func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, authMaterial *arkmcp.AuthorizationMaterial) (*arkmcp.MCPClient, error) {

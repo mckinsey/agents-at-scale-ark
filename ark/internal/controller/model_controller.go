@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -146,18 +145,7 @@ func (r *ModelReconciler) reconcileCondition(ctx context.Context, model *arkv1al
 
 // updateStatus updates the Model status
 func (r *ModelReconciler) updateStatus(ctx context.Context, model *arkv1alpha1.Model) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	err := r.Status().Update(ctx, model)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		logf.FromContext(ctx).Error(err, "failed to update model status")
-	}
-	return err
+	return updateStatusIgnoringDeleted(ctx, r.Client, model, "model")
 }
 
 func (r *ModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
