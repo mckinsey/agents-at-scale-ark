@@ -1,7 +1,6 @@
 'use client';
 
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { toast } from '@/components/ui/sonner';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Build } from '@/components/icons';
@@ -13,9 +12,9 @@ import {
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
 import {
-  getToolTypeKey,
   type ToolTypeKey,
   ToolsTable,
+  getToolTypeKey,
 } from '@/components/sections/tools-table';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -27,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
 import {
@@ -46,6 +46,7 @@ const TYPE_ITEMS: ReadonlyArray<{ value: TypeFilter; label: string }> = [
   { value: 'mcp', label: 'MCP' },
   { value: 'agent', label: 'Agent' },
   { value: 'team', label: 'Team' },
+  { value: 'inline', label: 'Inline' },
 ];
 
 export function ToolsSection() {
@@ -221,7 +222,7 @@ export function ToolsSection() {
   }
 
   return (
-    <div className="flex h-full w-full content-shell flex-col">
+    <div className="content-shell flex h-full w-full flex-col">
       <ResourcePageHeader
         icon={<Build className="size-full" />}
         title="Tools"

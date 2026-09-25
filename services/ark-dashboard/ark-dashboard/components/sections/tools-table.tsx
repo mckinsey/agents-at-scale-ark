@@ -23,13 +23,14 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { OriginCell, OriginColumnHeader } from './origin-column';
 
-export type ToolTypeKey = 'built-in' | 'mcp' | 'agent' | 'team';
+export type ToolTypeKey = 'built-in' | 'mcp' | 'agent' | 'team' | 'inline';
 
 const TOOL_TYPE_LABELS: Record<ToolTypeKey, string> = {
   'built-in': 'Built-in',
   mcp: 'MCP',
   agent: 'Agent',
   team: 'Team',
+  inline: 'Inline',
 };
 
 export function getToolTypeKey(tool: Tool): ToolTypeKey {
@@ -40,13 +41,21 @@ export function getToolTypeKey(tool: Tool): ToolTypeKey {
       return 'agent';
     case 'team':
       return 'team';
+    case 'inline':
+      return 'inline';
     default:
       return 'built-in';
   }
 }
 
+// The language comes from the list projection, so the badge costs no extra
+// request and no script body.
 export function getToolTypeLabel(tool: Tool): string {
-  return TOOL_TYPE_LABELS[getToolTypeKey(tool)];
+  const label = TOOL_TYPE_LABELS[getToolTypeKey(tool)];
+  if (tool.type === 'inline' && tool.language) {
+    return `${label} \u00b7 ${tool.language}`;
+  }
+  return label;
 }
 
 interface ToolUsage {
