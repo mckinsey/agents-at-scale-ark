@@ -18,7 +18,7 @@ import (
 var _ = Describe("Tool Webhook", func() {
 	var (
 		ctx       context.Context
-		validator *validation.WebhookValidator
+		validator *validation.WebhookValidator[*arkv1alpha1.Tool]
 	)
 
 	BeforeEach(func() {
@@ -28,7 +28,7 @@ var _ = Describe("Tool Webhook", func() {
 		Expect(arkv1alpha1.AddToScheme(s)).To(Succeed())
 
 		fakeClient := fake.NewClientBuilder().WithScheme(s).Build()
-		validator = &validation.WebhookValidator{
+		validator = &validation.WebhookValidator[*arkv1alpha1.Tool]{
 			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
 		}
 	})

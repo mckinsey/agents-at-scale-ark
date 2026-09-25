@@ -1,7 +1,7 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, APIError } from '@/lib/api/client';
-import { fetchAllPages } from '@/lib/api/pagination';
+import { APIError, apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
+import { fetchAllPages } from '@/lib/api/pagination';
 
 // Use the generated types from OpenAPI
 export type AgentResponse = components['schemas']['AgentResponse'];
@@ -43,32 +43,28 @@ export type Agent = AgentDetailResponseWithA2A & { id: string };
 // List-response shape, no detail-only fields (#2581)
 export type AgentListItem = AgentResponse & { id: string };
 
+type AgentListView = 'summary' | 'with-tools';
+
+async function fetchAgentList(
+  namespace: string,
+  view: AgentListView,
+): Promise<AgentListItem[]> {
+  const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`, {
+    namespace,
+    view,
+  });
+
+  return items.map(item => ({ ...item, id: item.name }));
+}
+
 // CRUD Operations
 export const agentsService = {
-  // Get all agents
-  async getAll(namespace: string): Promise<Agent[]> {
-    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`, {
-      namespace,
-    });
-
-    // Map the response items to include id for UI compatibility
-    const agents = await Promise.all(
-      items.map(async item => {
-        // Fetch detailed info for each agent to get full data
-        const detailed = await agentsService.getByName(namespace, item.name);
-        return detailed!;
-      }),
-    );
-
-    return agents;
+  async list(namespace: string): Promise<AgentListItem[]> {
+    return fetchAgentList(namespace, 'summary');
   },
 
-  async list(namespace: string): Promise<AgentListItem[]> {
-    const items = await fetchAllPages<AgentResponse>(`/api/v1/agents`, {
-      namespace,
-    });
-
-    return items.map(item => ({ ...item, id: item.name }));
+  async listWithTools(namespace: string): Promise<AgentListItem[]> {
+    return fetchAgentList(namespace, 'with-tools');
   },
 
   // Get a single agent by name

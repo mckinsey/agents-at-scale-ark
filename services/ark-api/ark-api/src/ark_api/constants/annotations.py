@@ -20,6 +20,7 @@ RESOURCES_ANNOTATION = ARK_PREFIX + "resources"
 
 # General annotations
 LOCALHOST_GATEWAY_PORT_ANNOTATION = ARK_PREFIX + "localhost-gateway-port"
+ORIGIN_ANNOTATION = ARK_PREFIX + "origin"
 
 # Streaming annotations
 STREAMING_SUPPORTED_ANNOTATION = ARK_PREFIX + "streaming-supported"

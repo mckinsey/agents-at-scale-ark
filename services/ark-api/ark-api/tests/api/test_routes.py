@@ -990,12 +990,101 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["description"], "Test agent")
         self.assertEqual(data["items"][0]["model_ref"], "gpt-4")
         self.assertEqual(data["items"][0]["available"], "True")
+        # Full view (default) keeps the prompt
+        self.assertEqual(
+            data["items"][0]["prompt"], "You are a helpful assistant"
+        )
 
         # Check second agent
         self.assertEqual(data["items"][1]["name"], "another-agent")
         self.assertEqual(data["items"][1]["description"], "Another test agent")
         self.assertIsNone(data["items"][1]["model_ref"])
         self.assertEqual(data["items"][1]["available"], "False")
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_list_agents_summary_view(self, mock_ark_client):
+        """Summary view omits prompt and keeps only the origin annotation."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "test-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/origin": "dashboard",
+                    "ark.mckinsey.com/a2a-server-skills": '[{"heavy": "payload"}]',
+                },
+            },
+            "spec": {
+                "description": "Test agent",
+                "prompt": "You are a helpful assistant",
+                "modelRef": {"name": "gpt-4"},
+            },
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([mock_agent]))
+
+        response = self.client.get("/v1/agents?namespace=default&view=summary")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        item = data["items"][0]
+        # Fields the list UI renders survive
+        self.assertEqual(item["name"], "test-agent")
+        self.assertEqual(item["description"], "Test agent")
+        self.assertEqual(item["model_ref"], "gpt-4")
+        self.assertEqual(item["available"], "True")
+        # Heavy fields are stripped
+        self.assertIsNone(item["prompt"])
+        self.assertEqual(
+            item["annotations"], {"ark.mckinsey.com/origin": "dashboard"}
+        )
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_list_agents_with_tools_view(self, mock_ark_client):
+        """With-tools view trims heavy fields but carries the referenced tool names."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "test-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/origin": "dashboard",
+                    "ark.mckinsey.com/a2a-server-skills": '[{"heavy": "payload"}]',
+                },
+            },
+            "spec": {
+                "description": "Test agent",
+                "prompt": "You are a helpful assistant",
+                "tools": [
+                    {"type": "custom", "name": "search"},
+                    {"type": "custom", "name": "terminate"},
+                    {"type": "custom"},
+                ],
+            },
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([mock_agent]))
+
+        response = self.client.get("/v1/agents?namespace=default&view=with-tools")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        item = data["items"][0]
+        # Trimmed like summary
+        self.assertIsNone(item["prompt"])
+        self.assertEqual(
+            item["annotations"], {"ark.mckinsey.com/origin": "dashboard"}
+        )
+        # Tool names carried; entries without a name are skipped
+        self.assertEqual(item["tool_names"], ["search", "terminate"])
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_list_agents_empty(self, mock_ark_client):
@@ -1386,6 +1475,42 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][1]["type"], "completions")
         self.assertEqual(data["items"][1]["model"], "anthropic.claude-v2")
         self.assertEqual(data["items"][1]["available"], "False")
+        # Default (summary) view does not carry secret refs
+        self.assertIsNone(data["items"][0]["secret_refs"])
+
+    @patch("ark_api.api.v1.models.with_ark_client")
+    def test_list_models_with_secrets_view(self, mock_ark_client):
+        """With-secrets view carries the names of secrets referenced by the config."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_model = Mock()
+        mock_model.to_dict.return_value = {
+            "metadata": {"name": "gpt-4-model", "namespace": "default"},
+            "spec": {
+                "provider": "openai",
+                "model": {"value": "gpt-4"},
+                "config": {
+                    "openai": {
+                        "apiKey": {
+                            "valueFrom": {
+                                "secretKeyRef": {"name": "openai-key", "key": "token"}
+                            }
+                        },
+                        "baseUrl": {"value": "https://api.openai.com"},
+                    }
+                },
+            },
+            "status": {"conditions": [{"type": "ModelAvailable", "status": "True"}]},
+        }
+
+        mock_client.models.a_list_page = AsyncMock(return_value=_page([mock_model]))
+
+        response = self.client.get("/v1/models?namespace=default&view=with-secrets")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["items"][0]["secret_refs"], ["openai-key"])
 
     @patch("ark_api.api.v1.models.with_ark_client")
     def test_list_models_empty(self, mock_ark_client):
@@ -2170,7 +2295,10 @@ class TestTeamsEndpoint(unittest.TestCase):
                     {"name": "backend-dev", "type": "agent"},
                 ],
             },
-            "status": {"phase": "Ready"},
+            "status": {
+                "phase": "Ready",
+                "conditions": [{"type": "Available", "status": "True"}],
+            },
         }
 
         mock_team2 = Mock()
@@ -2180,7 +2308,10 @@ class TestTeamsEndpoint(unittest.TestCase):
                 "strategy": "selector",
                 "members": [{"name": "researcher", "type": "agent"}],
             },
-            "status": {"phase": "pending"},
+            "status": {
+                "phase": "pending",
+                "conditions": [{"type": "Available", "status": "False"}],
+            },
         }
 
         # Mock the API response
@@ -2201,12 +2332,14 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["strategy"], "sequential")
         self.assertEqual(data["items"][0]["members_count"], 2)
         self.assertEqual(data["items"][0]["status"], "Ready")
+        self.assertEqual(data["items"][0]["available"], "True")
 
         # Check second team
         self.assertEqual(data["items"][1]["name"], "research-team")
         self.assertEqual(data["items"][1]["strategy"], "selector")
         self.assertEqual(data["items"][1]["members_count"], 1)
         self.assertEqual(data["items"][1]["status"], "pending")
+        self.assertEqual(data["items"][1]["available"], "False")
 
     @patch("ark_api.api.v1.teams.with_ark_client")
     def test_list_teams_empty(self, mock_ark_client):

@@ -60,6 +60,10 @@ linters:
           - staticcheck
         text: "SA5011"
         path: "_test\\.go$"
+      # Deprecated by controller-runtime v0.25; events-API migration tracked in #3543.
+      - linters:
+          - staticcheck
+        text: "SA1019: mgr.GetEventRecorderFor is deprecated"
 formatters:
   enable:
     - gofmt

@@ -6,13 +6,11 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -20,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/eventing"
 )
 
 const (
@@ -29,7 +28,7 @@ const (
 type TeamReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Eventing eventing.Provider
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=teams,verbs=get;list;watch;create;update;patch;delete
@@ -56,7 +55,7 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		if err := r.updateStatus(ctx, &team); err != nil {
 			return ctrl.Result{}, err
 		}
-		r.Recorder.Event(&team, corev1.EventTypeNormal, "TeamCreated", "Initialized team conditions")
+		r.Eventing.TeamRecorder().Created(ctx, &team)
 		return ctrl.Result{}, nil
 	}
 
@@ -77,7 +76,7 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		if err := r.updateStatus(ctx, &team); err != nil {
 			return ctrl.Result{}, err
 		}
-		r.Recorder.Event(&team, corev1.EventTypeNormal, "StatusChanged", fmt.Sprintf("Team availability: %s - %s", newStatus, reason))
+		r.Eventing.TeamRecorder().StatusChanged(ctx, &team, fmt.Sprintf("Team availability: %s - %s", newStatus, reason))
 	}
 
 	return ctrl.Result{}, nil
@@ -122,18 +121,7 @@ func (r *TeamReconciler) setCondition(team *arkv1alpha1.Team, conditionType stri
 }
 
 func (r *TeamReconciler) updateStatus(ctx context.Context, team *arkv1alpha1.Team) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	err := r.Status().Update(ctx, team)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		logf.FromContext(ctx).Error(err, "failed to update team status")
-	}
-	return err
+	return updateStatusIgnoringDeleted(ctx, r.Client, team, "team")
 }
 
 // teamAgentMemberIndexer returns agent member names for field-based Team lookups.
@@ -164,10 +152,11 @@ func (r *TeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *TeamReconciler) findTeamsForAgent(ctx context.Context, obj client.Object) []reconcile.Request {
 	var teams arkv1alpha1.TeamList
-	if err := r.List(ctx, &teams,
+	if r.List(
+		ctx, &teams,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.members.agent.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return []reconcile.Request{}
 	}
 

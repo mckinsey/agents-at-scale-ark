@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/openai/openai-go"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
@@ -257,4 +258,9 @@ func (m *mockEventingRecorder) AddCompletionUsage(ctx context.Context, usage ope
 
 func (m *mockEventingRecorder) GetTokenSummary(ctx context.Context) arkv1alpha1.TokenUsage {
 	return arkv1alpha1.TokenUsage{}
+}
+
+func (m *mockEventingRecorder) Created(ctx context.Context, obj runtime.Object) {}
+
+func (m *mockEventingRecorder) StatusChanged(ctx context.Context, obj runtime.Object, message string) {
 }

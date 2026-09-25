@@ -310,8 +310,9 @@ type MCPServerAuthorizationStatus struct {
 	// +kubebuilder:validation:Optional
 	TokenEndpoint string `json:"tokenEndpoint,omitempty"`
 
-	// LastDiscovered is the timestamp of the most recent successful
-	// discovery probe against the server.
+	// LastDiscovered is the time this authorization block was last
+	// recomputed and persisted. Routine polls that leave the block
+	// unchanged do not advance it.
 	// +kubebuilder:validation:Optional
 	LastDiscovered *metav1.Time `json:"lastDiscovered,omitempty"`
 
@@ -363,8 +364,4 @@ type MCPServerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []MCPServer `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&MCPServer{}, &MCPServerList{})
 }

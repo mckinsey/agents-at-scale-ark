@@ -10,7 +10,7 @@ vi.mock('@/lib/services', () => ({
     list: vi.fn(),
   },
   teamsService: {
-    getAll: vi.fn(),
+    list: vi.fn(),
   },
 }));
 
@@ -62,7 +62,7 @@ function values(overrides: Partial<ToolFormValues> = {}): ToolFormValues {
 beforeEach(() => {
   vi.clearAllMocks();
   mockAgentsService.list.mockResolvedValue([]);
-  mockTeamsService.getAll.mockResolvedValue([]);
+  mockTeamsService.list.mockResolvedValue([]);
   mockToolsService.create.mockResolvedValue(undefined);
 });
 
@@ -198,7 +198,7 @@ describe('useToolForm', () => {
   });
 
   it('loads teams when type becomes team', async () => {
-    mockTeamsService.getAll.mockResolvedValue([{ name: 'team-1' }] as never);
+    mockTeamsService.list.mockResolvedValue([{ name: 'team-1' }] as never);
     const { result } = renderHook(() => useToolForm({ mode: ToolFormMode.CREATE }));
 
     act(() => {
@@ -206,7 +206,7 @@ describe('useToolForm', () => {
     });
 
     await waitFor(() => {
-      expect(mockTeamsService.getAll).toHaveBeenCalled();
+      expect(mockTeamsService.list).toHaveBeenCalled();
     });
     await waitFor(() => {
       expect(result.current.state.teams).toEqual([{ name: 'team-1' }]);
