@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/inlinetools"
 	"mckinsey.com/ark/internal/inlinetools/runner"
 )
 
@@ -299,9 +300,33 @@ func TestInlineChildNamesAreDeterministicAndLengthSafe(t *testing.T) {
 	assert.Equal(t, first, inlineChildNames(long), "names must be stable across reconciles")
 	assert.LessOrEqual(t, len(first.Runner), 63)
 	assert.LessOrEqual(t, len(first.Source), 63)
-	assert.True(t, strings.HasSuffix(first.Runner, inlineRunnerSuffix))
+	assert.True(t, strings.HasSuffix(first.Runner, "-runner"))
 	assert.NotEqual(t, first.Runner, inlineChildNames(other).Runner,
 		"two long names sharing a prefix must not collide")
+}
+
+func TestInlineChildrenMatchActivationIdentity(t *testing.T) {
+	for _, name := range []string{"identity", strings.Repeat("a", 200)} {
+		tool := newInlineTool(name)
+		tool.Generation = 1
+		r := newInlineReconciler(t, tool)
+		require.NoError(t, r.reconcileInlineChildren(context.Background(), tool))
+		deployment := inlineGetDeployment(t, r, inlineChildNames(name).Runner)
+		service := &corev1.Service{}
+		require.NoError(t, r.Get(context.Background(), client.ObjectKeyFromObject(deployment), service))
+		// The fake API does not allocate child UIDs or Service IPs.
+		deployment.UID, service.UID, service.Spec.ClusterIP = "deployment-uid", "service-uid", "10.43.0.1"
+		tool.Status = arkv1alpha1.ToolStatus{
+			State: arkv1alpha1.ToolStateReady, ResolvedAddress: inlinetools.ResolvedAddress("ark-system", tool),
+			Conditions: []metav1.Condition{{
+				Type: arkv1alpha1.ToolConditionAvailable, Status: metav1.ConditionTrue,
+				Reason: arkv1alpha1.ToolReasonAvailable, ObservedGeneration: tool.Generation,
+			}},
+		}
+		address, err := inlinetools.ResolveActivation(true, tool, tool.UID, tool.Name, "ark-system", deployment, service)
+		require.NoError(t, err)
+		assert.Contains(t, address, deployment.Name+"."+tool.Namespace+".svc.cluster.local:8080/mcp")
+	}
 }
 
 func TestInlineLabelValuesStayWithinTheLimit(t *testing.T) {
