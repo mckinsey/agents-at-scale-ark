@@ -16,7 +16,7 @@ A `Tool` is something an agent can call: an HTTP API, a function on an MCP serve
 | **`agent`** | Another agent, called as a tool | You author it (wraps an existing Agent). |
 | **`team`** | A team, called as a tool | You author it (wraps an existing Team). |
 | **`builtin`** | A system function (`terminate`, `noop`) | **Auto-seeded** by the install; you reference it by name. |
-| **`inline`** | A short script stored in the tool itself | You author it. Off by default and needs an administrator grant — see [Inline tools](#inline-tools). |
+| **`inline`** | A short script stored in the tool itself | You author it, Ark runs it. Off by default and needs an administrator grant — see [Inline tools](#inline-tools). |
 
 ## Create a tool
 
@@ -235,7 +235,7 @@ In the dashboard, pick **Inline** in the Add Tool form, choose a language, and p
 
 Two things to know before you try it:
 
-- **Inline tools are not callable yet.** No runner ships in this release, so an authored inline tool stays `Pending` with reason `RuntimeNotInstalled`. The dashboard says so on the tool.
+- **Attach it like any other tool**, with `type: inline` in the agent's `spec.tools`. The default execution engine calls it over MCP once the tool reports `Available`; agents on an external execution engine can't call inline tools yet.
 - **Authoring is off by default and permission-gated.** An administrator must enable `inlineTools.enabled` in the Ark chart (and the ark-apiserver chart on the PostgreSQL backend), then grant you the `inline-tool-author-role` in your namespace:
 
   ```bash

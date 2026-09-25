@@ -9,7 +9,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,12 +31,11 @@ func ResolveActivation(enabled bool, tool *arkv1alpha1.Tool, routeUID types.UID,
 	if tool.UID == "" || routeUID != tool.UID || calledName != tool.Name {
 		return "", fmt.Errorf("inline Tool name or UID does not match the call")
 	}
-	condition := meta.FindStatusCondition(tool.Status.Conditions, arkv1alpha1.ToolConditionAvailable)
-	if condition == nil || condition.Status != metav1.ConditionTrue || condition.Reason != arkv1alpha1.ToolReasonAvailable ||
-		tool.Generation < 1 || condition.ObservedGeneration != tool.Generation || tool.Status.State != arkv1alpha1.ToolStateReady {
-		return "", fmt.Errorf("inline Tool is not available for its current generation")
+	endpoint, err := PublishedEndpoint(tool)
+	if err != nil {
+		return "", err
 	}
-	if activatorNamespace == "" || tool.Status.ResolvedAddress != ResolvedAddress(activatorNamespace, tool) {
+	if activatorNamespace == "" || endpoint != ResolvedAddress(activatorNamespace, tool) {
 		return "", fmt.Errorf("inline Tool has no matching published activator endpoint")
 	}
 	if _, err := runner.SourceFilename(tool.Spec.Inline.Language); err != nil {
