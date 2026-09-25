@@ -540,6 +540,88 @@ describe('FilesSection', () => {
     });
   });
 
+  describe('Load error state', () => {
+    it('shows an error state instead of the empty state when the root load fails', async () => {
+      mockUseListFiles.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isFetching: false,
+        isError: true,
+        error: new Error('service unavailable'),
+        refetch: vi.fn(),
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
+
+      renderWithProviders(<FilesSection />);
+
+      const alert = await screen.findByRole('alert');
+      expect(
+        within(alert).getByText(/couldn't load files/i),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/no files yet/i)).not.toBeInTheDocument();
+    });
+
+    it('calls refetch when the retry button is clicked', async () => {
+      const refetch = vi.fn();
+      mockUseListFiles.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isFetching: false,
+        isError: true,
+        error: new Error('service unavailable'),
+        refetch,
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
+
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      renderWithProviders(<FilesSection />);
+
+      await user.click(await screen.findByRole('button', { name: /retry/i }));
+      expect(refetch).toHaveBeenCalled();
+    });
+
+    it('keeps files visible and shows a refresh banner when a refresh fails', async () => {
+      // First render loads successfully so the files land in component state,
+      // then a re-render reports an error while that state is retained — the
+      // refreshFailed path (files stay visible under the banner).
+      const { rerender } = renderWithProviders(<FilesSection />);
+
+      expect(
+        await screen.findByRole('row', { name: /report\.pdf/i }),
+      ).toBeInTheDocument();
+
+      mockUseListFiles.mockReturnValue({
+        data: mockListFilesData,
+        isLoading: false,
+        isFetching: false,
+        isError: true,
+        error: new Error('service unavailable'),
+        refetch: vi.fn(),
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
+
+      rerender(
+        <JotaiProvider store={jotaiStore}>
+          <FilesSection />
+        </JotaiProvider>,
+      );
+
+      const alert = await screen.findByRole('alert');
+      expect(
+        within(alert).getByText(/couldn't refresh files/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('row', { name: /report\.pdf/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
   describe('File Upload', () => {
     const getFileInput = () =>
       screen.getByLabelText(/browse files/i, {

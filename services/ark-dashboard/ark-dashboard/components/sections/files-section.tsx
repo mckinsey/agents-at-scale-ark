@@ -22,6 +22,7 @@ import {
 import {
   LearnMoreButton,
   ResourceEmptyState,
+  ResourceErrorState,
 } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import {
@@ -53,7 +54,6 @@ import {
 import { useMultiFilePreview } from '@/hooks/use-multi-file-preview';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { filesService } from '@/lib/services/files';
-import { useNamespace } from '@/providers/NamespaceProvider';
 import { useGetFilesCount } from '@/lib/services/files-count-hooks';
 import {
   useDeleteDirectory,
@@ -61,6 +61,7 @@ import {
   useListFiles,
 } from '@/lib/services/files-hooks';
 import type { DirectoryItem, FileItem } from '@/lib/types/files';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 const MENU_CONTENT_CLASS =
   'w-[211px] rounded-none border-0 bg-surface-bg-tertiary';
@@ -159,6 +160,12 @@ export function FilesSection() {
   const { data: filesCount } = useGetFilesCount();
   const pageTitle =
     filesCount === undefined ? 'Files' : `Files (${filesCount})`;
+
+  useEffect(() => {
+    setAllFiles([]);
+    setAllDirectories([]);
+    setNextToken(undefined);
+  }, [namespace]);
 
   useEffect(() => {
     if (listFilesData && !listFilesError) {
@@ -359,6 +366,12 @@ export function FilesSection() {
 
   const breadcrumbs = parseBreadcrumbs(prefix);
   const hasFiles = allFiles.length > 0 || allDirectories.length > 0;
+  // A nested-path error is not a real error: the effect above resets the
+  // prefix to root and refetches (the directory likely no longer exists), so
+  // only a root-level error surfaces the error state. refreshFailed keeps the
+  // already-loaded files visible under a banner instead of discarding them.
+  const loadFailed = listFilesError && prefix === '' && !hasFiles;
+  const refreshFailed = listFilesError && hasFiles;
 
   if (listFilesLoading) {
     return (
@@ -432,7 +445,27 @@ export function FilesSection() {
         </nav>
       )}
 
-      {!hasFiles && !listFilesLoading && (
+      {refreshFailed && (
+        <ResourceErrorState
+          title="Couldn't refresh files"
+          description="Showing the last loaded version."
+          onRetry={() => loadFiles()}
+        />
+      )}
+
+      {loadFailed && (
+        <ResourceErrorState
+          title="Couldn't load files"
+          description={
+            listFilesErrorObject instanceof Error
+              ? listFilesErrorObject.message
+              : undefined
+          }
+          onRetry={() => loadFiles()}
+        />
+      )}
+
+      {!hasFiles && !listFilesLoading && !loadFailed && (
         <ResourceEmptyState
           icon={<InsertDriveFile />}
           title="No Files Yet"

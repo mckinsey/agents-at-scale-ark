@@ -135,7 +135,9 @@ describe('QueriesSection', () => {
     expect(screen.getByText(/No queries match/)).toBeInTheDocument();
     expect(screen.getByText(/missing/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /clear search/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /clear search/i }),
+    );
     expect(onClearSearch).toHaveBeenCalledTimes(1);
   });
 
@@ -212,7 +214,10 @@ describe('QueriesSection', () => {
     fireEvent.click(screen.getByText('Cancel'));
 
     await waitFor(() => {
-      expect(queriesService.cancel).toHaveBeenCalledWith('default', 'q-running');
+      expect(queriesService.cancel).toHaveBeenCalledWith(
+        'default',
+        'q-running',
+      );
       expect(refetch).toHaveBeenCalled();
     });
   });
@@ -263,5 +268,56 @@ describe('QueriesSection', () => {
 
     expect(queriesService.delete).toHaveBeenCalledWith('default', 'q-1');
     expect(refetch).toHaveBeenCalled();
+  });
+
+  it('shows an error state instead of the table when the load fails', () => {
+    renderSection({
+      queryResult: {
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        error: new Error('backend is down'),
+        refetch: vi.fn(),
+      },
+    });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/couldn't load queries/i);
+    expect(alert).toHaveTextContent(/backend is down/i);
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('refetches when the retry button is clicked after a failed load', async () => {
+    const refetch = vi.fn();
+    renderSection({
+      queryResult: {
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        error: new Error('backend is down'),
+        refetch,
+      },
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('keeps the table and shows a refresh banner when a refresh fails', () => {
+    renderSection({
+      queryResult: {
+        data: twoQueries,
+        isLoading: false,
+        isError: true,
+        error: new Error('refresh blew up'),
+        refetch: vi.fn(),
+      },
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /couldn't refresh queries/i,
+    );
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByText('q-1')).toBeInTheDocument();
   });
 });
