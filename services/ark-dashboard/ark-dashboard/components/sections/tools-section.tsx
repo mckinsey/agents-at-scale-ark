@@ -1,7 +1,6 @@
 'use client';
 
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { toast } from '@/components/ui/sonner';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Build } from '@/components/icons';
@@ -13,9 +12,9 @@ import {
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
 import {
-  getToolTypeKey,
   type ToolTypeKey,
   ToolsTable,
+  getToolTypeKey,
 } from '@/components/sections/tools-table';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -27,11 +26,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
 import {
-  type Agent,
-  type AgentTool,
+  type AgentListItem,
   type Tool,
   agentsService,
   toolsService,
@@ -62,7 +61,7 @@ const URL_STATE_SPEC = {
 export function ToolsSection() {
   const { readOnlyMode, namespace } = useNamespace();
   const [tools, setTools] = useState<Tool[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
   const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
@@ -73,7 +72,7 @@ export function ToolsSection() {
       try {
         const [toolsData, agentsData] = await Promise.all([
           toolsService.getAll(namespace),
-          agentsService.getAll(namespace),
+          agentsService.listWithTools(namespace),
         ]);
         setTools(toolsData);
         setAgents(agentsData);
@@ -97,11 +96,9 @@ export function ToolsSection() {
     const map: Record<string, { inUse: boolean; reason?: string }> = {};
     const agentsByTool: Record<string, string[]> = {};
     agents.forEach(agent => {
-      agent.tools?.forEach((tool: AgentTool) => {
-        if (tool.name) {
-          agentsByTool[tool.name] ??= [];
-          agentsByTool[tool.name].push(agent.name);
-        }
+      agent.tool_names?.forEach(toolName => {
+        agentsByTool[toolName] ??= [];
+        agentsByTool[toolName].push(agent.name);
       });
     });
     tools.forEach(tool => {
@@ -236,7 +233,7 @@ export function ToolsSection() {
   }
 
   return (
-    <div className="flex h-full w-full content-shell flex-col">
+    <div className="content-shell flex h-full w-full flex-col">
       <ResourcePageHeader
         icon={<Build className="size-full" />}
         title="Tools"

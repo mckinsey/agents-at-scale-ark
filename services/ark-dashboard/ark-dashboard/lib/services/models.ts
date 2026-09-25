@@ -1,7 +1,7 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
-import { fetchAllPages } from '@/lib/api/pagination';
 import type { components } from '@/lib/api/generated/types';
+import { fetchAllPages } from '@/lib/api/pagination';
 
 // Helper type for axios errors
 interface AxiosError extends Error {
@@ -23,32 +23,28 @@ export type Model = ModelDetailResponse & { id: string };
 // List-response shape, no detail-only fields (#2581)
 export type ModelListItem = ModelResponse & { id: string };
 
+type ModelListView = 'summary' | 'with-secrets';
+
+async function fetchModelList(
+  namespace: string,
+  view: ModelListView,
+): Promise<ModelListItem[]> {
+  const items = await fetchAllPages<ModelResponse>(`/api/v1/models`, {
+    namespace,
+    view,
+  });
+
+  return items.map(item => ({ ...item, id: item.name }));
+}
+
 // CRUD Operations
 export const modelsService = {
-  // Get all models
-  async getAll(namespace: string): Promise<Model[]> {
-    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`, {
-      namespace,
-    });
-
-    // Map the response items to include id for UI compatibility
-    const models = await Promise.all(
-      items.map(async item => {
-        // Fetch detailed info for each model to get full data
-        const detailed = await modelsService.getByName(namespace, item.name);
-        return detailed!;
-      }),
-    );
-
-    return models;
+  async list(namespace: string): Promise<ModelListItem[]> {
+    return fetchModelList(namespace, 'summary');
   },
 
-  async list(namespace: string): Promise<ModelListItem[]> {
-    const items = await fetchAllPages<ModelResponse>(`/api/v1/models`, {
-      namespace,
-    });
-
-    return items.map(item => ({ ...item, id: item.name }));
+  async listWithSecrets(namespace: string): Promise<ModelListItem[]> {
+    return fetchModelList(namespace, 'with-secrets');
   },
 
   // Get a single model by name
