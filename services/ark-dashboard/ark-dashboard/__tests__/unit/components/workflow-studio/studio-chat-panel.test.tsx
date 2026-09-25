@@ -125,6 +125,7 @@ interface HarnessOptions {
   mcpMissing?: boolean;
   mcpNotReady?: boolean;
   unverifiable?: boolean;
+  readOnly?: boolean;
 }
 
 function renderPanel(options: HarnessOptions = {}) {
@@ -177,6 +178,7 @@ function renderPanel(options: HarnessOptions = {}) {
           mcpMissing={options.mcpMissing ?? false}
           mcpNotReady={options.mcpNotReady ?? false}
           unverifiable={options.unverifiable ?? false}
+          readOnly={options.readOnly ?? false}
         />
       </>
     );
@@ -565,6 +567,16 @@ describe('StudioChatPanel', () => {
       const call = vi.mocked(chatService.startStreamChatResponse).mock.calls[0];
       expect(call[4]).toBe('argo-make-default-my-workflow');
       expect(call[5]).toBe('conv-prev');
+    });
+  });
+
+  describe('read-only mode', () => {
+    it('disables the composer, send button and suggestions', () => {
+      renderPanel({ readOnly: true });
+
+      expect(screen.getByTestId('studio-chat-input')).toBeDisabled();
+      expect(screen.getByTestId('studio-chat-send')).toBeDisabled();
+      expect(screen.getByTestId('studio-chat-suggestion-0')).toBeDisabled();
     });
   });
 

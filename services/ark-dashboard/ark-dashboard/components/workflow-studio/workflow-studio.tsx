@@ -67,6 +67,7 @@ interface WorkflowStudioProps {
   initialName?: string;
   initialTitle?: string;
   initialDescription?: string;
+  readOnly?: boolean;
 }
 
 interface EditMetaDialogProps {
@@ -251,6 +252,7 @@ export function WorkflowStudio({
   initialName,
   initialTitle,
   initialDescription,
+  readOnly = false,
 }: Readonly<WorkflowStudioProps>) {
   const studio = useWorkflowStudio({
     mode,
@@ -260,6 +262,7 @@ export function WorkflowStudio({
   });
   const gate = useAuthorAgentGate();
   const { namespace, readOnlyMode } = useNamespace();
+  const effectiveReadOnly = readOnly || readOnlyMode;
   const chatSessionId = studio.workflowName
     ? `argo-make-${namespace}-${studio.workflowName}`
     : undefined;
@@ -346,12 +349,16 @@ export function WorkflowStudio({
       : validateWorkflowYaml(studio.draftYaml);
 
   const canSave =
-    studio.isDirty && !studio.building && !studio.saving && validation.ok;
+    studio.isDirty &&
+    !studio.building &&
+    !studio.saving &&
+    validation.ok &&
+    !effectiveReadOnly;
 
   const persisted =
     studio.mode === 'edit' || studio.lastSavedYaml.trim() !== '';
   const canRun =
-    persisted && !studio.isDirty && !studio.building && !readOnlyMode;
+    persisted && !studio.isDirty && !studio.building && !effectiveReadOnly;
   const runParameters = useMemo(
     () => parseWorkflowParameters(studio.draftYaml),
     [studio.draftYaml],
@@ -441,23 +448,25 @@ export function WorkflowStudio({
                 data-testid="studio-title">
                 {studio.title.trim() || studio.workflowName || 'New workflow'}
               </h1>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0"
-                      aria-label="Edit workflow details"
-                      onClick={() => setEditMetaOpen(true)}
-                      data-testid="studio-edit-meta">
-                      <Edit className="text-fg-secondary h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Edit workflow details</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {!effectiveReadOnly && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        aria-label="Edit workflow details"
+                        onClick={() => setEditMetaOpen(true)}
+                        data-testid="studio-edit-meta">
+                        <Edit className="text-fg-secondary h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit workflow details</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
             {studio.description.trim() && (
               <p
@@ -480,6 +489,7 @@ export function WorkflowStudio({
             <StudioHeaderActions
               workflowName={studio.workflowName}
               persisted={persisted}
+              readOnly={effectiveReadOnly}
             />
           </div>
         </div>
@@ -490,6 +500,7 @@ export function WorkflowStudio({
           <StudioChatPanel
             chat={chat}
             loading={gate.loading || chat.historyLoading}
+            readOnly={effectiveReadOnly}
             gated={gate.gated}
             agentMissing={gate.agentMissing}
             agentNotReady={gate.agentNotReady}
@@ -554,7 +565,8 @@ export function WorkflowStudio({
                     studio.setDraftYaml(value);
                     studio.setHandEdited(true);
                   }}
-                  readOnly={studio.building}
+                  readOnly={studio.building || effectiveReadOnly}
+                  building={studio.building}
                   error={
                     validation.ok ? undefined : { message: validation.message }
                   }

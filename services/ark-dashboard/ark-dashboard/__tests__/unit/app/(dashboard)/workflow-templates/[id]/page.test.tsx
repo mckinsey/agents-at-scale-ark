@@ -55,18 +55,15 @@ describe('WorkflowTemplatePage', () => {
     expect(await screen.findByTestId('workflow-studio')).toBeInTheDocument();
   });
 
-  it('renders a not-authorized message with a back link and no studio when canUpdate is false', async () => {
+  it('renders the studio (read-only) with no permission-denied message when canUpdate is false', async () => {
     setup({ canUpdate: false });
 
     render(<WorkflowTemplatePage />);
 
+    expect(await screen.findByTestId('workflow-studio')).toBeInTheDocument();
     expect(
-      await screen.findByText(/don't have permission to edit/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: /back to workflow templates/i }),
-    ).toBeInTheDocument();
-    expect(screen.queryByTestId('workflow-studio')).not.toBeInTheDocument();
+      screen.queryByText(/don't have permission to edit/i),
+    ).not.toBeInTheDocument();
   });
 
   it('re-runs the access check when the namespace changes', async () => {
