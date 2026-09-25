@@ -11,7 +11,7 @@ export const useGetAllTeams = () => {
 
   return useQuery({
     queryKey: [GET_ALL_TEAMS_QUERY_KEY, namespace],
-    queryFn: () => teamsService.getAll(namespace),
+    queryFn: () => teamsService.list(namespace),
     enabled: Boolean(namespace),
   });
 };

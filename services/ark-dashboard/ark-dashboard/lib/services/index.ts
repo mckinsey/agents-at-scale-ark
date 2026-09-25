@@ -8,6 +8,7 @@ export {
 export {
   teamsService,
   type Team,
+  type TeamListItem,
   type TeamCreateRequest,
   type TeamUpdateRequest,
   type TeamMember,

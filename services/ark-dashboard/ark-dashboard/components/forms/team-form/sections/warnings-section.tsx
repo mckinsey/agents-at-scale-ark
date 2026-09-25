@@ -1,10 +1,15 @@
 import { AlertCircle } from 'lucide-react';
 
-import { Alert, AlertIcon, AlertContent, AlertDescription } from '@/components/ui/alert';
-import type { Agent, TeamMember } from '@/lib/services';
+import {
+  Alert,
+  AlertContent,
+  AlertDescription,
+  AlertIcon,
+} from '@/components/ui/alert';
+import type { AgentListItem, TeamMember } from '@/lib/services';
 
 interface WarningsSectionProps {
-  agents: Agent[];
+  agents: AgentListItem[];
   selectedMembers: TeamMember[];
   strategy: string;
   enableTerminateTool?: boolean;
@@ -22,7 +27,7 @@ export function WarningsSection({
 
   const anyMemberHasTerminateTool = selectedMembers.some(member => {
     const agent = agents.find(a => a.name === member.name);
-    return agent?.tools?.some(tool => tool.name === 'terminate');
+    return agent?.tool_names?.includes('terminate');
   });
 
   if (enableTerminateTool !== false || anyMemberHasTerminateTool) {
@@ -36,7 +41,10 @@ export function WarningsSection({
       </AlertIcon>
       <AlertContent>
         <AlertDescription>
-          Neither the agents nor the selector have access to the terminate tool, which may prevent the conversation from terminating gracefully. Enable the terminate tool for the selector, or give one or more agents in the team access to the terminate tool.
+          Neither the agents nor the selector have access to the terminate tool,
+          which may prevent the conversation from terminating gracefully. Enable
+          the terminate tool for the selector, or give one or more agents in the
+          team access to the terminate tool.
         </AlertDescription>
       </AlertContent>
     </Alert>

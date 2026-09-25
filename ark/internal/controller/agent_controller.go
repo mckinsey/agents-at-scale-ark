@@ -291,18 +291,7 @@ func (r *AgentReconciler) setCondition(agent *arkv1alpha1.Agent, conditionType s
 
 // updateStatus updates the Agent status
 func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.Agent) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	err := r.Status().Update(ctx, agent)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		logf.FromContext(ctx).Error(err, "failed to update agent status")
-	}
-	return err
+	return updateStatusIgnoringDeleted(ctx, r.Client, agent, "agent")
 }
 
 // agentModelRefIndexer returns the model reference name for field-based Agent lookups.
@@ -384,10 +373,11 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(ctx, &agentList,
+	if r.List(
+		ctx, &agentList,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.tools.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)
@@ -395,10 +385,11 @@ func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Obje
 
 func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(ctx, &agentList,
+	if r.List(
+		ctx, &agentList,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.modelRef.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)
@@ -406,10 +397,11 @@ func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Obj
 
 func (r *AgentReconciler) findAgentsForExecutionEngine(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(ctx, &agentList,
+	if r.List(
+		ctx, &agentList,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.executionEngine.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)
