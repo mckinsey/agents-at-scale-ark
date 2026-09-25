@@ -125,7 +125,7 @@ type QueryReconciler struct {
 	// default (1).
 	MaxConcurrentReconciles int
 
-	sched      *fairScheduler
+	sched         *fairScheduler
 	operations    sync.Map
 	saClients     *impersonatedClientCache
 	saClientsOnce sync.Once
