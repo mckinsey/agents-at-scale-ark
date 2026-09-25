@@ -89,7 +89,7 @@ func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, 
 		return nil, err
 	}
 
-	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages)
+	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages, tools)
 	anthropicTools := convertToolsToAnthropic(tools)
 
 	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, toolChoice, bm.Properties)

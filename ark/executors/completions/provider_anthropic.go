@@ -40,7 +40,7 @@ func (ap *AnthropicProvider) SetOutputSchema(schema *runtime.RawExtension, schem
 }
 
 func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
-	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages)
+	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages, tools)
 	anthropicTools := convertToolsToAnthropic(tools)
 
 	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, toolChoice, ap.Properties)
