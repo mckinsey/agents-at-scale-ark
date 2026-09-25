@@ -31,8 +31,11 @@ USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/inlinerunner"]
 
+# The :nonroot tags already default to uid 65532; the USER lines restate it so
+# the runtime identity is explicit in the image and to scanners.
 FROM gcr.io/distroless/python3-debian12:nonroot AS python
 COPY --from=builder /workspace/inlinerunner /inlinerunner
+USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/inlinerunner"]
 
@@ -40,5 +43,6 @@ ENTRYPOINT ["/inlinerunner"]
 # natively, so there is no loader to vendor and no second base to pin.
 FROM gcr.io/distroless/nodejs24-debian12:nonroot AS node
 COPY --from=builder /workspace/inlinerunner /inlinerunner
+USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/inlinerunner"]
