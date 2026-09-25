@@ -104,6 +104,7 @@ func (r *noopModelRecorder) RecordInput(span telemetry.Span, messages any) {} //
 func (r *noopModelRecorder) RecordOutput(span telemetry.Span, output any)  {} //nolint:revive
 func (r *noopModelRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 } //nolint:revive
+
 func (r *noopModelRecorder) RecordModelDetails(span telemetry.Span, modelName, modelType string) {
 }                                                                       //nolint:revive
 func (r *noopModelRecorder) RecordSuccess(span telemetry.Span)          {} //nolint:revive
@@ -139,6 +140,7 @@ func (r *noopTeamRecorder) StartTurn(ctx context.Context, turn int, memberName, 
 
 func (r *noopTeamRecorder) RecordTurnOutput(span telemetry.Span, output string, messageCount int) {
 } //nolint:revive
+
 func (r *noopTeamRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 }                                                                      //nolint:revive
 func (r *noopTeamRecorder) RecordSuccess(span telemetry.Span)          {} //nolint:revive
