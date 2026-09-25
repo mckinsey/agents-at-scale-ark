@@ -7,61 +7,45 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 
-	"mckinsey.com/ark/internal/eventing"
+	eventmock "mckinsey.com/ark/internal/eventing/mock"
 )
 
-type capturedEvent struct {
-	reason  string
-	message string
-}
-
-type capturingEmitter struct {
-	normals []capturedEvent
-}
-
-func (c *capturingEmitter) EmitNormal(_ context.Context, _ runtime.Object, reason, message string) {
-	c.normals = append(c.normals, capturedEvent{reason: reason, message: message})
-}
-
-func (c *capturingEmitter) EmitWarning(_ context.Context, _ runtime.Object, _, _ string) {}
-
-func (c *capturingEmitter) EmitStructured(_ context.Context, _ runtime.Object, _, _, _ string, _ any) {
-}
-
-var _ eventing.EventEmitter = (*capturingEmitter)(nil)
-
 func TestTeamRecorderCreated(t *testing.T) {
-	emitter := &capturingEmitter{}
+	emitter := eventmock.NewMockEventEmitter()
 	r := NewTeamRecorder(emitter, emitter)
 
 	r.Created(context.Background(), &corev1.ConfigMap{})
 
-	if len(emitter.normals) != 1 {
-		t.Fatalf("expected 1 normal event, got %d", len(emitter.normals))
+	events := emitter.GetEvents()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if emitter.normals[0].reason != "TeamCreated" {
-		t.Errorf("reason = %q, want TeamCreated", emitter.normals[0].reason)
+	if events[0].Type != corev1.EventTypeNormal {
+		t.Errorf("type = %q, want Normal", events[0].Type)
 	}
-	if emitter.normals[0].message != "Initialized team conditions" {
-		t.Errorf("message = %q, want Initialized team conditions", emitter.normals[0].message)
+	if events[0].Reason != "TeamCreated" {
+		t.Errorf("reason = %q, want TeamCreated", events[0].Reason)
+	}
+	if events[0].Message != "Initialized team conditions" {
+		t.Errorf("message = %q, want Initialized team conditions", events[0].Message)
 	}
 }
 
 func TestTeamRecorderStatusChanged(t *testing.T) {
-	emitter := &capturingEmitter{}
+	emitter := eventmock.NewMockEventEmitter()
 	r := NewTeamRecorder(emitter, emitter)
 
 	r.StatusChanged(context.Background(), &corev1.ConfigMap{}, "Team availability: True - Available")
 
-	if len(emitter.normals) != 1 {
-		t.Fatalf("expected 1 normal event, got %d", len(emitter.normals))
+	events := emitter.GetEvents()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if emitter.normals[0].reason != "StatusChanged" {
-		t.Errorf("reason = %q, want StatusChanged", emitter.normals[0].reason)
+	if events[0].Reason != "StatusChanged" {
+		t.Errorf("reason = %q, want StatusChanged", events[0].Reason)
 	}
-	if emitter.normals[0].message != "Team availability: True - Available" {
-		t.Errorf("message = %q", emitter.normals[0].message)
+	if events[0].Message != "Team availability: True - Available" {
+		t.Errorf("message = %q", events[0].Message)
 	}
 }
