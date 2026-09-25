@@ -54,6 +54,7 @@ const TYPE_ITEMS: ReadonlyArray<{ value: TypeFilter; label: string }> = [
   { value: 'mcp', label: 'MCP' },
   { value: 'agent', label: 'Agent' },
   { value: 'team', label: 'Team' },
+  { value: 'inline', label: 'Inline' },
 ];
 
 function parseTypeFilter(raw: string): TypeFilter {
