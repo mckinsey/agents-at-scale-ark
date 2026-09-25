@@ -26,7 +26,7 @@ A few conventions apply across the broker's read endpoints:
 
 - **Pagination.** List endpoints return `{ "items": [...], "total": N, "hasMore": bool, "nextCursor": M }`. Pass `?limit=<n>` to size the page and `?cursor=<nextCursor>` to fetch the next one.
 - **SSE streaming.** Any list endpoint accepts `?watch=true` to switch from a JSON page to a Server-Sent Events stream. New items arrive as `data:` lines. Add `?from-beginning=true` to replay existing items before streaming new ones, or `?cursor=<n>` to resume after a known sequence number.
-- **Write vs read.** The controller and executors POST data in (chunks, traces, events, messages); the dashboard and `ark-api` GET it out. Each domain also exposes a `DELETE` to purge it.
+- **Write vs read.** The controller and executors POST data in (chunks, traces, events, messages); the dashboard and `ark-api` GET it out. Deletes name what to remove — a conversation or a query. The one exception is `DELETE /conversations`, which clears the whole memory store.
 
 ## Messages
 
@@ -35,7 +35,6 @@ Chat messages exchanged during queries, grouped by conversation and query ID. Th
 ```
 GET    /messages
 POST   /messages
-DELETE /messages
 GET    /memory-status
 GET    /conversations
 POST   /conversations
@@ -90,7 +89,6 @@ GET    /stream                      # paginated chunks, or SSE with ?watch=true
 GET    /stream/{query_name}         # SSE stream for one query
 POST   /stream/{query_id}           # controller/executor pushes a chunk
 POST   /stream/{query_id}/complete  # mark the query stream complete
-DELETE /stream
 ```
 
 | Parameter | Applies to | Description |
@@ -145,7 +143,6 @@ Returns `{}` on success.
 ```
 GET    /traces
 GET    /traces/{traceId}
-DELETE /traces
 ```
 
 Returns traces grouped by trace ID.
@@ -205,7 +202,6 @@ Controller operation events emitted as a query executes — `QueryExecutionStart
 GET    /events
 GET    /events/{queryId}
 POST   /events
-DELETE /events
 DELETE /events/{queryId}
 ```
 
@@ -231,7 +227,7 @@ Held in memory by default, per replica. With `SESSIONS_BACKEND=postgres` session
 GET    /sessions
 GET    /sessions/{sessionId}
 POST   /sessions
-DELETE /sessions
+DELETE /sessions/queries/{queryId}
 ```
 
 | Parameter | Description |
@@ -263,10 +259,10 @@ curl "http://localhost:8080/sessions?limit=10&status=active"
 
 | Domain | Endpoints |
 |--------|-----------|
-| Messages | `GET`/`POST`/`DELETE` `/messages`, `GET /memory-status` |
+| Messages | `GET`/`POST` `/messages`, `GET /memory-status` |
 | Conversations | `GET`/`POST`/`DELETE` `/conversations`, `GET`/`DELETE` `/conversations/{id}`, `DELETE /queries/{queryId}/messages`, `DELETE /conversations/{id}/queries/{queryId}/messages` |
-| Chunks | `GET`/`DELETE` `/stream`, `GET /stream/{query_name}`, `POST /stream/{query_id}`, `POST /stream/{query_id}/complete` |
-| Traces | `POST /v1/traces` (OTLP), `GET`/`DELETE` `/traces`, `GET /traces/{traceId}` |
-| Events | `GET`/`POST`/`DELETE` `/events`, `GET`/`DELETE` `/events/{queryId}` |
-| Sessions | `GET`/`POST`/`DELETE` `/sessions`, `GET /sessions/{sessionId}` |
+| Chunks | `GET /stream`, `GET /stream/{query_name}`, `POST /stream/{query_id}`, `POST /stream/{query_id}/complete` |
+| Traces | `POST /v1/traces` (OTLP), `GET /traces`, `GET /traces/{traceId}` |
+| Events | `GET`/`POST` `/events`, `GET`/`DELETE` `/events/{queryId}` |
+| Sessions | `GET`/`POST` `/sessions`, `GET /sessions/{sessionId}`, `DELETE /sessions/queries/{queryId}` |
 | Health | `GET /health` (liveness), `GET /readyz` (readiness) |

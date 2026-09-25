@@ -1,7 +1,6 @@
 'use client';
 
-import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { SessionsView } from '@/components/broker/sessions-view';
 import { StreamView } from '@/components/broker/stream-view';
@@ -30,10 +29,7 @@ import {
   BROKER_STREAM_KEYS,
   type BrokerStreamKey,
 } from '@/lib/services/broker-streams';
-import {
-  BROKER_STREAM_PROBE_QUERY_KEY,
-  useBrokerStreamProbe,
-} from '@/lib/services/broker-streams-hooks';
+import { useBrokerStreamProbe } from '@/lib/services/broker-streams-hooks';
 import {
   type MemoryListItem,
   memoriesService,
@@ -101,25 +97,17 @@ function getEmptyStateContent(kind: EmptyStateKind, memory: string) {
 interface BrokerStreamTabProps {
   readonly streamKey: Exclude<BrokerStreamKey, 'sessions'>;
   readonly memory: string;
-  readonly onPurged: (streamKey: BrokerStreamKey) => void;
   readonly onEntriesPresentChange: (hasEntries: boolean) => void;
 }
 
 function BrokerStreamTab({
   streamKey,
   memory,
-  onPurged,
   onEntriesPresentChange,
 }: Readonly<BrokerStreamTabProps>) {
-  const handlePurged = useCallback(
-    () => onPurged(streamKey),
-    [onPurged, streamKey],
-  );
-
   const stream = useSSEStream(BROKER_STREAM_ENDPOINTS[streamKey], memory, {
     pageSize: STREAM_PAGE_SIZE,
     fetchAllPages: true,
-    onPurge: handlePurged,
   });
 
   const hasEntries = stream.entries.length > 0;
@@ -137,7 +125,6 @@ function BrokerStreamTab({
       isLoading={stream.isLoading}
       hasMore={stream.hasMore}
       error={stream.error}
-      onPurge={stream.purge}
       onLoadMore={stream.loadMore}
     />
   );
@@ -150,33 +137,10 @@ export default function BrokerPage() {
   const [hasMemoriesError, setHasMemoriesError] = useState(false);
   const [activeTab, setActiveTab] = useState<BrokerStreamKey>('traces');
   const [hasLiveEntries, setHasLiveEntries] = useState(false);
-  const queryClient = useQueryClient();
   const { namespace } = useNamespace();
 
   const selectedMemoryRef = useRef(selectedMemory);
   selectedMemoryRef.current = selectedMemory;
-
-  const reprobeStreams = useCallback(() => {
-    queryClient.invalidateQueries({
-      queryKey: [BROKER_STREAM_PROBE_QUERY_KEY],
-    });
-  }, [queryClient]);
-
-  const handlePurged = useCallback(
-    (streamType: BrokerStreamKey) => {
-      trackEvent({
-        name: 'broker_data_purged',
-        properties: { streamType, memoryName: selectedMemory },
-      });
-      reprobeStreams();
-    },
-    [selectedMemory, reprobeStreams],
-  );
-
-  const handleSessionsPurged = useCallback(
-    () => handlePurged('sessions'),
-    [handlePurged],
-  );
 
   useEffect(() => {
     let isStale = false;
@@ -329,14 +293,12 @@ export default function BrokerPage() {
                 <SessionsView
                   memory={selectedMemory}
                   title={panelTitleFor(key)}
-                  onPurged={handleSessionsPurged}
                 />
               ) : (
                 <BrokerStreamTab
                   key={`${key}:${selectedMemory}`}
                   streamKey={key}
                   memory={selectedMemory}
-                  onPurged={handlePurged}
                   onEntriesPresentChange={setHasLiveEntries}
                 />
               )}

@@ -176,36 +176,6 @@ export function createMemoryRouter(
 
   /**
    * @swagger
-   * /messages:
-   *   delete:
-   *     summary: Purge all memory data
-   *     description: Clears all stored messages and saves empty state to disk
-   *     tags:
-   *       - Memory
-   *     responses:
-   *       200:
-   *         description: Memory purged successfully
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 status:
-   *                   type: string
-   *                   example: success
-   *                 message:
-   *                   type: string
-   *                   example: Memory purged
-   *       500:
-   *         description: Failed to purge memory
-   */
-  router.delete('/messages', async (_req, res) => {
-    await memory.delete();
-    res.json({status: 'success', message: 'Memory purged'});
-  });
-
-  /**
-   * @swagger
    * /conversations/{conversationId}:
    *   delete:
    *     summary: Delete a specific conversation

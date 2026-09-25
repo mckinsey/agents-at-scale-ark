@@ -21,9 +21,9 @@ const {app} = buildApp({
 
 describe('ARK Broker API', () => {
   afterEach(async () => {
-    const getResponse = await request(app).delete('/messages');
+    const getResponse = await request(app).delete('/conversations');
     expect(getResponse.status).toBe(200);
-    expect(getResponse.body.message).toEqual('Memory purged');
+    expect(getResponse.body.message).toEqual('All conversations deleted');
   });
 
   describe('Health Check', () => {

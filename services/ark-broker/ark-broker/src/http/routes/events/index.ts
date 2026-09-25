@@ -109,16 +109,6 @@ export function createEventsRouter(
     }
   );
 
-  router.delete('/', async (req, res) => {
-    try {
-      await events.delete();
-      res.json({status: 'success', message: 'Event data purged'});
-    } catch (error) {
-      req.log.error({err: error}, 'event purge failed');
-      sendInternalError(res, req.id);
-    }
-  });
-
   router.delete<{query_id: string}>('/:query_id', async (req, res) => {
     const {query_id: queryId} = req.params;
 

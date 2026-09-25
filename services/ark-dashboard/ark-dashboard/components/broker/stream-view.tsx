@@ -31,7 +31,6 @@ interface StreamViewProps {
   readonly isLoading?: boolean;
   readonly hasMore?: boolean;
   readonly error: string | null;
-  readonly onPurge: () => void;
   readonly onLoadMore?: () => void;
 }
 
@@ -42,7 +41,6 @@ export function StreamView({
   isLoading,
   hasMore,
   error,
-  onPurge,
   onLoadMore,
 }: Readonly<StreamViewProps>) {
   const {
@@ -59,7 +57,6 @@ export function StreamView({
       isConnected={isConnected}
       autoScroll={autoScroll}
       onAutoScrollChange={setAutoScroll}
-      onPurge={onPurge}
       containerRef={containerRef}
       error={error}>
       {entries.length === 0 ? (
