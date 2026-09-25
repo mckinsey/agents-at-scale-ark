@@ -246,6 +246,8 @@ The activator's stateless MCP handler serves initialization, notifications, ping
 
 Routes outside the explicitly watched namespaces, deleted/recreated Tools, and unknown names are rejected. API read failures and malformed schemas fail closed. Only `tools/call` reaches the separate invocation handler. **Rollout status:** the metadata handler is tested but not installed until activation and lifecycle enforcement are complete.
 
+Stateless `tools/call` work is tied to its HTTP request lifetime. Disconnecting cancels the invocation context and terminates a running script's process group rather than waiting for the execution limit. Cancellation cannot roll back effects already dispatched; treat a lost response as uncertain execution.
+
 #### Activation identity checks
 
 The activation decision requires an enabled feature, a matching Tool name and UID, and `Available=True` for the current generation with the canonical published activator address. It rejects missing, deleting, cross-namespace, or unowned runner resources and stale source/language identity. The backend address is derived from the controller's shared child names and private Service, never a caller-supplied URL.
