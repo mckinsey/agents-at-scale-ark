@@ -90,9 +90,10 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 rules:
-  # Read namespace metadata to detect the ark.mckinsey.com/demo label
-  # (read-only mode) in GET /v1/context. Namespaces are cluster-scoped, so this
-  # must be granted here rather than in the namespaced Role.
+  # Read namespace metadata to validate the target namespace exists in
+  # GET /v1/context (so the dashboard can redirect on a stale namespace param).
+  # Namespaces are cluster-scoped, so this must be granted here rather than in
+  # the namespaced Role.
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get"]

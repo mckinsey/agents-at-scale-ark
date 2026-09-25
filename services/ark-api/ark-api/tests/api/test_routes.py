@@ -108,10 +108,15 @@ class TestContextEndpoint(unittest.TestCase):
     @patch("ark_api.api.v1.namespaces.get_current_context")
     @patch("ark_api.api.v1.namespaces.create_api_client")
     @patch("ark_api.api.v1.namespaces.client.CoreV1Api")
-    def test_get_context_with_valid_namespace(
+    def test_get_context_demo_label_does_not_force_read_only(
         self, mock_v1_api, mock_api_client, mock_get_current_context
     ):
-        """Test context with valid namespace parameter."""
+        """A namespace label must NOT make the context read-only.
+
+        The `ark.mckinsey.com/demo` (now `landing-page`) label only affects
+        landing-page visibility; editability is governed by RBAC. read_only_mode
+        reflects the deployment-wide READ_ONLY_MODE env only (default false).
+        """
         mock_get_current_context.return_value = {
             "namespace": "default",
             "cluster": "test-cluster",
@@ -133,7 +138,8 @@ class TestContextEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["namespace"], "kyc-demo")
-        self.assertEqual(data["read_only_mode"], True)  # Demo namespace has read_only
+        # Label present, but read_only_mode stays False (no env READ_ONLY_MODE).
+        self.assertEqual(data["read_only_mode"], False)
 
     @patch("ark_api.api.v1.namespaces.get_current_context")
     @patch("ark_api.api.v1.namespaces.create_api_client")
@@ -167,6 +173,61 @@ class TestContextEndpoint(unittest.TestCase):
         self.assertIn("detail", data)
         self.assertEqual(data["detail"]["message"], "Namespace 'invalid-ns' not found")
         self.assertEqual(data["detail"]["default_namespace"], "kyc-demo")
+
+    @patch("ark_api.api.v1.namespaces.user_can_edit")
+    @patch("ark_api.api.v1.namespaces.get_ark_permissions")
+    @patch("ark_api.api.v1.namespaces.get_current_context")
+    @patch("ark_api.api.v1.namespaces.create_api_client")
+    @patch("ark_api.api.v1.namespaces.client.CoreV1Api")
+    def test_get_context_impersonated_user_without_edit_is_read_only(
+        self,
+        mock_v1_api,
+        mock_api_client,
+        mock_get_current_context,
+        mock_get_ark_permissions,
+        mock_user_can_edit,
+    ):
+        """Per-user path: an impersonated identity that cannot edit is read-only.
+
+        With READ_ONLY_MODE off and an impersonated user, /v1/context reflects
+        RBAC — a user who cannot write the namespace gets read_only_mode=True.
+        """
+        from ark_api.auth.dependencies import get_impersonation_config
+        from ark_api.main import app
+        from ark_api.models.context import PermissionsResponse
+        from ark_sdk.impersonation import ImpersonationConfig
+
+        mock_get_current_context.return_value = {
+            "namespace": "default",
+            "cluster": "test-cluster",
+        }
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespace = AsyncMock(return_value=Mock())
+
+        mock_get_ark_permissions.return_value = PermissionsResponse(
+            status="ok", rules={"agents": ["get", "list"]}
+        )
+        mock_user_can_edit.return_value = False
+
+        app.dependency_overrides[get_impersonation_config] = lambda: ImpersonationConfig(
+            username="viewer@example.com", groups=["viewers"]
+        )
+        try:
+            response = self.client.get("/v1/context?namespace=default")
+        finally:
+            app.dependency_overrides.pop(get_impersonation_config, None)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["read_only_mode"])
+        # The per-user check received the rules already fetched for permissions.
+        mock_user_can_edit.assert_awaited_once()
+        self.assertEqual(
+            mock_user_can_edit.await_args.args[2], {"agents": ["get", "list"]}
+        )
 
 
 class TestDeleteEndpoints(unittest.TestCase):

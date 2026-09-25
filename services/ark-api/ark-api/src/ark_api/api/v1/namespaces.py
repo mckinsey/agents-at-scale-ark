@@ -13,7 +13,7 @@ from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
 from ...core.namespace import get_current_context
-from ...core.permissions import get_ark_permissions
+from ...core.permissions import get_ark_permissions, user_can_edit
 from ...models.context import ContextResponse
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
@@ -92,26 +92,31 @@ async def get_context_endpoint(
     3. Fallback to default
 
     Args:
-        namespace: Optional namespace to check for demo mode
+        namespace: Optional namespace to resolve/validate
 
     Returns:
         ContextResponse: The current namespace, cluster, and read-only mode status
     """
     current_context = get_current_context()
-    
+
     # Use provided namespace or fall back to current context namespace
     target_namespace = namespace or current_context["namespace"]
-    
-    # Check if namespace exists and has demo label
-    read_only_mode = False
+
+    # read_only_mode drives the dashboard's read-only UI. It is the deployment
+    # -wide READ_ONLY_MODE toggle OR (per-user) whether the impersonated user
+    # lacks write access to this namespace — so the dashboard renders read-only
+    # for users who cannot edit, instead of showing enabled buttons that 403.
+    # It is NOT derived from any namespace label (the historical
+    # `ark.mckinsey.com/demo` coupling was removed): landing-page visibility must
+    # not make a namespace read-only. In open mode (no identity) it stays false.
+    read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
+
+    # Verify the namespace exists so the dashboard can redirect on a bad/stale
+    # namespace param (404 carries the default namespace to redirect to).
     try:
         async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
-            ns = await v1.read_namespace(name=target_namespace)
-
-            # Check if namespace has demo label
-            if ns.metadata.labels and ns.metadata.labels.get("ark.mckinsey.com/demo") == "true":
-                read_only_mode = True
+            await v1.read_namespace(name=target_namespace)
     except ApiException as e:
         if e.status == 404:
             # Namespace doesn't exist - return 404 with default namespace for redirect
@@ -123,15 +128,21 @@ async def get_context_endpoint(
                     "default_namespace": default_namespace
                 }
             )
-        logger.warning("Could not check namespace labels: %s", e)
-        # Fall back to environment variable for other errors
-        read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
+        logger.warning("Could not verify namespace '%s': %s", target_namespace, e)
     except Exception as e:
-        logger.warning("Could not check namespace labels: %s", e)
-        # Fall back to environment variable if we can't check the namespace
-        read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
+        logger.warning("Could not verify namespace '%s': %s", target_namespace, e)
 
     permissions = await get_ark_permissions(impersonation, target_namespace)
+
+    # Per-user read-only: if not already globally read-only and we have an
+    # impersonated identity, present the namespace as read-only when the user
+    # cannot write it (RBAC). Reuses the rules already fetched above, so the
+    # create decision is read from them on the happy path instead of issuing
+    # fresh access reviews. Open mode (impersonation is None) stays editable.
+    if not read_only_mode and impersonation is not None:
+        read_only_mode = not await user_can_edit(
+            impersonation, target_namespace, permissions.rules
+        )
 
     return ContextResponse(
         namespace=target_namespace,
