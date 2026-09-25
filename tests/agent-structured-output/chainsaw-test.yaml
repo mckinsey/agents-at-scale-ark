@@ -1,0 +1,144 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-structured-output
+spec:
+  description: Test that an agent outputSchema reaches the model provider as a strict json_schema response format
+  timeouts:
+    exec: 300s
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        file: manifests/a00-rbac.yaml
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: create-agent-and-query
+    try:
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: schema-query
+        timeout: 2m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: schema-query
+
+  - name: validate-structured-response
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: schema-query
+          status:
+            phase: done
+            (response.target.name): 'schema-agent'
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          RESPONSE=$(kubectl -n $NAMESPACE get query schema-query -o jsonpath='{.status.response.content}')
+
+          echo "=== Query Response Content ==="
+          echo "$RESPONSE"
+          echo "=========================="
+
+          echo "$RESPONSE" | jq -e . >/dev/null || {
+            echo "✗ Response is not valid JSON"
+            exit 1
+          }
+          echo "✓ Response is valid JSON"
+
+          for field in summary sentiment confidence; do
+            echo "$RESPONSE" | jq -e "has(\"$field\")" >/dev/null || {
+              echo "✗ Response missing required schema field: $field"
+              exit 1
+            }
+          done
+          echo "✓ Response carries every field required by the outputSchema"
+
+          SCHEMA_NAME=$(echo "$RESPONSE" | jq -r '.schema_name')
+          echo "schema name sent to provider: $SCHEMA_NAME"
+          case "$SCHEMA_NAME" in
+            namespace-$NAMESPACE-agent-schema-agent) ;;
+            *)
+              echo "✗ Unexpected json_schema name: $SCHEMA_NAME"
+              exit 1
+              ;;
+          esac
+          echo "✓ json_schema name identifies the namespace and agent"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: schema-query
+
+  - name: validate-agent-without-schema-sends-no-response-format
+    try:
+    - apply:
+        file: manifests/a03-agent-no-schema.yaml
+    - apply:
+        file: manifests/a04-query-no-schema.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: no-schema-query
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: no-schema-query
+          status:
+            phase: error
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: no-schema-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -1,0 +1,46 @@
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  # Fail closed: a completions request that does not carry the agent's
+  # outputSchema as response_format matches only this rule and errors the query.
+  - path: "/v1/chat/completions"
+    response:
+      status: 500
+      content: '"request carried no response_format.json_schema"'
+
+  # Matched only when outputSchema reached the provider as a strict json_schema
+  # response format, with the schema body intact. The reply echoes the schema
+  # name the executor generated so the test can assert on it.
+  - path: "/v1/chat/completions"
+    match: "body.response_format.type == 'json_schema' && body.response_format.json_schema.strict == `true` && body.response_format.json_schema.schema.properties.sentiment != null"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": "{\"summary\":\"schema applied\",\"sentiment\":\"positive\",\"confidence\":0.9,\"schema_name\":\"{{jmes request body.response_format.json_schema.name}}\"}"
+            },
+            "finish_reason": "stop"
+          }],
+          "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        }

@@ -276,28 +276,42 @@ class SessionsPage(BasePage):
         option.click()
         self.page.wait_for_timeout(500)
 
+    def _session_rows(self):
+        """The rendered session rows, waiting for the table to settle first."""
+        try:
+            self.page.wait_for_selector(
+                "button[aria-pressed], div.py-12.text-center:has-text('No sessions found')",
+                timeout=10000,
+            )
+        except Exception:
+            pass
+        rows = self.page.locator("button[type='button'][aria-pressed]")
+        if rows.count() > 0:
+            return rows
+        return self.page.locator("button[type='button'].grid")
+
     def get_visible_session_count(self) -> int:
         try:
-            try:
-                self.page.wait_for_selector(
-                    "button[aria-pressed], div.py-12.text-center:has-text('No sessions found')",
-                    timeout=10000,
-                )
-            except Exception:
-                pass
-            rows = self.page.locator(
-                "button[type='button'][aria-pressed]"
-            )
-            count = rows.count()
-            if count > 0:
-                return count
-            rows = self.page.locator(
-                "button[type='button'].grid"
-            )
-            return rows.count()
+            return self._session_rows().count()
         except Exception as e:
             logger.warning("Could not get visible session count: %s", e)
         return 0
+
+    def get_visible_session_names(self) -> list[str]:
+        """The session name of each rendered row, in the order shown.
+
+        The name cell also carries an error badge and a timestamp, so the
+        session id is read from its own element rather than the whole cell.
+        """
+        try:
+            rows = self._session_rows()
+            return [
+                rows.nth(i).locator("div.line-clamp-1").first.inner_text().strip()
+                for i in range(rows.count())
+            ]
+        except Exception as e:
+            logger.warning("Could not read visible session names: %s", e)
+        return []
 
     def search_sessions(self, query: str) -> None:
         try:

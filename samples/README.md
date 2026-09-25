@@ -274,11 +274,10 @@ Querying multiple agents and teams.
 - **Query**: Single input to multiple processors
 - **Use case**: Parallel processing
 
-#### `queries/query-with-label-selectors.yaml` - Label Selector Queries
+#### `queries/query-with-selectors.yaml` - Label Selector Queries
 Dynamic target selection using label selectors.
-- **Selector**: Label-based target discovery
-- **Mixed mode**: Explicit targets + label selector
-- **Query**: Selects agents and teams by labels
+- **Selector**: `matchLabels` and `matchExpressions` label-based discovery
+- **Mixed mode**: Explicit target + label selector
 - **Use case**: Dynamic resource discovery
 
 #### `queries/query-selectors-only.yaml` - Selector-Only Query
@@ -306,14 +305,12 @@ Enterprise customer onboarding with comprehensive parameters.
 
 Queries support three ways to select targets:
 
-#### 1. Explicit Targets
+#### 1. Explicit Target
 ```yaml
 spec:
-  targets:
-    - type: agent
-      name: specific-agent
-    - type: team
-      name: specific-team
+  target:
+    type: agent
+    name: specific-agent
 ```
 
 #### 2. Label Selectors
@@ -328,9 +325,9 @@ spec:
 #### 3. Mixed Mode (Both)
 ```yaml
 spec:
-  targets:
-    - type: agent
-      name: backup-agent
+  target:
+    type: agent
+    name: backup-agent
   selector:
     matchExpressions:
       - key: category

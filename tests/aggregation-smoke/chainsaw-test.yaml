@@ -62,9 +62,32 @@ spec:
       - script:
           content: |
             set -eu
-            kubectl get models -n $NAMESPACE --watch-only --timeout=5 &
+
+            WATCH_OUT=$(mktemp)
+            kubectl get models -n $NAMESPACE --watch -o name > "$WATCH_OUT" 2>&1 &
             WATCH_PID=$!
-            sleep 2
+            trap 'kill $WATCH_PID 2>/dev/null || true; wait $WATCH_PID 2>/dev/null || true; rm -f "$WATCH_OUT"' EXIT
+
+            await_watch_line() {
+              name=$1
+              what=$2
+              i=0
+              while :; do
+                if grep -q "/${name}$" "$WATCH_OUT"; then
+                  echo "OK ${what}"
+                  return 0
+                fi
+                i=$((i + 1))
+                [ "$i" -ge 50 ] && break
+                sleep 0.2
+              done
+              echo "FAIL ${what}"
+              echo "watch output so far:"
+              cat "$WATCH_OUT"
+              return 1
+            }
+
+            await_watch_line smoke-test-model "watch established (initial list delivered)"
 
             cat <<'MANIFEST' | kubectl apply -n $NAMESPACE -f -
             apiVersion: ark.mckinsey.com/v1alpha1
@@ -83,11 +106,9 @@ spec:
                     value: smoke-test-key
             MANIFEST
 
-            sleep 3
-            kill $WATCH_PID 2>/dev/null || true
-            wait $WATCH_PID 2>/dev/null || true
+            await_watch_line smoke-test-watch "watch delivered the create event"
             echo "OK Watch routing operational"
           env:
           - name: NAMESPACE
             value: ($namespace)
-          timeout: 30s
+          timeout: 60s

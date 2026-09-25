@@ -307,21 +307,24 @@ class TestSessionsAndConversations:
         sessions = SessionsPage(page)
         sessions.navigate_to_session_history()
 
-        total = sessions.get_visible_session_count()
-        if total < 1:
-            pytest.skip("No sessions available for sort test")
+        # Other xdist workers run queries against the same namespace, and every
+        # query creates a session, so the number of rows can change at any moment.
+        # Assert the order the page renders instead: a row appearing mid-test slots
+        # into its sorted position rather than breaking the assertion.
+        sessions.click_sort_header("Name")
+        first = sessions.get_visible_session_names()
+        assert len(first) >= 2, \
+            f"sorting needs at least two sessions to be observable, saw {first}"
+        first_ascending = first == sorted(first)
+        assert first_ascending or first == sorted(first, reverse=True), \
+            f"sorting by Name should order the rows, but they read {first}"
 
         sessions.click_sort_header("Name")
-        assert sessions.get_visible_session_count() == total, \
-            "Sorting by Name should not change the number of visible sessions"
-
-        sessions.click_sort_header("Name")
-        assert sessions.get_visible_session_count() == total, \
-            "Reversing Name sort should not change the number of visible sessions"
-
-        sessions.click_sort_header("Convos")
-        assert sessions.get_visible_session_count() == total, \
-            "Sorting by Convos should not change the number of visible sessions"
+        second = sessions.get_visible_session_names()
+        expected = sorted(second, reverse=True) if first_ascending else sorted(second)
+        assert second == expected, \
+            ("clicking Name again should reverse the order, but the rows read "
+             f"{second}")
 
     # -------------------------------------------------------------------------
     # Empty search results
