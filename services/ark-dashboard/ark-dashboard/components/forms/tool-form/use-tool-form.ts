@@ -43,6 +43,9 @@ function toolToFormValues(tool: ToolDetail): ToolFormValues {
     httpUrl: spec?.http?.url ?? '',
     selectedAgent: spec?.agent?.name ?? '',
     selectedTeam: spec?.team?.name ?? '',
+    // Never trimmed: leading and trailing whitespace is part of a script.
+    inlineSource: spec?.inline?.source ?? '',
+    inlineLanguage: spec?.inline?.language ?? '',
   };
 }
 
@@ -53,7 +56,9 @@ export function useToolForm({
 }: UseToolFormOptions): ToolFormContextValue {
   const { namespace } = useNamespace();
   const isViewing = mode === ToolFormMode.VIEW;
-  const [loading, setLoading] = useState(isViewing);
+  const isEditing = mode === ToolFormMode.EDIT;
+  const needsExistingTool = isViewing || isEditing;
+  const [loading, setLoading] = useState(needsExistingTool);
   const [saving, setSaving] = useState(false);
   const [tool, setTool] = useState<ToolDetail | null>(null);
   const [agents, setAgents] = useState<AgentListItem[]>([]);
@@ -72,13 +77,15 @@ export function useToolForm({
       httpUrl: '',
       selectedAgent: '',
       selectedTeam: '',
+      inlineSource: '',
+      inlineLanguage: '',
     },
   });
 
   const { reset } = form;
 
   useEffect(() => {
-    if (!isViewing || !toolName) return;
+    if (!needsExistingTool || !toolName) return;
     let cancelled = false;
     const loadTool = async () => {
       setLoading(true);
@@ -99,7 +106,7 @@ export function useToolForm({
     return () => {
       cancelled = true;
     };
-  }, [isViewing, toolName, namespace, reset]);
+  }, [needsExistingTool, toolName, namespace, reset]);
 
   const selectedType = useWatch({ control: form.control, name: 'type' });
 
@@ -176,25 +183,36 @@ export function useToolForm({
       ...(values.type === 'agent'
         ? { agent: values.selectedAgent?.trim() }
         : {}),
-      ...(values.type === 'team'
-        ? { team: values.selectedTeam?.trim() }
+      ...(values.type === 'team' ? { team: values.selectedTeam?.trim() } : {}),
+      ...(values.type === 'inline'
+        ? {
+            inlineSource: values.inlineSource ?? '',
+            inlineLanguage: values.inlineLanguage?.trim(),
+          }
         : {}),
     };
 
     setSaving(true);
     try {
-      await toolsService.create(namespace, {
-        name: values.name.trim(),
-        ...specFields,
-      });
+      if (isEditing && toolName) {
+        await toolsService.update(namespace, toolName, specFields);
+      } else {
+        await toolsService.create(namespace, {
+          name: values.name.trim(),
+          ...specFields,
+        });
+      }
       onSuccess?.();
     } catch (error) {
-      toast.error('Failed to Create Tool', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
-      });
+      toast.error(
+        isEditing ? 'Failed to Update Tool' : 'Failed to Create Tool',
+        {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
+        },
+      );
     } finally {
       setSaving(false);
     }
