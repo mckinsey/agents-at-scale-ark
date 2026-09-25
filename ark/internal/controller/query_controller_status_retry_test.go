@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -60,6 +61,39 @@ func TestUpdateStatusWithDurationRetriesTransientError(t *testing.T) {
 	var got arkv1alpha1.Query
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "retry-q", Namespace: "default"}, &got))
 	assert.Equal(t, statusDone, got.Status.Phase, "the terminal phase must be persisted despite the earlier transient failures")
+}
+
+func TestUpdateStatusPreservesErrorContentWhenCacheStripped(t *testing.T) {
+	// The cache transform strips status.response.content from the cached copy.
+	// The backing store below returns a stripped Query on Get, mirroring that.
+	// updateStatusWithDuration must still produce the QueryErrored condition from
+	// the in-memory Response the reconcile holds, not from the stripped refetch.
+	stored := newRetryTestQuery()
+	stored.Status.Response = &arkv1alpha1.Response{Phase: statusError, Content: ""}
+
+	c := fake.NewClientBuilder().WithScheme(newTestScheme()).
+		WithObjects(stored).
+		WithStatusSubresource(&arkv1alpha1.Query{}).
+		Build()
+
+	r := &QueryReconciler{Client: c, Scheme: c.Scheme()}
+
+	inMemory := newRetryTestQuery()
+	inMemory.Status.Response = &arkv1alpha1.Response{Phase: statusError, Content: "boom: model timed out"}
+
+	require.NoError(t, r.updateStatus(context.Background(), inMemory, statusError))
+
+	var got arkv1alpha1.Query
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "retry-q", Namespace: "default"}, &got))
+
+	cond := meta.FindStatusCondition(got.Status.Conditions, string(arkv1alpha1.QueryCompleted))
+	require.NotNil(t, cond)
+	assert.Equal(t, "QueryErrored", cond.Reason)
+	assert.Equal(t, "boom: model timed out", cond.Message, "error message must come from the in-memory Response, not the cache-stripped refetch")
+
+	require.NotNil(t, got.Status.Response)
+	assert.Equal(t, "boom: model timed out", got.Status.Response.Content,
+		"persisted response content must come from the in-memory Response, not the cache-stripped refetch")
 }
 
 func TestUpdateStatusWithDurationDoesNotRetryPermanentError(t *testing.T) {

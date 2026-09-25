@@ -37,6 +37,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/apiserver"
+	"mckinsey.com/ark/internal/cachetransform"
 	"mckinsey.com/ark/internal/controller"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/storage/postgresql"
@@ -250,14 +251,21 @@ func setupManager(cfg config) (ctrl.Manager, *certwatcher.CertWatcher, *certwatc
 		}),
 	}
 
+	cacheOptions := cache.Options{
+		DefaultTransform: cachetransform.StripManagedFields,
+		ByObject: map[client.Object]cache.ByObject{
+			&arkv1alpha1.Query{}: {Transform: cachetransform.StripQuery},
+		},
+	}
 	if ns := watchNamespaces(); len(ns) > 0 {
 		defaults := make(map[string]cache.Config, len(ns))
 		for _, n := range ns {
 			defaults[n] = cache.Config{}
 		}
-		managerOptions.Cache = cache.Options{DefaultNamespaces: defaults}
+		cacheOptions.DefaultNamespaces = defaults
 		setupLog.Info("controller cache scoped to namespaces", "namespaces", ns)
 	}
+	managerOptions.Cache = cacheOptions
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
 	if err != nil {

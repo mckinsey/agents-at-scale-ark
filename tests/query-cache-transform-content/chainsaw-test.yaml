@@ -1,0 +1,86 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-cache-transform-content
+spec:
+  description: >
+    Verify the controller cache transform does not corrupt observable Query
+    state. The transform strips status.response.content from the in-memory
+    cache only; the API server (etcd) must still return the full content, and
+    the query must complete normally with the correct condition.
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a03-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: cache-transform-query
+        timeout: 90s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: cache-transform-query
+          status:
+            phase: done
+            (response.target.name): 'test-model-mock'
+            (contains(response.content, 'CACHE_TRANSFORM_MARKER_START')): true
+            (contains(response.content, 'CACHE_TRANSFORM_MARKER_END')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: cache-transform-query
+
+  - name: verify-content-served-from-apiserver
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          CONTENT=$(kubectl -n $NAMESPACE get query cache-transform-query -o jsonpath='{.status.response.content}')
+          echo "content length: ${#CONTENT}"
+          echo "$CONTENT" | grep -q "CACHE_TRANSFORM_MARKER_START" || { echo "missing start marker"; exit 1; }
+          echo "$CONTENT" | grep -q "CACHE_TRANSFORM_MARKER_END" || { echo "missing end marker"; exit 1; }
+          echo "full content preserved by the api server"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -941,11 +941,7 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 }
 
 func isTerminalPhase(phase string) bool {
-	switch phase {
-	case statusDone, statusError, statusCanceled:
-		return true
-	}
-	return false
+	return arkv1alpha1.IsTerminalPhase(phase)
 }
 
 // isPreExecutionPhase reports whether a Query is still waiting for Ark to
@@ -1132,7 +1128,9 @@ func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1al
 		// and raw payload survive. Read from the refetched object: it holds the
 		// last persisted status, whereas the caller's Response may be an
 		// in-memory, unpersisted A2A-less error scratch value set by the
-		// dispatch error path that would drop the correlation.
+		// dispatch error path that would drop the correlation. The cache strips
+		// Raw only in terminal phases, and this arm runs only on a non-terminal
+		// Query, so the refetched Raw is intact here.
 		target := arkv1alpha1.QueryTarget{}
 		var raw string
 		var a2a *arkv1alpha1.A2AMetadata
