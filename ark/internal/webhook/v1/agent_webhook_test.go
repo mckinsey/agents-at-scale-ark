@@ -19,7 +19,7 @@ var _ = Describe("Agent Webhook", func() {
 	var (
 		ctx       context.Context
 		agent     *arkv1alpha1.Agent
-		validator *validation.WebhookValidator
+		validator *validation.WebhookValidator[*arkv1alpha1.Agent]
 	)
 
 	BeforeEach(func() {
@@ -30,7 +30,7 @@ var _ = Describe("Agent Webhook", func() {
 
 		fakeClient := fake.NewClientBuilder().WithScheme(s).Build()
 
-		validator = &validation.WebhookValidator{
+		validator = &validation.WebhookValidator[*arkv1alpha1.Agent]{
 			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
 		}
 
@@ -88,10 +88,10 @@ var _ = Describe("Agent Webhook", func() {
 	})
 
 	Context("When defaulting agent model", func() {
-		var defaulter *validation.WebhookDefaulter
+		var defaulter *validation.WebhookDefaulter[*arkv1alpha1.Agent]
 
 		BeforeEach(func() {
-			defaulter = &validation.WebhookDefaulter{}
+			defaulter = &validation.WebhookDefaulter[*arkv1alpha1.Agent]{}
 		})
 
 		It("Should set default model for regular agents without modelRef", func() {

@@ -319,7 +319,7 @@ func applyTokenData(secret *corev1.Secret, accessKey, expiresKey, accessToken st
 //
 // status.authorization.state is deliberately left alone: an acquisition
 // failure says nothing about whether the server requires authorization.
-func (r *MCPServerReconciler) reconcileConditionsTokenAcquisitionFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, cause error) (ctrl.Result, error) {
+func (r *MCPServerReconciler) reconcileConditionsTokenAcquisitionFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, cause error) ctrl.Result {
 	reason := cause.Error()
 	logf.FromContext(ctx).Info("token acquisition failed", "server", mcpServer.Name, "reason", reason)
 
@@ -328,15 +328,12 @@ func (r *MCPServerReconciler) reconcileConditionsTokenAcquisitionFailed(ctx cont
 	changed2 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, MCPServerReasonTokenAcquisitionFailed, "Cannot attempt tool discovery without a token")
 	if changed1 || changed2 {
 		r.Eventing.MCPServerRecorder().TokenAcquisitionFailed(ctx, mcpServer, reason)
-		if err := r.updateStatus(ctx, mcpServer); err != nil {
-			return ctrl.Result{}, err
-		}
 	}
 
 	// Back off to the poll interval rather than the renewal timer. An
 	// expired token would otherwise floor the requeue at one second and
 	// retry against a failing authorization server every second.
-	return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
+	return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}
 }
 
 // tokenRenewalRequeue returns the interval after which the controller
