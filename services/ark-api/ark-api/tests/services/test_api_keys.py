@@ -7,6 +7,7 @@ import base64
 import json
 
 from ark_api.services.api_keys import APIKeyService, API_KEY_TYPE, API_KEY_ANNOTATION
+from ark_api.utils.helpers import parse_iso_timestamp
 from ark_api.models.auth import APIKeyCreateRequest
 
 
@@ -89,15 +90,15 @@ class TestAPIKeyService(unittest.TestCase):
         self.assertIn("T", formatted)  # ISO format
         
         # Test parsing
-        parsed = self.service._parse_datetime(formatted)
+        parsed = parse_iso_timestamp(formatted)
         self.assertIsInstance(parsed, datetime)
         self.assertLess(abs((parsed - now).total_seconds()), 1)  # Should be very close
         
         # Test None handling
         self.assertIsNone(self.service._format_datetime(None))
-        self.assertIsNone(self.service._parse_datetime(None))
-        self.assertIsNone(self.service._parse_datetime(""))
-        self.assertIsNone(self.service._parse_datetime("invalid"))
+        self.assertIsNone(parse_iso_timestamp(None))
+        self.assertIsNone(parse_iso_timestamp(""))
+        self.assertIsNone(parse_iso_timestamp("invalid"))
 
 
 class TestAPIKeyServiceIntegration(unittest.IsolatedAsyncioTestCase):
@@ -274,7 +275,7 @@ class TestAPIKeyServiceIntegration(unittest.IsolatedAsyncioTestCase):
         patched_secret = mock_api_instance.patch_namespaced_secret.call_args[1]["body"]
         annotation_data = json.loads(patched_secret.metadata.annotations[API_KEY_ANNOTATION])
         self.assertIn("lastUsedAt", annotation_data)
-        self.assertIsNotNone(self.service._parse_datetime(annotation_data["lastUsedAt"]))
+        self.assertIsNotNone(parse_iso_timestamp(annotation_data["lastUsedAt"]))
     
     @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')

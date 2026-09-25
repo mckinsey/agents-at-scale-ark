@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
+from ark_api.utils.helpers import parse_iso_timestamp
+
 
 class EventResponse(BaseModel):
     """Response model for a single Kubernetes event."""
@@ -30,20 +32,6 @@ class EventListResponse(BaseModel):
     total: int
 
 
-def _parse_ts(value: Any) -> Optional[datetime]:
-    """Parse a Kubernetes timestamp (ISO string or datetime) into a datetime."""
-    if not value:
-        return None
-    if isinstance(value, str):
-        try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
-            return None
-    if hasattr(value, "isoformat"):  # already a datetime
-        return value
-    return None
-
-
 def event_to_response(event_dict: Dict[str, Any]) -> EventResponse:
     """Convert Kubernetes event dict to EventResponse.
 
@@ -58,13 +46,13 @@ def event_to_response(event_dict: Dict[str, Any]) -> EventResponse:
     source = event_dict.get("source") or {}
     series = event_dict.get("series") or {}
 
-    creation_timestamp = _parse_ts(metadata.get("creation_timestamp")) or datetime.now()
-    event_time = _parse_ts(event_dict.get("event_time"))
-    series_last = _parse_ts(series.get("last_observed_time"))
+    creation_timestamp = parse_iso_timestamp(metadata.get("creation_timestamp")) or datetime.now()
+    event_time = parse_iso_timestamp(event_dict.get("event_time"))
+    series_last = parse_iso_timestamp(series.get("last_observed_time"))
 
-    first_timestamp = _parse_ts(event_dict.get("first_timestamp")) or event_time or creation_timestamp
+    first_timestamp = parse_iso_timestamp(event_dict.get("first_timestamp")) or event_time or creation_timestamp
     last_timestamp = (
-        _parse_ts(event_dict.get("last_timestamp"))
+        parse_iso_timestamp(event_dict.get("last_timestamp"))
         or series_last
         or event_time
         or creation_timestamp

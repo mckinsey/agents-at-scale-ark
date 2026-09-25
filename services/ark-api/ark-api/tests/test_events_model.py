@@ -107,8 +107,8 @@ class TestEventToResponse(unittest.TestCase):
         self.assertEqual(r.count, 1)
 
     def test_datetime_object_and_unparseable_string_timestamps(self):
-        """_parse_ts accepts datetime objects as-is and treats an unparseable
-        string as absent (falling back to the next candidate)."""
+        """Timestamp parsing accepts datetime objects as-is and treats an
+        unparseable string as absent (falling back to the next candidate)."""
         created = datetime(2026, 9, 24, 13, 0, 0, tzinfo=timezone.utc)
         event_dict = {
             "metadata": {
