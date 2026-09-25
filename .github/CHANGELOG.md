@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.70-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70-rc...v0.1.70-rc.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **ci:** pin argo CLI version in ark-tools image ([#3614](https://github.com/mckinsey/agents-at-scale-ark/issues/3614)) ([dc2cf00](https://github.com/mckinsey/agents-at-scale-ark/commit/dc2cf003825a4b680bb143cc98bb34e73a850801)), closes [#3615](https://github.com/mckinsey/agents-at-scale-ark/issues/3615)
+
+
+### Performance Improvements
+
+* **dashboard:** trim list-page payloads (teams N+1, agents summary view) ([#3545](https://github.com/mckinsey/agents-at-scale-ark/issues/3545)) ([f411763](https://github.com/mckinsey/agents-at-scale-ark/commit/f4117631079e81f8224c2c3a45339328e6ab8369))
+
 ## [0.1.70-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.69...v0.1.70-rc) (2026-09-24)
 
 
