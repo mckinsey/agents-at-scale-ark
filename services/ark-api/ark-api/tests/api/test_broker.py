@@ -288,51 +288,6 @@ class TestBrokerAPI(unittest.TestCase):
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
-    def test_purge_traces_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"success": True}
-        mock_response.status_code = 200
-
-        mock_client_instance = AsyncMock()
-        mock_client_instance.delete = AsyncMock(return_value=mock_response)
-        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
-
-        response = self.client.delete("/v1/broker/traces")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"success": True})
-
-    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
-    def test_purge_traces_memory_not_available(self, mock_get_broker_url):
-        mock_get_broker_url.return_value = None
-
-        response = self.client.delete("/v1/broker/traces?memory=unavailable")
-
-        self.assertEqual(response.status_code, 503)
-        data = response.json()
-        self.assertIn("error", data)
-        self.assertEqual(data["error"]["type"], "service_unavailable")
-
-    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
-    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
-    def test_purge_traces_connection_error(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
-
-        mock_client_instance = AsyncMock()
-        mock_client_instance.delete = AsyncMock(side_effect=httpx.ConnectError("Connection failed"))
-        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
-
-        response = self.client.delete("/v1/broker/traces")
-
-        self.assertEqual(response.status_code, 503)
-        data = response.json()
-        self.assertIn("error", data)
-        self.assertEqual(data["error"]["type"], "connection_error")
-
-    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
-    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_events_success(self, mock_async_client, mock_get_broker_url):
         mock_get_broker_url.return_value = "http://broker:8080"
 
@@ -467,52 +422,6 @@ class TestBrokerAPI(unittest.TestCase):
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
-    def test_purge_events_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"success": True}
-        mock_response.status_code = 200
-
-        mock_client_instance = AsyncMock()
-        mock_client_instance.delete = AsyncMock(return_value=mock_response)
-        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
-
-        response = self.client.delete("/v1/broker/events")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"success": True})
-
-    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
-    def test_purge_events_memory_not_available(self, mock_get_broker_url):
-        mock_get_broker_url.return_value = None
-
-        response = self.client.delete("/v1/broker/events?memory=unavailable")
-
-        self.assertEqual(response.status_code, 503)
-        data = response.json()
-        self.assertIn("error", data)
-        self.assertEqual(data["error"]["type"], "service_unavailable")
-
-    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
-    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
-    def test_purge_events_connection_error(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
-
-        mock_client_instance = AsyncMock()
-        mock_client_instance.delete = AsyncMock(side_effect=httpx.ConnectError("Connection failed"))
-        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
-
-        response = self.client.delete("/v1/broker/events")
-
-        self.assertEqual(response.status_code, 503)
-        data = response.json()
-        self.assertIn("error", data)
-        self.assertEqual(data["error"]["type"], "connection_error")
-
-
-    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
-    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_sessions_success(self, mock_async_client, mock_get_broker_url):
         mock_get_broker_url.return_value = "http://broker:8080"
 
@@ -549,35 +458,6 @@ class TestBrokerAPI(unittest.TestCase):
         mock_get_broker_url.return_value = None
 
         response = self.client.get("/v1/broker/sessions?memory=unavailable")
-
-        self.assertEqual(response.status_code, 503)
-        data = response.json()
-        self.assertIn("error", data)
-        self.assertEqual(data["error"]["type"], "service_unavailable")
-
-    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
-    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
-    def test_purge_sessions_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"success": True}
-        mock_response.status_code = 200
-
-        mock_client_instance = AsyncMock()
-        mock_client_instance.delete = AsyncMock(return_value=mock_response)
-        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
-
-        response = self.client.delete("/v1/broker/sessions")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"success": True})
-
-    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
-    def test_purge_sessions_memory_not_available(self, mock_get_broker_url):
-        mock_get_broker_url.return_value = None
-
-        response = self.client.delete("/v1/broker/sessions?memory=unavailable")
 
         self.assertEqual(response.status_code, 503)
         data = response.json()

@@ -79,7 +79,7 @@ Set `app.nodeOptions` to override the computed value. If `app.resources.limits.m
   `app.nodeOptions` **replaces** the computed value rather than adding to it. Setting it for an unrelated flag drops the heap cap and returns V8 to its host-derived default — the failure this section exists to prevent. Include the flag yourself whenever you set it, as in `nodeOptions: "--max-old-space-size=870 --enable-source-maps"`.
 </Callout>
 
-Heap pressure scales with the in-memory stores, so `limits.maxMessages`, `limits.maxChunks`, `limits.maxSpans` and `limits.maxEvents` are the other lever. Moving messages or sessions to Postgres, or chunks to Redis, takes those stores off the heap; traces stay in memory regardless. On the default in-memory backend the sessions index has no size limit — it grows with the queries it has seen until `DELETE /sessions` purges it, which is the one heap consumer with no cap.
+Heap pressure scales with the in-memory stores, so the per-store byte budgets `limits.messageMaxBytes`, `limits.eventMaxBytes`, `limits.chunkMaxBytes` and `limits.traceMaxBytes` are the other lever. Moving messages or sessions to Postgres, or chunks to Redis, takes those stores off the heap; traces stay in memory regardless. On the default in-memory backend the sessions index has no size limit — it grows with the queries it has seen, and `DELETE /sessions/queries/{queryId}` drops one query at a time, so nothing clears it wholesale. Restarting the pod does, unless file persistence is enabled (`persistence.enabled`), in which case the index is reloaded from `SESSIONS_FILE_PATH` on boot and the restart costs nothing. It is the one heap consumer with no cap; move sessions to Postgres if that growth matters.
 
 ## Metrics
 
@@ -291,7 +291,7 @@ The other `DATABASE_*` variables are shared with the message and event backends 
 
 Session expiry is a **sliding** window rather than the write-time snapshot used for messages and events: every event or message on a session pushes `expires_at` out by `SESSIONS_VISIBILITY_TTL_SECONDS`, so a session stays visible for as long as it is in use, and the value does not track the originating query's `spec.ttl`. The minimum enforced at startup exists because a session is the index into its own messages and events — hiding it earlier than they expire would strand data that is still retained. Expiry hides a session from reads, and a later event or message on a still-present expired session makes it visible again. The expired-row reaper covers the `sessions` table too (see the [message backend](#message-backend-postgres)), so a session that stays expired is eventually deleted, taking its `session_queries` rows with it via `ON DELETE CASCADE` — after that there is no row left to revive.
 
-Deleting a `Query` does **not** remove it from the sessions read model. Messages and events have per-query cleanup paths (see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup)); sessions do not, so the query's row stays in `session_queries` and its session keeps listing it. `DELETE /sessions` purges every session and its queries.
+Deleting a `Query` removes it from the sessions read model. The controller's finalizer calls `DELETE /sessions/queries/{queryId}` alongside the message and event cleanup paths (see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup)): the `session_queries` row goes, the session header's aggregates are recomputed, and a session left with no queries is deleted with it.
 
 ### Cross-replica session updates
 
@@ -389,6 +389,6 @@ The `/sessions` endpoint provides a live, event-sourced index of active sessions
 | GET | `/sessions` | Returns the full sessions store |
 | GET | `/sessions?watch=true` | SSE stream of session updates |
 | GET | `/sessions?watch=true&session_id=X` | SSE stream filtered to one session |
-| DELETE | `/sessions` | Purge all session data |
+| DELETE | `/sessions/queries/{queryId}` | Remove one query from every session holding it |
 
 Set `SESSIONS_FILE_PATH` to enable persistence to disk, or enable the [Sessions backend (Postgres)](#sessions-backend-postgres) to persist sessions in Postgres and share them across broker replicas.
