@@ -6,8 +6,19 @@ import {
 } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
 import { A2ATasksSection } from '@/components/sections/a2a-tasks-section';
 import { useListA2ATasks } from '@/lib/services/a2a-tasks-hooks';
+
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock();
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
 
 vi.mock('@/lib/services/a2a-tasks-hooks');
 

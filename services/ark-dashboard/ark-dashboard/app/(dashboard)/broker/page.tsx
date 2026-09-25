@@ -25,6 +25,7 @@ import { trackEvent } from '@/lib/analytics/singleton';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
 import { useSSEStream } from '@/lib/hooks/use-sse-stream';
+import { useUrlState } from '@/lib/hooks/use-url-state';
 import {
   BROKER_STREAM_ENDPOINTS,
   BROKER_STREAM_KEYS,
@@ -143,12 +144,25 @@ function BrokerStreamTab({
   );
 }
 
+function parseStreamKey(raw: string): BrokerStreamKey {
+  return BROKER_STREAM_KEYS.find(key => key === raw) ?? 'traces';
+}
+
+const URL_STATE_SPEC = {
+  tab: { default: 'traces', parse: parseStreamKey },
+  memory: { default: 'default' },
+};
+
 export default function BrokerPage() {
   const [memories, setMemories] = useState<MemoryListItem[]>([]);
-  const [selectedMemory, setSelectedMemory] = useState<string>('default');
+  const [urlState, setUrlState] = useUrlState(URL_STATE_SPEC);
+  const selectedMemory = urlState.memory;
+  const setSelectedMemory = useCallback(
+    (next: string) => setUrlState({ memory: next }),
+    [setUrlState],
+  );
   const [loading, setLoading] = useState(true);
   const [hasMemoriesError, setHasMemoriesError] = useState(false);
-  const [activeTab, setActiveTab] = useState<BrokerStreamKey>('traces');
   const [hasLiveEntries, setHasLiveEntries] = useState(false);
   const queryClient = useQueryClient();
   const { namespace } = useNamespace();
@@ -300,12 +314,12 @@ export default function BrokerPage() {
       )}
       {!isResolving && !showEmptyState && (
         <Tabs
-          value={activeTab}
+          value={urlState.tab}
           size="lg"
           padded={false}
           className="mt-5 flex min-h-0 flex-1 flex-col"
           onValueChange={tab => {
-            setActiveTab(tab as BrokerStreamKey);
+            setUrlState({ tab: parseStreamKey(tab) });
             trackEvent({
               name: 'broker_tab_changed',
               properties: { tabName: tab },

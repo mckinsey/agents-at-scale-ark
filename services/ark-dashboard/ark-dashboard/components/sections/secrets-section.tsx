@@ -18,12 +18,17 @@ import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
 import { type Model, modelsService } from '@/lib/services';
 import { useDeleteSecret, useGetAllSecrets } from '@/lib/services/secrets-hooks';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+};
 
 export function SecretsSection() {
   const { readOnlyMode, namespace } = useNamespace();
   const [models, setModels] = useState<Model[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
 
   const { data: secrets = [], isLoading: secretsLoading } = useGetAllSecrets();
   const deleteSecretMutation = useDeleteSecret();
@@ -42,12 +47,12 @@ export function SecretsSection() {
   }, [namespace]);
 
   const filteredSecrets = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = filters.q.trim().toLowerCase();
     if (!q) {
       return secrets;
     }
     return secrets.filter(secret => secret.name.toLowerCase().includes(q));
-  }, [secrets, searchQuery]);
+  }, [secrets, filters.q]);
 
   const handleDeleteSecret = (id: string) => {
     const secret = secrets.find(s => s.id === id);
@@ -102,7 +107,10 @@ export function SecretsSection() {
       {!showLoading && !isEmpty && (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
           <div className="flex flex-none items-end gap-3">
-            <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+            <ResourceSearchInput
+              value={filters.q}
+              onChange={q => setFilters({ q })}
+            />
           </div>
 
           {filteredSecrets.length === 0 ? (

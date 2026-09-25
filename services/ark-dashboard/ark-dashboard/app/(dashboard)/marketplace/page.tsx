@@ -1,45 +1,132 @@
 'use client';
 
-import {
-  Bot,
-  CheckCircle,
-  ChevronLeft,
-  ChevronRight,
-  Search,
-  Server,
-  SquarePlay,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
+import type { ComponentType, SVGProps } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
+import {
+  AccountTree,
+  CheckCircle,
+  Dns,
+  PlayArrow,
+  PlugConnect,
+  SmartToy,
+  Storefront,
+} from '@/components/icons';
 import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
-import { PageHeader } from '@/components/common/page-header';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import {
+  ResourceNoResults,
+  ResourceSearchInput,
+} from '@/components/sections/resource-list-states';
+import { IconShell } from '@/components/ui/icon-shell';
+import { Pagination } from '@/components/ui/pagination';
+import { Skeleton } from '@/components/ui/skeleton';
+import { TagToggle } from '@/components/ui/tag-toggle';
 import type {
   MarketplaceCategory,
   MarketplaceFilters,
   MarketplaceItemType,
 } from '@/lib/api/generated/marketplace-types';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
-import { cn } from '@/lib/utils';
+import { parsePage } from '@/lib/utils/pagination';
 
 const FILTERS: Record<string, Partial<MarketplaceFilters>> = {
   all: { category: undefined, type: undefined, status: undefined },
-  agents: { category: 'agents' as MarketplaceCategory, type: undefined, status: undefined },
-  mcp: { category: 'mcp-servers' as MarketplaceCategory, type: undefined, status: undefined },
-  demo: { category: undefined, type: 'demo' as MarketplaceItemType, status: undefined },
-  services: { category: undefined, type: 'service' as MarketplaceItemType, status: undefined },
+  agents: {
+    category: 'agents' as MarketplaceCategory,
+    type: undefined,
+    status: undefined,
+  },
+  workflows: {
+    category: 'workflows' as MarketplaceCategory,
+    type: undefined,
+    status: undefined,
+  },
+  mcp: {
+    category: 'mcp-servers' as MarketplaceCategory,
+    type: undefined,
+    status: undefined,
+  },
+  services: {
+    category: undefined,
+    type: 'service' as MarketplaceItemType,
+    status: undefined,
+  },
+  demo: {
+    category: undefined,
+    type: 'demo' as MarketplaceItemType,
+    status: undefined,
+  },
   installed: { category: undefined, type: undefined, status: 'installed' },
 } as const;
 
+interface CategoryTab {
+  readonly key: string;
+  readonly label: string;
+  readonly icon?: ComponentType<SVGProps<SVGSVGElement>>;
+  readonly iconClass?: string;
+}
+
+const CATEGORY_TABS: readonly CategoryTab[] = [
+  { key: 'all', label: 'All' },
+  {
+    key: 'agents',
+    label: 'Agents',
+    icon: SmartToy,
+    iconClass: 'text-blue-500',
+  },
+  {
+    key: 'workflows',
+    label: 'Workflows',
+    icon: AccountTree,
+    iconClass: 'text-pink-500',
+  },
+  {
+    key: 'mcp',
+    label: 'MCPs',
+    icon: PlugConnect,
+    iconClass: 'text-violet-500',
+  },
+  { key: 'services', label: 'Services', icon: Dns, iconClass: 'text-lime-500' },
+  {
+    key: 'demo',
+    label: 'Demos',
+    icon: PlayArrow,
+    iconClass: 'text-amber-500',
+  },
+  { key: 'installed', label: 'Installed', icon: CheckCircle },
+];
+
+const TAG_CLASSES =
+  'h-8 !px-2 bg-surface-bg-secondary text-fg-secondary ' +
+  'data-[state=on]:bg-fill-muted data-[state=on]:text-fg-primary ' +
+  'data-[state=on]:focus-visible:bg-fill-muted';
+
+function parseCategory(raw: string): string {
+  return Object.hasOwn(FILTERS, raw) ? raw : 'all';
+}
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  category: { default: 'all', parse: parseCategory },
+  page: { default: 1, parse: parsePage },
+};
+
+const SKELETON_CARDS = ['a', 'b', 'c', 'd', 'e', 'f'];
+
 export default function MarketplacePage() {
-  const [filters, setFilters] = useState<MarketplaceFilters>({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
   const itemsPerPage = 6;
+
+  const filters = useMemo<MarketplaceFilters>(
+    () => ({
+      ...FILTERS[urlState.category],
+      search: committedState.q || undefined,
+    }),
+    [urlState.category, committedState.q],
+  );
 
   const { data, isPending } = useGetMarketplaceItems(filters);
 
@@ -57,206 +144,107 @@ export default function MarketplacePage() {
 
   const totalItems = data?.items.length || 0;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
+
+  useEffect(() => {
+    if (!data) return;
+    if (urlState.page > Math.max(1, totalPages)) {
+      setUrlState({ page: 1 });
+    }
+  }, [data, totalPages, urlState.page, setUrlState]);
+  const startIndex = (urlState.page - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentItems = data?.items.slice(startIndex, endIndex) || [];
 
   const pageTitle = data ? `Marketplace (${data.items.length})` : 'Marketplace';
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setCurrentPage(1);
-      setFilters(prev => ({
-        ...prev,
-        search: searchQuery || undefined,
-      }));
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  const handleSearch = (value: string) => {
-    setSearchQuery(value);
-  };
-
-  const handleCategoryChange = (category: string) => {
-    setSelectedCategory(category);
-    setCurrentPage(1); // Reset to first page on category change
-
-    const newFilter = FILTERS[category];
-    if (newFilter) {
-      setFilters(prev => ({ ...prev, ...newFilter }));
-    }
-  };
-
   return (
-    <>
-      <PageHeader
-        breadcrumbs={BASE_BREADCRUMBS}
-        currentPage="Marketplace"
-        actions={
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search marketplace..."
-                value={searchQuery}
-                onChange={e => handleSearch(e.target.value)}
-                className="w-[300px] pl-10"
-              />
-            </div>
-          </div>
-        }
+    <div className="content-shell flex min-h-0 w-full flex-1 flex-col">
+      <ResourcePageHeader
+        icon={<Storefront />}
+        title={pageTitle}
+        description="Discover reusable components for your AI ecosystem"
       />
-      <div className="flex flex-1 flex-col">
-        <div>
-          <h1 className="text-xl">{pageTitle}</h1>
-        </div>
 
-        {/* Category Filters */}
-        <div className="mb-4 mt-4 flex items-center gap-2">
-          <Button
-            variant={selectedCategory === 'all' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => handleCategoryChange('all')}
-            className={cn(
-              'h-8 px-4',
-              selectedCategory === 'all'
-                ? ''
-                : 'text-muted-foreground hover:text-foreground',
-            )}>
-            All
-          </Button>
-          <Button
-            variant={selectedCategory === 'agents' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => handleCategoryChange('agents')}
-            className={cn(
-              'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'agents'
-                ? ''
-                : 'text-muted-foreground hover:text-foreground',
-            )}>
-            <Bot className="h-3.5 w-3.5" />
-            Agents
-          </Button>
-          <Button
-            variant={selectedCategory === 'mcp' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => handleCategoryChange('mcp')}
-            className={cn(
-              'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'mcp'
-                ? ''
-                : 'text-muted-foreground hover:text-foreground',
-            )}>
-            <Server className="h-3.5 w-3.5" />
-            MCPs
-          </Button>
-          <Button
-            variant={selectedCategory === 'demo' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => handleCategoryChange('demo')}
-            className={cn(
-              'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'demo'
-                ? ''
-                : 'text-muted-foreground hover:text-foreground',
-            )}>
-            <SquarePlay className="h-3.5 w-3.5" />
-            Demos
-          </Button>
-          <Button
-            variant={selectedCategory === 'services' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => handleCategoryChange('services')}
-            className={cn(
-              'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'services'
-                ? ''
-                : 'text-muted-foreground hover:text-foreground',
-            )}>
-            <Server className="h-3.5 w-3.5" />
-            Services
-          </Button>
-          <Button
-            variant={selectedCategory === 'installed' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => handleCategoryChange('installed')}
-            className={cn(
-              'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'installed'
-                ? ''
-                : 'text-muted-foreground hover:text-foreground',
-            )}>
-            <CheckCircle className="h-3.5 w-3.5" />
-            Installed
-          </Button>
-        </div>
-
-        {!isPending && (
-          <div className="mb-4">
-            <MarketplaceSourceErrors errors={data?.sourceErrors} />
+      <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-8">
+        <div className="flex flex-none flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {CATEGORY_TABS.map(tab => {
+              const Icon = tab.icon;
+              const isActive = urlState.category === tab.key;
+              const iconVariant =
+                tab.iconClass || isActive ? 'primary' : 'secondary';
+              return (
+                <TagToggle
+                  key={tab.key}
+                  size="default"
+                  className={TAG_CLASSES}
+                  pressed={isActive}
+                  onPressedChange={pressed => {
+                    if (pressed) {
+                      setUrlState({ category: tab.key });
+                    }
+                  }}>
+                  {Icon && (
+                    <IconShell
+                      size="sm"
+                      variant={iconVariant}
+                      className={tab.iconClass}>
+                      <Icon />
+                    </IconShell>
+                  )}
+                  {tab.label}
+                </TagToggle>
+              );
+            })}
           </div>
-        )}
 
-        {/* Loading state */}
+          <ResourceSearchInput
+            value={urlState.q}
+            onChange={q => setUrlState({ q })}
+            placeholder="Search"
+          />
+        </div>
+
+        {!isPending && <MarketplaceSourceErrors errors={data?.sourceErrors} />}
+
         {isPending && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="h-64 animate-pulse rounded-lg bg-muted" />
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {SKELETON_CARDS.map(card => (
+              <Skeleton key={card} className="h-[268px]" />
             ))}
           </div>
         )}
 
-        {/* Marketplace Items Grid */}
         {!isPending && data && data.items.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {currentItems.map(item => (
               <MarketplaceItemCard key={item.id} item={item} />
             ))}
           </div>
         )}
 
-        {/* Empty state */}
         {!isPending && data && data.items.length === 0 && (
-          <div className="py-12 text-center">
-            <p className="text-muted-foreground">No marketplace items found</p>
-          </div>
+          <ResourceNoResults
+            icon={<Storefront />}
+            message="No marketplace items found"
+          />
         )}
 
-        {/* Pagination Controls */}
         {totalPages > 1 && (
-          <div className="mt-6 flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              Showing {startIndex + 1}-{Math.min(endIndex, totalItems)} of {totalItems} items
-            </div>
+          <div className="flex items-center justify-between">
+            <p className="text-fg-secondary paragraph-small-primary">
+              Showing {startIndex + 1}-{Math.min(endIndex, totalItems)} of{' '}
+              {totalItems} items
+            </p>
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-
-              <span className="text-sm">
-                Page {currentPage} of {totalPages}
-              </span>
-
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <Pagination
+              currentPage={urlState.page}
+              totalPages={totalPages}
+              onPageChange={page => setUrlState({ page })}
+            />
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }

@@ -2,10 +2,21 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
 import ExportPage from '@/app/(dashboard)/export/page';
 import { exportService } from '@/lib/services/export';
 
 // Mock dependencies
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock('/export');
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
+
 vi.mock('@/lib/services/export');
 vi.mock('@/components/ui/sonner', () => ({
   toast: {

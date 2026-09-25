@@ -102,6 +102,85 @@ app; that is the allowlist's entire purpose, so only genuinely app-wide scoping
 params belong there. Anything page-local needs no registration — pass it in the
 target href.
 
+#### URL-backed screen state
+
+A screen's filters, sorting and pagination live in the query string via
+`useUrlState` from `@/lib/hooks/use-url-state`. The URL is the **single source of
+truth**: never mirror a key it owns in a local `useState`.
+
+A mirror seeded once at mount goes stale the moment the URL moves on its own —
+browser back/forward, a namespace switch, another writer on the same page — and
+the effect that syncs it then writes the stale value back, undoing the
+navigation. This was reintroduced across eight screens before being removed.
+
+```typescript
+// ❌ WRONG - a mount-only mirror that writes itself back over the URL
+const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
+const [searchInput, setSearchInput] = useState(filters.q);
+const debounced = useDebounce(searchInput, 300);
+useEffect(() => {
+  if (debounced !== filters.q) setFilters({ q: debounced });
+}, [debounced, filters.q, setFilters]);
+
+// ✅ CORRECT - the hook owns the debounce, so there is nothing to keep in sync
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+};
+const [filters, setFilters, committedFilters] = useUrlState(URL_STATE_SPEC);
+```
+
+Use the three return values for what each is for:
+
+- `filters` — reads back a keystroke at once. Bind inputs and in-memory
+  filtering to this.
+- `setFilters(updates, { flush })` — several calls in one commit compose into a
+  single navigation. Pass `flush` when the change is a decision rather than
+  typing (clearing filters, picking from a dropdown).
+- `committedFilters` — the URL only. Key a **server query** off this, or it
+  refetches on every keystroke.
+
+Writes use `router.replace`, so changing a filter does not add a history entry
+and the browser back button leaves the screen rather than stepping back through
+each filter. Never write a filter with `router.push` - that is the pattern this
+replaced, and it fills history with one entry per keystroke.
+
+A screen may hold more than one `useUrlState` (a page's own spec plus a sort key
+inside a child). Writes from all of them accumulate against one pending URL per
+pathname, so they compose instead of overwriting; that accumulator is module
+state, which is why tests that leave a navigation unlanded call
+`resetPendingParams`.
+
+#### Returning to a list
+
+Every back control resolves its target through `useListReturnHref` from
+`@/lib/hooks/use-list-return-href`, which maps a list route to the URL that list
+was last left in:
+
+```typescript
+// ❌ WRONG - returns to an unfiltered page one
+<NamespacedLink href={listHref}>Back</NamespacedLink>
+push('/sessions');
+
+// ✅ CORRECT - returns the list as the user left it
+const returnHref = useListReturnHref(listHref);
+<NamespacedLink href={returnHref}>Back</NamespacedLink>
+```
+
+It falls back to the bare route when the list has not been visited since the page
+was loaded, so a deep-linked detail page invents no filters. The recorded URL
+carries no namespace, so the active one is applied rather than a stale one.
+
+**Sidebar entries are deliberately not resolved.** `app-sidebar.tsx` navigates to
+a bare `/${sectionKey}`, so a sidebar click opens a screen in its default state.
+That is the documented platform behaviour, not an oversight - see the
+`url-param-scoping` spec and `docs/content/user-guide/dashboard.mdx`. `/files`
+once compensated with its own `sessionStorage` copy of the current folder; that
+copy is gone, and the folder lives in the URL like any other screen state.
+
+If this is ever changed, change it for the whole sidebar and update the spec and
+the user guide with it. One section restoring while the rest do not is the
+behaviour this convention exists to prevent.
+
 ### Namespace-scoped data
 
 The namespace is **explicit data, never ambient**. The API client does not inject
