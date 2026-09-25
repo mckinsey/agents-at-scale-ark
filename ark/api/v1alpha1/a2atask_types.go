@@ -221,7 +221,3 @@ type A2ATaskList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []A2ATask `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&A2ATask{}, &A2ATaskList{})
-}

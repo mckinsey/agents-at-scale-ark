@@ -3,11 +3,7 @@ import { useCallback, useState } from 'react';
 import { ChevronDown, Warning } from '@/components/icons';
 import { NumericBadge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  FieldDescription,
-  FieldSet,
-  FieldTitle,
-} from '@/components/ui/field';
+import { FieldDescription, FieldSet, FieldTitle } from '@/components/ui/field';
 import { IconShell } from '@/components/ui/icon-shell';
 import {
   Popover,
@@ -21,11 +17,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { Agent, TeamMember } from '@/lib/services';
+import type { AgentListItem, TeamMember } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
 interface MembersSectionProps {
-  agents: Agent[];
+  agents: AgentListItem[];
   selectedMembers: TeamMember[];
   unavailableMembers: TeamMember[];
   onMembersChange: (members: TeamMember[]) => void;
@@ -51,7 +47,7 @@ export function MembersSection({
   );
 
   const toggleMember = useCallback(
-    (agent: Agent) => {
+    (agent: AgentListItem) => {
       const exists = selectedMembers.some(m => m.name === agent.name);
       if (exists) {
         onMembersChange(selectedMembers.filter(m => m.name !== agent.name));

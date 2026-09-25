@@ -21,25 +21,17 @@ export type TeamMember = components['schemas']['TeamMember'];
 // For UI compatibility, we'll map the API response to include an id field
 export type Team = TeamDetailResponse & { id: string };
 
+// List-response shape, no detail-only fields (#3108)
+export type TeamListItem = TeamResponse & { id: string };
+
 // CRUD Operations
 export const teamsService = {
-  // Still does a per-item detail fetch (#2581 follow-up) - TeamResponse lacks
-  // the computed `available` field and `members` array; needs an ark-api change.
-  async getAll(namespace: string): Promise<Team[]> {
+  async list(namespace: string): Promise<TeamListItem[]> {
     const items = await fetchAllPages<TeamResponse>(`/api/v1/teams`, {
       namespace,
     });
 
-    // Map the response items to include id for UI compatibility
-    const teams = await Promise.all(
-      items.map(async item => {
-        // Fetch detailed info for each team to get full data
-        const detailed = await teamsService.getByName(namespace, item.name);
-        return detailed!;
-      }),
-    );
-
-    return teams;
+    return items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get a single team by name
