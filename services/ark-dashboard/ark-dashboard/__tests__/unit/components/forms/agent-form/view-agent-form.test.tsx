@@ -22,7 +22,7 @@ vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
 
 vi.mock('@/lib/services', () => ({
   agentsService: {
-    getAll: vi.fn().mockResolvedValue([]),
+    list: vi.fn().mockResolvedValue([]),
     getRawResource: vi.fn().mockResolvedValue({}),
   },
 }));

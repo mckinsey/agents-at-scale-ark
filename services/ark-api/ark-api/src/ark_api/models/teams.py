@@ -43,6 +43,7 @@ class TeamResponse(BaseModel):
     strategy: Optional[str] = None
     members_count: Optional[int] = None
     loops: Optional[bool] = None
+    available: Optional[AvailabilityStatus] = None
     status: Optional[str] = None
 
 
