@@ -8,6 +8,9 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,6 +19,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/inlinetools"
 )
 
 // inlineRuntimeNotInstalledMessage is what an author sees until the runner
@@ -32,6 +36,11 @@ type ToolReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools/finalizers,verbs=update
+// Inline tool runners: the controller owns one ConfigMap, ServiceAccount,
+// Service, NetworkPolicy and Deployment per inline Tool.
+// +kubebuilder:rbac:groups="",resources=configmaps;services;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 
 func (r *ToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	tool := &arkv1alpha1.Tool{}
@@ -50,33 +59,53 @@ func (r *ToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	return r.updateToolStatus(ctx, tool, arkv1alpha1.ToolStateReady, "Tool configuration is valid")
 }
 
-// reconcileInline is the authoring-only path: no runner, no endpoint, and a
-// status that says so. Phase 2 replaces the body of this with child
-// reconciliation; the honest Pending report is what phase 1 owes an author.
+// reconcileInline provisions the Tool's owned runner objects and reports an
+// honest status. Provisioning a runner does not make the Tool callable: the
+// activator that fronts it is not part of this release, so the Tool stays
+// Pending.
 func (r *ToolReconciler) reconcileInline(ctx context.Context, tool *arkv1alpha1.Tool) (ctrl.Result, error) {
 	r.emitSourceChange(ctx, tool)
 
+	reason, message := arkv1alpha1.ToolReasonRuntimeNotInstalled, inlineRuntimeNotInstalledMessage
+	var provisionErr error
+	if inlinetools.Enabled() {
+		if provisionErr = r.reconcileInlineChildren(ctx, tool); provisionErr != nil {
+			reason, message = arkv1alpha1.ToolReasonProvisioningFailed, provisionErr.Error()
+		}
+	}
+
+	if err := r.setInlineUnavailable(ctx, tool, reason, message); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, provisionErr
+}
+
+// setInlineUnavailable records that the Tool is stored but not callable, with
+// the reason a reader can branch on. No endpoint is advertised while it is set.
+func (r *ToolReconciler) setInlineUnavailable(ctx context.Context, tool *arkv1alpha1.Tool, reason, message string) error {
 	// A settled inline tool is not rewritten, mirroring the Ready short-circuit
-	// on the non-inline path.
-	if conditionUpToDate(tool) {
-		return ctrl.Result{}, nil
+	// on the non-inline path. Children are still reconciled above, and a changed
+	// reason or message is still a transition worth recording.
+	if c := meta.FindStatusCondition(tool.Status.Conditions, arkv1alpha1.ToolConditionAvailable); c != nil &&
+		c.ObservedGeneration == tool.Generation && c.Reason == reason && c.Message == message {
+		return nil
 	}
 
 	tool.Status.State = arkv1alpha1.ToolStatePending
-	tool.Status.Message = inlineRuntimeNotInstalledMessage
+	tool.Status.Message = message
 	tool.Status.ResolvedAddress = ""
 	meta.SetStatusCondition(&tool.Status.Conditions, metav1.Condition{
 		Type:               arkv1alpha1.ToolConditionAvailable,
 		Status:             metav1.ConditionFalse,
-		Reason:             arkv1alpha1.ToolReasonRuntimeNotInstalled,
-		Message:            inlineRuntimeNotInstalledMessage,
+		Reason:             reason,
+		Message:            message,
 		ObservedGeneration: tool.Generation,
 	})
 
 	if err := r.Status().Update(ctx, tool); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update tool status: %v", err)
+		return fmt.Errorf("failed to update tool status: %v", err)
 	}
-	return ctrl.Result{}, nil
+	return nil
 }
 
 // emitSourceChange records a change of executable source as an event. Audit logs
@@ -120,5 +149,14 @@ func (r *ToolReconciler) updateToolStatus(ctx context.Context, tool *arkv1alpha1
 }
 
 func (r *ToolReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).For(&arkv1alpha1.Tool{}).Named("tool").Complete(r)
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&arkv1alpha1.Tool{}).
+		// Owned children are watched so drift is corrected without waiting for a
+		// resync, and so a deleted child is recreated.
+		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.Service{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&networkingv1.NetworkPolicy{}).
+		Named("tool").
+		Complete(r)
 }
