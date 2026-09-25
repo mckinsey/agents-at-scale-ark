@@ -103,6 +103,22 @@ Switching between storage backends is destructive. Resources created with etcd (
 - ark-api and ark-dashboard deploy to namespace: default
 - ark-controller, ark-completions, and localhost-gateway deploy to namespace: ark-system
 
+## Inline tool runtime
+
+Authoring inline tools is on in DevSpace already. To also run them, build the
+runner images and install the activator:
+
+```bash
+INLINE_TOOLS_RUNTIME=true devspace dev
+```
+
+The activator refuses a cluster-wide RBAC binding, so this narrows the
+controller to the `default` and `ark-system` namespaces — Ark resources
+elsewhere are not reconciled. Try it with `kubectl apply -f
+samples/tools/inline-tools.yaml`. Note that a local k3s or Docker Desktop
+cluster usually runs a CNI that ignores NetworkPolicy, so the runner's network
+isolation is not actually enforced there.
+
 ## Completions Engine in Dev Mode
 
 The completions engine runs as a standalone pod. This allows independent code sync and restart — changing engine code only restarts the engine, not the controller.

@@ -6,6 +6,11 @@ vars:
   STORAGE_BACKEND:
     source: env
     default: "etcd"
+  # INLINE_TOOLS_RUNTIME=true devspace dev  installs the inline activator, which
+  # needs a namespaced controller, so it is opt-in rather than the default.
+  INLINE_TOOLS_RUNTIME:
+    source: env
+    default: "false"
 
 images:
   ark-controller:
@@ -16,6 +21,42 @@ images:
     image: ark-completions
     dockerfile: ./Dockerfile.completions
     context: .
+  # One runner image per language runtime. The controller appends the language
+  # suffix to a single repository, so these share a prefix and a fixed tag
+  # instead of the per-image hash tags DevSpace would otherwise generate.
+  ark-inline-runner-bash:
+    image: ark-inline-runner-bash
+    tags: ["dev"]
+    dockerfile: ./Dockerfile.inlinerunner
+    context: .
+    target: bash
+  ark-inline-runner-python:
+    image: ark-inline-runner-python
+    tags: ["dev"]
+    dockerfile: ./Dockerfile.inlinerunner
+    context: .
+    target: python
+  ark-inline-runner-node:
+    image: ark-inline-runner-node
+    tags: ["dev"]
+    dockerfile: ./Dockerfile.inlinerunner
+    context: .
+    target: node
+
+functions:
+  # DevSpace rewrites image names to its local registry, so the repository
+  # prefix the controller appends the language suffix to is only known after the
+  # build. The bash image's name minus its suffix is that prefix.
+  deploy_controller: |-
+    if [ "${INLINE_TOOLS_RUNTIME}" != "true" ]; then
+      create_deployments ark-controller
+      return
+    fi
+    build_images ark-inline-runner-bash ark-inline-runner-python \
+      ark-inline-runner-node
+    runner=$(get_image --only image ark-inline-runner-bash)
+    create_deployments ark-controller \
+      --set helm.values.inlineTools.runner.image.repository="${runner%-bash}"
 
 pipelines:
   deploy: |-
@@ -34,7 +75,7 @@ pipelines:
       done
       create_deployments ark-apiserver
     fi
-    create_deployments ark-controller
+    deploy_controller
     create_deployments ark-completions
   dev: |-
     if [ "${STORAGE_BACKEND}" == "postgresql" ]; then
@@ -51,7 +92,7 @@ pipelines:
       done
       create_deployments ark-apiserver
     fi
-    create_deployments ark-controller
+    deploy_controller
     create_deployments ark-completions
     # Pre-create the Go cache PVCs before DevSpace starts dev mode. DevSpace names
     # its own PVCs after the dev container (e.g. ark-controller-devspace) and deletes
@@ -90,6 +131,9 @@ deployments:
           enable: true
         inlineTools:
           enabled: true
+          runner:
+            image:
+              tag: dev
         completions:
           enabled: false
         telemetry:
@@ -194,6 +238,21 @@ dev:
       enabled: true
 
 profiles:
+  - name: inline-tools-runtime
+    activation:
+      - vars:
+          INLINE_TOOLS_RUNTIME: "true"
+    patches:
+      # The activator refuses a cluster-wide binding, so the controller is
+      # narrowed to the namespaces a local demo uses.
+      - op: add
+        path: deployments.ark-controller.helm.values.controllerManager
+        value:
+          watchNamespaces: ["default", "ark-system"]
+      - op: add
+        path: deployments.ark-controller.helm.values.inlineTools.activator
+        value:
+          enabled: true
   - name: storage-postgresql
     activation:
       - vars:
