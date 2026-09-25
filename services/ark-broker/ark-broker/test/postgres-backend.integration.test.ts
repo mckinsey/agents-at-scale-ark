@@ -4,13 +4,15 @@ import request from 'supertest';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
-import {createDb} from '../src/db/db.js';
+import {createDb, type Db} from '../src/db/db.js';
 import {MemoryBroker} from '../src/brokers/memory-broker.js';
+import type {SessionsBroker} from '../src/brokers/sessions-broker.js';
 import {handleStreamingMessages} from '../src/http/routes/memory/handlers.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
 import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
+import type {PostgresSessionsStorage} from '../src/brokers/sessions/postgres-sessions-storage.js';
 import {usePgContainer} from '../src/db/__tests__/testHelpers/pg-testcontainer.js';
 
 jest.setTimeout(120_000);
@@ -54,6 +56,7 @@ describeIntegration('postgres backend — HTTP integration', () => {
   const {db, connectionUrl} = usePgContainer();
   let app: Express;
   let memory: MemoryBroker;
+  let sessions: SessionsBroker;
 
   beforeAll(() => {
     const config = loadConfig({
@@ -62,7 +65,10 @@ describeIntegration('postgres backend — HTTP integration', () => {
     });
     const stream = createMessageStream(config, logger, db());
     memory = new MemoryBroker(stream);
-    ({app} = buildApp({
+    ({
+      app,
+      brokers: {sessions},
+    } = buildApp({
       config,
       logger,
       version: 'test',
@@ -72,6 +78,12 @@ describeIntegration('postgres backend — HTTP integration', () => {
       sessionsStorage: createSessionsStorage(config, logger),
       db: db(),
     }));
+  });
+
+  // The per-test truncate does not reach the sessions store: this app holds it
+  // in the heap, so it is cleared here instead.
+  afterEach(async () => {
+    await sessions.delete();
   });
 
   it('POST /messages stores and GET /messages retrieves from Postgres', async () => {
@@ -470,6 +482,89 @@ describeIntegration('postgres backend — HTTP integration', () => {
     expect(afterRes.body.items[0].sequence).toBe(3);
   });
 
+  // The dashboard's "Reset memory". The sessions it leaves behind read like
+  // orphans and are not: a conversation summary folds over the session's own
+  // query rows - messageCount counts queries, and messages carry no session id
+  // - so it stays correct once the messages are gone. Cascading the purge into
+  // sessions would instead destroy state nothing can rebuild, because the fold
+  // is incremental and no path replays the event stream into a session. A
+  // session goes when its queries do, via DELETE /sessions/queries/{queryId}.
+  it('DELETE /conversations leaves the sessions read model standing', async () => {
+    await request(app)
+      .post('/sessions')
+      .send({
+        sessionId: 'pin-session',
+        queryName: 'pin-query-1',
+        conversationId: 'pin-conv-1',
+        agent: 'weather-agent',
+        _reason: 'QueryExecutionComplete',
+      })
+      .expect(201);
+    // No conversationId on this event: the message below is what joins the
+    // query to its conversation, which is the link a purge looks most entitled
+    // to undo.
+    await request(app)
+      .post('/sessions')
+      .send({
+        sessionId: 'pin-session',
+        queryName: 'pin-query-2',
+        agent: 'forecast-agent',
+      })
+      .expect(201);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'pin-conv-1',
+        query_id: 'pin-query-1',
+        messages: ['a'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'pin-conv-2',
+        query_id: 'pin-query-2',
+        messages: ['b'],
+      })
+      .expect(200);
+
+    const before = await request(app).get('/sessions').expect(200);
+
+    await request(app).delete('/conversations').expect(200);
+
+    const messagesRes = await request(app).get('/messages').expect(200);
+    expect(messagesRes.body.items).toEqual([]);
+    const conversationsRes = await request(app)
+      .get('/conversations')
+      .expect(200);
+    expect(conversationsRes.body.conversations).toEqual([]);
+
+    const after = await request(app).get('/sessions').expect(200);
+    expect(Object.keys(after.body.sessions)).toEqual(['pin-session']);
+    const session = after.body.sessions['pin-session'];
+    expect(Object.keys(session.queries)).toEqual([
+      'pin-query-1',
+      'pin-query-2',
+    ]);
+    expect(
+      session.conversations.map(
+        (conversation: {conversationId: string; messageCount: number}) => [
+          conversation.conversationId,
+          conversation.messageCount,
+        ]
+      )
+    ).toEqual([
+      ['pin-conv-1', 1],
+      ['pin-conv-2', 1],
+    ]);
+    expect(
+      session.participants.map(
+        (participant: {name: string}) => participant.name
+      )
+    ).toEqual(['weather-agent', 'forecast-agent']);
+    expect(after.body).toEqual(before.body);
+  });
+
   it('GET /memory-status aggregates per-conversation counts via a single query', async () => {
     await request(app)
       .post('/messages')
@@ -532,5 +627,161 @@ describeIntegration('postgres backend — HTTP integration', () => {
       .get('/messages?conversation_id=conv-3')
       .expect(200);
     expect(after.body.items).toHaveLength(0);
+  });
+
+  // The same purge with the read model in Postgres, where the rows outlive the
+  // process that wrote them. The route is backend-agnostic, so what this adds
+  // is the SQL layer underneath it: a cascade written as a DELETE against
+  // session_queries, or a purge that stranded the per-query message
+  // watermarks, would show up here and nowhere else. Sessions are seeded from
+  // real events here, so the purge is also held to leaving the events the
+  // session groups.
+  describeIntegration('with sessions materialized in Postgres', () => {
+    const sessionId = 'pg-pin-session';
+    let pgApp: Express;
+    let pgDb: Db;
+
+    beforeAll(async () => {
+      const config = loadConfig({
+        MESSAGE_BACKEND: 'postgres',
+        EVENT_BACKEND: 'postgres',
+        SESSIONS_BACKEND: 'postgres',
+        DATABASE_URL: connectionUrl(),
+      });
+      pgDb = createDb(config, logger);
+      const sessionsStorage = createSessionsStorage(
+        config,
+        logger,
+        pgDb
+      ) as PostgresSessionsStorage;
+      ({app: pgApp} = buildApp({
+        config,
+        logger,
+        version: 'test',
+        messageStream: createMessageStream(config, logger, pgDb),
+        chunkStream: createChunkStream(config, logger),
+        eventStream: createEventStream(config, logger, pgDb),
+        sessionsStorage,
+        db: pgDb,
+      }));
+      await sessionsStorage.whenListening();
+    });
+
+    afterAll(async () => {
+      await pgDb.end({timeout: 5});
+    });
+
+    function postSessionEvent(fields: {
+      queryName: string;
+      conversationId?: string;
+      agent?: string;
+    }): request.Test {
+      return request(pgApp)
+        .post('/events')
+        .send({
+          timestamp: new Date().toISOString(),
+          eventType: 'AgentExecutionStart',
+          reason: 'AgentExecutionStart',
+          message: 'test event',
+          data: {
+            queryId: fields.queryName,
+            queryName: fields.queryName,
+            queryNamespace: 'default',
+            sessionId,
+            conversationId: fields.conversationId,
+            agent: fields.agent,
+          },
+        });
+    }
+
+    async function messageWatermarks(): Promise<Record<string, number>> {
+      const rows = await db()<
+        {query_id: string; last_applied_message_sequence: string}[]
+      >`
+        SELECT query_id, last_applied_message_sequence FROM session_queries
+        WHERE session_id = ${sessionId}
+        ORDER BY query_id
+      `;
+      return Object.fromEntries(
+        rows.map((row) => [
+          row.query_id,
+          Number(row.last_applied_message_sequence),
+        ])
+      );
+    }
+
+    it('DELETE /conversations leaves the session rows, their events and their watermarks intact', async () => {
+      await postSessionEvent({
+        queryName: 'pg-pin-query-1',
+        conversationId: 'pg-pin-conv-1',
+        agent: 'weather-agent',
+      }).expect(201);
+      await postSessionEvent({
+        queryName: 'pg-pin-query-2',
+        agent: 'forecast-agent',
+      }).expect(201);
+      await request(pgApp)
+        .post('/messages')
+        .send({
+          conversation_id: 'pg-pin-conv-1',
+          query_id: 'pg-pin-query-1',
+          messages: ['a'],
+        })
+        .expect(200);
+      await request(pgApp)
+        .post('/messages')
+        .send({
+          conversation_id: 'pg-pin-conv-2',
+          query_id: 'pg-pin-query-2',
+          messages: ['b'],
+        })
+        .expect(200);
+
+      expect(await messageWatermarks()).toEqual({
+        'pg-pin-query-1': 1,
+        'pg-pin-query-2': 2,
+      });
+      const before = await request(pgApp)
+        .get(`/sessions/${sessionId}`)
+        .expect(200);
+      const eventsBefore = await request(pgApp)
+        .get(`/events?session_id=${sessionId}`)
+        .expect(200);
+      expect(eventsBefore.body.items).toHaveLength(2);
+
+      await request(pgApp).delete('/conversations').expect(200);
+
+      const messagesRes = await request(pgApp).get('/messages').expect(200);
+      expect(messagesRes.body.items).toEqual([]);
+      const after = await request(pgApp)
+        .get(`/sessions/${sessionId}`)
+        .expect(200);
+      expect(after.body).toEqual(before.body);
+      expect(await messageWatermarks()).toEqual({
+        'pg-pin-query-1': 1,
+        'pg-pin-query-2': 2,
+      });
+      const eventsAfter = await request(pgApp)
+        .get(`/events?session_id=${sessionId}`)
+        .expect(200);
+      expect(eventsAfter.body.items).toEqual(eventsBefore.body.items);
+
+      // Postgres message sequences do not rewind with the purge, so a message
+      // written after one is still ahead of the watermark left behind and lands
+      // in the read model instead of being dropped as a replay.
+      await request(pgApp)
+        .post('/messages')
+        .send({
+          conversation_id: 'pg-pin-conv-1',
+          query_id: 'pg-pin-query-1',
+          messages: ['c'],
+        })
+        .expect(200);
+
+      expect(await messageWatermarks()).toEqual({
+        'pg-pin-query-1': 3,
+        'pg-pin-query-2': 2,
+      });
+    });
   });
 });
