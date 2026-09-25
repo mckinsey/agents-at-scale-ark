@@ -40,5 +40,5 @@ func (e *KubernetesEventEmitter) EmitStructured(ctx context.Context, obj runtime
 	eventAnnotations := map[string]string{
 		annotations.EventData: string(jsonBytes),
 	}
-	e.recorder.AnnotatedEventf(obj, eventAnnotations, eventType, reason, message)
+	e.recorder.AnnotatedEventf(obj, eventAnnotations, eventType, reason, "%s", message)
 }
