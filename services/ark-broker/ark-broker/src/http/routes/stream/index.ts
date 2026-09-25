@@ -105,11 +105,6 @@ export function createStreamRouter(
    *           default: false
    *         description: Replay all chunks from the beginning
    *       - in: query
-   *         name: wait-for-query
-   *         schema:
-   *           type: integer
-   *         description: Wait timeout in seconds for query to start (e.g., 30, 300)
-   *       - in: query
    *         name: max-chunk-size
    *         schema:
    *           type: integer
@@ -141,7 +136,6 @@ export function createStreamRouter(
           chunks,
           query_name,
           streamQuery['from-beginning'] ?? false,
-          streamQuery['wait-for-query'],
           streamQuery['max-chunk-size'] ?? 50,
           idleTimeoutMs
         );

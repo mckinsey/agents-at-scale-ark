@@ -274,28 +274,11 @@ export async function handleQueryStream(
   chunks: CompletionChunkBroker,
   queryName: string,
   fromBeginning: boolean,
-  waitForQuerySeconds: number | undefined,
   maxChunkSize: number,
   idleTimeoutMs: number
 ): Promise<void> {
-  const waitForQuery = waitForQuerySeconds !== undefined;
-  // Time allowed before the first chunk: wait-for-query widens it when supplied,
-  // otherwise fall back to the idle window. Subsequent chunks re-arm at
-  // idleTimeoutMs (see handleIncomingItem).
-  const initialTimeout =
-    waitForQuerySeconds === undefined
-      ? idleTimeoutMs
-      : Math.max(1000, Math.min(waitForQuerySeconds * 1000, 300000));
-
   req.log.info(
-    {
-      queryName,
-      fromBeginning,
-      waitForQuery,
-      initialTimeout,
-      idleTimeoutMs,
-      maxChunkSize,
-    },
+    {queryName, fromBeginning, idleTimeoutMs, maxChunkSize},
     'starting query stream'
   );
 
@@ -353,9 +336,9 @@ export async function handleQueryStream(
     handleIncomingItem(item, state, res, req, queryName, cleanup);
   });
 
-  // Always arm an idle timeout so every subscriber is bounded, not just those
-  // that pass wait-for-query. Re-armed on each chunk in handleIncomingItem.
-  armIdleTimeout(initialTimeout);
+  // Always arm an idle timeout so every subscriber is bounded. Re-armed on each
+  // chunk in handleIncomingItem, so the bound is inter-chunk silence.
+  armIdleTimeout(idleTimeoutMs);
 
   if (fromBeginning) {
     const ok = await replayChunks(
