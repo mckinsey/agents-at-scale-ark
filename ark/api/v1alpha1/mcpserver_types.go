@@ -365,7 +365,3 @@ type MCPServerList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []MCPServer `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&MCPServer{}, &MCPServerList{})
-}
