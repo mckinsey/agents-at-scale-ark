@@ -83,9 +83,7 @@ describe('ToolsTable', () => {
     const user = userEvent.setup();
     render(<ToolsTable tools={tools} usage={noUsage} onDelete={vi.fn()} />);
     await user.click(screen.getAllByLabelText('Query tool')[0]);
-    expect(mockPush).toHaveBeenCalledWith(
-      '/query/new?target_tool=tool-one',
-    );
+    expect(mockPush).toHaveBeenCalledWith('/query/new?target_tool=tool-one');
   });
 
   it('opens confirmation dialog and calls onDelete on confirm', async () => {
@@ -107,6 +105,25 @@ describe('ToolsTable', () => {
     const deleteButtons = screen.getAllByLabelText('Delete tool');
     expect(deleteButtons[0]).toBeDisabled();
     expect(deleteButtons[1]).not.toBeDisabled();
+  });
+
+  it('labels an inline tool with its language', () => {
+    const inlineTools: Tool[] = [
+      {
+        id: 't5',
+        name: 'csv',
+        type: 'inline',
+        language: 'python',
+        description: 'count rows',
+      } as Tool,
+      { id: 't6', name: 'legacy', type: 'inline', description: '' } as Tool,
+    ];
+    render(
+      <ToolsTable tools={inlineTools} usage={noUsage} onDelete={vi.fn()} />,
+    );
+    expect(screen.getByText('Inline \u00b7 python')).toBeInTheDocument();
+    // A tool stored before the language projection still gets a plain label.
+    expect(screen.getByText('Inline')).toBeInTheDocument();
   });
 
   it('renders the table headers', () => {
