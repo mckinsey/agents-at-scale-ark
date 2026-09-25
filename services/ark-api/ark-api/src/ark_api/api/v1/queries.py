@@ -132,6 +132,9 @@ def _creation_timestamp_key(item_dict: dict):
     """Sort key (timestamp, name). Missing timestamp sorts last when reversed."""
     meta = item_dict.get("metadata", {})
     name = meta.get("name", "")
+    # A missing or unparseable creationTimestamp degrades to sort-last rather than
+    # raising: one malformed item must not 500 the entire list endpoint. k8s
+    # always sets a valid creationTimestamp, so None here means missing/corrupt.
     dt = parse_iso_timestamp(meta.get("creationTimestamp"))
     if dt is None:
         return (datetime.min.replace(tzinfo=timezone.utc), name)

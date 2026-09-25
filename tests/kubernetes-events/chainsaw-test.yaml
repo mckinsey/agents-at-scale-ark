@@ -1,15 +1,16 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: events-api-migration
+  name: kubernetes-events
 spec:
   description: >
-    The controller emits Kubernetes events through the events.k8s.io/v1 API
-    (migrated from the deprecated core/v1 recorder). A Team's first reconcile
-    emits a Normal "TeamCreated" event. Assert it is readable through the core/v1
-    view — both by a plain list (dual-serving) and by the involvedObject field
-    selector that fark, ark-cli and ark-api rely on — so the migration cannot
-    silently break event consumers.
+    Controller reconciles emit Kubernetes Events, and consumers (fark, ark-cli,
+    ark-api) read them through the core/v1 API filtered by involvedObject. This
+    guards that consumer contract: a reconcile that emits an event must be
+    readable both by a plain core/v1 list and by the involvedObject.name field
+    selector. A Team's first reconcile is the trigger (it emits a Normal
+    "TeamCreated" event), but the assertions are about the event-read path, not
+    any one reconciler.
   steps:
   - name: create-agent
     try:
@@ -21,11 +22,11 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
           metadata:
-            name: events-migration-agent
+            name: events-test-agent
           spec:
             prompt: You are a test agent.
             modelRef:
-              name: events-migration-model
+              name: events-test-model
 
   - name: create-team
     try:
@@ -34,14 +35,14 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Team
           metadata:
-            name: events-migration-team
+            name: events-test-team
           spec:
             strategy: sequential
             members:
-            - name: events-migration-agent
+            - name: events-test-agent
               type: agent
 
-  - name: assert-team-created-event-via-core-v1
+  - name: event-readable-via-core-v1
     try:
     - assert:
         resource:
@@ -51,23 +52,23 @@ spec:
           reason: TeamCreated
           involvedObject:
             kind: Team
-            name: events-migration-team
+            name: events-test-team
 
-  - name: assert-readable-by-involvedobject-field-selector
+  - name: event-readable-by-involvedobject-field-selector
     try:
     - script:
         content: |
           set -e
           OUT=$(kubectl get events -n "$NAMESPACE" \
-            --field-selector involvedObject.name=events-migration-team,reason=TeamCreated \
+            --field-selector involvedObject.name=events-test-team,reason=TeamCreated \
             -o json)
           COUNT=$(echo "$OUT" | jq '.items | length')
           if [ "$COUNT" -lt 1 ]; then
-            echo "FAIL: TeamCreated event not returned via core/v1 involvedObject field selector"
+            echo "FAIL: event not returned via core/v1 involvedObject field selector"
             kubectl get events -n "$NAMESPACE" -o wide || true
             exit 1
           fi
-          echo "PASS: TeamCreated event readable via involvedObject field selector"
+          echo "PASS: event readable via involvedObject field selector"
         env:
         - name: NAMESPACE
           value: ($namespace)
