@@ -20,6 +20,24 @@ WILDCARD = "*"
 ESSENTIAL_RESOURCES = ("agents", "models", "queries", "teams", "tools")
 ESSENTIAL_VERB = "list"
 
+# Resources the dashboard's read-only gate treats as "editing". Deliberately
+# separate from ESSENTIAL_RESOURCES (which is a `list` gate tied to
+# lib/permissions.ts) so the two uses don't drift. `queries` is excluded on
+# purpose: chat creates a Query, so a view-only "can chat" user would otherwise
+# come back editable and get the click-then-403 dashboard this gate exists to
+# prevent. All entries live in ARK_API_GROUP so the SubjectAccessReview below
+# can check them with a single group.
+EDITABLE_RESOURCES = (
+    "agents",
+    "models",
+    "teams",
+    "tools",
+    "mcpservers",
+    "a2aservers",
+    "executionengines",
+)
+CREATE_VERB = "create"
+
 # Returned to the client when permissions cannot be determined. The underlying
 # cause (exception text, evaluation errors) is logged server-side rather than
 # echoed back, so internal details are not exposed to callers.
@@ -120,28 +138,65 @@ async def _can_i(authz, namespace: str, resource: str, verb: str) -> bool:
     return bool(review.status and review.status.allowed)
 
 
+def can_edit_from_rules(rules: dict[str, list[str]]) -> Optional[bool]:
+    """Derive the edit decision from an already-fetched rule map, or None.
+
+    Returns True/False when `rules` came from a complete SelfSubjectRulesReview
+    (so it carries every verb the user holds), and None when it cannot answer —
+    either because it is empty or because every verb present is `list`, which is
+    the shape the access-review fallback produces (list-only) and so cannot tell
+    us about `create`. A None result means the caller must fall back to explicit
+    create access reviews.
+    """
+    wildcard_verbs = rules.get(WILDCARD, [])
+    if WILDCARD in wildcard_verbs or CREATE_VERB in wildcard_verbs:
+        return True
+
+    seen = {verb for verbs in rules.values() for verb in verbs}
+    # No verbs at all, or only `list` (the access-review fallback shape): the map
+    # is not authoritative for create, so defer to explicit access reviews.
+    if not seen or seen <= {ESSENTIAL_VERB}:
+        return None
+
+    for resource in EDITABLE_RESOURCES:
+        verbs = rules.get(resource, [])
+        if CREATE_VERB in verbs or WILDCARD in verbs:
+            return True
+    return False
+
+
 async def user_can_edit(
-    impersonation: ImpersonationConfig, namespace: str
+    impersonation: ImpersonationConfig,
+    namespace: str,
+    rules: Optional[dict[str, list[str]]] = None,
 ) -> bool:
     """Whether the impersonated user may write ARK resources in the namespace.
 
     A namespace-wide "can edit" signal for the dashboard's read-only gate:
-    True if the user can `create` at least one core ARK resource. Uses
-    SubjectAccessReview (a concrete yes/no every authorizer answers, including
-    the EKS webhook authorizer) rather than rule enumeration, so it is reliable
-    where SelfSubjectRulesReview is incomplete.
+    True if the user can `create` at least one editable ARK resource.
+
+    Fast path: when `rules` from a complete SelfSubjectRulesReview are supplied
+    (as /v1/context already fetches them), the create decision is read straight
+    from them — no extra API calls. Only when the rules cannot answer (empty or
+    list-only, e.g. the EKS webhook-authorizer fallback) does this issue
+    SubjectAccessReviews, a concrete yes/no every authorizer answers.
 
     Fails OPEN (returns True) if the check itself errors: the dashboard then
     shows controls enabled and ark-api still enforces RBAC on the real write —
     better than falsely locking out a user who actually has access.
     """
+    if rules is not None:
+        decision = can_edit_from_rules(rules)
+        if decision is not None:
+            return decision
+
     from ..api.v1.client_utils import get_impersonating_api_client
 
     try:
         async with get_impersonating_api_client(impersonation) as api:
             authz = client.AuthorizationV1Api(api)
-            for resource in ESSENTIAL_RESOURCES:
-                if await _can_i(authz, namespace, resource, "create"):
+            for resource in EDITABLE_RESOURCES:
+                if await _can_i(authz, namespace, resource, CREATE_VERB):
                     return True
             return False
     except Exception as e:

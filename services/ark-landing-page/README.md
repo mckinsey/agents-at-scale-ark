@@ -2,6 +2,8 @@
 
 Landing page that discovers and lists Ark namespaces the signed-in user can access. Candidate namespaces are those carrying the label `ark.mckinsey.com/landing-page=true` (via the `ARK_TENANT_NAMESPACE_SELECTOR` env selector); the list is then gated per-user by RBAC (SelfSubjectAccessReview). Card name/description come from the `ark.mckinsey.com/landing-page-name` / `ark.mckinsey.com/landing-page-description` annotations. The label affects landing-page visibility only — it has no bearing on dashboard editability, which is governed by RBAC.
 
+> **Upgrade note.** The chart now defaults `ARK_TENANT_NAMESPACE_SELECTOR` to `ark.mckinsey.com/landing-page=true`, so only labelled namespaces are listed. Existing installs must add that label to each namespace that should appear (or set the selector to `""` to list all accessible namespaces as before). The card annotations were also renamed from `ark.mckinsey.com/display-name` / `namespace-description` to `landing-page-name` / `landing-page-description`; the old keys are still read as a fallback, so relabelling is not required for names to render.
+
 ## Prerequisites
 
 - [Minikube](https://minikube.sigs.k8s.io/docs/start/)
@@ -44,7 +46,16 @@ make dev                # Run landing page dev server on http://localhost:3002
 
 ## Read-Only Mode
 
-The `kyc-demo-values.yaml` enables `READ_ONLY_MODE=true` on the API — a deployment-wide toggle that blocks create/edit/delete operations at the API (returns 403), allowing only viewing, chat, and workflow runs. This is independent of any namespace label. Per-user/per-namespace editability is otherwise governed by RBAC (ark-api impersonates the signed-in user). The dashboard no longer disables mutation buttons based on a namespace label — a user without permission simply gets a 403 from the API when they act.
+The dashboard renders read-only when either of two things is true:
+
+1. **Deployment-wide toggle** — `READ_ONLY_MODE=true` on the API (set by `kyc-demo-values.yaml`) blocks create/edit/delete for everyone at the API (returns 403), allowing only viewing, chat, and workflow runs.
+2. **Per-user RBAC** — when the toggle is off, `/v1/context` checks whether the impersonated user can create any editable Ark resource in the namespace. Users who can't get a read-only dashboard, so mutation controls are disabled up front rather than shown enabled and 403-ing on click.
+
+Read-only is not derived from any namespace label; landing-page visibility (the `ark.mckinsey.com/landing-page` label) has no bearing on editability.
+
+### Migration note
+
+The old `ark.mckinsey.com/demo` label used to mark a namespace read-only for **everyone**, admins included, and it did so per-namespace. That coupling is removed. `READ_ONLY_MODE` is deployment-wide, so a single dashboard deployment can no longer serve one demo namespace as view-only alongside other tenants that stay editable; per-user editability is now RBAC-driven instead. If you relied on the label to freeze a specific namespace for all users, run a separate read-only API deployment for it.
 
 ## Architecture
 
@@ -61,15 +72,6 @@ Per-namespace SelfSubjectAccessReview as the signed-in user (RBAC)
     ↓
 Return only namespaces the user can access
 ```
-
-### Why Check HTTPRoute?
-
-HTTPRoute serves two purposes:
-
-1. **Routing** (primary): Routes `{namespace}.127.0.0.1.nip.io` → dashboard service
-2. **Health indicator**: Proves dashboard is deployed and accessible
-
-Without HTTPRoute verification, landing page would show "phantom" demos that give 404 errors.
 
 ### URL Convention
 

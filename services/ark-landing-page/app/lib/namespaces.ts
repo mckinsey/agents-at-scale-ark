@@ -15,12 +15,16 @@ export interface AccessibleNamespace {
 const SA_DIR = '/var/run/secrets/kubernetes.io/serviceaccount';
 
 // Namespace annotations used for the landing-page card name / description /
-// dashboard URL, each with a fallback when unset. The `landing-page*` keys
-// replace the older `demo*` keys — a namespace opts into the landing page with
-// the `ark.mckinsey.com/landing-page=true` label (see ARK_TENANT_NAMESPACE_SELECTOR).
-// The label has no bearing on dashboard editability (that is RBAC-only).
+// dashboard URL, each with a fallback when unset. The `landing-page-*` keys
+// replace the older `display-name` / `namespace-description` keys — a namespace
+// opts into the landing page with the `ark.mckinsey.com/landing-page=true` label
+// (see ARK_TENANT_NAMESPACE_SELECTOR). The label has no bearing on dashboard
+// editability (that is RBAC-only). The legacy keys are still read as a fallback
+// so a namespace annotated before the rename doesn't drop back to its raw name.
 const DISPLAY_NAME_ANNOTATION = 'ark.mckinsey.com/landing-page-name';
 const DESCRIPTION_ANNOTATION = 'ark.mckinsey.com/landing-page-description';
+const LEGACY_DISPLAY_NAME_ANNOTATION = 'ark.mckinsey.com/display-name';
+const LEGACY_DESCRIPTION_ANNOTATION = 'ark.mckinsey.com/namespace-description';
 const DASHBOARD_URL_ANNOTATION = 'ark.mckinsey.com/dashboard-url';
 
 // Per-SSAR socket timeout. Without this a stalled apiserver connection never
@@ -196,16 +200,22 @@ export async function fetchAccessibleNamespaces(
   };
 
   const candidates = (resp.body?.items ?? resp.items ?? [])
-    .map((n) => {
+    .map((n): AccessibleNamespace | null => {
       const name = n.metadata?.name;
       if (!name) return null;
       const annotations = n.metadata?.annotations ?? {};
       return {
         name,
-        displayName: annotations[DISPLAY_NAME_ANNOTATION] || name,
-        description: annotations[DESCRIPTION_ANNOTATION] || undefined,
+        displayName:
+          annotations[DISPLAY_NAME_ANNOTATION] ||
+          annotations[LEGACY_DISPLAY_NAME_ANNOTATION] ||
+          name,
+        description:
+          annotations[DESCRIPTION_ANNOTATION] ||
+          annotations[LEGACY_DESCRIPTION_ANNOTATION] ||
+          undefined,
         dashboardUrl: annotations[DASHBOARD_URL_ANNOTATION] || undefined,
-      } satisfies AccessibleNamespace;
+      };
     })
     .filter((c): c is AccessibleNamespace => c !== null);
 

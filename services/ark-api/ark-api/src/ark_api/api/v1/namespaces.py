@@ -136,9 +136,13 @@ async def get_context_endpoint(
 
     # Per-user read-only: if not already globally read-only and we have an
     # impersonated identity, present the namespace as read-only when the user
-    # cannot write it (RBAC). Open mode (impersonation is None) stays editable.
+    # cannot write it (RBAC). Reuses the rules already fetched above, so the
+    # create decision is read from them on the happy path instead of issuing
+    # fresh access reviews. Open mode (impersonation is None) stays editable.
     if not read_only_mode and impersonation is not None:
-        read_only_mode = not await user_can_edit(impersonation, target_namespace)
+        read_only_mode = not await user_can_edit(
+            impersonation, target_namespace, permissions.rules
+        )
 
     return ContextResponse(
         namespace=target_namespace,
