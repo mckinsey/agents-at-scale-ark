@@ -229,7 +229,9 @@ for server in request.mcpServers:
 
 Your executor connects to each MCP server using its own MCP client (e.g., via LangChain, CrewAI, or the MCP SDK directly). The `tools` list is an allowlist — only register and use tools that appear in this list, even if the server exposes additional tools.
 
-Non-MCP tool types (http, agent, team, builtin) are not included in `mcpServers`. MCP is the only tool type with a dialable endpoint, so there is nothing for an engine to invoke.
+Inline tools also arrive as `mcpServers` entries, one connection per tool, so an engine needs no inline-specific code. Each entry uses the activator URL published in `Tool.status.resolvedAddress`, a connection name qualified by namespace and Tool UID, and a one-tool allowlist holding the Tool's name. Its timeout covers the activation and execution budgets, so it is longer than an ordinary MCP server's. An inline tool that is not `Available` for its current generation is omitted with a warning rather than dialed.
+
+Other non-MCP tool types (http, agent, team, builtin) are not included in `mcpServers`. MCP is the only other tool type with a dialable endpoint, so there is nothing for an engine to invoke.
 
 Attaching one anyway is accepted, but warns. Applying the agent prints an admission warning naming the engine and the dropped tools:
 
