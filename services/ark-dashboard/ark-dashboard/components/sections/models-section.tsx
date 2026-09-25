@@ -2,7 +2,10 @@
 
 import { Memory } from '@/components/icons';
 import { ModelsTable } from '@/components/sections/models-table';
-import { ResourceListSection } from '@/components/sections/resource-list-section';
+import {
+  CreateResourceButton,
+  ResourceListSection,
+} from '@/components/sections/resource-list-section';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { modelsService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -14,8 +17,9 @@ export function ModelsSection() {
       icon={<Memory />}
       title="Models"
       subtitle="Add and manage all your models"
-      createHref="/models/new"
-      createLabel="Add model"
+      createAction={
+        <CreateResourceButton href="/models/new" label="Add model" />
+      }
       learnMoreUrl={DOCS_URLS.models}
       entityLabel="Model"
       entityPluralLabel="models"

@@ -2,7 +2,10 @@
 
 import { PlugConnect } from '@/components/icons';
 import { McpServersTable } from '@/components/sections/mcp-servers-table';
-import { ResourceListSection } from '@/components/sections/resource-list-section';
+import {
+  CreateResourceButton,
+  ResourceListSection,
+} from '@/components/sections/resource-list-section';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { mcpServersService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -15,8 +18,7 @@ export function McpServersSection() {
       title="MCP servers"
       showCount
       subtitle="Add and manage all your MCPs"
-      createHref="/mcp/new"
-      createLabel="Add MCP"
+      createAction={<CreateResourceButton href="/mcp/new" label="Add MCP" />}
       learnMoreUrl={DOCS_URLS.tools}
       entityLabel="MCP Server"
       entityPluralLabel="MCP servers"

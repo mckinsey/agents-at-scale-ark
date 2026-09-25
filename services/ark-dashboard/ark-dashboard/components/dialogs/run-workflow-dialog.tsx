@@ -1,6 +1,5 @@
 'use client';
 
-import { Play } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -24,7 +23,10 @@ interface RunWorkflowDialogProps {
     parameters?: Record<string, string>,
     workflowName?: string,
   ) => Promise<void>;
+  /** Element that opens the dialog. Omit it when driving `open` directly. */
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function RunWorkflowDialog({
@@ -32,8 +34,15 @@ export function RunWorkflowDialog({
   parameters = [],
   onRun,
   trigger,
+  open: controlledOpen,
+  onOpenChange,
 }: RunWorkflowDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   const [workflowName, setWorkflowName] = useState('');
   const [workflowNameError, setWorkflowNameError] = useState<string>('');
   const [paramValues, setParamValues] = useState<Record<string, string>>(() => {
@@ -112,16 +121,7 @@ export function RunWorkflowDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 cursor-pointer p-0">
-            <Play className="h-4 w-4" />
-          </Button>
-        )}
-      </DialogTrigger>
+      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
@@ -152,7 +152,7 @@ export function RunWorkflowDialog({
                   <div key={param.name} className="grid gap-2">
                     <Label htmlFor={param.name}>{param.name}</Label>
                     {param.description && (
-                      <p className="text-muted-foreground text-xs">
+                      <p className="text-fg-secondary text-xs">
                         {param.description}
                       </p>
                     )}

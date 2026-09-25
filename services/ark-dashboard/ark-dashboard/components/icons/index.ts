@@ -32,7 +32,6 @@ export { Dashboard } from './dashboard';
 export { Database } from './database';
 export { DatabaseSearch } from './database-search';
 export { Dns } from './dns';
-export { DragIndicator } from './drag-indicator';
 export { Earthquake } from './earthquake';
 export { Edit } from './edit';
 export { ErrorIcon } from './error-icon';

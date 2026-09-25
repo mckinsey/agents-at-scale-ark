@@ -1,22 +1,63 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { createRef } from 'react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  WorkflowTemplatesSection,
-  type WorkflowTemplatesSectionHandle,
-} from '@/components/sections/workflow-templates-section';
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
+import { WorkflowTemplatesSection } from '@/components/sections/workflow-templates-section';
+import type { WorkflowTemplateListItem } from '@/components/sections/workflow-templates-table';
+import { toast } from '@/components/ui/sonner';
 import type { WorkflowTemplate } from '@/lib/services/workflow-templates';
-import {
-  isArgoNotInstalledError,
-  workflowTemplatesService,
-} from '@/lib/services/workflow-templates';
+
+const mockList = vi.fn();
+const mockDelete = vi.fn();
+const mockIsArgoNotInstalledError = vi.fn(() => false);
+const mockPush = vi.fn();
+const mockReadOnly = { value: false };
+const mockAccess = { canCreate: true };
+
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock();
+});
 
 vi.mock('@/lib/services/workflow-templates', () => ({
   workflowTemplatesService: {
-    list: vi.fn(),
+    list: (...args: unknown[]) => mockList(...args),
+    delete: (...args: unknown[]) => mockDelete(...args),
+    run: vi.fn(),
   },
-  isArgoNotInstalledError: vi.fn(() => false),
+  isArgoNotInstalledError: (...args: unknown[]) =>
+    mockIsArgoNotInstalledError(...args),
+  WORKFLOW_TEMPLATE_ANNOTATIONS: {
+    TITLE: 'workflows.argoproj.io/title',
+    DESCRIPTION: 'workflows.argoproj.io/description',
+  },
+}));
+
+vi.mock('@/lib/hooks/use-workflow-template-access', () => ({
+  useWorkflowTemplateAccess: () => ({
+    canCreate: mockAccess.canCreate,
+    canUpdate: true,
+    loading: false,
+  }),
+}));
+
+vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
+  useNamespacedNavigation: () => ({ push: mockPush, replace: vi.fn() }),
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    readOnlyMode: mockReadOnly.value,
+    isPending: false,
+    isNamespaceResolved: true,
+  }),
+}));
+
+vi.mock('@/lib/hooks', () => ({
+  useDelayedLoading: (loading: boolean) => loading,
 }));
 
 vi.mock('@/components/sections/workflow-templates-not-installed', () => ({
@@ -25,459 +66,192 @@ vi.mock('@/components/sections/workflow-templates-not-installed', () => ({
   ),
 }));
 
-vi.mock('@/lib/hooks', () => ({
-  useDelayedLoading: vi.fn(loading => loading),
-  useWorkflowsLayout: vi.fn(() => ({
-    layout: { sections: [], ungroupedOrder: [] },
-    setLayout: vi.fn(),
-  })),
-}));
-
-vi.mock('@/components/rows/flow-row', () => ({
-  FlowRow: vi.fn(({ flow }) => (
-    <div data-testid="flow-row">
-      <div>{flow.id}</div>
-      {flow.title && <div>{flow.title}</div>}
-      {flow.description && <div>{flow.description}</div>}
-      <div>{flow.stages} stages</div>
+vi.mock('@/components/sections/workflow-templates-table', () => ({
+  WorkflowTemplatesTable: ({
+    templates,
+  }: {
+    templates: WorkflowTemplateListItem[];
+  }) => (
+    <div data-testid="workflow-templates-table">
+      {templates.map(template => (
+        <div key={template.id} data-testid="workflow-template-row">
+          <span>{template.name}</span>
+          {template.title && <span>{template.title}</span>}
+          {template.description && <span>{template.description}</span>}
+          <span>{template.stages} stages</span>
+        </div>
+      ))}
     </div>
-  )),
-}));
-
-vi.mock('@/components/ui/empty', () => ({
-  Empty: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="empty">{children}</div>
-  ),
-  EmptyHeader: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  EmptyMedia: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  EmptyTitle: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  EmptyDescription: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  EmptyContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
   ),
 }));
 
-vi.mock('@/lib/constants', () => ({
-  DASHBOARD_SECTIONS: {
-    'workflow-templates': {
-      icon: () => <div>WorkflowIcon</div>,
-    },
+vi.mock('@/components/namespaced-link', () => ({
+  NamespacedLink: ({
+    href,
+    children,
+  }: {
+    href: string;
+    children: React.ReactNode;
+  }) => <a href={href}>{children}</a>,
+}));
+
+vi.mock('@/components/ui/sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
   },
 }));
 
-vi.mock('@/providers/NamespaceProvider', () => ({
-  useNamespace: vi.fn(() => ({
-    namespace: 'default',
-    readOnlyMode: false,
-    isPending: false,
-    isNamespaceResolved: true,
-  })),
-}));
+const templates: WorkflowTemplate[] = [
+  {
+    apiVersion: 'argoproj.io/v1alpha1',
+    kind: 'WorkflowTemplate',
+    metadata: { name: 'simple-workflow', namespace: 'default' },
+  },
+  {
+    apiVersion: 'argoproj.io/v1alpha1',
+    kind: 'WorkflowTemplate',
+    metadata: {
+      name: 'composer-workflow',
+      namespace: 'default',
+      annotations: {
+        'workflows.argoproj.io/title': 'Data Processing Pipeline',
+        'workflows.argoproj.io/description':
+          'A workflow for processing customer data',
+      },
+    },
+  },
+];
 
 describe('WorkflowTemplatesSection', () => {
-  const mockTemplates: WorkflowTemplate[] = [
-    {
-      apiVersion: 'argoproj.io/v1alpha1',
-      kind: 'WorkflowTemplate',
-      metadata: {
-        name: 'simple-workflow',
-        namespace: 'default',
-      },
-    },
-    {
-      apiVersion: 'argoproj.io/v1alpha1',
-      kind: 'WorkflowTemplate',
-      metadata: {
-        name: 'composer-workflow',
-        namespace: 'default',
-        annotations: {
-          'workflows.argoproj.io/title': 'Data Processing Pipeline',
-          'workflows.argoproj.io/description':
-            'A workflow for processing customer data',
-        },
-      },
-    },
-    {
-      apiVersion: 'argoproj.io/v1alpha1',
-      kind: 'WorkflowTemplate',
-      metadata: {
-        name: 'another-workflow',
-        namespace: 'default',
-        annotations: {
-          'workflows.argoproj.io/title': 'Invoice Processing',
-        },
-      },
-    },
-  ];
-
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isArgoNotInstalledError).mockReturnValue(false);
+    resetAppRouterMock();
+    mockReadOnly.value = false;
+    mockAccess.canCreate = true;
+    mockIsArgoNotInstalledError.mockReturnValue(false);
   });
 
-  describe('Loading state', () => {
-    it('should display loading state initially', async () => {
-      vi.mocked(workflowTemplatesService.list).mockImplementation(
-        () => new Promise(() => {}),
-      );
-
-      render(<WorkflowTemplatesSection />);
-
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
-    });
+  it('shows Loading... while data is pending', () => {
+    mockList.mockReturnValue(new Promise(() => {}));
+    render(<WorkflowTemplatesSection />);
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
-  describe('Successful data loading', () => {
-    it('should load and display workflow templates', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(mockTemplates);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(screen.getByText('simple-workflow')).toBeInTheDocument();
-        expect(screen.getByText('composer-workflow')).toBeInTheDocument();
-        expect(screen.getByText('another-workflow')).toBeInTheDocument();
-      });
-    });
-
-    it('should display workflow with title and description', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(mockTemplates);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText('Data Processing Pipeline'),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByText('A workflow for processing customer data'),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('should display workflow with only title', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(mockTemplates);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Invoice Processing')).toBeInTheDocument();
-      });
-    });
-
-    it('should render correct number of flow rows', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(mockTemplates);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        const flowRows = screen.getAllByTestId('flow-row');
-        expect(flowRows).toHaveLength(3);
-      });
-    });
+  it('renders the table with the returned templates', async () => {
+    mockList.mockResolvedValue(templates);
+    render(<WorkflowTemplatesSection />);
+    expect(
+      await screen.findByTestId('workflow-templates-table'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId('workflow-template-row')).toHaveLength(2);
+    expect(screen.getByText('simple-workflow')).toBeInTheDocument();
   });
 
-  describe('Empty state', () => {
-    it('should display empty state when no templates exist', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue([]);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('empty')).toBeInTheDocument();
-        expect(
-          screen.getByText('No Workflow Templates Yet'),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('should show helpful message in empty state', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue([]);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText(/You haven't created any workflow templates yet/i),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('should display workflow icon in empty state', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue([]);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(screen.getByText('WorkflowIcon')).toBeInTheDocument();
-      });
-    });
+  it('maps title, description and stage count from annotations', async () => {
+    mockList.mockResolvedValue(templates);
+    render(<WorkflowTemplatesSection />);
+    await screen.findByTestId('workflow-templates-table');
+    expect(screen.getByText('Data Processing Pipeline')).toBeInTheDocument();
+    expect(
+      screen.getByText('A workflow for processing customer data'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('0 stages')).toHaveLength(2);
   });
 
-  describe('Error handling', () => {
-    it('should handle fetch error and show empty state', async () => {
-      const error = new Error('Failed to fetch templates');
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
-      vi.mocked(workflowTemplatesService.list).mockRejectedValue(error);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('empty')).toBeInTheDocument();
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          'Failed to fetch workflow templates:',
-          error,
-        );
-      });
-
-      consoleErrorSpy.mockRestore();
-    });
-
-    it('should log error to console on failure', async () => {
-      const error = new Error('Network error');
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
-      vi.mocked(workflowTemplatesService.list).mockRejectedValue(error);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(consoleErrorSpy).toHaveBeenCalled();
-      });
-
-      consoleErrorSpy.mockRestore();
-    });
-
-    it('should show not-installed component when Argo is not installed', async () => {
-      const error = new Error('Resource type not available');
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
-      vi.mocked(workflowTemplatesService.list).mockRejectedValue(error);
-      vi.mocked(isArgoNotInstalledError).mockReturnValue(true);
-      const onArgoInstalledChange = vi.fn();
-
-      render(
-        <WorkflowTemplatesSection
-          onArgoInstalledChange={onArgoInstalledChange}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(screen.getByTestId('not-installed')).toBeInTheDocument();
-      });
-      expect(screen.queryByTestId('empty')).not.toBeInTheDocument();
-      expect(onArgoInstalledChange).toHaveBeenCalledWith(false);
-
-      consoleErrorSpy.mockRestore();
-    });
-
-    it('should show plain empty state for generic errors', async () => {
-      const error = new Error('Network error');
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
-      vi.mocked(workflowTemplatesService.list).mockRejectedValue(error);
-      vi.mocked(isArgoNotInstalledError).mockReturnValue(false);
-      const onArgoInstalledChange = vi.fn();
-
-      render(
-        <WorkflowTemplatesSection
-          onArgoInstalledChange={onArgoInstalledChange}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(screen.getByTestId('empty')).toBeInTheDocument();
-      });
-      expect(screen.queryByTestId('not-installed')).not.toBeInTheDocument();
-      expect(onArgoInstalledChange).toHaveBeenCalledWith(true);
-
-      consoleErrorSpy.mockRestore();
-    });
+  it('requests templates for the current namespace, once on mount', async () => {
+    mockList.mockResolvedValue(templates);
+    render(<WorkflowTemplatesSection />);
+    await screen.findByTestId('workflow-templates-table');
+    expect(mockList).toHaveBeenCalledTimes(1);
+    expect(mockList).toHaveBeenCalledWith('default');
   });
 
-  describe('Template mapping', () => {
-    it('should map template without annotations correctly', async () => {
-      const templateWithoutAnnotations: WorkflowTemplate[] = [
-        {
-          apiVersion: 'argoproj.io/v1alpha1',
-          kind: 'WorkflowTemplate',
-          metadata: {
-            name: 'basic-template',
-            namespace: 'default',
-          },
-        },
-      ];
-
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(
-        templateWithoutAnnotations,
-      );
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(screen.getByText('basic-template')).toBeInTheDocument();
-      });
-    });
-
-    it('should handle template with empty annotations object', async () => {
-      const templateWithEmptyAnnotations: WorkflowTemplate[] = [
-        {
-          apiVersion: 'argoproj.io/v1alpha1',
-          kind: 'WorkflowTemplate',
-          metadata: {
-            name: 'empty-annotations',
-            namespace: 'default',
-            annotations: {},
-          },
-        },
-      ];
-
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(
-        templateWithEmptyAnnotations,
-      );
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(screen.getByText('empty-annotations')).toBeInTheDocument();
-      });
-    });
-
-    it('should extract title annotation correctly', async () => {
-      const templateWithTitle: WorkflowTemplate[] = [
-        {
-          apiVersion: 'argoproj.io/v1alpha1',
-          kind: 'WorkflowTemplate',
-          metadata: {
-            name: 'titled-workflow',
-            namespace: 'default',
-            annotations: {
-              'workflows.argoproj.io/title': 'My Workflow Title',
-            },
-          },
-        },
-      ];
-
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(
-        templateWithTitle,
-      );
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(screen.getByText('My Workflow Title')).toBeInTheDocument();
-      });
-    });
-
-    it('should extract description annotation correctly', async () => {
-      const templateWithDescription: WorkflowTemplate[] = [
-        {
-          apiVersion: 'argoproj.io/v1alpha1',
-          kind: 'WorkflowTemplate',
-          metadata: {
-            name: 'described-workflow',
-            namespace: 'default',
-            annotations: {
-              'workflows.argoproj.io/description': 'Workflow description here',
-            },
-          },
-        },
-      ];
-
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(
-        templateWithDescription,
-      );
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText('Workflow description here'),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('should set stages to 0 for all workflows', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(mockTemplates);
-
-      render(<WorkflowTemplatesSection />);
-
-      await waitFor(() => {
-        const stageTexts = screen.getAllByText(/0 stages/);
-        expect(stageTexts).toHaveLength(3);
-      });
-    });
+  it('filters by search term (case-insensitive)', async () => {
+    mockList.mockResolvedValue(templates);
+    render(<WorkflowTemplatesSection />);
+    await screen.findByTestId('workflow-templates-table');
+    await userEvent.type(screen.getByPlaceholderText('Search'), 'COMPOSER');
+    expect(screen.getByText('composer-workflow')).toBeInTheDocument();
+    expect(screen.queryByText('simple-workflow')).not.toBeInTheDocument();
   });
 
-  describe('Imperative handle', () => {
-    it('should expose openCreateGroup via ref', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(mockTemplates);
-      const ref = createRef<WorkflowTemplatesSectionHandle>();
-
-      render(<WorkflowTemplatesSection ref={ref} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('simple-workflow')).toBeInTheDocument();
-      });
-
-      expect(typeof ref.current?.openCreateGroup).toBe('function');
-    });
+  it('shows the empty state when there are no templates', async () => {
+    mockList.mockResolvedValue([]);
+    render(<WorkflowTemplatesSection />);
+    expect(
+      await screen.findByText('No Workflow Templates Yet'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /learn more/i })).toHaveAttribute(
+      'href',
+      'https://mckinsey.github.io/agents-at-scale-ark/developer-guide/workflows/',
+    );
   });
 
-  describe('Component lifecycle', () => {
-    it('should fetch templates only once on mount', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(mockTemplates);
+  it('shows the not-installed state when Argo is missing', async () => {
+    mockIsArgoNotInstalledError.mockReturnValue(true);
+    mockList.mockRejectedValue(new Error('argo missing'));
+    render(<WorkflowTemplatesSection />);
+    expect(await screen.findByTestId('not-installed')).toBeInTheDocument();
+  });
 
-      const { rerender } = render(<WorkflowTemplatesSection />);
+  it('shows an error toast for generic load failures', async () => {
+    mockList.mockRejectedValue(new Error('boom'));
+    render(<WorkflowTemplatesSection />);
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.queryByTestId('not-installed')).not.toBeInTheDocument();
+  });
 
-      await waitFor(() => {
-        expect(screen.getByText('simple-workflow')).toBeInTheDocument();
-      });
+  it('hides the create button when the user cannot create', async () => {
+    mockAccess.canCreate = false;
+    mockList.mockResolvedValue(templates);
+    render(<WorkflowTemplatesSection />);
+    await screen.findByTestId('workflow-templates-table');
+    expect(
+      screen.queryByTestId('workflow-create-template'),
+    ).not.toBeInTheDocument();
+  });
 
-      expect(workflowTemplatesService.list).toHaveBeenCalledTimes(1);
+  it('disables the create button in read-only mode', async () => {
+    mockReadOnly.value = true;
+    mockList.mockResolvedValue(templates);
+    render(<WorkflowTemplatesSection />);
+    await screen.findByTestId('workflow-templates-table');
+    expect(screen.getByTestId('workflow-create-template')).toBeDisabled();
+  });
 
-      rerender(<WorkflowTemplatesSection />);
+  it('forwards name, title and description as query params', async () => {
+    const user = userEvent.setup();
+    mockList.mockResolvedValue(templates);
+    render(<WorkflowTemplatesSection />);
+    await screen.findByTestId('workflow-templates-table');
 
-      expect(workflowTemplatesService.list).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByTestId('workflow-create-template'));
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(
+      within(dialog).getByTestId('workflow-name-input'),
+      'my-workflow',
+    );
+    await user.type(
+      within(dialog).getByTestId('workflow-title-input'),
+      'My Workflow',
+    );
+    await user.type(
+      within(dialog).getByTestId('workflow-description-input'),
+      'Does a thing',
+    );
+
+    const submit = within(dialog).getByRole('button', {
+      name: 'Create workflow template',
     });
+    await waitFor(() => expect(submit).toBeEnabled());
+    await user.click(submit);
 
-    it('should transition from loading to content state', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue(mockTemplates);
-
-      render(<WorkflowTemplatesSection />);
-
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
-
-      await waitFor(() => {
-        expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
-        expect(screen.getByText('simple-workflow')).toBeInTheDocument();
-      });
-    });
-
-    it('should transition from loading to empty state', async () => {
-      vi.mocked(workflowTemplatesService.list).mockResolvedValue([]);
-
-      render(<WorkflowTemplatesSection />);
-
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
-
-      await waitFor(() => {
-        expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
-        expect(screen.getByTestId('empty')).toBeInTheDocument();
-      });
-    });
+    expect(mockPush).toHaveBeenCalledWith(
+      '/workflow-templates/new?name=my-workflow&title=My%20Workflow&description=Does%20a%20thing',
+    );
   });
 });

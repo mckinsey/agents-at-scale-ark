@@ -1,111 +1,81 @@
 'use client';
 
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import { ArrowOutward } from '@/components/icons';
-import { type Flow, FlowRow } from '@/components/rows/flow-row';
+import {
+  NameWorkflowDialog,
+  type NameWorkflowValues,
+} from '@/components/dialogs/name-workflow-dialog';
+import { AccountTree } from '@/components/icons';
+import {
+  CreateResourceButton,
+  ResourceListSection,
+} from '@/components/sections/resource-list-section';
 import { WorkflowTemplatesNotInstalled } from '@/components/sections/workflow-templates-not-installed';
 import {
-  SortableSectionedList,
-  type SortableSectionedListHandle,
-} from '@/components/sortable-sectioned-list';
-import { Button } from '@/components/ui/button';
+  type WorkflowTemplateListItem,
+  WorkflowTemplatesTable,
+} from '@/components/sections/workflow-templates-table';
+import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { useWorkflowTemplateAccess } from '@/lib/hooks/use-workflow-template-access';
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
-import { useDelayedLoading, useWorkflowsLayout } from '@/lib/hooks';
-import {
-  isArgoNotInstalledError,
+  WORKFLOW_TEMPLATE_ANNOTATIONS,
   type WorkflowTemplate,
+  isArgoNotInstalledError,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
 import { countWorkflowTasks } from '@/lib/utils/workflow';
 import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
+function mapTemplateToItem(
+  template: WorkflowTemplate,
+): WorkflowTemplateListItem {
   const annotations = template.metadata.annotations || {};
-  const stages = countWorkflowTasks(template.spec);
   return {
     id: template.metadata.name,
-    title: annotations['workflows.argoproj.io/title'],
-    description: annotations['workflows.argoproj.io/description'],
-    stages,
+    name: template.metadata.name,
+    title: annotations[WORKFLOW_TEMPLATE_ANNOTATIONS.TITLE],
+    description: annotations[WORKFLOW_TEMPLATE_ANNOTATIONS.DESCRIPTION],
+    stages: countWorkflowTasks(template.spec),
+    parameters: template.spec?.arguments?.parameters,
   };
 }
 
-const getTemplateKey = (template: WorkflowTemplate) => template.metadata.name;
+export function WorkflowTemplatesSection() {
+  const { namespace } = useNamespace();
+  const { canCreate } = useWorkflowTemplateAccess();
+  const { push } = useNamespacedNavigation();
+  const [argoMissingIn, setArgoMissingIn] = useState<string | null>(null);
+  const [showNameDialog, setShowNameDialog] = useState(false);
+  const argoInstalled = argoMissingIn !== namespace;
 
-export interface WorkflowTemplatesSectionHandle {
-  openCreateGroup: () => void;
-}
-
-export interface WorkflowTemplatesSectionProps {
-  onArgoInstalledChange?: (installed: boolean) => void;
-}
-
-export const WorkflowTemplatesSection = forwardRef<
-  WorkflowTemplatesSectionHandle,
-  WorkflowTemplatesSectionProps
->(function WorkflowTemplatesSection({ onArgoInstalledChange }, ref) {
-  const { namespace, readOnlyMode } = useNamespace();
-  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
-  const [argoInstalled, setArgoInstalled] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const showLoading = useDelayedLoading(loading);
-  const { layout, setLayout } = useWorkflowsLayout(namespace);
-  const listRef = useRef<SortableSectionedListHandle>(null);
-
-  useImperativeHandle(ref, () => ({
-    openCreateGroup: () => listRef.current?.openCreateGroup(),
-  }));
-
-  const fetchFlows = useCallback(async () => {
+  const loadItems = useCallback(async () => {
     try {
-      setLoading(true);
-      const fetchedTemplates = await workflowTemplatesService.list(namespace);
-      setTemplates(fetchedTemplates);
-      setArgoInstalled(true);
-      onArgoInstalledChange?.(true);
+      const templates = await workflowTemplatesService.list(namespace);
+      setArgoMissingIn(null);
+      return templates.map(mapTemplateToItem);
     } catch (error) {
-      console.error('Failed to fetch workflow templates:', error);
-      setTemplates([]);
-      const installed = !isArgoNotInstalledError(error);
-      setArgoInstalled(installed);
-      onArgoInstalledChange?.(installed);
-    } finally {
-      setLoading(false);
+      if (isArgoNotInstalledError(error)) {
+        setArgoMissingIn(namespace);
+        return [];
+      }
+      throw error;
     }
-  }, [namespace, onArgoInstalledChange]);
+  }, [namespace]);
 
-  useEffect(() => {
-    fetchFlows();
-  }, [fetchFlows]);
-
-  const handleRunWorkflow = useCallback(
+  const handleRun = useCallback(
     async (
-      flowId: string,
+      id: string,
       parameters?: Record<string, string>,
       workflowName?: string,
     ) => {
       try {
         const workflow = await workflowTemplatesService.run(
           namespace,
-          flowId,
+          id,
           parameters,
           workflowName,
         );
@@ -124,92 +94,69 @@ export const WorkflowTemplatesSection = forwardRef<
     [namespace],
   );
 
-  const handleDeleteWorkflow = useCallback(
-    async (flowId: string) => {
-      try {
-        await workflowTemplatesService.delete(namespace, flowId);
-        toast.success('Workflow template deleted', {
-          description: `Deleted workflow template: ${flowId}`,
-        });
-        await fetchFlows();
-      } catch (error) {
-        console.error('Failed to delete workflow template:', error);
-        toast.error('Failed to delete workflow template', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unknown error occurred',
-        });
-      }
-    },
-    [namespace, fetchFlows],
-  );
-
-  if (showLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="py-8 text-center">Loading...</div>
-      </div>
+  const handleConfirmName = ({
+    name,
+    title,
+    description,
+  }: NameWorkflowValues) => {
+    setShowNameDialog(false);
+    const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
+    const descriptionParam = description
+      ? `&description=${encodeURIComponent(description)}`
+      : '';
+    push(
+      `/workflow-templates/new?name=${encodeURIComponent(name)}${titleParam}${descriptionParam}`,
     );
-  }
+  };
 
-  if (!argoInstalled && !loading) {
+  if (!argoInstalled) {
     return <WorkflowTemplatesNotInstalled />;
   }
 
-  if (templates.length === 0 && !loading) {
-    const WorkflowIcon = DASHBOARD_SECTIONS['workflow-templates'].icon;
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <WorkflowIcon />
-          </EmptyMedia>
-          <EmptyTitle>No Workflow Templates Yet</EmptyTitle>
-          <EmptyDescription>
-            You haven&apos;t created any workflow templates yet. Argo Workflows
-            must be installed as a prerequisite. Get started by creating your
-            first workflow template.
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent></EmptyContent>
-        <Button
-          variant="ghost"
-          asChild
-          className="text-fg-secondary"
-          size="sm">
-          <a
-            href="https://mckinsey.github.io/agents-at-scale-ark/developer-guide/workflows/"
-            target="_blank">
-            Learn how to create Workflow Templates <ArrowOutward />
-          </a>
-        </Button>
-      </Empty>
-    );
-  }
-
   return (
-    <div className="flex h-full flex-col">
-      <main className="mt-4 flex-1 overflow-auto">
-        <SortableSectionedList
-          ref={listRef}
-          items={templates}
-          getKey={getTemplateKey}
-          layout={layout}
-          setLayout={setLayout}
-          itemNoun={{ singular: 'workflow', plural: 'workflows' }}
-          renderItem={(template, { dragHandle }) => (
-            <FlowRow
-              flow={mapWorkflowTemplateToFlow(template)}
-              parameters={template.spec?.arguments?.parameters}
-              readOnly={readOnlyMode}
-              onRun={handleRunWorkflow}
-              onDelete={handleDeleteWorkflow}
-              leading={dragHandle}
+    <>
+      <ResourceListSection
+        icon={<AccountTree />}
+        title="Workflow templates"
+        showCount
+        subtitle="Automate complex processes with agentic orchestration"
+        createAction={
+          canCreate ? (
+            <CreateResourceButton
+              label="Create workflow template"
+              onClick={() => setShowNameDialog(true)}
+              data-testid="workflow-create-template"
             />
-          )}
-        />
-      </main>
-    </div>
+          ) : null
+        }
+        showStatusFilter={false}
+        learnMoreUrl={ARGO_WORKFLOWS_DOCS_URL}
+        entityLabel="Workflow Template"
+        entityPluralLabel="workflow templates"
+        emptyTitle="No Workflow Templates Yet"
+        emptyDescription={
+          <>
+            <p className="mb-2">
+              You haven&apos;t created any workflow templates yet.
+            </p>
+            <p>Get started by creating your first workflow template.</p>
+          </>
+        }
+        loadItems={loadItems}
+        deleteItem={id => workflowTemplatesService.delete(namespace, id)}
+        renderTable={(templates, onDelete) => (
+          <WorkflowTemplatesTable
+            templates={templates}
+            onDelete={onDelete}
+            onRun={handleRun}
+          />
+        )}
+      />
+      <NameWorkflowDialog
+        open={showNameDialog}
+        onOpenChange={setShowNameDialog}
+        onConfirm={handleConfirmName}
+      />
+    </>
   );
-});
+}

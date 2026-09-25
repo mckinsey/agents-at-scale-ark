@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { toast } from '@/components/ui/sonner';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -28,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { useDelayedLoading } from '@/lib/hooks';
 import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -69,8 +69,14 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly title: string;
   readonly showCount?: boolean;
   readonly subtitle: string;
-  readonly createHref: string;
-  readonly createLabel: string;
+  /**
+   * Create control rendered in the header and the empty state. Use
+   * CreateResourceButton unless the resource needs something bespoke; omit it
+   * for resources that cannot be created from the list.
+   */
+  readonly createAction?: ReactNode;
+  /** Set false for resources that have no availability status to filter on. */
+  readonly showStatusFilter?: boolean;
   readonly learnMoreUrl: string;
   /** Capitalised singular for toasts, e.g. "Team" or "Agent". */
   readonly entityLabel: string;
@@ -89,13 +95,52 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   ) => ReactNode;
 }
 
+interface CreateResourceButtonProps {
+  readonly label: string;
+  /** Route to the create page. Omit and pass onClick for dialog-based flows. */
+  readonly href?: string;
+  readonly onClick?: () => void;
+  readonly 'data-testid'?: string;
+}
+
+export function CreateResourceButton({
+  label,
+  href,
+  onClick,
+  'data-testid': testId,
+}: Readonly<CreateResourceButtonProps>) {
+  const { readOnlyMode } = useNamespace();
+
+  if (readOnlyMode) {
+    return (
+      <Button disabled data-testid={testId}>
+        {label}
+      </Button>
+    );
+  }
+
+  if (href) {
+    return (
+      <NamespacedLink href={href}>
+        <Button data-testid={testId}>{label}</Button>
+      </NamespacedLink>
+    );
+  }
+
+  return (
+    <Button onClick={onClick} data-testid={testId}>
+      {label}
+    </Button>
+  );
+}
+
 export function ResourceListSection<T extends ResourceListItem>({
   icon,
   title,
   showCount,
   subtitle,
-  createHref,
-  createLabel,
+  createAction,
+  showStatusFilter = true,
   learnMoreUrl,
   entityLabel,
   entityPluralLabel,
@@ -111,7 +156,7 @@ export function ResourceListSection<T extends ResourceListItem>({
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
   const showLoading = useDelayedLoading(loading);
-  const { readOnlyMode, namespace } = useNamespace();
+  const { namespace } = useNamespace();
 
   const loadItemsRef = useRef(loadItems);
   loadItemsRef.current = loadItems;
@@ -140,6 +185,7 @@ export function ResourceListSection<T extends ResourceListItem>({
         item.name.toLowerCase().includes(q) ||
         (item.description?.toLowerCase().includes(q) ?? false);
       const matchesStatus =
+        !showStatusFilter ||
         filters.status === 'All' ||
         (item.available ?? 'Unknown') === filters.status;
       const matchesOrigin =
@@ -148,7 +194,14 @@ export function ResourceListSection<T extends ResourceListItem>({
         originFilter.getValue(item) === originValue;
       return matchesSearch && matchesStatus && matchesOrigin;
     });
-  }, [items, filters.q, filters.status, originFilter, originValue]);
+  }, [
+    items,
+    filters.q,
+    filters.status,
+    originFilter,
+    originValue,
+    showStatusFilter,
+  ]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -200,12 +253,12 @@ export function ResourceListSection<T extends ResourceListItem>({
   const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
   const statusLabel = STATUS_ITEMS.find(s => s.value === filters.status)?.label;
   const noResultsMessage =
-    filters.status === 'All'
+    !showStatusFilter || filters.status === 'All'
       ? `No ${pluralLabel} match your search.`
       : `There are no ${statusLabel} ${pluralLabel} at the moment.`;
 
   return (
-    <div className="flex h-full w-full content-shell flex-col">
+    <div className="content-shell flex h-full w-full flex-col">
       <ResourcePageHeader
         icon={icon}
         title={
@@ -216,13 +269,7 @@ export function ResourceListSection<T extends ResourceListItem>({
           !isEmpty && (
             <>
               {headerActions}
-              {readOnlyMode ? (
-                <Button disabled>{createLabel}</Button>
-              ) : (
-                <NamespacedLink href={createHref}>
-                  <Button>{createLabel}</Button>
-                </NamespacedLink>
-              )}
+              {createAction}
             </>
           )
         }
@@ -240,13 +287,7 @@ export function ResourceListSection<T extends ResourceListItem>({
           description={emptyDescription}
           actions={
             <>
-              {readOnlyMode ? (
-                <Button disabled>{createLabel}</Button>
-              ) : (
-                <NamespacedLink href={createHref}>
-                  <Button>{createLabel}</Button>
-                </NamespacedLink>
-              )}
+              {createAction}
               <LearnMoreButton href={learnMoreUrl} />
             </>
           }
@@ -286,28 +327,30 @@ export function ResourceListSection<T extends ResourceListItem>({
                 </Select>
               </div>
             )}
-            <div className="flex w-48 flex-col gap-2">
-              <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
-                Status
-              </span>
-              <Select
-                items={STATUS_ITEMS}
-                value={filters.status}
-                onValueChange={v =>
-                  setFilters({ status: parseStatusFilter(String(v)) })
-                }>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="All" />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_ITEMS.map(item => (
-                    <SelectItem key={item.value} value={item.value}>
-                      <SelectItemText>{item.label}</SelectItemText>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {showStatusFilter && (
+              <div className="flex w-48 flex-col gap-2">
+                <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
+                  Status
+                </span>
+                <Select
+                  items={STATUS_ITEMS}
+                  value={filters.status}
+                  onValueChange={v =>
+                    setFilters({ status: parseStatusFilter(String(v)) })
+                  }>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_ITEMS.map(item => (
+                      <SelectItem key={item.value} value={item.value}>
+                        <SelectItemText>{item.label}</SelectItemText>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {filteredItems.length === 0 ? (

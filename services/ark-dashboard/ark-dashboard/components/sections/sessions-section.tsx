@@ -45,7 +45,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
+import {
+  ARGO_BASE_URL,
+  ARGO_WORKFLOWS_DOCS_URL,
+} from '@/lib/constants/workflows';
 import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   mapArgoWorkflowToSession,
@@ -536,7 +539,7 @@ function WorkflowStepDetail({
                 </p>
                 <Button variant="ghost" size="xs" asChild>
                   <a
-                    href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+                    href={`${ARGO_BASE_URL}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
                     target="_blank"
                     rel="noopener noreferrer">
                     View logs in Argo UI
@@ -828,7 +831,7 @@ function SessionDetailView({
           {session.type === 'workflow' && session.namespace && session.uid && (
             <Button variant="outline" size="xs" asChild>
               <a
-                href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
+                href={`${ARGO_BASE_URL}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
                 target="_blank"
                 rel="noopener noreferrer">
                 View in Argo

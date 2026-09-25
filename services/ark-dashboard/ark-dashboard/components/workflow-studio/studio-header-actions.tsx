@@ -19,6 +19,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { ARGO_BASE_URL } from '@/lib/constants/workflows';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   type WorkflowStats,
@@ -26,9 +27,6 @@ import {
 } from '@/lib/services/workflow-templates';
 import { buildWorkflowRunsUrl } from '@/lib/utils/workflow';
 import { useNamespace } from '@/providers/NamespaceProvider';
-
-const ARGO_BASE_URL =
-  process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
 
 const STATS_POLL_INTERVAL_MS = 30000;
 
@@ -192,7 +190,7 @@ export function StudioHeaderActions({
                   data-testid="studio-activity-trigger">
                   <Badge
                     variant="alternative"
-                    className="border-stroke-divider bg-mist-50 text-slate-900 mr-2 size-5 min-w-5 items-center justify-center rounded-full border p-0"
+                    className="border-stroke-divider mr-2 size-5 min-w-5 items-center justify-center rounded-full border bg-mist-50 p-0 text-slate-900"
                     data-testid="studio-activity-badge">
                     {totalRuns}
                   </Badge>

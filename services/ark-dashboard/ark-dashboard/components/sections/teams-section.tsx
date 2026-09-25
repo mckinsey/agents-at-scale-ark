@@ -1,7 +1,10 @@
 'use client';
 
 import { Group } from '@/components/icons';
-import { ResourceListSection } from '@/components/sections/resource-list-section';
+import {
+  CreateResourceButton,
+  ResourceListSection,
+} from '@/components/sections/resource-list-section';
 import { TeamsTable } from '@/components/sections/teams-table';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { teamsService } from '@/lib/services';
@@ -14,8 +17,9 @@ export function TeamsSection() {
       icon={<Group />}
       title="Teams"
       subtitle="Create and manage teams of agents"
-      createHref="/teams/new"
-      createLabel="Create team"
+      createAction={
+        <CreateResourceButton href="/teams/new" label="Create team" />
+      }
       learnMoreUrl={DOCS_URLS.teams}
       entityLabel="Team"
       entityPluralLabel="teams"
