@@ -36,6 +36,7 @@ export class PostgresEventStream
     'event',
     'created_at',
   ];
+  protected readonly notifyChannel = 'ark_broker_events';
 
   constructor(logger: Logger, db: Db, ttlSeconds: number) {
     super(logger, db, ttlSeconds);
@@ -70,6 +71,7 @@ export class PostgresEventStream
     `;
     const item = rowToBrokerItem(rows[0]!);
     this.emitter.emit('item', item);
+    await this.notifyAppended([item.sequenceNumber]);
     return item;
   }
 

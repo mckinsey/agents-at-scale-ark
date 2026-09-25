@@ -429,6 +429,73 @@ describe('PostgresEventStream', () => {
     });
   });
 
+  describe('cross-replica notification', () => {
+    it('delivers an item appended on one instance to a subscriber on another', async () => {
+      const replicaA = new PostgresEventStream(silentLogger, db(), 3600);
+      const replicaB = new PostgresEventStream(silentLogger, db(), 3600);
+      await replicaB.init();
+      await replicaB.whenListening();
+
+      const delivered = new Promise<number>((resolve) => {
+        replicaB.subscribe((item) => resolve(item.sequenceNumber));
+      });
+
+      const appended = await replicaA.append(makeEventData());
+
+      await expect(delivered).resolves.toBe(appended.sequenceNumber);
+      replicaB.close();
+    });
+
+    it('does not double-deliver an appended item back to its own instance', async () => {
+      const replica = new PostgresEventStream(silentLogger, db(), 3600);
+      await replica.init();
+      await replica.whenListening();
+
+      const received: number[] = [];
+      replica.subscribe((item) => received.push(item.sequenceNumber));
+
+      await replica.append(makeEventData());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(received).toHaveLength(1);
+      replica.close();
+    });
+
+    it('unlistens a subscription that resolves after close() was already called', async () => {
+      const replica = new PostgresEventStream(silentLogger, db(), 3600);
+      const initPromise = replica.init();
+      replica.close();
+      await initPromise;
+      await replica.whenListening();
+
+      const received: number[] = [];
+      replica.subscribe((item) => received.push(item.sequenceNumber));
+
+      const other = new PostgresEventStream(silentLogger, db(), 3600);
+      await other.append(makeEventData());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(received).toHaveLength(0);
+    });
+
+    it('is idempotent - calling init() twice does not double-register the listener', async () => {
+      const replica = new PostgresEventStream(silentLogger, db(), 3600);
+      await replica.init();
+      await replica.init();
+      await replica.whenListening();
+
+      const received: number[] = [];
+      replica.subscribe((item) => received.push(item.sequenceNumber));
+
+      const other = new PostgresEventStream(silentLogger, db(), 3600);
+      await other.append(makeEventData());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(received).toHaveLength(1);
+      replica.close();
+    });
+  });
+
   describe('TTL', () => {
     const CLOCK_SKEW_MS = 100;
 
