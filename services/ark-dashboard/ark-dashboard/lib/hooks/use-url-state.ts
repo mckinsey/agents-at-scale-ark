@@ -59,7 +59,10 @@ const pendingParamsByPath = new Map<string, PendingParams>();
 const instanceCountByPath = new Map<string, number>();
 
 function retainPath(pathname: string): void {
-  instanceCountByPath.set(pathname, (instanceCountByPath.get(pathname) ?? 0) + 1);
+  instanceCountByPath.set(
+    pathname,
+    (instanceCountByPath.get(pathname) ?? 0) + 1,
+  );
 }
 
 function releasePath(pathname: string): void {
@@ -77,7 +80,7 @@ function releasePath(pathname: string): void {
 /** Rebases on the landed URL once per change, however many instances render. */
 function syncPendingParams(pathname: string, landed: string): void {
   const entry = pendingParamsByPath.get(pathname);
-  if (!entry || entry.landed !== landed) {
+  if (entry?.landed !== landed) {
     pendingParamsByPath.set(pathname, { landed, pending: landed });
   }
 }
@@ -130,7 +133,7 @@ function writeParam(
     params.delete(key);
     return;
   }
-  params.set(key, String(value));
+  params.set(key, typeof value === 'string' ? value : JSON.stringify(value));
 }
 
 function retainLiveDrafts(drafts: Drafts, params: URLSearchParams): Drafts {
