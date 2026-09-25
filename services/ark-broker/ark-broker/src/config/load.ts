@@ -13,6 +13,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       host: parsed.HOST,
       requestTimeoutMs: parsed.REQUEST_TIMEOUT_MS,
       shutdownDrainTimeoutMs: parsed.SHUTDOWN_DRAIN_TIMEOUT_MS,
+      streamIdleTimeoutMs: parsed.STREAM_IDLE_TIMEOUT_MS,
     }),
     limits: Object.freeze({
       messageMaxBytes: parsed.MESSAGE_MAX_BYTES,

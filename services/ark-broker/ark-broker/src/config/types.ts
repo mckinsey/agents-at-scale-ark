@@ -14,6 +14,7 @@ export type ServerConfig = Readonly<{
   host: string;
   requestTimeoutMs: number;
   shutdownDrainTimeoutMs: number;
+  streamIdleTimeoutMs: number;
 }>;
 
 export type LimitsConfig = Readonly<{

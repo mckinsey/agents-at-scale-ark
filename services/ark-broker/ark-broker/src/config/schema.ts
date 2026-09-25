@@ -16,6 +16,7 @@ export const envSchema = z
       .int()
       .nonnegative()
       .default(10000),
+    STREAM_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
     MESSAGE_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
     EVENT_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
     CHUNK_MAX_BYTES: z.coerce.number().int().positive().default(33554432),
