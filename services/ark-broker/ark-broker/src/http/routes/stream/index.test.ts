@@ -16,14 +16,22 @@ describe('Streaming API', () => {
   let app: express.Application;
   let chunks: CompletionChunkBroker;
 
-  beforeEach(() => {
+  // Build an app whose stream router uses the given idle timeout. Default is
+  // large so the existing behavioural tests never hit it; the idle-timeout suite
+  // rebuilds with a short value.
+  const buildStreamApp = (idleTimeoutMs = 300000): express.Application => {
     const logger = createLogger({level: 'silent', pretty: false});
     chunks = new CompletionChunkBroker(new InMemoryChunkStream(logger));
-    app = express();
-    app.use(express.json() as express.RequestHandler);
-    app.use(requestId);
-    app.use(createHttpLogger(logger));
-    app.use('/stream', createStreamRouter(chunks));
+    const a = express();
+    a.use(express.json() as express.RequestHandler);
+    a.use(requestId);
+    a.use(createHttpLogger(logger));
+    a.use('/stream', createStreamRouter(chunks, idleTimeoutMs));
+    return a;
+  };
+
+  beforeEach(() => {
+    app = buildStreamApp();
   });
 
   // Helper to send chunks to stream endpoint
@@ -280,6 +288,29 @@ describe('Streaming API', () => {
       expect(res.status).toBe(200);
 
       const events = await consumeStream(queryId, {fromBeginning: true});
+      expect(events).toContain('[DONE]');
+    });
+  });
+
+  describe('Idle timeout', () => {
+    it('terminates a stream that goes silent after receiving chunks', async () => {
+      // Chunks arrive, then the executor dies before [DONE]/complete. The idle
+      // timeout (re-armed on each chunk) must still terminate the subscriber
+      // with a terminal [DONE] rather than hang forever.
+      app = buildStreamApp(250);
+      const queryId = 'stalled-after-chunks';
+
+      await sendChunks(queryId, [createTextChunk('partial')]);
+
+      const events = await consumeStream(queryId, {
+        fromBeginning: true,
+        timeout: 3000,
+      });
+
+      // The replayed chunk was delivered...
+      expect(events.some((e) => e.includes('partial'))).toBe(true);
+      // ...then the idle timeout closed the stream cleanly.
+      expect(events.some((e) => e.includes('timeout_error'))).toBe(true);
       expect(events).toContain('[DONE]');
     });
   });

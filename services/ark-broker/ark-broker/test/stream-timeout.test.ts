@@ -30,9 +30,7 @@ describe('Stream Timeout', () => {
 
     // Should contain error event with streaming timeout message
     expect(response.text).toContain('data: {"error":{');
-    expect(response.text).toContain(
-      'Request timeout waiting for streaming query response'
-    );
+    expect(response.text).toContain('Streaming query response timed out');
     expect(response.text).toContain('"type":"timeout_error"');
     expect(response.text).toContain('"code":"timeout"');
 

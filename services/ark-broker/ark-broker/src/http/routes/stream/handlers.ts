@@ -22,8 +22,8 @@ interface StreamCounters {
 
 interface QueryStreamState {
   caughtUp: boolean;
-  hasReceivedChunks: boolean;
   timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  rearmIdleTimeout: () => void;
   buffer: BrokerItem<CompletionChunkData>[];
   counters: StreamCounters;
 }
@@ -109,11 +109,10 @@ function handleIncomingItem(
   queryName: string,
   cleanup: () => void
 ): void {
-  state.hasReceivedChunks = true;
-  if (state.timeoutHandle) {
-    clearTimeout(state.timeoutHandle);
-    state.timeoutHandle = undefined;
-  }
+  // Re-arm the idle timeout on every chunk: the bound is inter-chunk silence,
+  // not time-to-first-chunk, so a stream that stalls after some chunks (e.g. the
+  // executor dies before [DONE]) still terminates.
+  state.rearmIdleTimeout();
   if (!state.caughtUp) {
     state.buffer.push(item);
     return;
@@ -218,28 +217,28 @@ async function replayChunks(
   );
 }
 
-function onQueryTimeout(
+function onIdleTimeout(
   res: Response,
   req: Request,
   queryName: string,
   timeout: number,
-  state: QueryStreamState,
   cleanup: () => void
 ): void {
-  if (!state.hasReceivedChunks) {
-    req.log.error({queryName, timeout}, 'timeout waiting for chunks');
-    const errorEvent = {
-      error: {
-        message: 'Request timeout waiting for streaming query response',
-        type: 'timeout_error',
-        code: 'timeout',
-      },
-    };
-    res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-    cleanup();
-  }
+  // Fires when no chunk (or terminal [DONE]) arrives within the idle window,
+  // whether or not any chunk was seen. Terminates the subscriber cleanly with a
+  // terminal [DONE] so it never hangs on a stream that lost its completion.
+  req.log.warn({queryName, timeout}, 'stream idle timeout; terminating');
+  const errorEvent = {
+    error: {
+      message: 'Streaming query response timed out',
+      type: 'timeout_error',
+      code: 'timeout',
+    },
+  };
+  res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+  res.write('data: [DONE]\n\n');
+  res.end();
+  cleanup();
 }
 
 function onStreamClose(
@@ -276,16 +275,27 @@ export async function handleQueryStream(
   queryName: string,
   fromBeginning: boolean,
   waitForQuerySeconds: number | undefined,
-  maxChunkSize: number
+  maxChunkSize: number,
+  idleTimeoutMs: number
 ): Promise<void> {
   const waitForQuery = waitForQuerySeconds !== undefined;
-  const timeout =
+  // Time allowed before the first chunk: wait-for-query widens it when supplied,
+  // otherwise fall back to the idle window. Subsequent chunks re-arm at
+  // idleTimeoutMs (see handleIncomingItem).
+  const initialTimeout =
     waitForQuerySeconds === undefined
-      ? 30000
+      ? idleTimeoutMs
       : Math.max(1000, Math.min(waitForQuerySeconds * 1000, 300000));
 
   req.log.info(
-    {queryName, fromBeginning, waitForQuery, timeout, maxChunkSize},
+    {
+      queryName,
+      fromBeginning,
+      waitForQuery,
+      initialTimeout,
+      idleTimeoutMs,
+      maxChunkSize,
+    },
     'starting query stream'
   );
 
@@ -296,8 +306,8 @@ export async function handleQueryStream(
 
   const state: QueryStreamState = {
     caughtUp: false,
-    hasReceivedChunks: false,
     timeoutHandle: undefined,
+    rearmIdleTimeout: (): void => {},
     buffer: [],
     counters: {
       outboundChunkCount: 0,
@@ -308,8 +318,18 @@ export async function handleQueryStream(
 
   const unsubHandles = {chunks: (): void => {}};
   const cleanup = (): void => {
+    if (state.timeoutHandle) clearTimeout(state.timeoutHandle);
     unsubHandles.chunks();
   };
+
+  const armIdleTimeout = (ms: number): void => {
+    if (state.timeoutHandle) clearTimeout(state.timeoutHandle);
+    state.timeoutHandle = setTimeout(
+      () => onIdleTimeout(res, req, queryName, ms, cleanup),
+      ms
+    );
+  };
+  state.rearmIdleTimeout = (): void => armIdleTimeout(idleTimeoutMs);
 
   const completeHandler = (): void => {
     req.log.info(
@@ -333,12 +353,9 @@ export async function handleQueryStream(
     handleIncomingItem(item, state, res, req, queryName, cleanup);
   });
 
-  if (waitForQuery) {
-    state.timeoutHandle = setTimeout(
-      () => onQueryTimeout(res, req, queryName, timeout, state, cleanup),
-      timeout
-    );
-  }
+  // Always arm an idle timeout so every subscriber is bounded, not just those
+  // that pass wait-for-query. Re-armed on each chunk in handleIncomingItem.
+  armIdleTimeout(initialTimeout);
 
   if (fromBeginning) {
     const ok = await replayChunks(
