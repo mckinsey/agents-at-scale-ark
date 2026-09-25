@@ -1,0 +1,74 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kubernetes-events
+spec:
+  description: >
+    Controller reconciles emit Kubernetes Events, and consumers (fark, ark-cli,
+    ark-api) read them through the core/v1 API filtered by involvedObject. This
+    guards that consumer contract: a reconcile that emits an event must be
+    readable both by a plain core/v1 list and by the involvedObject.name field
+    selector. A Team's first reconcile is the trigger (it emits a Normal
+    "TeamCreated" event), but the assertions are about the event-read path, not
+    any one reconciler.
+  steps:
+  - name: create-agent
+    try:
+    # The Team validating webhook requires each member agent to exist, so create
+    # the agent first. Its modelRef may point at a non-existent model; the agent
+    # webhook still admits it (availability is resolved later by the controller).
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: events-test-agent
+          spec:
+            prompt: You are a test agent.
+            modelRef:
+              name: events-test-model
+
+  - name: create-team
+    try:
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: events-test-team
+          spec:
+            strategy: sequential
+            members:
+            - name: events-test-agent
+              type: agent
+
+  - name: event-readable-via-core-v1
+    try:
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Event
+          type: Normal
+          reason: TeamCreated
+          involvedObject:
+            kind: Team
+            name: events-test-team
+
+  - name: event-readable-by-involvedobject-field-selector
+    try:
+    - script:
+        content: |
+          set -e
+          OUT=$(kubectl get events -n "$NAMESPACE" \
+            --field-selector involvedObject.name=events-test-team,reason=TeamCreated \
+            -o json)
+          COUNT=$(echo "$OUT" | jq '.items | length')
+          if [ "$COUNT" -lt 1 ]; then
+            echo "FAIL: event not returned via core/v1 involvedObject field selector"
+            kubectl get events -n "$NAMESPACE" -o wide || true
+            exit 1
+          fi
+          echo "PASS: event readable via involvedObject field selector"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

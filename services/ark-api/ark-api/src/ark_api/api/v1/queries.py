@@ -10,6 +10,7 @@ from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...utils.helpers import parse_iso_timestamp
 
 from ...models.queries import (
     QueryResponse,
@@ -33,11 +34,9 @@ NAMESPACE_QUERY_DESCRIPTION = "Namespace for this request (defaults to current c
 
 def query_to_response(query: dict) -> QueryResponse:
     """Convert a Kubernetes query object to response model."""
-    creation_timestamp = None
-    if "creationTimestamp" in query["metadata"]:
-        creation_timestamp = datetime.fromisoformat(
-            query["metadata"]["creationTimestamp"].replace("Z", "+00:00")
-        )
+    creation_timestamp = parse_iso_timestamp(
+        query["metadata"].get("creationTimestamp")
+    )
     
     # Get query type and determine input field
     spec = query["spec"]
@@ -132,11 +131,13 @@ def _extract_search_text(spec_input) -> str:
 def _creation_timestamp_key(item_dict: dict):
     """Sort key (timestamp, name). Missing timestamp sorts last when reversed."""
     meta = item_dict.get("metadata", {})
-    ts = meta.get("creationTimestamp")
     name = meta.get("name", "")
-    if not ts:
+    # A missing or unparseable creationTimestamp degrades to sort-last rather than
+    # raising: one malformed item must not 500 the entire list endpoint. k8s
+    # always sets a valid creationTimestamp, so None here means missing/corrupt.
+    dt = parse_iso_timestamp(meta.get("creationTimestamp"))
+    if dt is None:
         return (datetime.min.replace(tzinfo=timezone.utc), name)
-    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
     return (dt, name)
 
 

@@ -10,7 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/recorder"
 
 	"mckinsey.com/ark/internal/annotations"
 )
@@ -31,27 +31,25 @@ type annotatedEvent struct {
 	obj         runtime.Object
 }
 
-func (m *mockEventRecorder) Event(object runtime.Object, eventtype, reason, message string) {
-	m.events = append(m.events, message)
+func (m *mockEventRecorder) Eventf(regarding, related runtime.Object, eventtype, reason, action, note string, args ...interface{}) {
+	msg := fmt.Sprintf(note, args...)
+	m.events = append(m.events, msg)
 	m.eventType = eventtype
 	m.reason = reason
-	m.message = message
+	m.message = msg
 }
 
-func (m *mockEventRecorder) Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
-}
-
-func (m *mockEventRecorder) AnnotatedEventf(object runtime.Object, eventAnnotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
+func (m *mockEventRecorder) AnnotatedEventf(regarding, related runtime.Object, eventAnnotations map[string]string, eventtype, reason, action, note string, args ...interface{}) {
 	m.annotatedEvents = append(m.annotatedEvents, annotatedEvent{
 		annotations: eventAnnotations,
 		eventType:   eventtype,
 		reason:      reason,
-		message:     fmt.Sprintf(messageFmt, args...),
-		obj:         object,
+		message:     fmt.Sprintf(note, args...),
+		obj:         regarding,
 	})
 }
 
-var _ record.EventRecorder = (*mockEventRecorder)(nil)
+var _ recorder.EventRecorder = (*mockEventRecorder)(nil)
 
 func TestKubernetesEventEmitter_EmitNormal(t *testing.T) {
 	mockRecorder := &mockEventRecorder{events: []string{}}
