@@ -52,7 +52,7 @@ var childEnv = []string{
 // The arguments are passed as a single argv element. There is no shell, so
 // quotes, newlines, and metacharacters in the JSON are data.
 func (s Script) Call(ctx context.Context, arguments json.RawMessage) Result {
-	argument, err := compactArgument(arguments)
+	argument, err := CompactArgument(arguments)
 	if err != nil {
 		return errorResult("invalid arguments: %v", err)
 	}
@@ -133,10 +133,10 @@ func safeText(b []byte) string {
 	return strings.ToValidUTF8(string(b), "\uFFFD")
 }
 
-// compactArgument validates that the arguments are a JSON object and returns
+// CompactArgument validates that the arguments are a JSON object and returns
 // their compact form. Everything is checked before a process is started: an
 // oversized or malformed argument never reaches an interpreter.
-func compactArgument(arguments json.RawMessage) (string, error) {
+func CompactArgument(arguments json.RawMessage) (string, error) {
 	if len(bytes.TrimSpace(arguments)) == 0 || string(bytes.TrimSpace(arguments)) == "null" {
 		return "{}", nil
 	}
