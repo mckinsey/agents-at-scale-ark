@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -310,6 +311,13 @@ func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall) (ToolRes
 			tr.eventingRecorder.Fail(ctx, "ToolCall", fmt.Sprintf("Tool execution failed: %v", err), err, operationData)
 		}
 		return result, err
+	}
+
+	if result.Error != "" {
+		toolErr := errors.New(result.Error)
+		tr.telemetryRecorder.RecordError(span, toolErr)
+		tr.eventingRecorder.Fail(ctx, "ToolCall", fmt.Sprintf("Tool execution failed: %v", toolErr), toolErr, operationData)
+		return result, nil
 	}
 
 	tr.telemetryRecorder.RecordToolResult(span, result.Content)

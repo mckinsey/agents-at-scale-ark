@@ -13,7 +13,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/eventing"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 	arkmcp "mckinsey.com/ark/internal/mcp"
+	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
 const (
@@ -23,6 +26,9 @@ const (
 
 	testToolGreet = "greet"
 	testToolSlow  = "slow"
+	testToolBoom  = "boom"
+
+	testToolBoomText = "exit status 1: boom"
 )
 
 type greetParams struct {
@@ -52,6 +58,14 @@ func newTestMCPServer(t *testing.T) string {
 			case <-ctx.Done():
 				return nil, nil, ctx.Err()
 			}
+		})
+
+	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: testToolBoom, Description: "fails"},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest, args greetParams) (*mcpsdk.CallToolResult, any, error) {
+			return &mcpsdk.CallToolResult{
+				IsError: true,
+				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: testToolBoomText}},
+			}, nil, nil
 		})
 
 	httpServer := httptest.NewServer(mcpsdk.NewStreamableHTTPHandler(
@@ -113,6 +127,53 @@ func TestMCPExecutorSucceedsWithinToolCallTimeout(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Hi ark", result.Content)
 	require.Empty(t, result.Error)
+}
+
+func boomCall() ToolCall {
+	call := greetCall()
+	call.Function.Name = testToolBoom
+	return call
+}
+
+func TestMCPExecutorSurfacesIsErrorToTheModel(t *testing.T) {
+	executor := &MCPExecutor{MCPClient: newTestMCPClient(t, testConnectTimeout), ToolName: testToolBoom}
+
+	result, err := executor.Execute(t.Context(), boomCall())
+
+	require.NoError(t, err, "a tool-level failure must not abort the agentic loop")
+	require.Empty(t, result.Content, "an isError result is not successful content")
+	require.Equal(t, testToolBoomText, result.Error, "the failure must reach the model as the tool message")
+}
+
+func TestExecuteToolReportsIsErrorAsAFailedToolCallEvent(t *testing.T) {
+	events := &recordingToolEvents{ToolRecorder: eventnoop.NewProvider().ToolRecorder()}
+	registry := NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), events)
+	registry.RegisterTool(ToolDefinition{Name: testToolBoom},
+		&MCPExecutor{MCPClient: newTestMCPClient(t, testConnectTimeout), ToolName: testToolBoom})
+
+	result, err := registry.ExecuteTool(t.Context(), boomCall())
+
+	require.NoError(t, err)
+	require.Equal(t, testToolBoomText, result.Error)
+	require.True(t, events.failed, "shared result handling must report a tool error on the existing event path")
+	require.False(t, events.completed, "a failed call must not also report success")
+	require.ErrorContains(t, events.err, testToolBoomText)
+}
+
+type recordingToolEvents struct {
+	eventing.ToolRecorder
+	failed    bool
+	completed bool
+	err       error
+}
+
+func (r *recordingToolEvents) Complete(ctx context.Context, operation, message string, data map[string]string) {
+	r.completed = true
+}
+
+func (r *recordingToolEvents) Fail(ctx context.Context, operation, message string, err error, data map[string]string) {
+	r.failed = true
+	r.err = err
 }
 
 func TestMCPExecutorBoundsToolCallByToolCallTimeout(t *testing.T) {
