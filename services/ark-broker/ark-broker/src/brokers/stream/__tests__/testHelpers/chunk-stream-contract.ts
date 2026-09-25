@@ -76,17 +76,6 @@ export function runChunkStreamContract(factory: () => ChunkStream): void {
     });
   });
 
-  describe('hasQuery', () => {
-    it('returns true after appendChunk', async () => {
-      await stream.appendChunk('q1', textChunk);
-      expect(await stream.hasQuery('q1')).toBe(true);
-    });
-
-    it('returns false for unknown queryId', async () => {
-      expect(await stream.hasQuery('unknown')).toBe(false);
-    });
-  });
-
   describe('subscribeToQuery', () => {
     it('fires callback for matching queryId only', async () => {
       const received: unknown[] = [];

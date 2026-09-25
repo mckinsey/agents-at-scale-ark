@@ -117,11 +117,6 @@ export class RedisChunkStream implements ChunkStream {
     return data.complete === true;
   }
 
-  async hasQuery(queryId: string): Promise<boolean> {
-    const qKey = makeQKey(this.prefix, queryId);
-    return (await this.redis.exists(qKey)) === 1;
-  }
-
   subscribeToQuery(
     queryId: string,
     callback: (item: BrokerItem<CompletionChunkData>) => void
