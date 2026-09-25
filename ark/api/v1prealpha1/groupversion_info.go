@@ -6,12 +6,23 @@
 package v1prealpha1
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
 var (
 	GroupVersion  = schema.GroupVersion{Group: "ark.mckinsey.com", Version: "v1prealpha1"}
-	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
+
+func addKnownTypes(s *runtime.Scheme) error {
+	s.AddKnownTypes(
+		GroupVersion,
+		&ExecutionEngine{}, &ExecutionEngineList{},
+		&A2AServer{}, &A2AServerList{},
+	)
+	metav1.AddToGroupVersion(s, GroupVersion)
+	return nil
+}

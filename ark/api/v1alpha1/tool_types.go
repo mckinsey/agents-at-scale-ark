@@ -169,10 +169,6 @@ type ToolList struct {
 	Items           []Tool `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&Tool{}, &ToolList{})
-}
-
 func (in *ToolSpec) DeepCopyInto(out *ToolSpec) {
 	*out = *in
 	if in.InputSchema != nil {
