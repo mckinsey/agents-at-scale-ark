@@ -1,7 +1,7 @@
 'use client';
 
 import { Bot, Check, ExternalLink, Loader2, Server } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
@@ -29,11 +29,13 @@ import { getOriginIcon } from '@/lib/utils/origin-icon';
 interface MarketplaceItemCardProps {
   item: MarketplaceItem;
   className?: string;
+  autoOpenInstall?: boolean;
 }
 
 export function MarketplaceItemCard({
   item,
   className,
+  autoOpenInstall = false,
 }: MarketplaceItemCardProps) {
   const [isInstalling, setIsInstalling] = useState(false);
   const [localStatus, setLocalStatus] = useState(item.status);
@@ -44,8 +46,9 @@ export function MarketplaceItemCard({
     name?: string;
   }>({});
   const installMutation = useInstallMarketplaceItem();
+  const autoOpenTriggered = useRef(false);
 
-  const handleInstall = async () => {
+  const handleInstall = useCallback(async () => {
     setIsInstalling(true);
     try {
       const result = await installMutation.mutateAsync(item.id);
@@ -116,7 +119,20 @@ export function MarketplaceItemCard({
     } finally {
       setIsInstalling(false);
     }
-  };
+  }, [installMutation, item.id, item.name]);
+
+  useEffect(() => {
+    if (
+      !autoOpenInstall ||
+      autoOpenTriggered.current ||
+      item.type === 'demo' ||
+      localStatus === 'installed'
+    ) {
+      return;
+    }
+    autoOpenTriggered.current = true;
+    void handleInstall();
+  }, [autoOpenInstall, handleInstall, item.type, localStatus]);
 
   const getTypeIcon = (type: string) => {
     if (type === 'service') {

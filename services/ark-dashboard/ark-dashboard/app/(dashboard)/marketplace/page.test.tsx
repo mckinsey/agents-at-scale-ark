@@ -3,6 +3,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+import { useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
+
 import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
 import type { MarketplaceItem, MarketplaceResponse } from '@/lib/api/generated/marketplace-types';
 
@@ -19,6 +22,9 @@ vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/marketplace'),
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 // Mock the PageHeader component to avoid SidebarProvider dependency
 vi.mock('@/components/common/page-header', () => ({
@@ -31,8 +37,10 @@ vi.mock('@/components/common/page-header', () => ({
 
 // Mock the MarketplaceItemCard component
 vi.mock('@/components/cards/marketplace-item-card', () => ({
-  MarketplaceItemCard: vi.fn(({ item }) => (
-    <div data-testid={`marketplace-item-${item.id}`}>
+  MarketplaceItemCard: vi.fn(({ item, autoOpenInstall }) => (
+    <div
+      data-testid={`marketplace-item-${item.id}`}
+      data-auto-open-install={String(Boolean(autoOpenInstall))}>
       <div>{item.name}</div>
       <div>{item.description}</div>
     </div>
@@ -40,6 +48,15 @@ vi.mock('@/components/cards/marketplace-item-card', () => ({
 }));
 
 const mockUseGetMarketplaceItems = vi.mocked(useGetMarketplaceItems);
+const mockUseSearchParams = vi.mocked(useSearchParams);
+
+function setItemQueryParam(itemId: string) {
+  mockUseSearchParams.mockReturnValue(
+    new URLSearchParams({ item: itemId }) as unknown as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+}
 
 const mockMarketplaceData: MarketplaceResponse = {
   items: [
@@ -112,6 +129,9 @@ function renderWithProviders(ui: React.ReactElement) {
 describe('MarketplacePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
   });
 
   it('silently discards the legacy localStorage marketplace-sources key on mount', () => {
@@ -360,6 +380,170 @@ describe('MarketplacePage', () => {
           type: 'service',
         })
       );
+    });
+  });
+
+  describe('item deep link', () => {
+    it('requests the install dialog for the item named in the URL', async () => {
+      setItemQueryParam('mcp-1');
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: mockMarketplaceData,
+        isPending: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<MarketplacePage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('marketplace-item-mcp-1')
+        ).toHaveAttribute('data-auto-open-install', 'true');
+      });
+      expect(screen.getByTestId('marketplace-item-agent-1')).toHaveAttribute(
+        'data-auto-open-install',
+        'false'
+      );
+    });
+
+    it('does not request the install dialog without the item param', async () => {
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: mockMarketplaceData,
+        isPending: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<MarketplacePage />);
+
+      expect(screen.getByTestId('marketplace-item-mcp-1')).toHaveAttribute(
+        'data-auto-open-install',
+        'false'
+      );
+    });
+
+    it('does not request the install dialog for an already installed item', async () => {
+      setItemQueryParam('service-1');
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: mockMarketplaceData,
+        isPending: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<MarketplacePage />);
+
+      expect(screen.getByTestId('marketplace-item-service-1')).toHaveAttribute(
+        'data-auto-open-install',
+        'false'
+      );
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it('does not request the install dialog for a demo item', async () => {
+      setItemQueryParam('demo-1');
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: mockMarketplaceData,
+        isPending: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<MarketplacePage />);
+
+      expect(screen.getByTestId('marketplace-item-demo-1')).toHaveAttribute(
+        'data-auto-open-install',
+        'false'
+      );
+    });
+
+    it('shows an error when the item in the URL does not exist', async () => {
+      setItemQueryParam('does-not-exist');
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: mockMarketplaceData,
+        isPending: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<MarketplacePage />);
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          'Marketplace item "does-not-exist" not found'
+        );
+      });
+      expect(
+        screen.getByPlaceholderText('Search marketplace...')
+      ).toHaveValue('');
+    });
+
+    it('searches for the item named in the URL', async () => {
+      setItemQueryParam('mcp-1');
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: mockMarketplaceData,
+        isPending: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<MarketplacePage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText('Search marketplace...')
+        ).toHaveValue('Test MCP');
+      });
+      expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
+        expect.objectContaining({ search: 'Test MCP' })
+      );
+    });
+
+    it('shows the first page of results for the searched item', async () => {
+      setItemQueryParam('item-8');
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: {
+          items: [
+            {
+              id: 'item-8',
+              name: 'Item 8',
+              description: 'Description 8',
+              category: 'agents',
+              type: 'agent',
+              version: '1.0.0',
+              status: 'available',
+              author: 'Test',
+              icon: '🤖',
+              featured: false,
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 10,
+        },
+        isPending: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<MarketplacePage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('marketplace-item-item-8')).toHaveAttribute(
+          'data-auto-open-install',
+          'true'
+        );
+      });
+      expect(
+        screen.getByPlaceholderText('Search marketplace...')
+      ).toHaveValue('Item 8');
     });
   });
 });
