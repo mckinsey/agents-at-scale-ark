@@ -267,6 +267,19 @@ func TestInterpreterDispatch(t *testing.T) {
 	assert.ErrorContains(t, err, "unsupported inline language")
 }
 
+func TestInterpreterMissingCandidates(t *testing.T) {
+	original := languages[arkv1alpha1.InlineLanguagePython]
+	t.Cleanup(func() { languages[arkv1alpha1.InlineLanguagePython] = original })
+	languages[arkv1alpha1.InlineLanguagePython] = language{
+		filename: original.filename, candidates: []string{filepath.Join(t.TempDir(), "missing")},
+	}
+
+	interpreter, err := Interpreter(arkv1alpha1.InlineLanguagePython)
+
+	assert.Empty(t, interpreter)
+	assert.ErrorContains(t, err, "no python interpreter found")
+}
+
 func TestSourceFilenamesAreLanguageSpecific(t *testing.T) {
 	expected := map[string]string{
 		arkv1alpha1.InlineLanguageBash:       "/tool/source.sh",

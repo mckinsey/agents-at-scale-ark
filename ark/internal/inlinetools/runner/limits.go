@@ -3,6 +3,13 @@
 // Package runner executes one inline Tool script inside its own pod. The
 // limits here are the v1 contract, not tunables: an author who needs more than
 // this needs an MCPServer.
+//
+// Each call has a process group. Linux runner images install an inherited
+// seccomp filter before executing the script, denying setsid and setpgid so
+// descendants cannot escape group cleanup. This requires Linux amd64/arm64;
+// non-Linux execution is for local development and has group cleanup only.
+// Authors are trusted: this is process-lifetime control, not hostile-code or
+// PID-exhaustion isolation. Pod security and administrator PID limits still apply.
 package runner
 
 import "time"

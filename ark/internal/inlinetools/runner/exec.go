@@ -64,10 +64,13 @@ func (s Script) Call(ctx context.Context, arguments json.RawMessage) Result {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, s.Interpreter, s.Path, argument)
+	cmd, err := scriptCommand(ctx, s, argument)
+	if err != nil {
+		return errorResult("failed to prepare script: %v", err)
+	}
 	cmd.Env = childEnv
-	// Setpgid makes the child a group leader, so cancellation reaches whatever
-	// it spawned rather than only the interpreter.
+	// Establish the group before the Linux helper prevents descendants from
+	// changing groups or sessions, so cancellation reaches the whole call.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return killGroup(cmd) }
 	cmd.WaitDelay = drainGrace
