@@ -4,11 +4,20 @@ import { PlugConnect } from '@/components/icons';
 import { McpServersTable } from '@/components/sections/mcp-servers-table';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
 import { DOCS_URLS } from '@/lib/constants/docs';
-import { mcpServersService } from '@/lib/services';
-import { useNamespace } from '@/providers/NamespaceProvider';
+import {
+  useDeleteMcpServer,
+  useGetAllMcpServers,
+} from '@/lib/services/mcp-servers-hooks';
 
 export function McpServersSection() {
-  const { namespace } = useNamespace();
+  const {
+    data: servers = [],
+    isPending,
+    error,
+    refetch,
+  } = useGetAllMcpServers();
+  const deleteMcpServer = useDeleteMcpServer();
+
   return (
     <ResourceListSection
       icon={<PlugConnect />}
@@ -27,11 +36,14 @@ export function McpServersSection() {
           <p>Get started by adding your first MCP Server.</p>
         </>
       }
-      loadItems={() => mcpServersService.getAll(namespace)}
-      deleteItem={id => mcpServersService.delete(namespace, id)}
-      renderTable={(servers, onDelete, reload) => (
+      items={servers}
+      loading={isPending}
+      error={error}
+      onDelete={id => deleteMcpServer.mutate(id)}
+      onReload={() => refetch()}
+      renderTable={(items, onDelete, reload) => (
         <McpServersTable
-          servers={servers}
+          servers={items}
           onDelete={onDelete}
           onAuthChanged={reload}
         />

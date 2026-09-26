@@ -4,11 +4,12 @@ import { Group } from '@/components/icons';
 import { ResourceListSection } from '@/components/sections/resource-list-section';
 import { TeamsTable } from '@/components/sections/teams-table';
 import { DOCS_URLS } from '@/lib/constants/docs';
-import { teamsService } from '@/lib/services';
-import { useNamespace } from '@/providers/NamespaceProvider';
+import { useDeleteTeam, useGetAllTeams } from '@/lib/services/teams-hooks';
 
 export function TeamsSection() {
-  const { namespace } = useNamespace();
+  const { data: teams = [], isPending, error, refetch } = useGetAllTeams();
+  const deleteTeam = useDeleteTeam();
+
   return (
     <ResourceListSection
       icon={<Group />}
@@ -26,10 +27,13 @@ export function TeamsSection() {
           <p>Get started by creating your first team.</p>
         </>
       }
-      loadItems={() => teamsService.list(namespace)}
-      deleteItem={id => teamsService.deleteById(namespace, id)}
-      renderTable={(teams, onDelete) => (
-        <TeamsTable teams={teams} onDelete={onDelete} />
+      items={teams}
+      loading={isPending}
+      error={error}
+      onDelete={id => deleteTeam.mutate(id)}
+      onReload={() => refetch()}
+      renderTable={(items, onDelete) => (
+        <TeamsTable teams={items} onDelete={onDelete} />
       )}
     />
   );

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { toast } from '@/components/ui/sonner';
 
+import { toast } from '@/components/ui/sonner';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import type { ModelCreateRequest, ModelUpdateRequest } from './models';
@@ -9,6 +9,7 @@ import { modelsService } from './models';
 
 export const GET_ALL_MODELS_QUERY_KEY = 'get-all-models';
 export const GET_MODEL_BY_ID_QUERY_KEY = 'get-model-by-id';
+export const DELETE_MODEL_MUTATION_KEY = 'delete-model';
 
 export const useGetAllModels = () => {
   const { namespace } = useNamespace();
@@ -111,6 +112,36 @@ export const useUpdateModelById = () => {
       toast.error(`Failed to update Model: ${data.id}`, {
         description: getMessage(),
       });
+    },
+  });
+};
+
+type UseDeleteModelProps = {
+  onSuccess?: () => void;
+};
+
+export const useDeleteModel = (props?: UseDeleteModelProps) => {
+  const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
+
+  return useMutation({
+    mutationKey: [DELETE_MODEL_MUTATION_KEY],
+    mutationFn: (id: number | string) =>
+      modelsService.deleteById(namespace, id),
+    onSuccess: () => {
+      toast.success('Model deleted successfully');
+      props?.onSuccess?.();
+    },
+    onError: error => {
+      toast.error('Failed to delete Model', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [GET_ALL_MODELS_QUERY_KEY] });
     },
   });
 };

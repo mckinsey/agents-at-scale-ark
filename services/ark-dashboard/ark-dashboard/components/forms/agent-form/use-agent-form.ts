@@ -5,10 +5,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from '@/components/ui/sonner';
 
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import type { Parameter } from '@/components/ui/parameter-editor';
+import { toast } from '@/components/ui/sonner';
 import type {
   Agent,
   AgentCreateRequest,
@@ -24,7 +24,10 @@ import {
   modelsService,
   toolsService,
 } from '@/lib/services';
-import { GET_ALL_AGENTS_QUERY_KEY } from '@/lib/services/agents-hooks';
+import {
+  GET_AGENT_BY_NAME_QUERY_KEY,
+  GET_ALL_AGENTS_QUERY_KEY,
+} from '@/lib/services/agents-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
@@ -100,7 +103,13 @@ export function useAgentForm({
         if (isExistingAgent && agentName) {
           const [agentData, modelsData, toolsData, enginesData] =
             await Promise.all([
-              agentsService.getByName(namespace, agentName),
+              // fetchQuery shares the React Query cache, so a warm entry
+              // (seeded by a prior visit) paints without a round-trip and
+              // still revalidates per staleTime.
+              queryClient.fetchQuery({
+                queryKey: [GET_AGENT_BY_NAME_QUERY_KEY, agentName, namespace],
+                queryFn: () => agentsService.getByName(namespace, agentName),
+              }),
               modelsService.list(namespace),
               toolsService.getAll(namespace),
               enginesPromise,
@@ -238,6 +247,13 @@ export function useAgentForm({
             return;
           }
           toast.success('Agent updated successfully');
+
+          queryClient.invalidateQueries({
+            queryKey: [GET_ALL_AGENTS_QUERY_KEY],
+          });
+          queryClient.invalidateQueries({
+            queryKey: [GET_AGENT_BY_NAME_QUERY_KEY, agent.name],
+          });
 
           form.reset(values);
           setInitialTools(selectedTools);
