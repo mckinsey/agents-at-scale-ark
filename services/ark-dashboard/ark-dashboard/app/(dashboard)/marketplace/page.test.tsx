@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
 import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
 import type { MarketplaceItem, MarketplaceResponse } from '@/lib/api/generated/marketplace-types';
 
@@ -10,15 +11,15 @@ import MarketplacePage from './page';
 
 // Mock the hooks and services
 vi.mock('@/lib/services/marketplace-hooks');
-vi.mock('next/navigation', () => ({
-  useRouter: vi.fn(() => ({
-    push: vi.fn(),
-    replace: vi.fn(),
-    prefetch: vi.fn(),
-  })),
-  usePathname: vi.fn(() => '/marketplace'),
-  useSearchParams: vi.fn(() => new URLSearchParams()),
-}));
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock('/marketplace');
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
 
 // Mock the PageHeader component to avoid SidebarProvider dependency
 vi.mock('@/components/common/page-header', () => ({

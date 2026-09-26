@@ -9,21 +9,23 @@ import {
   Server,
   SquarePlay,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
-import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
 import { PageHeader } from '@/components/common/page-header';
+import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import type {
   MarketplaceCategory,
   MarketplaceFilters,
   MarketplaceItemType,
 } from '@/lib/api/generated/marketplace-types';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
+import { parsePage } from '@/lib/utils/pagination';
 
 const FILTERS: Record<string, Partial<MarketplaceFilters>> = {
   all: { category: undefined, type: undefined, status: undefined },
@@ -34,12 +36,27 @@ const FILTERS: Record<string, Partial<MarketplaceFilters>> = {
   installed: { category: undefined, type: undefined, status: 'installed' },
 } as const;
 
+function parseCategory(raw: string): string {
+  return Object.hasOwn(FILTERS, raw) ? raw : 'all';
+}
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  category: { default: 'all', parse: parseCategory },
+  page: { default: 1, parse: parsePage },
+};
+
 export default function MarketplacePage() {
-  const [filters, setFilters] = useState<MarketplaceFilters>({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
   const itemsPerPage = 6;
+
+  const filters = useMemo<MarketplaceFilters>(
+    () => ({
+      ...FILTERS[urlState.category],
+      search: committedState.q || undefined,
+    }),
+    [urlState.category, committedState.q],
+  );
 
   const { data, isPending } = useGetMarketplaceItems(filters);
 
@@ -57,36 +74,21 @@ export default function MarketplacePage() {
 
   const totalItems = data?.items.length || 0;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
+
+  useEffect(() => {
+    if (!data) return;
+    if (urlState.page > Math.max(1, totalPages)) {
+      setUrlState({ page: 1 });
+    }
+  }, [data, totalPages, urlState.page, setUrlState]);
+  const startIndex = (urlState.page - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentItems = data?.items.slice(startIndex, endIndex) || [];
 
   const pageTitle = data ? `Marketplace (${data.items.length})` : 'Marketplace';
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setCurrentPage(1);
-      setFilters(prev => ({
-        ...prev,
-        search: searchQuery || undefined,
-      }));
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  const handleSearch = (value: string) => {
-    setSearchQuery(value);
-  };
-
   const handleCategoryChange = (category: string) => {
-    setSelectedCategory(category);
-    setCurrentPage(1); // Reset to first page on category change
-
-    const newFilter = FILTERS[category];
-    if (newFilter) {
-      setFilters(prev => ({ ...prev, ...newFilter }));
-    }
+    setUrlState({ category: parseCategory(category) });
   };
 
   return (
@@ -101,8 +103,8 @@ export default function MarketplacePage() {
               <Input
                 type="search"
                 placeholder="Search marketplace..."
-                value={searchQuery}
-                onChange={e => handleSearch(e.target.value)}
+                value={urlState.q}
+                onChange={e => setUrlState({ q: e.target.value })}
                 className="w-[300px] pl-10"
               />
             </div>
@@ -117,24 +119,24 @@ export default function MarketplacePage() {
         {/* Category Filters */}
         <div className="mb-4 mt-4 flex items-center gap-2">
           <Button
-            variant={selectedCategory === 'all' ? 'secondary' : 'ghost'}
+            variant={urlState.category === 'all' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => handleCategoryChange('all')}
             className={cn(
               'h-8 px-4',
-              selectedCategory === 'all'
+              urlState.category === 'all'
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
             All
           </Button>
           <Button
-            variant={selectedCategory === 'agents' ? 'secondary' : 'ghost'}
+            variant={urlState.category === 'agents' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => handleCategoryChange('agents')}
             className={cn(
               'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'agents'
+              urlState.category === 'agents'
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
@@ -142,12 +144,12 @@ export default function MarketplacePage() {
             Agents
           </Button>
           <Button
-            variant={selectedCategory === 'mcp' ? 'secondary' : 'ghost'}
+            variant={urlState.category === 'mcp' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => handleCategoryChange('mcp')}
             className={cn(
               'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'mcp'
+              urlState.category === 'mcp'
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
@@ -155,12 +157,12 @@ export default function MarketplacePage() {
             MCPs
           </Button>
           <Button
-            variant={selectedCategory === 'demo' ? 'secondary' : 'ghost'}
+            variant={urlState.category === 'demo' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => handleCategoryChange('demo')}
             className={cn(
               'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'demo'
+              urlState.category === 'demo'
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
@@ -168,12 +170,12 @@ export default function MarketplacePage() {
             Demos
           </Button>
           <Button
-            variant={selectedCategory === 'services' ? 'secondary' : 'ghost'}
+            variant={urlState.category === 'services' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => handleCategoryChange('services')}
             className={cn(
               'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'services'
+              urlState.category === 'services'
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
@@ -181,12 +183,12 @@ export default function MarketplacePage() {
             Services
           </Button>
           <Button
-            variant={selectedCategory === 'installed' ? 'secondary' : 'ghost'}
+            variant={urlState.category === 'installed' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => handleCategoryChange('installed')}
             className={cn(
               'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'installed'
+              urlState.category === 'installed'
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
@@ -237,20 +239,24 @@ export default function MarketplacePage() {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}>
+                onClick={() =>
+                  setUrlState({ page: Math.max(1, urlState.page - 1) })
+                }
+                disabled={urlState.page === 1}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
 
               <span className="text-sm">
-                Page {currentPage} of {totalPages}
+                Page {urlState.page} of {totalPages}
               </span>
 
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}>
+                onClick={() =>
+                  setUrlState({ page: Math.min(totalPages, urlState.page + 1) })
+                }
+                disabled={urlState.page === totalPages}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

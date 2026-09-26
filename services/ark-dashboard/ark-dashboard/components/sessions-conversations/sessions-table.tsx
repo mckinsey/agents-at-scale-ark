@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { toast } from '@/components/ui/sonner';
 
 import { BarChart, SwapVert } from '@/components/icons';
@@ -11,8 +11,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
-import { useDebounce } from '@/lib/hooks/use-debounce';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import type { SortDirection } from '@/lib/hooks/use-value-sort';
+import { parsePage } from '@/lib/utils/pagination';
+
 import { SessionTableRow } from './session-table-row';
 
 interface Props {
@@ -21,18 +23,47 @@ interface Props {
 }
 
 type SortField = 'date' | 'name' | 'conversations';
+type StatusFilter = 'all' | 'active' | 'idle' | 'error';
+type DateFilter = '' | '24h' | '7d' | '30d';
 
 const PAGE_SIZE = 20;
 
-export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'idle' | 'error'>('all');
-  const [dateFilter, setDateFilter] = useState<'' | '24h' | '7d' | '30d'>('');
-  const [sortField, setSortField] = useState<SortField>('date');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [currentPage, setCurrentPage] = useState(1);
+const SORT_FIELDS: readonly SortField[] = ['date', 'name', 'conversations'];
+const STATUS_FILTERS: readonly StatusFilter[] = [
+  'all',
+  'active',
+  'idle',
+  'error',
+];
+const DATE_FILTERS: readonly DateFilter[] = ['', '24h', '7d', '30d'];
 
-  const debouncedSearch = useDebounce(searchQuery, 400);
+function parseSortField(raw: string): SortField {
+  return SORT_FIELDS.find(field => field === raw) ?? 'date';
+}
+
+function parseSortDirection(raw: string): SortDirection {
+  return raw === 'asc' ? 'asc' : 'desc';
+}
+
+function parseStatusFilter(raw: string): StatusFilter {
+  return STATUS_FILTERS.find(status => status === raw) ?? 'all';
+}
+
+function parseDateFilter(raw: string): DateFilter {
+  return DATE_FILTERS.find(range => range === raw) ?? '';
+}
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  status: { default: 'all', parse: parseStatusFilter },
+  date: { default: '', parse: parseDateFilter },
+  sort: { default: 'date', parse: parseSortField },
+  order: { default: 'desc', parse: parseSortDirection },
+  page: { default: 1, parse: parsePage },
+};
+
+export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
+  const [filters, setFilters, committedFilters] = useUrlState(URL_STATE_SPEC);
 
   const dateRangeItems = [
     { value: '', label: 'Choose option' },
@@ -49,22 +80,25 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
   ];
 
   const dateFrom = useMemo(() => {
-    if (!dateFilter) return undefined;
+    if (!filters.date) return undefined;
     const now = new Date();
-    if (dateFilter === '24h') return new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-    if (dateFilter === '7d') return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    if (dateFilter === '30d') return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    if (filters.date === '24h')
+      return new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    if (filters.date === '7d')
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    if (filters.date === '30d')
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
     return undefined;
-  }, [dateFilter]);
+  }, [filters.date]);
 
   const { data, isLoading, isError, error } = useListSessions({
     limit: PAGE_SIZE,
-    cursor: (currentPage - 1) * PAGE_SIZE,
-    status: statusFilter === 'all' ? undefined : statusFilter,
+    cursor: (filters.page - 1) * PAGE_SIZE,
+    status: filters.status === 'all' ? undefined : filters.status,
     dateFrom,
-    search: debouncedSearch || undefined,
-    sort: sortField,
-    order: sortDirection,
+    search: committedFilters.q || undefined,
+    sort: filters.sort,
+    order: filters.order,
   });
 
   useEffect(() => {
@@ -75,16 +109,11 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
     }
   }, [isError, error]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, statusFilter, dateFilter, sortField, sortDirection]);
-
   const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    if (filters.sort === field) {
+      setFilters({ order: filters.order === 'asc' ? 'desc' : 'asc' });
     } else {
-      setSortField(field);
-      setSortDirection('desc');
+      setFilters({ sort: field, order: 'desc' });
     }
   };
 
@@ -93,6 +122,13 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
   const activeSessions = data?.statusCounts?.active ?? 0;
   const errorSessions = data?.statusCounts?.error ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalSessions / PAGE_SIZE));
+
+  useEffect(() => {
+    if (!data) return;
+    if (filters.page > totalPages) {
+      setFilters({ page: 1 });
+    }
+  }, [data, filters.page, totalPages, setFilters]);
 
   if (isLoading && sessions.length === 0) {
     return (
@@ -138,10 +174,18 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
 
       <div className="flex w-full items-end gap-3">
         <div className="flex items-end gap-3">
-          <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+          <ResourceSearchInput
+            value={filters.q}
+            onChange={q => setFilters({ q })}
+          />
           <div className="flex w-48 flex-col gap-2">
             <span className="text-sm leading-5 text-fg-secondary">Date range</span>
-            <Select items={dateRangeItems} value={dateFilter} onValueChange={(value) => setDateFilter(value as typeof dateFilter)}>
+            <Select
+              items={dateRangeItems}
+              value={filters.date}
+              onValueChange={value =>
+                setFilters({ date: parseDateFilter(String(value)) })
+              }>
               <SelectTrigger className="h-9 w-48">
                 <SelectValue placeholder="Choose option" />
               </SelectTrigger>
@@ -156,7 +200,12 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
           </div>
           <div className="flex w-48 flex-col gap-2">
             <span className="text-sm leading-5 text-fg-secondary">Status</span>
-            <Select items={statusItems} value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
+            <Select
+              items={statusItems}
+              value={filters.status}
+              onValueChange={value =>
+                setFilters({ status: parseStatusFilter(String(value)) })
+              }>
               <SelectTrigger className="h-9 w-48">
                 <SelectValue placeholder="All" />
               </SelectTrigger>
@@ -207,9 +256,9 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
         {totalPages > 1 && (
           <div className="shrink-0 border-t border-stroke-tertiary">
             <Pagination
-              currentPage={currentPage}
+              currentPage={filters.page}
               totalPages={totalPages}
-              onPageChange={setCurrentPage}
+              onPageChange={page => setFilters({ page })}
             />
           </div>
         )}
