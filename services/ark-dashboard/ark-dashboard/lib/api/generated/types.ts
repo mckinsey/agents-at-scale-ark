@@ -233,6 +233,7 @@ export interface paths {
          *
          *     Args:
          *         namespace: The namespace to list agents from (defaults to current context)
+         *         view: response detail level; 'summary' omits heavy fields for list rendering
          *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
@@ -493,11 +494,7 @@ export interface paths {
         get: operations["get_chunks_v1_broker_chunks_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Chunks
-         * @description Purge all chunks from the broker.
-         */
-        delete: operations["purge_chunks_v1_broker_chunks_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -517,11 +514,7 @@ export interface paths {
         get: operations["get_events_v1_broker_events_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Events
-         * @description Purge all events from the broker.
-         */
-        delete: operations["purge_events_v1_broker_events_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -561,11 +554,7 @@ export interface paths {
         get: operations["get_messages_v1_broker_messages_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Messages
-         * @description Purge all messages from the broker.
-         */
-        delete: operations["purge_messages_v1_broker_messages_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -585,11 +574,7 @@ export interface paths {
         get: operations["get_sessions_v1_broker_sessions_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Sessions
-         * @description Purge all sessions from the broker.
-         */
-        delete: operations["purge_sessions_v1_broker_sessions_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -629,11 +614,7 @@ export interface paths {
         get: operations["get_traces_v1_broker_traces_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Traces
-         * @description Purge all traces from the broker.
-         */
-        delete: operations["purge_traces_v1_broker_traces_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1216,6 +1197,7 @@ export interface paths {
          *
          *     Args:
          *         namespace: The namespace to list models from
+         *         view: response detail level; 'with-secrets' adds referenced secret names
          *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
@@ -2772,6 +2754,8 @@ export interface components {
             namespace: string;
             /** Prompt */
             prompt?: string | null;
+            /** Tool Names */
+            tool_names?: string[] | null;
         };
         /**
          * AgentSecretKeyRef
@@ -2838,6 +2822,12 @@ export interface components {
             secretKeyRef?: components["schemas"]["AgentSecretKeyRef"] | null;
             serviceRef?: components["schemas"]["AgentServiceRef"] | null;
         };
+        /**
+         * AgentView
+         * @description Detail level for agent list responses.
+         * @enum {string}
+         */
+        AgentView: "full" | "summary" | "with-tools";
         /**
          * AnthropicConfig
          * @description Anthropic model configuration.
@@ -4255,6 +4245,8 @@ export interface components {
              * @enum {string}
              */
             provider: "openai" | "azure" | "bedrock" | "anthropic";
+            /** Secret Refs */
+            secret_refs?: string[] | null;
             /**
              * Type
              * @default completions
@@ -4285,6 +4277,12 @@ export interface components {
                 };
             } | null;
         };
+        /**
+         * ModelView
+         * @description Detail level for model list responses.
+         * @enum {string}
+         */
+        ModelView: "summary" | "with-secrets";
         /**
          * NamespaceCreateRequest
          * @description Request model for creating a namespace.
@@ -4877,6 +4875,7 @@ export interface components {
          * @description Team resource response model.
          */
         TeamResponse: {
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Description */
             description?: string | null;
             /** Loops */
@@ -5305,6 +5304,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Response detail level: 'full' (default) returns every field; 'summary' omits heavy fields (prompt, non-essential annotations) for list rendering */
+                view?: components["schemas"]["AgentView"];
                 /** @description Maximum number of items to return per page */
                 limit?: number;
                 /** @description Continuation token returned by the previous page */
@@ -5769,38 +5770,6 @@ export interface operations {
             };
         };
     };
-    purge_chunks_v1_broker_chunks_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_events_v1_broker_events_get: {
         parameters: {
             query?: {
@@ -5814,38 +5783,6 @@ export interface operations {
                 cursor?: number | null;
                 /** @description Filter by session ID */
                 session_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    purge_events_v1_broker_events_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
             };
             header?: never;
             path?: never;
@@ -5957,38 +5894,6 @@ export interface operations {
             };
         };
     };
-    purge_messages_v1_broker_messages_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_sessions_v1_broker_sessions_get: {
         parameters: {
             query?: {
@@ -6012,38 +5917,6 @@ export interface operations {
                 sort?: string | null;
                 /** @description Sort order (asc/desc) */
                 order?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    purge_sessions_v1_broker_sessions_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
             };
             header?: never;
             path?: never;
@@ -6118,38 +5991,6 @@ export interface operations {
                 cursor?: number | null;
                 /** @description Filter by session ID */
                 session_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    purge_traces_v1_broker_traces_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
             };
             header?: never;
             path?: never;
@@ -7324,6 +7165,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Response detail level: 'full' (default) returns every field; 'summary' omits heavy fields (prompt, non-essential annotations) for list rendering */
+                view?: components["schemas"]["ModelView"];
                 /** @description Maximum number of items to return per page */
                 limit?: number;
                 /** @description Continuation token returned by the previous page */

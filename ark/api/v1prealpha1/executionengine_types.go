@@ -47,7 +47,3 @@ type ExecutionEngineList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ExecutionEngine `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&ExecutionEngine{}, &ExecutionEngineList{})
-}

@@ -55,7 +55,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.525.0",
     "mermaid": "^11.16.1",
-    "next": "16.3.3",
+    "next": "16.3.6",
     "next-auth": "^5.0.0-beta.29",
     "next-themes": "^0.4.6",
     "openai": "^6.1.0",
@@ -128,5 +128,9 @@
     "form-data": "^4.0.6",
     "vite": "^8.0.16",
     "sharp": "^0.35.0"
+  },
+  "optionalDependencies": {
+    "@emnapi/core": "1.11.3",
+    "@emnapi/runtime": "1.11.3"
   }
 }
