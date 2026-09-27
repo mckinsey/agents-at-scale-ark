@@ -191,31 +191,46 @@ func availableToolNames(tools []openai.ChatCompletionToolParam) map[string]bool 
 	return names
 }
 
-func pairedToolCallIDs(messages []Message, available map[string]bool) map[string]bool {
-	paired := make(map[string]bool)
+type toolPairing struct {
+	calls   map[int]map[int]bool
+	results map[int]bool
+}
+
+func pairToolCalls(messages []Message, available map[string]bool) toolPairing {
+	pairing := toolPairing{calls: make(map[int]map[int]bool), results: make(map[int]bool)}
 	if len(available) == 0 {
-		return paired
+		return pairing
 	}
 
+	used := make(map[string]bool)
 	for i, msg := range messages {
 		assistant := msg.OfAssistant
 		if assistant == nil || len(assistant.ToolCalls) == 0 {
 			continue
 		}
 
-		results := make(map[string]bool)
+		resultIndex := make(map[string]int)
 		for j := i + 1; j < len(messages) && messages[j].OfTool != nil; j++ {
-			results[messages[j].OfTool.ToolCallID] = true
+			if _, seen := resultIndex[messages[j].OfTool.ToolCallID]; !seen {
+				resultIndex[messages[j].OfTool.ToolCallID] = j
+			}
 		}
 
-		for _, call := range assistant.ToolCalls {
-			if call.ID != "" && available[call.Function.Name] && results[call.ID] {
-				paired[call.ID] = true
+		for k, call := range assistant.ToolCalls {
+			j, hasResult := resultIndex[call.ID]
+			if call.ID == "" || used[call.ID] || !available[call.Function.Name] || !hasResult {
+				continue
 			}
+			used[call.ID] = true
+			if pairing.calls[i] == nil {
+				pairing.calls[i] = make(map[int]bool)
+			}
+			pairing.calls[i][k] = true
+			pairing.results[j] = true
 		}
 	}
 
-	return paired
+	return pairing
 }
 
 func toolUseInput(arguments string) json.RawMessage {
@@ -240,8 +255,8 @@ func toolResultText(tool *openai.ChatCompletionToolMessageParam) string {
 	return strings.Join(parts, "\n")
 }
 
-func pairedToolTurn(msg Message, paired map[string]bool) (collectedMessage, bool) {
-	if tool := msg.OfTool; tool != nil && paired[tool.ToolCallID] {
+func pairedToolTurn(index int, msg Message, pairing toolPairing) (collectedMessage, bool) {
+	if tool := msg.OfTool; tool != nil && pairing.results[index] {
 		return collectedMessage{
 			role: RoleUser,
 			blocks: []anthropicMessageContent{{
@@ -258,8 +273,8 @@ func pairedToolTurn(msg Message, paired map[string]bool) (collectedMessage, bool
 	}
 
 	blocks := make([]anthropicMessageContent, 0, len(assistant.ToolCalls))
-	for _, call := range assistant.ToolCalls {
-		if !paired[call.ID] {
+	for k, call := range assistant.ToolCalls {
+		if !pairing.calls[index][k] {
 			continue
 		}
 		blocks = append(blocks, anthropicMessageContent{
@@ -284,10 +299,10 @@ func collectAnthropicTurns(messages []Message, tools []openai.ChatCompletionTool
 	var collected []collectedMessage
 	var systemBlocks []anthropicSystemBlock
 
-	paired := pairedToolCallIDs(messages, availableToolNames(tools))
+	pairing := pairToolCalls(messages, availableToolNames(tools))
 
-	for _, msg := range messages {
-		if turn, ok := pairedToolTurn(msg, paired); ok {
+	for i, msg := range messages {
+		if turn, ok := pairedToolTurn(i, msg, pairing); ok {
 			collected = append(collected, turn)
 			continue
 		}

@@ -2,6 +2,7 @@ package completions
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/openai/openai-go"
@@ -678,5 +679,51 @@ func TestConvertMessagesToAnthropicToolBlockFallback(t *testing.T) {
 		for i := 1; i < len(result); i++ {
 			assert.NotEqual(t, result[i-1].Role, result[i].Role, "consecutive same-role messages at %d", i)
 		}
+	})
+
+	t.Run("does not pair a reused tool call ID across assistant turns", func(t *testing.T) {
+		agent1 := addAgentNameToMessages([]Message{assistantToolCalls("", toolCall("call_1", "search", `{}`))}, "agent1")[0]
+		agent2 := addAgentNameToMessages([]Message{assistantToolCalls("", toolCall("call_1", "search", `{}`))}, "agent2")[0]
+		messages := []Message{
+			NewUserMessage("start"),
+			agent1,
+			ToolMessage("agent1 result", "call_1"),
+			agent2,
+			NewUserMessage("It is your turn, agent3."),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages, functionTools("search"))
+
+		require.Len(t, result, 3)
+
+		toolUse := contentBlocksOf(t, result[1])
+		require.Len(t, toolUse, 1)
+		assert.Equal(t, "tool_use", toolUse[0].Type)
+		assert.Equal(t, "call_1", toolUse[0].ID)
+
+		userTurn := contentBlocksOf(t, result[2])
+		require.Len(t, userTurn, 2)
+		assert.Equal(t, "tool_result", userTurn[0].Type)
+		assert.Equal(t, "call_1", userTurn[0].ToolUseID)
+		assert.Equal(t, "It is your turn, agent3.", userTurn[1].Text)
+	})
+
+	t.Run("sends a reused tool call ID as blocks only once", func(t *testing.T) {
+		agent1 := addAgentNameToMessages([]Message{assistantToolCalls("", toolCall("call_1", "search", `{}`))}, "agent1")[0]
+		agent2 := addAgentNameToMessages([]Message{assistantToolCalls("", toolCall("call_1", "search", `{}`))}, "agent2")[0]
+		messages := []Message{
+			NewUserMessage("start"),
+			agent1,
+			ToolMessage("agent1 result", "call_1"),
+			agent2,
+			ToolMessage("agent2 result", "call_1"),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages, functionTools("search"))
+
+		wire := string(mustMarshalRaw(result))
+		assert.Equal(t, 1, strings.Count(wire, `"type":"tool_use"`))
+		assert.Equal(t, 1, strings.Count(wire, `"type":"tool_result"`))
+		assert.Contains(t, wire, "agent2 result")
 	})
 }
