@@ -1592,13 +1592,7 @@ func setupQueryController(mgr ctrl.Manager, r *QueryReconciler, rec reconcile.Re
 		Complete(rec)
 }
 
-// queryUpdatePredicate skips Update events where nothing changed except
-// Status and/or ResourceVersion. The controller is the sole writer of Query
-// status (#3437): with no predicate, every status write it makes bounces
-// back as a watch event and triggers another reconcile that only re-confirms
-// what the write already decided. Everything else (spec, annotations,
-// labels, finalizers, deletion) is not self-induced by a status write, so it
-// still reconciles.
+// queryUpdatePredicate drops Update events that only changed Status
 func queryUpdatePredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
