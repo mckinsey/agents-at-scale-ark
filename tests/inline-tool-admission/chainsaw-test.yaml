@@ -5,10 +5,9 @@ metadata:
   labels:
     inline-tools: "true"
 spec:
-  # Admission enforcement is the same decision on both storage backends, but the
-  # inline e2e job passes no storage-backend input, so this suite runs on etcd
-  # and exercises the webhook path only; both-backend e2e coverage is still
-  # outstanding (task 7.2). Pin to the watched default namespace.
+  # Admission enforcement is the same decision on both storage backends, and the
+  # inline e2e job runs this suite on each: the webhook path on etcd and the
+  # embedded apiserver path on postgresql. Pin to the watched default namespace.
   namespace: default
   description: >
     Inline authoring admission: an identity that can author Tools but lacks the
