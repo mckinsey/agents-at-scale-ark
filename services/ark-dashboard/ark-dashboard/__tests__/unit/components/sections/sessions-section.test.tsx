@@ -1285,7 +1285,7 @@ describe('SessionsSection', () => {
       });
     });
 
-    it('should fall back to archived logs and skip fetching without pod details', async () => {
+    it('should render fetched step logs and skip fetching without pod details', async () => {
       const user = userEvent.setup();
       vi.mocked(fetchNodeLogWindow).mockResolvedValueOnce({
         content: 'archived log line',
@@ -1344,12 +1344,23 @@ describe('SessionsSection', () => {
       await waitFor(() => {
         expect(screen.getByText('archived log line')).toBeInTheDocument();
       });
+      expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+      expect(fetchNodeLogWindow).toHaveBeenCalledWith(
+        {
+          namespace: 'default',
+          workflowName: 'logs-workflow',
+          nodeId: 'node-1',
+          podName: 'logs-workflow-with-logs-123',
+        },
+        expect.anything(),
+      );
 
       await user.click(
         screen.getByRole('button', { name: /no-logs, expand/i }),
       );
 
       expect(screen.getByText('alpine:3.20')).toBeInTheDocument();
+      expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
     });
   });
 

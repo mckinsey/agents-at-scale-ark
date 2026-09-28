@@ -821,9 +821,9 @@ class _LogWindowCollector:
     client already holds, while append pages keep the oldest new lines so the
     client's timestamp cursor advances without leaving a gap.
 
-    ``head_timestamp`` is the timestamp of the first line still retained by the
-    kubelet, which is how a page recognises that it has reached the start of
-    the log.
+    ``head_timestamp`` and ``head_line_bytes`` describe the first line still
+    retained by the kubelet, which is how a page recognises that it has reached
+    the start of the log rather than a chunk part-way through that line.
     """
 
     def __init__(
@@ -834,6 +834,7 @@ class _LogWindowCollector:
         max_timestamp: Optional[str],
         keep_newest: bool,
         head_timestamp: Optional[str] = None,
+        head_line_bytes: int = 0,
     ):
         self.read_limit = read_limit
         self.max_bytes = max_bytes
@@ -841,6 +842,7 @@ class _LogWindowCollector:
         self.max_timestamp = _normalize_log_timestamp(max_timestamp) if max_timestamp else None
         self.keep_newest = keep_newest
         self.head_timestamp = _normalize_log_timestamp(head_timestamp) if head_timestamp else None
+        self.head_line_bytes = head_line_bytes
         self.lines: deque[str] = deque()
         self.timestamps: deque[Optional[str]] = deque()
         self.admitted = 0
@@ -849,6 +851,7 @@ class _LogWindowCollector:
         self.dropped_from_front = 0
         self.reached_known_lines = False
         self.first_read_timestamp: Optional[str] = None
+        self.first_read_line_bytes = 0
         self.byte_count = 0
         self.truncated = False
 
@@ -861,6 +864,8 @@ class _LogWindowCollector:
     @property
     def range_reaches_log_start(self) -> bool:
         if self.head_timestamp is None or self.first_read_timestamp is None:
+            return False
+        if self.first_read_line_bytes < self.head_line_bytes:
             return False
         return _normalize_log_timestamp(self.first_read_timestamp) <= self.head_timestamp
 
@@ -889,6 +894,8 @@ class _LogWindowCollector:
         timestamp, text = _split_log_line(raw_line)
         if self.first_read_timestamp is None and timestamp is not None:
             self.first_read_timestamp = timestamp
+        if self.lines_read == 0:
+            self.first_read_line_bytes = len(raw_line.encode("utf-8"))
         self.lines_read += 1
         self.bytes_read += len(raw_line.encode("utf-8")) + 1
 
@@ -982,27 +989,45 @@ async def _collect_log_window(
     collector.add(pending.decode("utf-8", errors="replace"))
 
 
-async def _read_log_head_timestamp(
+async def _measure_first_line(response, max_bytes: int) -> tuple[bytes, int]:
+    """Opening bytes and byte length of the first streamed line, read no further than needed."""
+    head = b""
+    measured = 0
+    async for chunk in response.content.iter_chunked(LOG_STREAM_CHUNK_BYTES):
+        if not head:
+            head = chunk[:LOG_WINDOW_HEAD_PROBE_BYTES]
+        newline = chunk.find(b"\n")
+        if newline >= 0:
+            measured += newline
+            break
+        measured += len(chunk)
+        if measured >= max_bytes:
+            break
+    return head, measured
+
+
+async def _read_log_head_line(
     core_v1: CoreV1Api,
     namespace: str,
     pod_name: str,
     container: Optional[str],
-) -> Optional[str]:
-    """Timestamp of the oldest line the kubelet still retains."""
+    max_bytes: int,
+) -> tuple[Optional[str], int]:
+    """Timestamp and byte length of the oldest line the kubelet still retains."""
     response = await _open_pod_log_stream(
         core_v1,
         namespace,
         pod_name,
         container=container,
-        limit_bytes=LOG_WINDOW_HEAD_PROBE_BYTES,
+        limit_bytes=max_bytes,
     )
     try:
-        head = await response.content.read(LOG_WINDOW_HEAD_PROBE_BYTES)
+        head, line_bytes = await _measure_first_line(response, max_bytes)
     finally:
         response.release()
 
     timestamp, _ = _split_log_line(head.decode("utf-8", errors="replace"))
-    return timestamp
+    return timestamp, line_bytes
 
 
 async def _measure_boundary_line_bytes(
@@ -1021,16 +1046,8 @@ async def _measure_boundary_line_bytes(
         container=container,
         tail_lines=skip_tail_lines + 1,
     )
-    measured = 0
     try:
-        async for chunk in response.content.iter_chunked(LOG_STREAM_CHUNK_BYTES):
-            newline = chunk.find(b"\n")
-            if newline >= 0:
-                measured += newline
-                break
-            measured += len(chunk)
-            if measured >= max_bytes:
-                break
+        _, measured = await _measure_first_line(response, max_bytes)
     finally:
         response.release()
     return measured
@@ -1118,7 +1135,9 @@ async def _read_history_window(
     request is retried with a larger tail until the page it produces is both
     non-empty and known to start on a line boundary.
     """
-    head_timestamp = await _read_log_head_timestamp(core_v1, namespace, pod_name, container)
+    head_timestamp, head_line_bytes = await _read_log_head_line(
+        core_v1, namespace, pod_name, container, max_bytes
+    )
     line_bytes = await _measure_boundary_line_bytes(
         core_v1, namespace, pod_name, container, skip_tail_lines, max_bytes
     )
@@ -1141,6 +1160,7 @@ async def _read_history_window(
             before_timestamp,
             keep_newest=True,
             head_timestamp=head_timestamp,
+            head_line_bytes=head_line_bytes,
         )
         try:
             await _collect_log_window(response, collector)

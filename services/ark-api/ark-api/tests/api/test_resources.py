@@ -1720,7 +1720,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         self.assertEqual(lines[-1], "line 2499")
         self.assertTrue(body["has_more_before"])
         self.assertFalse(body["truncated"])
-        self.assertEqual(streams[0][0]["limit_bytes"], 64)
+        self.assertEqual(streams[0][0]["limit_bytes"], 1024 * 1024)
         self.assertNotIn("tail_lines", streams[0][0])
         self.assertEqual(streams[1][0]["tail_lines"], 1)
         self.assertEqual(streams[-1][0]["tail_lines"], 1001)
@@ -1817,7 +1817,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         for index, body in enumerate(seen[:-1]):
             self.assertEqual(body["content"], lines[3 - index][1])
 
-        self.assertTrue(lines[0][1].endswith(seen[-1]["content"]))
+        self.assertEqual(seen[-1]["content"], lines[0][1])
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
