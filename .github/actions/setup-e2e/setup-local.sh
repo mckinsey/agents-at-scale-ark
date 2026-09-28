@@ -101,6 +101,13 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
   sudo k3s crictl pull "${REGISTRY}/ark-broker:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
   IMAGE_PULL_PIDS+=($!)
 fi
+if [ "${ENABLE_INLINE_TOOLS}" = "true" ]; then
+  # Runner Deployments start at replicas 0, so this image is otherwise first
+  # pulled when the activator scales one up, inside its 60s activation budget.
+  # Python is the only language the inline suite uses.
+  sudo k3s crictl pull "${REGISTRY}/ark-inline-runner-python:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
+  IMAGE_PULL_PIDS+=($!)
+fi
 if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   # The Postgres backend installs ark-storage-dev (postgres:16-alpine) and the
   # broker migration job during serial --wait helm installs. Prefetch so the
