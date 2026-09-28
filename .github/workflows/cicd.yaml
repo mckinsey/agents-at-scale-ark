@@ -1539,6 +1539,7 @@ jobs:
         e2e-ark-cli,
         e2e-tests-llm,
         e2e-tests-third-party-webhooks,
+        e2e-tests-inline,
         jfrog-xray-scan,
         xray-container-scan,
         build-and-test-ark,
