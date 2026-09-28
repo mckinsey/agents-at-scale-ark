@@ -845,9 +845,16 @@ jobs:
   # That is also why mock-llm is not pre-installed here: the suite helm installs
   # its own into default, and helm will not adopt the kubectl-applied sample.
   e2e-tests-inline:
-    name: E2E Inline Tools
+    name: E2E Inline Tools (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Admission is enforced by the webhook on etcd and the apiserver on
+        # postgresql; run the whole inline suite on both so the enforcement
+        # path is covered for each backend.
+        storage-backend: [etcd, postgresql]
     steps:
       - uses: actions/checkout@v6
 
@@ -856,6 +863,7 @@ jobs:
           ark-image-tag: ${{ github.sha }}
           install-broker: "true"
           enable-inline-tools: "true"
+          storage-backend: ${{ matrix.storage-backend }}
           prefetch-test-images: "true"
           mock-llm-enabled: "false"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
@@ -883,7 +891,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: cluster-logs-inline-${{ github.sha }}
+          name: cluster-logs-inline-${{ matrix.storage-backend }}-${{ github.sha }}
           path: /tmp/cluster-logs
           retention-days: 7
 
