@@ -525,6 +525,38 @@ describe('useChatSession - Conversation ID Continuity', () => {
     ];
   }
 
+  it('releases the chunk stream when the loop breaks early on an error chunk', async () => {
+    const cleanup = vi.fn();
+    async function* erroringChunks(): AsyncGenerator<Record<string, unknown>> {
+      try {
+        yield { error: { message: 'boom' } };
+        yield { choices: [{ delta: { content: 'unreached' } }] };
+      } finally {
+        cleanup();
+      }
+    }
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'test-query-error-break',
+      chunks: erroringChunks(),
+    });
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    // The error chunk breaks the consumer loop; stopStreamOnSignal must
+    // propagate that to the source generator so its reader is released.
+    await waitFor(() => {
+      expect(cleanup).toHaveBeenCalled();
+    });
+  });
+
   it('fetches conversationId via getQuery when the final stream chunk is missing', async () => {
     vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
       queryName: 'test-query-missing-final',

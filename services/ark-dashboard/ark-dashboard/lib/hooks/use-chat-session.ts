@@ -57,17 +57,23 @@ async function* stopStreamOnSignal<T>(
   const iterator = source[Symbol.asyncIterator]();
   const STOP: unique symbol = Symbol('stop');
   const stopSignal = stop.then((): typeof STOP => STOP);
-  while (true) {
-    const read = iterator.next();
-    const winner = await Promise.race([read, stopSignal]);
-    if (winner === STOP) {
-      onStop();
-      releaseStream();
-      void read.catch(() => {});
-      return;
+  try {
+    while (true) {
+      const read = iterator.next();
+      const winner = await Promise.race([read, stopSignal]);
+      if (winner === STOP) {
+        onStop();
+        releaseStream();
+        void read.catch(() => {});
+        return;
+      }
+      if (winner.done) return;
+      yield winner.value;
     }
-    if (winner.done) return;
-    yield winner.value;
+  } finally {
+    // Propagate early consumer exit (break/throw in the caller's loop) to the
+    // underlying stream so its reader is released, matching plain `for await`.
+    void iterator.return?.();
   }
 }
 
