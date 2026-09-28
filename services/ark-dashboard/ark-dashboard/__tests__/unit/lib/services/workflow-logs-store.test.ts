@@ -165,4 +165,69 @@ describe('workflow log store', () => {
       'Logs not available (pod terminated and logs not archived)',
     );
   });
+
+  it('reports a generic message for non-404 failures', async () => {
+    vi.mocked(fetchNodeLogWindow).mockRejectedValue(new Error('HTTP 500'));
+
+    await ensureLoaded(key, target);
+
+    expect(getNodeLogBuffer(key).error).toBe('Failed to load logs');
+  });
+
+  it('keeps loaded pages and the paging cursor when loading older fails', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(
+        windowOf('c\nd', { has_more_before: true, first_timestamp: 't3' }),
+      )
+      .mockRejectedValueOnce(new Error('HTTP 500'))
+      .mockResolvedValueOnce(windowOf('a\nb', { has_more_before: false }));
+
+    await ensureLoaded(key, target);
+    await loadOlder(key, target);
+
+    const failed = getNodeLogBuffer(key);
+    expect(failed.pages).toEqual(['c\nd']);
+    expect(failed.error).toBe('Failed to load logs');
+    expect(failed.loadingOlder).toBe(false);
+    expect(failed.hasMoreBefore).toBe(true);
+    expect(failed.oldestSkipLines).toBe(2);
+    expect(failed.oldestTimestamp).toBe('t3');
+
+    await loadOlder(key, target);
+
+    const retried = getNodeLogBuffer(key);
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(fetchNodeLogWindow).mock.calls[2][1]).toMatchObject({
+      skipTailLines: 2,
+      beforeTimestamp: 't3',
+    });
+    expect(retried.pages).toEqual(['a\nb', 'c\nd']);
+    expect(retried.error).toBeNull();
+    expect(retried.hasMoreBefore).toBe(false);
+  });
+
+  it('keeps loaded pages and the timestamp cursor when polling fails', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('a', { last_timestamp: 't1' }))
+      .mockRejectedValueOnce(new Error('HTTP 500'))
+      .mockResolvedValueOnce(windowOf('b', { last_timestamp: 't2' }));
+
+    await ensureLoaded(key, target);
+    await pollTail(key, target);
+
+    const failed = getNodeLogBuffer(key);
+    expect(failed.pages).toEqual(['a']);
+    expect(failed.error).toBe('Failed to load logs');
+    expect(failed.lastTimestamp).toBe('t1');
+
+    await pollTail(key, target);
+
+    const recovered = getNodeLogBuffer(key);
+    expect(vi.mocked(fetchNodeLogWindow).mock.calls[2][1]).toMatchObject({
+      sinceTimestamp: 't1',
+    });
+    expect(recovered.pages).toEqual(['a', 'b']);
+    expect(recovered.lastTimestamp).toBe('t2');
+    expect(recovered.error).toBeNull();
+  });
 });

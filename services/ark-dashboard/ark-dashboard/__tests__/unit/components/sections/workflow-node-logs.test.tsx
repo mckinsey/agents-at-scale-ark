@@ -338,4 +338,56 @@ describe('WorkflowNodeLogs', () => {
       screen.getByRole('link', { name: /View logs in Argo UI/ }),
     ).toHaveAttribute('href', 'http://argo.test');
   });
+
+  it('shows a poll failure beneath the logs without hiding them', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('hello'))
+      .mockRejectedValue(new Error('HTTP 500'));
+
+    await renderLogs(true);
+    expect(screen.getByText('hello')).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Failed to load logs')).toBeInTheDocument();
+    expect(screen.getByText('hello')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /View logs in Argo UI/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows an older page failure beneath the logs without hiding them', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('newer', true))
+      .mockRejectedValueOnce(new Error('HTTP 500'));
+
+    render(
+      <WorkflowNodeLogs
+        target={target}
+        isRunning={false}
+        argoUrl="http://argo.test"
+      />,
+    );
+    const container = screen.getByTestId('workflow-node-logs-scroll');
+    stubScrollMetrics(container, 1000, 100);
+    await act(async () => {});
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+
+    container.scrollTop = 150;
+    await act(async () => {
+      container.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Failed to load logs')).toBeInTheDocument();
+    expect(screen.getByText('newer')).toBeInTheDocument();
+    expect(screen.queryByText('Loading older logs...')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /View logs in Argo UI/ }),
+    ).not.toBeInTheDocument();
+  });
 });
