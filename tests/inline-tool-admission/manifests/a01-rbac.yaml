@@ -4,17 +4,23 @@ metadata:
   name: inline-unauth
   namespace: default
 ---
-# Can author Tools generally, but is not granted "use inlinetools", so inline
-# authoring must still be denied.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inline-author
+  namespace: default
+---
+# Authoring Tools generally. It grants no "use inlinetools", so on its own it
+# must not let a subject introduce executable source.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: tools-author-no-inline
+  name: tools-author
   namespace: default
 rules:
-- apiGroups: ["ark.mckinsey.com"]
-  resources: ["tools"]
-  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["tools"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -22,10 +28,41 @@ metadata:
   name: inline-unauth-tools
   namespace: default
 subjects:
-- kind: ServiceAccount
-  name: inline-unauth
-  namespace: default
+  - kind: ServiceAccount
+    name: inline-unauth
+    namespace: default
 roleRef:
   kind: Role
-  name: tools-author-no-inline
+  name: tools-author
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: inline-author-tools
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: inline-author
+    namespace: default
+roleRef:
+  kind: Role
+  name: tools-author
+  apiGroup: rbac.authorization.k8s.io
+---
+# The dedicated inline authoring grant, bound exactly as the operator docs
+# instruct: the chart's inline-tool-author-role, per namespace. This is the
+# grant the accepted write must pass the SubjectAccessReview with.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: inline-author-inlinetools
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: inline-author
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: inline-tool-author-role
   apiGroup: rbac.authorization.k8s.io
