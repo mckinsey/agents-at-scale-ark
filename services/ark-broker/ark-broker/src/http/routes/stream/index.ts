@@ -342,40 +342,5 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
     }
   });
 
-  /**
-   * @swagger
-   * /stream:
-   *   delete:
-   *     summary: Purge all stream data
-   *     description: Clears all stored streaming chunks and completion states
-   *     tags:
-   *       - Streaming
-   *     responses:
-   *       200:
-   *         description: Streams purged successfully
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 status:
-   *                   type: string
-   *                   example: success
-   *                 message:
-   *                   type: string
-   *                   example: Stream data purged
-   *       500:
-   *         description: Failed to purge streams
-   */
-  router.delete('/', async (req, res) => {
-    try {
-      await chunks.delete();
-      res.json({status: 'success', message: 'Stream data purged'});
-    } catch (error) {
-      req.log.error({err: error}, 'stream purge failed');
-      sendInternalError(res, req.id);
-    }
-  });
-
   return router;
 }
