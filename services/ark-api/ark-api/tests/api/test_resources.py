@@ -1587,19 +1587,26 @@ class FakeLogStream:
         return self.content.data.decode("utf-8", errors="replace")
 
 
-def build_log_bytes(total_lines: int, text: str = "line") -> bytes:
+def build_log_lines(texts: list[str]) -> bytes:
     lines = [
-        f"2024-01-01T{index // 3600:02d}:{index // 60 % 60:02d}:{index % 60:02d}.{index:09d}Z {text} {index}"
-        for index in range(total_lines)
+        f"2024-01-01T{index // 3600:02d}:{index // 60 % 60:02d}:{index % 60:02d}.{index:09d}Z {text}"
+        for index, text in enumerate(texts)
     ]
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def make_log_stream_reader(total_lines: int, streams: list, line_bytes: int = 0):
+def build_log_bytes(total_lines: int, text: str = "line") -> bytes:
+    return build_log_lines([f"{text} {index}" for index in range(total_lines)])
+
+
+def make_log_stream_reader(total_lines: int, streams: list, line_bytes: int = 0, texts: list[str] | None = None):
     """Return a read_namespaced_pod_log stub honouring tail_lines."""
     async def reader(**kwargs):
-        text = "x" * line_bytes if line_bytes else "line"
-        lines = build_log_bytes(total_lines, text).split(b"\n")[:-1]
+        if texts is None:
+            text = "x" * line_bytes if line_bytes else "line"
+            lines = build_log_bytes(total_lines, text).split(b"\n")[:-1]
+        else:
+            lines = build_log_lines(texts).split(b"\n")[:-1]
         tail_lines = kwargs.get("tail_lines")
         if tail_lines is not None:
             lines = lines[-tail_lines:]
@@ -1687,10 +1694,10 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         from ark_api.main import app
         self.client = TestClient(app)
 
-    def _mock_core_v1(self, mock_core_v1_cls, total_lines, line_bytes=0):
+    def _mock_core_v1(self, mock_core_v1_cls, total_lines, line_bytes=0, texts=None):
         streams = []
         mock_core_v1 = AsyncMock()
-        mock_core_v1.read_namespaced_pod_log = make_log_stream_reader(total_lines, streams, line_bytes)
+        mock_core_v1.read_namespaced_pod_log = make_log_stream_reader(total_lines, streams, line_bytes, texts)
         mock_core_v1_cls.return_value = mock_core_v1
         return mock_core_v1, streams
 
@@ -1854,6 +1861,81 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         oldest_kept = int(first["content"].splitlines()[0].split()[-1])
         newest_older = int(second["content"].splitlines()[-1].split()[-1])
         self.assertEqual(newest_older, oldest_kept - 1)
+
+    def _long_tailed_log_texts(self, total_lines):
+        return [f"line {index} " + "x" * 200 for index in range(total_lines - 1)] + [f"line {total_lines - 1}"]
+
+    def _line_numbers(self, body):
+        return [int(line.split()[1]) for line in body["content"].splitlines()]
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_byte_capped_page_reaching_log_start_still_has_more_before(self, mock_core_v1_cls, mock_api_client):
+        """A tail range that spans the whole log but drops its oldest lines for the byte cap is not the first page."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 60, texts=self._long_tailed_log_texts(60))
+
+        body = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?max_lines=1000&max_bytes=4096"
+        ).json()
+
+        self.assertGreaterEqual(streams[-1][0]["tail_lines"], 60)
+        self.assertLess(body["line_count"], 60)
+        self.assertEqual(body["content"].splitlines()[-1], "line 59")
+        self.assertLessEqual(body["byte_count"], 4096)
+        self.assertTrue(body["truncated"])
+        self.assertTrue(body["has_more_before"])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_paging_back_from_a_byte_capped_first_page_recovers_the_dropped_lines(
+        self, mock_core_v1_cls, mock_api_client
+    ):
+        """Walking back from a byte-capped page that spans the log yields every line exactly once."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        self._mock_core_v1(mock_core_v1_cls, 60, texts=self._long_tailed_log_texts(60))
+
+        body = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?max_lines=1000&max_bytes=4096"
+        ).json()
+        self.assertTrue(body["has_more_before"])
+
+        pages = [body]
+        skip_tail_lines = body["line_count"]
+        while body["has_more_before"]:
+            self.assertLess(len(pages), 60)
+            body = self.client.get(
+                "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+                f"?max_lines=1000&max_bytes=4096&skip_tail_lines={skip_tail_lines}"
+                f"&before_timestamp={body['first_timestamp']}"
+            ).json()
+            self.assertGreater(body["line_count"], 0)
+            skip_tail_lines += body["line_count"]
+            pages.append(body)
+
+        collected = [number for page in reversed(pages) for number in self._line_numbers(page)]
+        self.assertEqual(collected, list(range(60)))
+        self.assertFalse(pages[-1]["has_more_before"])
+        self.assertEqual(self._line_numbers(pages[-1])[0], 0)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_page_reaching_log_start_within_the_byte_cap_is_the_first_page(self, mock_core_v1_cls, mock_api_client):
+        """A whole log that fits one page reports nothing older."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        self._mock_core_v1(mock_core_v1_cls, 60)
+
+        body = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?max_lines=1000&max_bytes=65536"
+        ).json()
+
+        self.assertEqual(body["line_count"], 60)
+        self.assertEqual(self._line_numbers(body), list(range(60)))
+        self.assertFalse(body["truncated"])
+        self.assertFalse(body["has_more_before"])
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
