@@ -45,6 +45,8 @@ DELETE /queries/{queryId}/messages
 DELETE /conversations/{conversationId}/queries/{queryId}/messages
 ```
 
+`DELETE /conversations` clears the message store only — it backs the dashboard's **Reset memory** action. The [sessions](#sessions) read model survives it: a session keeps its queries, conversation summaries and participants, because those are folded from the session's own query rows rather than from messages. A query leaves a session when its `Query` is deleted, and a session left with no queries goes with it.
+
 List messages:
 
 ```bash
