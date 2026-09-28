@@ -160,6 +160,18 @@ func TestCheckRunnerNetworkPolicy(t *testing.T) {
 	}
 }
 
+func TestCheckRunnerNetworkPolicyWithoutNamespace(t *testing.T) {
+	policy := runnerPolicy()
+	policy.Name = "tenant-ark-tenant-netpol"
+	policy.Spec.PodSelector = metav1.LabelSelector{}
+	policy.Spec.Ingress = []networkingv1.NetworkPolicyIngressRule{{From: []networkingv1.NetworkPolicyPeer{{PodSelector: &metav1.LabelSelector{}}}}}
+	policy.Spec.Egress = []networkingv1.NetworkPolicyEgressRule{{}}
+
+	err := CheckRunnerNetworkPolicy(policy, "", map[string]string{"runner": "one"}, "ark-system", map[string]string{"app": ActivatorName})
+	require.ErrorContains(t, err, "tenant/tenant-ark-tenant-netpol", "an unknown runner namespace must not clear an allow-all policy")
+	assert.ErrorContains(t, err, "cannot be evaluated without a runner namespace")
+}
+
 func TestRunnerPolicyConflictReevaluation(t *testing.T) {
 	// The optional ark-tenant policy selects every pod, admits its namespace,
 	// and allows all egress (charts/ark-tenant/templates/networkpolicy.yaml).

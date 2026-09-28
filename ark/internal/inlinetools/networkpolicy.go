@@ -19,11 +19,14 @@ import (
 // Callers must supply every policy in the runner namespace and the actual pod
 // labels, not policy metadata labels. It performs no API calls or traffic probes.
 func CheckRunnerNetworkPolicy(policy *networkingv1.NetworkPolicy, namespace string, podLabels map[string]string, activatorNamespace string, activatorLabels map[string]string) error {
-	if policy.Namespace != namespace {
-		return nil
-	}
 	conflict := func(detail string) error {
 		return fmt.Errorf("NetworkPolicy %s/%s %s; an administrator must narrow it to exclude inline runners or allow only activator ingress on TCP %d and no egress", policy.Namespace, policy.Name, detail, runner.Port)
+	}
+	if namespace == "" {
+		return fmt.Errorf("NetworkPolicy %s/%s cannot be evaluated without a runner namespace", policy.Namespace, policy.Name)
+	}
+	if policy.Namespace != namespace {
+		return nil
 	}
 	selector, err := metav1.LabelSelectorAsSelector(&policy.Spec.PodSelector)
 	if err != nil {
@@ -41,28 +44,40 @@ func CheckRunnerNetworkPolicy(policy *networkingv1.NetworkPolicy, namespace stri
 		return nil
 	}
 	for _, rule := range policy.Spec.Ingress {
-		if len(rule.From) == 0 || len(rule.Ports) == 0 {
-			return conflict("allows unrestricted runner ingress peers or ports")
-		}
-		for _, port := range rule.Ports {
-			if !runnerPortOnly(port) {
-				return conflict("allows ingress outside the runner TCP port")
-			}
-		}
-		for _, peer := range rule.From {
-			if peer.IPBlock != nil || !selectorRequiresLabels(peer.PodSelector, activatorLabels) {
-				return conflict("allows ingress from workloads other than the activator")
-			}
-			if peer.NamespaceSelector == nil {
-				if policy.Namespace != activatorNamespace {
-					return conflict("allows ingress from outside the activator namespace")
-				}
-			} else if !selectorRequiresLabels(peer.NamespaceSelector, map[string]string{corev1.LabelMetadataName: activatorNamespace}) {
-				return conflict("allows ingress from outside the activator namespace")
-			}
+		if detail := ingressWidensBoundary(rule, policy.Namespace, activatorNamespace, activatorLabels); detail != "" {
+			return conflict(detail)
 		}
 	}
 	return nil
+}
+
+// ingressWidensBoundary returns the conflict detail for a rule, or "" if the rule
+// admits nothing but the activator on the runner port.
+func ingressWidensBoundary(rule networkingv1.NetworkPolicyIngressRule, policyNamespace, activatorNamespace string, activatorLabels map[string]string) string {
+	if len(rule.From) == 0 || len(rule.Ports) == 0 {
+		return "allows unrestricted runner ingress peers or ports"
+	}
+	for _, port := range rule.Ports {
+		if !runnerPortOnly(port) {
+			return "allows ingress outside the runner TCP port"
+		}
+	}
+	for _, peer := range rule.From {
+		if peer.IPBlock != nil || !selectorRequiresLabels(peer.PodSelector, activatorLabels) {
+			return "allows ingress from workloads other than the activator"
+		}
+		if !peerNamespaceIsActivator(peer, policyNamespace, activatorNamespace) {
+			return "allows ingress from outside the activator namespace"
+		}
+	}
+	return ""
+}
+
+func peerNamespaceIsActivator(peer networkingv1.NetworkPolicyPeer, policyNamespace, activatorNamespace string) bool {
+	if peer.NamespaceSelector == nil {
+		return policyNamespace == activatorNamespace
+	}
+	return selectorRequiresLabels(peer.NamespaceSelector, map[string]string{corev1.LabelMetadataName: activatorNamespace})
 }
 
 func runnerPortOnly(port networkingv1.NetworkPolicyPort) bool {
