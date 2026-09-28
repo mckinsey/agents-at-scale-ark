@@ -7,8 +7,6 @@ export type HeaderData = {
   name: string;
   type: 'direct' | 'secret';
   value: string;
-  // secretKeyRef.key the resource already had; preserved across edits since the
-  // UI cannot change it. Defaults to 'token' when unset (new secret headers).
   secretKey?: string;
 };
 
