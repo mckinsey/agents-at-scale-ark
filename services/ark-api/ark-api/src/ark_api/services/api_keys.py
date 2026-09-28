@@ -19,6 +19,7 @@ from ..models.auth import (
     APIKeyListResponse
 )
 from ..constants.annotations import ARK_PREFIX
+from ..utils.helpers import parse_iso_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -112,22 +113,6 @@ class APIKeyService:
         
         return f"api-key-{sanitized}"
     
-    def _parse_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
-        """Parse datetime string from annotations.
-        
-        Args:
-            dt_str: ISO format datetime string
-            
-        Returns:
-            Datetime object or None if parsing fails
-        """
-        if not dt_str:
-            return None
-        try:
-            return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
-        except Exception:
-            return None
-    
     def _format_datetime(self, dt: Optional[datetime]) -> Optional[str]:
         """Format datetime for storage in annotations.
         
@@ -192,10 +177,10 @@ class APIKeyService:
             metadata = json.loads(annotation_json)
             return {
                 "name": metadata.get("name", "Unknown"),
-                "created_at": self._parse_datetime(metadata.get("createdAt")),
-                "expires_at": self._parse_datetime(metadata.get("expiresAt")),
-                "last_used_at": self._parse_datetime(metadata.get("lastUsedAt")),
-                "deleted_at": self._parse_datetime(metadata.get("deletedAt")),
+                "created_at": parse_iso_timestamp(metadata.get("createdAt")),
+                "expires_at": parse_iso_timestamp(metadata.get("expiresAt")),
+                "last_used_at": parse_iso_timestamp(metadata.get("lastUsedAt")),
+                "deleted_at": parse_iso_timestamp(metadata.get("deletedAt")),
                 "created_by": metadata.get("createdBy")
             }
         except (json.JSONDecodeError, Exception) as e:
