@@ -151,4 +151,42 @@ describe('fetchNodeLogWindow', () => {
       '/workflows/wf-1/node-1/log/window',
     );
   });
+
+  it('forwards the target container to both the pod and the node endpoint', async () => {
+    vi.mocked(apiClient.get)
+      .mockRejectedValueOnce(new Error('404'))
+      .mockResolvedValueOnce(window);
+
+    await fetchNodeLogWindow({
+      namespace: 'test-namespace',
+      workflowName: 'wf-1',
+      nodeId: 'node-1',
+      podName: 'pod-1',
+      container: 'sidecar',
+    });
+
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    const [[, podOptions], [, nodeOptions]] = vi.mocked(apiClient.get).mock
+      .calls;
+    expect(podOptions?.params).toMatchObject({ container: 'sidecar' });
+    expect(nodeOptions?.params).toMatchObject({ container: 'sidecar' });
+  });
+
+  it('lets an explicit container param override the target container', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce(window);
+
+    await fetchNodeLogWindow(
+      {
+        namespace: 'test-namespace',
+        workflowName: 'wf-1',
+        nodeId: 'node-1',
+        podName: 'pod-1',
+        container: 'main',
+      },
+      { container: 'init' },
+    );
+
+    const [, options] = vi.mocked(apiClient.get).mock.calls[0];
+    expect(options?.params).toMatchObject({ container: 'init' });
+  });
 });

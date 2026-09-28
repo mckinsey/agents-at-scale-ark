@@ -1582,6 +1582,9 @@ class FakeLogStream:
     def release(self):
         self.released = True
 
+    async def text(self):
+        return self.content.data.decode("utf-8", errors="replace")
+
 
 def build_log_bytes(total_lines: int, text: str = "line") -> bytes:
     lines = [
@@ -2078,6 +2081,113 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         self.assertEqual(streams, [])
         mock_core_v1.read_namespaced_pod.assert_not_awaited()
         mock_core_v1.list_namespaced_pod.assert_not_awaited()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_out_of_range_paging_params_are_rejected_without_reading_logs(self, mock_core_v1_cls, mock_api_client):
+        """Paging params outside their bounds are a 422 before any log stream opens."""
+        from ark_api.api.v1.resources import LOG_WINDOW_MAX_BYTES_LIMIT, LOG_WINDOW_MAX_LINES_LIMIT
+
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 50)
+
+        queries = (
+            "max_lines=0",
+            f"max_lines={LOG_WINDOW_MAX_LINES_LIMIT + 1}",
+            "max_bytes=1023",
+            f"max_bytes={LOG_WINDOW_MAX_BYTES_LIMIT + 1}",
+            "skip_tail_lines=-1",
+        )
+        for query in queries:
+            with self.subTest(query=query):
+                response = self.client.get(
+                    f"/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window?{query}"
+                )
+
+                self.assertEqual(response.status_code, 422)
+                self.assertIn(query.split("=")[0], str(response.json()["detail"]))
+
+        self.assertEqual(streams, [])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_pod_route_forwards_container_to_every_log_read(self, mock_core_v1_cls, mock_api_client):
+        """The container query param reaches the probe, boundary and page reads alike."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 2500)
+
+        response = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?max_lines=1000&container=sidecar"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(len(streams), 1)
+        self.assertTrue(all(kwargs["container"] == "sidecar" for kwargs, _ in streams))
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_pod_route_passes_no_container_by_default(self, mock_core_v1_cls, mock_api_client):
+        """Without a container param the pod route lets the kubelet pick the container."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 5)
+
+        response = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(len(streams), 0)
+        self.assertTrue(all(kwargs["container"] is None for kwargs, _ in streams))
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_workflow_route_defaults_container_to_main(self, mock_core_v1_cls, mock_api_client):
+        """The workflow route reads the Argo main container unless told otherwise."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 5)
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf/node/log/window"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(len(streams), 0)
+        self.assertTrue(all(kwargs["container"] == "main" for kwargs, _ in streams))
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_workflow_route_forwards_explicit_container(self, mock_core_v1_cls, mock_api_client):
+        """An explicit container on the workflow route overrides the main default."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 5)
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf/node/log/window"
+            "?container=sidecar"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(len(streams), 0)
+        self.assertTrue(all(kwargs["container"] == "sidecar" for kwargs, _ in streams))
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_non_2xx_log_stream_is_reported_and_released(self, mock_core_v1_cls, mock_api_client):
+        """A kubelet error status becomes an HTTP error carrying the body, and the stream is released."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        stream = FakeLogStream(b"container sidecar is not valid", status=400)
+        mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value=stream)
+        mock_core_v1_cls.return_value = mock_core_v1
+
+        response = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window?container=sidecar"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "container sidecar is not valid")
+        self.assertTrue(stream.released)
 
 
 if __name__ == "__main__":
