@@ -230,4 +230,106 @@ describe('workflow log store', () => {
     expect(recovered.lastTimestamp).toBe('t2');
     expect(recovered.error).toBeNull();
   });
+
+  it('replaces the buffer with the fresh tail when polling without a timestamp cursor', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('a', { last_timestamp: null }))
+      .mockResolvedValueOnce(
+        windowOf('b\nc', {
+          has_more_before: true,
+          truncated: true,
+          first_timestamp: 't2',
+          last_timestamp: 't3',
+        }),
+      );
+
+    await ensureLoaded(key, target);
+    await pollTail(key, target);
+
+    const buffer = getNodeLogBuffer(key);
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(
+      vi.mocked(fetchNodeLogWindow).mock.calls[1][1]?.sinceTimestamp,
+    ).toBeUndefined();
+    expect(buffer.pages).toEqual(['b\nc']);
+    expect(buffer.oldestSkipLines).toBe(2);
+    expect(buffer.oldestTimestamp).toBe('t2');
+    expect(buffer.lastTimestamp).toBe('t3');
+    expect(buffer.hasMoreBefore).toBe(true);
+    expect(buffer.truncated).toBe(true);
+    expect(buffer.error).toBeNull();
+  });
+
+  it('leaves the buffer untouched and stays silent when a poll returns nothing', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('a', { last_timestamp: 't1' }))
+      .mockResolvedValueOnce(windowOf('', { last_timestamp: 't1' }));
+
+    await ensureLoaded(key, target);
+    const before = structuredClone(getNodeLogBuffer(key));
+    const listener = vi.fn();
+    subscribeToNodeLogs(key, listener);
+
+    await pollTail(key, target);
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(getNodeLogBuffer(key)).toEqual(before);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('does not poll a buffer that has never been loaded', async () => {
+    vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('a'));
+
+    await pollTail(key, target);
+
+    expect(fetchNodeLogWindow).not.toHaveBeenCalled();
+  });
+
+  it('skips polling and paging older while the initial load is in flight', async () => {
+    let resolveInitial: (
+      window: ReturnType<typeof windowOf>,
+    ) => void = () => {};
+    vi.mocked(fetchNodeLogWindow).mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveInitial = resolve;
+      }),
+    );
+
+    const initial = ensureLoaded(key, target);
+    await pollTail(key, target);
+    await loadOlder(key, target);
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+
+    resolveInitial(
+      windowOf('a', { has_more_before: true, last_timestamp: 't1' }),
+    );
+    await initial;
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+    expect(getNodeLogBuffer(key).pages).toEqual(['a']);
+  });
+
+  it('skips polling while an older page is in flight', async () => {
+    let resolveOlder: (window: ReturnType<typeof windowOf>) => void = () => {};
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(
+        windowOf('c', { has_more_before: true, last_timestamp: 't3' }),
+      )
+      .mockReturnValueOnce(
+        new Promise(resolve => {
+          resolveOlder = resolve;
+        }),
+      );
+
+    await ensureLoaded(key, target);
+    const older = loadOlder(key, target);
+    await pollTail(key, target);
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+
+    resolveOlder(windowOf('b', { has_more_before: false }));
+    await older;
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(getNodeLogBuffer(key).pages).toEqual(['b', 'c']);
+  });
 });
