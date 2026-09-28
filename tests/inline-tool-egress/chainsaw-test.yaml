@@ -1,0 +1,94 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: inline-tool-egress
+  labels:
+    inline-tools: "true"
+spec:
+  # Inline tools run only in watched namespaces; this assertion holds only on an
+  # enforcing CNI (the runner NetworkPolicy denies all egress). The dedicated
+  # inline e2e job provides both; pin to the watched default namespace.
+  namespace: default
+  description: >
+    A runner cannot open an egress connection to an internal endpoint: its
+    NetworkPolicy denies all egress, enforced by an enforcing CNI.
+  steps:
+  - name: create-probe-tool
+    try:
+    - apply:
+        file: manifests/a01-tool.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: egress-probe
+            namespace: default
+          status:
+            state: Ready
+            conditions:
+            - type: Available
+              status: "True"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Tool
+        name: egress-probe
+        namespace: default
+
+  - name: egress-blocked
+    try:
+    # Probe the Kubernetes API ClusterIP, an internal endpoint the runner must
+    # not reach. Resolve it at runtime since it varies per cluster.
+    - script:
+        timeout: 30s
+        content: |
+          K8S_IP=$(kubectl get svc kubernetes -n default -o jsonpath='{.spec.clusterIP}')
+          kubectl apply -f - <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: egress-probe-call
+            namespace: default
+          spec:
+            input: '{"host": "${K8S_IP}", "port": 443}'
+            target:
+              type: tool
+              name: egress-probe
+          EOF
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: egress-probe-call
+        namespace: default
+        timeout: 90s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    # Ingress from the activator worked (the query completed), but the runner's
+    # own outbound connection was denied.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: egress-probe-call
+            namespace: default
+          status:
+            "(contains(response.content, '\"reachable\": false'))": true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: egress-probe-call
+        namespace: default
+    cleanup:
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: egress-probe-call
+          namespace: default
