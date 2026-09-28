@@ -1,9 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { useNamespace } from '@/providers/NamespaceProvider';
-
-import type { QueryParameter } from './chat';
-import type { ParticipantType } from './conversations';
+import type { ConversationMessage } from './conversations';
 import { conversationsService } from './conversations';
 
 export const useListConversations = (sessionId: string | null, options?: { enabled?: boolean }) => {
@@ -18,38 +15,43 @@ export const useListConversations = (sessionId: string | null, options?: { enabl
   });
 };
 
+/**
+ * Poll a conversation's transcript.
+ *
+ * The first fetch follows the broker's cursor to the end of the conversation;
+ * later polls read the cached transcript and ask only for messages after its
+ * last sequence, so a steady-state tick stays small. Appending onto the cached
+ * array (and returning it unchanged when nothing arrived) keeps the reference
+ * stable, which is what lets the memoised transcript skip re-rendering.
+ */
 export const useGetMessages = (sessionId: string | null, conversationId: string | null, options?: { enabled?: boolean }) => {
+  const queryClient = useQueryClient();
+
   return useQuery({
     queryKey: ['messages', sessionId, conversationId],
-    queryFn: () =>
-      conversationId ? conversationsService.getMessages(conversationId) : [],
+    queryFn: async () => {
+      if (!conversationId) return [];
+
+      const cached = queryClient.getQueryData<ConversationMessage[]>([
+        'messages',
+        sessionId,
+        conversationId,
+      ]);
+      const lastSequence = cached?.at(-1)?.sequence;
+
+      if (!cached || lastSequence === undefined) {
+        return conversationsService.getMessages(conversationId);
+      }
+
+      const newMessages = await conversationsService.getMessages(
+        conversationId,
+        lastSequence
+      );
+      return newMessages.length > 0 ? [...cached, ...newMessages] : cached;
+    },
     enabled: options?.enabled !== false && !!conversationId,
     refetchInterval: 2000,
     retry: false,
     placeholderData: (previousData) => previousData,
-  });
-};
-
-export const useSendMessage = () => {
-  const queryClient = useQueryClient();
-  const { namespace } = useNamespace();
-
-  return useMutation({
-    mutationFn: (params: {
-      conversationId: string;
-      message: string;
-      sessionId: string;
-      agentName: string;
-      participantType?: ParticipantType;
-      parameters?: QueryParameter[];
-    }) => conversationsService.sendMessage({ ...params, namespace }),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ['messages', variables.sessionId, variables.conversationId]
-      });
-      queryClient.invalidateQueries({
-        queryKey: ['conversations', variables.sessionId]
-      });
-    },
   });
 };

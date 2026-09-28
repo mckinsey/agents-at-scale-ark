@@ -18,12 +18,6 @@ vi.mock('@/lib/services/logs', () => ({
   },
 }));
 
-vi.mock('@/lib/services/chat', () => ({
-  chatService: {
-    submitChatQuery: vi.fn(),
-  },
-}));
-
 describe('conversationsService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -361,99 +355,65 @@ describe('conversationsService', () => {
         },
       ];
 
-      vi.mocked(apiClient.get).mockResolvedValueOnce({ items: mockMessages });
+      vi.mocked(apiClient.get)
+        .mockResolvedValueOnce({
+          items: [mockMessages[0]],
+          hasMore: true,
+          nextCursor: 1,
+        })
+        .mockResolvedValueOnce({
+          items: [mockMessages[1]],
+          hasMore: false,
+        });
 
       const result = await conversationsService.getMessages('conv-1');
 
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/broker/messages?conversation_id=conv-1');
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/broker/messages', {
+        params: { conversation_id: 'conv-1', limit: 500 },
+      });
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/broker/messages', {
+        params: { conversation_id: 'conv-1', limit: 500, cursor: 1 },
+      });
+      expect(apiClient.get).toHaveBeenCalledTimes(2);
       expect(result).toEqual(mockMessages);
     });
 
+    it('should fetch only messages after the given sequence', async () => {
+      const laterMessage: ConversationMessage = {
+        timestamp: '2024-01-01T00:00:10Z',
+        conversation_id: 'conv-1',
+        query_id: 'query-1',
+        message: { role: 'assistant', content: 'Hi there!' },
+        sequence: 2,
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        items: [laterMessage],
+        hasMore: false,
+      });
+
+      const result = await conversationsService.getMessages('conv-1', 1);
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/broker/messages', {
+        params: { conversation_id: 'conv-1', limit: 500, cursor: 1 },
+      });
+      expect(apiClient.get).toHaveBeenCalledTimes(1);
+      expect(result).toEqual([laterMessage]);
+    });
+
     it('should handle empty message list', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({ items: [] });
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ items: [], hasMore: false });
 
       const result = await conversationsService.getMessages('conv-1');
 
       expect(result).toEqual([]);
+      expect(apiClient.get).toHaveBeenCalledTimes(1);
     });
 
     it('should propagate errors', async () => {
       vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Network error'));
 
       await expect(conversationsService.getMessages('conv-1')).rejects.toThrow('Network error');
-    });
-  });
-
-  describe('sendMessage', () => {
-    it('should submit chat query with correct params', async () => {
-      const { chatService } = await import('@/lib/services/chat');
-
-      await conversationsService.sendMessage({
-        namespace: 'default',
-        conversationId: 'conv-1',
-        message: 'Hello',
-        sessionId: 'session-1',
-        agentName: 'test-agent',
-        participantType: 'agent',
-      });
-
-      expect(chatService.submitChatQuery).toHaveBeenCalledWith(
-        'default',
-        'Hello',
-        'agent',
-        'test-agent',
-        'session-1',
-        'conv-1',
-        undefined,
-        undefined
-      );
-    });
-
-    it('should strip namespace from agent name', async () => {
-      const { chatService } = await import('@/lib/services/chat');
-
-      await conversationsService.sendMessage({
-        namespace: 'default',
-        conversationId: 'conv-1',
-        message: 'Hello',
-        sessionId: 'session-1',
-        agentName: 'namespace/test-agent',
-        participantType: 'agent',
-      });
-
-      expect(chatService.submitChatQuery).toHaveBeenCalledWith(
-        'default',
-        'Hello',
-        'agent',
-        'test-agent',
-        'session-1',
-        'conv-1',
-        undefined,
-        undefined
-      );
-    });
-
-    it('should default to agent type when participantType not provided', async () => {
-      const { chatService } = await import('@/lib/services/chat');
-
-      await conversationsService.sendMessage({
-        namespace: 'default',
-        conversationId: 'conv-1',
-        message: 'Hello',
-        sessionId: 'session-1',
-        agentName: 'test-agent',
-      });
-
-      expect(chatService.submitChatQuery).toHaveBeenCalledWith(
-        'default',
-        'Hello',
-        'agent',
-        'test-agent',
-        'session-1',
-        'conv-1',
-        undefined,
-        undefined
-      );
     });
   });
 });
