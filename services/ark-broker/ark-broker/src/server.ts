@@ -113,7 +113,10 @@ export function buildApp(deps: {
 
   app.use('/metrics', createMetricsRouter(metricsRegistry));
   app.use('/', createMemoryRouter(memory, sessions));
-  app.use('/stream', createStreamRouter(chunks));
+  app.use(
+    '/stream',
+    createStreamRouter(chunks, config.server.streamIdleTimeoutMs)
+  );
   app.use('/traces', createTracesRouter(traces));
   app.use('/events', createEventsRouter(events, sessions));
   app.use('/sessions', createSessionsRouter(sessions));

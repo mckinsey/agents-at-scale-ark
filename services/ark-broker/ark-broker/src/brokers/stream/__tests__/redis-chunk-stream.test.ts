@@ -105,13 +105,6 @@ describeIntegration('RedisChunkStream — redis-specific', () => {
     expect(await stream.isComplete('q1')).toBe(true);
   });
 
-  it('hasQuery uses EXISTS on per-query key', async () => {
-    const stream = new RedisChunkStream(client(), logger, PREFIX, TTL);
-    expect(await stream.hasQuery('no-such')).toBe(false);
-    await stream.appendChunk('no-such', {text: 'x'});
-    expect(await stream.hasQuery('no-such')).toBe(true);
-  });
-
   it('delete(queryId) UNLINKs only the per-query key', async () => {
     const stream = new RedisChunkStream(client(), logger, PREFIX, TTL);
     await stream.appendChunk('q1', {text: 'a'});

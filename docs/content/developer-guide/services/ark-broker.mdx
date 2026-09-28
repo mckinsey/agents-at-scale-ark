@@ -62,6 +62,8 @@ The Helm chart can optionally configure a persistent volume for data storage by 
 
 File persistence stores each stream as a single append-only file on a `ReadWriteOnce` volume, written by exactly one broker. Run **one broker replica per store**: two brokers writing the same volume duplicate or silently lose events. With persistence enabled the chart sets the Deployment strategy to `Recreate` so a rollout never briefly runs two brokers against the same volume. This is a limit **per store, not per cluster** — a broker per namespace is safe, since each has its own volume, file, and sequence space. For high availability with shared state, use the Postgres (messages, events, sessions) and Redis (chunks) backends instead of file persistence.
 
+- **Optional NetworkPolicy.** `networkPolicy.enabled=true` renders a policy that restricts ingress to the broker's pod port, from pods in the broker's own namespace plus every pod in any namespace listed in `networkPolicy.allowNamespaces` (`ark-system` in practice, since the controller and the completions executor write from there). Off by default, and enforcement depends on your CNI — see [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+
 ## Heap sizing
 
 V8 sizes its default heap from the host's memory rather than the container limit, so on a large node it may pick a cap unrelated to the memory the pod was actually given. Where that cap lands below the limit, the broker exhausts its heap and exits with `FATAL ERROR: Ineffective mark-compacts near heap limit` while the container still has headroom — a Node-initiated exit, not a Linux OOMKill.
