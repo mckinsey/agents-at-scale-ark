@@ -1,7 +1,10 @@
 # Inline Tools release gate (task 7.6)
 
-The gate that must hold before execution is enabled (the umbrella PR flips the
-default). Execution ships disabled by default; every unit merges with it off.
+The gate that must hold before an operator enables execution. Execution ships
+disabled by default — `inlineTools.enabled: false` in
+`ark/dist/chart/values.yaml` and `ark/dist/chart-apiserver/values.yaml` — and
+no unit in this change flips that default; enabling it stays a per-install
+administrator opt-in.
 
 ## Gates per touched stack
 
@@ -38,13 +41,22 @@ Chainsaw suite, label `inline-tools`, run by `e2e-tests-inline` over both
 storage backends on a Calico-enforcing cluster. Verified locally on
 etcd and, after a postgresql redeploy, on the aggregated apiserver:
 
-- `inline-tool-lifecycle` — create, child provisioning, idle scale-to-zero,
-  agent attach/discover, call, edit propagation, cascade delete.
+- `inline-tool-lifecycle` — create, child provisioning (Deployment, Service,
+  ConfigMap, ServiceAccount, NetworkPolicy), a cold runner at zero replicas,
+  call, idle scale-down back to zero after that call, edit propagation to the
+  source ConfigMap, cascade delete of every child.
 - `inline-tool-egress` — runner egress to an internal endpoint is denied.
 - `inline-tool-admission` — unauthorized authoring denied, authorized accepted,
   authorship stamped over any requester-supplied value; same on both backends.
 - `inline-tool-pending` — an unusable authored tool stays Pending and is never
   shown as Ready, then recovers.
+
+Not covered end to end: agent-attached invocation. The lifecycle suite's attach
+step proves only that an Agent referencing the tool with `type: inline` reaches
+`Available`, which `AgentReconciler.checkToolDependencies` grants once the Tool
+CR exists with a matching `spec.type` — it reads neither the Tool's `Available`
+condition nor its `resolvedAddress`. The call is a `target.type: tool` query, so
+agent-side tool resolution and LLM-side tool discovery are unverified.
 
 ## Remaining platform limitations (before enabling execution)
 
