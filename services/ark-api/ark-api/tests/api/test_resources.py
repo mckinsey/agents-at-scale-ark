@@ -1924,6 +1924,60 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("archiveLogs", response.json()["detail"])
 
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_malformed_since_timestamp_is_rejected_without_reading_logs(self, mock_core_v1_cls, mock_api_client):
+        """An unparseable since_timestamp is a client error, never a silent tail page."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 50)
+
+        for cursor in ("not-a-timestamp", "2024-13-45T99:99:99Z"):
+            with self.subTest(cursor=cursor):
+                response = self.client.get(
+                    "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+                    f"?since_timestamp={cursor}"
+                )
+
+                self.assertEqual(response.status_code, 422)
+                self.assertIn("since_timestamp", response.json()["detail"])
+                self.assertIn(cursor, response.json()["detail"])
+
+        self.assertEqual(streams, [])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_malformed_before_timestamp_is_rejected_without_reading_logs(self, mock_core_v1_cls, mock_api_client):
+        """An unparseable before_timestamp is a client error, never a silent tail page."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 50)
+
+        response = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?skip_tail_lines=10&before_timestamp=2024-13-45T99:99:99Z"
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("before_timestamp", response.json()["detail"])
+        self.assertEqual(streams, [])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_workflow_window_rejects_malformed_since_timestamp_before_resolving_pod(self, mock_core_v1_cls, mock_api_client):
+        """The workflow route reports the bad cursor as 422 instead of a pod-not-found 404."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_core_v1, streams = self._mock_core_v1(mock_core_v1_cls, 5)
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/"
+            "test-workflow/step-abc123/log/window?since_timestamp=not-a-timestamp"
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("since_timestamp", response.json()["detail"])
+        self.assertEqual(streams, [])
+        mock_core_v1.read_namespaced_pod.assert_not_awaited()
+        mock_core_v1.list_namespaced_pod.assert_not_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()

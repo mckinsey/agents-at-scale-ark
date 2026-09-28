@@ -796,6 +796,15 @@ def _split_log_line(raw_line: str) -> tuple[Optional[str], str]:
     return None, raw_line
 
 
+def _validate_log_window_cursors(since_timestamp: Optional[str], before_timestamp: Optional[str]) -> None:
+    for name, value in (("since_timestamp", since_timestamp), ("before_timestamp", before_timestamp)):
+        if value is not None and _parse_log_timestamp(value) is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{name} must be an RFC3339 timestamp such as 2024-01-01T00:00:00.000000000Z, got '{value}'",
+            )
+
+
 def _since_seconds_for(since_timestamp: str) -> Optional[int]:
     parsed = _parse_log_timestamp(since_timestamp)
     if parsed is None:
@@ -1219,6 +1228,7 @@ async def get_pod_log_window(
         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log/window
         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log/window?skip_tail_lines=1000
     """
+    _validate_log_window_cursors(since_timestamp, before_timestamp)
     async with get_impersonating_api_client(impersonation) as api:
         core_v1 = CoreV1Api(api)
         return await _read_log_window(
@@ -1256,6 +1266,7 @@ async def get_workflow_log_window(
     Examples:
         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log/window
     """
+    _validate_log_window_cursors(since_timestamp, before_timestamp)
     async with get_impersonating_api_client(impersonation) as api:
         core_v1 = CoreV1Api(api)
         try:
