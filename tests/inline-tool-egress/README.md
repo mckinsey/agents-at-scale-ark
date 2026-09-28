@@ -7,8 +7,11 @@ A runner cannot open an egress connection to an internal endpoint.
   with no egress rules).
 - An inline tool that attempts a TCP connection to the Kubernetes API service
   ClusterIP — an internal endpoint the runner must not reach — reports the
-  connection was refused/timed out, while the call itself still completes
-  (ingress from the activator is unaffected).
+  connection was refused/timed out for that exact address, while the call
+  itself still completes (ingress from the activator is unaffected).
+- A control pod in the same namespace, selected by no runner NetworkPolicy,
+  reaches the same ClusterIP, so the runner's failure means the policy denied
+  it rather than the endpoint being unreachable for the whole cluster.
 
 ## Prerequisites
 Labelled `inline-tools: "true"` and excluded from the standard e2e run. This

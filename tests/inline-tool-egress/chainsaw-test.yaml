@@ -40,12 +40,24 @@ spec:
   - name: egress-blocked
     try:
     # Probe the Kubernetes API ClusterIP, an internal endpoint the runner must
-    # not reach. Resolve it at runtime since it varies per cluster.
+    # not reach. Resolve it at runtime since it varies per cluster. The control
+    # pod is not selected by any runner NetworkPolicy, so it proves the target
+    # is reachable from this namespace and a denied probe means policy denied
+    # it rather than the address being dead.
     - script:
-        timeout: 30s
+        timeout: 60s
         content: |
+          set -eu
           K8S_IP=$(kubectl get svc kubernetes -n default -o jsonpath='{.spec.clusterIP}')
-          kubectl apply -f - <<EOF
+          if [ -z "$K8S_IP" ]; then
+            echo "ERROR: svc/kubernetes in default has no clusterIP" >&2
+            exit 1
+          fi
+          kubectl run egress-control --image=curlimages/curl --rm -i \
+            --restart=Never -n default -- \
+            curl -sS -k -o /dev/null --max-time 10 \
+            "https://${K8S_IP}:443/version" >&2
+          kubectl apply -f - >&2 <<EOF
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           metadata:
@@ -57,6 +69,10 @@ spec:
               type: tool
               name: egress-probe
           EOF
+          printf '%s' "$K8S_IP"
+        outputs:
+        - name: k8sIp
+          value: ($stdout)
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -64,9 +80,8 @@ spec:
         namespace: default
         timeout: 90s
         for:
-          condition:
-            name: Completed
-            value: 'True'
+          jsonPath:
+            path: '{.status.response.content}'
     # Ingress from the activator worked (the query completed), but the runner's
     # own outbound connection was denied.
     - assert:
@@ -78,6 +93,22 @@ spec:
             namespace: default
           status:
             "(contains(response.content, '\"reachable\": false'))": true
+    # The runner echoes back what it dialled, so a probe that failed before
+    # leaving the pod cannot satisfy the assertion above.
+    - script:
+        timeout: 30s
+        env:
+        - name: K8S_IP
+          value: ($k8sIp)
+        content: |
+          set -eu
+          RESPONSE=$(kubectl get query egress-probe-call -n default \
+            -o jsonpath='{.status.response.content}')
+          echo "probe response: ${RESPONSE}"
+          echo "$RESPONSE" | grep -qF "\"host\": \"${K8S_IP}\"" || {
+            echo "ERROR: probe did not dial ${K8S_IP}" >&2
+            exit 1
+          }
     catch:
     - events: {}
     - describe:
@@ -86,6 +117,10 @@ spec:
         name: egress-probe-call
         namespace: default
     cleanup:
+    - script:
+        content: |
+          kubectl delete pod egress-control -n default \
+            --ignore-not-found --wait=false
     - delete:
         ref:
           apiVersion: ark.mckinsey.com/v1alpha1
