@@ -1,0 +1,35 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: egress-probe
+  namespace: default
+spec:
+  type: inline
+  description: Try a TCP connection to a host and port; report reachability
+  inputSchema:
+    type: object
+    properties:
+      host:
+        type: string
+        description: Host or IP to connect to
+      port:
+        type: integer
+        description: TCP port to connect to
+    required: ["host", "port"]
+    additionalProperties: false
+  inline:
+    language: python
+    source: |
+      import json
+      import socket
+      import sys
+
+      args = json.loads(sys.argv[1])
+      s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      s.settimeout(3)
+      try:
+          s.connect((args["host"], int(args["port"])))
+          s.close()
+          print(json.dumps({"reachable": True}))
+      except Exception as exc:
+          print(json.dumps({"reachable": False, "error": type(exc).__name__}))
