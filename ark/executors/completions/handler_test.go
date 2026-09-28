@@ -2099,3 +2099,19 @@ func TestSetupExecutionFailures(t *testing.T) {
 		assert.IsType(t, &NoopMemory{}, state.memory)
 	})
 }
+
+func TestExecuteToolReportsToolFailureText(t *testing.T) {
+	tool := inlineTool(testToolBoom, newTestMCPServer(t), "uid-1")
+	h := newTestHandler(tool)
+	query := arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "boom-query", Namespace: "default"},
+		Spec:       arkv1alpha1.QuerySpec{Input: runtime.RawExtension{Raw: []byte(`"{\"name\":\"ark\"}"`)}},
+	}
+
+	messages, err := h.executeTool(t.Context(), query, testToolBoom, []Message{NewUserMessage(`{"name":"ark"}`)})
+
+	require.NoError(t, err, "a tool-level failure is a result, not a transport error")
+	require.Len(t, messages, 1)
+	assert.Equal(t, testToolBoomText, extractAssistantText(messages),
+		"a direct Tool query must report why the tool failed, not an empty success")
+}
