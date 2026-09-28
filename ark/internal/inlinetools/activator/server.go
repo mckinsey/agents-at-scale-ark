@@ -85,11 +85,18 @@ func metadata(tool *arkv1alpha1.Tool) (*mcp.Tool, error) {
 	}
 	// Server.AddTool panics on a non-object schema. Fail closed instead if stored
 	// metadata is invalid; discovery does not resolve or fetch schema references.
+	// Admission accepts an omitted type as object (internal/validation.ValidateTool),
+	// so declare it here rather than 503ing on metadata the API server stored.
 	var object map[string]any
-	if err := json.Unmarshal(schema, &object); err != nil || object["type"] != "object" {
+	if err := json.Unmarshal(schema, &object); err != nil || object == nil ||
+		(object["type"] != nil && object["type"] != "object") {
 		return nil, fmt.Errorf("inline input schema must describe an object")
 	}
 	descriptor := &mcp.Tool{Name: tool.Name, Description: tool.Spec.Description, InputSchema: schema}
+	if object["type"] == nil {
+		object["type"] = "object"
+		descriptor.InputSchema = object
+	}
 	if annotations := tool.Spec.Annotations; annotations != nil {
 		descriptor.Annotations = &mcp.ToolAnnotations{
 			Title: annotations.Title, ReadOnlyHint: annotations.ReadOnlyHint, IdempotentHint: annotations.IdempotentHint,

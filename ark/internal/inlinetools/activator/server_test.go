@@ -23,6 +23,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/inlinetools/runner"
+	"mckinsey.com/ark/internal/validation"
 )
 
 const testRoute = "/mcp/tenant/echo/tool-uid"
@@ -216,6 +217,27 @@ func TestDiscoveryFailsClosedOnInvalidMetadataOrReads(t *testing.T) {
 	response := rpc(t, handler, testRoute, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	assert.Equal(t, http.StatusServiceUnavailable, response.Code)
 	assert.NotContains(t, response.Body.String(), "SECRET_SOURCE_SENTINEL")
+}
+
+func TestDiscoveryServesEverySchemaAdmissionAccepts(t *testing.T) {
+	tool := discoveryTool()
+	tool.Spec.InputSchema = &runtime.RawExtension{Raw: []byte(`{"properties":{"text":{"type":"string"}},"required":["text"]}`)}
+	_, err := validation.ValidateTool(tool)
+	require.NoError(t, err, "admission admits an inline schema that omits type")
+	var calls atomic.Int32
+	handler, err := Handler(discoveryClient(t, tool), []string{"tenant"}, func(context.Context, types.NamespacedName, types.UID, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls.Add(1)
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "invoked"}}}, nil
+	})
+	require.NoError(t, err)
+	listing := rpc(t, handler, testRoute, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	require.Equal(t, http.StatusOK, listing.Code, listing.Body.String())
+	assert.Contains(t, listing.Body.String(), `"type":"object"`, "the advertised schema declares the object type the SDK requires")
+	assert.Contains(t, listing.Body.String(), `"required":["text"]`)
+	call := rpc(t, handler, testRoute, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"hi"}}}`)
+	require.Equal(t, http.StatusOK, call.Code, call.Body.String())
+	assert.Contains(t, call.Body.String(), "invoked")
+	assert.EqualValues(t, 1, calls.Load())
 }
 
 func TestDiscoveryRequiresExplicitNamespaceScopeAndInvocationHandler(t *testing.T) {
