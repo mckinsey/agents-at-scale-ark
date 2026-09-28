@@ -1193,7 +1193,12 @@ async def _workflow_node_unavailable_detail(
         api_version="argoproj.io/v1alpha1",
         kind="Workflow",
     )
-    workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
+    try:
+        workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
+    except ApiException as e:
+        if e.status == 404:
+            return f"Workflow {workflow_name} not found in namespace {namespace}"
+        raise HTTPException(status_code=e.status, detail=e.reason) from e
     nodes = workflow.to_dict().get("status", {}).get("nodes", {})
     node = nodes.get(node_id)
 

@@ -1924,6 +1924,107 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("archiveLogs", response.json()["detail"])
 
+    def _mock_missing_workflow_pod(self, mock_core_v1_cls, mock_dynamic_client_cls, workflow_get):
+        mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(
+            side_effect=ApiException(status=404, reason="Not Found")
+        )
+        pod_list = Mock()
+        pod_list.items = []
+        mock_core_v1.list_namespaced_pod = AsyncMock(return_value=pod_list)
+        mock_core_v1_cls.return_value = mock_core_v1
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+        mock_workflow_resource = AsyncMock()
+        mock_workflow_resource.get = workflow_get
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_workflow_resource)
+
+    def _workflow_with_nodes(self, nodes):
+        mock_workflow = Mock()
+        mock_workflow.to_dict.return_value = {"status": {"nodes": nodes}}
+        return AsyncMock(return_value=mock_workflow)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_workflow_log_window_reports_unknown_node(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
+        """A node id missing from the workflow status is a 404 naming the node and workflow."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        self._mock_missing_workflow_pod(
+            mock_core_v1_cls,
+            mock_dynamic_client_cls,
+            self._workflow_with_nodes({"other": {"type": "Pod", "phase": "Succeeded"}}),
+        )
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf/node/log/window"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Node node not found in workflow wf")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_workflow_log_window_reports_node_without_logs(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
+        """A running pod node or a non-pod node without a pod gets the generic unavailable detail."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+
+        for node in ({"type": "Pod", "phase": "Running"}, {"type": "Steps", "phase": "Succeeded"}):
+            with self.subTest(node=node):
+                self._mock_missing_workflow_pod(
+                    mock_core_v1_cls,
+                    mock_dynamic_client_cls,
+                    self._workflow_with_nodes({"node": node}),
+                )
+
+                response = self.client.get(
+                    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf/node/log/window"
+                )
+
+                self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.json()["detail"], "Logs are not available for node node")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_workflow_log_window_reports_missing_workflow(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
+        """A workflow that no longer exists is a 404 naming the workflow, not a 500."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        self._mock_missing_workflow_pod(
+            mock_core_v1_cls,
+            mock_dynamic_client_cls,
+            AsyncMock(side_effect=ApiException(status=404, reason="Not Found")),
+        )
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf/node/log/window"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("wf", response.json()["detail"])
+        self.assertIn("not found", response.json()["detail"])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_workflow_log_window_propagates_workflow_lookup_status(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
+        """A non-404 failure reading the workflow keeps its own status code."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        self._mock_missing_workflow_pod(
+            mock_core_v1_cls,
+            mock_dynamic_client_cls,
+            AsyncMock(side_effect=ApiException(status=403, reason="Forbidden")),
+        )
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf/node/log/window"
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Forbidden", response.json()["detail"])
+
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
     def test_malformed_since_timestamp_is_rejected_without_reading_logs(self, mock_core_v1_cls, mock_api_client):
