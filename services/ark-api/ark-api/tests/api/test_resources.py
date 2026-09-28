@@ -1,6 +1,7 @@
 """Tests for generic Kubernetes resources API endpoints."""
 import os
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from kubernetes_asyncio.client.rest import ApiException
@@ -1644,6 +1645,41 @@ def make_chunked_log_stream_reader(lines, streams):
     return reader
 
 
+def format_log_timestamp(moment: datetime) -> str:
+    return f"{moment.strftime('%Y-%m-%dT%H:%M:%S')}.{moment.microsecond * 1000:09d}Z"
+
+
+def build_recent_log_lines(total_lines: int, anchor: datetime) -> list[tuple[datetime, str]]:
+    """One line per second, the newest stamped at ``anchor``."""
+    return [
+        (anchor - timedelta(seconds=total_lines - 1 - index), f"line {index}")
+        for index in range(total_lines)
+    ]
+
+
+def make_recent_log_stream_reader(lines: list[tuple[datetime, str]], streams: list):
+    """Return a reader that, like the kubelet, drops lines older than now - since_seconds."""
+    async def reader(**kwargs):
+        selected = list(lines)
+        since_seconds = kwargs.get("since_seconds")
+        if since_seconds is not None:
+            cutoff = datetime.now(timezone.utc) - timedelta(seconds=since_seconds)
+            selected = [(moment, text) for moment, text in selected if moment >= cutoff]
+        tail_lines = kwargs.get("tail_lines")
+        if tail_lines is not None:
+            selected = selected[-tail_lines:]
+        parts = [f"{format_log_timestamp(moment)} {text}" for moment, text in selected]
+        data = ("\n".join(parts) + "\n").encode("utf-8") if parts else b""
+        limit_bytes = kwargs.get("limit_bytes")
+        if limit_bytes is not None:
+            data = data[:limit_bytes]
+        stream = FakeLogStream(data)
+        streams.append((kwargs, stream))
+        return stream
+
+    return reader
+
+
 class TestPodLogWindowEndpoint(unittest.TestCase):
     """Test cases for the windowed pod log endpoints."""
 
@@ -1836,6 +1872,60 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         self.assertFalse(body["has_more_before"])
         self.assertNotIn("tail_lines", streams[0][0])
         self.assertGreater(streams[0][0]["since_seconds"], 0)
+
+    def _mock_recent_core_v1(self, mock_core_v1_cls, total_lines):
+        streams = []
+        lines = build_recent_log_lines(total_lines, datetime.now(timezone.utc))
+        mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod_log = make_recent_log_stream_reader(lines, streams)
+        mock_core_v1_cls.return_value = mock_core_v1
+        return lines, streams
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_since_seconds_sent_to_kubelet_covers_the_cursor(self, mock_core_v1_cls, mock_api_client):
+        """The since_seconds window reaches back far enough that the kubelet returns every newer line."""
+        from ark_api.api.v1.resources import LOG_WINDOW_SINCE_SLACK_SECONDS
+
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        lines, streams = self._mock_recent_core_v1(mock_core_v1_cls, 20)
+        cursor_moment, _ = lines[-5]
+
+        body = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            f"?since_timestamp={format_log_timestamp(cursor_moment)}"
+        ).json()
+
+        self.assertEqual(body["content"].splitlines(), [text for _, text in lines[-4:]])
+        self.assertEqual(body["line_count"], 4)
+        self.assertEqual(body["last_timestamp"], format_log_timestamp(lines[-1][0]))
+        self.assertGreaterEqual(streams[0][0]["since_seconds"], 4 + LOG_WINDOW_SINCE_SLACK_SECONDS)
+        self.assertLessEqual(streams[0][0]["since_seconds"], 4 + LOG_WINDOW_SINCE_SLACK_SECONDS + 2)
+        served = streams[0][1].content.data.decode("utf-8").splitlines()
+        self.assertGreaterEqual(len(served), 4)
+        self.assertLess(len(served), len(lines))
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_fractional_since_timestamp_between_lines_returns_only_newer_lines(
+        self, mock_core_v1_cls, mock_api_client
+    ):
+        """A cursor sitting between two lines still yields exactly the newer ones."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        lines, streams = self._mock_recent_core_v1(mock_core_v1_cls, 20)
+        cursor_moment = lines[-6][0] + timedelta(milliseconds=500)
+
+        body = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            f"?since_timestamp={format_log_timestamp(cursor_moment)}"
+        ).json()
+
+        self.assertEqual(body["content"].splitlines(), [text for _, text in lines[-5:]])
+        self.assertEqual(body["line_count"], 5)
+        self.assertEqual(body["first_timestamp"], format_log_timestamp(lines[-5][0]))
+        self.assertEqual(body["last_timestamp"], format_log_timestamp(lines[-1][0]))
+        served = streams[0][1].content.data.decode("utf-8").splitlines()
+        self.assertLess(len(served), len(lines))
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
