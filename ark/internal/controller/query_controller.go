@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,11 +24,15 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"go.opentelemetry.io/otel/baggage"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -180,7 +185,10 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	if len(obj.Status.Conditions) == 0 {
 		r.setConditionCompleted(&obj, metav1.ConditionFalse, "QueryNotStarted", "The query has not been started yet")
-		return ctrl.Result{}, r.Status().Update(ctx, &obj)
+		// Requeue explicitly: the update predicate drops the watch event this
+		// status write would otherwise trigger, and handleQueryExecution still
+		// needs to run to actually start the query.
+		return ctrl.Result{Requeue: true}, r.Status().Update(ctx, &obj)
 	}
 
 	return r.handleQueryExecution(ctx, req, obj)
@@ -225,7 +233,10 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		// Requeue explicitly so the terminal-phase branch below runs and
+		// computes the TTL-based GC requeue; the update predicate drops the
+		// watch event this status write would otherwise trigger.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Enforces per-round pre-execution wall-SLO.
@@ -234,7 +245,8 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		if err := r.failQueryOnTimeout(ctx, &obj, reasonTimedOutInQueue, preExecutionTimeoutMessage(obj.Status.Phase)); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		// Same as above: requeue explicitly for the TTL/GC follow-up.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	switch obj.Status.Phase {
@@ -354,9 +366,13 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
-	// Arm the safety net. On success the goroutine writes a terminal phase and
-	// the resulting watch event reconciles ahead of this timer; if it dies, this
-	// requeue is what brings the Query back for recovery.
+	// Arm the safety net. The goroutine's terminal status write no longer
+	// re-triggers a reconcile on its own (the update predicate drops it), so
+	// this timer is what brings the Query back to compute the TTL-based GC
+	// requeue on success, or to recover a dead goroutine on failure. Semaphore
+	// release and operation-map cleanup are synchronous in the goroutine
+	// itself (finishExecuteQueryAsync), so capacity/drain throughput is
+	// unaffected by this requeue's delay.
 	return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 }
 
@@ -448,9 +464,10 @@ func (r *QueryReconciler) handleDeniedOrFailedTask(ctx context.Context, obj *ark
 	if err := r.updateStatus(ctx, obj, statusError); err != nil {
 		return ctrl.Result{}, err
 	}
-	// The status update to error re-triggers reconcile, where the terminal-phase
-	// case computes the TTL-based requeue for garbage collection.
-	return ctrl.Result{}, nil
+	// Requeue explicitly so the terminal-phase case computes the TTL-based
+	// requeue for garbage collection; the update predicate drops the watch
+	// event this status write would otherwise trigger.
+	return ctrl.Result{Requeue: true}, nil
 }
 
 func logQueryError(ctx context.Context, err error, obj *arkv1alpha1.Query, stage string) {
@@ -1437,9 +1454,10 @@ func (r *QueryReconciler) handleResumableDenial(ctx context.Context, obj *arkv1a
 		if err := r.updateStatus(ctx, obj, statusError); err != nil {
 			return ctrl.Result{}, err
 		}
-		// The status update to error re-triggers reconcile, where the
-		// terminal-phase case computes the TTL-based requeue for GC.
-		return ctrl.Result{}, nil
+		// Requeue explicitly so the terminal-phase case computes the
+		// TTL-based requeue for GC; the update predicate drops the watch
+		// event this status write would otherwise trigger.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	log.Info("A2ATask denied (resumable), resuming query execution for graceful handling", "taskId", taskID, "cascadeCount", count)
@@ -1555,15 +1573,50 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.initSemaphore()
+	return setupQueryController(mgr, r, r)
+}
+
+// setupQueryController takes the reconciler to complete with separately from
+// r so a test can wrap it (e.g. to count Reconcile invocations) while still
+// using r for the mapper function and controller options.
+func setupQueryController(mgr ctrl.Manager, r *QueryReconciler, rec reconcile.Reconciler) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&arkv1alpha1.Query{}).
+		For(&arkv1alpha1.Query{}, builder.WithPredicates(queryUpdatePredicate())).
 		Watches(
 			&arkv1alpha1.A2ATask{},
 			handler.EnqueueRequestsFromMapFunc(r.findQueriesForA2ATask),
 		).
 		Named("query").
 		WithOptions(r.buildControllerOptions()).
-		Complete(r)
+		Complete(rec)
+}
+
+// queryUpdatePredicate skips Update events where nothing changed except
+// Status and/or ResourceVersion. The controller is the sole writer of Query
+// status (#3437): with no predicate, every status write it makes bounces
+// back as a watch event and triggers another reconcile that only re-confirms
+// what the write already decided. Everything else (spec, annotations,
+// labels, finalizers, deletion) is not self-induced by a status write, so it
+// still reconciles.
+func queryUpdatePredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldQuery, okOld := e.ObjectOld.(*arkv1alpha1.Query)
+			newQuery, okNew := e.ObjectNew.(*arkv1alpha1.Query)
+			if !okOld || !okNew {
+				return true
+			}
+			old := oldQuery.DeepCopy()
+			newQ := newQuery.DeepCopy()
+			old.Status = arkv1alpha1.QueryStatus{}
+			newQ.Status = arkv1alpha1.QueryStatus{}
+			old.ResourceVersion = ""
+			newQ.ResourceVersion = ""
+			old.ManagedFields = nil
+			newQ.ManagedFields = nil
+			return !equality.Semantic.DeepEqual(old, newQ)
+		},
+	}
 }
 
 // findQueriesForA2ATask maps an A2ATask to its associated Query for reconciliation
