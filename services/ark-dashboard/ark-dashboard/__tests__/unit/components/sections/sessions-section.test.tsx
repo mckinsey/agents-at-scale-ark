@@ -1051,6 +1051,39 @@ describe('SessionsSection', () => {
     });
   });
 
+  describe('Namespace scoping', () => {
+    beforeEach(() => {
+      mockUseNamespace.mockReturnValue({
+        namespace: 'tenant-alpha',
+        isNamespaceResolved: true,
+        isPending: false,
+        readOnlyMode: false,
+      });
+    });
+
+    it('lists workflows from the active namespace, not a hardcoded default', () => {
+      render(<SessionsSection />);
+
+      expect(useWorkflows).toHaveBeenCalledWith(
+        'tenant-alpha',
+        expect.any(Object),
+      );
+      expect(useWorkflows).not.toHaveBeenCalledWith(
+        'default',
+        expect.anything(),
+      );
+    });
+
+    it('fetches workflow detail from the active namespace', () => {
+      render(<SessionsSection />);
+
+      expect(useWorkflow).toHaveBeenCalledWith(
+        'tenant-alpha',
+        expect.any(String),
+      );
+    });
+  });
+
   describe('Team Sessions', () => {
     const teamSession = {
       id: 'team-session-1',
