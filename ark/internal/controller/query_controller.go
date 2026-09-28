@@ -196,7 +196,7 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 	if obj.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(obj, finalizer) {
 			controllerutil.AddFinalizer(obj, finalizer)
-			return &ctrl.Result{}, r.Update(ctx, obj)
+			return &ctrl.Result{}, r.patchFinalizers(ctx, obj)
 		}
 		return nil, nil
 	}
@@ -207,16 +207,34 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 			if time.Since(obj.DeletionTimestamp.Time) > messageCleanupGracePeriod {
 				log.Error(err, "giving up on broker message cleanup after grace period", "query", obj.Name)
 				controllerutil.RemoveFinalizer(obj, finalizer)
-				return &ctrl.Result{}, r.Update(ctx, obj)
+				return &ctrl.Result{}, r.patchFinalizers(ctx, obj)
 			}
 			log.Error(err, "broker message cleanup failed, will retry", "query", obj.Name)
 			return &ctrl.Result{RequeueAfter: messageCleanupRetryInterval}, nil
 		}
 		controllerutil.RemoveFinalizer(obj, finalizer)
-		return &ctrl.Result{}, r.Update(ctx, obj)
+		return &ctrl.Result{}, r.patchFinalizers(ctx, obj)
 	}
 
 	return &ctrl.Result{}, nil
+}
+
+// patchFinalizers writes only metadata.finalizers via a merge patch. A plain
+// Update would send the whole object, including the status; when the object
+// came from a cache that stripped status.response.content (see cachetransform),
+// that empty status overwrites the stored one on backends without a status
+// subresource (aggregated API server / non-CRD storage). Patching just the
+// finalizers list carries no status at all.
+func (r *QueryReconciler) patchFinalizers(ctx context.Context, obj *arkv1alpha1.Query) error {
+	body, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{
+			"finalizers": obj.GetFinalizers(),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return r.Patch(ctx, obj, client.RawPatch(types.MergePatchType, body))
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
