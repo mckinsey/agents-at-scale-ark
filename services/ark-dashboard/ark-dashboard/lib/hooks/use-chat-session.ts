@@ -509,6 +509,12 @@ export function useChatSession({
       queryName = streamQueryName;
       lastQueryName.current = queryName;
 
+      // Grace after the query goes terminal before force-closing the chunk
+      // stream, so a real [DONE] still in flight wins and ends the loop naturally.
+      const STREAM_TERMINAL_ABORT_GRACE_MS = 1500;
+      let terminalAbortTimer: ReturnType<typeof setTimeout> | undefined;
+      const streamAbortController = chatStreamAbortControllerRef.current;
+
       const stopPhasePolling = await chatService.streamQueryStatus(
         namespace,
         streamQueryName,
@@ -517,6 +523,17 @@ export function useChatSession({
             const phase = (status as { phase?: string }).phase;
             setProcessingPhase(phase);
           }
+        },
+        undefined,
+        () => {
+          // Query reached a terminal phase — the authoritative done signal. The
+          // chunk stream's [DONE] is best-effort and may never arrive (broker
+          // unreachable / executor killed, see #2862); abort the stream after a
+          // grace so the chat leaves the streaming state instead of hanging.
+          terminalAbortTimer ??= setTimeout(
+            () => streamAbortController.abort(),
+            STREAM_TERMINAL_ABORT_GRACE_MS,
+          );
         },
       );
 
@@ -750,6 +767,9 @@ export function useChatSession({
       }
 
       stopPhasePolling();
+      // Stream ended on its own (real [DONE] or broker close); the terminal-phase
+      // abort is no longer needed.
+      if (terminalAbortTimer) clearTimeout(terminalAbortTimer);
 
       if (!hasPendingApproval) {
         console.log(

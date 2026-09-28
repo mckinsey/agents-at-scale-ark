@@ -344,6 +344,60 @@ describe('FloatingChat', () => {
       expect(screen.getByText('Second message')).toBeInTheDocument();
       expect(screen.getByText('Second response')).toBeInTheDocument();
     });
+
+    it('aborts a hung chunk stream when the query reaches a terminal phase (#2862)', async () => {
+      const user = userEvent.setup();
+
+      // Chunk stream that yields once, then hangs until aborted — simulates the
+      // broker never sending [DONE] (executor killed / broker unreachable).
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* (...args: unknown[]) {
+          const signal = args[7] as AbortSignal | undefined;
+          yield { choices: [{ delta: { content: 'partial' } }] };
+          await new Promise<void>((_resolve, reject) => {
+            const fail = () =>
+              reject(
+                Object.assign(new Error('Aborted'), { name: 'AbortError' }),
+              );
+            if (signal?.aborted) return fail();
+            signal?.addEventListener('abort', fail, { once: true });
+          });
+        },
+      );
+
+      // Query reaches a terminal phase with no [DONE] on the chunk stream:
+      // fire the onTerminal callback (5th arg) the hook passes to bind the
+      // stream to the phase poll.
+      vi.mocked(chatService.streamQueryStatus).mockImplementation(
+        async (...args: unknown[]) => {
+          const onTerminal = args[4] as ((phase: string) => void) | undefined;
+          onTerminal?.('done');
+          return () => {};
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Hi');
+      await user.click(screen.getByRole('button', { name: /send/i }));
+
+      // Streaming started: first chunk rendered, input disabled.
+      await waitFor(() => {
+        expect(screen.getByText('partial')).toBeInTheDocument();
+      });
+      expect(input).toBeDisabled();
+
+      // The terminal phase must force the hung stream closed so the chat leaves
+      // the streaming state. Without the phase→abort wiring the input stays
+      // disabled forever and this times out.
+      await waitFor(
+        () => {
+          expect(input).not.toBeDisabled();
+        },
+        { timeout: 4000 },
+      );
+    });
   });
 
   describe('window state management', () => {

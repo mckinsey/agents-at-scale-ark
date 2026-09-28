@@ -479,6 +479,7 @@ export const chatService = {
     queryName: string,
     onUpdate: (status: QueryDetailResponse['status']) => void,
     pollInterval: number = 1000,
+    onTerminal?: (phase: QueryStatusPhase) => void,
   ): Promise<() => void> {
     let stopped = false;
 
@@ -503,6 +504,7 @@ export const chatService = {
                 : 'unknown';
               if (isTerminalPhase(validatedPhase)) {
                 stopped = true;
+                onTerminal?.(validatedPhase);
                 break;
               }
             }
