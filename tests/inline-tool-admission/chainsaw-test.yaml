@@ -5,73 +5,84 @@ metadata:
   labels:
     inline-tools: "true"
 spec:
-  # Admission enforcement is the same decision on both storage backends: the
-  # webhook on etcd and the embedded apiserver on postgresql. The dedicated
-  # inline e2e job runs this on both. Pin to the watched default namespace.
+  # Admission enforcement is the same decision on both storage backends, but the
+  # inline e2e job passes no storage-backend input, so this suite runs on etcd
+  # and exercises the webhook path only; both-backend e2e coverage is still
+  # outstanding (task 7.2). Pin to the watched default namespace.
   namespace: default
   description: >
     Inline authoring admission: an identity that can author Tools but lacks the
-    inlinetools use permission is denied, an authorized one is accepted, and
-    admission stamps authorship over any requester-supplied value.
+    inlinetools use permission is denied, an identity holding the shipped
+    inline-tool-author-role is accepted, and admission stamps authorship over
+    any requester-supplied value.
   steps:
-  - name: rbac
-    try:
-    - apply:
-        file: manifests/a01-rbac.yaml
+    - name: rbac
+      try:
+        - apply:
+            file: manifests/a01-rbac.yaml
 
-  - name: deny-unauthorized-author
-    try:
-    # tools/create alone must not let a subject introduce executable source.
-    - script:
-        timeout: 60s
-        content: |
-          set -o pipefail
-          sa=system:serviceaccount:default:inline-unauth
-          if out=$(kubectl apply --as="$sa" -f manifests/a02-tool.yaml 2>&1); then
-            echo "expected denial but the apply succeeded: $out"
-            exit 1
-          fi
-          echo "$out" | grep -q 'not permitted to author inline tools' || {
-            echo "denied, but for the wrong reason: $out"
-            exit 1
-          }
-          echo "correctly denied"
-    # The denied apply created nothing.
-    - error:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Tool
-          metadata:
+    - name: deny-unauthorized-author
+      try:
+        # tools/create alone must not let a subject introduce executable source.
+        - script:
+            timeout: 60s
+            content: |
+              set -o pipefail
+              sa=system:serviceaccount:default:inline-unauth
+              if out=$(kubectl apply --as="$sa" -f manifests/a02-tool.yaml 2>&1)
+              then
+                echo "expected denial but the apply succeeded: $out"
+                exit 1
+              fi
+              echo "$out" | grep -q 'not permitted to author inline tools' || {
+                echo "denied, but for the wrong reason: $out"
+                exit 1
+              }
+              echo "correctly denied"
+        # The denied apply created nothing.
+        - error:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Tool
+              metadata:
+                name: inline-admission-probe
+                namespace: default
+
+    - name: accept-authorized-and-stamp-authorship
+      try:
+        # Impersonate a subject whose only inline permission is the chart's
+        # inline-tool-author-role, so acceptance depends on that grant passing
+        # the SubjectAccessReview and not on the suite's admin kubeconfig.
+        - script:
+            timeout: 60s
+            content: |
+              set -e
+              sa=system:serviceaccount:default:inline-author
+              kubectl apply --as="$sa" -f manifests/a02-tool.yaml
+        # Accepted, and the requester-supplied authored-by is replaced by the
+        # real authenticated identity of the impersonated author.
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Tool
+              metadata:
+                name: inline-admission-probe
+                namespace: default
+                (annotations."ark.mckinsey.com/inline-authored-by"):
+                  'system:serviceaccount:default:inline-author'
+                (annotations."ark.mckinsey.com/inline-authored-at" != null):
+                  true
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Tool
             name: inline-admission-probe
             namespace: default
-
-  - name: accept-authorized-and-stamp-authorship
-    try:
-    - apply:
-        file: manifests/a02-tool.yaml
-    # Accepted, and the requester-supplied authored-by is overwritten by the
-    # real authenticated identity, not left at the submitted value.
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Tool
-          metadata:
-            name: inline-admission-probe
-            namespace: default
-            (annotations."ark.mckinsey.com/inline-authored-by" != null): true
-            (annotations."ark.mckinsey.com/inline-authored-by" != 'attacker-supplied'): true
-            (annotations."ark.mckinsey.com/inline-authored-at" != null): true
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Tool
-        name: inline-admission-probe
-        namespace: default
-    cleanup:
-    - delete:
-        ref:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Tool
-          name: inline-admission-probe
-          namespace: default
+      cleanup:
+        - delete:
+            ref:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Tool
+              name: inline-admission-probe
+              namespace: default
