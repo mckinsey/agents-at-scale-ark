@@ -71,6 +71,42 @@ async function* stopStreamOnSignal<T>(
   }
 }
 
+interface TerminalStopController {
+  // Resolves a short grace after the query phase goes terminal; pass to
+  // stopStreamOnSignal as its stop signal.
+  stop: Promise<void>;
+  // Call when the phase poll observes a terminal phase.
+  arm: () => void;
+  // Call when the stream was stopped by the signal (not a natural [DONE]).
+  markStopped: () => void;
+  // Clear the grace timer; invoke onForceStopped if the stream was force-stopped.
+  finish: (onForceStopped: () => void) => void;
+}
+
+// Bundles the terminal-phase → stop-draining machinery (grace timer + one-shot
+// stop promise) so the streaming loop stays flat.
+function createTerminalStopController(): TerminalStopController {
+  let resolve: (() => void) | undefined;
+  const stop = new Promise<void>(r => {
+    resolve = r;
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  return {
+    stop,
+    arm: () => {
+      timer ??= setTimeout(() => resolve?.(), STREAM_TERMINAL_STOP_GRACE_MS);
+    },
+    markStopped: () => {
+      stopped = true;
+    },
+    finish: onForceStopped => {
+      if (timer) clearTimeout(timer);
+      if (stopped) onForceStopped();
+    },
+  };
+}
+
 // Converts a query-result message (OpenAI-ish shape) into the dashboard's
 // ExtendedChatMessage. Extracted to keep pollAfterApproval's complexity low.
 function convertResultMessage(msg: ResultMessage): ExtendedChatMessage {
@@ -548,12 +584,7 @@ export function useChatSession({
       // after the phase poll observes a terminal phase; stopStreamOnSignal then
       // stops draining so the turn finalizes normally instead of hanging.
       const streamAbortController = chatStreamAbortControllerRef.current;
-      let resolveTerminalStop: (() => void) | undefined;
-      const terminalStop = new Promise<void>(resolve => {
-        resolveTerminalStop = resolve;
-      });
-      let terminalStopTimer: ReturnType<typeof setTimeout> | undefined;
-      let stoppedOnTerminal = false;
+      const terminal = createTerminalStopController();
 
       const stopPhasePolling = await chatService.streamQueryStatus(
         namespace,
@@ -565,21 +596,14 @@ export function useChatSession({
           }
         },
         undefined,
-        () => {
-          terminalStopTimer ??= setTimeout(
-            () => resolveTerminalStop?.(),
-            STREAM_TERMINAL_STOP_GRACE_MS,
-          );
-        },
+        terminal.arm,
       );
 
       for await (const chunk of stopStreamOnSignal(
         chunks,
-        terminalStop,
+        terminal.stop,
         () => streamAbortController.abort(),
-        () => {
-          stoppedOnTerminal = true;
-        },
+        terminal.markStopped,
       )) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
 
@@ -810,11 +834,10 @@ export function useChatSession({
       }
 
       stopPhasePolling();
-      if (terminalStopTimer) clearTimeout(terminalStopTimer);
-      if (stoppedOnTerminal) {
-        // Query finished but the stream never delivered [DONE] — we force-closed
-        // it. Invisible to the user (the answer already streamed), but tracked so
-        // a rise in dropped completions is observable.
+      // Query finished but the stream never delivered [DONE] — we force-closed
+      // it. Invisible to the user (the answer already streamed), but tracked so
+      // a rise in dropped completions is observable.
+      terminal.finish(() => {
         trackEvent({
           name: 'chat_stream_force_closed',
           properties: {
@@ -823,7 +846,7 @@ export function useChatSession({
             queryName,
           },
         });
-      }
+      });
 
       if (!hasPendingApproval) {
         console.log(
