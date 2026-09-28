@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,23 +24,25 @@ import (
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
-// countingReconciler wraps a real reconciler and counts every Reconcile call,
-// regardless of what triggered it (initial enqueue vs. watch event from the
-// controller's own status write).
+// countingReconciler counts Reconcile calls for one key, ignoring noise from
+// other specs sharing this envtest cluster.
 type countingReconciler struct {
 	inner reconcile.Reconciler
+	key   types.NamespacedName
 	count atomic.Int64
 }
 
 func (c *countingReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
-	c.count.Add(1)
+	if req.NamespacedName == c.key {
+		c.count.Add(1)
+	}
 	return c.inner.Reconcile(ctx, req)
 }
 
-// Repro for #3437: the Query controller is the sole writer of Query status
-// but watches Query with no predicate, so its own status writes bounce back
-// as watch events and trigger extra reconciles.
-var _ = Describe("Query Controller reconcile amplification (bug repro for #3437)", func() {
+// The Query controller is the sole writer of Query status but watches Query
+// with no predicate, so its own status writes bounce back as watch events
+// and trigger extra reconciles.
+var _ = Describe("Query Controller reconcile amplification", func() {
 	It("reconciles more times than the number of external triggers", func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -49,10 +52,8 @@ var _ = Describe("Query Controller reconcile amplification (bug repro for #3437)
 			Scheme:  scheme.Scheme,
 			Metrics: metricsserver.Options{BindAddress: "0"},
 			Controller: config.Controller{
-				// This suite runs many specs (each its own manager) in one
-				// process; other specs also register a "query" controller
-				// for the real SetupWithManager, and controller-runtime
-				// tracks controller names as unique per-process.
+				// Other specs also register a "query" controller; names must
+				// be unique per-process otherwise.
 				SkipNameValidation: &skipNameValidation,
 			},
 		})
@@ -66,7 +67,14 @@ var _ = Describe("Query Controller reconcile amplification (bug repro for #3437)
 		}
 		r.initSemaphore()
 
-		counting := &countingReconciler{inner: r}
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "amplification-repro", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+				Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
+			},
+		}
+		counting := &countingReconciler{inner: r, key: client.ObjectKeyFromObject(query)}
 		Expect(setupQueryController(mgr, r, counting)).To(Succeed())
 
 		go func() {
@@ -75,13 +83,6 @@ var _ = Describe("Query Controller reconcile amplification (bug repro for #3437)
 		}()
 		Expect(mgr.GetCache().WaitForCacheSync(ctx)).To(BeTrue())
 
-		query := &arkv1alpha1.Query{
-			ObjectMeta: metav1.ObjectMeta{Name: "amplification-repro", Namespace: "default"},
-			Spec: arkv1alpha1.QuerySpec{
-				Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
-				Input:  runtime.RawExtension{Raw: []byte(`"hello"`)},
-			},
-		}
 		Expect(k8sClient.Create(ctx, query)).To(Succeed())
 		DeferCleanup(func() {
 			Expect(client.IgnoreNotFound(k8sClient.Delete(context.Background(), query))).To(Succeed())
@@ -89,15 +90,10 @@ var _ = Describe("Query Controller reconcile amplification (bug repro for #3437)
 
 		reconcileCount := func() int64 { return counting.count.Load() }
 
-		// One external trigger (the Create above) still legitimately produces
-		// a few reconciles: the finalizer add (metadata change, not filtered),
-		// the QueryNotStarted condition write (self-requeues explicitly since
-		// handleQueryExecution hasn't run yet), and the transition into
-		// Running. All three are real state transitions, not watch-echoes of
-		// a status write, so the predicate lets them through / they carry
-		// their own explicit Requeue.
+		// finalizer add, condition write, and running transition each still
+		// reconcile legitimately.
 		Eventually(reconcileCount, 5*time.Second, 50*time.Millisecond).
-			Should(BeNumerically(">=", 3), "finalizer add, condition write, and running transition must still reconcile")
+			Should(BeNumerically(">=", 3))
 
 		Eventually(func() string {
 			var latest arkv1alpha1.Query
@@ -107,15 +103,15 @@ var _ = Describe("Query Controller reconcile amplification (bug repro for #3437)
 			return latest.Status.Phase
 		}, 5*time.Second, 50*time.Millisecond).Should(Equal(statusError))
 
-		// This is the actual fix under test: the goroutine's terminal Error
-		// write is a pure status change, so the predicate drops the watch
-		// event it used to trigger. The reconcile count must NOT grow just
-		// because the Query went terminal — before the fix this always added
-		// one more (5 total instead of 3).
-		Consistently(reconcileCount, 2*time.Second, 100*time.Millisecond).
-			Should(Equal(reconcileCount()), "a terminal status write alone must not trigger another reconcile")
+		// signalRequeue lands one more reconcile after the terminal write.
+		// Wait for it, or Consistently below could catch it mid-transition.
+		Eventually(reconcileCount, 3*time.Second, 50*time.Millisecond).
+			Should(BeNumerically(">=", 4))
 
-		Expect(reconcileCount()).To(BeNumerically("<", 5),
-			"amplification regression: pre-fix this scenario produced 5 reconciles for 1 external trigger")
+		Consistently(reconcileCount, 2*time.Second, 100*time.Millisecond).
+			Should(Equal(reconcileCount()), "count must stop growing once the terminal reconcile has run")
+
+		Expect(reconcileCount()).To(BeNumerically("<", 6),
+			"pre-fix this scenario produced 5 reconciles for 1 external trigger")
 	})
 })

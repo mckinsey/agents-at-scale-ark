@@ -33,6 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"go.opentelemetry.io/otel/baggage"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -97,6 +98,8 @@ const (
 	// goroutine died so it converges to a terminal phase instead of stranding.
 	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
 	queryRunningSafetyRequeue = 30 * time.Second
+	// requeueChannelBufferSize sizes the async-goroutine self-requeue channel.
+	requeueChannelBufferSize = 64
 
 	// Condition reasons for QueryCompleted when spec.timeout elapses.
 	// spec.timeout is a wall-clock budget from metadata.creationTimestamp; the
@@ -134,6 +137,9 @@ type QueryReconciler struct {
 	operations    sync.Map
 	saClients     *impersonatedClientCache
 	saClientsOnce sync.Once
+
+	// requeueCh lets an async goroutine self-requeue on completion (see signalRequeue).
+	requeueCh chan event.GenericEvent
 
 	// brokerEndpoint resolves the broker endpoint for a namespace, used by the
 	// finalizer's broker cleanups. Defaults to routing.ResolveBrokerEndpoint
@@ -367,13 +373,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
-	// Arm the safety net. The goroutine's terminal status write no longer
-	// re-triggers a reconcile on its own (the update predicate drops it), so
-	// this timer is what brings the Query back to compute the TTL-based GC
-	// requeue on success, or to recover a dead goroutine on failure. Semaphore
-	// release and operation-map cleanup are synchronous in the goroutine
-	// itself (finishExecuteQueryAsync), so capacity/drain throughput is
-	// unaffected by this requeue's delay.
+	// Fallback if the goroutine dies before signalRequeue runs.
 	return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 }
 
@@ -550,6 +550,7 @@ func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespace
 	if r.sched != nil {
 		r.sched.release(namespacedName.Namespace)
 	}
+	r.signalRequeue(namespacedName)
 }
 
 // markQueryErroredAfterPanic sets the query status to error so it converges
@@ -1583,6 +1584,7 @@ func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func setupQueryController(mgr ctrl.Manager, r *QueryReconciler, rec reconcile.Reconciler) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Query{}, builder.WithPredicates(queryUpdatePredicate())).
+		WatchesRawSource(source.Channel(r.requeueCh, &handler.EnqueueRequestForObject{})).
 		Watches(
 			&arkv1alpha1.A2ATask{},
 			handler.EnqueueRequestsFromMapFunc(r.findQueriesForA2ATask),
@@ -1751,6 +1753,22 @@ func (r *QueryReconciler) handleQueryDispatch(
 func (r *QueryReconciler) initSemaphore() {
 	if r.MaxConcurrentQueries > 0 {
 		r.sched = newFairScheduler(r.MaxConcurrentQueries, queryFairnessWaitWindow)
+	}
+	r.requeueCh = make(chan event.GenericEvent, requeueChannelBufferSize)
+}
+
+// signalRequeue enqueues an immediate reconcile for namespacedName. Non-blocking:
+// a full buffer just falls back to the safety-net requeue.
+func (r *QueryReconciler) signalRequeue(namespacedName types.NamespacedName) {
+	if r.requeueCh == nil {
+		return
+	}
+	obj := &arkv1alpha1.Query{}
+	obj.Name = namespacedName.Name
+	obj.Namespace = namespacedName.Namespace
+	select {
+	case r.requeueCh <- event.GenericEvent{Object: obj}:
+	default:
 	}
 }
 
