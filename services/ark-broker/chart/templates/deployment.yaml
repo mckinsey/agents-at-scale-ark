@@ -75,6 +75,8 @@ spec:
               value: {{ .Values.memory.port | quote }}
             - name: REQUEST_TIMEOUT_MS
               value: {{ .Values.server.requestTimeout | quote }}
+            - name: STREAM_IDLE_TIMEOUT_MS
+              value: {{ .Values.server.streamIdleTimeout | quote }}
             - name: MESSAGE_MAX_BYTES
               value: {{ .Values.limits.messageMaxBytes | quote }}
             - name: EVENT_MAX_BYTES

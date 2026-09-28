@@ -99,8 +99,9 @@ POST   /stream/{query_id}/complete  # mark the query stream complete
 | `cursor` | `GET /stream` | Sequence number to paginate from |
 | `watch` | `GET /stream` | Set `true` for SSE streaming |
 | `from-beginning` | `GET /stream/{query_name}` | Replay existing chunks before streaming |
-| `wait-for-query` | `GET /stream/{query_name}` | Wait for the query to appear before streaming |
 | `max-chunk-size` | `GET /stream/{query_name}` | Split large chunks to this byte size |
+
+A stream that receives no chunk (nor its terminal `[DONE]`) for `STREAM_IDLE_TIMEOUT_MS` (default 300000) is closed with a terminal error event (`code: stream_idle_timeout`) followed by `[DONE]`. This is a broker-side inactivity backstop, not a query failure — the Query's status is authoritative and the query may still be running.
 
 Stream one query's output as it is generated:
 
