@@ -20,7 +20,7 @@ var _ = Describe("Model Webhook", func() {
 	var (
 		ctx        context.Context
 		model      *arkv1alpha1.Model
-		validator  *validation.WebhookValidator
+		validator  *validation.WebhookValidator[*arkv1alpha1.Model]
 		fakeClient client.Client
 	)
 
@@ -33,7 +33,7 @@ var _ = Describe("Model Webhook", func() {
 
 		fakeClient = fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		validator = &validation.WebhookValidator{
+		validator = &validation.WebhookValidator[*arkv1alpha1.Model]{
 			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
 		}
 
@@ -492,12 +492,12 @@ var _ = Describe("Model Webhook", func() {
 var _ = Describe("Model Defaulter", func() {
 	var (
 		ctx       context.Context
-		defaulter *validation.WebhookDefaulter
+		defaulter *validation.WebhookDefaulter[*arkv1alpha1.Model]
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		defaulter = &validation.WebhookDefaulter{}
+		defaulter = &validation.WebhookDefaulter[*arkv1alpha1.Model]{}
 	})
 
 	Context("When migrating old format models", func() {
@@ -574,13 +574,6 @@ var _ = Describe("Model Defaulter", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(model.Spec.Provider).To(Equal(validation.ProviderOpenAI))
 			Expect(model.Spec.Type).To(Equal("custom-type"))
-		})
-	})
-
-	Context("When handling non-Model input", func() {
-		It("Should be a no-op for non-Model object", func() {
-			err := defaulter.Default(ctx, &corev1.ConfigMap{})
-			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })
