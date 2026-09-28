@@ -237,7 +237,7 @@ For runnable examples — a Python CSV summariser, a bash text counter, and an a
 
 Two things to know before you try it:
 
-- **Attach it like any other tool**, with `type: inline` in the agent's `spec.tools`. Ark calls it over MCP once the tool reports `Available` — the first call waits for the runner to start, and the runner shuts down again a minute after the last one.
+- **Attach it like any other tool**, with `type: inline` in the agent's `spec.tools`. The default engine, and execution engines built on the Ark SDK, call it over MCP once the tool reports `Available` — the first call waits for the runner to start, and the runner shuts down again a minute after the last one.
 - **Authoring is off by default and permission-gated.** An administrator must enable `inlineTools.enabled` in the Ark chart (and the ark-apiserver chart on the PostgreSQL backend), then grant you the `inline-tool-author-role` in your namespace:
 
   ```bash

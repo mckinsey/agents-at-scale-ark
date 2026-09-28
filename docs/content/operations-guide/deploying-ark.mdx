@@ -294,7 +294,7 @@ The feature is disabled by default and each stage is independently reversible. D
 1. **Confirm the prerequisites.** A CNI that enforces NetworkPolicy, a finite per-pod PID limit, a non-empty `controllerManager.watchNamespaces`, and `webhook.enable=true` on the etcd backend. The chart enforces the last two; the first two it cannot see.
 2. **Install the runtime, grant nobody.** `inlineTools.enabled=true` with `inlineTools.activator.enabled=true`, and no `inline-tool-author-role` binding. Nothing can be authored yet, so nothing runs.
 3. **Grant one namespace.** Bind `inline-tool-author-role` for a pilot author and confirm a tool reaches `Available: True` with `status.resolvedAddress` set and zero runner replicas.
-4. **Attach and invoke.** Attach it to an agent and query. Check the first call cold-starts, the runner returns to zero after roughly a minute idle, and `kubectl logs` shows no egress succeeding from the runner.
+4. **Attach and invoke.** Attach it to an agent and query. Check the first call cold-starts and the runner returns to zero after roughly a minute idle. Then test the egress boundary by invoking a tool whose script attempts an outbound connection: the call must return an error, not a response. A response means the CNI is not enforcing the policy. A runner writes no request logs, so this is the only check that distinguishes the two.
 5. **Widen per namespace.** Each additional namespace is another deliberate RoleBinding. There is no cluster-wide grant.
 
 At every stage these must hold; if one does not, stop and treat it as a defect rather than widening the grant:
