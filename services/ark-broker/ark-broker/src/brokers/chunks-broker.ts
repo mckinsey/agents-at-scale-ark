@@ -51,10 +51,6 @@ export class CompletionChunkBroker {
     return this.stream.save();
   }
 
-  delete(): Promise<void> {
-    return this.stream.delete();
-  }
-
   paginate(
     params: PaginationParams,
     queryId?: string
