@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os/signal"
 	"syscall"
@@ -46,18 +47,32 @@ func run() error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	listener, err := net.Listen("tcp", cfg.Addr)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("inline runner serving tool %q (%s) on %s", cfg.ToolName, cfg.Language, cfg.Addr)
+	return serve(ctx, server, listener, runner.ExecutionTimeout)
+}
+
+// serve runs srv until ctx is cancelled, then drains in-flight calls within
+// grace. Serve returns ErrServerClosed as soon as Shutdown starts, so the
+// drain has to be waited on separately: returning on ErrServerClosed alone
+// would exit the process while a call still had budget left.
+func serve(ctx context.Context, srv *http.Server, listener net.Listener, grace time.Duration) error {
+	drained := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
 		// A call in flight gets the execution budget to finish; the signal that
 		// started this shutdown must not cancel it.
-		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), runner.ExecutionTimeout)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), grace)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
+		drained <- srv.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("inline runner serving tool %q (%s) on %s", cfg.ToolName, cfg.Language, cfg.Addr)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
-	return nil
+	return <-drained
 }
