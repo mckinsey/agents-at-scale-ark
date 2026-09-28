@@ -6,8 +6,9 @@ vars:
   STORAGE_BACKEND:
     source: env
     default: "etcd"
-  # INLINE_TOOLS_RUNTIME=true devspace dev  installs the inline activator, which
-  # needs a namespaced controller, so it is opt-in rather than the default.
+  # INLINE_TOOLS_RUNTIME=true devspace dev  enables inline tools and installs
+  # the activator, which needs a namespaced controller, so it is opt-in rather
+  # than the default.
   INLINE_TOOLS_RUNTIME:
     source: env
     default: "false"
@@ -60,7 +61,7 @@ functions:
 
 pipelines:
   deploy: |-
-    build_images --all
+    build_images ark-controller ark-completions
     if [ "${STORAGE_BACKEND}" == "postgresql" ]; then
       create_deployments ark-storage-dev
       for crd in $(kubectl get crd -o name 2>/dev/null | grep ark.mckinsey.com); do
@@ -129,11 +130,6 @@ deployments:
             runAsNonRoot: false
         webhook:
           enable: true
-        inlineTools:
-          enabled: true
-          runner:
-            image:
-              tag: dev
         completions:
           enabled: false
         telemetry:
@@ -249,10 +245,17 @@ profiles:
         path: deployments.ark-controller.helm.values.controllerManager
         value:
           watchNamespaces: ["default", "ark-system"]
+      # The chart refuses inlineTools.enabled without the activator, so both
+      # move together with the dev-built runner tag.
       - op: add
-        path: deployments.ark-controller.helm.values.inlineTools.activator
+        path: deployments.ark-controller.helm.values.inlineTools
         value:
           enabled: true
+          activator:
+            enabled: true
+          runner:
+            image:
+              tag: dev
   - name: storage-postgresql
     activation:
       - vars:
