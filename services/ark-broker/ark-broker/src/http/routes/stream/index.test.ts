@@ -293,24 +293,29 @@ describe('Streaming API', () => {
   });
 
   describe('Idle timeout', () => {
-    it('terminates a stream that goes silent after receiving chunks', async () => {
-      // Chunks arrive, then the executor dies before [DONE]/complete. The idle
-      // timeout (re-armed on each chunk) must still terminate the subscriber
-      // with a terminal [DONE] rather than hang forever.
-      app = buildStreamApp(250);
-      const queryId = 'stalled-after-chunks';
+    it('re-arms on each live chunk, then closes when truly idle', async () => {
+      // idle window = 200ms. Two live chunks: A before the initial arm elapses,
+      // B after it would have (but within the window A re-armed to). B is only
+      // delivered if A re-armed the timer — so this bites if the per-chunk
+      // re-arm in handleIncomingItem is removed. Then, with no more chunks, the
+      // idle timeout must still terminate the subscriber.
+      app = buildStreamApp(200);
+      const queryId = 'live-rearm';
 
-      await sendChunks(queryId, [createTextChunk('partial')]);
+      const streamPromise = consumeStream(queryId, {timeout: 1500});
 
-      const events = await consumeStream(queryId, {
-        fromBeginning: true,
-        timeout: 3000,
-      });
+      await new Promise((r) => setTimeout(r, 100)); // t~100 (< 200 initial arm)
+      await sendChunks(queryId, [createTextChunk('AAA')]); // re-arms to ~t+200
+      await new Promise((r) => setTimeout(r, 150)); // t~250 (past initial 200)
+      await sendChunks(queryId, [createTextChunk('BBB')]);
 
-      // The replayed chunk was delivered...
-      expect(events.some((e) => e.includes('partial'))).toBe(true);
-      // ...then the idle timeout closed the stream cleanly.
-      expect(events.some((e) => e.includes('timeout_error'))).toBe(true);
+      const events = await streamPromise;
+
+      expect(events.some((e) => e.includes('AAA'))).toBe(true);
+      // Delivered only because chunk A re-armed the idle timer past t=200.
+      expect(events.some((e) => e.includes('BBB'))).toBe(true);
+      // No further chunks -> idle timeout closes the stream cleanly.
+      expect(events.some((e) => e.includes('stream_idle_timeout'))).toBe(true);
       expect(events).toContain('[DONE]');
     });
   });

@@ -128,7 +128,8 @@ function flushBuffer(
   maxReplayedSeq: number,
   counters: StreamCounters,
   cleanup: () => void,
-  onComplete: () => void
+  onComplete: () => void,
+  rearmIdleTimeout: () => void
 ): boolean {
   for (const bufferedItem of buffer) {
     if (bufferedItem.sequenceNumber <= maxReplayedSeq) continue;
@@ -163,6 +164,9 @@ function flushBuffer(
       return false;
     }
 
+    // Re-arm per chunk so the idle bound holds across the flush, not just from
+    // stream open (matters for a large backlog to a slow client).
+    rearmIdleTimeout();
     counters.outboundChunkCount++;
     classifyChunk(chunk, counters.chunkTypeCounts);
   }
@@ -200,6 +204,9 @@ async function replayChunks(
       cleanup();
       return false;
     }
+    // Re-arm per replayed chunk: the idle bound is inter-chunk silence, so a
+    // large backlog must not run the whole clock from stream open.
+    state.rearmIdleTimeout();
     if (item.sequenceNumber > maxReplayedSeq) {
       maxReplayedSeq = item.sequenceNumber;
     }
@@ -213,7 +220,8 @@ async function replayChunks(
     maxReplayedSeq,
     state.counters,
     cleanup,
-    onComplete
+    onComplete,
+    state.rearmIdleTimeout
   );
 }
 
@@ -228,11 +236,17 @@ function onIdleTimeout(
   // whether or not any chunk was seen. Terminates the subscriber cleanly with a
   // terminal [DONE] so it never hangs on a stream that lost its completion.
   req.log.warn({queryName, timeout}, 'stream idle timeout; terminating');
+  // Distinct code so consumers can tell a broker-side idle bound from a real
+  // query failure: the Query CR is authoritative and may still be running. Until
+  // the Query-phase bound lands (#2862), downstream should treat this as
+  // "stream ended, check query status", not "query failed".
   const errorEvent = {
     error: {
-      message: 'Streaming query response timed out',
+      message:
+        `Stream closed after ${timeout}ms of inactivity; ` +
+        'the query may still be running — check its status',
       type: 'timeout_error',
-      code: 'timeout',
+      code: 'stream_idle_timeout',
     },
   };
   res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);

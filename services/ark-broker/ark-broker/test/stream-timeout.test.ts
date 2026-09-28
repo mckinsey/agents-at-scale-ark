@@ -28,11 +28,12 @@ describe('Stream Timeout', () => {
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toContain('text/event-stream');
 
-    // Should contain error event with streaming timeout message
+    // Should contain the idle-timeout error event, tagged with a distinct code
+    // so consumers can tell it from a real query failure.
     expect(response.text).toContain('data: {"error":{');
-    expect(response.text).toContain('Streaming query response timed out');
+    expect(response.text).toContain('inactivity');
     expect(response.text).toContain('"type":"timeout_error"');
-    expect(response.text).toContain('"code":"timeout"');
+    expect(response.text).toContain('"code":"stream_idle_timeout"');
 
     // Must end with [DONE] marker
     expect(response.text).toContain('data: [DONE]');
