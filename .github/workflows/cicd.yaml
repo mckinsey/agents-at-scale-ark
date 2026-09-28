@@ -837,6 +837,53 @@ jobs:
           path: /tmp/cluster-logs
           retention-days: 7
 
+  # Separate job: inline authoring and the activator ship disabled, and the
+  # activator refuses a cluster-wide binding, so the controller is narrowed to
+  # specific namespaces. Applied to the shared legs that would break the
+  # generated namespaces every other test uses. Calico from setup-k3s enforces
+  # the runner NetworkPolicies; the suite pins to the watched default namespace.
+  e2e-tests-inline:
+    name: E2E Inline Tools
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          install-broker: "true"
+          enable-inline-tools: "true"
+          prefetch-test-images: "true"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Install chainsaw
+        run: |
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/${{ env.CHAINSAW_VERSION }}/chainsaw_linux_amd64.tar.gz" | \
+            tar xz -C /tmp
+          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
+          sudo chmod +x /usr/local/bin/chainsaw
+
+      - name: Run inline tool E2E tests
+        run: |
+          cd tests
+          mkdir -p /tmp/chainsaw-report
+          chainsaw test --config .chainsaw.yaml --selector 'inline-tools'
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-inline-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
+
   e2e-tests-llm:
     name: E2E LLM (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
