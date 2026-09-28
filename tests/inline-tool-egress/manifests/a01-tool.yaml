@@ -25,11 +25,16 @@ spec:
       import sys
 
       args = json.loads(sys.argv[1])
+      host = args["host"]
+      port = int(args["port"])
+      result = {"host": host, "port": port}
       s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       s.settimeout(3)
       try:
-          s.connect((args["host"], int(args["port"])))
+          s.connect((host, port))
           s.close()
-          print(json.dumps({"reachable": True}))
+          result["reachable"] = True
       except Exception as exc:
-          print(json.dumps({"reachable": False, "error": type(exc).__name__}))
+          result["reachable"] = False
+          result["error"] = type(exc).__name__
+      print(json.dumps(result))
