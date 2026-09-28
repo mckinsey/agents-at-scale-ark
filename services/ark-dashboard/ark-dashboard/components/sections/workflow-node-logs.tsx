@@ -44,12 +44,7 @@ export function WorkflowNodeLogs({
   const key = useMemo(() => logBufferKey(target), [target]);
   const containerRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
-  const savedScrollState = getNodeLogScrollState(key);
-  const restoreScrollTopRef = useRef(
-    savedScrollState && !savedScrollState.stickToBottom
-      ? savedScrollState.scrollTop
-      : undefined,
-  );
+  const restoreScrollTopRef = useRef<number | undefined>(undefined);
   const restoreOffsetRef = useRef<number | null>(null);
   const pageCountRef = useRef(0);
   const wasRunningRef = useRef(isRunning);
@@ -104,6 +99,17 @@ export function WorkflowNodeLogs({
       restoreOffsetRef.current = container.scrollHeight - container.scrollTop;
     }
     void loadOlder(key, targetRef.current);
+  }, [key]);
+
+  useLayoutEffect(() => {
+    const savedScrollState = getNodeLogScrollState(key);
+    stickToBottomRef.current = savedScrollState?.stickToBottom ?? true;
+    restoreScrollTopRef.current =
+      savedScrollState && !savedScrollState.stickToBottom
+        ? savedScrollState.scrollTop
+        : undefined;
+    restoreOffsetRef.current = null;
+    pageCountRef.current = 0;
   }, [key]);
 
   useLayoutEffect(() => {

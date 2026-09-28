@@ -5,6 +5,7 @@ import { WorkflowNodeLogs } from '@/components/sections/workflow-node-logs';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
 import {
   getNodeLogBuffer,
+  getNodeLogScrollState,
   logBufferKey,
   resetNodeLogStore,
 } from '@/lib/services/workflow-logs-store';
@@ -18,6 +19,8 @@ const target = {
   workflowName: 'wf-1',
   nodeId: 'node-1',
 };
+
+const otherTarget = { ...target, nodeId: 'node-2' };
 
 function windowOf(content: string, hasMoreBefore = false) {
   return {
@@ -327,6 +330,131 @@ describe('WorkflowNodeLogs', () => {
     expect(screen.getByTestId('workflow-node-logs-scroll').scrollTop).toBe(
       1800,
     );
+  });
+
+  it('fetches and scrolls to the bottom of a node that has never been viewed when the target changes', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('alpha'))
+      .mockResolvedValueOnce(windowOf('beta'));
+
+    const { rerender } = await renderLogs();
+    const container = screen.getByTestId('workflow-node-logs-scroll');
+    stubScrollMetrics(container, 5000, 100);
+    container.scrollTop = 2000;
+    await act(async () => {
+      container.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    stubScrollMetrics(container, 3000, 100);
+    rerender(
+      <WorkflowNodeLogs
+        target={otherTarget}
+        isRunning={false}
+        argoUrl="http://argo.test"
+      />,
+    );
+    await act(async () => {});
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fetchNodeLogWindow).mock.calls[1][0].nodeId).toBe(
+      'node-2',
+    );
+    expect(screen.getByText('beta')).toBeInTheDocument();
+    expect(screen.queryByText('alpha')).not.toBeInTheDocument();
+    expect(container.scrollTop).toBe(3000);
+  });
+
+  it('restores the remembered scroll position without refetching when switching back to a node', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('alpha'))
+      .mockResolvedValueOnce(windowOf('beta'));
+
+    const { rerender } = await renderLogs();
+    const container = screen.getByTestId('workflow-node-logs-scroll');
+    stubScrollMetrics(container, 5000, 100);
+    container.scrollTop = 2000;
+    await act(async () => {
+      container.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    stubScrollMetrics(container, 3000, 100);
+    rerender(
+      <WorkflowNodeLogs
+        target={otherTarget}
+        isRunning={false}
+        argoUrl="http://argo.test"
+      />,
+    );
+    await act(async () => {});
+    expect(container.scrollTop).toBe(3000);
+
+    stubScrollMetrics(container, 5000, 100);
+    rerender(
+      <WorkflowNodeLogs
+        target={target}
+        isRunning={false}
+        argoUrl="http://argo.test"
+      />,
+    );
+    await act(async () => {});
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('alpha')).toBeInTheDocument();
+    expect(screen.queryByText('beta')).not.toBeInTheDocument();
+    expect(container.scrollTop).toBe(2000);
+  });
+
+  it('lands at the bottom when switching to a node remembered as stuck to the bottom', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('alpha'))
+      .mockResolvedValueOnce(windowOf('beta'));
+
+    const { rerender } = await renderLogs();
+    const container = screen.getByTestId('workflow-node-logs-scroll');
+    stubScrollMetrics(container, 5000, 100);
+    container.scrollTop = 2000;
+    await act(async () => {
+      container.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    stubScrollMetrics(container, 3000, 100);
+    rerender(
+      <WorkflowNodeLogs
+        target={otherTarget}
+        isRunning={false}
+        argoUrl="http://argo.test"
+      />,
+    );
+    await act(async () => {});
+    expect(getNodeLogScrollState(logBufferKey(otherTarget))).toEqual({
+      scrollTop: 3000,
+      stickToBottom: true,
+    });
+
+    stubScrollMetrics(container, 5000, 100);
+    rerender(
+      <WorkflowNodeLogs
+        target={target}
+        isRunning={false}
+        argoUrl="http://argo.test"
+      />,
+    );
+    await act(async () => {});
+    expect(container.scrollTop).toBe(2000);
+
+    stubScrollMetrics(container, 3500, 100);
+    rerender(
+      <WorkflowNodeLogs
+        target={otherTarget}
+        isRunning={false}
+        argoUrl="http://argo.test"
+      />,
+    );
+    await act(async () => {});
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('beta')).toBeInTheDocument();
+    expect(container.scrollTop).toBe(3500);
   });
 
   it('offers the Argo UI link when the logs cannot be loaded', async () => {
