@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkflowNodeLogs } from '@/components/sections/workflow-node-logs';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
-import { resetNodeLogStore } from '@/lib/services/workflow-logs-store';
+import {
+  getNodeLogBuffer,
+  logBufferKey,
+  resetNodeLogStore,
+} from '@/lib/services/workflow-logs-store';
 
 vi.mock('@/lib/services/workflow-logs', () => ({
   fetchNodeLogWindow: vi.fn(),
@@ -103,6 +107,46 @@ describe('WorkflowNodeLogs', () => {
     });
 
     expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the viewport anchored on the same content when an older page prepends', async () => {
+    let resolveOlder: (window: ReturnType<typeof windowOf>) => void = () => {};
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('newer', true))
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            resolveOlder = resolve;
+          }),
+      );
+
+    render(
+      <WorkflowNodeLogs
+        target={target}
+        isRunning={false}
+        argoUrl="http://argo.test"
+      />,
+    );
+    const container = screen.getByTestId('workflow-node-logs-scroll');
+    stubScrollMetrics(container, 1000, 100);
+    await act(async () => {});
+
+    container.scrollTop = 150;
+    await act(async () => {
+      container.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+
+    stubScrollMetrics(container, 1600, 100);
+    await act(async () => {
+      resolveOlder(windowOf('older', false));
+    });
+
+    expect(container.scrollTop).toBe(1600 - (1000 - 150));
+    expect(getNodeLogBuffer(logBufferKey(target)).pages).toEqual([
+      'older',
+      'newer',
+    ]);
   });
 
   it('polls for new lines while the node is running', async () => {

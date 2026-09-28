@@ -115,7 +115,7 @@ export function WorkflowNodeLogs({
 
     const restoreOffset = restoreOffsetRef.current;
     if (restoreOffset !== null) {
-      restoreOffsetRef.current = null;
+      if (!buffer.loadingOlder) restoreOffsetRef.current = null;
       container.scrollTop = container.scrollHeight - restoreOffset;
       rememberScroll();
       return;
