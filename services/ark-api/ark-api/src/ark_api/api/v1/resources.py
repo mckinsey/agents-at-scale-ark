@@ -949,19 +949,28 @@ async def _open_pod_log_stream(core_v1: CoreV1Api, namespace: str, pod_name: str
     return response
 
 
-async def _collect_log_window(response, collector: _LogWindowCollector) -> None:
+async def _collect_log_window(
+    response, collector: _LogWindowCollector, limit_bytes: Optional[int] = None
+) -> None:
     pending = b""
+    received = 0
     async for chunk in response.content.iter_chunked(LOG_STREAM_CHUNK_BYTES):
         if collector.done:
             break
+        received += len(chunk)
         pending += chunk
         *complete, pending = pending.split(b"\n")
         for raw_line in complete:
             collector.add(raw_line.decode("utf-8", errors="replace"))
             if collector.done:
                 return
-    if pending and not collector.done:
-        collector.add(pending.decode("utf-8", errors="replace"))
+    if not pending or collector.done:
+        return
+    if limit_bytes is not None and received >= limit_bytes:
+        collector.truncated = True
+        if collector.lines:
+            return
+    collector.add(pending.decode("utf-8", errors="replace"))
 
 
 async def _read_log_head_timestamp(
@@ -1075,7 +1084,7 @@ async def _read_appended_window(
         keep_newest=False,
     )
     try:
-        await _collect_log_window(response, collector)
+        await _collect_log_window(response, collector, limit_bytes=max_bytes)
     finally:
         response.release()
 

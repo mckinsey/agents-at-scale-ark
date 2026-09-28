@@ -1836,6 +1836,25 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
+    def test_append_page_cut_mid_line_by_byte_limit_keeps_whole_lines(self, mock_core_v1_cls, mock_api_client):
+        """A byte-limited append page drops the cut tail line so the cursor never skips it."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        _, streams = self._mock_core_v1(mock_core_v1_cls, 6, line_bytes=400)
+
+        body = self.client.get(
+            "/v1/resources/api/v1/namespaces/default/pods/test-pod/log/window"
+            "?since_timestamp=2024-01-01T00:00:00.000000000Z&max_bytes=1024"
+        ).json()
+
+        self.assertEqual(streams[0][0]["limit_bytes"], 1024)
+        self.assertEqual(len(streams[0][1].content.data), 1024)
+        self.assertEqual(body["content"], "x" * 400 + " 1")
+        self.assertEqual(body["line_count"], 1)
+        self.assertEqual(body["last_timestamp"], "2024-01-01T00:00:01.000000001Z")
+        self.assertTrue(body["truncated"])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
     def test_timestamps_are_always_requested_and_stripped(self, mock_core_v1_cls, mock_api_client):
         """Timestamps drive the cursor but never reach the rendered content."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
