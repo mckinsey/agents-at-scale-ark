@@ -7,7 +7,9 @@ End-to-end lifecycle of a `type: inline` Tool on an inline-enabled cluster.
   resolved endpoint, and admission stamps the authorship annotations.
 - **Provisioning**: the controller creates the full owned child set
   (Deployment, Service, ConfigMap, ServiceAccount, NetworkPolicy).
-- **Idle**: an available inline Tool keeps its runner scaled to zero.
+- **Idle**: a newly provisioned inline Tool keeps its runner scaled to zero,
+  and the activator scales a warmed runner back down within the idle window
+  after the call completes.
 - **Attach/discover**: an Agent referencing the inline tool becomes `Available`.
 - **Call**: a `type: tool` Query returns the runner's output.
 - **Edit**: changing the source reconciles the new generation and propagates to
