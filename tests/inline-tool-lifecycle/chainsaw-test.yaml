@@ -104,9 +104,10 @@ spec:
         name: inline-doubler
         namespace: default
 
-  - name: idle-scale-to-zero
+  - name: provisions-cold
     try:
-    # Available inline tool keeps no warm pod; runner starts on first call.
+    # A newly provisioned inline tool keeps no warm pod; the runner starts on
+    # the first call.
     - assert:
         resource:
           apiVersion: apps/v1
@@ -159,9 +160,8 @@ spec:
         namespace: default
         timeout: 90s
         for:
-          condition:
-            name: Completed
-            value: 'True'
+          jsonPath:
+            path: '{.status.response.content}'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -178,6 +178,29 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: inline-doubler-call
+        namespace: default
+
+  - name: idle-scale-to-zero
+    try:
+    # The call warmed the runner, so this fails unless the activator's idle
+    # sweep scales it back down. The sweep ticks every second against a 60s
+    # idle window measured from the last completion.
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+          spec:
+            replicas: 0
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: inline-doubler-runner
         namespace: default
 
   - name: edit
@@ -258,6 +281,13 @@ spec:
           kind: ConfigMap
           metadata:
             name: inline-doubler-source
+            namespace: default
+    - error:
+        resource:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: inline-doubler-runner
             namespace: default
     - error:
         resource:
