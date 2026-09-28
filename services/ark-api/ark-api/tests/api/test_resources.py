@@ -2190,5 +2190,166 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         self.assertTrue(stream.released)
 
 
+class TestLogWindowTimestampHelpers(unittest.TestCase):
+    """Direct unit tests for the log window timestamp helpers."""
+
+    def test_normalize_adds_nanosecond_fraction_when_missing(self):
+        from ark_api.api.v1.resources import _normalize_log_timestamp
+
+        self.assertEqual(_normalize_log_timestamp("2024-01-01T00:00:00Z"), "2024-01-01T00:00:00.000000000Z")
+
+    def test_normalize_pads_short_fraction_to_nine_digits(self):
+        from ark_api.api.v1.resources import _normalize_log_timestamp
+
+        self.assertEqual(_normalize_log_timestamp("2024-01-01T00:00:00.123Z"), "2024-01-01T00:00:00.123000000Z")
+
+    def test_normalize_truncates_long_fraction_to_nine_digits(self):
+        from ark_api.api.v1.resources import _normalize_log_timestamp
+
+        self.assertEqual(
+            _normalize_log_timestamp("2024-01-01T00:00:00.1234567890123Z"),
+            "2024-01-01T00:00:00.123456789Z",
+        )
+
+    def test_normalize_appends_z_when_missing(self):
+        from ark_api.api.v1.resources import _normalize_log_timestamp
+
+        self.assertEqual(_normalize_log_timestamp("2024-01-01T00:00:00.5"), "2024-01-01T00:00:00.500000000Z")
+
+    def test_normalize_returns_non_matching_value_unchanged(self):
+        from ark_api.api.v1.resources import _normalize_log_timestamp
+
+        self.assertEqual(_normalize_log_timestamp("not a timestamp"), "not a timestamp")
+
+    def test_parse_returns_aware_utc_datetime(self):
+        from datetime import datetime, timezone
+        from ark_api.api.v1.resources import _parse_log_timestamp
+
+        parsed = _parse_log_timestamp("2024-01-01T12:34:56.000000000Z")
+
+        self.assertEqual(parsed, datetime(2024, 1, 1, 12, 34, 56, tzinfo=timezone.utc))
+        self.assertEqual(parsed.utcoffset().total_seconds(), 0)
+
+    def test_parse_drops_sub_microsecond_digits(self):
+        from ark_api.api.v1.resources import _parse_log_timestamp
+
+        parsed = _parse_log_timestamp("2024-01-01T00:00:00.123456789Z")
+
+        self.assertEqual(parsed.microsecond, 123456)
+
+    def test_parse_returns_none_for_non_matching_string(self):
+        from ark_api.api.v1.resources import _parse_log_timestamp
+
+        self.assertIsNone(_parse_log_timestamp("line 1"))
+
+    def test_parse_returns_none_for_invalid_date(self):
+        from ark_api.api.v1.resources import _parse_log_timestamp
+
+        self.assertIsNone(_parse_log_timestamp("2024-13-45T99:99:99Z"))
+
+    def test_split_returns_timestamp_and_text(self):
+        from ark_api.api.v1.resources import _split_log_line
+
+        self.assertEqual(
+            _split_log_line("2024-01-01T00:00:00.000000000Z hello world"),
+            ("2024-01-01T00:00:00.000000000Z", "hello world"),
+        )
+
+    def test_split_keeps_whole_line_when_first_token_is_not_a_timestamp(self):
+        from ark_api.api.v1.resources import _split_log_line
+
+        self.assertEqual(_split_log_line("hello world"), (None, "hello world"))
+
+    def test_split_returns_empty_text_for_timestamp_with_trailing_space(self):
+        from ark_api.api.v1.resources import _split_log_line
+
+        self.assertEqual(_split_log_line("2024-01-01T00:00:00Z "), ("2024-01-01T00:00:00Z", ""))
+
+    def test_split_keeps_bare_timestamp_as_text(self):
+        from ark_api.api.v1.resources import _split_log_line
+
+        self.assertEqual(_split_log_line("2024-01-01T00:00:00Z"), (None, "2024-01-01T00:00:00Z"))
+
+    def test_since_seconds_covers_elapsed_time_plus_slack(self):
+        from datetime import datetime, timedelta, timezone
+        from ark_api.api.v1.resources import LOG_WINDOW_SINCE_SLACK_SECONDS, _since_seconds_for
+
+        past = datetime.now(timezone.utc) - timedelta(seconds=100)
+
+        result = _since_seconds_for(past.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+
+        self.assertGreaterEqual(result, 100 + LOG_WINDOW_SINCE_SLACK_SECONDS)
+        self.assertLessEqual(result, 100 + LOG_WINDOW_SINCE_SLACK_SECONDS + 2)
+
+    def test_since_seconds_is_at_least_one_for_future_timestamp(self):
+        from datetime import datetime, timedelta, timezone
+        from ark_api.api.v1.resources import _since_seconds_for
+
+        future = datetime.now(timezone.utc) + timedelta(seconds=600)
+
+        self.assertGreaterEqual(_since_seconds_for(future.strftime("%Y-%m-%dT%H:%M:%SZ")), 1)
+
+    def test_since_seconds_returns_none_for_invalid_timestamp(self):
+        from ark_api.api.v1.resources import _since_seconds_for
+
+        self.assertIsNone(_since_seconds_for("yesterday"))
+
+    def _collector(self, min_timestamp=None, max_timestamp=None):
+        from ark_api.api.v1.resources import _LogWindowCollector
+
+        return _LogWindowCollector(
+            read_limit=10,
+            max_bytes=1024,
+            min_timestamp=min_timestamp,
+            max_timestamp=max_timestamp,
+            keep_newest=False,
+        )
+
+    def test_collector_rejects_untimestamped_line_when_min_cursor_set(self):
+        collector = self._collector(min_timestamp="2024-01-01T00:00:00Z")
+
+        collector.add("no timestamp here")
+
+        self.assertEqual(list(collector.lines), [])
+        self.assertEqual(collector.lines_read, 1)
+
+    def test_collector_admits_untimestamped_line_when_only_max_cursor_set(self):
+        collector = self._collector(max_timestamp="2024-01-01T00:00:00Z")
+
+        collector.add("no timestamp here")
+
+        self.assertEqual(list(collector.lines), ["no timestamp here"])
+        self.assertFalse(collector.reached_known_lines)
+
+    def test_collector_rejects_line_at_or_after_max_cursor(self):
+        collector = self._collector(max_timestamp="2024-01-01T00:00:05Z")
+
+        collector.add("2024-01-01T00:00:04.999999999Z before")
+        collector.add("2024-01-01T00:00:05.000000000Z at")
+        collector.add("2024-01-01T00:00:06Z after")
+
+        self.assertEqual(list(collector.lines), ["before"])
+        self.assertTrue(collector.reached_known_lines)
+
+    def test_collector_rejects_line_equal_to_min_cursor_and_admits_newer(self):
+        collector = self._collector(min_timestamp="2024-01-01T00:00:05Z")
+
+        collector.add("2024-01-01T00:00:05.000000000Z equal")
+        collector.add("2024-01-01T00:00:05.000000001Z newer")
+
+        self.assertEqual(list(collector.lines), ["newer"])
+        self.assertEqual(list(collector.timestamps), ["2024-01-01T00:00:05.000000001Z"])
+
+    def test_collector_compares_cursors_across_fraction_precision(self):
+        collector = self._collector(min_timestamp="2024-01-01T00:00:01Z", max_timestamp="2024-01-01T00:00:02.5Z")
+
+        collector.add("2024-01-01T00:00:01.000000001Z first")
+        collector.add("2024-01-01T00:00:02.499Z second")
+        collector.add("2024-01-01T00:00:02.500000000Z third")
+
+        self.assertEqual(list(collector.lines), ["first", "second"])
+        self.assertTrue(collector.reached_known_lines)
+
+
 if __name__ == "__main__":
     unittest.main()
