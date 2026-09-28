@@ -407,15 +407,18 @@ describe('FloatingChat', () => {
       });
       expect(input).toBeDisabled();
 
-      // The terminal phase must stop the hung stream so the chat leaves the
-      // streaming state. Without the phase→stop wiring the input stays disabled
-      // forever and this times out. It is a clean close, not an error.
+      // A re-enabled input is how the chat signals it left the streaming state.
+      // The hung stream never ends on its own, so this only happens if the
+      // terminal-phase poll stops it; without that wiring the input stays
+      // disabled and this waitFor times out.
       await waitFor(
         () => {
           expect(input).not.toBeDisabled();
         },
         { timeout: 4000 },
       );
+      // Stopping is a clean close, not an abort surfaced to the user: no error
+      // message is rendered for the turn.
       expect(
         screen.queryByText(/Failed to send message/i),
       ).not.toBeInTheDocument();
