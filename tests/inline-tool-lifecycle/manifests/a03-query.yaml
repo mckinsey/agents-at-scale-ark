@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: inline-doubler-call
+  namespace: default
+spec:
+  input: '{"n": 5}'
+  target:
+    type: tool
+    name: inline-doubler
