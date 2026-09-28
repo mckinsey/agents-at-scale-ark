@@ -61,6 +61,7 @@ var _ = Describe("Query Controller reconcile amplification", func() {
 
 		r := &QueryReconciler{
 			Client:    mgr.GetClient(),
+			APIReader: mgr.GetAPIReader(),
 			Scheme:    mgr.GetScheme(),
 			Telemetry: telemetryconfig.NewProvider(ctx, nil),
 			Eventing:  eventingconfig.NewProviderWithClient(ctx, nil),

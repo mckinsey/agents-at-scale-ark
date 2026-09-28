@@ -133,6 +133,11 @@ type QueryReconciler struct {
 	// default (1).
 	MaxConcurrentReconciles int
 
+	// APIReader bypasses the informer cache. signalRequeue's trigger is a local
+	// channel, not a watch event, so the reconcile it causes can otherwise race
+	// the cache still catching up to the write that triggered it.
+	APIReader client.Reader
+
 	sched         *fairScheduler
 	operations    sync.Map
 	saClients     *impersonatedClientCache
@@ -201,9 +206,19 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return r.handleQueryExecution(ctx, req, obj)
 }
 
+// fetchQuery reads the Query directly from the API server rather than the
+// informer cache. signalRequeue's trigger is a local channel, not a watch
+// event, so a reconcile it causes can otherwise run before the cache has
+// observed this same Query's own prior status writes — leading Reconcile to
+// act on a stale phase (e.g. clobbering a finished status, or re-running
+// handleRunningPhase and spawning a duplicate execution goroutine).
 func (r *QueryReconciler) fetchQuery(ctx context.Context, namespacedName types.NamespacedName) (arkv1alpha1.Query, error) {
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
 	var obj arkv1alpha1.Query
-	err := r.Get(ctx, namespacedName, &obj)
+	err := reader.Get(ctx, namespacedName, &obj)
 	return obj, err
 }
 
