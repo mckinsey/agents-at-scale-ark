@@ -127,8 +127,8 @@ func TestValidateAgent(t *testing.T) {
 			},
 		}
 		_, err := v.ValidateAgent(ctx, agent)
-		if err == nil {
-			t.Fatal("expected error for inline tool without name")
+		if err == nil || !strings.Contains(err.Error(), "inline tools must specify a name") {
+			t.Fatalf("expected inline name error, got: %v", err)
 		}
 	})
 
