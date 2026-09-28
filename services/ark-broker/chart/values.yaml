@@ -130,6 +130,10 @@ app:
 
 server:
   requestTimeout: 0
+  # Milliseconds of inter-chunk silence before an SSE stream subscriber is
+  # closed with a terminal event. Backstop that bounds every consumer; the
+  # precise bound is the Query CR phase (see #2862).
+  streamIdleTimeout: 300000
 
 replicaCount: 1
 
