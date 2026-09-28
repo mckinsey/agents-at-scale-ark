@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { SessionsView } from '@/components/broker/sessions-view';
 import { StreamView } from '@/components/broker/stream-view';
