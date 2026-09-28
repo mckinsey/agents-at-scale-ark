@@ -1,0 +1,77 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: inline-tool-admission
+  labels:
+    inline-tools: "true"
+spec:
+  # Admission enforcement is the same decision on both storage backends: the
+  # webhook on etcd and the embedded apiserver on postgresql. The dedicated
+  # inline e2e job runs this on both. Pin to the watched default namespace.
+  namespace: default
+  description: >
+    Inline authoring admission: an identity that can author Tools but lacks the
+    inlinetools use permission is denied, an authorized one is accepted, and
+    admission stamps authorship over any requester-supplied value.
+  steps:
+  - name: rbac
+    try:
+    - apply:
+        file: manifests/a01-rbac.yaml
+
+  - name: deny-unauthorized-author
+    try:
+    # tools/create alone must not let a subject introduce executable source.
+    - script:
+        timeout: 60s
+        content: |
+          set -o pipefail
+          sa=system:serviceaccount:default:inline-unauth
+          if out=$(kubectl apply --as="$sa" -f manifests/a02-tool.yaml 2>&1); then
+            echo "expected denial but the apply succeeded: $out"
+            exit 1
+          fi
+          echo "$out" | grep -q 'not permitted to author inline tools' || {
+            echo "denied, but for the wrong reason: $out"
+            exit 1
+          }
+          echo "correctly denied"
+    # The denied apply created nothing.
+    - error:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: inline-admission-probe
+            namespace: default
+
+  - name: accept-authorized-and-stamp-authorship
+    try:
+    - apply:
+        file: manifests/a02-tool.yaml
+    # Accepted, and the requester-supplied authored-by is overwritten by the
+    # real authenticated identity, not left at the submitted value.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: inline-admission-probe
+            namespace: default
+            (annotations."ark.mckinsey.com/inline-authored-by" != null): true
+            (annotations."ark.mckinsey.com/inline-authored-by" != 'attacker-supplied'): true
+            (annotations."ark.mckinsey.com/inline-authored-at" != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Tool
+        name: inline-admission-probe
+        namespace: default
+    cleanup:
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          name: inline-admission-probe
+          namespace: default
