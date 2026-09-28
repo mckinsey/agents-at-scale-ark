@@ -17,7 +17,10 @@ import {
 } from './schemas.js';
 import {handleQueryStream, processNDJSONData} from './handlers.js';
 
-export function createStreamRouter(chunks: CompletionChunkBroker): Router {
+export function createStreamRouter(
+  chunks: CompletionChunkBroker,
+  idleTimeoutMs: number
+): Router {
   const router = Router();
 
   /**
@@ -102,11 +105,6 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *           default: false
    *         description: Replay all chunks from the beginning
    *       - in: query
-   *         name: wait-for-query
-   *         schema:
-   *           type: integer
-   *         description: Wait timeout in seconds for query to start (e.g., 30, 300)
-   *       - in: query
    *         name: max-chunk-size
    *         schema:
    *           type: integer
@@ -138,8 +136,8 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           chunks,
           query_name,
           streamQuery['from-beginning'] ?? false,
-          streamQuery['wait-for-query'],
-          streamQuery['max-chunk-size'] ?? 50
+          streamQuery['max-chunk-size'] ?? 50,
+          idleTimeoutMs
         );
       } catch (error) {
         req.log.error({err: error}, 'failed to handle stream request');
