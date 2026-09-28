@@ -1,12 +1,19 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionsSection } from '@/components/sections/sessions-section';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
 import { resetNodeLogStore } from '@/lib/services/workflow-logs-store';
 import {
+  type MappedStepStatus,
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
@@ -1343,6 +1350,82 @@ describe('SessionsSection', () => {
       );
 
       expect(screen.getByText('alpine:3.20')).toBeInTheDocument();
+    });
+  });
+
+  describe('Step log polling', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function expandStepWithStatus(status: MappedStepStatus) {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({
+        advanceTimers: vi.advanceTimersByTime,
+      });
+      vi.mocked(fetchNodeLogWindow).mockResolvedValue({
+        content: 'log line',
+        line_count: 1,
+        byte_count: 8,
+        has_more_before: false,
+        truncated: false,
+        first_timestamp: null,
+        last_timestamp: 't1',
+      });
+      vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
+        {
+          id: 'poll-workflow',
+          name: 'poll-workflow',
+          type: 'workflow' as const,
+          status,
+          startedAt: '2024-01-15T10:00:00Z',
+          duration: '1m',
+          steps: [
+            {
+              id: 'poll-step',
+              name: 'poll-step',
+              displayName: 'poll-step',
+              type: 'container' as const,
+              status,
+              detail: {
+                podName: 'poll-workflow-poll-step-123',
+                workflowName: 'poll-workflow',
+                nodeId: 'node-1',
+                namespace: 'default',
+              },
+            },
+          ],
+        },
+      ]);
+
+      render(<SessionsSection />);
+
+      await user.click(
+        screen.getByRole('button', { name: /poll-step, expand/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('log line')).toBeInTheDocument();
+      });
+      expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3100);
+      });
+    }
+
+    it('should keep polling logs for a running step', async () => {
+      await expandStepWithStatus('running');
+
+      expect(vi.mocked(fetchNodeLogWindow).mock.calls.length).toBeGreaterThan(
+        1,
+      );
+    });
+
+    it('should fetch logs once for a finished step', async () => {
+      await expandStepWithStatus('succeeded');
+
+      expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -179,6 +179,58 @@ describe('WorkflowNodeLogs', () => {
     );
   });
 
+  it('fetches the tail once more when the node finishes and then stops', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('a'));
+
+    const { rerender } = await renderLogs(true);
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <WorkflowNodeLogs
+        target={target}
+        isRunning={false}
+        argoUrl="http://argo.test"
+      />,
+    );
+    await act(async () => {});
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fetchNodeLogWindow).mock.calls[1][1]).toMatchObject({
+      sinceTimestamp: 't1',
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts polling when the node begins running after mount', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('a'));
+
+    const { rerender } = await renderLogs(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <WorkflowNodeLogs
+        target={target}
+        isRunning={true}
+        argoUrl="http://argo.test"
+      />,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+
+    expect(vi.mocked(fetchNodeLogWindow).mock.calls.length).toBeGreaterThan(1);
+  });
+
   it('reuses the buffer after a collapse and re-expand', async () => {
     vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('kept'));
 
