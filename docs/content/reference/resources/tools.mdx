@@ -380,10 +380,10 @@ kubectl get events --field-selector involvedObject.name=word-count,reason=Inline
 | Tool error naming a missing package, or a connection failure | Runners are standard-library only with all egress denied. Move the tool to an [MCPServer](/reference/resources/mcpserver). |
 | Tool error with truncated stderr | Errors carry the last 4 KiB of stderr; stdout is capped at 256 KiB. Print less, or summarise in the script. |
 
-Runner logs are per pod and only exist while a runner is warm:
+A runner logs nothing but its own startup line, so a failing call leaves no trace in `kubectl logs`. The script's stderr is returned to the caller in the tool error instead. A runner that never gets that far — a revision mismatch or an image it cannot pull — shows the reason in its pod events:
 
 ```bash
-kubectl logs -l ark.mckinsey.com/inline-tool=word-count --tail=50
+kubectl describe pod -l ark.mckinsey.com/inline-tool=word-count
 ```
 
 ## Referencing tools from an agent
