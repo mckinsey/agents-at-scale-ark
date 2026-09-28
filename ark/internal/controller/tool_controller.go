@@ -154,6 +154,7 @@ func (r *ToolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Owned children are watched so drift is corrected without waiting for a
 		// resync, and so a deleted child is recreated.
 		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&networkingv1.NetworkPolicy{}).

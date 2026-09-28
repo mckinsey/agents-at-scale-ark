@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,6 +14,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -195,6 +200,77 @@ var _ = Describe("Tool Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedTool)).To(Succeed())
 			Expect(updatedTool.Status.State).To(Equal(arkv1alpha1.ToolStatePending))
 			Expect(updatedTool.Status.ResolvedAddress).To(BeEmpty())
+		})
+	})
+
+	Context("When an owned child is deleted out of band", func() {
+		const resourceName = "inline-owned-watch"
+
+		It("recreates the ServiceAccount from its own watch, with no other trigger", func() {
+			GinkgoT().Setenv(inlinetools.EnabledEnvVar, "true")
+			GinkgoT().Setenv(runner.EnvImageRepository, "ghcr.io/example/ark-inline-runner")
+			GinkgoT().Setenv(runner.EnvImageTag, "v1.2.3")
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+				Scheme:  scheme.Scheme,
+				Metrics: metricsserver.Options{BindAddress: "0"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect((&ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager(mgr)).To(Succeed())
+
+			go func() {
+				defer GinkgoRecover()
+				Expect(mgr.Start(ctx)).To(Succeed())
+			}()
+			Expect(mgr.GetCache().WaitForCacheSync(ctx)).To(BeTrue())
+
+			tool := &arkv1alpha1.Tool{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: arkv1alpha1.ToolSpec{
+					Type:   arkv1alpha1.ToolTypeInline,
+					Inline: &arkv1alpha1.InlineSpec{Source: "print(1)", Language: arkv1alpha1.InlineLanguagePython},
+				},
+			}
+			Expect(k8sClient.Create(ctx, tool)).To(Succeed())
+			DeferCleanup(func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(context.Background(), tool))).To(Succeed())
+			})
+
+			serviceAccountKey := types.NamespacedName{Name: inlineChildNames(resourceName).Runner, Namespace: "default"}
+			serviceAccount := &corev1.ServiceAccount{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, serviceAccountKey, serviceAccount)
+			}, 10*time.Second).Should(Succeed(), "the first reconcile should provision the runner ServiceAccount")
+			originalUID := serviceAccount.UID
+
+			// The Tool must be settled before the delete, so that the recreation
+			// below can only have come from the ServiceAccount watch: a status write
+			// still in flight would itself queue another Tool reconcile.
+			Eventually(func(g Gomega) {
+				settling := &arkv1alpha1.Tool{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tool), settling)).To(Succeed())
+				condition := meta.FindStatusCondition(settling.Status.Conditions, arkv1alpha1.ToolConditionAvailable)
+				g.Expect(condition).NotTo(BeNil())
+				g.Expect(condition.ObservedGeneration).To(Equal(settling.Generation))
+			}, 10*time.Second).Should(Succeed())
+			Consistently(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, serviceAccountKey, serviceAccount)).To(Succeed())
+				g.Expect(serviceAccount.UID).To(Equal(originalUID))
+			}, 2*time.Second, 200*time.Millisecond).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, serviceAccount)).To(Succeed())
+
+			Eventually(func(g Gomega) types.UID {
+				recreated := &corev1.ServiceAccount{}
+				g.Expect(k8sClient.Get(ctx, serviceAccountKey, recreated)).To(Succeed())
+				g.Expect(recreated.AutomountServiceAccountToken).NotTo(BeNil())
+				g.Expect(*recreated.AutomountServiceAccountToken).To(BeFalse())
+				return recreated.UID
+			}, 15*time.Second).ShouldNot(Equal(originalUID),
+				"deleting the ServiceAccount must trigger the Tool's own watch and recreate it")
 		})
 	})
 })
