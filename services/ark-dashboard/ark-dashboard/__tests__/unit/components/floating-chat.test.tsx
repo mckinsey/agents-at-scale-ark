@@ -62,6 +62,12 @@ vi.mock('jotai', async importOriginal => {
   };
 });
 
+// Shaped like the DOM AbortError the real fetch throws, so the hook's
+// `err.name === 'AbortError'` swallow path is exercised.
+function makeAbortError(): Error {
+  return Object.assign(new Error('Aborted'), { name: 'AbortError' });
+}
+
 function renderFloatingChat(
   props: {
     id: string;
@@ -345,32 +351,45 @@ describe('FloatingChat', () => {
       expect(screen.getByText('Second response')).toBeInTheDocument();
     });
 
-    it('aborts a hung chunk stream when the query reaches a terminal phase (#2862)', async () => {
+    it('stops a hung chunk stream when the query reaches a terminal phase (#2862)', async () => {
       const user = userEvent.setup();
 
-      // Chunk stream that yields once, then hangs until aborted — simulates the
-      // broker never sending [DONE] (executor killed / broker unreachable).
+      // Chunk stream that yields once, then hangs until the transport is
+      // released — simulates the broker never sending [DONE] (executor killed /
+      // broker unreachable).
       vi.mocked(chatService.streamChatResponse).mockImplementation(
-        async function* (...args: unknown[]) {
-          const signal = args[7] as AbortSignal | undefined;
+        async function* (
+          _namespace,
+          _input,
+          _targetType,
+          _targetName,
+          _sessionId,
+          _conversationId,
+          _timeout,
+          abortSignal,
+        ) {
           yield { choices: [{ delta: { content: 'partial' } }] };
           await new Promise<void>((_resolve, reject) => {
-            const fail = () =>
-              reject(
-                Object.assign(new Error('Aborted'), { name: 'AbortError' }),
-              );
-            if (signal?.aborted) return fail();
-            signal?.addEventListener('abort', fail, { once: true });
+            if (abortSignal?.aborted) return reject(makeAbortError());
+            abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
           });
         },
       );
 
-      // Query reaches a terminal phase with no [DONE] on the chunk stream:
-      // fire the onTerminal callback (5th arg) the hook passes to bind the
-      // stream to the phase poll.
+      // Query reaches a terminal phase with no [DONE] on the chunk stream: fire
+      // the onTerminal callback the hook passes to bind the stream to the poll.
       vi.mocked(chatService.streamQueryStatus).mockImplementation(
-        async (...args: unknown[]) => {
-          const onTerminal = args[4] as ((phase: string) => void) | undefined;
+        async (
+          _namespace,
+          _queryName,
+          _onUpdate,
+          _pollInterval,
+          onTerminal,
+        ) => {
           onTerminal?.('done');
           return () => {};
         },
@@ -388,15 +407,82 @@ describe('FloatingChat', () => {
       });
       expect(input).toBeDisabled();
 
-      // The terminal phase must force the hung stream closed so the chat leaves
-      // the streaming state. Without the phase→abort wiring the input stays
-      // disabled forever and this times out.
+      // The terminal phase must stop the hung stream so the chat leaves the
+      // streaming state. Without the phase→stop wiring the input stays disabled
+      // forever and this times out. It is a clean close, not an error.
       await waitFor(
         () => {
           expect(input).not.toBeDisabled();
         },
         { timeout: 4000 },
       );
+      expect(
+        screen.queryByText(/Failed to send message/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('lets a late chunk within the grace finish instead of truncating (#2862)', async () => {
+      const user = userEvent.setup();
+
+      // The query goes terminal while a final chunk is still in flight. The
+      // grace must let that chunk land rather than stopping the stream at once.
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* (
+          _namespace,
+          _input,
+          _targetType,
+          _targetName,
+          _sessionId,
+          _conversationId,
+          _timeout,
+          abortSignal,
+        ) {
+          yield { choices: [{ delta: { content: 'part1' } }] };
+          const late = new Promise<void>(resolve => setTimeout(resolve, 50));
+          const released = new Promise<never>((_resolve, reject) => {
+            if (abortSignal?.aborted) return reject(makeAbortError());
+            abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+          await Promise.race([late, released]);
+          yield {
+            choices: [{ delta: { content: 'part2' }, finish_reason: 'stop' }],
+          };
+        },
+      );
+
+      vi.mocked(chatService.streamQueryStatus).mockImplementation(
+        async (
+          _namespace,
+          _queryName,
+          _onUpdate,
+          _pollInterval,
+          onTerminal,
+        ) => {
+          onTerminal?.('done');
+          return () => {};
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Hi');
+      await user.click(screen.getByRole('button', { name: /send/i }));
+
+      // The late chunk must arrive; a zero grace would stop before it lands.
+      await waitFor(() => {
+        expect(screen.getByText('part1part2')).toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(input).not.toBeDisabled();
+      });
+      expect(
+        screen.queryByText(/Failed to send message/i),
+      ).not.toBeInTheDocument();
     });
   });
 

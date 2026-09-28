@@ -38,6 +38,39 @@ import type {
 
 type ResultMessage = NonNullable<ChatResponse['messages']>[number];
 
+// How long to keep draining the chunk stream after the Query phase goes
+// terminal, so an in-flight [DONE]/finalize chunk still lands before we stop.
+const STREAM_TERMINAL_STOP_GRACE_MS = 300;
+
+// Consume `source` until it ends or `stop` resolves, whichever comes first. On
+// `stop` we end iteration cleanly so the caller's normal post-stream
+// finalization runs — unlike aborting mid-loop, which throws past it. A hung
+// read can only be unblocked by cancelling the transport, so `releaseStream`
+// cancels the underlying fetch; the resulting rejection settles on the
+// abandoned read and is swallowed rather than surfaced as an error.
+async function* stopStreamOnSignal<T>(
+  source: AsyncIterable<T>,
+  stop: Promise<void>,
+  releaseStream: () => void,
+  onStop: () => void,
+): AsyncGenerator<T> {
+  const iterator = source[Symbol.asyncIterator]();
+  const STOP: unique symbol = Symbol('stop');
+  const stopSignal = stop.then((): typeof STOP => STOP);
+  while (true) {
+    const read = iterator.next();
+    const winner = await Promise.race([read, stopSignal]);
+    if (winner === STOP) {
+      onStop();
+      releaseStream();
+      void read.catch(() => {});
+      return;
+    }
+    if (winner.done) return;
+    yield winner.value;
+  }
+}
+
 // Converts a query-result message (OpenAI-ish shape) into the dashboard's
 // ExtendedChatMessage. Extracted to keep pollAfterApproval's complexity low.
 function convertResultMessage(msg: ResultMessage): ExtendedChatMessage {
@@ -509,11 +542,18 @@ export function useChatSession({
       queryName = streamQueryName;
       lastQueryName.current = queryName;
 
-      // Grace after the query goes terminal before force-closing the chunk
-      // stream, so a real [DONE] still in flight wins and ends the loop naturally.
-      const STREAM_TERMINAL_ABORT_GRACE_MS = 1500;
-      let terminalAbortTimer: ReturnType<typeof setTimeout> | undefined;
+      // The Query CR phase is the authoritative done signal; the chunk stream's
+      // [DONE] is best-effort and may never arrive (broker unreachable /
+      // executor killed, see #2862). `terminalStop` resolves a short grace
+      // after the phase poll observes a terminal phase; stopStreamOnSignal then
+      // stops draining so the turn finalizes normally instead of hanging.
       const streamAbortController = chatStreamAbortControllerRef.current;
+      let resolveTerminalStop: (() => void) | undefined;
+      const terminalStop = new Promise<void>(resolve => {
+        resolveTerminalStop = resolve;
+      });
+      let terminalStopTimer: ReturnType<typeof setTimeout> | undefined;
+      let stoppedOnTerminal = false;
 
       const stopPhasePolling = await chatService.streamQueryStatus(
         namespace,
@@ -526,18 +566,21 @@ export function useChatSession({
         },
         undefined,
         () => {
-          // Query reached a terminal phase — the authoritative done signal. The
-          // chunk stream's [DONE] is best-effort and may never arrive (broker
-          // unreachable / executor killed, see #2862); abort the stream after a
-          // grace so the chat leaves the streaming state instead of hanging.
-          terminalAbortTimer ??= setTimeout(
-            () => streamAbortController.abort(),
-            STREAM_TERMINAL_ABORT_GRACE_MS,
+          terminalStopTimer ??= setTimeout(
+            () => resolveTerminalStop?.(),
+            STREAM_TERMINAL_STOP_GRACE_MS,
           );
         },
       );
 
-      for await (const chunk of chunks) {
+      for await (const chunk of stopStreamOnSignal(
+        chunks,
+        terminalStop,
+        () => streamAbortController.abort(),
+        () => {
+          stoppedOnTerminal = true;
+        },
+      )) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
 
         console.log(
@@ -767,9 +810,20 @@ export function useChatSession({
       }
 
       stopPhasePolling();
-      // Stream ended on its own (real [DONE] or broker close); the terminal-phase
-      // abort is no longer needed.
-      if (terminalAbortTimer) clearTimeout(terminalAbortTimer);
+      if (terminalStopTimer) clearTimeout(terminalStopTimer);
+      if (stoppedOnTerminal) {
+        // Query finished but the stream never delivered [DONE] — we force-closed
+        // it. Invisible to the user (the answer already streamed), but tracked so
+        // a rise in dropped completions is observable.
+        trackEvent({
+          name: 'chat_stream_force_closed',
+          properties: {
+            targetType: type,
+            targetName: name,
+            queryName,
+          },
+        });
+      }
 
       if (!hasPendingApproval) {
         console.log(
