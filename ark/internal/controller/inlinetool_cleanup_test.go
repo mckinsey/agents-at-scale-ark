@@ -118,6 +118,44 @@ func TestInlineDisableDrainsAndScalesDownTheRunner(t *testing.T) {
 	assert.NotContains(t, drained.Annotations, AnnotationInlineDrainStartedAt)
 }
 
+func TestInlineReEnableClearsAnInterruptedDrain(t *testing.T) {
+	tool := newInlineTool("resumed")
+	r := newInlineStatusReconciler(t, tool, activatorDeployment(1))
+	_, stored := reconcileInlineTool(t, r, tool)
+
+	deployment := inlineGetDeployment(t, r, "resumed-runner")
+	deployment.Spec.Replicas = ptr.To(int32(1))
+	require.NoError(t, r.Update(context.Background(), deployment))
+
+	t.Setenv(inlinetools.EnabledEnvVar, "false")
+	result, _ := reconcileInlineTool(t, r, stored)
+	require.Equal(t, inlineDrainWindow, result.RequeueAfter)
+
+	// The window runs out while nothing is reconciling — a controller restart,
+	// or the requeue still pending — and the feature is turned back on.
+	deployment = inlineGetDeployment(t, r, "resumed-runner")
+	deployment.Annotations[AnnotationInlineDrainStartedAt] = time.Now().UTC().Add(-2 * inlineDrainWindow).Format(time.RFC3339)
+	require.NoError(t, r.Update(context.Background(), deployment))
+
+	t.Setenv(inlinetools.EnabledEnvVar, "true")
+	_, stored = reconcileInlineTool(t, r, stored)
+	assert.NotContains(t, inlineGetDeployment(t, r, "resumed-runner").Annotations, AnnotationInlineDrainStartedAt,
+		"re-enabling abandons the drain")
+
+	// The activator scales the runner up again for a call, then the feature is
+	// disabled a second time: that call gets a full window, not a zero one.
+	deployment = inlineGetDeployment(t, r, "resumed-runner")
+	deployment.Spec.Replicas = ptr.To(int32(1))
+	require.NoError(t, r.Update(context.Background(), deployment))
+	t.Setenv(inlinetools.EnabledEnvVar, "false")
+
+	result, _ = reconcileInlineTool(t, r, stored)
+
+	assert.Equal(t, inlineDrainWindow, result.RequeueAfter, "the second disable starts a fresh drain")
+	assert.Equal(t, int32(1), *inlineGetDeployment(t, r, "resumed-runner").Spec.Replicas,
+		"a stale drain timestamp must not cut off work in flight")
+}
+
 func TestInlineDisableKeepsReconcilingAndDeletingPossible(t *testing.T) {
 	tool := newInlineTool("disabled-delete")
 	r := newInlineStatusReconciler(t, tool, activatorDeployment(1))
