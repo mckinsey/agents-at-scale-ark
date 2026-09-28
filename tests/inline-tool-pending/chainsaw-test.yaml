@@ -1,0 +1,80 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: inline-tool-pending
+  labels:
+    inline-tools: "true"
+spec:
+  # The dashboard-first state: an authored tool the runtime cannot make usable
+  # is reported Pending and never shown as Ready. Pin to the watched default
+  # namespace; the conflicting policy is scoped to this tool only.
+  namespace: default
+  description: >
+    An authored inline tool that cannot be made usable stays Pending and not
+    Available (not shown as Ready), then recovers to Ready once the cause clears.
+  steps:
+  - name: authored-but-pending
+    try:
+    # Apply the conflict first so the tool never flaps to Ready.
+    - apply:
+        file: manifests/a01-conflicting-policy.yaml
+    - apply:
+        file: manifests/a02-tool.yaml
+    # Honest Pending: not Available, no usable endpoint, so the dashboard shows
+    # it as not executable rather than Ready.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: inline-pending-probe
+            namespace: default
+          status:
+            state: Pending
+            conditions:
+            - type: Available
+              status: "False"
+              reason: ConflictingNetworkPolicy
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Tool
+        name: inline-pending-probe
+        namespace: default
+
+  - name: recovers-to-ready
+    try:
+    # Removing the cause makes the tool usable: the state transition is honest.
+    - delete:
+        ref:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          name: widen-pending-probe-egress
+          namespace: default
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: inline-pending-probe
+            namespace: default
+          status:
+            state: Ready
+            conditions:
+            - type: Available
+              status: "True"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Tool
+        name: inline-pending-probe
+        namespace: default
+    cleanup:
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          name: inline-pending-probe
+          namespace: default

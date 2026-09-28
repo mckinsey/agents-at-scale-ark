@@ -1,0 +1,24 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: inline-pending-probe
+  namespace: default
+spec:
+  type: inline
+  description: Minimal inline tool used to observe the Pending state
+  inputSchema:
+    type: object
+    properties:
+      "n":
+        type: integer
+        description: ignored
+    required: ["n"]
+    additionalProperties: false
+  inline:
+    language: python
+    source: |
+      import json
+      import sys
+
+      json.loads(sys.argv[1])
+      print(json.dumps({"ok": True}))
