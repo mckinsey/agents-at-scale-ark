@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
 import {
+  MAX_CACHED_BUFFERS,
   ensureLoaded,
   getNodeLogBuffer,
+  getNodeLogScrollState,
   loadOlder,
   logBufferKey,
   pollTail,
   resetNodeLogStore,
+  setNodeLogScrollState,
   subscribeToNodeLogs,
 } from '@/lib/services/workflow-logs-store';
 
@@ -43,6 +46,27 @@ function windowOf(
     last_timestamp: null,
     ...overrides,
   };
+}
+
+function targetOf(index: number) {
+  return { ...target, nodeId: `node-${index}` };
+}
+
+async function loadWhileSubscribed(index: number): Promise<string> {
+  const nodeTarget = targetOf(index);
+  const nodeKey = logBufferKey(nodeTarget);
+  const unsubscribe = subscribeToNodeLogs(nodeKey, () => {});
+  await ensureLoaded(nodeKey, nodeTarget);
+  unsubscribe();
+  return nodeKey;
+}
+
+async function loadRange(from: number, to: number): Promise<string[]> {
+  const keys: string[] = [];
+  for (let index = from; index < to; index++) {
+    keys.push(await loadWhileSubscribed(index));
+  }
+  return keys;
 }
 
 describe('workflow log store', () => {
@@ -331,5 +355,85 @@ describe('workflow log store', () => {
 
     expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
     expect(getNodeLogBuffer(key).pages).toEqual(['b', 'c']);
+  });
+  it('evicts the least recently used buffer and its scroll state past the cache limit', async () => {
+    vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('a'));
+
+    const [oldest] = await loadRange(0, 1);
+    setNodeLogScrollState(oldest, { scrollTop: 10, stickToBottom: false });
+    const keys = await loadRange(1, MAX_CACHED_BUFFERS + 1);
+    const newest = keys[keys.length - 1];
+
+    expect(getNodeLogBuffer(oldest).loaded).toBe(false);
+    expect(getNodeLogBuffer(oldest).pages).toEqual([]);
+    expect(getNodeLogScrollState(oldest)).toBeUndefined();
+    expect(getNodeLogBuffer(newest).loaded).toBe(true);
+    expect(getNodeLogBuffer(newest).pages).toEqual(['a']);
+  });
+
+  it('does not evict a buffer that still has a listener', async () => {
+    vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('a'));
+
+    const watchedTarget = targetOf(0);
+    const watched = logBufferKey(watchedTarget);
+    subscribeToNodeLogs(watched, () => {});
+    await ensureLoaded(watched, watchedTarget);
+    const [secondOldest, third] = await loadRange(1, MAX_CACHED_BUFFERS + 1);
+
+    expect(getNodeLogBuffer(watched).loaded).toBe(true);
+    expect(getNodeLogBuffer(secondOldest).loaded).toBe(false);
+    expect(getNodeLogBuffer(third).loaded).toBe(true);
+  });
+
+  it('does not evict a buffer with a request in flight', async () => {
+    let resolvePending: (
+      window: ReturnType<typeof windowOf>,
+    ) => void = () => {};
+    vi.mocked(fetchNodeLogWindow)
+      .mockReturnValueOnce(
+        new Promise(resolve => {
+          resolvePending = resolve;
+        }),
+      )
+      .mockResolvedValue(windowOf('a'));
+
+    const pendingTarget = targetOf(0);
+    const pending = logBufferKey(pendingTarget);
+    const initial = ensureLoaded(pending, pendingTarget);
+    const [secondOldest] = await loadRange(1, MAX_CACHED_BUFFERS + 1);
+
+    expect(getNodeLogBuffer(pending).loadingInitial).toBe(true);
+    expect(getNodeLogBuffer(secondOldest).loaded).toBe(false);
+
+    resolvePending(windowOf('pending'));
+    await initial;
+
+    expect(getNodeLogBuffer(pending).loaded).toBe(true);
+    expect(getNodeLogBuffer(pending).pages).toEqual(['pending']);
+  });
+
+  it('treats a re-subscribed buffer as most recently used', async () => {
+    vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('a'));
+
+    const [first, second] = await loadRange(0, MAX_CACHED_BUFFERS);
+    subscribeToNodeLogs(first, () => {})();
+    await loadRange(MAX_CACHED_BUFFERS, MAX_CACHED_BUFFERS + 1);
+
+    expect(getNodeLogBuffer(first).loaded).toBe(true);
+    expect(getNodeLogBuffer(second).loaded).toBe(false);
+  });
+
+  it('keeps every buffer while the cache is within the limit', async () => {
+    vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('a'));
+
+    const keys = await loadRange(0, MAX_CACHED_BUFFERS);
+    setNodeLogScrollState(keys[0], { scrollTop: 10, stickToBottom: false });
+    subscribeToNodeLogs(keys[0], () => {})();
+
+    expect(keys.every(nodeKey => getNodeLogBuffer(nodeKey).loaded)).toBe(true);
+    expect(getNodeLogScrollState(keys[0])).toEqual({
+      scrollTop: 10,
+      stickToBottom: false,
+    });
   });
 });

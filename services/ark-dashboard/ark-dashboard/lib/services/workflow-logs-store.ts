@@ -15,7 +15,7 @@ export interface NodeLogBuffer {
   error: string | null;
 }
 
-const MAX_CACHED_BUFFERS = 20;
+export const MAX_CACHED_BUFFERS = 20;
 
 const EMPTY_BUFFER: NodeLogBuffer = {
   pages: [],
