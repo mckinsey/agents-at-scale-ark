@@ -9,7 +9,7 @@ import type {
   MessageFilter,
   MessageStream,
 } from './message-stream.js';
-import {PostgresStreamBase} from './postgres-stream-base.js';
+import {NOTIFY_CHUNK_SIZE, PostgresStreamBase} from './postgres-stream-base.js';
 
 type MessageRow = {
   sequence_number: string;
@@ -66,18 +66,24 @@ export class PostgresMessageStream
   ): Promise<BrokerItem<MessageData>> {
     const effectiveTtl = ttlSeconds ?? this.ttlSeconds;
     const rows = await this.db<MessageRow[]>`
-      INSERT INTO messages (conversation_id, query_id, message, expires_at)
-      VALUES (
-        ${data.conversationId},
-        ${data.queryId},
-        ${this.db.json(data.message as postgres.JSONValue)},
-        now() + make_interval(secs => ${effectiveTtl})
+      WITH inserted AS (
+        INSERT INTO messages (conversation_id, query_id, message, expires_at)
+        VALUES (
+          ${data.conversationId},
+          ${data.queryId},
+          ${this.db.json(data.message as postgres.JSONValue)},
+          now() + make_interval(secs => ${effectiveTtl})
+        )
+        RETURNING sequence_number, conversation_id, query_id, message, created_at
+      ), notified AS (
+        SELECT ${this.notifyFragment(this.db`array_agg(sequence_number ORDER BY sequence_number)`)}
+        FROM inserted
       )
-      RETURNING sequence_number, conversation_id, query_id, message, created_at
+      SELECT inserted.* FROM inserted, notified
     `;
     const item = rowToBrokerItem(rows[0]!);
+    this.markSeen(item.sequenceNumber);
     this.emitter.emit('item', item);
-    await this.notifyAppended([item.sequenceNumber]);
     return item;
   }
 
@@ -93,18 +99,29 @@ export class PostgresMessageStream
       JSON.stringify(data.message),
     ]);
     const inserted = await this.db<MessageRow[]>`
-      INSERT INTO messages (conversation_id, query_id, message, expires_at)
-      SELECT v.conversation_id, v.query_id, v.message::jsonb, now() + make_interval(secs => ${effectiveTtl})
-      FROM (VALUES ${this.db(valueRows)}) AS v(conversation_id, query_id, message)
-      RETURNING sequence_number, conversation_id, query_id, message, created_at
+      WITH inserted AS (
+        INSERT INTO messages (conversation_id, query_id, message, expires_at)
+        SELECT v.conversation_id, v.query_id, v.message::jsonb, now() + make_interval(secs => ${effectiveTtl})
+        FROM (VALUES ${this.db(valueRows)}) AS v(conversation_id, query_id, message)
+        RETURNING sequence_number, conversation_id, query_id, message, created_at
+      ), notified AS (
+        SELECT ${this.notifyFragment(this.db`(array_agg(sequence_number ORDER BY sequence_number))[1:${NOTIFY_CHUNK_SIZE}]`)}
+        FROM inserted
+      )
+      SELECT inserted.* FROM inserted, notified
     `;
     const items = inserted
       .map(rowToBrokerItem)
       .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
     for (const item of items) {
+      this.markSeen(item.sequenceNumber);
       this.emitter.emit('item', item);
     }
-    await this.notifyAppended(items.map((item) => item.sequenceNumber));
+    if (items.length > NOTIFY_CHUNK_SIZE) {
+      await this.notifyOverflow(
+        items.slice(NOTIFY_CHUNK_SIZE).map((item) => item.sequenceNumber)
+      );
+    }
     return items;
   }
 
