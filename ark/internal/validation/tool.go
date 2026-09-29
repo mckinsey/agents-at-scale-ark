@@ -16,7 +16,12 @@ import (
 // characters, so the byte limit has to be enforced here as well.
 const MaxInlineSourceBytes = 65536
 
-var InlineLanguages = []string{"bash", "python", "node", "ts"}
+var InlineLanguages = []string{
+	arkv1alpha1.InlineLanguageBash,
+	arkv1alpha1.InlineLanguagePython,
+	arkv1alpha1.InlineLanguageNode,
+	arkv1alpha1.InlineLanguageTypeScript,
+}
 
 func ValidateTool(tool *arkv1alpha1.Tool) ([]string, error) {
 	if err := validateInlineExclusivity(&tool.Spec); err != nil {
