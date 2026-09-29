@@ -10,8 +10,9 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
-// SourceDir is where the controller mounts the read-only source snapshot.
-const SourceDir = "/tool"
+// SourceDir is where the controller mounts the read-only source snapshot. It is
+// a var only so tests can point at a temporary directory.
+var SourceDir = "/tool"
 
 // language is the fixed dispatch table. The interpreter comes from the language
 // field alone: no shebang, no PATH lookup, and nothing a caller can influence.
