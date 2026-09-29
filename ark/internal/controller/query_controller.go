@@ -138,10 +138,11 @@ type QueryReconciler struct {
 	// the cache still catching up to the write that triggered it.
 	APIReader client.Reader
 
-	sched         *fairScheduler
-	operations    sync.Map
-	saClients     *impersonatedClientCache
-	saClientsOnce sync.Once
+	sched             *fairScheduler
+	operations        sync.Map
+	saClients         *impersonatedClientCache
+	saClientsOnce     sync.Once
+	pendingFreshReads sync.Map
 
 	// requeueCh lets an async goroutine self-requeue on completion (see signalRequeue).
 	requeueCh chan event.GenericEvent
@@ -206,20 +207,32 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return r.handleQueryExecution(ctx, req, obj)
 }
 
-// fetchQuery reads the Query directly from the API server rather than the
-// informer cache. signalRequeue's trigger is a local channel, not a watch
-// event, so a reconcile it causes can otherwise run before the cache has
-// observed this same Query's own prior status writes — leading Reconcile to
-// act on a stale phase (e.g. clobbering a finished status, or re-running
-// handleRunningPhase and spawning a duplicate execution goroutine).
 func (r *QueryReconciler) fetchQuery(ctx context.Context, namespacedName types.NamespacedName) (arkv1alpha1.Query, error) {
-	reader := r.APIReader
-	if reader == nil {
-		reader = r.Client
-	}
 	var obj arkv1alpha1.Query
-	err := reader.Get(ctx, namespacedName, &obj)
-	return obj, err
+	if err := r.Get(ctx, namespacedName, &obj); err != nil {
+		return obj, err
+	}
+
+	if minRV, ok := r.pendingFreshReads.LoadAndDelete(namespacedName); ok && !resourceVersionAtLeast(obj.ResourceVersion, minRV.(string)) {
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		if err := reader.Get(ctx, namespacedName, &obj); err != nil {
+			return obj, err
+		}
+	}
+
+	return obj, nil
+}
+
+func resourceVersionAtLeast(actual, min string) bool {
+	a, errA := strconv.ParseInt(actual, 10, 64)
+	m, errM := strconv.ParseInt(min, 10, 64)
+	if errA != nil || errM != nil {
+		return actual == min
+	}
+	return a >= m
 }
 
 func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.Query) (*ctrl.Result, error) {
@@ -494,7 +507,7 @@ func logQueryError(ctx context.Context, err error, obj *arkv1alpha1.Query, stage
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
 
-	defer r.finishExecuteQueryAsync(opCtx, namespacedName)
+	defer r.finishExecuteQueryAsync(opCtx, namespacedName, &obj)
 
 	// Re-fetch query to get latest status (may have been updated with A2A taskID for resumption)
 	if err := r.Get(opCtx, namespacedName, &obj); err != nil {
@@ -552,29 +565,30 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 }
 
-func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName) {
+func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName, obj *arkv1alpha1.Query) {
+	resourceVersion := obj.ResourceVersion
 	if rec := recover(); rec != nil {
 		logf.FromContext(ctx).Error(
 			fmt.Errorf("query execution goroutine panic: %v", rec),
 			"Query execution goroutine panicked",
 			"stack", string(debug.Stack()),
 		)
-		r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
+		resourceVersion = r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
 	}
 	r.operations.Delete(namespacedName)
 	if r.sched != nil {
 		r.sched.release(namespacedName.Namespace)
 	}
-	r.signalRequeue(namespacedName)
+	r.signalRequeue(namespacedName, resourceVersion)
 }
 
 // markQueryErroredAfterPanic sets the query status to error so it converges
 // instead of relying on the safety-net requeue to retry the panicking dispatch.
-func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namespacedName types.NamespacedName, rec any) {
+func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namespacedName types.NamespacedName, rec any) string {
 	var q arkv1alpha1.Query
 	if err := r.Get(ctx, namespacedName, &q); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to fetch query after panic; leaving to safety-net requeue")
-		return
+		return ""
 	}
 	if q.Status.Response == nil {
 		q.Status.Response = &arkv1alpha1.Response{}
@@ -583,7 +597,9 @@ func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namesp
 	q.Status.Response.Content = fmt.Sprintf("query execution goroutine panicked: %v", rec)
 	if err := r.updateStatus(ctx, &q, statusError); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to mark query errored after panic; leaving to safety-net requeue")
+		return ""
 	}
+	return q.ResourceVersion
 }
 
 func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[string]string {
@@ -1774,9 +1790,12 @@ func (r *QueryReconciler) initSemaphore() {
 
 // signalRequeue enqueues an immediate reconcile for namespacedName. Non-blocking:
 // a full buffer just falls back to the safety-net requeue.
-func (r *QueryReconciler) signalRequeue(namespacedName types.NamespacedName) {
+func (r *QueryReconciler) signalRequeue(namespacedName types.NamespacedName, resourceVersion string) {
 	if r.requeueCh == nil {
 		return
+	}
+	if resourceVersion != "" {
+		r.pendingFreshReads.Store(namespacedName, resourceVersion)
 	}
 	obj := &arkv1alpha1.Query{}
 	obj.Name = namespacedName.Name
