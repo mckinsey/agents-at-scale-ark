@@ -281,6 +281,12 @@ An inline tool must not also set `spec.http`, `spec.mcp`, `spec.agent`, `spec.te
 
 **No inline runner ships in this release.** Authored inline tools stay `Pending` with reason `RuntimeNotInstalled`, so they cannot be called yet. The schema, admission and authoring UI exist so that authorship and permissions are in place before the runtime lands.
 
+### Runner process cleanup
+
+The Linux runner execution core starts each call in its own process group and kills that group on completion, timeout, or cancellation. Before the interpreter starts, an inherited seccomp filter denies `setsid` and `setpgid` with `EPERM`. Python reports the error; runtimes such as Node may ignore it when asked to spawn a detached child, but that child remains in the call's process group. Ordinary subprocesses, pipelines, and background jobs remain supported, but cannot outlive the call.
+
+The filter requires Linux amd64 or arm64 and needs no added capabilities. If it cannot be installed, the script does not run. Non-Linux execution is for local development only and does not provide this filter; process cleanup is not hostile-author isolation or a replacement for administrator-managed PID limits.
+
 ### Enabling inline authoring
 
 Inline authoring is off by default and fails closed. Enable it per install:
