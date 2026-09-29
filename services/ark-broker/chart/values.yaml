@@ -130,6 +130,10 @@ app:
 
 server:
   requestTimeout: 0
+  # Milliseconds of inter-chunk silence before an SSE stream subscriber is
+  # closed with a terminal event. Backstop that bounds every consumer; the
+  # precise bound is the Query CR phase (see #2862).
+  streamIdleTimeout: 300000
 
 replicaCount: 1
 
@@ -145,6 +149,24 @@ memory:
   setAsDefault: true
   # Port for the HTTP server
   port: 8080
+
+# Optional NetworkPolicy restricting ingress to the broker pods.
+# The rule targets the pod port (memory.port, 8080), not the Service port
+# (service.port, 80): a policy written against 80 matches nothing and every
+# connection is dropped.
+# Pods in the broker's own namespace always reach that port. allowNamespaces
+# admits whole namespaces, not workloads: listing one lets every pod running
+# there through, so this bounds reach rather than identifying the caller.
+# ark-system is needed in practice — the controller and the completions executor
+# write messages, events and spans from there while the broker runs in the
+# tenant namespace. Add the Prometheus namespace only when prometheus.enable
+# is on.
+networkPolicy:
+  enabled: false
+  allowNamespaces: []
+  # Example:
+  # - ark-system
+  # - monitoring
 
 # Store limits (0 = unlimited)
 # Each store persists to JSON. Limits prevent unbounded file growth.
