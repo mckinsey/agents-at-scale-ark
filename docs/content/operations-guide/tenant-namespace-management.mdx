@@ -24,6 +24,8 @@ ark dashboard
 
 A namespace without a broker silently loses conversation history: queries succeed, but the assistant never recalls a previous turn. To make that failure loud instead, a direct `helm install ark-tenant` refuses to install into a namespace with no broker Service. `ark install ark-tenant` never hits that refusal: it installs `ark-broker` first, and with `--no-deps` it passes `--set memory.requireBroker=false` so the tenant provisions without one. An existing tenant running `helm upgrade` is never blocked by the check either. Pass `--set memory.requireBroker=false` to a direct Helm install to provision a tenant without a broker anyway.
 
+> Dashboard chat streams responses over SSE through `ark-broker` by default. If the broker is unreachable, chat falls back to polling the `Query` resource instead, with a one-time notice in the UI — so `ark-broker` is required for streaming chat, but not for chat to work at all.
+
 If a `Memory` named `default` already exists in the namespace from a previous manual setup, `ark install ark-broker` leaves it untouched rather than failing on ownership metadata, so it keeps pointing wherever it already pointed. Annotate and label it for Helm to adopt instead: `kubectl annotate memory default meta.helm.sh/release-name=ark-broker meta.helm.sh/release-namespace=<namespace> --overwrite && kubectl label memory default app.kubernetes.io/managed-by=Helm --overwrite`.
 
 ## Cross-Tenant Access
