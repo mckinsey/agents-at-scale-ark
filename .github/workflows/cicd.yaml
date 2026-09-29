@@ -409,6 +409,19 @@ jobs:
           - path: ark
             image: ark-completions
             dockerfile: Dockerfile.completions
+          - path: ark
+            image: ark-inline-runner-bash
+            dockerfile: Dockerfile.inlinerunner
+            target: bash
+          - path: ark
+            image: ark-inline-runner-python
+            dockerfile: Dockerfile.inlinerunner
+            target: python
+          # Serves both the node and ts languages: Node strips TypeScript types.
+          - path: ark
+            image: ark-inline-runner-node
+            dockerfile: Dockerfile.inlinerunner
+            target: node
           - path: services/ark-api
             image: ark-api
             install-uv: true
@@ -468,6 +481,7 @@ jobs:
           push: true
           prebuild: ${{ matrix.prebuild }}
           dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
+          target: ${{ matrix.target }}
 
   xray-container-scan:
     needs: [setup-container-cache-registry, build-containers]
@@ -479,6 +493,9 @@ jobs:
         image:
           - ark-controller
           - ark-completions
+          - ark-inline-runner-bash
+          - ark-inline-runner-python
+          - ark-inline-runner-node
           - ark-api
           - ark-dashboard
           - ark-broker

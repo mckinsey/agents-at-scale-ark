@@ -95,6 +95,19 @@ jobs:
           - path: ark
             image: ark-completions
             dockerfile: Dockerfile.completions
+          - path: ark
+            image: ark-inline-runner-bash
+            dockerfile: Dockerfile.inlinerunner
+            target: bash
+          - path: ark
+            image: ark-inline-runner-python
+            dockerfile: Dockerfile.inlinerunner
+            target: python
+          # Serves both the node and ts languages: Node strips TypeScript types.
+          - path: ark
+            image: ark-inline-runner-node
+            dockerfile: Dockerfile.inlinerunner
+            target: node
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -167,6 +180,7 @@ jobs:
           push: true
           prebuild: ${{ matrix.prebuild }}
           dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
+          target: ${{ matrix.target }}
       
       - name: Push to "latest" tag
         if: ${{ inputs.deploy_containers_to_latest }}
