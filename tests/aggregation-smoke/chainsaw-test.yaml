@@ -64,8 +64,13 @@ spec:
             set -eu
 
             WATCH_OUT=$(mktemp)
-            kubectl get models -n $NAMESPACE --watch -o name > "$WATCH_OUT" 2>&1 &
-            WATCH_PID=$!
+
+            start_watch() {
+              kubectl get models -n $NAMESPACE --watch -o name >> "$WATCH_OUT" 2>&1 &
+              WATCH_PID=$!
+            }
+
+            start_watch
             trap 'kill $WATCH_PID 2>/dev/null || true; wait $WATCH_PID 2>/dev/null || true; rm -f "$WATCH_OUT"' EXIT
 
             await_watch_line() {
@@ -77,8 +82,11 @@ spec:
                   echo "OK ${what}"
                   return 0
                 fi
+                if ! kill -0 "$WATCH_PID" 2>/dev/null; then
+                  start_watch
+                fi
                 i=$((i + 1))
-                [ "$i" -ge 50 ] && break
+                [ "$i" -ge 100 ] && break
                 sleep 0.2
               done
               echo "FAIL ${what}"
@@ -111,4 +119,4 @@ spec:
           env:
           - name: NAMESPACE
             value: ($namespace)
-          timeout: 60s
+          timeout: 90s
