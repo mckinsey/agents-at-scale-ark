@@ -258,7 +258,7 @@ spec:
     language: python
     source: |
       import json, sys
-      args = json.load(sys.stdin)
+      args = json.loads(sys.argv[1])
       print(len(args["text"].split()))
 ```
 
@@ -270,6 +270,32 @@ spec:
 | `language` | yes | Interpreter: `bash`, `python`, `node`, or `ts`. No default, and shebang lines are not used to pick one. |
 
 An inline tool must not also set `spec.http`, `spec.mcp`, `spec.agent`, `spec.team`, or `spec.builtin`, and `spec.inline` is rejected on any other type. A tool cannot be converted between `inline` and another type — delete and recreate it instead.
+
+### Runtime contract
+
+The runner invokes the interpreter directly with the script path and the call arguments as **one JSON object in a single argument**. There is no shell, so quotes, newlines and metacharacters in the arguments are data, never commands.
+
+| Language | Interpreter and image | Script path | Arguments |
+| --- | --- | --- | --- |
+| `bash` | `ark-inline-runner-bash` (Alpine, with `bash`, `jq` and coreutils) | `/tool/source.sh` | `$1` |
+| `python` | `ark-inline-runner-python` (distroless Python 3) | `/tool/source.py` | `sys.argv[1]` |
+| `node` | `ark-inline-runner-node` (distroless Node 24) | `/tool/source.js` | `process.argv[2]` |
+| `ts` | `ark-inline-runner-node` — Node strips the types itself | `/tool/source.ts` | `process.argv[2]` |
+
+Write the result to stdout. Limits are fixed and not configurable:
+
+| Limit | Value |
+| --- | --- |
+| Request body | 128 KiB |
+| Serialized arguments | 64 KiB, must be a JSON object |
+| stdout returned | 256 KiB of valid UTF-8, truncated on a character boundary with a notice |
+| stderr in an error | last 4 KiB |
+| Execution | 30 seconds, or the caller's remaining budget if shorter |
+| Resources | 50m CPU / 64Mi requested, 500m CPU / 256Mi limit |
+
+A non-zero exit, a timeout, cancellation, or stdout that is not valid UTF-8 is reported to the model as a tool error with bounded stderr. Only `bash` has a shell; the other images have none.
+
+**Only the standard library is available.** There is no package installation, no image override, and no network access from a runner. A script importing a third-party package fails at execution — move that tool to an [MCPServer](/reference/resources/mcpserver), which is also where anything needing files, credentials, or outbound calls belongs. TypeScript is limited to erasable syntax (no `enum`, `namespace`, or parameter properties), because Node strips types rather than compiling them.
 
 ### Status
 

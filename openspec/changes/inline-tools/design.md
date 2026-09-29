@@ -146,9 +146,9 @@ Non-zero exit, timeout, cancellation, and invalid output return MCP `isError` re
 
 ### Publish per-language images
 
-Share one `CGO_ENABLED=0` Go runner build. The bash image includes bash, jq, and coreutils on Alpine; Python uses a distroless Python base; Node and TypeScript use distroless Node, with the TypeScript image vendoring its loader at build time. Invoke the loader through Node rather than relying on a shell launcher. Pin bases and publish signed images through existing build tooling.
+Share one `CGO_ENABLED=0` Go runner build. The bash image includes bash, jq, and coreutils on Alpine; Python uses a distroless Python base; Node and TypeScript both use the distroless Node image, which strips TypeScript types natively (Node 22.18+), so there is no loader to vendor and no shell launcher. Three images cover the four languages. Pin bases and publish signed images through existing build tooling.
 
-Scripts have only the documented standard libraries/tools. Import scanning is not admission policy: missing third-party packages fail at execution and indicate that the author needs an MCPServer. Smoke-test all four images under the real security settings, including TypeScript syntax and read-only source paths. Allow only a bounded ephemeral scratch volume if required by a runtime; it supplies no caller reference files and is not durable tool state.
+Scripts have only the documented standard libraries/tools. Import scanning is not admission policy: missing third-party packages fail at execution and indicate that the author needs an MCPServer. Type stripping accepts only erasable TypeScript syntax; document that rather than adding a compiler. Smoke-test all four languages under the real security settings, including TypeScript syntax and read-only source paths. Allow only a bounded ephemeral scratch volume if required by a runtime; it supplies no caller reference files and is not durable tool state.
 
 ### Enforce author admission on both storage backends
 
@@ -195,7 +195,7 @@ Phase 1 ships the authoring path, mandatory author admission on both backends, a
 - **Cold starts and object count:** unused runners cost no pods, but every Tool still has Kubernetes objects and an activator dependency. KeepWarm and pooling are deferred.
 - **Singleton activator:** temporary unavailability interrupts tool calls; v1 favors a single scaling authority over distributed call tracking. Do not replay uncertain calls.
 - **Script edits:** a rollout can interrupt in-flight work; revision checks prevent new calls from silently using stale source.
-- **Resource budgets and packaging:** prove the four images work within the fixed budgets and security settings; do not relax them silently to make a smoke test pass.
+- **Resource budgets and packaging:** prove all four languages work within the fixed budgets and security settings; do not relax them silently to make a smoke test pass.
 
 ## Migration Plan
 
