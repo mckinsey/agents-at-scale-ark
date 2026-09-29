@@ -487,6 +487,9 @@ export const chatService = {
       while (!stopped) {
         try {
           const query = await this.getQuery(namespace, queryName);
+          // stop() may have fired while this poll was in flight; don't emit a
+          // straggler update/terminal callback after the caller tore down.
+          if (stopped) return;
           if (query && query.status) {
             onUpdate(query.status);
 
@@ -625,7 +628,9 @@ export const chatService = {
           }
         }
       } finally {
-        reader.releaseLock();
+        // cancel() releases the lock and aborts the transfer, so an early break
+        // stops the SSE download instead of leaking a streaming connection.
+        await reader.cancel().catch(() => {});
       }
     }
 

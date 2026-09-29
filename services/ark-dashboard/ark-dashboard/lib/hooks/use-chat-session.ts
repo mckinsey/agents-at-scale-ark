@@ -42,75 +42,36 @@ type ResultMessage = NonNullable<ChatResponse['messages']>[number];
 // terminal, so an in-flight [DONE]/finalize chunk still lands before we stop.
 const STREAM_TERMINAL_STOP_GRACE_MS = 300;
 
-// Consume `source` until it ends or `stop` resolves, whichever comes first. On
-// `stop` we end iteration cleanly so the caller's normal post-stream
-// finalization runs — unlike aborting mid-loop, which throws past it. A hung
-// read can only be unblocked by cancelling the transport, so `releaseStream`
-// cancels the underlying fetch; the resulting rejection settles on the
-// abandoned read and is swallowed rather than surfaced as an error.
-async function* stopStreamOnSignal<T>(
+// Yield from `source`; if a read rejects because we force-closed the stream
+// (terminal phase → abort), end cleanly so post-stream finalization runs — any
+// other rejection propagates. `onExit` runs on every exit (even a throw) so
+// polling/timers are always torn down.
+async function* streamUntilForceClose<T>(
   source: AsyncIterable<T>,
-  stop: Promise<void>,
-  releaseStream: () => void,
-  onStop: () => void,
+  wasForceClosed: () => boolean,
+  onExit: () => void,
 ): AsyncGenerator<T> {
   const iterator = source[Symbol.asyncIterator]();
-  const STOP: unique symbol = Symbol('stop');
-  const stopSignal = stop.then((): typeof STOP => STOP);
   try {
     while (true) {
-      const read = iterator.next();
-      const winner = await Promise.race([read, stopSignal]);
-      if (winner === STOP) {
-        onStop();
-        releaseStream();
-        void read.catch(() => {});
-        return;
+      let result: IteratorResult<T>;
+      try {
+        result = await iterator.next();
+      } catch (err) {
+        if (wasForceClosed()) return;
+        throw err;
       }
-      if (winner.done) return;
-      yield winner.value;
+      if (result.done) return;
+      yield result.value;
     }
   } finally {
-    // Propagate early consumer exit (break/throw in the caller's loop) to the
-    // underlying stream so its reader is released, matching plain `for await`.
-    void iterator.return?.();
+    onExit();
+    try {
+      await iterator.return?.();
+    } catch {
+      // Best-effort transport release; the stream may already be gone.
+    }
   }
-}
-
-interface TerminalStopController {
-  // Resolves a short grace after the query phase goes terminal; pass to
-  // stopStreamOnSignal as its stop signal.
-  stop: Promise<void>;
-  // Call when the phase poll observes a terminal phase.
-  arm: () => void;
-  // Call when the stream was stopped by the signal (not a natural [DONE]).
-  markStopped: () => void;
-  // Clear the grace timer; invoke onForceStopped if the stream was force-stopped.
-  finish: (onForceStopped: () => void) => void;
-}
-
-// Bundles the terminal-phase → stop-draining machinery (grace timer + one-shot
-// stop promise) so the streaming loop stays flat.
-function createTerminalStopController(): TerminalStopController {
-  let resolve: (() => void) | undefined;
-  const stop = new Promise<void>(r => {
-    resolve = r;
-  });
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let stopped = false;
-  return {
-    stop,
-    arm: () => {
-      timer ??= setTimeout(() => resolve?.(), STREAM_TERMINAL_STOP_GRACE_MS);
-    },
-    markStopped: () => {
-      stopped = true;
-    },
-    finish: onForceStopped => {
-      if (timer) clearTimeout(timer);
-      if (stopped) onForceStopped();
-    },
-  };
 }
 
 // Converts a query-result message (OpenAI-ish shape) into the dashboard's
@@ -584,13 +545,13 @@ export function useChatSession({
       queryName = streamQueryName;
       lastQueryName.current = queryName;
 
-      // The Query CR phase is the authoritative done signal; the chunk stream's
-      // [DONE] is best-effort and may never arrive (broker unreachable /
-      // executor killed, see #2862). `terminalStop` resolves a short grace
-      // after the phase poll observes a terminal phase; stopStreamOnSignal then
-      // stops draining so the turn finalizes normally instead of hanging.
+      // The Query CR phase is the authoritative done signal; the stream's [DONE]
+      // is best-effort and may never arrive (broker unreachable / executor
+      // killed, see #2862). On a real terminal phase, after a short grace so an
+      // in-flight [DONE] still wins, abort the transport to stop a hung stream.
       const streamAbortController = chatStreamAbortControllerRef.current;
-      const terminal = createTerminalStopController();
+      let forceClosePhase: string | undefined;
+      let forceCloseTimer: ReturnType<typeof setTimeout> | undefined;
 
       const stopPhasePolling = await chatService.streamQueryStatus(
         namespace,
@@ -602,14 +563,26 @@ export function useChatSession({
           }
         },
         undefined,
-        terminal.arm,
+        phase => {
+          // Only real terminal phases force-close; leave `unknown` to the poll so
+          // an unrecognized phase can't truncate a live answer.
+          if (phase !== 'done' && phase !== 'error' && phase !== 'canceled') {
+            return;
+          }
+          forceCloseTimer ??= setTimeout(() => {
+            forceClosePhase = phase;
+            streamAbortController.abort();
+          }, STREAM_TERMINAL_STOP_GRACE_MS);
+        },
       );
 
-      for await (const chunk of stopStreamOnSignal(
+      for await (const chunk of streamUntilForceClose(
         chunks,
-        terminal.stop,
-        () => streamAbortController.abort(),
-        terminal.markStopped,
+        () => forceClosePhase !== undefined,
+        () => {
+          stopPhasePolling();
+          if (forceCloseTimer) clearTimeout(forceCloseTimer);
+        },
       )) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
 
@@ -839,11 +812,15 @@ export function useChatSession({
         }
       }
 
-      stopPhasePolling();
-      // Query finished but the stream never delivered [DONE] — we force-closed
-      // it. Invisible to the user (the answer already streamed), but tracked so
-      // a rise in dropped completions is observable.
-      terminal.finish(() => {
+      // A terminal `error` phase force-closed the stream before any error chunk
+      // arrived — surface the failure instead of finalizing as success.
+      if (forceClosePhase === 'error' && !hasError) {
+        hasError = true;
+        errorMessage = errorMessage || 'Query failed';
+      }
+      if (forceClosePhase) {
+        // Stream never delivered [DONE]; tracked so dropped completions stay
+        // observable.
         trackEvent({
           name: 'chat_stream_force_closed',
           properties: {
@@ -852,7 +829,7 @@ export function useChatSession({
             queryName,
           },
         });
-      });
+      }
 
       if (!hasPendingApproval) {
         console.log(

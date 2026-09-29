@@ -4,6 +4,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { agentsService, chatService } from '@/lib/services';
+import { trackEvent } from '@/lib/analytics/singleton';
 
 import { useChatSession } from './use-chat-session';
 
@@ -52,6 +53,11 @@ async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) {
     yield item;
   }
+}
+
+// Shaped like the DOM AbortError the real fetch throws.
+function makeAbortError(): Error {
+  return Object.assign(new Error('Aborted'), { name: 'AbortError' });
 }
 
 describe('useChatSession - Approval Handling', () => {
@@ -786,6 +792,116 @@ describe('useChatSession - Conversation ID Continuity', () => {
           },
           { timeout: 10000 },
         );
+    });
+  });
+});
+
+describe('useChatSession - Stream force-close (#2862)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(agentsService.getByName).mockResolvedValue(null);
+    vi.mocked(chatService.resolveMemoryNotice).mockResolvedValue({
+      settled: true,
+      notice: null,
+    });
+    globalThis.sessionStorage?.clear();
+  });
+
+  it('fires chat_stream_force_closed when a terminal phase force-closes a hung stream', async () => {
+    vi.mocked(chatService.startStreamChatResponse).mockImplementation(
+      async (
+        _namespace,
+        _input,
+        _targetType,
+        _targetName,
+        _sessionId,
+        _conversationId,
+        _timeout,
+        abortSignal,
+      ) => {
+        async function* hung(): AsyncGenerator<Record<string, unknown>> {
+          yield { choices: [{ delta: { content: 'x' } }] };
+          await new Promise<void>((_resolve, reject) => {
+            if (abortSignal?.aborted) return reject(makeAbortError());
+            abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+        }
+        return { queryName: 'q-force', chunks: hung() };
+      },
+    );
+    vi.mocked(chatService.streamQueryStatus).mockImplementation(
+      async (_namespace, _queryName, _onUpdate, _pollInterval, onTerminal) => {
+        onTerminal?.('done');
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(trackEvent)).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'chat_stream_force_closed' }),
+      );
+    });
+  });
+
+  it('does not fire chat_stream_force_closed on a clean stream completion', async () => {
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'q-clean',
+      chunks: toAsyncIterable([
+        { choices: [{ delta: { content: 'hi' }, finish_reason: 'stop' }] },
+      ]),
+    });
+    // The stream ends on its own; the phase poll never reports terminal.
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    expect(vi.mocked(trackEvent)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'chat_stream_force_closed' }),
+    );
+  });
+
+  it('tears down phase polling even when the stream loop throws (user cancel)', async () => {
+    const stopPhasePolling = vi.fn();
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'q-throw',
+      chunks: (async function* (): AsyncGenerator<Record<string, unknown>> {
+        yield { choices: [{ delta: { content: 'x' } }] };
+        // External cancel aborts the read; not our terminal-phase force-close.
+        throw makeAbortError();
+      })(),
+    });
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(stopPhasePolling);
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    // The AbortError propagates out of the loop; cleanup must still have run.
+    await waitFor(() => {
+      expect(stopPhasePolling).toHaveBeenCalled();
     });
   });
 });
