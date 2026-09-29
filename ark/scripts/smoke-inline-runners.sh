@@ -17,27 +17,40 @@ IMAGE_TAG=${INLINE_RUNNER_IMAGE_TAG:-latest}
 WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/inline-runner-smoke.XXXXXX")
 trap 'rm -rf "$WORKDIR"' EXIT
 
-LANGUAGES=("$@")
-if [ ${#LANGUAGES[@]} -eq 0 ]; then
+if [[ $# -eq 0 ]]; then
   LANGUAGES=(bash python node ts)
+else
+  LANGUAGES=("$@")
 fi
 
 # image_for maps a language to its image target: ts runs on the node image,
 # because Node strips the types itself.
 image_for() {
-  case "$1" in
+  local language=$1
+  case "$language" in
     ts) echo node ;;
-    *) echo "$1" ;;
+    bash | python | node) echo "$language" ;;
+    *)
+      echo "unsupported language: $language" >&2
+      return 1
+      ;;
   esac
+  return 0
 }
 
 filename_for() {
-  case "$1" in
+  local language=$1
+  case "$language" in
     bash) echo source.sh ;;
     python) echo source.py ;;
     node) echo source.js ;;
     ts) echo source.ts ;;
+    *)
+      echo "unsupported language: $language" >&2
+      return 1
+      ;;
   esac
+  return 0
 }
 
 # Each sample echoes its language plus the argument value, so the check proves
@@ -75,15 +88,22 @@ const label = (v: string): string => `ts ${v}`;
 process.stdout.write(label(args.value));
 EOF
       ;;
+    *)
+      echo "unsupported language: $language" >&2
+      return 1
+      ;;
   esac
+  return 0
 }
 
 sha256() {
+  local path=$1
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | cut -d' ' -f1
+    sha256sum "$path" | cut -d' ' -f1
   else
-    shasum -a 256 "$1" | cut -d' ' -f1
+    shasum -a 256 "$path" | cut -d' ' -f1
   fi
+  return 0
 }
 
 failures=0
@@ -128,7 +148,7 @@ for language in "${LANGUAGES[@]}"; do
       -H 'Content-Type: application/json' \
       -H 'Accept: application/json, text/event-stream' \
       -d "$request" 2>/dev/null); then
-      [ -n "$output" ] && break
+      [[ -n "$output" ]] && break
     fi
     sleep 1
   done
@@ -144,7 +164,7 @@ for language in "${LANGUAGES[@]}"; do
   "$CONTAINER_TOOL" rm -f "$container" >/dev/null 2>&1 || true
 done
 
-if [ "$failures" -ne 0 ]; then
+if [[ "$failures" -ne 0 ]]; then
   echo "$failures runner image(s) failed"
   exit 1
 fi
