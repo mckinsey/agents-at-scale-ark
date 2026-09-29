@@ -1,9 +1,13 @@
-import { WORKFLOW_LOG_PAGE_LINES } from '@/lib/constants/workflow-logs';
+import { APIError } from '@/lib/api/client';
+import {
+  WORKFLOW_LOG_MAX_BUFFERED_LINES,
+  WORKFLOW_LOG_PAGE_LINES,
+} from '@/lib/constants/workflow-logs';
 
 import { type LogWindowTarget, fetchNodeLogWindow } from './workflow-logs';
 
 export interface NodeLogBuffer {
-  pages: string[];
+  lines: string[];
   loaded: boolean;
   loadingInitial: boolean;
   loadingOlder: boolean;
@@ -18,7 +22,7 @@ export interface NodeLogBuffer {
 export const MAX_CACHED_BUFFERS = 20;
 
 const EMPTY_BUFFER: NodeLogBuffer = {
-  pages: [],
+  lines: [],
   loaded: false,
   loadingInitial: false,
   loadingOlder: false,
@@ -38,7 +42,8 @@ export interface NodeLogScrollState {
 const buffers = new Map<string, NodeLogBuffer>();
 const scrollStates = new Map<string, NodeLogScrollState>();
 const listeners = new Map<string, Set<() => void>>();
-const inFlight = new Set<string>();
+const fetchInFlight = new Set<string>();
+const pollInFlight = new Set<string>();
 
 export function logBufferKey(target: LogWindowTarget): string {
   return [
@@ -66,12 +71,20 @@ function update(key: string, patch: Partial<NodeLogBuffer>) {
   notify(key);
 }
 
+function splitContent(content: string): string[] {
+  return content ? content.split('\n') : [];
+}
+
 function evictLeastRecentlyUsed() {
   if (buffers.size <= MAX_CACHED_BUFFERS) return;
 
   for (const key of buffers.keys()) {
     if (buffers.size <= MAX_CACHED_BUFFERS) return;
-    if (!listeners.has(key) && !inFlight.has(key)) {
+    if (
+      !listeners.has(key) &&
+      !fetchInFlight.has(key) &&
+      !pollInFlight.has(key)
+    ) {
       buffers.delete(key);
       scrollStates.delete(key);
     }
@@ -104,10 +117,13 @@ export function subscribeToNodeLogs(
 }
 
 function describeError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes('404')
-    ? 'Logs not available (pod terminated and logs not archived)'
-    : 'Failed to load logs';
+  if (error instanceof APIError && error.status === 404) {
+    return error.message || 'Logs are no longer available for this node';
+  }
+  if (error instanceof APIError && error.status === 403) {
+    return 'You do not have permission to read these logs';
+  }
+  return 'Failed to load logs';
 }
 
 export async function ensureLoaded(
@@ -115,9 +131,9 @@ export async function ensureLoaded(
   target: LogWindowTarget,
 ): Promise<void> {
   const buffer = buffers.get(key);
-  if (buffer?.loaded || inFlight.has(key)) return;
+  if (buffer?.loaded || fetchInFlight.has(key)) return;
 
-  inFlight.add(key);
+  fetchInFlight.add(key);
   update(key, { loadingInitial: true, error: null });
 
   try {
@@ -126,7 +142,7 @@ export async function ensureLoaded(
     });
 
     update(key, {
-      pages: window.content ? [window.content] : [],
+      lines: splitContent(window.content),
       loaded: true,
       loadingInitial: false,
       hasMoreBefore: window.has_more_before,
@@ -139,7 +155,7 @@ export async function ensureLoaded(
   } catch (error) {
     update(key, { loadingInitial: false, error: describeError(error) });
   } finally {
-    inFlight.delete(key);
+    fetchInFlight.delete(key);
   }
 }
 
@@ -148,9 +164,10 @@ export async function loadOlder(
   target: LogWindowTarget,
 ): Promise<void> {
   const buffer = buffers.get(key);
-  if (!buffer?.loaded || !buffer.hasMoreBefore || inFlight.has(key)) return;
+  if (!buffer?.loaded || !buffer.hasMoreBefore || fetchInFlight.has(key))
+    return;
 
-  inFlight.add(key);
+  fetchInFlight.add(key);
   update(key, { loadingOlder: true });
 
   try {
@@ -162,9 +179,7 @@ export async function loadOlder(
     const current = getNodeLogBuffer(key);
 
     update(key, {
-      pages: window.content
-        ? [window.content, ...current.pages]
-        : current.pages,
+      lines: [...splitContent(window.content), ...current.lines],
       loadingOlder: false,
       hasMoreBefore: window.has_more_before,
       truncated: current.truncated || window.truncated,
@@ -175,8 +190,35 @@ export async function loadOlder(
   } catch (error) {
     update(key, { loadingOlder: false, error: describeError(error) });
   } finally {
-    inFlight.delete(key);
+    fetchInFlight.delete(key);
   }
+}
+
+function appendTail(
+  current: NodeLogBuffer,
+  appended: string[],
+  window: { last_timestamp?: string | null; truncated: boolean },
+): Partial<NodeLogBuffer> {
+  const lines = [...current.lines, ...appended];
+  const overflow = lines.length - WORKFLOW_LOG_MAX_BUFFERED_LINES;
+  const patch: Partial<NodeLogBuffer> = {
+    lines,
+    lastTimestamp: window.last_timestamp ?? current.lastTimestamp,
+    truncated: current.truncated || window.truncated,
+    oldestSkipLines: current.oldestSkipLines + appended.length,
+    error: null,
+  };
+
+  if (overflow <= 0) return patch;
+
+  patch.lines = lines.slice(overflow);
+  patch.oldestSkipLines = Math.max(
+    0,
+    current.oldestSkipLines + appended.length - overflow,
+  );
+  patch.oldestTimestamp = null;
+  patch.hasMoreBefore = true;
+  return patch;
 }
 
 export async function pollTail(
@@ -184,9 +226,10 @@ export async function pollTail(
   target: LogWindowTarget,
 ): Promise<void> {
   const buffer = buffers.get(key);
-  if (!buffer?.loaded || inFlight.has(key)) return;
+  if (!buffer?.loaded || pollInFlight.has(key)) return;
+  if (!buffer.lastTimestamp && buffer.lines.length > 0) return;
 
-  inFlight.add(key);
+  pollInFlight.add(key);
 
   try {
     const window = await fetchNodeLogWindow(target, {
@@ -197,10 +240,11 @@ export async function pollTail(
     if (!window.content) return;
 
     const current = getNodeLogBuffer(key);
+    const appended = splitContent(window.content);
 
-    if (!buffer.lastTimestamp) {
+    if (!current.lastTimestamp && current.lines.length === 0) {
       update(key, {
-        pages: [window.content],
+        lines: appended,
         hasMoreBefore: window.has_more_before,
         truncated: window.truncated,
         oldestSkipLines: window.line_count,
@@ -211,16 +255,11 @@ export async function pollTail(
       return;
     }
 
-    update(key, {
-      pages: [...current.pages, window.content],
-      lastTimestamp: window.last_timestamp ?? current.lastTimestamp,
-      truncated: current.truncated || window.truncated,
-      error: null,
-    });
+    update(key, appendTail(current, appended, window));
   } catch (error) {
     update(key, { error: describeError(error) });
   } finally {
-    inFlight.delete(key);
+    pollInFlight.delete(key);
   }
 }
 
@@ -241,5 +280,6 @@ export function resetNodeLogStore(): void {
   buffers.clear();
   scrollStates.clear();
   listeners.clear();
-  inFlight.clear();
+  fetchInFlight.clear();
+  pollInFlight.clear();
 }

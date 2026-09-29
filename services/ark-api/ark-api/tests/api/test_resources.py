@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from kubernetes_asyncio.client.rest import ApiException
+from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 
 os.environ["AUTH_MODE"] = "open"
 
@@ -2199,6 +2200,55 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertIn("Forbidden", response.json()["detail"])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_workflow_log_window_keeps_a_forbidden_log_read_as_403(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
+        """A denied log read keeps its own status instead of becoming archive guidance."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=Mock())
+        mock_core_v1.read_namespaced_pod_log = AsyncMock(
+            side_effect=ApiException(status=403, reason="Forbidden")
+        )
+        mock_core_v1_cls.return_value = mock_core_v1
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf/node/log/window"
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("archiveLogs", response.json()["detail"])
+        mock_dynamic_client_cls.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_workflow_log_window_handles_a_missing_workflow_crd(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
+        """Without the Argo CRD the explanation degrades to a 404, never an empty 500."""
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(
+            side_effect=ApiException(status=404, reason="Not Found")
+        )
+        pod_list = Mock()
+        pod_list.items = []
+        mock_core_v1.list_namespaced_pod = AsyncMock(return_value=pod_list)
+        mock_core_v1_cls.return_value = mock_core_v1
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+        mock_dynamic_client_instance.resources.get = AsyncMock(
+            side_effect=ResourceNotFoundError("No resource kind Workflow")
+        )
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf/node/log/window"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Logs are not available for node node")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')

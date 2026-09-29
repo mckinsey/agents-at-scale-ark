@@ -386,11 +386,11 @@ function WorkflowStepDetail({
   detail,
   message,
   status,
-}: {
+}: Readonly<{
   detail: WorkflowStepDetail;
   message?: string;
   status: StepStatus;
-}) {
+}>) {
   const shouldFetchLogs = Boolean(
     detail.workflowName && detail.nodeId && detail.namespace,
   );

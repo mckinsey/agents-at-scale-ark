@@ -1,4 +1,4 @@
-import { apiClient } from '@/lib/api/client';
+import { APIError, apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 import {
   WORKFLOW_LOG_MAX_BYTES,
@@ -89,7 +89,10 @@ export async function fetchNodeLogWindow(
         target.podName,
         withContainer,
       );
-    } catch {
+    } catch (error) {
+      if (!(error instanceof APIError) || error.status !== 404) {
+        throw error;
+      }
       console.debug('Pod log window not available, trying workflow node logs');
     }
   }

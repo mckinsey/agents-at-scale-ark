@@ -61,15 +61,26 @@ async function renderLogs(isRunning = false) {
   return result;
 }
 
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
 describe('WorkflowNodeLogs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetNodeLogStore();
+    Element.prototype.scrollIntoView = function scrollIntoViewStub(
+      this: Element,
+    ) {
+      const container = this.closest<HTMLElement>(
+        '[data-testid="workflow-node-logs-scroll"]',
+      );
+      if (container) container.scrollTop = container.scrollHeight;
+    };
   });
 
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    Element.prototype.scrollIntoView = originalScrollIntoView;
   });
 
   it('renders the tail page', async () => {
@@ -91,7 +102,7 @@ describe('WorkflowNodeLogs', () => {
     expect(vi.mocked(fetchNodeLogWindow).mock.calls[1][1]).toMatchObject({
       skipTailLines: 1,
     });
-    expect(screen.getByText('older')).toBeInTheDocument();
+    expect(screen.getByText(/older/)).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /older logs/ }),
     ).not.toBeInTheDocument();
@@ -146,7 +157,7 @@ describe('WorkflowNodeLogs', () => {
     });
 
     expect(container.scrollTop).toBe(1600 - (1000 - 150));
-    expect(getNodeLogBuffer(logBufferKey(target)).pages).toEqual([
+    expect(getNodeLogBuffer(logBufferKey(target)).lines).toEqual([
       'older',
       'newer',
     ]);

@@ -17,3 +17,8 @@ export const WORKFLOW_LOG_POLL_INTERVAL_MS = readPositiveInt(
   process.env.NEXT_PUBLIC_WORKFLOW_LOG_POLL_INTERVAL_MS,
   3000,
 );
+
+export const WORKFLOW_LOG_MAX_BUFFERED_LINES = readPositiveInt(
+  process.env.NEXT_PUBLIC_WORKFLOW_LOG_MAX_BUFFERED_LINES,
+  20000,
+);

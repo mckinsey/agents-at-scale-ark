@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionsSection } from '@/components/sections/sessions-section';
+import { APIError } from '@/lib/api/client';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
 import { resetNodeLogStore } from '@/lib/services/workflow-logs-store';
 import {
@@ -1265,7 +1266,7 @@ describe('SessionsSection', () => {
     it('should report an error when step logs cannot be loaded', async () => {
       const user = userEvent.setup();
       vi.mocked(fetchNodeLogWindow).mockRejectedValue(
-        new Error('404 not found'),
+        new APIError('Logs are no longer available for this node', 404),
       );
       vi.mocked(useWorkflow).mockReturnValue({
         workflow: mockWorkflow,
@@ -1281,7 +1282,9 @@ describe('SessionsSection', () => {
       await user.click(expandButton);
 
       await waitFor(() => {
-        expect(screen.getByText(/Logs not available/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/Logs are no longer available/i),
+        ).toBeInTheDocument();
       });
     });
 

@@ -14,6 +14,7 @@ from kubernetes_asyncio import client
 from kubernetes_asyncio.client import CoreV1Api
 from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.dynamic import DynamicClient
+from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 from ark_sdk.k8s import get_context
 from ark_sdk.impersonation import ImpersonationConfig
 
@@ -1208,11 +1209,16 @@ async def _workflow_node_unavailable_detail(
     workflow_name: str,
     node_id: str,
 ) -> str:
+    fallback = f"Logs are not available for node {node_id}"
     dynamic_client = await DynamicClient(api)
-    workflow_resource = await dynamic_client.resources.get(
-        api_version="argoproj.io/v1alpha1",
-        kind="Workflow",
-    )
+    try:
+        workflow_resource = await dynamic_client.resources.get(
+            api_version="argoproj.io/v1alpha1",
+            kind="Workflow",
+        )
+    except ResourceNotFoundError:
+        logger.warning("Workflow CRD is not installed; cannot explain missing logs for node %s", node_id)
+        return fallback
     try:
         workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
     except ApiException as e:
@@ -1226,7 +1232,7 @@ async def _workflow_node_unavailable_detail(
         return f"Node {node_id} not found in workflow {workflow_name}"
     if node.get("type") == "Pod" and node.get("phase") in ["Succeeded", "Failed", "Error"]:
         return POD_DELETED_MESSAGE
-    return f"Logs are not available for node {node_id}"
+    return fallback
 
 
 @router.get("/api/v1/namespaces/{namespace}/pods/{pod_name}/log/window")
@@ -1270,6 +1276,7 @@ async def get_pod_log_window(
 
 
 @router.get("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/{node_id}/log/window")
+@handle_k8s_errors(operation="get", resource_type="workflow")
 async def get_workflow_log_window(
     workflow_name: str,
     node_id: str,
@@ -1308,6 +1315,9 @@ async def get_workflow_log_window(
                 max_bytes,
             )
         except (ApiException, HTTPException) as e:
-            logger.error(f"Failed to fetch log window for node {node_id}: {e}")
+            status = e.status if isinstance(e, ApiException) else e.status_code
+            if status != 404:
+                raise
+            logger.info(f"No live logs for node {node_id}, explaining why: {e}")
             detail = await _workflow_node_unavailable_detail(api, namespace, workflow_name, node_id)
-            raise HTTPException(status_code=404, detail=detail)
+            raise HTTPException(status_code=404, detail=detail) from e

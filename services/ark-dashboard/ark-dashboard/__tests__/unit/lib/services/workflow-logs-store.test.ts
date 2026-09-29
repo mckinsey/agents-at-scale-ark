@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { APIError } from '@/lib/api/client';
+import { WORKFLOW_LOG_MAX_BUFFERED_LINES } from '@/lib/constants/workflow-logs';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
 import {
   MAX_CACHED_BUFFERS,
@@ -85,7 +87,7 @@ describe('workflow log store', () => {
 
     const buffer = getNodeLogBuffer(key);
     expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
-    expect(buffer.pages).toEqual(['a\nb']);
+    expect(buffer.lines).toEqual(['a', 'b']);
     expect(buffer.oldestSkipLines).toBe(2);
     expect(buffer.hasMoreBefore).toBe(true);
     expect(buffer.lastTimestamp).toBe('t2');
@@ -100,7 +102,7 @@ describe('workflow log store', () => {
     await loadOlder(key, target);
 
     const buffer = getNodeLogBuffer(key);
-    expect(buffer.pages).toEqual(['a\nb', 'c\nd']);
+    expect(buffer.lines).toEqual(['a', 'b', 'c', 'd']);
     expect(buffer.oldestSkipLines).toBe(4);
     expect(buffer.hasMoreBefore).toBe(false);
     expect(vi.mocked(fetchNodeLogWindow).mock.calls[1][1]).toMatchObject({
@@ -146,7 +148,7 @@ describe('workflow log store', () => {
     await pollTail(key, target);
 
     const buffer = getNodeLogBuffer(key);
-    expect(buffer.pages).toEqual(['a', 'b']);
+    expect(buffer.lines).toEqual(['a', 'b']);
     expect(buffer.lastTimestamp).toBe('t2');
     expect(vi.mocked(fetchNodeLogWindow).mock.calls[1][1]).toMatchObject({
       sinceTimestamp: 't1',
@@ -162,7 +164,7 @@ describe('workflow log store', () => {
     await ensureLoaded(key, target);
     unsubscribe();
 
-    expect(getNodeLogBuffer(key).pages).toEqual(['a']);
+    expect(getNodeLogBuffer(key).lines).toEqual(['a']);
 
     subscribeToNodeLogs(key, () => {});
     await ensureLoaded(key, target);
@@ -180,18 +182,30 @@ describe('workflow log store', () => {
     expect(listener).toHaveBeenCalled();
   });
 
-  it('reports a friendly message when the logs are gone', async () => {
-    vi.mocked(fetchNodeLogWindow).mockRejectedValue(new Error('HTTP 404'));
+  it('surfaces the server explanation when the logs are gone', async () => {
+    vi.mocked(fetchNodeLogWindow).mockRejectedValue(
+      new APIError('Pod has been deleted', 404),
+    );
+
+    await ensureLoaded(key, target);
+
+    expect(getNodeLogBuffer(key).error).toBe('Pod has been deleted');
+  });
+
+  it('reports a permission error rather than a missing-logs hint on 403', async () => {
+    vi.mocked(fetchNodeLogWindow).mockRejectedValue(
+      new APIError('forbidden', 403),
+    );
 
     await ensureLoaded(key, target);
 
     expect(getNodeLogBuffer(key).error).toBe(
-      'Logs not available (pod terminated and logs not archived)',
+      'You do not have permission to read these logs',
     );
   });
 
-  it('reports a generic message for non-404 failures', async () => {
-    vi.mocked(fetchNodeLogWindow).mockRejectedValue(new Error('HTTP 500'));
+  it('reports a generic message for other failures', async () => {
+    vi.mocked(fetchNodeLogWindow).mockRejectedValue(new APIError('boom', 500));
 
     await ensureLoaded(key, target);
 
@@ -210,7 +224,7 @@ describe('workflow log store', () => {
     await loadOlder(key, target);
 
     const failed = getNodeLogBuffer(key);
-    expect(failed.pages).toEqual(['c\nd']);
+    expect(failed.lines).toEqual(['c', 'd']);
     expect(failed.error).toBe('Failed to load logs');
     expect(failed.loadingOlder).toBe(false);
     expect(failed.hasMoreBefore).toBe(true);
@@ -225,7 +239,7 @@ describe('workflow log store', () => {
       skipTailLines: 2,
       beforeTimestamp: 't3',
     });
-    expect(retried.pages).toEqual(['a\nb', 'c\nd']);
+    expect(retried.lines).toEqual(['a', 'b', 'c', 'd']);
     expect(retried.error).toBeNull();
     expect(retried.hasMoreBefore).toBe(false);
   });
@@ -240,7 +254,7 @@ describe('workflow log store', () => {
     await pollTail(key, target);
 
     const failed = getNodeLogBuffer(key);
-    expect(failed.pages).toEqual(['a']);
+    expect(failed.lines).toEqual(['a']);
     expect(failed.error).toBe('Failed to load logs');
     expect(failed.lastTimestamp).toBe('t1');
 
@@ -250,14 +264,14 @@ describe('workflow log store', () => {
     expect(vi.mocked(fetchNodeLogWindow).mock.calls[2][1]).toMatchObject({
       sinceTimestamp: 't1',
     });
-    expect(recovered.pages).toEqual(['a', 'b']);
+    expect(recovered.lines).toEqual(['a', 'b']);
     expect(recovered.lastTimestamp).toBe('t2');
     expect(recovered.error).toBeNull();
   });
 
-  it('replaces the buffer with the fresh tail when polling without a timestamp cursor', async () => {
+  it('fills an empty buffer with the fresh tail when polling without a cursor', async () => {
     vi.mocked(fetchNodeLogWindow)
-      .mockResolvedValueOnce(windowOf('a', { last_timestamp: null }))
+      .mockResolvedValueOnce(windowOf('', { last_timestamp: null }))
       .mockResolvedValueOnce(
         windowOf('b\nc', {
           has_more_before: true,
@@ -275,13 +289,72 @@ describe('workflow log store', () => {
     expect(
       vi.mocked(fetchNodeLogWindow).mock.calls[1][1]?.sinceTimestamp,
     ).toBeUndefined();
-    expect(buffer.pages).toEqual(['b\nc']);
+    expect(buffer.lines).toEqual(['b', 'c']);
     expect(buffer.oldestSkipLines).toBe(2);
     expect(buffer.oldestTimestamp).toBe('t2');
     expect(buffer.lastTimestamp).toBe('t3');
     expect(buffer.hasMoreBefore).toBe(true);
     expect(buffer.truncated).toBe(true);
     expect(buffer.error).toBeNull();
+  });
+
+  it('does not re-request a cursor-less tail over content it already holds', async () => {
+    vi.mocked(fetchNodeLogWindow).mockResolvedValueOnce(
+      windowOf('a', { has_more_before: true, last_timestamp: null }),
+    );
+
+    await ensureLoaded(key, target);
+    await pollTail(key, target);
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+    const buffer = getNodeLogBuffer(key);
+    expect(buffer.lines).toEqual(['a']);
+    expect(buffer.oldestSkipLines).toBe(1);
+  });
+
+  it('advances the paging cursor by the lines a poll appends', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(
+        windowOf('a\nb', { has_more_before: true, last_timestamp: 't2' }),
+      )
+      .mockResolvedValueOnce(windowOf('c\nd', { last_timestamp: 't4' }))
+      .mockResolvedValueOnce(windowOf('x', { has_more_before: true }));
+
+    await ensureLoaded(key, target);
+    await pollTail(key, target);
+
+    expect(getNodeLogBuffer(key).oldestSkipLines).toBe(4);
+
+    await loadOlder(key, target);
+
+    expect(vi.mocked(fetchNodeLogWindow).mock.calls[2][1]).toMatchObject({
+      skipTailLines: 4,
+    });
+  });
+
+  it('drops the oldest lines once the buffer exceeds its retention cap', async () => {
+    const head = Array.from(
+      { length: WORKFLOW_LOG_MAX_BUFFERED_LINES },
+      (_, index) => `line-${index}`,
+    ).join('\n');
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(
+        windowOf(head, { has_more_before: false, last_timestamp: 't1' }),
+      )
+      .mockResolvedValueOnce(
+        windowOf('new-1\nnew-2', { last_timestamp: 't2' }),
+      );
+
+    await ensureLoaded(key, target);
+    await pollTail(key, target);
+
+    const buffer = getNodeLogBuffer(key);
+    expect(buffer.lines.length).toBe(WORKFLOW_LOG_MAX_BUFFERED_LINES);
+    expect(buffer.lines[0]).toBe('line-2');
+    expect(buffer.lines[buffer.lines.length - 1]).toBe('new-2');
+    expect(buffer.oldestSkipLines).toBe(WORKFLOW_LOG_MAX_BUFFERED_LINES);
+    expect(buffer.oldestTimestamp).toBeNull();
+    expect(buffer.hasMoreBefore).toBe(true);
   });
 
   it('leaves the buffer untouched and stays silent when a poll returns nothing', async () => {
@@ -330,10 +403,10 @@ describe('workflow log store', () => {
     await initial;
 
     expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
-    expect(getNodeLogBuffer(key).pages).toEqual(['a']);
+    expect(getNodeLogBuffer(key).lines).toEqual(['a']);
   });
 
-  it('skips polling while an older page is in flight', async () => {
+  it('polls the tail while an older page is still in flight', async () => {
     let resolveOlder: (window: ReturnType<typeof windowOf>) => void = () => {};
     vi.mocked(fetchNodeLogWindow)
       .mockResolvedValueOnce(
@@ -343,18 +416,44 @@ describe('workflow log store', () => {
         new Promise(resolve => {
           resolveOlder = resolve;
         }),
-      );
+      )
+      .mockResolvedValueOnce(windowOf('d', { last_timestamp: 't4' }));
 
     await ensureLoaded(key, target);
     const older = loadOlder(key, target);
     await pollTail(key, target);
-    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(3);
 
     resolveOlder(windowOf('b', { has_more_before: false }));
     await older;
 
-    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
-    expect(getNodeLogBuffer(key).pages).toEqual(['b', 'c']);
+    expect(getNodeLogBuffer(key).lines).toEqual(['b', 'c', 'd']);
+  });
+
+  it('runs a user page request while a poll is in flight', async () => {
+    let resolvePoll: (window: ReturnType<typeof windowOf>) => void = () => {};
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(
+        windowOf('c', { has_more_before: true, last_timestamp: 't3' }),
+      )
+      .mockReturnValueOnce(
+        new Promise(resolve => {
+          resolvePoll = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(windowOf('b', { has_more_before: false }));
+
+    await ensureLoaded(key, target);
+    const poll = pollTail(key, target);
+    await loadOlder(key, target);
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(3);
+    expect(getNodeLogBuffer(key).lines).toEqual(['b', 'c']);
+
+    resolvePoll(windowOf('d', { last_timestamp: 't4' }));
+    await poll;
+
+    expect(getNodeLogBuffer(key).lines).toEqual(['b', 'c', 'd']);
   });
   it('evicts the least recently used buffer and its scroll state past the cache limit', async () => {
     vi.mocked(fetchNodeLogWindow).mockResolvedValue(windowOf('a'));
@@ -365,10 +464,10 @@ describe('workflow log store', () => {
     const newest = keys[keys.length - 1];
 
     expect(getNodeLogBuffer(oldest).loaded).toBe(false);
-    expect(getNodeLogBuffer(oldest).pages).toEqual([]);
+    expect(getNodeLogBuffer(oldest).lines).toEqual([]);
     expect(getNodeLogScrollState(oldest)).toBeUndefined();
     expect(getNodeLogBuffer(newest).loaded).toBe(true);
-    expect(getNodeLogBuffer(newest).pages).toEqual(['a']);
+    expect(getNodeLogBuffer(newest).lines).toEqual(['a']);
   });
 
   it('does not evict a buffer that still has a listener', async () => {
@@ -409,7 +508,7 @@ describe('workflow log store', () => {
     await initial;
 
     expect(getNodeLogBuffer(pending).loaded).toBe(true);
-    expect(getNodeLogBuffer(pending).pages).toEqual(['pending']);
+    expect(getNodeLogBuffer(pending).lines).toEqual(['pending']);
   });
 
   it('treats a re-subscribed buffer as most recently used', async () => {

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Spinner } from '@/components/ui/spinner';
 import { WORKFLOW_LOG_POLL_INTERVAL_MS } from '@/lib/constants/workflow-logs';
+import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import type { LogWindowTarget } from '@/lib/services/workflow-logs';
 import {
   ensureLoaded,
@@ -28,7 +29,6 @@ import {
 } from '@/lib/services/workflow-logs-store';
 
 const SCROLL_TOP_THRESHOLD_PX = 200;
-const STICK_TO_BOTTOM_THRESHOLD_PX = 40;
 
 interface WorkflowNodeLogsProps {
   readonly target: LogWindowTarget;
@@ -42,14 +42,23 @@ export function WorkflowNodeLogs({
   argoUrl,
 }: WorkflowNodeLogsProps) {
   const key = useMemo(() => logBufferKey(target), [target]);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const stickToBottomRef = useRef(true);
+  const {
+    scrollContainerRef,
+    messagesEndRef,
+    handleScroll: trackStickToBottom,
+    scrollToBottom,
+    isStickingToBottom,
+    setStickToBottom,
+  } = useStickyScroll();
   const restoreScrollTopRef = useRef<number | undefined>(undefined);
   const restoreOffsetRef = useRef<number | null>(null);
-  const pageCountRef = useRef(0);
+  const lineCountRef = useRef(0);
   const wasRunningRef = useRef(isRunning);
   const targetRef = useRef(target);
-  targetRef.current = target;
+
+  useEffect(() => {
+    targetRef.current = target;
+  });
 
   const subscribe = useCallback(
     (listener: () => void) => subscribeToNodeLogs(key, listener),
@@ -60,6 +69,7 @@ export function WorkflowNodeLogs({
     () => getNodeLogBuffer(key),
     getServerNodeLogBuffer,
   );
+  const content = useMemo(() => buffer.lines.join('\n'), [buffer.lines]);
 
   useEffect(() => {
     void ensureLoaded(key, targetRef.current);
@@ -84,40 +94,40 @@ export function WorkflowNodeLogs({
   }, [isRunning, buffer.loaded, key]);
 
   const rememberScroll = useCallback(() => {
-    const container = containerRef.current;
+    const container = scrollContainerRef.current;
     if (!container) return;
 
     setNodeLogScrollState(key, {
       scrollTop: container.scrollTop,
-      stickToBottom: stickToBottomRef.current,
+      stickToBottom: isStickingToBottom(),
     });
-  }, [key]);
+  }, [key, isStickingToBottom, scrollContainerRef]);
 
   const requestOlder = useCallback(() => {
-    const container = containerRef.current;
+    const container = scrollContainerRef.current;
     if (container) {
       restoreOffsetRef.current = container.scrollHeight - container.scrollTop;
     }
     void loadOlder(key, targetRef.current);
-  }, [key]);
+  }, [key, scrollContainerRef]);
 
   useLayoutEffect(() => {
     const savedScrollState = getNodeLogScrollState(key);
-    stickToBottomRef.current = savedScrollState?.stickToBottom ?? true;
+    setStickToBottom(savedScrollState?.stickToBottom ?? true);
     restoreScrollTopRef.current =
       savedScrollState && !savedScrollState.stickToBottom
         ? savedScrollState.scrollTop
         : undefined;
     restoreOffsetRef.current = null;
-    pageCountRef.current = 0;
-  }, [key]);
+    lineCountRef.current = 0;
+  }, [key, setStickToBottom]);
 
   useLayoutEffect(() => {
-    const container = containerRef.current;
+    const container = scrollContainerRef.current;
     if (!container) return;
 
-    const previousPageCount = pageCountRef.current;
-    pageCountRef.current = buffer.pages.length;
+    const previousLineCount = lineCountRef.current;
+    lineCountRef.current = buffer.lines.length;
 
     const restoreOffset = restoreOffsetRef.current;
     if (restoreOffset !== null) {
@@ -128,16 +138,17 @@ export function WorkflowNodeLogs({
     }
 
     const restoreScrollTop = restoreScrollTopRef.current;
-    if (restoreScrollTop !== undefined && buffer.pages.length > 0) {
+    if (restoreScrollTop !== undefined && buffer.lines.length > 0) {
       restoreScrollTopRef.current = undefined;
       container.scrollTop = restoreScrollTop;
       return;
     }
 
-    if (previousPageCount === 0 || stickToBottomRef.current) {
-      container.scrollTop = container.scrollHeight;
-      rememberScroll();
+    if (previousLineCount === 0) {
+      setStickToBottom(true);
     }
+    scrollToBottom();
+    rememberScroll();
 
     if (
       container.scrollHeight <= container.clientHeight &&
@@ -147,20 +158,21 @@ export function WorkflowNodeLogs({
       requestOlder();
     }
   }, [
-    buffer.pages,
+    buffer.lines,
     buffer.hasMoreBefore,
     buffer.loadingOlder,
     rememberScroll,
     requestOlder,
+    scrollContainerRef,
+    scrollToBottom,
+    setStickToBottom,
   ]);
 
   const handleScroll = useCallback(() => {
-    const container = containerRef.current;
+    const container = scrollContainerRef.current;
     if (!container) return;
 
-    stickToBottomRef.current =
-      container.scrollHeight - container.scrollTop - container.clientHeight <=
-      STICK_TO_BOTTOM_THRESHOLD_PX;
+    trackStickToBottom();
     rememberScroll();
 
     if (
@@ -170,9 +182,16 @@ export function WorkflowNodeLogs({
     ) {
       requestOlder();
     }
-  }, [buffer.hasMoreBefore, buffer.loadingOlder, rememberScroll, requestOlder]);
+  }, [
+    buffer.hasMoreBefore,
+    buffer.loadingOlder,
+    rememberScroll,
+    requestOlder,
+    scrollContainerRef,
+    trackStickToBottom,
+  ]);
 
-  if (buffer.error && buffer.pages.length === 0) {
+  if (buffer.error && buffer.lines.length === 0) {
     return (
       <div className="bg-fill-onsurface-ui-1 flex w-full flex-col items-start gap-2 p-2">
         <p className="paragraph-small-primary text-fg-warning">
@@ -193,7 +212,7 @@ export function WorkflowNodeLogs({
   return (
     <div className="flex w-full flex-col gap-1">
       <div
-        ref={containerRef}
+        ref={scrollContainerRef}
         onScroll={handleScroll}
         data-testid="workflow-node-logs-scroll"
         className="bg-fill-onsurface-ui-1 h-96 w-full overflow-auto p-2">
@@ -214,25 +233,17 @@ export function WorkflowNodeLogs({
               </span>
             )}
 
-            {!buffer.hasMoreBefore && buffer.pages.length > 0 && (
+            {!buffer.hasMoreBefore && buffer.lines.length > 0 && (
               <span className="paragraph-small-primary text-fg-tertiary px-1">
                 Start of log
               </span>
             )}
 
-            {buffer.pages.length === 0 && (
-              <pre className="paragraph-regular-primary text-fg-secondary whitespace-pre">
-                No logs available
-              </pre>
-            )}
+            <pre className="paragraph-regular-primary text-fg-secondary whitespace-pre">
+              {buffer.lines.length === 0 ? 'No logs available' : content}
+            </pre>
 
-            {buffer.pages.map((page, index) => (
-              <pre
-                key={`${key}-page-${index}-${page.length}`}
-                className="paragraph-regular-primary text-fg-secondary whitespace-pre">
-                {page}
-              </pre>
-            ))}
+            <div ref={messagesEndRef} />
           </div>
         )}
       </div>
@@ -242,7 +253,7 @@ export function WorkflowNodeLogs({
           Some lines were dropped because a page hit the size limit.
         </span>
       )}
-      {buffer.error && buffer.pages.length > 0 && (
+      {buffer.error && buffer.lines.length > 0 && (
         <span className="paragraph-small-primary text-fg-warning">
           {buffer.error}
         </span>

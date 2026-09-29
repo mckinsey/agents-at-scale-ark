@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { apiClient } from '@/lib/api/client';
+import { APIError, apiClient } from '@/lib/api/client';
+import type * as ApiClientModule from '@/lib/api/client';
 import {
   fetchNodeLogWindow,
   workflowLogsService,
 } from '@/lib/services/workflow-logs';
 
-vi.mock('@/lib/api/client', () => ({
+vi.mock('@/lib/api/client', async importOriginal => ({
+  ...(await importOriginal<typeof ApiClientModule>()),
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
@@ -121,7 +123,7 @@ describe('fetchNodeLogWindow', () => {
 
   it('falls back to the workflow node endpoint when the pod lookup fails', async () => {
     vi.mocked(apiClient.get)
-      .mockRejectedValueOnce(new Error('404'))
+      .mockRejectedValueOnce(new APIError('not found', 404))
       .mockResolvedValueOnce(window);
 
     await fetchNodeLogWindow({
@@ -135,6 +137,23 @@ describe('fetchNodeLogWindow', () => {
     expect(vi.mocked(apiClient.get).mock.calls[1][0]).toContain(
       '/workflows/wf-1/node-1/log/window',
     );
+  });
+
+  it('surfaces a non-404 pod log failure instead of retrying the node endpoint', async () => {
+    vi.mocked(apiClient.get).mockRejectedValueOnce(
+      new APIError('forbidden', 403),
+    );
+
+    await expect(
+      fetchNodeLogWindow({
+        namespace: 'test-namespace',
+        workflowName: 'wf-1',
+        nodeId: 'node-1',
+        podName: 'pod-1',
+      }),
+    ).rejects.toThrow('forbidden');
+
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
   });
 
   it('goes straight to the workflow node endpoint without a pod name', async () => {
@@ -154,7 +173,7 @@ describe('fetchNodeLogWindow', () => {
 
   it('forwards the target container to both the pod and the node endpoint', async () => {
     vi.mocked(apiClient.get)
-      .mockRejectedValueOnce(new Error('404'))
+      .mockRejectedValueOnce(new APIError('not found', 404))
       .mockResolvedValueOnce(window);
 
     await fetchNodeLogWindow({
