@@ -228,7 +228,7 @@ spec:
     language: python      # bash | python | node | ts
     source: |
       import json, sys
-      print(len(json.load(sys.stdin)["text"].split()))
+      print(len(json.loads(sys.argv[1])["text"].split()))
 ```
 
 In the dashboard, pick **Inline** in the Add Tool form, choose a language, and paste the source. The tools list shows a language badge.

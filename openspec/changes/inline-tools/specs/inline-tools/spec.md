@@ -327,7 +327,7 @@ Activation SHALL have a 60-second deadline shortened by the caller's remaining b
 
 ### Requirement: Runner uses bounded literal arguments and text results
 
-Ark SHALL publish per-language images sharing a static Go MCP runner. Bash SHALL include bash/jq/coreutils on Alpine; Python/Node/TypeScript SHALL use distroless language bases, with the TypeScript loader vendored at image build time and invoked without a shell launcher. Every image SHALL be tested with the specified non-root/read-only security settings and a language-appropriate source filename.
+Ark SHALL publish per-language images sharing a static Go MCP runner. Bash SHALL include bash/jq/coreutils on Alpine; Python/Node/TypeScript SHALL use distroless language bases, and TypeScript SHALL be served by the Node image using the runtime's native type stripping, without a vendored loader and without a shell launcher. Every language SHALL be tested with the specified non-root/read-only security settings and a language-appropriate source filename.
 
 The runner SHALL invoke the fixed interpreter directly with the script path followed by one JSON-object argument, without shell interpolation or shebang dispatch. It SHALL reject malformed/non-object arguments, bodies over 128 KiB, and serialized arguments over 64 KiB before script execution, using bounded decoding/capture memory.
 
