@@ -234,7 +234,7 @@ The controller transitions the query to `phase: canceled` once the in-flight dis
 
 ## Deletion and cleanup
 
-When a `Query` is deleted, a controller finalizer removes the messages and operation events that query wrote to the broker, so deleting a Query does not leave orphaned history behind.
+When a `Query` is deleted, a controller finalizer removes the messages and operation events that query wrote to the broker, along with the query's entry in the broker's sessions index, so deleting a Query does not leave orphaned history behind.
 
 **Messages** go through the `Memory` contract:
 - **Memory resolution** mirrors execution: the controller uses `spec.memory` if set, otherwise a `Memory` named `default` in the query's namespace. If neither exists, cleanup is skipped.
@@ -244,7 +244,10 @@ When a `Query` is deleted, a controller finalizer removes the messages and opera
 - The controller discovers the broker endpoint from the `ark-config-broker` ConfigMap and issues `DELETE /events/{queryId}` directly against it. If no broker is configured for the namespace, cleanup is skipped.
 - Events are keyed by the Query's **UID**, not its name (unlike messages), so `{queryId}` here is the UID.
 
-Both cleanups run independently and either can fail without blocking the other. A backend that does not implement a delete endpoint returns `404`/`405`, which the controller treats as "not supported" and skips. **Scope:** messages and events only — chunks, traces, and the broker's [sessions read model](/developer-guide/services/ark-broker#sessions-backend-postgres) are not affected. **Failure policy:** if a backend is unreachable the finalizer retries every 15s; after a 5-minute grace period it gives up and removes itself, so a Query is never stuck in `Deleting`.
+**Sessions** use the same broker path as events:
+- The controller issues `DELETE /sessions/queries/{queryId}` against the broker discovered from `ark-config-broker`, keyed by the Query's **name**. The query's row goes, the session header's aggregates are recomputed, and a session left with no queries is deleted with it — see the [sessions read model](/developer-guide/services/ark-broker#sessions-backend-postgres).
+
+The three cleanups run independently and any one can fail without blocking the others. A backend that does not implement a delete endpoint returns `404`/`405`, which the controller treats as "not supported" and skips. **Scope:** messages, events and the sessions index only — chunks and traces are not affected. **Failure policy:** if a backend is unreachable the finalizer retries every 15s; after a 5-minute grace period it gives up and removes itself, so a Query is never stuck in `Deleting`.
 
 This is complementary to `spec.ttl`: TTL expires history on a timer, while deletion cleans it up immediately when the Query is removed.
 
@@ -281,7 +284,7 @@ status:
 | Field | Description |
 | --- | --- |
 | `status.phase` | One of `pending`, `provisioning`, `running`, `done`, `error`, `canceled`. |
-| `status.conditions[]` | Standard Kubernetes conditions. The `Completed` condition flips to `True` on success or failure. |
+| `status.conditions[]` | Standard Kubernetes conditions. The `Completed` condition flips to `True` on success or failure. `MemoryUnavailable` and `MemoryDegraded` report conversation history that was dropped — both are written on every query whose dispatch completes, so read `status`, not presence. See [telling when memory is not working](/reference/resources/memory#telling-when-memory-is-not-working). |
 | `status.response` | Single response object (singular — there is no `responses[]` array). A selector resolves to one target, so there is always exactly one response. |
 | `status.response.content` | The final assistant message, not a concatenation of every message produced during execution. When a target emits multiple assistant messages, for example an A2A agent returning several text artifacts, only the last one lands here. Read `status.response.raw` for the full set. See [A2A queries](/developer-guide/queries/a2a-queries#artifacts). |
 | `status.response.raw` | The full conversation as a JSON-encoded array of messages, what the dashboard's Debug tab renders. This is the complete record; use it when you need every message rather than just the final answer. |

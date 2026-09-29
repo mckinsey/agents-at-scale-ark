@@ -99,6 +99,18 @@ const main = async (): Promise<void> => {
   const gracefulShutdown = async (): Promise<void> => {
     logger.info('shutting down gracefully');
     await reaper?.stop();
+    // Stop accepting and let in-flight requests (including /stream SSE
+    // responses waiting on a [DONE] from another replica) finish before the
+    // brokers that feed them are torn down; anything still open at the
+    // deadline is cut.
+    const drained = new Promise<void>((resolve) =>
+      server.close(() => resolve())
+    );
+    const deadline = new Promise<void>((resolve) =>
+      setTimeout(resolve, config.server.shutdownDrainTimeoutMs).unref()
+    );
+    await Promise.race([drained, deadline]);
+    server.closeAllConnections();
     messageStream.close?.();
     chunkStream.close?.();
     eventStream.close?.();
@@ -125,10 +137,8 @@ const main = async (): Promise<void> => {
     if (redis) {
       await redis.quit();
     }
-    server.close(() => {
-      logger.info('process terminated');
-      process.exit(0);
-    });
+    logger.info('process terminated');
+    process.exit(0);
   };
 
   process.on('SIGTERM', () => {

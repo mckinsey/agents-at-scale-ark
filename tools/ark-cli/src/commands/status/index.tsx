@@ -17,8 +17,11 @@ import {
 import {
   runReadinessChecks,
   describeStorageBackend,
+  describeNamespaceMemory,
   type ReadinessCheckResult,
   type BackendDetection,
+  type NamespaceMemoryCheck,
+  type NamespaceMemoryStatus,
 } from '../../lib/readinessChecks.js';
 import {arkServices} from '../../arkServices.js';
 import type {ArkService} from '../../types/arkService.js';
@@ -96,10 +99,34 @@ function backendStatusLine(detection: BackendDetection) {
   };
 }
 
+function namespaceMemoryStatusLine(check: NamespaceMemoryCheck) {
+  const display: Record<
+    NamespaceMemoryStatus,
+    {icon: string; color: StatusColor; details: string}
+  > = {
+    ready: {icon: '●', color: 'green', details: check.message},
+    unresolved: {icon: '✗', color: 'red', details: 'not resolving'},
+    missing: {icon: '✗', color: 'red', details: 'missing'},
+    'no-broker': {icon: '○', color: 'yellow', details: 'not configured'},
+    undetermined: {icon: '?', color: 'yellow', details: 'undetermined'},
+  };
+  const {icon, color, details} = display[check.status];
+  return {
+    icon,
+    iconColor: color,
+    status: 'default memory',
+    statusColor: color,
+    name: '',
+    details,
+    subtext: check.status === 'ready' ? undefined : check.message,
+  };
+}
+
 function buildStatusSections(
   data: StatusData & {clusterAccess?: boolean; clusterInfo?: any},
   versionInfo?: ArkVersionInfo,
-  backend?: BackendDetection
+  backend?: BackendDetection,
+  namespaceMemory?: NamespaceMemoryCheck
 ): StatusSection[] {
   const sections: StatusSection[] = [];
 
@@ -305,6 +332,9 @@ function buildStatusSections(
       }
     }
   }
+  if (namespaceMemory) {
+    arkStatusLines.push(namespaceMemoryStatusLine(namespaceMemory));
+  }
   if (backend) {
     arkStatusLines.push(backendStatusLine(backend));
   }
@@ -335,19 +365,34 @@ export async function checkStatus(
     ]);
 
     // Only probe for the storage backend if the cluster is reachable; probing an
-    // unreachable cluster would just retry to its timeout.
-    const detection: BackendDetection = statusData.clusterAccess
-      ? await describeStorageBackend()
-      : {
-          backend: 'unknown',
-          status: 'unreachable',
-          message:
-            'Cluster is not reachable — cannot determine the storage backend.',
-        };
+    // unreachable cluster would just retry to its timeout. The memory check is
+    // scoped to the kubeconfig's current namespace: the invariant it reports on
+    // is per-namespace, and that is the namespace the user's queries land in.
+    // Both probes are independent, so they run together rather than in series.
+    const [detection, namespaceMemory] = await Promise.all([
+      statusData.clusterAccess
+        ? describeStorageBackend()
+        : Promise.resolve<BackendDetection>({
+            backend: 'unknown',
+            status: 'unreachable',
+            message:
+              'Cluster is not reachable — cannot determine the storage backend.',
+          }),
+      statusData.clusterAccess && statusData.arkReady
+        ? describeNamespaceMemory(
+            statusData.clusterInfo?.namespace || 'default'
+          )
+        : Promise.resolve(undefined),
+    ]);
 
     spinner.stop();
 
-    const sections = buildStatusSections(statusData, versionInfo, detection);
+    const sections = buildStatusSections(
+      statusData,
+      versionInfo,
+      detection,
+      namespaceMemory
+    );
     StatusFormatter.printSections(sections);
 
     if (options?.waitForReady) {

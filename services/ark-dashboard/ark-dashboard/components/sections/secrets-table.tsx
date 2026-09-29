@@ -21,14 +21,14 @@ import {
   rowHoverOverlayClass,
 } from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
-import type { Model } from '@/lib/services/models';
+import type { ModelListItem } from '@/lib/services/models';
 import type { Secret } from '@/lib/services/secrets';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface SecretsTableProps {
   readonly secrets: readonly Secret[];
-  readonly models: readonly Model[];
+  readonly models: readonly ModelListItem[];
   readonly onDelete: (id: string) => void;
 }
 
@@ -63,37 +63,8 @@ function NameCell({ secret }: Readonly<{ secret: Secret }>) {
   );
 }
 
-function modelUsesSecret(model: Model, secretName: string): boolean {
-  const config = model.config;
-  if (!config) {
-    return false;
-  }
-
-  const checkValueSource = (valueSource: unknown): boolean => {
-    if (!valueSource || typeof valueSource !== 'object') {
-      return false;
-    }
-    const source = valueSource as Record<string, unknown>;
-    const valueFrom = source.valueFrom as Record<string, unknown> | undefined;
-    const secretKeyRef = valueFrom?.secretKeyRef as
-      | Record<string, unknown>
-      | undefined;
-    return secretKeyRef?.name === secretName;
-  };
-
-  for (const [, providerConfig] of Object.entries(config)) {
-    if (!providerConfig || typeof providerConfig !== 'object') {
-      continue;
-    }
-
-    for (const [, value] of Object.entries(providerConfig)) {
-      if (checkValueSource(value)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+function modelUsesSecret(model: ModelListItem, secretName: string): boolean {
+  return model.secret_refs?.includes(secretName) ?? false;
 }
 
 function SecretStatus({ inUse }: Readonly<{ inUse: boolean }>) {
@@ -105,7 +76,9 @@ function SecretStatus({ inUse }: Readonly<{ inUse: boolean }>) {
   );
 }
 
-function ModelsInUse({ models }: Readonly<{ models: readonly Model[] }>) {
+function ModelsInUse({
+  models,
+}: Readonly<{ models: readonly ModelListItem[] }>) {
   return (
     <TagOverflowList
       items={models}
@@ -119,7 +92,7 @@ function ModelsInUse({ models }: Readonly<{ models: readonly Model[] }>) {
 
 interface SecretTableRowProps {
   readonly secret: Secret;
-  readonly models: readonly Model[];
+  readonly models: readonly ModelListItem[];
   readonly onDelete: (id: string) => void;
 }
 

@@ -1,9 +1,6 @@
 import {Router} from 'express';
 import {TraceBroker} from '@ark-broker/brokers/trace-broker.js';
-import {
-  sendValidationError,
-  sendInternalError,
-} from '@ark-broker/http/routes/errors.js';
+import {sendValidationError} from '@ark-broker/http/routes/errors.js';
 import {
   getTracesQuerySchema,
   GetTracesQuery,
@@ -59,16 +56,6 @@ export function createTracesRouter(traces: TraceBroker): Router {
       }
     }
   );
-
-  router.delete('/', async (req, res) => {
-    try {
-      await traces.delete();
-      res.json({status: 'success', message: 'Trace data purged'});
-    } catch (error) {
-      req.log.error({err: error}, 'trace purge failed');
-      sendInternalError(res, req.id);
-    }
-  });
 
   return router;
 }
