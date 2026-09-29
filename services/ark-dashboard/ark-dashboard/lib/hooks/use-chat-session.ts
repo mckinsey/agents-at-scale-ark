@@ -23,13 +23,15 @@ import {
   type TeamAgentParameters,
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
+import { useBrokerFallbackNotice } from '@/lib/hooks/use-broker-fallback-notice';
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
-import type {
-  ChatResponse,
-  MemoryNotice,
-  MemoryNoticeLookup,
+import {
+  BrokerUnavailableError,
+  type ChatResponse,
+  type MemoryNotice,
+  type MemoryNoticeLookup,
 } from '@/lib/services/chat';
 import type {
   ArkExtendedChunk,
@@ -167,6 +169,8 @@ interface UseChatSessionReturn {
 
   error: string | null;
   memoryNotice: MemoryNotice | null;
+  brokerFallbackNoticeVisible: boolean;
+  dismissBrokerFallbackNotice: () => void;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -333,6 +337,7 @@ export function useChatSession({
 
   const [error, setError] = useState<string | null>(null);
   const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
+  const brokerFallbackNotice = useBrokerFallbackNotice();
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
@@ -481,6 +486,7 @@ export function useChatSession({
 
       let hasError = false;
       let errorMessage = '';
+      let brokerUnavailableError: BrokerUnavailableError | null = null;
       let queryName = '';
       let currentAgent: string | undefined;
       let turnComplete = false;
@@ -656,6 +662,15 @@ export function useChatSession({
         );
 
         if ('error' in typedChunk && typedChunk.error) {
+          if (typedChunk.code === 'broker_unavailable') {
+            brokerUnavailableError = new BrokerUnavailableError(
+              typedChunk.error.message || 'Broker unavailable',
+              503,
+              typedChunk.code,
+              typedChunk.fallback,
+            );
+            break;
+          }
           hasError = true;
           errorMessage = typedChunk.error.message || 'An error occurred';
           queryName = typedChunk.ark?.query || '';
@@ -829,6 +844,10 @@ export function useChatSession({
             queryName,
           },
         });
+      }
+
+      if (brokerUnavailableError) {
+        throw brokerUnavailableError;
       }
 
       if (!hasPendingApproval) {
@@ -1177,6 +1196,32 @@ export function useChatSession({
         }
       } catch (err) {
         console.error('Error sending message:', err);
+
+        if (err instanceof BrokerUnavailableError && err.status === 503) {
+          brokerFallbackNotice.notify();
+          try {
+            await handlePollChatResponse(userMessage, apiParameters);
+          } catch (pollErr) {
+            console.error('Error sending message:', pollErr);
+            const pollErrMsg =
+              pollErr instanceof Error
+                ? pollErr.message
+                : 'Failed to send message';
+            updateChatMessages(prev => [
+              ...prev,
+              {
+                role: 'assistant',
+                content: pollErrMsg,
+                metadata: {
+                  status: 'failed',
+                },
+              } as ExtendedChatMessage,
+            ]);
+            setError(pollErrMsg);
+          }
+          return;
+        }
+
         let errMsg = 'Failed to send message';
 
         if (err instanceof Error) {
@@ -1232,6 +1277,7 @@ export function useChatSession({
     },
     [
       beginMemoryNoticeTurn,
+      brokerFallbackNotice,
       ensureConversationId,
       handlePollChatResponse,
       handleStreamChatResponse,
@@ -1428,6 +1474,8 @@ export function useChatSession({
     statusText,
     error,
     memoryNotice,
+    brokerFallbackNoticeVisible: brokerFallbackNotice.visible,
+    dismissBrokerFallbackNotice: brokerFallbackNotice.dismiss,
     sendMessage,
     clearChat,
     messagesEndRef,

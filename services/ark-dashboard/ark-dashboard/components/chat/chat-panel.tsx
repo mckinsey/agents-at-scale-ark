@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { BrokerFallbackNotice } from '@/components/chat/broker-fallback-notice';
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { ChatNotice } from '@/components/chat/chat-notice';
 import { MemoryChatNotice } from '@/components/chat/memory-chat-notice';
@@ -49,6 +50,8 @@ export function ChatPanel({
     isWaitingForApprovalResponse,
     error,
     memoryNotice,
+    brokerFallbackNoticeVisible,
+    dismissBrokerFallbackNotice,
     sendMessage,
     clearChat,
     messagesEndRef,
@@ -152,6 +155,11 @@ export function ChatPanel({
             the first send; this one is set after the newest turn, and the
             viewport is pinned to the bottom by then, so in the scroll area it
             would be painted screens above where the user is looking. */}
+        {brokerFallbackNoticeVisible && (
+          <div className="px-4 pt-4">
+            <BrokerFallbackNotice onDismiss={dismissBrokerFallbackNotice} />
+          </div>
+        )}
         {memoryNotice && (
           <div className="px-4 pt-4">
             <MemoryChatNotice notice={memoryNotice} />

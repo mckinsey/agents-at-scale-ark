@@ -217,6 +217,18 @@ export type ChatMessage = {
   queryId?: string;
 };
 
+export class BrokerUnavailableError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string,
+    public fallback?: string,
+  ) {
+    super(message);
+    this.name = 'BrokerUnavailableError';
+  }
+}
+
 export type ChatSession = {
   id: string;
   messages: ChatMessage[];
@@ -600,7 +612,21 @@ export const chatService = {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to connect to stream: ${response.statusText}`);
+        let code: string | undefined;
+        let fallback: string | undefined;
+        try {
+          const body = await response.json();
+          if (body && typeof body === 'object') {
+            if (typeof body.code === 'string') code = body.code;
+            if (typeof body.fallback === 'string') fallback = body.fallback;
+          }
+        } catch {}
+        throw new BrokerUnavailableError(
+          `Failed to connect to stream: ${response.statusText}`,
+          response.status,
+          code,
+          fallback,
+        );
       }
 
       const reader = response.body?.getReader();

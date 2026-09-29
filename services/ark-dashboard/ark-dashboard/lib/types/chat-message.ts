@@ -50,6 +50,8 @@ export interface A2AStatusEvent {
 export type ArkExtendedChunk =
   | (ChatCompletionChunk & {
       error?: { message?: string; code?: string };
+      code?: string;
+      fallback?: string;
       ark?: ArkCompletedQueryData & {
         agent?: string;
         query?: string;
