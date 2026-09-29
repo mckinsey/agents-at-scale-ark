@@ -166,6 +166,27 @@ build-completions-container: ## Build the ark-completions container
 		-t $(COMPLETIONS_IMAGE):$(COMPLETIONS_IMAGE_TAG) \
 		-f Dockerfile.completions .
 
+INLINE_RUNNER_IMAGE ?= ark-inline-runner
+INLINE_RUNNER_IMAGE_TAG ?= latest
+# ts runs on the node image, so there are three images for four languages.
+INLINE_RUNNER_TARGETS ?= bash python node
+
+.PHONY: build-inline-runner-containers
+build-inline-runner-containers: ## Build the inline tool runner images
+	@for target in $(INLINE_RUNNER_TARGETS); do \
+		echo "building $(INLINE_RUNNER_IMAGE)-$$target:$(INLINE_RUNNER_IMAGE_TAG)"; \
+		$(CONTAINER_TOOL) build \
+			--build-arg VERSION=$(VERSION) \
+			--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+			--target $$target \
+			-t $(INLINE_RUNNER_IMAGE)-$$target:$(INLINE_RUNNER_IMAGE_TAG) \
+			-f Dockerfile.inlinerunner . || exit 1; \
+	done
+
+.PHONY: smoke-inline-runners
+smoke-inline-runners: ## Run a real script through each inline runner image under the pod's security settings
+	@./scripts/smoke-inline-runners.sh
+
 .PHONY: deploy
 deploy: manifests ## Deploy controller and cert-manager to the K8s cluster specified in ~/.kube/config.
 	# NOTE: cert-manager might be better in 'prepare-cluster' target as it's required infra rather than ark-deployment

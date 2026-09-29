@@ -17,12 +17,12 @@
 
 ## 3. Phase 2: runner contract and images
 
-- [ ] 3.1 Build the shared static Go MCP runner with fixed interpreter dispatch and bounded literal JSON arguments; test malformed/non-object/oversized input, Unicode, nested values, and shell metacharacters without interpolation.
-- [ ] 3.2 Implement bounded stdout/stderr draining, UTF-8 text results, truncation indicators, and MCP error results; test invalid encoding, multibyte truncation boundaries, non-zero exit, and sustained output without unbounded memory/logging.
-- [ ] 3.3 Enforce execution/caller deadlines, cancellation, process-group termination, and child reaping; test hangs, orphan children, and children keeping output pipes open without using a node-exhausting fork bomb.
+- [x] 3.1 Build the shared static Go MCP runner with fixed interpreter dispatch and bounded literal JSON arguments; test malformed/non-object/oversized input, Unicode, nested values, and shell metacharacters without interpolation.
+- [x] 3.2 Implement bounded stdout/stderr draining, UTF-8 text results, truncation indicators, and MCP error results; test invalid encoding, multibyte truncation boundaries, non-zero exit, and sustained output without unbounded memory/logging.
+- [x] 3.3 Enforce execution/caller deadlines, cancellation, process-group termination, and child reaping; test hangs, orphan children, and children keeping output pipes open without using a node-exhausting fork bomb.
   - [x] Prevent Linux descendants from escaping process-group cleanup through `setsid` or `setpgid`; test completion, timeout, and cancellation with inherited and closed output pipes, and document the restriction.
-- [ ] 3.4 Build the bash/Python/Node/TypeScript images with pinned bases and the documented installed tools; smoke-test all four under the real non-root/read-only security and resource settings, including TypeScript syntax and any bounded scratch requirement.
-- [ ] 3.5 Wire image builds, signing, and publication into existing tooling; document the language/image mapping and dependency limitations without per-tool image overrides.
+- [x] 3.4 Build the bash/Python/Node images with pinned bases and the documented installed tools (TypeScript runs on the Node image via native type stripping); smoke-test all four languages under the real non-root/read-only security and resource settings, including TypeScript syntax and any bounded scratch requirement.
+- [x] 3.5 Wire image builds, signing, and publication into existing tooling; document the language/image mapping and dependency limitations without per-tool image overrides.
 
 ## 4. Phase 2: owned resources and revision lifecycle
 
