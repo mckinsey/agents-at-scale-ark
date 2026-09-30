@@ -800,7 +800,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			defer cancel()
 			r.operations.Store(namespacedName, cancel)
 
-			r.finishExecuteQueryAsync(context.Background(), namespacedName)
+			r.finishExecuteQueryAsync(context.Background(), namespacedName, &arkv1alpha1.Query{})
 
 			_, exists := r.operations.Load(namespacedName)
 			Expect(exists).To(BeFalse(), "operations entry should be cleared")
@@ -812,7 +812,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			namespacedName := types.NamespacedName{Name: "no-sem-query", Namespace: "default"}
 			r.operations.Store(namespacedName, context.CancelFunc(func() {}))
 
-			Expect(func() { r.finishExecuteQueryAsync(context.Background(), namespacedName) }).NotTo(Panic())
+			Expect(func() { r.finishExecuteQueryAsync(context.Background(), namespacedName, &arkv1alpha1.Query{}) }).NotTo(Panic())
 
 			_, exists := r.operations.Load(namespacedName)
 			Expect(exists).To(BeFalse())
@@ -833,7 +833,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			r.operations.Store(namespacedName, context.CancelFunc(func() {}))
 
 			Expect(func() {
-				defer r.finishExecuteQueryAsync(context.Background(), namespacedName)
+				defer r.finishExecuteQueryAsync(context.Background(), namespacedName, &arkv1alpha1.Query{})
 				panic("simulated execution panic")
 			}).NotTo(Panic())
 
