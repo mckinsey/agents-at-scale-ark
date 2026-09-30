@@ -190,6 +190,16 @@ var _ = Describe("Tool Controller", func() {
 
 			service := &corev1.Service{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: names.Runner, Namespace: "default"}, service)).To(Succeed())
+
+			// The API server re-normalizes the fields it assigns, so a redundant
+			// write never moves resourceVersion: only a call counter can see it.
+			serviceUpdates := 0
+			counting := &serviceUpdateCounter{Client: k8sClient, updates: &serviceUpdates}
+			steadyState := &ToolReconciler{Client: counting, Scheme: k8sClient.Scheme()}
+			_, err = steadyState.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(serviceUpdates).To(Equal(0), "a steady-state reconcile must not re-Update the Service")
+
 			policy := &networkingv1.NetworkPolicy{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: names.Runner, Namespace: "default"}, policy)).To(Succeed())
 			serviceAccount := &corev1.ServiceAccount{}
@@ -200,6 +210,59 @@ var _ = Describe("Tool Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedTool)).To(Succeed())
 			Expect(updatedTool.Status.State).To(Equal(arkv1alpha1.ToolStatePending))
 			Expect(updatedTool.Status.ResolvedAddress).To(BeEmpty())
+		})
+	})
+
+	Context("When an owned child's spec drifts out of band", func() {
+		const resourceName = "inline-drift"
+
+		It("restores the whole managed Service spec", func() {
+			GinkgoT().Setenv(inlinetools.EnabledEnvVar, "true")
+			GinkgoT().Setenv(runner.EnvImageRepository, "ghcr.io/example/ark-inline-runner")
+			GinkgoT().Setenv(runner.EnvImageTag, "v1.2.3")
+
+			ctx := context.Background()
+			toolKey := types.NamespacedName{Name: resourceName, Namespace: "default"}
+			serviceKey := types.NamespacedName{Name: inlineChildNames(resourceName).Runner, Namespace: "default"}
+
+			tool := &arkv1alpha1.Tool{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: arkv1alpha1.ToolSpec{
+					Type:   arkv1alpha1.ToolTypeInline,
+					Inline: &arkv1alpha1.InlineSpec{Source: "print(1)", Language: arkv1alpha1.InlineLanguagePython},
+				},
+			}
+			Expect(k8sClient.Create(ctx, tool)).To(Succeed())
+			DeferCleanup(func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(context.Background(), tool))).To(Succeed())
+			})
+
+			controllerReconciler := &ToolReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: toolKey})
+			Expect(err).NotTo(HaveOccurred())
+
+			drifted := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, serviceKey, drifted)).To(Succeed())
+			drifted.Spec.Selector = map[string]string{"hijacked": "true"}
+			drifted.Spec.Ports = []corev1.ServicePort{{Name: "wrong", Port: 1, Protocol: corev1.ProtocolTCP}}
+			Expect(k8sClient.Update(ctx, drifted)).To(Succeed())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: toolKey})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Comparing the whole spec, with only the API-server-assigned fields
+			// masked out, covers any field inlineService gains later; a
+			// field-by-field assertion would not.
+			Expect(k8sClient.Get(ctx, toolKey, tool)).To(Succeed())
+			want := inlineService(tool).Spec
+			restored := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, serviceKey, restored)).To(Succeed())
+			got := *restored.Spec.DeepCopy()
+			got.ClusterIP, got.ClusterIPs = "", nil
+			got.IPFamilies, got.IPFamilyPolicy = nil, nil
+			got.InternalTrafficPolicy = nil
+			got.SessionAffinity = ""
+			Expect(got).To(Equal(want), "a drifted Service must be reconciled back to the full desired spec")
 		})
 	})
 
@@ -274,3 +337,17 @@ var _ = Describe("Tool Controller", func() {
 		})
 	})
 })
+
+// serviceUpdateCounter counts Update calls for Services, so a test can assert a
+// steady-state reconcile issues none.
+type serviceUpdateCounter struct {
+	client.Client
+	updates *int
+}
+
+func (c *serviceUpdateCounter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if _, ok := obj.(*corev1.Service); ok {
+		*c.updates++
+	}
+	return c.Client.Update(ctx, obj, opts...)
+}

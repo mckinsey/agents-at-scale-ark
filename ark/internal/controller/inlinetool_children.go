@@ -82,10 +82,18 @@ func (r *ToolReconciler) reconcileInlineChildren(ctx context.Context, tool *arkv
 	desiredService := service.Spec
 	if err := r.applyInlineChild(ctx, tool, service, func(existing client.Object) {
 		current := existing.(*corev1.Service)
-		// ClusterIP is assigned by the API server and is immutable.
-		clusterIP := current.Spec.ClusterIP
+		// The API server assigns or defaults these, so the desired spec leaves them
+		// empty. Carrying the live values over keeps the immutable ones (ClusterIP,
+		// and a dual-stack Service's secondary IP and family) and stops
+		// CreateOrUpdate seeing a diff, and re-Updating, on every reconcile.
+		assigned := current.Spec
 		current.Spec = desiredService
-		current.Spec.ClusterIP = clusterIP
+		current.Spec.ClusterIP = assigned.ClusterIP
+		current.Spec.ClusterIPs = assigned.ClusterIPs
+		current.Spec.IPFamilies = assigned.IPFamilies
+		current.Spec.IPFamilyPolicy = assigned.IPFamilyPolicy
+		current.Spec.InternalTrafficPolicy = assigned.InternalTrafficPolicy
+		current.Spec.SessionAffinity = assigned.SessionAffinity
 	}); err != nil {
 		return err
 	}
