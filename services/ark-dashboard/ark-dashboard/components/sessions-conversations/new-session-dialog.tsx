@@ -68,7 +68,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
   const { data: teams = [], isLoading: loadingTeams } = useQuery({
     queryKey: ['teams', namespace],
-    queryFn: () => teamsService.getAll(namespace),
+    queryFn: () => teamsService.list(namespace),
     enabled: Boolean(namespace),
   });
 

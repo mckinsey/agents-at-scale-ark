@@ -198,7 +198,3 @@ func (q *QuerySpec) SetInputString(input string) error {
 	q.Input.Raw = inputBytes
 	return nil
 }
-
-func init() {
-	SchemeBuilder.Register(&Query{}, &QueryList{})
-}

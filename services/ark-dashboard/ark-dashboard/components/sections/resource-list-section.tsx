@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -69,8 +62,15 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly emptyDescription: ReactNode;
   readonly headerActions?: ReactNode;
   readonly originFilter?: ResourceListFilter<T>;
-  readonly loadItems: () => Promise<T[]>;
-  readonly deleteItem: (id: string) => Promise<unknown>;
+  // Data is owned by the caller via React Query (fetching + caching).
+  readonly items: T[];
+  readonly loading: boolean;
+  readonly error?: unknown;
+  // React Query's dataUpdatedAt: 0 until the first successful load, so it
+  // distinguishes an initial load failure from a failed refresh.
+  readonly dataUpdatedAt?: number;
+  readonly onDelete: (id: string) => void;
+  readonly onReload: () => void;
   readonly renderTable: (
     items: T[],
     onDelete: (id: string) => void,
@@ -92,22 +92,30 @@ export function ResourceListSection<T extends ResourceListItem>({
   emptyDescription,
   headerActions,
   originFilter,
-  loadItems,
-  deleteItem,
+  items,
+  loading,
+  error,
+  dataUpdatedAt,
+  onDelete,
+  onReload,
   renderTable,
 }: ResourceListSectionProps<T>) {
-  const [items, setItems] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [originFilterValue, setOriginFilterValue] = useState('All');
-  const showLoading = useDelayedLoading(loading);
-  const { readOnlyMode, namespace } = useNamespace();
+  const { readOnlyMode } = useNamespace();
 
-  const loadItemsRef = useRef(loadItems);
-  loadItemsRef.current = loadItems;
-  const hasLoadedOnce = useRef(false);
+  const showLoading = useDelayedLoading(loading);
+
+  const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(`Failed to Load ${pluralLabel}`, {
+      description:
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+    });
+  }, [error, pluralLabel]);
 
   const originFilterOptions = useMemo(() => {
     if (!originFilter) return [];
@@ -136,65 +144,19 @@ export function ResourceListSection<T extends ResourceListItem>({
     });
   }, [items, searchQuery, statusFilter, originFilter, originFilterValue]);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try {
-      setItems(await loadItemsRef.current());
-      setError(null);
-      hasLoadedOnce.current = true;
-    } catch (err) {
-      const normalizedError =
-        err instanceof Error ? err : new Error('An unexpected error occurred');
-      console.error('Failed to load data:', normalizedError);
-      setError(normalizedError);
-      toast.error('Failed to Load Data', {
-        description: normalizedError.message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    hasLoadedOnce.current = false;
-    setItems([]);
-    setError(null);
-    reload();
-  }, [namespace, reload]);
-
-  const handleDelete = async (id: string) => {
-    try {
-      const item = items.find(i => i.id === id);
-      if (!item) {
-        throw new Error(`${entityLabel} not found`);
-      }
-      await deleteItem(id);
-      toast.success(`${entityLabel} deleted successfully`);
-      setLoading(true);
-      try {
-        setItems(await loadItemsRef.current());
-      } finally {
-        setLoading(false);
-      }
-    } catch (err) {
-      toast.error(`Failed to Delete ${entityLabel}`, {
-        description:
-          err instanceof Error ? err.message : 'An unexpected error occurred',
-      });
-    }
-  };
-
   // loadFailed: the first load never succeeded, so there is nothing to show —
   // the error replaces the list. refreshFailed: a later reload failed but we
   // still hold the previously loaded items — keep showing them under a banner
   // rather than discarding valid data. This mirrors the a2a-servers/events
   // sections and prevents a transient error from rendering the empty state.
   const hasError = Boolean(error);
-  const loadFailed = hasError && !hasLoadedOnce.current;
-  const refreshFailed = hasError && hasLoadedOnce.current;
+  const hasLoadedOnce = (dataUpdatedAt ?? 0) > 0;
+  const loadFailed = hasError && !hasLoadedOnce;
+  const refreshFailed = hasError && hasLoadedOnce;
   const isEmpty = !loading && !hasError && items.length === 0;
+  const errorMessage =
+    error instanceof Error ? error.message : 'An unexpected error occurred';
 
-  const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
   const statusLabel = STATUS_ITEMS.find(s => s.value === statusFilter)?.label;
   const noResultsMessage =
     statusFilter === 'All'
@@ -234,8 +196,8 @@ export function ResourceListSection<T extends ResourceListItem>({
         <ResourceErrorState
           className="mt-5"
           title={`Couldn't load ${pluralLabel}`}
-          description={error?.message}
-          onRetry={reload}
+          description={errorMessage}
+          onRetry={onReload}
         />
       )}
       {!showLoading && !loadFailed && isEmpty && (
@@ -263,7 +225,7 @@ export function ResourceListSection<T extends ResourceListItem>({
             <ResourceErrorState
               title={`Couldn't refresh ${pluralLabel}`}
               description="Showing the last loaded version."
-              onRetry={reload}
+              onRetry={onReload}
             />
           )}
           <div className="flex flex-none items-end gap-3">
@@ -322,7 +284,7 @@ export function ResourceListSection<T extends ResourceListItem>({
             <ResourceNoResults icon={icon} message={noResultsMessage} />
           ) : (
             <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-              {renderTable(filteredItems, handleDelete, reload)}
+              {renderTable(filteredItems, onDelete, onReload)}
             </ScrollArea>
           )}
         </div>

@@ -94,7 +94,3 @@ type A2AServerList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []A2AServer `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&A2AServer{}, &A2AServerList{})
-}

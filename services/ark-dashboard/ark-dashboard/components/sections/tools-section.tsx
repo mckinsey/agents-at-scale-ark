@@ -38,8 +38,7 @@ import { toast } from '@/components/ui/sonner';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
 import {
-  type Agent,
-  type AgentTool,
+  type AgentListItem,
   type Tool,
   agentsService,
   toolsService,
@@ -59,7 +58,7 @@ const TYPE_ITEMS: ReadonlyArray<{ value: TypeFilter; label: string }> = [
 export function ToolsSection() {
   const { readOnlyMode, namespace } = useNamespace();
   const [tools, setTools] = useState<Tool[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const showLoading = useDelayedLoading(loading);
@@ -72,7 +71,7 @@ export function ToolsSection() {
     try {
       const [toolsData, agentsData] = await Promise.all([
         toolsService.getAll(namespace),
-        agentsService.getAll(namespace),
+        agentsService.listWithTools(namespace),
       ]);
       setTools(toolsData);
       setAgents(agentsData);
@@ -102,11 +101,9 @@ export function ToolsSection() {
     const map: Record<string, { inUse: boolean; reason?: string }> = {};
     const agentsByTool: Record<string, string[]> = {};
     agents.forEach(agent => {
-      agent.tools?.forEach((tool: AgentTool) => {
-        if (tool.name) {
-          agentsByTool[tool.name] ??= [];
-          agentsByTool[tool.name].push(agent.name);
-        }
+      agent.tool_names?.forEach(toolName => {
+        agentsByTool[toolName] ??= [];
+        agentsByTool[toolName].push(agent.name);
       });
     });
     tools.forEach(tool => {

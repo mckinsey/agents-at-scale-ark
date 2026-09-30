@@ -1,15 +1,14 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ResourceListItem } from './resource-list-section';
 import { ResourceListSection } from './resource-list-section';
 
-let currentNamespace = 'default';
-
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
-    namespace: currentNamespace,
+    namespace: 'default',
     isNamespaceResolved: true,
     isPending: false,
     readOnlyMode: false,
@@ -36,127 +35,89 @@ interface Item extends ResourceListItem {
   name: string;
 }
 
-function renderSection(loadItems: () => Promise<Item[]>) {
-  return render(
-    <ResourceListSection<Item>
-      icon={<span>icon</span>}
-      title="Agents"
-      subtitle="Manage agents"
-      createHref="/agents/new"
-      createLabel="Create agent"
-      learnMoreUrl="https://example.com"
-      entityLabel="Agent"
-      emptyTitle="No Agents Yet"
-      emptyDescription="Create your first agent"
-      loadItems={loadItems}
-      deleteItem={vi.fn().mockResolvedValue(undefined)}
-      renderTable={(items, _onDelete, reload) => (
-        <div>
-          <button type="button" onClick={reload}>
-            trigger-reload
-          </button>
-          <ul>
-            {items.map(i => (
-              <li key={i.id}>{i.name}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    />,
-  );
+type SectionProps = ComponentProps<typeof ResourceListSection<Item>>;
+
+function makeProps(overrides: Partial<SectionProps>): SectionProps {
+  return {
+    icon: <span>icon</span>,
+    title: 'Agents',
+    subtitle: 'Manage agents',
+    createHref: '/agents/new',
+    createLabel: 'Create agent',
+    learnMoreUrl: 'https://example.com',
+    entityLabel: 'Agent',
+    emptyTitle: 'No Agents Yet',
+    emptyDescription: 'Create your first agent',
+    items: [],
+    loading: false,
+    error: undefined,
+    dataUpdatedAt: 0,
+    onDelete: vi.fn(),
+    onReload: vi.fn(),
+    renderTable: items => (
+      <ul>
+        {items.map(i => (
+          <li key={i.id}>{i.name}</li>
+        ))}
+      </ul>
+    ),
+    ...overrides,
+  };
+}
+
+function renderSection(overrides: Partial<SectionProps> = {}) {
+  const props = makeProps(overrides);
+  const result = render(<ResourceListSection<Item> {...props} />);
+  return { ...result, props };
 }
 
 describe('ResourceListSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    currentNamespace = 'default';
   });
 
-  it('renders the error state (not the empty state) when the load fails', async () => {
-    renderSection(() => Promise.reject(new Error('backend is down')));
+  it('renders the error state (not the empty state) when the first load fails', () => {
+    // dataUpdatedAt stays 0 until the first successful load, so an error here
+    // is a load failure that replaces the list.
+    renderSection({
+      error: new Error('backend is down'),
+      dataUpdatedAt: 0,
+    });
 
-    const alert = await screen.findByRole('alert');
+    const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(/couldn't load agents/i);
     expect(alert).toHaveTextContent(/backend is down/i);
     expect(screen.queryByText('No Agents Yet')).not.toBeInTheDocument();
   });
 
-  it('retries the load when the retry button is clicked', async () => {
-    const loadItems = vi
-      .fn<() => Promise<Item[]>>()
-      .mockRejectedValueOnce(new Error('backend is down'))
-      .mockResolvedValueOnce([{ id: '1', name: 'agent-one' }]);
-
+  it('calls onReload when the retry button is clicked', async () => {
+    const onReload = vi.fn();
     const user = userEvent.setup();
-    renderSection(loadItems);
+    renderSection({ error: new Error('backend is down'), onReload });
 
-    await user.click(await screen.findByRole('button', { name: /retry/i }));
+    await user.click(screen.getByRole('button', { name: /retry/i }));
 
-    expect(await screen.findByText('agent-one')).toBeInTheDocument();
+    expect(onReload).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the empty state when the load succeeds with no items', () => {
+    renderSection({ items: [], dataUpdatedAt: 1_000 });
+
+    expect(screen.getByText('No Agents Yet')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows the empty state when the load succeeds with no items', async () => {
-    renderSection(() => Promise.resolve([]));
+  it('keeps stale data and shows a refresh banner when a refresh fails', () => {
+    // A prior successful load (dataUpdatedAt > 0) plus an error is a refresh
+    // failure: keep the last items and surface a banner rather than the list.
+    renderSection({
+      items: [{ id: '1', name: 'agent-one' }],
+      error: new Error('refresh blew up'),
+      dataUpdatedAt: 1_000,
+    });
 
-    expect(await screen.findByText('No Agents Yet')).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it('keeps stale data and shows a refresh banner when a refresh fails', async () => {
-    const loadItems = vi
-      .fn<() => Promise<Item[]>>()
-      .mockResolvedValueOnce([{ id: '1', name: 'agent-one' }])
-      .mockRejectedValueOnce(new Error('refresh blew up'));
-
-    const user = userEvent.setup();
-    renderSection(loadItems);
-
-    expect(await screen.findByText('agent-one')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'trigger-reload' }));
-
-    const alert = await screen.findByRole('alert');
+    const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(/couldn't refresh agents/i);
     expect(screen.getByText('agent-one')).toBeInTheDocument();
-  });
-
-  it('replaces the list (loadFailed) when a load fails right after a namespace switch', async () => {
-    const loadItems = vi
-      .fn<() => Promise<Item[]>>()
-      .mockResolvedValueOnce([{ id: '1', name: 'foo-agent' }])
-      .mockRejectedValueOnce(new Error('forbidden in bar'));
-
-    const { rerender } = renderSection(loadItems);
-
-    expect(await screen.findByText('foo-agent')).toBeInTheDocument();
-
-    currentNamespace = 'bar';
-    rerender(
-      <ResourceListSection<Item>
-        icon={<span>icon</span>}
-        title="Agents"
-        subtitle="Manage agents"
-        createHref="/agents/new"
-        createLabel="Create agent"
-        learnMoreUrl="https://example.com"
-        entityLabel="Agent"
-        emptyTitle="No Agents Yet"
-        emptyDescription="Create your first agent"
-        loadItems={loadItems}
-        deleteItem={vi.fn().mockResolvedValue(undefined)}
-        renderTable={items => (
-          <ul>
-            {items.map(i => (
-              <li key={i.id}>{i.name}</li>
-            ))}
-          </ul>
-        )}
-      />,
-    );
-
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent(/couldn't load agents/i);
-    expect(screen.queryByText('foo-agent')).not.toBeInTheDocument();
   });
 });

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
 
 import {
   StreamPanel,
@@ -18,17 +17,14 @@ interface BrokerSession {
 interface SessionsViewProps {
   readonly memory: string;
   readonly title?: string;
-  readonly onPurged?: () => void;
 }
 
 export function SessionsView({
   memory,
   title = 'Sessions',
-  onPurged,
 }: Readonly<SessionsViewProps>) {
   const [sessions, setSessions] = useState<Record<string, BrokerSession>>({});
   const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const sessionIds = useMemo(
     () =>
@@ -50,7 +46,6 @@ export function SessionsView({
 
   useEffect(() => {
     setSessions({});
-    setError(null);
     const es = new EventSource(
       apiUrl(
         `/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}&watch=true`,
@@ -76,34 +71,13 @@ export function SessionsView({
     return () => es.close();
   }, [memory]);
 
-  const handlePurge = async () => {
-    try {
-      const response = await fetch(
-        apiUrl(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}`),
-        { method: 'DELETE' },
-      );
-      if (!response.ok) {
-        throw new Error(`${response.status} ${response.statusText}`);
-      }
-      setSessions({});
-      setError(null);
-      onPurged?.();
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Unexpected error';
-      setError(message);
-      toast.error('Failed to purge sessions', { description: message });
-    }
-  };
-
   return (
     <StreamPanel
       title={title}
       isConnected={isConnected}
       autoScroll={autoScroll}
       onAutoScrollChange={setAutoScroll}
-      onPurge={handlePurge}
-      containerRef={containerRef}
-      error={error}>
+      containerRef={containerRef}>
       {sessionIds.length === 0 ? (
         <StreamPlaceholder />
       ) : (

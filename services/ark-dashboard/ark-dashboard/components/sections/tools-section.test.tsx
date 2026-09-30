@@ -33,7 +33,7 @@ vi.mock('@/components/ui/sonner', () => ({
 
 vi.mock('@/lib/services', () => ({
   toolsService: { getAll: vi.fn(), delete: vi.fn() },
-  agentsService: { getAll: vi.fn() },
+  agentsService: { listWithTools: vi.fn() },
 }));
 
 const mockToolsService = vi.mocked(toolsService);
@@ -43,7 +43,7 @@ describe('ToolsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     currentNamespace = 'default';
-    mockAgentsService.getAll.mockResolvedValue([]);
+    mockAgentsService.listWithTools.mockResolvedValue([]);
   });
 
   it('renders the error state instead of the empty state when the load fails', async () => {

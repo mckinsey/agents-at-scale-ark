@@ -38,6 +38,42 @@ import type {
 
 type ResultMessage = NonNullable<ChatResponse['messages']>[number];
 
+// How long to keep draining the chunk stream after the Query phase goes
+// terminal, so an in-flight [DONE]/finalize chunk still lands before we stop.
+const STREAM_TERMINAL_STOP_GRACE_MS = 300;
+
+// Yield from `source`; if a read rejects because we force-closed the stream
+// (terminal phase → abort), end cleanly so post-stream finalization runs — any
+// other rejection propagates. `onExit` runs on every exit (even a throw) so
+// polling/timers are always torn down.
+async function* streamUntilForceClose<T>(
+  source: AsyncIterable<T>,
+  wasForceClosed: () => boolean,
+  onExit: () => void,
+): AsyncGenerator<T> {
+  const iterator = source[Symbol.asyncIterator]();
+  try {
+    while (true) {
+      let result: IteratorResult<T>;
+      try {
+        result = await iterator.next();
+      } catch (err) {
+        if (wasForceClosed()) return;
+        throw err;
+      }
+      if (result.done) return;
+      yield result.value;
+    }
+  } finally {
+    onExit();
+    try {
+      await iterator.return?.();
+    } catch {
+      // Best-effort transport release; the stream may already be gone.
+    }
+  }
+}
+
 // Converts a query-result message (OpenAI-ish shape) into the dashboard's
 // ExtendedChatMessage. Extracted to keep pollAfterApproval's complexity low.
 function convertResultMessage(msg: ResultMessage): ExtendedChatMessage {
@@ -509,6 +545,14 @@ export function useChatSession({
       queryName = streamQueryName;
       lastQueryName.current = queryName;
 
+      // The Query CR phase is the authoritative done signal; the stream's [DONE]
+      // is best-effort and may never arrive (broker unreachable / executor
+      // killed, see #2862). On a real terminal phase, after a short grace so an
+      // in-flight [DONE] still wins, abort the transport to stop a hung stream.
+      const streamAbortController = chatStreamAbortControllerRef.current;
+      let forceClosePhase: string | undefined;
+      let forceCloseTimer: ReturnType<typeof setTimeout> | undefined;
+
       const stopPhasePolling = await chatService.streamQueryStatus(
         namespace,
         streamQueryName,
@@ -518,9 +562,28 @@ export function useChatSession({
             setProcessingPhase(phase);
           }
         },
+        undefined,
+        phase => {
+          // Only real terminal phases force-close; leave `unknown` to the poll so
+          // an unrecognized phase can't truncate a live answer.
+          if (phase !== 'done' && phase !== 'error' && phase !== 'canceled') {
+            return;
+          }
+          forceCloseTimer ??= setTimeout(() => {
+            forceClosePhase = phase;
+            streamAbortController.abort();
+          }, STREAM_TERMINAL_STOP_GRACE_MS);
+        },
       );
 
-      for await (const chunk of chunks) {
+      for await (const chunk of streamUntilForceClose(
+        chunks,
+        () => forceClosePhase !== undefined,
+        () => {
+          stopPhasePolling();
+          if (forceCloseTimer) clearTimeout(forceCloseTimer);
+        },
+      )) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
 
         console.log(
@@ -749,7 +812,24 @@ export function useChatSession({
         }
       }
 
-      stopPhasePolling();
+      // A terminal `error` phase force-closed the stream before any error chunk
+      // arrived — surface the failure instead of finalizing as success.
+      if (forceClosePhase === 'error' && !hasError) {
+        hasError = true;
+        errorMessage = errorMessage || 'Query failed';
+      }
+      if (forceClosePhase) {
+        // Stream never delivered [DONE]; tracked so dropped completions stay
+        // observable.
+        trackEvent({
+          name: 'chat_stream_force_closed',
+          properties: {
+            targetType: type,
+            targetName: name,
+            queryName,
+          },
+        });
+      }
 
       if (!hasPendingApproval) {
         console.log(
