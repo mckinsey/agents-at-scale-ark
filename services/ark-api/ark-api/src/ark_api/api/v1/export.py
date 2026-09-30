@@ -18,6 +18,7 @@ from ark_sdk.client import with_ark_client
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
+from ...utils.helpers import parse_iso_timestamp
 from .client_utils import get_impersonating_sync_api_client
 from ...models.export import (
     ExportRequest,
@@ -334,9 +335,7 @@ async def get_last_export_time() -> ExportHistoryResponse:
     """
     history = await get_export_history()
 
-    last_export = None
-    if history.get("last_export"):
-        last_export = datetime.fromisoformat(history["last_export"])
+    last_export = parse_iso_timestamp(history.get("last_export"))
 
     return ExportHistoryResponse(
         last_export=last_export,

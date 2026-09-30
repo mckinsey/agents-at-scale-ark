@@ -297,8 +297,7 @@ var _ = Describe("MCPServer Controller", func() {
 				},
 			},
 		}
-		_, err := controllerReconciler.createOrUpdateSingleTool(ctx, rediscovered, toolName, "fg")
-		Expect(err).NotTo(HaveOccurred())
+		Expect(controllerReconciler.createOrUpdateSingleTool(ctx, rediscovered, toolName, "fg")).To(Succeed())
 
 		By("keeping the gate while still applying the discovered change")
 		stored := &arkv1alpha1.Tool{}
@@ -312,8 +311,9 @@ var _ = Describe("MCPServer Controller", func() {
 		By("reporting no change when only the carried-over approval would differ")
 		unchanged := rediscovered.DeepCopy()
 		unchanged.Spec.Approval = nil
-		updated, err := controllerReconciler.createOrUpdateSingleTool(ctx, unchanged, toolName, "fg")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(updated).To(BeFalse())
+		Expect(controllerReconciler.createOrUpdateSingleTool(ctx, unchanged, toolName, "fg")).To(Succeed())
+		after := &arkv1alpha1.Tool{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: toolName, Namespace: "default"}, after)).To(Succeed())
+		Expect(after.ResourceVersion).To(Equal(stored.ResourceVersion))
 	})
 })

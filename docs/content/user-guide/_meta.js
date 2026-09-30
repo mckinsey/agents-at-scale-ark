@@ -16,6 +16,7 @@ export default {
 
   '---patterns': { type: 'separator', title: 'Patterns and guidance' },
   'tips-on-building-agentic-use-cases': 'Tips on Building Agentic Use Cases',
+  'untrusted-content': 'Untrusted File Content',
   samples: 'Samples',
 
   '---advanced': { type: 'separator', title: 'Advanced' },

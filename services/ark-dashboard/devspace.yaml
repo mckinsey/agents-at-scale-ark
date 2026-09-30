@@ -1,6 +1,23 @@
 # DevSpace configuration for ark-dashboard service
 version: v2beta1
 
+vars:
+  ENABLE_SSO:
+    source: env
+    default: false
+  # Must match the values of the same name in the root devspace.yaml.
+  SSO_DEX_HOST:
+    source: env
+    default: "dex.default.svc.cluster.local"
+  SSO_DEX_PORT:
+    source: env
+    default: "5556"
+  # Host the browser uses. AUTH_URL derives from it, and the callback path it
+  # produces must be registered as a redirect URI in charts/ark-dex-dev.
+  SSO_DASHBOARD_URL:
+    source: env
+    default: "http://dashboard.default.127.0.0.1.nip.io:8080"
+
 images:
   ark-dashboard:
     image: ark-dashboard
@@ -73,6 +90,50 @@ deployments:
     kubectl:
       manifests:
         - dev/marketplace-source-editor-binding.yaml
+
+profiles:
+  - name: sso
+    activation:
+      - vars:
+          ENABLE_SSO: true
+    patches:
+      # Helm replaces list values rather than merging them, so app.env has to
+      # restate the chart defaults it is not changing.
+      - op: add
+        path: deployments.ark-dashboard.helm.values.app.env
+        value:
+          - name: AUTH_MODE
+            value: "sso"
+          - name: BASE_URL
+            value: "${SSO_DASHBOARD_URL}"
+          - name: AUTH_URL
+            value: "${SSO_DASHBOARD_URL}/api/auth"
+          # Signs the session cookie that wraps the Dex tokens. Fixed value so
+          # restarting the dashboard does not invalidate an open session.
+          - name: AUTH_SECRET
+            value: "ark-devspace-sso-secret-not-for-production"
+          - name: OIDC_ISSUER_URL
+            value: "http://${SSO_DEX_HOST}:${SSO_DEX_PORT}/dex"
+          - name: OIDC_CLIENT_ID
+            value: "ark-dashboard"
+          - name: OIDC_CLIENT_SECRET
+            value: "ark-dashboard-dev-secret"
+          - name: OIDC_PROVIDER_NAME
+            value: "Dex"
+          # Fixes the callback path to /api/auth/callback/dex, which must appear
+          # verbatim in the Dex staticClient redirect URIs.
+          - name: OIDC_PROVIDER_ID
+            value: "dex"
+          # offline_access is required: Dex only issues a refresh token when the
+          # scope is requested, and without one the periodic token refresh fails.
+          - name: OIDC_SCOPES
+            value: "openid email profile offline_access"
+          - name: SESSION_MAX_AGE
+            value: ""
+          - name: NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS
+            value: "600000"
+          - name: NEXT_PUBLIC_FALLBACK_INACTIVITY_TIMEOUT
+            value: "1800000"
 
 dev:
   ark-dashboard:

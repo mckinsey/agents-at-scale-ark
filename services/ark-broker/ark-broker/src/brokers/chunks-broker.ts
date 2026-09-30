@@ -26,10 +26,6 @@ export class CompletionChunkBroker {
     return this.stream.isComplete(queryId);
   }
 
-  hasQuery(queryId: string): Promise<boolean> {
-    return this.stream.hasQuery(queryId);
-  }
-
   subscribeToQuery(
     queryId: string,
     callback: (item: BrokerItem<CompletionChunkData>) => void
@@ -49,10 +45,6 @@ export class CompletionChunkBroker {
 
   save(): Promise<void> {
     return this.stream.save();
-  }
-
-  delete(): Promise<void> {
-    return this.stream.delete();
   }
 
   paginate(

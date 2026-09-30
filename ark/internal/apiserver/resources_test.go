@@ -14,7 +14,7 @@ func TestV1Alpha1Resources(t *testing.T) {
 
 	expectedKinds := []string{
 		"Query", "Agent", "Model", "Team", "Tool",
-		"Memory", "MCPServer", "A2ATask",
+		"Memory", "MCPServer", "A2ATask", "ArkConfig",
 	}
 
 	for _, kind := range expectedKinds {
@@ -71,6 +71,7 @@ func TestGetResourceByKind(t *testing.T) {
 		{"Agent", true, "v1alpha1"},
 		{"Model", true, "v1alpha1"},
 		{"Query", true, "v1alpha1"},
+		{"ArkConfig", true, "v1alpha1"},
 		{"A2AServer", true, "v1prealpha1"},
 		{"ExecutionEngine", true, "v1prealpha1"},
 		{"NonExistent", false, ""},
@@ -84,6 +85,18 @@ func TestGetResourceByKind(t *testing.T) {
 			}
 			if found && res.Version != tt.wantVersion {
 				t.Errorf("GetResourceByKind(%q) version = %q, want %q", tt.kind, res.Version, tt.wantVersion)
+			}
+		})
+	}
+}
+
+func TestResourceDef_Scope(t *testing.T) {
+	t.Parallel()
+	for _, r := range AllResources {
+		t.Run(r.Kind, func(t *testing.T) {
+			want := r.Kind == "ArkConfig"
+			if r.ClusterScoped != want {
+				t.Errorf("ClusterScoped = %v, want %v", r.ClusterScoped, want)
 			}
 		})
 	}

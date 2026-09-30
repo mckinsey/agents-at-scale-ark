@@ -93,6 +93,34 @@ ark import ark-export.yaml --upsert
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
+## v0.1.70
+
+### Broker Purge Endpoints Removed
+
+The broker's purge-all `DELETE` endpoints are gone, together with the `ark-api` proxies in front of them and the dashboard **Purge** buttons that called them. Each one wiped a whole data domain for every query, conversation and tenant sharing the broker, and the broker routes had no authentication in front of them. Deleting broker data now means naming what to delete.
+
+**Migration** — broker routes:
+
+| Removed | Replacement |
+|---------|-------------|
+| `DELETE /messages` | `DELETE /queries/{queryId}/messages`, or `DELETE /conversations/{conversationId}/queries/{queryId}/messages`, or `DELETE /conversations/{conversationId}` for a whole conversation |
+| `DELETE /events` | `DELETE /events/{queryId}` (keyed by Query UID) |
+| `DELETE /sessions` | `DELETE /sessions/queries/{queryId}` (keyed by Query name) |
+| `DELETE /stream` | None. Chunks are bounded by `limits.chunkMaxBytes` and `limits.chunkTtlSeconds` |
+| `DELETE /traces` | None. Spans are bounded by `limits.traceMaxBytes` |
+
+**Migration** — `ark-api` routes:
+
+| Removed | Replacement |
+|---------|-------------|
+| `DELETE /v1/broker/messages` | `DELETE /v1/conversations` to clear memory, or `DELETE /v1/conversations/{conversationId}` and `DELETE /v1/conversations/{conversationId}/queries/{queryId}/messages` to scope it |
+| `DELETE /v1/broker/events`, `DELETE /v1/broker/sessions` | None. The scoped broker routes are not proxied; call the broker directly, or let the Query finalizer clean up |
+| `DELETE /v1/broker/chunks`, `DELETE /v1/broker/traces` | None, as above |
+
+`DELETE /conversations` on the broker and `DELETE /v1/conversations` on `ark-api` are unchanged. They still clear the whole memory store, and back the dashboard's **Reset memory** action.
+
+If you were purging to clean up after deleted queries, you no longer have to: the controller's finalizer removes a Query's messages, operation events and sessions entry when the Query goes away. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
+
 ## v0.1.67
 
 ### Aggregated Apiserver Audit Logging On By Default

@@ -44,8 +44,8 @@ class WorkflowTemplatesPage(BasePage):
     STUDIO_RUN_BUTTON = "[data-testid='studio-run']"
 
     RUN_NAME_INPUT = f"{DIALOG} #workflow-name"
-    RUN_SEARCH_INPUT = "input[placeholder*='Search workflows']"
-    RUN_STATUS_BADGE = "[data-slot='badge']"
+    RUN_SEARCH_INPUT = "[data-testid='workflow-runs-search']"
+    RUN_STATUS = "[data-testid='session-status']"
 
     def navigate_to_workflow_templates(self) -> None:
         DashboardPage(self.page).navigate_to_section("workflow-templates")
@@ -248,7 +248,7 @@ class WorkflowTemplatesPage(BasePage):
         card = self.wait_for_element(
             f"button:has(span:text-is('{run_name}'))", timeout=30000
         )
-        return card.locator(self.RUN_STATUS_BADGE).first.inner_text().strip()
+        return card.locator(self.RUN_STATUS).first.get_attribute("data-status")
 
     def save_template(self) -> str:
         """Save the studio draft and return the toast the dashboard showed."""

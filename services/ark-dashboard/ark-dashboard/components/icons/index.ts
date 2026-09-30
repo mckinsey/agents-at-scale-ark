@@ -73,6 +73,8 @@ export { Stop } from './stop';
 export { Storefront } from './storefront';
 export { SwapVert } from './swap-vert';
 export { TableChart } from './table-chart';
+export { Terminal } from './terminal';
+export { Terminal2 } from './terminal-2';
 export { Trash } from './trash';
 export { Tune } from './tune';
 export { UnfoldMore } from './unfold-more';

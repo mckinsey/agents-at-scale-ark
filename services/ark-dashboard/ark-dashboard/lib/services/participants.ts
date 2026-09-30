@@ -12,7 +12,7 @@ export const participantsService = {
   async getAll(namespace: string): Promise<Participant[]> {
     const results = await Promise.allSettled([
       agentsService.list(namespace),
-      teamsService.getAll(namespace),
+      teamsService.list(namespace),
       toolsService.getAll(namespace),
     ]);
 

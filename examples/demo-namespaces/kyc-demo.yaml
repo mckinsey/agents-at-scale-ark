@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   name: kyc-demo
   labels:
-    ark.mckinsey.com/demo: "true"
+    ark.mckinsey.com/landing-page: "true"
   annotations:
-    ark.mckinsey.com/demo-name: "KYC Demo"
-    ark.mckinsey.com/demo-description: "Know Your Customer agent for identity verification and compliance automation"
+    ark.mckinsey.com/landing-page-name: "KYC Demo"
+    ark.mckinsey.com/landing-page-description: "Know Your Customer agent for identity verification and compliance automation"
