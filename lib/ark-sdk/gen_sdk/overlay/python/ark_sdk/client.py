@@ -19,6 +19,18 @@ from ark_sdk.executor_app import ExecutorApp
 V1_ALPHA1 = "v1alpha1"
 V1_PREALPHA1 = "v1prealpha1"
 
+
+def close_ark_client(ark_client) -> None:
+    """Close every Kubernetes ApiClient owned by an ARK client's resource clients."""
+    for attribute in vars(ark_client).values():
+        close = getattr(getattr(attribute, "api_client", None), "close", None)
+        if close is None:
+            continue
+        try:
+            close()
+        except Exception:
+            pass
+
 _default_user_agent: Optional[str] = None
 
 def set_default_user_agent(user_agent: str):
@@ -67,4 +79,4 @@ async def with_ark_client(namespace: Optional[str], version: str, impersonation:
     try:
         yield ark_client
     finally:
-        ark_client.api_client.close()
+        close_ark_client(ark_client)
