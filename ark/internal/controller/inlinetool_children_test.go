@@ -17,7 +17,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -111,6 +113,27 @@ func TestInlineSourceConfigMapCarriesTheScript(t *testing.T) {
 	assert.Equal(t, inlineTestSource, configMap.Data[inlineSourceKey])
 }
 
+func TestInlineSourceConfigMapClearsDriftedBinaryData(t *testing.T) {
+	tool := newInlineTool("binary-drift")
+	r := newInlineReconciler(t, tool)
+	require.NoError(t, r.reconcileInlineChildren(context.Background(), tool))
+
+	key := types.NamespacedName{Name: "binary-drift-source", Namespace: inlineTestNamespace}
+	drifted := &corev1.ConfigMap{}
+	require.NoError(t, r.Get(context.Background(), key, drifted))
+	drifted.Data = nil
+	drifted.BinaryData = map[string][]byte{inlineSourceKey: []byte("print(99)\n")}
+	require.NoError(t, r.Update(context.Background(), drifted))
+
+	require.NoError(t, r.reconcileInlineChildren(context.Background(), tool))
+
+	corrected := &corev1.ConfigMap{}
+	require.NoError(t, r.Get(context.Background(), key, corrected))
+	assert.Equal(t, inlineTestSource, corrected.Data[inlineSourceKey])
+	assert.Empty(t, corrected.BinaryData,
+		"data and binaryData keys may not overlap, so a drifted binaryData wedges every later write")
+}
+
 func TestInlineDeploymentIsHardenedAndIdle(t *testing.T) {
 	tool := newInlineTool("hardened")
 	r := newInlineReconciler(t, tool)
@@ -124,6 +147,8 @@ func TestInlineDeploymentIsHardenedAndIdle(t *testing.T) {
 	assert.Equal(t, int32(0), *deployment.Spec.Replicas, "an unused runner must cost no pods")
 	assert.Equal(t, "ghcr.io/example/ark-inline-runner-python:v1.2.3", container.Image)
 	assert.False(t, *pod.AutomountServiceAccountToken)
+	assert.Equal(t, ptr.To(false), pod.EnableServiceLinks,
+		"service links default to on and would name every Service in the namespace to the script")
 	assert.Equal(t, "hardened-runner", pod.ServiceAccountName)
 	assert.True(t, *pod.SecurityContext.RunAsNonRoot)
 	assert.Equal(t, int64(65532), *pod.SecurityContext.RunAsUser)
@@ -329,11 +354,14 @@ func TestInlineChildrenMatchActivationIdentity(t *testing.T) {
 	}
 }
 
-func TestInlineLabelValuesStayWithinTheLimit(t *testing.T) {
-	tool := newInlineTool(strings.Repeat("a", 200))
-
-	for key, value := range inlineLabels(tool) {
-		assert.LessOrEqualf(t, len(value), 63, "label %s", key)
+func TestInlineLabelValuesAreValidLabelValues(t *testing.T) {
+	// A Tool name is a DNS subdomain with no length cap, so it can carry a
+	// separator at the character the label value is truncated on.
+	for _, name := range []string{strings.Repeat("a", 200), strings.Repeat("a", 62) + "-tail"} {
+		for key, value := range inlineLabels(newInlineTool(name)) {
+			assert.Emptyf(t, validation.IsValidLabelValue(value),
+				"label %s=%q from a tool name of %d characters", key, value, len(name))
+		}
 	}
 }
 
