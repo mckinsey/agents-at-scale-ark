@@ -67,9 +67,9 @@ describe('studioChatHistoryService.load', () => {
         conversation('conv-b', '2026-01-05T00:00:00Z'),
       ]),
     );
-    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce([
+    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce({ messages: [
       message('latest reply'),
-    ]);
+    ] });
 
     const result = await studioChatHistoryService.load(
       'argo-make-default-my-workflow',
@@ -89,9 +89,9 @@ describe('studioChatHistoryService.load', () => {
         conversation('conv-b', 'not-a-date'),
       ]),
     );
-    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce([
+    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce({ messages: [
       message('reply'),
-    ]);
+    ] });
 
     await studioChatHistoryService.load('argo-make');
 
@@ -105,9 +105,9 @@ describe('studioChatHistoryService.load', () => {
         conversation('conv-b', '2026-01-05T00:00:00Z'),
       ]),
     );
-    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce([
+    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce({ messages: [
       message('reply'),
-    ]);
+    ] });
 
     await studioChatHistoryService.load('argo-make');
 
@@ -138,7 +138,7 @@ describe('studioChatHistoryService.load', () => {
     vi.mocked(brokerSessionsService.getSession).mockResolvedValueOnce(
       session([conversation('conv-a', '2026-01-01T00:00:00Z')]),
     );
-    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce([]);
+    vi.mocked(conversationsService.getMessages).mockResolvedValueOnce({ messages: [] });
 
     const result = await studioChatHistoryService.load('argo-make');
 
