@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -17,9 +19,23 @@ import (
 
 const defaultAnthropicVersion = "2023-06-01"
 
+const defaultAnthropicBackstopSeconds = 1800
+
 var anthropicHTTPClient = &http.Client{
-	Timeout:   60 * time.Second,
-	Transport: common.NewSharedTransport(),
+	Transport: &common.BackstopTransport{
+		Base:     common.NewSharedTransport(),
+		Backstop: getAnthropicBackstop(),
+	},
+}
+
+// getAnthropicBackstop reads ARK_ANTHROPIC_HTTP_TIMEOUT_SECONDS env var or returns default
+func getAnthropicBackstop() time.Duration {
+	if timeoutStr := os.Getenv("ARK_ANTHROPIC_HTTP_TIMEOUT_SECONDS"); timeoutStr != "" {
+		if timeoutSec, err := strconv.Atoi(timeoutStr); err == nil && timeoutSec > 0 {
+			return time.Duration(timeoutSec) * time.Second
+		}
+	}
+	return defaultAnthropicBackstopSeconds * time.Second
 }
 
 type AnthropicProvider struct {
