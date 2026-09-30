@@ -20,7 +20,6 @@ export interface ChunkStream {
   completeQuery(queryId: string): Promise<BrokerItem<CompletionChunkData>>;
   getByQuery(queryId: string): Promise<BrokerItem<CompletionChunkData>[]>;
   isComplete(queryId: string): Promise<boolean>;
-  hasQuery(queryId: string): Promise<boolean>;
   subscribeToQuery(
     queryId: string,
     callback: (item: BrokerItem<CompletionChunkData>) => void

@@ -23,20 +23,20 @@
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.5",
+    "react-dom": "^19.3.0",
     "sharp": "^0.35.0"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
     "@vitejs/plugin-react": "^6.1.1",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^5.0.1",
     "http-server": "^14.1.1",
     "js-yaml": "^4.3.1",
     "jsdom": "^30.0.1",
     "linkinator": "^7.6.1",
     "pagefind": "^1.5.2",
     "picomatch": "^4.0.4",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   },
   "optionalDependencies": {
     "@emnapi/core": "1.11.3",

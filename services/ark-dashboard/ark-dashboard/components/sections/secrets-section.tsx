@@ -16,13 +16,16 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
-import { type Model, modelsService } from '@/lib/services';
-import { useDeleteSecret, useGetAllSecrets } from '@/lib/services/secrets-hooks';
+import { type ModelListItem, modelsService } from '@/lib/services';
+import {
+  useDeleteSecret,
+  useGetAllSecrets,
+} from '@/lib/services/secrets-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function SecretsSection() {
   const { readOnlyMode, namespace } = useNamespace();
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<ModelListItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   const { data: secrets = [], isLoading: secretsLoading } = useGetAllSecrets();
@@ -32,7 +35,7 @@ export function SecretsSection() {
   useEffect(() => {
     const loadModels = async () => {
       try {
-        setModels(await modelsService.getAll(namespace));
+        setModels(await modelsService.listWithSecrets(namespace));
       } catch (error) {
         console.error('Failed to load models:', error);
       }
@@ -68,7 +71,7 @@ export function SecretsSection() {
   );
 
   return (
-    <div className="flex h-full w-full content-shell flex-col">
+    <div className="content-shell flex h-full w-full flex-col">
       <ResourcePageHeader
         icon={<Shield className="size-full" />}
         title="Secrets"
@@ -102,7 +105,10 @@ export function SecretsSection() {
       {!showLoading && !isEmpty && (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
           <div className="flex flex-none items-end gap-3">
-            <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+            <ResourceSearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+            />
           </div>
 
           {filteredSecrets.length === 0 ? (

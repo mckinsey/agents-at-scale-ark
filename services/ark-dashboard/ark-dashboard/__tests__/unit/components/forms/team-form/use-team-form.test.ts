@@ -1,7 +1,10 @@
-import { renderHook, waitFor, act } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TeamFormMode } from '@/components/forms/team-form/types';
+import { useTeamForm } from '@/components/forms/team-form/use-team-form';
+import { toast } from '@/components/ui/sonner';
+import { agentsService, teamsService } from '@/lib/services';
 
 vi.mock('@/lib/services', () => ({
   teamsService: {
@@ -10,7 +13,7 @@ vi.mock('@/lib/services', () => ({
     updateById: vi.fn(),
   },
   agentsService: {
-    getAll: vi.fn(),
+    listWithTools: vi.fn(),
   },
 }));
 
@@ -31,17 +34,13 @@ vi.mock('@/providers/NamespaceProvider', () => ({
   })),
 }));
 
-import { useTeamForm } from '@/components/forms/team-form/use-team-form';
-import { toast } from '@/components/ui/sonner';
-import { teamsService, agentsService } from '@/lib/services';
-
 const mockTeamsService = vi.mocked(teamsService);
 const mockAgentsService = vi.mocked(agentsService);
 const mockToast = vi.mocked(toast);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockAgentsService.getAll.mockResolvedValue([]);
+  mockAgentsService.listWithTools.mockResolvedValue([]);
 });
 
 describe('useTeamForm', () => {
@@ -67,7 +66,7 @@ describe('useTeamForm', () => {
       maxTurns: 5,
       members: [{ name: 'agent1', type: 'agent' }],
     } as any);
-    mockAgentsService.getAll.mockResolvedValue([
+    mockAgentsService.listWithTools.mockResolvedValue([
       { name: 'agent1' },
     ] as any);
 
@@ -143,7 +142,7 @@ describe('useTeamForm', () => {
     };
     mockTeamsService.getByName.mockResolvedValue(teamData as any);
     mockTeamsService.updateById.mockResolvedValue({} as any);
-    mockAgentsService.getAll.mockResolvedValue([
+    mockAgentsService.listWithTools.mockResolvedValue([
       { name: 'agent1' },
     ] as any);
 
@@ -195,7 +194,9 @@ describe('useTeamForm', () => {
       });
     });
 
-    expect(maxTurnsError).toBe('Max turns is required for looping sequential teams');
+    expect(maxTurnsError).toBe(
+      'Max turns is required for looping sequential teams',
+    );
   });
 
   it('should require maxTurns when strategy is graph', async () => {
@@ -270,7 +271,7 @@ describe('useTeamForm', () => {
       members: [{ name: 'agent1', type: 'agent' }],
     };
     mockTeamsService.getByName.mockResolvedValue(teamData as any);
-    mockAgentsService.getAll.mockResolvedValue([
+    mockAgentsService.listWithTools.mockResolvedValue([
       { name: 'agent1' },
     ] as any);
 
