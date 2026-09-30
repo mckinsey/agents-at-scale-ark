@@ -61,7 +61,7 @@ function consumeSSE(
 }
 
 describeIntegration('redis chunk backend — HTTP parity', () => {
-  const {client, connectionUrl, onStop} = useRedisContainer();
+  const {connectionUrl, onStop} = useRedisContainer();
   let app: Express;
 
   beforeAll(() => {
@@ -123,20 +123,6 @@ describeIntegration('redis chunk backend — HTTP parity', () => {
     const chunks = events.slice(0, -1);
     expect(chunks).toHaveLength(2);
     expect(JSON.parse(chunks[0]).choices[0].delta.content).toBe('hello');
-  });
-
-  it('DELETE /stream purges all chunk data', async () => {
-    const q = 'redis-parity-q3';
-    await request(app)
-      .post(`/stream/${q}`)
-      .set('Content-Type', 'application/x-ndjson')
-      .send(ndjson(textChunk))
-      .expect(200);
-
-    await request(app).delete('/stream').expect(200);
-
-    const allKeys = await client().keys('ark-broker:chunks:*');
-    expect(allKeys).toHaveLength(0);
   });
 
   it('POST /stream/:id/complete stores [DONE] for a query with no chunks', async () => {

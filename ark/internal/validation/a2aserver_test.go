@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 func TestValidateA2AServer(t *testing.T) {
@@ -94,6 +96,89 @@ func TestValidateA2AServer(t *testing.T) {
 			t.Fatal("expected error for negative poll interval")
 		}
 	})
+}
+
+func TestValidateA2AServerEndpointResolution(t *testing.T) {
+	tests := []struct {
+		name            string
+		mode            string
+		allowedHosts    []string
+		expectError     string
+		expectWarnings  int
+		expectWarnsWith string
+	}{
+		{
+			name:         "rejects invalid allowed endpoint host",
+			mode:         arka2a.EndpointResolutionCardURL,
+			allowedHosts: []string{"agents.example.com", "https://agents.example.com"},
+			expectError:  "allowedEndpointHosts[1]",
+		},
+		{
+			name:         "accepts cardUrl with an allowlist without warnings",
+			mode:         arka2a.EndpointResolutionCardURL,
+			allowedHosts: []string{"agents.example.com:8443", "*.a2a.example.com"},
+		},
+		{
+			name:            "warns when the allowlist is set in default mode",
+			mode:            "",
+			allowedHosts:    []string{"agents.example.com"},
+			expectWarnings:  1,
+			expectWarnsWith: "ignored",
+		},
+		{
+			name:            "warns when the allowlist is set in address mode",
+			mode:            arka2a.EndpointResolutionAddress,
+			allowedHosts:    []string{"agents.example.com"},
+			expectWarnings:  1,
+			expectWarnsWith: "ignored",
+		},
+		{
+			name:            "warns when the allowlist is set in cardPath mode",
+			mode:            arka2a.EndpointResolutionCardPath,
+			allowedHosts:    []string{"agents.example.com"},
+			expectWarnings:  1,
+			expectWarnsWith: "ignored",
+		},
+		{
+			name:            "warns when cardUrl has no allowlist",
+			mode:            arka2a.EndpointResolutionCardURL,
+			expectWarnings:  1,
+			expectWarnsWith: "origin of spec.address",
+		},
+		{
+			name: "cardPath without an allowlist has no warnings",
+			mode: arka2a.EndpointResolutionCardPath,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a2a := &arkv1prealpha1.A2AServer{
+				Spec: arkv1prealpha1.A2AServerSpec{
+					Address:              arkv1prealpha1.ValueSource{Value: "http://localhost"},
+					EndpointResolution:   tt.mode,
+					AllowedEndpointHosts: tt.allowedHosts,
+				},
+			}
+			warnings, err := ValidateA2AServer(a2a)
+
+			if tt.expectError != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.expectError) {
+					t.Fatalf("expected error containing %q, got %v", tt.expectError, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(warnings) != tt.expectWarnings {
+				t.Fatalf("expected %d warnings, got %v", tt.expectWarnings, warnings)
+			}
+			if tt.expectWarnsWith != "" && !strings.Contains(warnings[0], tt.expectWarnsWith) {
+				t.Fatalf("expected warning containing %q, got %v", tt.expectWarnsWith, warnings)
+			}
+		})
+	}
 }
 
 func TestConvertV1PreAlpha1ValueSource(t *testing.T) {

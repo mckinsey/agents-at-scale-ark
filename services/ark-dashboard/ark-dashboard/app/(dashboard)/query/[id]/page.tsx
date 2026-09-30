@@ -570,7 +570,7 @@ function QueryDetailContent() {
           const [agents, models, teams, tools, memories] = await Promise.all([
             agentsService.list(namespace),
             modelsService.list(namespace),
-            teamsService.getAll(namespace),
+            teamsService.list(namespace),
             toolsService.getAll(namespace),
             memoriesService.getAll(namespace),
           ]);

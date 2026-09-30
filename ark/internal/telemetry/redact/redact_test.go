@@ -131,6 +131,7 @@ func TestRedactIdempotent(t *testing.T) {
 	for _, in := range []string{
 		"access_token=secret123",
 		"bare " + "ghp_" + strings.Repeat("A", 36) + " here",
+		`{"cookie": "sid=x", "other": 2}`,
 	} {
 		once := Redact(in)
 		if twice := Redact(once); once != twice {

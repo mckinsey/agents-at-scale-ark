@@ -17,7 +17,10 @@ import {
 } from './schemas.js';
 import {handleQueryStream, processNDJSONData} from './handlers.js';
 
-export function createStreamRouter(chunks: CompletionChunkBroker): Router {
+export function createStreamRouter(
+  chunks: CompletionChunkBroker,
+  idleTimeoutMs: number
+): Router {
   const router = Router();
 
   /**
@@ -102,11 +105,6 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *           default: false
    *         description: Replay all chunks from the beginning
    *       - in: query
-   *         name: wait-for-query
-   *         schema:
-   *           type: integer
-   *         description: Wait timeout in seconds for query to start (e.g., 30, 300)
-   *       - in: query
    *         name: max-chunk-size
    *         schema:
    *           type: integer
@@ -138,8 +136,8 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           chunks,
           query_name,
           streamQuery['from-beginning'] ?? false,
-          streamQuery['wait-for-query'],
-          streamQuery['max-chunk-size'] ?? 50
+          streamQuery['max-chunk-size'] ?? 50,
+          idleTimeoutMs
         );
       } catch (error) {
         req.log.error({err: error}, 'failed to handle stream request');
@@ -338,41 +336,6 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to complete query stream');
-      sendInternalError(res, req.id);
-    }
-  });
-
-  /**
-   * @swagger
-   * /stream:
-   *   delete:
-   *     summary: Purge all stream data
-   *     description: Clears all stored streaming chunks and completion states
-   *     tags:
-   *       - Streaming
-   *     responses:
-   *       200:
-   *         description: Streams purged successfully
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 status:
-   *                   type: string
-   *                   example: success
-   *                 message:
-   *                   type: string
-   *                   example: Stream data purged
-   *       500:
-   *         description: Failed to purge streams
-   */
-  router.delete('/', async (req, res) => {
-    try {
-      await chunks.delete();
-      res.json({status: 'success', message: 'Stream data purged'});
-    } catch (error) {
-      req.log.error({err: error}, 'stream purge failed');
       sendInternalError(res, req.id);
     }
   });
