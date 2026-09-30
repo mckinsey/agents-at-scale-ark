@@ -79,7 +79,7 @@ export async function fetchNodeLogWindow(
 ): Promise<LogWindow> {
   const withContainer = {
     ...params,
-    container: params.container ?? target.container,
+    container: params.container ?? target.container ?? 'main',
   };
 
   if (target.podName) {

@@ -226,7 +226,8 @@ export async function pollTail(
   target: LogWindowTarget,
 ): Promise<void> {
   const buffer = buffers.get(key);
-  if (!buffer?.loaded || pollInFlight.has(key)) return;
+  if (!buffer?.loaded || pollInFlight.has(key) || fetchInFlight.has(key))
+    return;
   if (!buffer.lastTimestamp && buffer.lines.length > 0) return;
 
   pollInFlight.add(key);

@@ -357,6 +357,41 @@ describe('workflow log store', () => {
     expect(buffer.hasMoreBefore).toBe(true);
   });
 
+  it('pages older with the skip cursor after a trim drops the timestamp cursor', async () => {
+    const head = Array.from(
+      { length: WORKFLOW_LOG_MAX_BUFFERED_LINES },
+      (_, index) => `line-${index}`,
+    ).join('\n');
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(
+        windowOf(head, { has_more_before: false, last_timestamp: 't1' }),
+      )
+      .mockResolvedValueOnce(windowOf('new-1\nnew-2', { last_timestamp: 't2' }))
+      .mockResolvedValueOnce(
+        windowOf('older-1\nolder-2', {
+          has_more_before: true,
+          first_timestamp: 't0',
+        }),
+      );
+
+    await ensureLoaded(key, target);
+    await pollTail(key, target);
+
+    expect(getNodeLogBuffer(key).oldestTimestamp).toBeNull();
+
+    await loadOlder(key, target);
+
+    const olderCall = vi.mocked(fetchNodeLogWindow).mock.calls[2][1];
+    expect(olderCall).toMatchObject({
+      skipTailLines: WORKFLOW_LOG_MAX_BUFFERED_LINES,
+    });
+    expect(olderCall?.beforeTimestamp).toBeUndefined();
+
+    const buffer = getNodeLogBuffer(key);
+    expect(buffer.lines.slice(0, 2)).toEqual(['older-1', 'older-2']);
+    expect(buffer.oldestTimestamp).toBe('t0');
+  });
+
   it('leaves the buffer untouched and stays silent when a poll returns nothing', async () => {
     vi.mocked(fetchNodeLogWindow)
       .mockResolvedValueOnce(windowOf('a', { last_timestamp: 't1' }))
@@ -406,7 +441,7 @@ describe('workflow log store', () => {
     expect(getNodeLogBuffer(key).lines).toEqual(['a']);
   });
 
-  it('polls the tail while an older page is still in flight', async () => {
+  it('defers the tail poll while an older page is still in flight', async () => {
     let resolveOlder: (window: ReturnType<typeof windowOf>) => void = () => {};
     vi.mocked(fetchNodeLogWindow)
       .mockResolvedValueOnce(
@@ -422,11 +457,14 @@ describe('workflow log store', () => {
     await ensureLoaded(key, target);
     const older = loadOlder(key, target);
     await pollTail(key, target);
-    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(3);
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
 
     resolveOlder(windowOf('b', { has_more_before: false }));
     await older;
 
+    expect(getNodeLogBuffer(key).lines).toEqual(['b', 'c']);
+
+    await pollTail(key, target);
     expect(getNodeLogBuffer(key).lines).toEqual(['b', 'c', 'd']);
   });
 

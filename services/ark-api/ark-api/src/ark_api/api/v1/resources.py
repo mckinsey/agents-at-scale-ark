@@ -1135,6 +1135,10 @@ async def _read_history_window(
     them than it has lines. ``before_timestamp`` is the real cursor, and the
     request is retried with a larger tail until the page it produces is both
     non-empty and known to start on a line boundary.
+
+    When the client has no ``before_timestamp`` to give — the tail buffer
+    trimmed the line the cursor pointed at — ``skip_tail_lines`` is the cursor:
+    return the page sitting just older than it, not the tail.
     """
     head_timestamp, head_line_bytes = await _read_log_head_line(
         core_v1, namespace, pod_name, container, max_bytes
@@ -1143,6 +1147,20 @@ async def _read_history_window(
         core_v1, namespace, pod_name, container, skip_tail_lines, max_bytes
     )
     read_limit = _lines_within_budget(line_bytes, max_bytes, max_lines)
+
+    if before_timestamp is None and skip_tail_lines > 0:
+        return await _read_skip_history_window(
+            core_v1,
+            namespace,
+            pod_name,
+            container,
+            read_limit,
+            skip_tail_lines,
+            max_bytes,
+            head_timestamp,
+            head_line_bytes,
+        )
+
     tail_lines = skip_tail_lines + read_limit + 1
     window = None
 
@@ -1176,6 +1194,51 @@ async def _read_history_window(
         tail_lines *= LOG_WINDOW_TAIL_GROWTH_FACTOR
 
     return window
+
+
+async def _read_skip_history_window(
+    core_v1: CoreV1Api,
+    namespace: str,
+    pod_name: str,
+    container: Optional[str],
+    read_limit: int,
+    skip_tail_lines: int,
+    max_bytes: int,
+    head_timestamp: Optional[str],
+    head_line_bytes: int,
+) -> LogWindow:
+    """Read the page ``skip_tail_lines`` from the end when there is no timestamp cursor.
+
+    The tail buffer trims the line the client's ``before_timestamp`` pointed at,
+    leaving only the positional ``skip_tail_lines`` cursor. The last
+    ``skip_tail_lines + read_limit + 1`` lines are read and the oldest
+    ``read_limit`` of them are kept, so the page sits flush against and just
+    older than the client's current oldest line rather than snapping back to
+    the tail.
+    """
+    tail_lines = skip_tail_lines + read_limit + 1
+    response = await _open_pod_log_stream(
+        core_v1,
+        namespace,
+        pod_name,
+        container=container,
+        tail_lines=tail_lines,
+    )
+    collector = _LogWindowCollector(
+        read_limit,
+        max_bytes,
+        None,
+        None,
+        keep_newest=False,
+        head_timestamp=head_timestamp,
+        head_line_bytes=head_line_bytes,
+    )
+    try:
+        await _collect_log_window(response, collector)
+    finally:
+        response.release()
+
+    return collector.build(expect_more_before=True)
 
 
 async def _resolve_workflow_pod_name(
