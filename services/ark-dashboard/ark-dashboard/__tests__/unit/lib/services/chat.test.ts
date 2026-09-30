@@ -662,6 +662,7 @@ describe('chatService', () => {
       expect(error.status).toBe(503);
       expect(error.code).toBe('broker_unavailable');
       expect(error.fallback).toBe('poll');
+      expect(error.queryName).toBe('chat-query-mock-uuid');
     });
 
     it('should throw a usable BrokerUnavailableError when the 503 body is not JSON', async () => {
@@ -706,6 +707,46 @@ describe('chatService', () => {
       expect(error.fallback).toBeUndefined();
       expect(error.message).toBe(
         'Failed to connect to stream: Service Unavailable',
+      );
+    });
+
+    it('should throw a generic Error on a non-503 stream failure', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => ({ error: { message: 'boom' } }),
+      });
+
+      const generator = chatService.streamChatResponse(
+        'default',
+        messages,
+        'agent',
+        'test-agent',
+        'session-123',
+      );
+
+      let caught: unknown;
+      try {
+        await generator.next();
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(BrokerUnavailableError);
+      expect((caught as Error).message).toBe(
+        'Failed to connect to stream: Internal Server Error',
       );
     });
 

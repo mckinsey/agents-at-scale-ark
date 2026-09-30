@@ -3,8 +3,8 @@ import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
 import { apiUrl } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
-import { generateUUID } from '@/lib/utils/uuid';
 import { a2aTasksService } from '@/lib/services/a2a-tasks';
+import { generateUUID } from '@/lib/utils/uuid';
 
 interface AxiosError extends Error {
   response?: {
@@ -223,10 +223,21 @@ export class BrokerUnavailableError extends Error {
     public status: number,
     public code?: string,
     public fallback?: string,
+    public queryName?: string,
   ) {
     super(message);
     this.name = 'BrokerUnavailableError';
   }
+}
+
+export function isBrokerUnavailableError(
+  err: unknown,
+): err is BrokerUnavailableError {
+  return (
+    err instanceof BrokerUnavailableError &&
+    err.status === 503 &&
+    (err.code === undefined || err.code === 'broker_unavailable')
+  );
 }
 
 export type ChatSession = {
@@ -495,7 +506,7 @@ export const chatService = {
         continue;
       }
       if (hasMemoryCondition(status)) {
-        return {settled: true, notice: extractMemoryNotice(status)};
+        return { settled: true, notice: extractMemoryNotice(status) };
       }
     }
     return MEMORY_LOOKUP_UNSETTLED;
@@ -621,12 +632,20 @@ export const chatService = {
             if (typeof body.fallback === 'string') fallback = body.fallback;
           }
         } catch {}
-        throw new BrokerUnavailableError(
-          `Failed to connect to stream: ${response.statusText}`,
-          response.status,
-          code,
-          fallback,
-        );
+        const message = `Failed to connect to stream: ${response.statusText}`;
+        if (
+          response.status === 503 &&
+          (code === undefined || code === 'broker_unavailable')
+        ) {
+          throw new BrokerUnavailableError(
+            message,
+            response.status,
+            code,
+            fallback,
+            queryName,
+          );
+        }
+        throw new Error(message);
       }
 
       const reader = response.body?.getReader();
