@@ -235,6 +235,12 @@ func (r *QueryReconciler) fetchQuery(ctx context.Context, namespacedName types.N
 	return obj, nil
 }
 
+// resourceVersionAtLeast assumes a globally monotonic numeric resourceVersion,
+// true for etcd revisions and for the PostgreSQL apiserver backend (RVs come
+// from a single BIGSERIAL sequence, see internal/storage/postgresql). The
+// comparison is always same-object (cached RV vs. that object's own write
+// RV), so cross-object commit ordering doesn't apply. Falls back to string
+// equality for any backend whose RVs aren't numeric.
 func resourceVersionAtLeast(actual, min string) bool {
 	a, errA := strconv.ParseInt(actual, 10, 64)
 	m, errM := strconv.ParseInt(min, 10, 64)
