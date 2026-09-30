@@ -127,7 +127,10 @@ async def get_context_endpoint(
                     "default_namespace": current_context["namespace"]
                 }
             ) from e
-        logger.warning("Could not verify namespace '%s': %s", target_namespace, e)
+        # Strip CR/LF from the user-supplied namespace so a crafted value cannot
+        # forge log entries (log injection).
+        safe_namespace = target_namespace.replace("\r", "").replace("\n", "")
+        logger.warning("Could not verify namespace '%s': %s", safe_namespace, e)
 
     permissions = await get_ark_permissions(impersonation, target_namespace)
 
