@@ -54,6 +54,10 @@ inputs:
     description: 'Enable inline Tool authoring and the activator (dedicated inline e2e job)'
     required: false
     default: 'false'
+  mock-llm-enabled:
+    description: 'Pre-install the mock-llm sample into the default namespace (set false for suites that helm install their own there)'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -89,6 +93,7 @@ runs:
       with:
         metrics-enabled: false
         traefik-enabled: false
+        mock-llm-enabled: ${{ inputs.mock-llm-enabled }}
 
     - name: Run setup-e2e script
       shell: bash

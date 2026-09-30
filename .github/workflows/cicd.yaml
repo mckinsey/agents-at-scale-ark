@@ -842,6 +842,8 @@ jobs:
   # specific namespaces. Applied to the shared legs that would break the
   # generated namespaces every other test uses. Calico from setup-k3s enforces
   # the runner NetworkPolicies; the suite pins to the watched default namespace.
+  # That is also why mock-llm is not pre-installed here: the suite helm installs
+  # its own into default, and helm will not adopt the kubectl-applied sample.
   e2e-tests-inline:
     name: E2E Inline Tools
     needs: [setup-container-cache-registry, build-containers]
@@ -855,6 +857,7 @@ jobs:
           install-broker: "true"
           enable-inline-tools: "true"
           prefetch-test-images: "true"
+          mock-llm-enabled: "false"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
