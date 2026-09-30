@@ -729,7 +729,7 @@ export interface paths {
          *     3. Fallback to default
          *
          *     Args:
-         *         namespace: Optional namespace to check for demo mode
+         *         namespace: Optional namespace to resolve/validate
          *
          *     Returns:
          *         ContextResponse: The current namespace, cluster, and read-only mode status
