@@ -64,4 +64,7 @@ async def with_ark_client(namespace: Optional[str], version: str, impersonation:
         ARK client instance
     """
     ark_client = get_client(namespace, version, impersonation, user_agent=user_agent)
-    yield ark_client
+    try:
+        yield ark_client
+    finally:
+        ark_client.api_client.close()
