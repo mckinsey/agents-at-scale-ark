@@ -39,7 +39,9 @@ func activatorSelector() map[string]string {
 
 // reconcileInlineChildren brings the Tool's owned runner objects to the current
 // spec. It is idempotent and safe to run on an already-available Tool: source
-// edits and drift in any child are corrected here.
+// edits and drift in the fields each mutate below writes are corrected here.
+// Deployment replicas, ConfigMap binaryData and labels added out of band are
+// left as found.
 func (r *ToolReconciler) reconcileInlineChildren(ctx context.Context, tool *arkv1alpha1.Tool) error {
 	image, err := inlineImage(tool)
 	if err != nil {
@@ -82,18 +84,18 @@ func (r *ToolReconciler) reconcileInlineChildren(ctx context.Context, tool *arkv
 	desiredService := service.Spec
 	if err := r.applyInlineChild(ctx, tool, service, func(existing client.Object) {
 		current := existing.(*corev1.Service)
-		// The API server assigns or defaults these, so the desired spec leaves them
-		// empty. Carrying the live values over keeps the immutable ones (ClusterIP,
-		// and a dual-stack Service's secondary IP and family) and stops
-		// CreateOrUpdate seeing a diff, and re-Updating, on every reconcile.
+		// The API server assigns these, so the desired spec leaves them empty.
+		// Carrying the live values over keeps the immutable ones (ClusterIP, and a
+		// dual-stack Service's secondary IP and family) and stops CreateOrUpdate
+		// seeing a diff, and re-Updating, on every reconcile. Defaulted policy
+		// fields are not carried over: inlineService states them, so drift in one
+		// is corrected rather than adopted.
 		assigned := current.Spec
 		current.Spec = desiredService
 		current.Spec.ClusterIP = assigned.ClusterIP
 		current.Spec.ClusterIPs = assigned.ClusterIPs
 		current.Spec.IPFamilies = assigned.IPFamilies
 		current.Spec.IPFamilyPolicy = assigned.IPFamilyPolicy
-		current.Spec.InternalTrafficPolicy = assigned.InternalTrafficPolicy
-		current.Spec.SessionAffinity = assigned.SessionAffinity
 	}); err != nil {
 		return err
 	}

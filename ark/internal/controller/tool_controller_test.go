@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -260,9 +261,66 @@ var _ = Describe("Tool Controller", func() {
 			got := *restored.Spec.DeepCopy()
 			got.ClusterIP, got.ClusterIPs = "", nil
 			got.IPFamilies, got.IPFamilyPolicy = nil, nil
-			got.InternalTrafficPolicy = nil
-			got.SessionAffinity = ""
 			Expect(got).To(Equal(want), "a drifted Service must be reconciled back to the full desired spec")
+		})
+	})
+
+	Context("When the child Service's defaulted policy fields drift out of band", func() {
+		const resourceName = "inline-affinity-drift"
+
+		It("resets them and settles without re-Updating the Service", func() {
+			GinkgoT().Setenv(inlinetools.EnabledEnvVar, "true")
+			GinkgoT().Setenv(runner.EnvImageRepository, "ghcr.io/example/ark-inline-runner")
+			GinkgoT().Setenv(runner.EnvImageTag, "v1.2.3")
+
+			ctx := context.Background()
+			toolKey := types.NamespacedName{Name: resourceName, Namespace: "default"}
+			serviceKey := types.NamespacedName{Name: inlineChildNames(resourceName).Runner, Namespace: "default"}
+
+			tool := &arkv1alpha1.Tool{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: arkv1alpha1.ToolSpec{
+					Type:   arkv1alpha1.ToolTypeInline,
+					Inline: &arkv1alpha1.InlineSpec{Source: "print(1)", Language: arkv1alpha1.InlineLanguagePython},
+				},
+			}
+			Expect(k8sClient.Create(ctx, tool)).To(Succeed())
+			DeferCleanup(func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(context.Background(), tool))).To(Succeed())
+			})
+
+			serviceUpdates := 0
+			counting := &serviceUpdateCounter{Client: k8sClient, updates: &serviceUpdates}
+			controllerReconciler := &ToolReconciler{Client: counting, Scheme: k8sClient.Scheme()}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: toolKey})
+			Expect(err).NotTo(HaveOccurred())
+
+			drifted := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, serviceKey, drifted)).To(Succeed())
+			drifted.Spec.SessionAffinity = corev1.ServiceAffinityClientIP
+			drifted.Spec.InternalTrafficPolicy = ptr.To(corev1.ServiceInternalTrafficPolicyLocal)
+			Expect(k8sClient.Update(ctx, drifted)).To(Succeed())
+
+			// The API server defaults SessionAffinityConfig alongside ClientIP, and the
+			// desired spec leaves it nil. Carrying the drifted affinity forward would
+			// therefore leave a permanent diff and an Update on every reconcile.
+			Expect(k8sClient.Get(ctx, serviceKey, drifted)).To(Succeed())
+			Expect(drifted.Spec.SessionAffinityConfig).NotTo(BeNil())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: toolKey})
+			Expect(err).NotTo(HaveOccurred())
+
+			corrected := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, serviceKey, corrected)).To(Succeed())
+			Expect(corrected.Spec.SessionAffinity).To(Equal(corev1.ServiceAffinityNone))
+			Expect(corrected.Spec.InternalTrafficPolicy).To(HaveValue(Equal(corev1.ServiceInternalTrafficPolicyCluster)))
+
+			serviceUpdates = 0
+			for range 2 {
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: toolKey})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(serviceUpdates).To(Equal(0), "a corrected Service must not be re-Updated on later reconciles")
 		})
 	})
 

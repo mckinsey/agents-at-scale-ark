@@ -121,6 +121,10 @@ func inlineService(tool *arkv1alpha1.Tool) *corev1.Service {
 			// or external Service for a runner.
 			Type:     corev1.ServiceTypeClusterIP,
 			Selector: inlineLabels(tool),
+			// The API server's own defaults, stated here so drift in either is
+			// reconciled back instead of being carried forward as desired.
+			SessionAffinity:       corev1.ServiceAffinityNone,
+			InternalTrafficPolicy: ptr.To(corev1.ServiceInternalTrafficPolicyCluster),
 			Ports: []corev1.ServicePort{{
 				Name:       runner.PortName,
 				Port:       runner.Port,

@@ -64,6 +64,14 @@ func (r *ToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 // activator that fronts it is not part of this release, so the Tool stays
 // Pending.
 func (r *ToolReconciler) reconcileInline(ctx context.Context, tool *arkv1alpha1.Tool) (ctrl.Result, error) {
+	// spec.inline is optional in the CRD and the structural check lives in a
+	// webhook a writer can skip, so a Tool can reach here with nothing to
+	// provision. Report it instead of dereferencing nil; no retry can fix a spec.
+	if tool.Spec.Inline == nil {
+		return ctrl.Result{}, r.setInlineUnavailable(ctx, tool,
+			arkv1alpha1.ToolReasonProvisioningFailed, "inline spec is required for inline type")
+	}
+
 	r.emitSourceChange(ctx, tool)
 
 	reason, message := arkv1alpha1.ToolReasonRuntimeNotInstalled, inlineRuntimeNotInstalledMessage
