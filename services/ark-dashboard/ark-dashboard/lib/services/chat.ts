@@ -176,6 +176,21 @@ function isValidQueryStatusPhase(phase: string): phase is QueryStatusPhase {
   return (QUERY_STATUS_PHASES as readonly string[]).includes(phase);
 }
 
+// Returns the query's terminal phase if it has reached one, else null. Keeps
+// streamQueryStatus's poll loop flat.
+function detectTerminalPhase(
+  status: QueryDetailResponse['status'],
+): QueryStatusPhase | null {
+  if (!status || typeof status !== 'object' || !('phase' in status)) {
+    return null;
+  }
+  const phase = (status as QueryStatusWithPhase).phase;
+  const validatedPhase: QueryStatusPhase = isValidQueryStatusPhase(phase)
+    ? phase
+    : 'unknown';
+  return isTerminalPhase(validatedPhase) ? validatedPhase : null;
+}
+
 export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
@@ -479,6 +494,7 @@ export const chatService = {
     queryName: string,
     onUpdate: (status: QueryDetailResponse['status']) => void,
     pollInterval: number = 1000,
+    onTerminal?: (phase: QueryStatusPhase) => void,
   ): Promise<() => void> {
     let stopped = false;
 
@@ -486,25 +502,16 @@ export const chatService = {
       while (!stopped) {
         try {
           const query = await this.getQuery(namespace, queryName);
-          if (query && query.status) {
+          // stop() may have fired while this poll was in flight; don't emit a
+          // straggler update/terminal callback after the caller tore down.
+          if (stopped) return;
+          if (query?.status) {
             onUpdate(query.status);
-
-            if (
-              query.status &&
-              typeof query.status === 'object' &&
-              'phase' in query.status
-            ) {
-              const statusWithPhase = query.status as QueryStatusWithPhase;
-              const phase = statusWithPhase.phase;
-              const validatedPhase: QueryStatusPhase = isValidQueryStatusPhase(
-                phase,
-              )
-                ? phase
-                : 'unknown';
-              if (isTerminalPhase(validatedPhase)) {
-                stopped = true;
-                break;
-              }
+            const terminalPhase = detectTerminalPhase(query.status);
+            if (terminalPhase) {
+              stopped = true;
+              onTerminal?.(terminalPhase);
+              break;
             }
           }
         } catch (error) {
@@ -623,7 +630,9 @@ export const chatService = {
           }
         }
       } finally {
-        reader.releaseLock();
+        // cancel() releases the lock and aborts the transfer, so an early break
+        // stops the SSE download instead of leaking a streaming connection.
+        await reader.cancel().catch(() => {});
       }
     }
 
