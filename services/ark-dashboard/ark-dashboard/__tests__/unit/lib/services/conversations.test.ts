@@ -375,7 +375,7 @@ describe('conversationsService', () => {
         params: { conversation_id: 'conv-1', limit: 500, cursor: 1 },
       });
       expect(apiClient.get).toHaveBeenCalledTimes(2);
-      expect(result).toEqual(mockMessages);
+      expect(result.messages).toEqual(mockMessages);
     });
 
     it('should fetch only messages after the given sequence', async () => {
@@ -398,7 +398,7 @@ describe('conversationsService', () => {
         params: { conversation_id: 'conv-1', limit: 500, cursor: 1 },
       });
       expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(result).toEqual([laterMessage]);
+      expect(result.messages).toEqual([laterMessage]);
     });
 
     it('should handle empty message list', async () => {
@@ -406,7 +406,7 @@ describe('conversationsService', () => {
 
       const result = await conversationsService.getMessages('conv-1');
 
-      expect(result).toEqual([]);
+      expect(result.messages).toEqual([]);
       expect(apiClient.get).toHaveBeenCalledTimes(1);
     });
 

@@ -31,6 +31,12 @@ interface ConversationMessagePage {
   items: ConversationMessage[];
   hasMore: boolean;
   nextCursor?: number;
+  total?: number;
+}
+
+export interface ConversationTranscript {
+  messages: ConversationMessage[];
+  total?: number;
 }
 
 interface SessionQuery {
@@ -98,9 +104,10 @@ export const conversationsService = {
   async getMessages(
     conversationId: string,
     afterSequence?: number
-  ): Promise<ConversationMessage[]> {
+  ): Promise<ConversationTranscript> {
     const messages: ConversationMessage[] = [];
     let cursor = afterSequence;
+    let total: number | undefined;
 
     for (;;) {
       const response = await apiClient.get<ConversationMessagePage>(
@@ -114,12 +121,15 @@ export const conversationsService = {
         }
       );
 
+      if (total === undefined) total = response.total;
       messages.push(...(response.items || []));
 
-      if (!response.hasMore || response.nextCursor === undefined) {
-        return messages;
+      const next = response.nextCursor;
+      const advanced = cursor === undefined || (next !== undefined && next > cursor);
+      if (!response.hasMore || next === undefined || !advanced) {
+        return { messages, total };
       }
-      cursor = response.nextCursor;
+      cursor = next;
     }
   },
 };

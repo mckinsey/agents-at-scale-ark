@@ -3,12 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConversationMessage } from './conversations';
 import { conversationsService } from './conversations';
 
-export const useListConversations = (sessionId: string | null, options?: { enabled?: boolean }) => {
+export const useListConversations = (sessionId: string | null) => {
   return useQuery({
     queryKey: ['conversations', sessionId],
     queryFn: () =>
       sessionId ? conversationsService.getConversations(sessionId) : [],
-    enabled: options?.enabled !== false && !!sessionId,
+    enabled: !!sessionId,
     refetchInterval: 5000,
     placeholderData: (previousData) => previousData,
     retry: false,
@@ -24,7 +24,10 @@ export const useListConversations = (sessionId: string | null, options?: { enabl
  * array (and returning it unchanged when nothing arrived) keeps the reference
  * stable, which is what lets the memoised transcript skip re-rendering.
  */
-export const useGetMessages = (sessionId: string | null, conversationId: string | null, options?: { enabled?: boolean }) => {
+export const useGetMessages = (
+  sessionId: string | null,
+  conversationId: string | null
+) => {
   const queryClient = useQueryClient();
 
   return useQuery({
@@ -40,16 +43,19 @@ export const useGetMessages = (sessionId: string | null, conversationId: string 
       const lastSequence = cached?.at(-1)?.sequence;
 
       if (!cached || lastSequence === undefined) {
-        return conversationsService.getMessages(conversationId);
+        return (await conversationsService.getMessages(conversationId)).messages;
       }
 
-      const newMessages = await conversationsService.getMessages(
-        conversationId,
-        lastSequence
-      );
+      const { messages: newMessages, total } =
+        await conversationsService.getMessages(conversationId, lastSequence);
+
+      if (total !== undefined && total < cached.length) {
+        return (await conversationsService.getMessages(conversationId)).messages;
+      }
+
       return newMessages.length > 0 ? [...cached, ...newMessages] : cached;
     },
-    enabled: options?.enabled !== false && !!conversationId,
+    enabled: !!conversationId,
     refetchInterval: 2000,
     retry: false,
     placeholderData: (previousData) => previousData,

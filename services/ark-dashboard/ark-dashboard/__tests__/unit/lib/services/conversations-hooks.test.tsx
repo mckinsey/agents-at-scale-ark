@@ -87,20 +87,6 @@ describe('conversations hooks', () => {
       expect(conversationsService.getConversations).not.toHaveBeenCalled();
     });
 
-    it('should respect enabled option', async () => {
-      vi.mocked(conversationsService.getConversations).mockResolvedValue([]);
-
-      const { result } = renderHook(
-        () => useListConversations('session-1', { enabled: false }),
-        {
-          wrapper: createWrapper(),
-        }
-      );
-
-      expect(result.current.isFetching).toBe(false);
-      expect(conversationsService.getConversations).not.toHaveBeenCalled();
-    });
-
     it('should handle errors', async () => {
       const error = new Error('Failed to fetch conversations');
       vi.mocked(conversationsService.getConversations).mockRejectedValue(error);
@@ -168,7 +154,7 @@ describe('conversations hooks', () => {
         },
       ];
 
-      vi.mocked(conversationsService.getMessages).mockResolvedValue(mockMessages);
+      vi.mocked(conversationsService.getMessages).mockResolvedValue({ messages: mockMessages });
 
       const { result } = renderHook(
         () => useGetMessages('session-1', 'conv-1'),
@@ -184,25 +170,11 @@ describe('conversations hooks', () => {
     });
 
     it('should not fetch when conversationId is null', async () => {
-      vi.mocked(conversationsService.getMessages).mockResolvedValue([]);
+      vi.mocked(conversationsService.getMessages).mockResolvedValue({ messages: [] });
 
       const { result } = renderHook(() => useGetMessages('session-1', null), {
         wrapper: createWrapper(),
       });
-
-      expect(result.current.isFetching).toBe(false);
-      expect(conversationsService.getMessages).not.toHaveBeenCalled();
-    });
-
-    it('should respect enabled option', async () => {
-      vi.mocked(conversationsService.getMessages).mockResolvedValue([]);
-
-      const { result } = renderHook(
-        () => useGetMessages('session-1', 'conv-1', { enabled: false }),
-        {
-          wrapper: createWrapper(),
-        }
-      );
 
       expect(result.current.isFetching).toBe(false);
       expect(conversationsService.getMessages).not.toHaveBeenCalled();
@@ -232,7 +204,7 @@ describe('conversations hooks', () => {
         },
       ];
 
-      vi.mocked(conversationsService.getMessages).mockResolvedValue(initialMessages);
+      vi.mocked(conversationsService.getMessages).mockResolvedValue({ messages: initialMessages });
 
       const { result, rerender } = renderHook(
         () => useGetMessages('session-1', 'conv-1'),

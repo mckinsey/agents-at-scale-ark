@@ -38,6 +38,7 @@ const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
 const RECENT_QUERIES_PARAMS = { page: 1, pageSize: 50 };
 const RECENT_QUERIES_POLL_MS = 5000;
+const RECENT_QUERIES_MAX_POLLS = 24;
 
 type ToolCall = NonNullable<ChatMessage['tool_calls']>[number];
 type EnhancedToolCall = ToolCall & { result?: string };
@@ -259,23 +260,32 @@ export function MessageDisplay({
   }, [messages]);
 
   // A conversation with no messages yet still has to surface a pending approval,
-  // so poll the session's queries until one of them supplies a query id.
-  const shouldFetchQueries = !latestQueryId;
+  // so poll the session's queries until one of them supplies a query id. Stop
+  // once this conversation's query is found - useGetQuery polls it from there -
+  // and give up after a bounded number of attempts, because a conversation whose
+  // query never produced a message would otherwise poll for as long as it is open.
   const { data: recentQueries } = useQuery({
     queryKey: ['list-all-queries', RECENT_QUERIES_PARAMS, namespace],
     queryFn: () => queriesService.list(namespace, RECENT_QUERIES_PARAMS),
-    enabled: shouldFetchQueries && Boolean(namespace),
-    refetchInterval: RECENT_QUERIES_POLL_MS,
+    enabled: !latestQueryId && Boolean(namespace),
+    refetchInterval: query => {
+      if (query.state.dataUpdateCount >= RECENT_QUERIES_MAX_POLLS) return false;
+      const found = query.state.data?.items?.some(
+        q => q.sessionId === sessionId && q.conversationId === conversationId,
+      );
+      return found ? false : RECENT_QUERIES_POLL_MS;
+    },
   });
 
-  // Find the most recent query for this session that's awaiting approval
-  const pendingApprovalQuery = useMemo(() => {
+  // Find the most recent query for this conversation. Matching on sessionId
+  // alone would let a sibling conversation's input-required query render here
+  // as this conversation's approval.
+  const conversationQuery = useMemo(() => {
     if (latestQueryId || !recentQueries?.items) return null;
 
-    // Filter to this session and input-required phase
-    const sessionQueries = recentQueries.items
+    const conversationQueries = recentQueries.items
       .filter(
-        q => q.sessionId === sessionId && q.status?.phase === 'input-required',
+        q => q.sessionId === sessionId && q.conversationId === conversationId,
       )
       .sort((a, b) => {
         // Sort by creation time descending
@@ -288,10 +298,10 @@ export function MessageDisplay({
         return timeB - timeA;
       });
 
-    return sessionQueries[0] || null;
-  }, [recentQueries, sessionId, latestQueryId]);
+    return conversationQueries[0] || null;
+  }, [recentQueries, sessionId, conversationId, latestQueryId]);
 
-  const effectiveQueryId = latestQueryId || pendingApprovalQuery?.name || null;
+  const effectiveQueryId = latestQueryId || conversationQuery?.name || null;
 
   // Fetch query details to check if approval is needed and to find the linked A2ATask
   const { data: queryDetails } = useGetQuery(
