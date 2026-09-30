@@ -27,6 +27,18 @@ from ...models.pod_logs import LogWindow
 from ...models.resources import AccessReviewRequest, AccessReviewResponse
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
+from .workflow_lifecycle import (
+    LifecyclePreconditionError,
+    formulate_resubmit_workflow,
+    formulate_resume_workflow,
+    formulate_retry_workflow,
+    validate_stoppable,
+    validate_suspendable,
+    workflow_pod_suffix,
+)
+
+WORKFLOW_API_VERSION = "argoproj.io/v1alpha1"
+WORKFLOW_KIND = "Workflow"
 
 logger = logging.getLogger(__name__)
 
@@ -1321,3 +1333,273 @@ async def get_workflow_log_window(
             logger.info(f"No live logs for node {node_id}, explaining why: {e}")
             detail = await _workflow_node_unavailable_detail(api, namespace, workflow_name, node_id)
             raise HTTPException(status_code=404, detail=detail) from e
+
+
+async def _get_workflow_resource(dynamic_client: DynamicClient):
+    return await dynamic_client.resources.get(
+        api_version=WORKFLOW_API_VERSION,
+        kind=WORKFLOW_KIND,
+    )
+
+
+async def _patch_workflow_spec(
+    request: Request,
+    workflow_name: str,
+    namespace: str,
+    patch_spec: dict,
+    impersonation: Optional[ImpersonationConfig],
+) -> Response:
+    """Apply a merge patch to a Workflow's spec (used by suspend/stop/terminate)."""
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+        workflow_resource = await _get_workflow_resource(dynamic_client)
+        patched = await workflow_resource.patch(
+            name=workflow_name,
+            namespace=namespace,
+            body={"spec": patch_spec},
+            content_type="application/merge-patch+json",
+        )
+        return _create_resource_response(patched.to_dict(), request)
+
+
+async def _replace_workflow(
+    request: Request,
+    workflow_name: str,
+    namespace: str,
+    mutate,
+    delete_pods: bool,
+    impersonation: Optional[ImpersonationConfig],
+) -> Response:
+    """Read a Workflow, apply a pure CR mutation, and write it back with a full replace.
+
+    ``mutate`` receives the workflow dict and returns either the mutated
+    workflow or a (workflow, pod_node_ids) tuple. When ``delete_pods`` is set,
+    the pods backing those node IDs are deleted before the workflow is written.
+    """
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+        workflow_resource = await _get_workflow_resource(dynamic_client)
+        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
+        workflow = existing.to_dict()
+
+        try:
+            result = mutate(workflow)
+        except LifecyclePreconditionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+
+        pod_node_ids: list[str] = []
+        if isinstance(result, tuple):
+            new_workflow, pod_node_ids = result
+        else:
+            new_workflow = result
+
+        if delete_pods and pod_node_ids:
+            await _delete_workflow_pods(api, namespace, workflow_name, pod_node_ids)
+
+        replaced = await workflow_resource.replace(
+            name=workflow_name,
+            namespace=namespace,
+            body=new_workflow,
+        )
+        return _create_resource_response(replaced.to_dict(), request)
+
+
+async def _delete_workflow_pods(
+    api,
+    namespace: str,
+    workflow_name: str,
+    node_ids: list[str],
+) -> None:
+    """Delete the pods backing the given workflow node IDs, ignoring absent pods.
+
+    Pods carry no node-id label, so they are matched by the trailing hash
+    segment their name shares with the node ID (the same suffix match used to
+    resolve node logs).
+    """
+    core_v1 = CoreV1Api(api)
+    suffixes = {suffix for suffix in (workflow_pod_suffix(node_id) for node_id in node_ids) if suffix}
+    if not suffixes:
+        return
+
+    pods = await core_v1.list_namespaced_pod(
+        namespace=namespace,
+        label_selector=f"workflows.argoproj.io/workflow={workflow_name}",
+    )
+    for pod in pods.items:
+        pod_name = pod.metadata.name
+        if not any(pod_name.endswith(suffix) for suffix in suffixes):
+            continue
+        try:
+            await core_v1.delete_namespaced_pod(name=pod_name, namespace=namespace)
+        except ApiException as e:
+            if e.status != 404:
+                raise
+
+
+@router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/suspend")
+@handle_k8s_errors(operation="suspend", resource_type="workflow")
+async def suspend_workflow(
+    request: Request,
+    workflow_name: str,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> Response:
+    """
+    Suspend a running workflow. No new nodes are scheduled; running pods finish.
+
+    Sets spec.suspend=true. The workflow stays Running.
+
+    Examples:
+        - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/suspend
+    """
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+        workflow_resource = await _get_workflow_resource(dynamic_client)
+        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
+        try:
+            validate_suspendable(existing.to_dict())
+        except LifecyclePreconditionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        patched = await workflow_resource.patch(
+            name=workflow_name,
+            namespace=namespace,
+            body={"spec": {"suspend": True}},
+            content_type="application/merge-patch+json",
+        )
+        return _create_resource_response(patched.to_dict(), request)
+
+
+@router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resume")
+@handle_k8s_errors(operation="resume", resource_type="workflow")
+async def resume_workflow(
+    request: Request,
+    workflow_name: str,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> Response:
+    """
+    Resume a suspended workflow.
+
+    Clears spec.suspend and marks active suspend-node gates Succeeded.
+
+    Examples:
+        - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/resume
+    """
+    return await _replace_workflow(
+        request, workflow_name, namespace, formulate_resume_workflow, delete_pods=False, impersonation=impersonation
+    )
+
+
+@router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/stop")
+@handle_k8s_errors(operation="stop", resource_type="workflow")
+async def stop_workflow(
+    request: Request,
+    workflow_name: str,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> Response:
+    """
+    Stop a workflow: kill running pods, mark it Failed, but still run onExit handlers.
+
+    Sets spec.shutdown=Stop.
+
+    Examples:
+        - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/stop
+    """
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+        workflow_resource = await _get_workflow_resource(dynamic_client)
+        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
+        try:
+            validate_stoppable(existing.to_dict())
+        except LifecyclePreconditionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        patched = await workflow_resource.patch(
+            name=workflow_name,
+            namespace=namespace,
+            body={"spec": {"shutdown": "Stop"}},
+            content_type="application/merge-patch+json",
+        )
+        return _create_resource_response(patched.to_dict(), request)
+
+
+@router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/terminate")
+@handle_k8s_errors(operation="terminate", resource_type="workflow")
+async def terminate_workflow(
+    request: Request,
+    workflow_name: str,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> Response:
+    """
+    Terminate a workflow: kill running pods and mark it Failed, skipping onExit handlers.
+
+    Sets spec.shutdown=Terminate.
+
+    Examples:
+        - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/terminate
+    """
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+        workflow_resource = await _get_workflow_resource(dynamic_client)
+        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
+        try:
+            validate_stoppable(existing.to_dict())
+        except LifecyclePreconditionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        patched = await workflow_resource.patch(
+            name=workflow_name,
+            namespace=namespace,
+            body={"spec": {"shutdown": "Terminate"}},
+            content_type="application/merge-patch+json",
+        )
+        return _create_resource_response(patched.to_dict(), request)
+
+
+@router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/retry")
+@handle_k8s_errors(operation="retry", resource_type="workflow")
+async def retry_workflow(
+    request: Request,
+    workflow_name: str,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> Response:
+    """
+    Retry a Failed or Error workflow from the point of failure.
+
+    Successful nodes keep their outputs; failed leaf nodes and their pods are
+    dropped, failed group nodes are reset, and the workflow flips back to
+    Running with the same name.
+
+    Examples:
+        - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/retry
+    """
+    return await _replace_workflow(
+        request, workflow_name, namespace, formulate_retry_workflow, delete_pods=True, impersonation=impersonation
+    )
+
+
+@router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resubmit")
+@handle_k8s_errors(operation="resubmit", resource_type="workflow")
+async def resubmit_workflow(
+    request: Request,
+    workflow_name: str,
+    namespace: str,
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> Response:
+    """
+    Resubmit a workflow: create a fresh workflow from the existing spec.
+
+    The new workflow gets a fresh name, an empty status, and a
+    workflows.argoproj.io/resubmitted-from-workflow label pointing at the source.
+
+    Examples:
+        - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/resubmit
+    """
+    async with get_impersonating_api_client(impersonation) as api:
+        dynamic_client = await DynamicClient(api)
+        workflow_resource = await _get_workflow_resource(dynamic_client)
+        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
+        new_workflow = formulate_resubmit_workflow(existing.to_dict())
+        created = await workflow_resource.create(body=new_workflow, namespace=namespace)
+        return _create_resource_response(created.to_dict(), request)
