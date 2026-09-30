@@ -223,7 +223,8 @@ Establishes SSE connection for receiving real-time messages. On disconnect, reco
 **Query Parameters:**
 
 - `from-beginning=true` - Send all existing messages first, then stream new ones
-- `wait-for-query=<timeout>` - Wait for query execution to start (e.g., `wait-for-query=30s`)
+
+The stream is bounded by an inactivity timeout: after `STREAM_IDLE_TIMEOUT_MS` (default 300000) with no chunk, the broker closes it with a terminal error event (`code: stream_idle_timeout`) then `[DONE]`. Treat this as "stream ended, check the query status" rather than a query failure — the query may still be running.
 
 **Response Format:**
 

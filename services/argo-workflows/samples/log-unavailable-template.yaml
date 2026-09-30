@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: log-unavailable-template
+  annotations:
+    workflows.argoproj.io/title: "Log Unavailable"
+    workflows.argoproj.io/description: |
+      Deletes its pods as soon as they complete, so node logs are gone by the
+      time the viewer asks for them. Exercises the not-available message and
+      the "View logs in Argo UI" fallback. One node also fails, so the failed
+      path is covered too.
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  podGC:
+    strategy: OnPodCompletion
+
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: succeeds
+        template: emit-then-exit
+        arguments:
+          parameters:
+          - name: exit-code
+            value: "0"
+      - name: fails
+        template: emit-then-exit
+        continueOn:
+          failed: true
+        arguments:
+          parameters:
+          - name: exit-code
+            value: "1"
+
+  - name: emit-then-exit
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Logs a few lines, then exits and is garbage collected"
+    inputs:
+      parameters:
+      - name: exit-code
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        set -uo pipefail
+        code="{{inputs.parameters.exit-code}}"
+        for i in $(seq 1 20); do
+          echo "line ${i} from a pod that is about to be deleted"
+        done
+        if [ "${code}" -ne 0 ]; then
+          echo "failing on purpose" >&2
+        fi
+        exit "${code}"

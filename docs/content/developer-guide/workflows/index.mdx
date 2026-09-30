@@ -317,6 +317,11 @@ The Ark repo ships runnable templates under `services/argo-workflows/samples/`:
 | `weather-workflow-template.yaml` | Sequential agent queries passing results between steps. |
 | `a2a-arithmetic-workflow.yaml` | Combine A2A agents, Ark agents, and Python steps. |
 | `minio-artifact-template.yaml` | Pass artifacts between steps via Minio. |
+| `log-paging-template.yaml` | Node output longer and wider than one log page. |
+| `log-tail-template.yaml` | A long-running node that streams output slowly, then bursts. |
+| `log-large-lines-template.yaml` | Lines large enough to span runtime log chunks and exceed the page byte budget. |
+| `log-fanout-template.yaml` | Many pod nodes, each with a different amount of output. |
+| `log-unavailable-template.yaml` | Pods garbage collected on completion, so their logs are gone. |
 
 ```bash
 kubectl apply -f services/argo-workflows/samples/query-fanout-template.yaml
@@ -345,6 +350,33 @@ argo submit --from workflowtemplate/a2a-arithmetic-workflow -p a="2" -p b="3"
 ![Screenshot of the A2A agents workflow](./images/a2a-workflow.png)
 
 For larger end-to-end examples (multi-team DAGs writing reports via the file-gateway), see the marketplace demo bundles: [kyc-demo-bundle](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/demos/kyc-demo-bundle) and [cobol-modernization-bundle](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/demos/cobol-modernization-bundle).
+
+### Workflow node log samples
+
+The five `log-*` templates exist to demo the node log viewer in the Ark dashboard. Apply them all, then submit the ones you need:
+
+```bash
+kubectl apply -f services/argo-workflows/samples/log-paging-template.yaml \
+  -f services/argo-workflows/samples/log-tail-template.yaml \
+  -f services/argo-workflows/samples/log-large-lines-template.yaml \
+  -f services/argo-workflows/samples/log-fanout-template.yaml \
+  -f services/argo-workflows/samples/log-unavailable-template.yaml
+
+argo submit --from workflowtemplate/log-paging-template
+argo submit --from workflowtemplate/log-tail-template
+```
+
+Open **Sessions** in the Ark dashboard, pick the run, and expand a step to reach its logs.
+
+| Template | What to look for |
+| --- | --- |
+| `log-paging-template` | The `bulk-output` node holds 5000 lines against a 1000-line page. Scroll up to load older pages until `Start of log` appears. The `wide-output` node scrolls sideways instead of wrapping, and `short-output` reaches the start of its log immediately. |
+| `log-tail-template` | While `stream` runs, new lines arrive on each poll and the viewport stays pinned to the bottom. Scroll up and it stops following. A final burst lands on the last poll after the node finishes. |
+| `log-large-lines-template` | `chunk-spanning` emits 200KB lines, which arrive across several runtime log chunks and must be reassembled. `oversized-line` emits one line past the page byte budget, and `byte-capped-page` fills a page past it, so both report that lines were dropped. |
+| `log-fanout-template` | Each shard emits a different number of lines. Switching between nodes resets the viewport, and collapsing then reopening a node restores its scroll position. Submit with `-p shards=24` to push past the buffer cache limit. |
+| `log-unavailable-template` | `podGC` deletes each pod on completion, so the viewer reports that logs are unavailable and offers the Argo UI link. One node fails on purpose. |
+
+Page size, byte budget, and poll interval come from `NEXT_PUBLIC_WORKFLOW_LOG_PAGE_LINES`, `NEXT_PUBLIC_WORKFLOW_LOG_MAX_BYTES`, and `NEXT_PUBLIC_WORKFLOW_LOG_POLL_INTERVAL_MS`. Lower `NEXT_PUBLIC_WORKFLOW_LOG_PAGE_LINES` to make paging easier to see on smaller runs.
 
 ## Viewing templates in the Ark dashboard
 
