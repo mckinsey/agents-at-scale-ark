@@ -117,19 +117,16 @@ async def get_context_endpoint(
         async with create_api_client() as api:
             v1 = client.CoreV1Api(api)
             await v1.read_namespace(name=target_namespace)
-    except ApiException as e:
-        if e.status == 404:
+    except Exception as e:
+        if isinstance(e, ApiException) and e.status == 404:
             # Namespace doesn't exist - return 404 with default namespace for redirect
-            default_namespace = current_context["namespace"]
             raise HTTPException(
                 status_code=404,
                 detail={
                     "message": f"Namespace '{target_namespace}' not found",
-                    "default_namespace": default_namespace
+                    "default_namespace": current_context["namespace"]
                 }
-            )
-        logger.warning("Could not verify namespace '%s': %s", target_namespace, e)
-    except Exception as e:
+            ) from e
         logger.warning("Could not verify namespace '%s': %s", target_namespace, e)
 
     permissions = await get_ark_permissions(impersonation, target_namespace)
