@@ -4,6 +4,7 @@ import {
   rmSync,
   readFileSync,
   writeFileSync,
+  appendFileSync,
   statSync,
   existsSync,
 } from 'node:fs';
@@ -149,12 +150,13 @@ describe('JsonFileStore', () => {
     const store = new JsonFileStore<Item>(logger, 'Test', path);
     await store.save([item(1)], 2);
 
-    // Sabotage the next write: occupy the temp path with a directory so
-    // writeFile(`${path}.tmp`) fails (EISDIR).
+    // Sabotage the next full rewrite: occupy the temp path with a directory so
+    // writeFile(`${path}.tmp`) fails (EISDIR). Only the atomic rewrite path uses
+    // the temp file, so drive a compaction to exercise it.
     mkdirSync(`${path}.tmp`);
 
     // The failed write must resolve (swallowed, not thrown) ...
-    await expect(store.save([item(1), item(2)], 3)).resolves.toBeUndefined();
+    await expect(store.compact([item(1), item(2)], 3)).resolves.toBeUndefined();
 
     // ... and the previous good snapshot must survive intact.
     const loaded = await new JsonFileStore<Item>(
@@ -341,5 +343,184 @@ describe('JsonFileStore.loadBounded — legacy .json migration to a new .jsonl',
     ).loadBounded({maxBytes: 100_000});
 
     expect(loaded!.items).toEqual([item(1, 5)]);
+  });
+});
+
+describe('JsonFileStore — append-delta and compaction', () => {
+  let dir: string;
+  let path: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'json-file-store-append-'));
+    path = join(dir, 'data.jsonl');
+  });
+
+  afterEach(() => {
+    rmSync(dir, {recursive: true, force: true});
+  });
+
+  it('appends only new records and leaves the header stale (not a full rewrite)', async () => {
+    const store = new JsonFileStore<Item>(logger, 'Test', path);
+    await store.save([item(1)], 2); // first write establishes the baseline
+    await store.save([item(1), item(2)], 3); // appends item(2) only
+
+    const lines = readFileSync(path, 'utf-8').trimEnd().split('\n');
+    // The header still carries the baseline's nextSequence: proof the second
+    // write appended rather than rewriting the whole file (a rewrite would have
+    // written {nextSequence:3}).
+    expect(JSON.parse(lines[0])).toEqual({nextSequence: 2});
+    expect(JSON.parse(lines[1])).toEqual(item(1));
+    expect(JSON.parse(lines[2])).toEqual(item(2));
+    expect(lines).toHaveLength(3);
+
+    // Recovery derives the true nextSequence from the last record despite the
+    // stale header.
+    const loaded = await new JsonFileStore<Item>(
+      logger,
+      'Test',
+      path
+    ).loadBounded({});
+    expect(loaded).toEqual({items: [item(1), item(2)], nextSequence: 3});
+  });
+
+  it('grows the file by the delta, not by rewriting the whole set', async () => {
+    const store = new JsonFileStore<Item>(logger, 'Test', path);
+    const items: Item[] = [item(1)];
+    await store.save([...items], 2);
+
+    for (let i = 2; i <= 20; i++) {
+      items.push(item(i));
+      await store.save([...items], i + 1);
+    }
+
+    const lines = readFileSync(path, 'utf-8').trimEnd().split('\n');
+    // Header + 20 records, and the header is still the baseline value — every
+    // write after the first was an append.
+    expect(lines).toHaveLength(21);
+    expect(JSON.parse(lines[0])).toEqual({nextSequence: 2});
+    expect(JSON.parse(lines.at(-1)!)).toEqual(item(20));
+  });
+
+  it('compacts when the log outgrows the live set, dropping evicted records', async () => {
+    // compactRatio=1: rewrite as soon as the log exceeds the live count. The
+    // sliding window simulates the in-memory byte eviction the store sees.
+    const store = new JsonFileStore<Item>(logger, 'Test', path, 1);
+    await store.save([item(1)], 2); // baseline: header{2}, log=1
+    await store.save([item(1), item(2)], 3); // append 2: log=2
+    await store.save([item(2), item(3)], 4); // evict 1, append 3: log=3
+    await store.save([item(3), item(4)], 5); // log(3) > 1*2 → compact
+
+    const lines = readFileSync(path, 'utf-8').trimEnd().split('\n');
+    // Header refreshed to the current nextSequence, evicted 1 and 2 dropped,
+    // order preserved.
+    expect(JSON.parse(lines[0])).toEqual({nextSequence: 5});
+    expect(lines.slice(1).map((l) => JSON.parse(l))).toEqual([
+      item(3),
+      item(4),
+    ]);
+
+    const loaded = await new JsonFileStore<Item>(
+      logger,
+      'Test',
+      path
+    ).loadBounded({});
+    expect(loaded).toEqual({items: [item(3), item(4)], nextSequence: 5});
+  });
+
+  it('skips a torn trailing line from a crash mid-append', async () => {
+    const store = new JsonFileStore<Item>(logger, 'Test', path);
+    await store.save([item(1)], 2);
+    await store.save([item(1), item(2)], 3); // appended record
+
+    // A crash mid-append leaves a partial final line with no newline.
+    appendFileSync(path, '{"sequenceNumber":3,"da');
+
+    const loaded = await new JsonFileStore<Item>(
+      logger,
+      'Test',
+      path
+    ).loadBounded({});
+    expect(loaded).toEqual({items: [item(1), item(2)], nextSequence: 3});
+  });
+});
+
+describe('JsonFileStore — write-integrity regressions', () => {
+  let dir: string;
+  let path: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'json-file-store-integrity-'));
+    path = join(dir, 'data.jsonl');
+  });
+
+  afterEach(() => {
+    rmSync(dir, {recursive: true, force: true});
+  });
+
+  it('does not duplicate a record when items grow after a save is enqueued', async () => {
+    const store = new JsonFileStore<Item>(logger, 'Test', path);
+    // Mutate one live array across saves — mirrors an in-memory stream whose
+    // append() grows items with no save() before the coalesced flush runs, so
+    // the delta (read from items at write time) outruns the captured
+    // nextSequence. The baseline must advance to what was actually written.
+    const items: Item[] = [item(1)];
+    await store.save(items, 2); // baseline
+    items.push(item(2));
+    const inFlight = store.save(items, 3);
+    items.push(item(3));
+    void store.save(items, 4); // coalesced; pending nextSequence=4
+    items.push(item(4)); // grows the ref with no save
+    await inFlight;
+    items.push(item(5));
+    await store.save(items, 6);
+
+    const loaded = await new JsonFileStore<Item>(
+      logger,
+      'Test',
+      path
+    ).loadBounded({});
+    const seqs = loaded!.items.map((i) => i.sequenceNumber);
+    expect(seqs).toEqual([1, 2, 3, 4, 5]);
+    expect(new Set(seqs).size).toBe(seqs.length); // no duplicates
+  });
+
+  it('retries an owed compaction on the next save, so deletes do not resurrect', async () => {
+    const store = new JsonFileStore<Item>(logger, 'Test', path);
+    await store.save([item(1)], 2);
+    await store.save([item(1), item(2), item(3)], 4);
+
+    // Sabotage the atomic rewrite so the delete-driven compaction fails.
+    mkdirSync(`${path}.tmp`);
+    await store.compact([item(1)], 4);
+    // Failure clears: the owed rewrite must run on the next save, not an append.
+    rmSync(`${path}.tmp`, {recursive: true, force: true});
+    await store.save([item(1), item(4)], 5);
+
+    const loaded = await new JsonFileStore<Item>(
+      logger,
+      'Test',
+      path
+    ).loadBounded({});
+    expect(loaded!.items.map((i) => i.sequenceNumber)).toEqual([1, 4]);
+  });
+
+  it('recovers persistence after a failed delete-all compaction', async () => {
+    const store = new JsonFileStore<Item>(logger, 'Test', path);
+    await store.save([item(1), item(2), item(3)], 4);
+
+    // No-predicate delete resets the sequence space to 1; if its compaction is
+    // lost, the baseline still points at the old space and later appends filter
+    // to nothing — persisting stops silently while serving deleted data.
+    mkdirSync(`${path}.tmp`);
+    await store.compact([], 1);
+    rmSync(`${path}.tmp`, {recursive: true, force: true});
+    await store.save([item(1)], 2);
+
+    const loaded = await new JsonFileStore<Item>(
+      logger,
+      'Test',
+      path
+    ).loadBounded({});
+    expect(loaded!.items.map((i) => i.sequenceNumber)).toEqual([1]);
   });
 });

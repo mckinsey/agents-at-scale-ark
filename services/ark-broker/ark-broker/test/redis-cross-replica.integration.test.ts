@@ -61,7 +61,7 @@ function consumeSSE(
 }
 
 describeIntegration('redis chunk backend — cross-replica', () => {
-  const {connectionUrl} = useRedisContainer();
+  const {connectionUrl, onStop} = useRedisContainer();
   let appA: Express;
   let appB: Express;
 
@@ -71,13 +71,21 @@ describeIntegration('redis chunk backend — cross-replica', () => {
 
     const redisA = createRedis(config, logger);
     const redisB = createRedis(config, logger);
+    const chunksA = createChunkStream(config, logger, redisA);
+    const chunksB = createChunkStream(config, logger, redisB);
+    onStop(async () => {
+      chunksA.close?.();
+      chunksB.close?.();
+      await redisA.quit();
+      await redisB.quit();
+    });
 
     appA = buildApp({
       config,
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
-      chunkStream: createChunkStream(config, logger, redisA),
+      chunkStream: chunksA,
       eventStream: createEventStream(config, logger),
       sessionsStorage: createSessionsStorage(config, logger),
       redis: redisA,
@@ -88,7 +96,7 @@ describeIntegration('redis chunk backend — cross-replica', () => {
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
-      chunkStream: createChunkStream(config, logger, redisB),
+      chunkStream: chunksB,
       eventStream: createEventStream(config, logger),
       sessionsStorage: createSessionsStorage(config, logger),
       redis: redisB,

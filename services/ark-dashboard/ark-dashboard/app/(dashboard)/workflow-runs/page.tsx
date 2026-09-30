@@ -1,31 +1,27 @@
 'use client';
 
-import { PageHeader } from '@/components/common/page-header';
+import { useState } from 'react';
+
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
+import { Terminal } from '@/components/icons';
 import { SessionsSection } from '@/components/sections/sessions-section';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
-import { mapArgoWorkflowsToSessions } from '@/lib/services/workflow-mapper';
-import { useWorkflows } from '@/lib/services/workflows-hooks';
-import { useNamespace } from '@/providers/NamespaceProvider';
 
 export default function WorkflowRunsPage() {
-  const { namespace } = useNamespace();
-  const { workflows } = useWorkflows(namespace);
+  const [sessionCount, setSessionCount] = useState(0);
 
-  const allSessions = mapArgoWorkflowsToSessions(workflows);
-
-  const pageTitle = allSessions
-    ? `Workflow Runs (${allSessions.length})`
-    : 'Workflow Runs';
+  const pageTitle = sessionCount
+    ? `Workflow runs (${sessionCount})`
+    : 'Workflow runs';
 
   return (
-    <>
-      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Workflow Runs" />
-      <div className="flex flex-1 flex-col">
-        <div>
-          <h1 className="text-xl">{pageTitle}</h1>
-        </div>
-        <SessionsSection />
-      </div>
-    </>
+    <div className="content-shell flex min-h-0 w-full flex-1 flex-col">
+      <ResourcePageHeader
+        icon={<Terminal />}
+        title={pageTitle}
+        description="Track workflow execution across agents, tools, and tasks"
+      />
+
+      <SessionsSection onCountChange={setSessionCount} />
+    </div>
   );
 }

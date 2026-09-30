@@ -25,7 +25,6 @@ import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import {
   useArkConfig,
-  useClearArkConfig,
   useUpdateArkConfig,
 } from '@/lib/services/arkconfig-hooks';
 import {
@@ -54,7 +53,6 @@ function validateTimeout(value: string): string | null {
 export function QueriesSettings() {
   const { data, isLoading, isError, error } = useArkConfig();
   const updateMutation = useUpdateArkConfig();
-  const clearMutation = useClearArkConfig();
 
   const fieldId = useId();
   const descriptionId = `${fieldId}-description`;
@@ -150,6 +148,8 @@ export function QueriesSettings() {
     updateMutation.mutate({ queryTTL: trimmed === '' ? null : trimmed });
   };
 
+  // Clears this field only. Deleting the whole ArkConfig would also drop
+  // cluster-wide defaults this form does not manage, such as defaultMemory.
   const handleReset = () => {
     setLocalError(null);
     setTimeoutError(null);
@@ -163,14 +163,17 @@ export function QueriesSettings() {
       return;
     }
 
-    clearMutation.mutate(undefined, {
-      onSuccess: () => {
-        setInput('');
+    updateMutation.mutate(
+      { queryTTL: null },
+      {
+        onSuccess: () => {
+          setInput('');
+        },
       },
-    });
+    );
   };
 
-  const isSaving = updateMutation.isPending || clearMutation.isPending;
+  const isSaving = updateMutation.isPending;
   const resetDescription = hasExisting
     ? `This clears the cluster-wide default Query TTL and resets the query timeout stored in this browser to ${DEFAULT_QUERY_TIMEOUT_MINUTES} minutes.`
     : `This resets the query timeout stored in this browser to ${DEFAULT_QUERY_TIMEOUT_MINUTES} minutes.`;
@@ -230,7 +233,7 @@ export function QueriesSettings() {
           variant="outline"
           onClick={() => setResetConfirmOpen(true)}
           disabled={isSaving || !hasResettableState}>
-          {clearMutation.isPending ? 'Clearing...' : 'Reset to default'}
+          Reset to default
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>
           {updateMutation.isPending ? 'Saving...' : 'Save'}

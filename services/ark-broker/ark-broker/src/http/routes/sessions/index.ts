@@ -100,16 +100,6 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
     }
   );
 
-  router.delete('/', async (req, res) => {
-    try {
-      await sessionsBroker.delete();
-      res.json({status: 'success', message: 'Sessions purged'});
-    } catch (error) {
-      req.log.error({err: error}, 'purge failed');
-      sendInternalError(res, req.id);
-    }
-  });
-
   router.delete<{query_id: string}>('/queries/:query_id', async (req, res) =>
     handleDeleteSessionQuery(req, res, sessionsBroker)
   );

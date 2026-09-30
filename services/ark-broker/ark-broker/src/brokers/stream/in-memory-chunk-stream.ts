@@ -57,12 +57,6 @@ export class InMemoryChunkStream implements ChunkStream {
     );
   }
 
-  async hasQuery(queryId: string): Promise<boolean> {
-    return (await this.stream.all()).some(
-      (item) => item.data.queryId === queryId
-    );
-  }
-
   subscribeToQuery(
     queryId: string,
     callback: (item: BrokerItem<CompletionChunkData>) => void

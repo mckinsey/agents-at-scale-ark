@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Agent, TeamMember } from '@/lib/services';
+import type { AgentListItem, TeamMember } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
 import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
@@ -28,7 +28,7 @@ const strategyItems = [
 
 interface StrategySectionProps {
   form: UseFormReturn<TeamFormValues>;
-  agents: Agent[];
+  agents: AgentListItem[];
   selectedMembers: TeamMember[];
   disabled?: boolean;
 }

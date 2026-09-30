@@ -2,32 +2,32 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { WarningsSection } from '@/components/forms/team-form/sections/warnings-section';
-import type { Agent, TeamMember } from '@/lib/services';
+import type { AgentListItem, TeamMember } from '@/lib/services';
 
 const selectedMembers: TeamMember[] = [
   { name: 'agent-1', type: 'agent' },
   { name: 'agent-2', type: 'agent' },
 ];
 
-const agentsWithoutTerminate: Agent[] = [
-  { id: '1', name: 'agent-1', namespace: 'default', isA2A: false, tools: [{ type: 'inline', name: 'search' }] },
-  { id: '2', name: 'agent-2', namespace: 'default', isA2A: false, tools: [{ type: 'inline', name: 'fetch' }] },
+const agentsWithoutTerminate: AgentListItem[] = [
+  { id: '1', name: 'agent-1', namespace: 'default', tool_names: ['search'] },
+  { id: '2', name: 'agent-2', namespace: 'default', tool_names: ['fetch'] },
 ];
 
-const agentsWithTerminate: Agent[] = [
-  { id: '1', name: 'agent-1', namespace: 'default', isA2A: false, tools: [{ type: 'inline', name: 'terminate' }] },
-  { id: '2', name: 'agent-2', namespace: 'default', isA2A: false, tools: [{ type: 'inline', name: 'fetch' }] },
+const agentsWithTerminate: AgentListItem[] = [
+  { id: '1', name: 'agent-1', namespace: 'default', tool_names: ['terminate'] },
+  { id: '2', name: 'agent-2', namespace: 'default', tool_names: ['fetch'] },
 ];
 
-const agentsWithNoTools: Agent[] = [
-  { id: '1', name: 'agent-1', namespace: 'default', isA2A: false },
-  { id: '2', name: 'agent-2', namespace: 'default', isA2A: false, tools: [] },
+const agentsWithNoTools: AgentListItem[] = [
+  { id: '1', name: 'agent-1', namespace: 'default' },
+  { id: '2', name: 'agent-2', namespace: 'default', tool_names: [] },
 ];
 
-const agentsWithTerminateOnNonMember: Agent[] = [
-  { id: '1', name: 'agent-1', namespace: 'default', isA2A: false, tools: [{ type: 'inline', name: 'search' }] },
-  { id: '2', name: 'agent-2', namespace: 'default', isA2A: false, tools: [{ type: 'inline', name: 'fetch' }] },
-  { id: '3', name: 'agent-3', namespace: 'default', isA2A: false, tools: [{ type: 'inline', name: 'terminate' }] },
+const agentsWithTerminateOnNonMember: AgentListItem[] = [
+  { id: '1', name: 'agent-1', namespace: 'default', tool_names: ['search'] },
+  { id: '2', name: 'agent-2', namespace: 'default', tool_names: ['fetch'] },
+  { id: '3', name: 'agent-3', namespace: 'default', tool_names: ['terminate'] },
 ];
 
 describe('WarningsSection', () => {
@@ -124,7 +124,9 @@ describe('WarningsSection', () => {
       />,
     );
     expect(
-      screen.getByText(/Neither the agents nor the selector have access to the terminate tool/),
+      screen.getByText(
+        /Neither the agents nor the selector have access to the terminate tool/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -138,7 +140,9 @@ describe('WarningsSection', () => {
       />,
     );
     expect(
-      screen.getByText(/Neither the agents nor the selector have access to the terminate tool/),
+      screen.getByText(
+        /Neither the agents nor the selector have access to the terminate tool/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -152,12 +156,16 @@ describe('WarningsSection', () => {
       />,
     );
     expect(
-      screen.getByText(/Neither the agents nor the selector have access to the terminate tool/),
+      screen.getByText(
+        /Neither the agents nor the selector have access to the terminate tool/,
+      ),
     ).toBeInTheDocument();
   });
 
   it('shows warning when selected member is not found in agents list', () => {
-    const unknownMembers: TeamMember[] = [{ name: 'unknown-agent', type: 'agent' }];
+    const unknownMembers: TeamMember[] = [
+      { name: 'unknown-agent', type: 'agent' },
+    ];
     render(
       <WarningsSection
         agents={agentsWithTerminate}
@@ -167,7 +175,9 @@ describe('WarningsSection', () => {
       />,
     );
     expect(
-      screen.getByText(/Neither the agents nor the selector have access to the terminate tool/),
+      screen.getByText(
+        /Neither the agents nor the selector have access to the terminate tool/,
+      ),
     ).toBeInTheDocument();
   });
 });

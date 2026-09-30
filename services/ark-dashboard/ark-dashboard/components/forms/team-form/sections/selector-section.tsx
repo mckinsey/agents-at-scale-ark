@@ -35,7 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { Agent } from '@/lib/services';
+import type { AgentListItem } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
 import {
@@ -46,7 +46,7 @@ import {
 
 interface SelectorSectionProps {
   form: UseFormReturn<TeamFormValues>;
-  agents: Agent[];
+  agents: AgentListItem[];
   unavailableAgents: string[];
   disabled?: boolean;
 }
@@ -130,7 +130,9 @@ export function SelectorSection({
             Advanced Settings
           </span>
         </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-4 pt-4" style={{ marginLeft: 0 }}>
+        <CollapsibleContent
+          className="space-y-4 pt-4"
+          style={{ marginLeft: 0 }}>
           <FormField
             control={form.control}
             name="selectorPrompt"
@@ -150,7 +152,11 @@ export function SelectorSection({
                       size="sm"
                       onClick={() => setIsPromptExpanded(!isPromptExpanded)}>
                       <IconShell size="sm" variant="secondary">
-                        {isPromptExpanded ? <CollapseContent /> : <ExpandContent />}
+                        {isPromptExpanded ? (
+                          <CollapseContent />
+                        ) : (
+                          <ExpandContent />
+                        )}
                       </IconShell>
                       {isPromptExpanded ? 'Collapse' : 'Expand'}
                     </Button>
@@ -159,7 +165,7 @@ export function SelectorSection({
                 <Textarea
                   placeholder="Enter the selector prompt..."
                   disabled={disabled}
-                  className={`scrollbar-thin resize-none transition-all duration-200 ${
+                  className={`resize-none scrollbar-thin transition-all duration-200 ${
                     isPromptExpanded
                       ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
                       : 'max-h-48 min-h-48 overflow-y-auto'
@@ -191,7 +197,11 @@ export function SelectorSection({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => form.setValue('selectorPrompt', DEFAULT_SELECTOR_PROMPT, { shouldDirty: true })}
+                  onClick={() =>
+                    form.setValue('selectorPrompt', DEFAULT_SELECTOR_PROMPT, {
+                      shouldDirty: true,
+                    })
+                  }
                   disabled={disabled}
                   className="mt-2">
                   <IconShell size="sm" variant="secondary">
@@ -238,7 +248,7 @@ export function SelectorSection({
                   <Textarea
                     placeholder="Enter the terminate prompt..."
                     disabled={disabled}
-                    className="scrollbar-thin min-h-[60px] resize-none"
+                    className="min-h-[60px] resize-none scrollbar-thin"
                     {...field}
                   />
                   <FieldError>{fieldState.error?.message}</FieldError>
@@ -247,9 +257,13 @@ export function SelectorSection({
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                      form.setValue('terminatePrompt', DEFAULT_TERMINATE_PROMPT, {
-                        shouldDirty: true,
-                      })
+                      form.setValue(
+                        'terminatePrompt',
+                        DEFAULT_TERMINATE_PROMPT,
+                        {
+                          shouldDirty: true,
+                        },
+                      )
                     }
                     disabled={disabled}
                     className="mt-2">
