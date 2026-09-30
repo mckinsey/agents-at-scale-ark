@@ -362,6 +362,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 		}},
 		{"Query", &controller.QueryReconciler{
 			Client:                  mgr.GetClient(),
+			APIReader:               mgr.GetAPIReader(),
 			Scheme:                  mgr.GetScheme(),
 			Telemetry:               telemetryProvider,
 			Eventing:                eventingProvider,
