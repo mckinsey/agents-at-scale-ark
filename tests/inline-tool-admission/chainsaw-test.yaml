@@ -27,7 +27,6 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -o pipefail
               sa=system:serviceaccount:default:inline-unauth
               if out=$(kubectl apply --as="$sa" -f manifests/a02-tool.yaml 2>&1)
               then
