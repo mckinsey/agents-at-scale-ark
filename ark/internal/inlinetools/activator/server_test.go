@@ -137,7 +137,7 @@ func TestDiscoveryIsStatelessAndReadsCurrentMetadata(t *testing.T) {
 	assert.NotContains(t, second.Body.String(), "Echo the arguments")
 	assert.Contains(t, second.Body.String(), `"required":["text"]`)
 	assert.Contains(t, second.Body.String(), `"readOnlyHint":true`)
-	assert.Contains(t, second.Body.String(), `"destructiveHint":false`)
+	assert.NotContains(t, second.Body.String(), `"destructiveHint"`)
 	assert.NotContains(t, second.Body.String(), tool.Spec.Inline.Source)
 	assert.Zero(t, calls.Load())
 
@@ -217,6 +217,45 @@ func TestDiscoveryFailsClosedOnInvalidMetadataOrReads(t *testing.T) {
 	response := rpc(t, handler, testRoute, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	assert.Equal(t, http.StatusServiceUnavailable, response.Code)
 	assert.NotContains(t, response.Body.String(), "SECRET_SOURCE_SENTINEL")
+}
+
+func TestDiscoveryNeverAdvertisesUnsetRiskHintsAsFalse(t *testing.T) {
+	for name, testCase := range map[string]struct {
+		annotations *arkv1alpha1.ToolAnnotations
+		absent      []string
+		present     []string
+	}{
+		"no annotations": {
+			absent: []string{`"annotations"`},
+		},
+		"title only": {
+			annotations: &arkv1alpha1.ToolAnnotations{Title: "T"},
+			absent:      []string{`"destructiveHint"`, `"openWorldHint"`},
+			present:     []string{`"title":"T"`},
+		},
+		"hints set true": {
+			annotations: &arkv1alpha1.ToolAnnotations{DestructiveHint: true, OpenWorldHint: true},
+			present:     []string{`"destructiveHint":true`, `"openWorldHint":true`},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tool := discoveryTool()
+			tool.Spec.Annotations = testCase.annotations
+			handler, err := Handler(discoveryClient(t, tool), []string{"tenant"}, func(context.Context, types.NamespacedName, types.UID, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return nil, fmt.Errorf("discovery must not invoke")
+			})
+			require.NoError(t, err)
+			listing := rpc(t, handler, testRoute, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+			require.Equal(t, http.StatusOK, listing.Code, listing.Body.String())
+			for _, hint := range testCase.absent {
+				assert.NotContains(t, listing.Body.String(), hint,
+					"%s is not set on the Tool, so discovery must omit it and leave the client on the MCP default rather than advertising less risk", hint)
+			}
+			for _, hint := range testCase.present {
+				assert.Contains(t, listing.Body.String(), hint)
+			}
+		})
+	}
 }
 
 func TestDiscoveryServesEverySchemaAdmissionAccepts(t *testing.T) {

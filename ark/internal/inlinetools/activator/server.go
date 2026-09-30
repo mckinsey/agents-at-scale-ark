@@ -100,7 +100,15 @@ func metadata(tool *arkv1alpha1.Tool) (*mcp.Tool, error) {
 	if annotations := tool.Spec.Annotations; annotations != nil {
 		descriptor.Annotations = &mcp.ToolAnnotations{
 			Title: annotations.Title, ReadOnlyHint: annotations.ReadOnlyHint, IdempotentHint: annotations.IdempotentHint,
-			DestructiveHint: ptr.To(annotations.DestructiveHint), OpenWorldHint: ptr.To(annotations.OpenWorldHint),
+		}
+		// These two hints default to true in MCP and the CRD stores plain booleans,
+		// so an unset field is indistinguishable from false. Send them only when the
+		// author asked for true; sending false would advertise less risk than is known.
+		if annotations.DestructiveHint {
+			descriptor.Annotations.DestructiveHint = ptr.To(true)
+		}
+		if annotations.OpenWorldHint {
+			descriptor.Annotations.OpenWorldHint = ptr.To(true)
 		}
 	}
 	return descriptor, nil
