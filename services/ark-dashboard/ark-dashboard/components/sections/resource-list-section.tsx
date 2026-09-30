@@ -7,6 +7,7 @@ import { NamespacedLink } from '@/components/namespaced-link';
 import {
   LearnMoreButton,
   ResourceEmptyState,
+  ResourceErrorState,
   ResourceNoResults,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
@@ -65,6 +66,9 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly items: T[];
   readonly loading: boolean;
   readonly error?: unknown;
+  // React Query's dataUpdatedAt: 0 until the first successful load, so it
+  // distinguishes an initial load failure from a failed refresh.
+  readonly dataUpdatedAt?: number;
   readonly onDelete: (id: string) => void;
   readonly onReload: () => void;
   readonly renderTable: (
@@ -91,6 +95,7 @@ export function ResourceListSection<T extends ResourceListItem>({
   items,
   loading,
   error,
+  dataUpdatedAt,
   onDelete,
   onReload,
   renderTable,
@@ -139,7 +144,18 @@ export function ResourceListSection<T extends ResourceListItem>({
     });
   }, [items, searchQuery, statusFilter, originFilter, originFilterValue]);
 
-  const isEmpty = !loading && items.length === 0;
+  // loadFailed: the first load never succeeded, so there is nothing to show —
+  // the error replaces the list. refreshFailed: a later reload failed but we
+  // still hold the previously loaded items — keep showing them under a banner
+  // rather than discarding valid data. This mirrors the a2a-servers/events
+  // sections and prevents a transient error from rendering the empty state.
+  const hasError = Boolean(error);
+  const hasLoadedOnce = (dataUpdatedAt ?? 0) > 0;
+  const loadFailed = hasError && !hasLoadedOnce;
+  const refreshFailed = hasError && hasLoadedOnce;
+  const isEmpty = !loading && !hasError && items.length === 0;
+  const errorMessage =
+    error instanceof Error ? error.message : 'An unexpected error occurred';
 
   const statusLabel = STATUS_ITEMS.find(s => s.value === statusFilter)?.label;
   const noResultsMessage =
@@ -176,7 +192,15 @@ export function ResourceListSection<T extends ResourceListItem>({
           <div className="py-8 text-center">Loading...</div>
         </div>
       )}
-      {!showLoading && isEmpty && (
+      {!showLoading && loadFailed && (
+        <ResourceErrorState
+          className="mt-5"
+          title={`Couldn't load ${pluralLabel}`}
+          description={errorMessage}
+          onRetry={onReload}
+        />
+      )}
+      {!showLoading && !loadFailed && isEmpty && (
         <ResourceEmptyState
           icon={icon}
           title={emptyTitle}
@@ -195,8 +219,15 @@ export function ResourceListSection<T extends ResourceListItem>({
           }
         />
       )}
-      {!showLoading && !isEmpty && (
+      {!showLoading && !loadFailed && !isEmpty && (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+          {refreshFailed && (
+            <ResourceErrorState
+              title={`Couldn't refresh ${pluralLabel}`}
+              description="Showing the last loaded version."
+              onRetry={onReload}
+            />
+          )}
           <div className="flex flex-none items-end gap-3">
             <ResourceSearchInput
               value={searchQuery}

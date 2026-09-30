@@ -15,6 +15,7 @@ export function McpServersSection() {
     isPending,
     error,
     refetch,
+    dataUpdatedAt,
   } = useGetAllMcpServers();
   const deleteMcpServer = useDeleteMcpServer();
 
@@ -39,6 +40,7 @@ export function McpServersSection() {
       items={servers}
       loading={isPending}
       error={error}
+      dataUpdatedAt={dataUpdatedAt}
       onDelete={id => deleteMcpServer.mutate(id)}
       onReload={() => refetch()}
       renderTable={(items, onDelete, reload) => (

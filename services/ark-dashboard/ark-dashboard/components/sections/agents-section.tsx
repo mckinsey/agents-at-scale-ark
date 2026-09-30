@@ -10,7 +10,13 @@ import { useDeleteAgent, useGetAllAgents } from '@/lib/services/agents-hooks';
 import { getOriginLabel } from '@/lib/utils/origin-icon';
 
 export function AgentsSection() {
-  const { data: agents = [], isPending, error, refetch } = useGetAllAgents();
+  const {
+    data: agents = [],
+    isPending,
+    error,
+    refetch,
+    dataUpdatedAt,
+  } = useGetAllAgents();
   const deleteAgent = useDeleteAgent();
 
   return (
@@ -39,6 +45,7 @@ export function AgentsSection() {
       items={agents}
       loading={isPending}
       error={error}
+      dataUpdatedAt={dataUpdatedAt}
       onDelete={id => deleteAgent.mutate(id)}
       onReload={() => refetch()}
       renderTable={(items, onDelete) => (
