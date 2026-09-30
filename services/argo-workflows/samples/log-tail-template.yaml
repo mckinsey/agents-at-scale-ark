@@ -1,0 +1,94 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: log-tail-template
+  annotations:
+    workflows.argoproj.io/title: "Log Tail"
+    workflows.argoproj.io/description: |
+      Streams output slowly from a long-running node, then emits a final burst
+      just before exiting. Exercises tail polling while a node runs, stick to
+      bottom, and the last poll that runs once the node finishes.
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  arguments:
+    parameters:
+    - name: ticks
+      value: "90"
+    - name: interval-seconds
+      value: "2"
+    - name: final-burst
+      value: "40"
+
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: stream
+        template: stream-output
+        arguments:
+          parameters:
+          - name: ticks
+            value: "{{workflow.parameters.ticks}}"
+          - name: interval-seconds
+            value: "{{workflow.parameters.interval-seconds}}"
+          - name: final-burst
+            value: "{{workflow.parameters.final-burst}}"
+      - name: summary
+        template: summarise
+        dependencies: [stream]
+        arguments:
+          parameters:
+          - name: ticks
+            value: "{{tasks.stream.outputs.parameters.ticks}}"
+
+  - name: stream-output
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "One line every few seconds, then a burst"
+    inputs:
+      parameters:
+      - name: ticks
+      - name: interval-seconds
+      - name: final-burst
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        set -euo pipefail
+        ticks="{{inputs.parameters.ticks}}"
+        interval="{{inputs.parameters.interval-seconds}}"
+        burst="{{inputs.parameters.final-burst}}"
+
+        echo "streaming ${ticks} ticks every ${interval}s"
+        for i in $(seq 1 "${ticks}"); do
+          printf 'tick %04d/%s at %s\n' "${i}" "${ticks}" "$(date -u '+%H:%M:%S')"
+          sleep "${interval}"
+        done
+
+        echo "stream complete, emitting final burst of ${burst} lines"
+        for i in $(seq 1 "${burst}"); do
+          printf 'final burst line %03d\n' "${i}"
+        done
+        echo "exiting now"
+        echo "${ticks}" > /tmp/ticks.txt
+    outputs:
+      parameters:
+      - name: ticks
+        valueFrom:
+          path: /tmp/ticks.txt
+
+  - name: summarise
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Short follow-up node"
+    inputs:
+      parameters:
+      - name: ticks
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        set -euo pipefail
+        echo "upstream streamed {{inputs.parameters.ticks}} ticks"
