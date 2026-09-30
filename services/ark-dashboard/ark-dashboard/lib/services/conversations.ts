@@ -121,7 +121,7 @@ export const conversationsService = {
         }
       );
 
-      if (total === undefined) total = response.total;
+      total ??= response.total;
       messages.push(...(response.items || []));
 
       const next = response.nextCursor;
