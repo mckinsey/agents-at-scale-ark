@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -178,6 +180,40 @@ func TestInlineNetworkPolicyReadErrorsFailClosed(t *testing.T) {
 	}
 }
 
+// TestInlineRunnerDeploymentNotYetCached covers the read-after-create gap: the
+// runner Deployment is created through the write client, so the cached read in
+// the policy check can still miss it on the first reconcile of a new tool.
+func TestInlineRunnerDeploymentNotYetCached(t *testing.T) {
+	uncachedRunner := func(t *testing.T, tool *arkv1alpha1.Tool, objects ...client.Object) *ToolReconciler {
+		t.Helper()
+		r := newInlineStatusReconciler(t, append([]client.Object{tool, activatorDeployment(1)}, objects...)...)
+		runnerKey := client.ObjectKey{Namespace: tool.Namespace, Name: inlineChildNames(tool.Name).Runner}
+		r.Client = interceptor.NewClient(r.Client.(client.WithWatch), interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, isDeployment := obj.(*appsv1.Deployment); isDeployment && key == runnerKey {
+					return apierrors.NewNotFound(appsv1.Resource("deployments"), key.Name)
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		})
+		return r
+	}
+
+	t.Run("reports the tool as available", func(t *testing.T) {
+		tool := newInlineTool("cache-lag")
+		_, ready := reconcileInlineTool(t, uncachedRunner(t, tool), tool)
+		assert.Equal(t, arkv1alpha1.ToolReasonAvailable, availableCondition(t, ready).Reason)
+		assert.Equal(t, arkv1alpha1.ToolStateReady, ready.Status.State)
+	})
+
+	t.Run("still withholds the endpoint on a conflicting policy", func(t *testing.T) {
+		tool := newInlineTool("cache-lag-conflict")
+		_, pending := reconcileInlineTool(t, uncachedRunner(t, tool, tenantAllowAll(tool.Namespace)), tool)
+		assert.Equal(t, arkv1alpha1.ToolReasonConflictingPolicy, availableCondition(t, pending).Reason)
+		assert.Empty(t, pending.Status.ResolvedAddress)
+	})
+}
+
 func TestInlineNetworkWatchMapping(t *testing.T) {
 	tool := newInlineTool("selected")
 	other := newInlineTool("other-namespace")
@@ -298,9 +334,13 @@ var _ = Describe("Inline network policy watches", func() {
 		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "inline-net-"}}
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 		GinkgoT().Setenv(EnvActivatorNamespace, ns.Name)
+		// Controller names are validated process-wide, and another spec in this
+		// package already registers a "tool" controller.
+		skipNameValidation := true
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme: k8sClient.Scheme(), Metrics: metricsserver.Options{BindAddress: "0"},
-			Cache: cache.Options{DefaultNamespaces: map[string]cache.Config{ns.Name: {}}},
+			Controller: config.Controller{SkipNameValidation: &skipNameValidation},
+			Cache:      cache.Options{DefaultNamespaces: map[string]cache.Config{ns.Name: {}}},
 		})
 		Expect(err).NotTo(HaveOccurred())
 		r := &ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
