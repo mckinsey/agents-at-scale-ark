@@ -43,7 +43,7 @@ func (c *countingReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 // with no predicate, so its own status writes bounce back as watch events
 // and trigger extra reconciles.
 var _ = Describe("Query Controller reconcile amplification", func() {
-	It("reconciles more times than the number of external triggers", func() {
+	It("settles after the terminal write instead of reconciling once per own status update", func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 

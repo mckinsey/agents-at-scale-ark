@@ -135,13 +135,21 @@ type QueryReconciler struct {
 
 	// APIReader bypasses the informer cache. signalRequeue's trigger is a local
 	// channel, not a watch event, so the reconcile it causes can otherwise race
-	// the cache still catching up to the write that triggered it.
+	// the cache still catching up to the write that triggered it. fetchQuery
+	// only falls back to it when pendingFreshReads says the cache is still
+	// behind; the common watch-driven path stays on the cached Client.
 	APIReader client.Reader
 
-	sched             *fairScheduler
-	operations        sync.Map
-	saClients         *impersonatedClientCache
-	saClientsOnce     sync.Once
+	sched         *fairScheduler
+	operations    sync.Map
+	saClients     *impersonatedClientCache
+	saClientsOnce sync.Once
+
+	// pendingFreshReads maps a Query's namespaced name to the minimum
+	// resourceVersion signalRequeue's caller observed, so fetchQuery knows to
+	// bypass the cache until it has caught up. Entries are removed by
+	// fetchQuery once consumed (LoadAndDelete) or once the Get for that name
+	// fails, so a deleted Query can't strand a marker forever.
 	pendingFreshReads sync.Map
 
 	// requeueCh lets an async goroutine self-requeue on completion (see signalRequeue).
@@ -210,6 +218,7 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 func (r *QueryReconciler) fetchQuery(ctx context.Context, namespacedName types.NamespacedName) (arkv1alpha1.Query, error) {
 	var obj arkv1alpha1.Query
 	if err := r.Get(ctx, namespacedName, &obj); err != nil {
+		r.pendingFreshReads.Delete(namespacedName) // don't strand a marker for a gone object
 		return obj, err
 	}
 
