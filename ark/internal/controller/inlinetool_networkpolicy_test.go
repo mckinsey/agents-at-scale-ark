@@ -36,6 +36,9 @@ import (
 	"mckinsey.com/ark/internal/inlinetools/runner"
 )
 
+// tenantAccessAll is the label value a tenant policy selects on.
+const tenantAccessAll = "all"
+
 func tenantAllowAll(namespace string) *networkingv1.NetworkPolicy {
 	return &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "tenant-ark-tenant-netpol", Namespace: namespace},
@@ -123,11 +126,11 @@ func TestInlineNetworkPolicyChecksLivePodLabels(t *testing.T) {
 	deployment.UID = types.UID(uuidFor("deployment"))
 	require.NoError(t, r.Update(ctx, deployment))
 	rs, pod := runnerReplicaSetAndPod(deployment)
-	pod.Labels["tenant-access"] = "all"
+	pod.Labels["tenant-access"] = tenantAccessAll
 	require.NoError(t, r.Create(ctx, rs))
 	require.NoError(t, r.Create(ctx, pod))
 	policy := tenantAllowAll(tool.Namespace)
-	policy.Spec.PodSelector.MatchLabels = map[string]string{"tenant-access": "all"}
+	policy.Spec.PodSelector.MatchLabels = map[string]string{"tenant-access": tenantAccessAll}
 	require.NoError(t, r.Create(ctx, policy))
 	_, pending := reconcileInlineTool(t, r, tool)
 	assert.Equal(t, arkv1alpha1.ToolReasonConflictingPolicy, availableCondition(t, pending).Reason)
@@ -226,7 +229,7 @@ func TestInlineNetworkWatchMapping(t *testing.T) {
 	assert.Equal(t, client.ObjectKeyFromObject(tool), requests[0].NamespacedName)
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Labels: inlineLabels(tool)}}
 	changed := pod.DeepCopy()
-	changed.Labels["tenant-access"] = "all"
+	changed.Labels["tenant-access"] = tenantAccessAll
 	filter := inlineNetworkLabelsChanged()
 	assert.True(t, filter.Update(event.UpdateEvent{ObjectOld: pod, ObjectNew: changed}))
 	assert.True(t, filter.Update(event.UpdateEvent{ObjectOld: changed, ObjectNew: pod}), "removed labels matter too")
@@ -255,7 +258,13 @@ func TestInlineNetworkPolicyBoundary(t *testing.T) {
 	newNamespace := func() string {
 		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "inline-boundary-"}}
 		require.NoError(t, c.Create(ctx, ns))
-		t.Cleanup(func() { assert.NoError(t, c.Delete(context.Background(), ns)) })
+		// t.Cleanup runs after the test function's deferred cancel, so ctx is
+		// already done by then; keep the lineage but drop the cancellation.
+		t.Cleanup(func() {
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+			defer cleanupCancel()
+			assert.NoError(t, c.Delete(cleanupCtx, ns))
+		})
 		return ns.Name
 	}
 	namespace, activatorNamespace := newNamespace(), newNamespace()
@@ -384,7 +393,7 @@ var _ = Describe("Inline network policy watches", func() {
 		policy := tenantAllowAll(ns.Name)
 		Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 		assertReason(arkv1alpha1.ToolReasonConflictingPolicy)
-		policy.Spec.PodSelector.MatchLabels = map[string]string{"tenant-access": "all"}
+		policy.Spec.PodSelector.MatchLabels = map[string]string{"tenant-access": tenantAccessAll}
 		Expect(k8sClient.Update(ctx, policy)).To(Succeed())
 		assertReason(arkv1alpha1.ToolReasonAvailable)
 
@@ -394,13 +403,13 @@ var _ = Describe("Inline network policy watches", func() {
 		rs.UID = ""
 		Expect(k8sClient.Create(ctx, rs)).To(Succeed())
 		pod.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(rs, appsv1.SchemeGroupVersion.WithKind("ReplicaSet"))}
-		pod.Labels["tenant-access"] = "all"
+		pod.Labels["tenant-access"] = tenantAccessAll
 		Expect(k8sClient.Create(ctx, pod)).To(Succeed())
 		assertReason(arkv1alpha1.ToolReasonConflictingPolicy)
 		delete(pod.Labels, "tenant-access")
 		Expect(k8sClient.Update(ctx, pod)).To(Succeed())
 		assertReason(arkv1alpha1.ToolReasonAvailable)
-		pod.Labels["tenant-access"] = "all"
+		pod.Labels["tenant-access"] = tenantAccessAll
 		Expect(k8sClient.Update(ctx, pod)).To(Succeed())
 		assertReason(arkv1alpha1.ToolReasonConflictingPolicy)
 		Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
