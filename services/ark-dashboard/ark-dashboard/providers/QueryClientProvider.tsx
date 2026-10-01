@@ -15,11 +15,16 @@ export function QueryClientProvider({ children }: PropsWithChildren) {
         defaultOptions: {
           queries: {
             refetchOnWindowFocus: false,
-            refetchOnMount: 'always',
-            staleTime: 0,
+            // Serve cached data instantly, then revalidate in the background
+            // only when the entry is stale. refetchOnMount: true respects
+            // staleTime; 'always' would refetch on every mount and defeat the
+            // cache. Mutations invalidate their lists, so data stays fresh on
+            // any user action regardless of staleTime.
+            refetchOnMount: true,
+            refetchOnReconnect: true,
+            staleTime: 30_000,
           },
         },
-        // Disable all window switch application switch refetch
       }),
   );
 
