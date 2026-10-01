@@ -120,12 +120,16 @@ interface ResourceErrorStateProps {
   readonly title: string;
   readonly description?: ReactNode;
   readonly className?: string;
+  readonly onRetry?: () => void;
+  readonly retryLabel?: string;
 }
 
 export function ResourceErrorState({
   title,
   description,
   className,
+  onRetry,
+  retryLabel = 'Retry',
 }: Readonly<ResourceErrorStateProps>) {
   return (
     <div
@@ -137,7 +141,7 @@ export function ResourceErrorState({
       <IconShell size="sm" className="text-fg-error mt-0.5 shrink-0">
         <Warning />
       </IconShell>
-      <div>
+      <div className="flex-1">
         <p className="label-regular-primary text-fg-error">{title}</p>
         {description ? (
           <p className="paragraph-regular-primary text-fg-secondary mt-1">
@@ -145,6 +149,15 @@ export function ResourceErrorState({
           </p>
         ) : null}
       </div>
+      {onRetry ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          className="shrink-0">
+          {wrapTextNodes(retryLabel)}
+        </Button>
+      ) : null}
     </div>
   );
 }

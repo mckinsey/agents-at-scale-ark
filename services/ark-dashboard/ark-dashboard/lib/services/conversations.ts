@@ -2,10 +2,10 @@ import { apiClient } from '@/lib/api/client';
 import type { ChatMessage } from '@/lib/types/chat-message';
 import type { BrokerSession, ConversationSummary } from './broker-sessions';
 import { logsService } from './logs';
-import { chatService } from './chat';
-import type { QueryParameter } from './chat';
 
 export type ParticipantType = 'agent' | 'team' | 'tool';
+
+const MESSAGES_PAGE_SIZE = 500;
 
 export interface Conversation {
   conversationId: string;
@@ -15,7 +15,6 @@ export interface Conversation {
   toolCallCount: number;
   duration: string;
   startTime: string;
-  isTemporary?: boolean;
   participantType?: ParticipantType;
   errorCount: number;
 }
@@ -26,6 +25,18 @@ export interface ConversationMessage {
   query_id: string;
   message: ChatMessage;
   sequence: number;
+}
+
+interface ConversationMessagePage {
+  items: ConversationMessage[];
+  hasMore: boolean;
+  nextCursor?: number;
+  total?: number;
+}
+
+export interface ConversationTranscript {
+  messages: ConversationMessage[];
+  total?: number;
 }
 
 interface SessionQuery {
@@ -90,37 +101,35 @@ export const conversationsService = {
   /**
    * Get messages for a conversation from the Memory Broker.
    */
-  async getMessages(conversationId: string): Promise<ConversationMessage[]> {
-    const response = await apiClient.get<{ items: ConversationMessage[] }>(
-      `/api/v1/broker/messages?conversation_id=${conversationId}`
-    );
-    return response.items || [];
+  async getMessages(
+    conversationId: string,
+    afterSequence?: number
+  ): Promise<ConversationTranscript> {
+    const messages: ConversationMessage[] = [];
+    let cursor = afterSequence;
+    let total: number | undefined;
+
+    for (;;) {
+      const response = await apiClient.get<ConversationMessagePage>(
+        '/api/v1/broker/messages',
+        {
+          params: {
+            conversation_id: conversationId,
+            limit: MESSAGES_PAGE_SIZE,
+            ...(cursor !== undefined && { cursor }),
+          },
+        }
+      );
+
+      total ??= response.total;
+      messages.push(...(response.items || []));
+
+      const next = response.nextCursor;
+      const advanced = cursor === undefined || (next !== undefined && next > cursor);
+      if (!response.hasMore || next === undefined || !advanced) {
+        return { messages, total };
+      }
+      cursor = next;
+    }
   },
-
-
-  async sendMessage(params: {
-    namespace: string;
-    conversationId: string;
-    message: string;
-    sessionId: string;
-    agentName: string;
-    participantType?: ParticipantType;
-    parameters?: QueryParameter[];
-  }): Promise<void> {
-    const targetName = params.agentName.includes('/')
-      ? params.agentName.split('/').pop() || params.agentName
-      : params.agentName;
-
-    await chatService.submitChatQuery(
-      params.namespace,
-      params.message,
-      params.participantType || 'agent',
-      targetName,
-      params.sessionId,
-      params.conversationId,
-      undefined,
-      params.parameters
-    );
-  },
-
 };
