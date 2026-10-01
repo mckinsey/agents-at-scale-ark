@@ -42,6 +42,8 @@
   - [x] 5.4a Isolate the activation identity/revision decision for security review, share runner names and labels with the controller, and test stale routes and arbitrary-target rejection without scaling or connecting.
   - [ ] 5.4b Wire valid calls through argument validation, coalesced activation, current-revision readiness, and backend MCP connection. Package the activator only once this call path and its lifecycle are enforced.
 - [ ] 5.5 Implement pending/active accounting, 60-second idle scale-down, separate activation/execution deadlines, and cancellation; test active-call protection, conservative restart recovery, no late execution after abandonment, and no replay after uncertain responses.
+  - [x] 5.5a Bind stateless MCP tools/call work to the original HTTP request context on both activator and runner. Test pre-dispatch cancellation, no late execution after disconnect, and process-group termination through the real HTTP runner.
+  - [ ] 5.5b Enforce pending/active accounting, idle scale-down, separate budgets, conservative recovery, and single-send backend execution in the activator lifecycle.
 
 ## 6. Phase 3: existing MCP execution integration
 
