@@ -760,13 +760,10 @@ describe('PostgresMessageStream', () => {
       await replica.init();
       await replica.whenListening();
 
-      // whenListening() only resolves once the LISTEN subscription itself is
-      // established - it does not wait for the no-op catch-up that the very
-      // same onlisten event fires in the background (see startListening()).
-      // Under load that catch-up can still be in flight when the explicit
-      // catchUp(true) below runs, and the catchingUp guard would make it a
-      // no-op. Give the initial catch-up a moment to settle first, same as
-      // the other NOTIFY-timing-sensitive tests in this file.
+      // whenListening() doesn't wait for the background no-op catch-up the
+      // same onlisten event fires; under load it can still be running when
+      // catchUp(true) below runs and the catchingUp guard no-ops it. Settle
+      // first, same as the other NOTIFY-timing tests here.
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       const received: number[] = [];
