@@ -12,6 +12,8 @@ import (
 	"os"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"mckinsey.com/ark/internal/inlinetools/transport"
 )
 
 // Environment the controller sets on the runner container. The script itself
@@ -113,10 +115,7 @@ func Handler(cfg Config, script Script) http.Handler {
 
 	// Stateless: the activator opens a connection per call and keeps no session
 	// here, so there is nothing for a restart to lose.
-	mcpHandler := mcp.NewStreamableHTTPHandler(
-		func(*http.Request) *mcp.Server { return server },
-		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true},
-	)
+	mcpHandler := transport.Handler(server)
 
 	mux := http.NewServeMux()
 	mux.Handle(MCPPath, limitBody(mcpHandler))
