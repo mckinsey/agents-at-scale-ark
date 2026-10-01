@@ -3,8 +3,6 @@
 package controller
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"path/filepath"
 
@@ -17,69 +15,32 @@ import (
 	"k8s.io/utils/ptr"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/inlinetools"
 	"mckinsey.com/ark/internal/inlinetools/runner"
 )
 
 // Child name suffixes. The source ConfigMap keeps a stable name so its contents
 // are updated in place rather than accumulating revisions.
 const (
-	inlineSourceSuffix = "-source"
-	inlineRunnerSuffix = "-runner"
-	inlineSourceKey    = "source"
+	inlineSourceKey = "source"
 
 	// LabelInlineTool and LabelInlineToolUID identify a runner's owner. The UID
 	// label is what distinguishes a recreated Tool from its predecessor.
-	LabelInlineTool    = "ark.mckinsey.com/inline-tool"
-	LabelInlineToolUID = "ark.mckinsey.com/inline-tool-uid"
+	LabelInlineTool    = inlinetools.LabelTool
+	LabelInlineToolUID = inlinetools.LabelToolUID
 	// AnnotationInlineSourceHash rolls the pod template when source changes.
-	AnnotationInlineSourceHash = "ark.mckinsey.com/inline-source-hash"
+	AnnotationInlineSourceHash = inlinetools.SourceHashAnnotation
 
 	inlineRunnerUser  int64 = 65532
 	inlineScratchPath       = "/tmp"
 )
 
-// inlineNames are the deterministic child names for one Tool.
-type inlineNames struct {
-	Source string
-	Runner string
-}
-
-func inlineChildNames(toolName string) inlineNames {
-	return inlineNames{
-		Source: childName(toolName, inlineSourceSuffix),
-		Runner: childName(toolName, inlineRunnerSuffix),
-	}
-}
-
-// childName keeps names inside the 63-character limit that applies to the
-// labels and pod-template names derived from them, deterministically: a
-// too-long Tool name is truncated and disambiguated by a hash of the full name,
-// so two long names that share a prefix still get different children.
-func childName(toolName, suffix string) string {
-	const maxLen = 63
-	if len(toolName)+len(suffix) <= maxLen {
-		return toolName + suffix
-	}
-	sum := sha256.Sum256([]byte(toolName))
-	digest := hex.EncodeToString(sum[:])[:8]
-	keep := maxLen - len(suffix) - len(digest) - 1
-	return toolName[:keep] + "-" + digest + suffix
+func inlineChildNames(toolName string) inlinetools.ChildNames {
+	return inlinetools.NamesFor(toolName)
 }
 
 func inlineLabels(tool *arkv1alpha1.Tool) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "ark-inline-runner",
-		"app.kubernetes.io/managed-by": "ark-controller",
-		LabelInlineTool:                labelValue(tool.Name),
-		LabelInlineToolUID:             string(tool.UID),
-	}
-}
-
-func labelValue(value string) string {
-	if len(value) <= 63 {
-		return value
-	}
-	return value[:63]
+	return inlinetools.RunnerLabels(tool)
 }
 
 // inlineSourceConfigMap holds the script. Its name never changes, so an edit is
