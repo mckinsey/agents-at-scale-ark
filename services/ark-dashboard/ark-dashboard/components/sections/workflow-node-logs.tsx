@@ -76,14 +76,15 @@ export function WorkflowNodeLogs({
   }, [key]);
 
   useEffect(() => {
-    if (!isRunning || buffer.loaded || !buffer.error) return;
+    if (!isRunning || buffer.loaded || !buffer.error || !buffer.retryable)
+      return;
 
     const intervalId = setInterval(() => {
       void ensureLoaded(key, targetRef.current);
     }, WORKFLOW_LOG_POLL_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [isRunning, buffer.loaded, buffer.error, key]);
+  }, [isRunning, buffer.loaded, buffer.error, buffer.retryable, key]);
 
   const retryLoad = useCallback(() => {
     void ensureLoaded(key, targetRef.current);

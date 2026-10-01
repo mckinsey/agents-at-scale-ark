@@ -31,6 +31,11 @@ class _FakeResponse:
         return None
 
 
+# A full log of 30 numbered lines (line-1 oldest, line-30 newest). A kubelet
+# tail_lines=N request returns the last N lines, which is what the fake honours.
+_FULL_LOG = [_line(i) for i in range(1, 31)]
+
+
 class TestLogWindowCollector(unittest.TestCase):
     """The collector's end-keeping behaviour under a byte/line budget."""
 
@@ -72,12 +77,15 @@ class TestLogWindowCollector(unittest.TestCase):
 class TestReadHistoryWindow(unittest.IsolatedAsyncioTestCase):
     """`skip_tail_lines` must be an honoured cursor even without a timestamp."""
 
-    async def _read(self, skip_tail_lines: int, before_timestamp, response_lines):
+    async def _read(self, skip_tail_lines: int, before_timestamp):
+        def open_stream(*_args, tail_lines: int, **_kwargs):
+            return _FakeResponse(_FULL_LOG[-tail_lines:])
+
         with (
             patch.object(
                 resources,
                 "_read_log_head_line",
-                AsyncMock(return_value=(_line(0).split(" ")[0], 10)),
+                AsyncMock(return_value=(_line(1).split(" ")[0], 10)),
             ),
             patch.object(
                 resources,
@@ -87,7 +95,7 @@ class TestReadHistoryWindow(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 resources,
                 "_open_pod_log_stream",
-                AsyncMock(return_value=_FakeResponse(response_lines)),
+                AsyncMock(side_effect=open_stream),
             ),
         ):
             return await _read_history_window(
@@ -101,27 +109,21 @@ class TestReadHistoryWindow(unittest.IsolatedAsyncioTestCase):
                 max_bytes=1_000_000,
             )
 
-    async def test_skip_without_before_returns_the_page_just_older_than_the_cursor(self):
-        # kubelet returns the last skip+read+1 = 9 lines for this request.
-        window = await self._read(
-            skip_tail_lines=5,
-            before_timestamp=None,
-            response_lines=[_line(i) for i in range(11, 20)],
-        )
+    async def test_skip_without_before_includes_the_line_adjacent_to_the_cursor(self):
+        # Client holds the newest 5 lines (line-26..line-30); oldest held is
+        # line-26. The page must be the three lines just older than it —
+        # line-23, line-24, line-25 — and must NOT drop line-25, the line
+        # directly adjacent to the client's oldest line.
+        window = await self._read(skip_tail_lines=5, before_timestamp=None)
 
-        # The client's oldest line sits 5 from the end (line-14); the page must
-        # be the three lines just older than it, not the tail (lines 17-19).
-        self.assertEqual(window.content, "line-11\nline-12\nline-13")
+        self.assertEqual(window.content, "line-23\nline-24\nline-25")
+        self.assertIn("line-25", window.content)
         self.assertTrue(window.has_more_before)
 
     async def test_skip_zero_without_before_returns_the_tail(self):
-        window = await self._read(
-            skip_tail_lines=0,
-            before_timestamp=None,
-            response_lines=[_line(i) for i in range(17, 20)],
-        )
+        window = await self._read(skip_tail_lines=0, before_timestamp=None)
 
-        self.assertEqual(window.content, "line-17\nline-18\nline-19")
+        self.assertEqual(window.content, "line-28\nline-29\nline-30")
 
 
 if __name__ == "__main__":

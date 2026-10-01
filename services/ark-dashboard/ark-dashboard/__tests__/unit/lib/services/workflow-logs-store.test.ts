@@ -332,14 +332,18 @@ describe('workflow log store', () => {
     });
   });
 
-  it('drops the oldest lines once the buffer exceeds its retention cap', async () => {
+  it('drops the oldest lines but keeps the timestamp cursor when the buffer exceeds its cap', async () => {
     const head = Array.from(
       { length: WORKFLOW_LOG_MAX_BUFFERED_LINES },
       (_, index) => `line-${index}`,
     ).join('\n');
     vi.mocked(fetchNodeLogWindow)
       .mockResolvedValueOnce(
-        windowOf(head, { has_more_before: false, last_timestamp: 't1' }),
+        windowOf(head, {
+          has_more_before: false,
+          first_timestamp: 't0',
+          last_timestamp: 't1',
+        }),
       )
       .mockResolvedValueOnce(
         windowOf('new-1\nnew-2', { last_timestamp: 't2' }),
@@ -353,43 +357,107 @@ describe('workflow log store', () => {
     expect(buffer.lines[0]).toBe('line-2');
     expect(buffer.lines[buffer.lines.length - 1]).toBe('new-2');
     expect(buffer.oldestSkipLines).toBe(WORKFLOW_LOG_MAX_BUFFERED_LINES);
-    expect(buffer.oldestTimestamp).toBeNull();
+    expect(buffer.oldestTimestamp).toBe('t0');
     expect(buffer.hasMoreBefore).toBe(true);
   });
 
-  it('pages older with the skip cursor after a trim drops the timestamp cursor', async () => {
+  it('stays timestamp-anchored when paging older after a trim', async () => {
     const head = Array.from(
       { length: WORKFLOW_LOG_MAX_BUFFERED_LINES },
       (_, index) => `line-${index}`,
     ).join('\n');
     vi.mocked(fetchNodeLogWindow)
       .mockResolvedValueOnce(
-        windowOf(head, { has_more_before: false, last_timestamp: 't1' }),
+        windowOf(head, {
+          has_more_before: false,
+          first_timestamp: 't0',
+          last_timestamp: 't1',
+        }),
       )
       .mockResolvedValueOnce(windowOf('new-1\nnew-2', { last_timestamp: 't2' }))
       .mockResolvedValueOnce(
         windowOf('older-1\nolder-2', {
           has_more_before: true,
-          first_timestamp: 't0',
+          first_timestamp: 'tminus1',
         }),
       );
 
     await ensureLoaded(key, target);
     await pollTail(key, target);
 
-    expect(getNodeLogBuffer(key).oldestTimestamp).toBeNull();
+    expect(getNodeLogBuffer(key).oldestTimestamp).toBe('t0');
 
     await loadOlder(key, target);
 
+    // loadOlder sends the preserved before_timestamp, not a bare skip cursor.
     const olderCall = vi.mocked(fetchNodeLogWindow).mock.calls[2][1];
-    expect(olderCall).toMatchObject({
-      skipTailLines: WORKFLOW_LOG_MAX_BUFFERED_LINES,
-    });
-    expect(olderCall?.beforeTimestamp).toBeUndefined();
+    expect(olderCall).toMatchObject({ beforeTimestamp: 't0' });
 
     const buffer = getNodeLogBuffer(key);
     expect(buffer.lines.slice(0, 2)).toEqual(['older-1', 'older-2']);
+    expect(buffer.oldestTimestamp).toBe('tminus1');
+  });
+
+  it('defers the trim while an older-page fetch is in flight', async () => {
+    const head = Array.from(
+      { length: WORKFLOW_LOG_MAX_BUFFERED_LINES },
+      (_, index) => `line-${index}`,
+    ).join('\n');
+    let resolvePoll: (window: ReturnType<typeof windowOf>) => void = () => {};
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(
+        windowOf(head, {
+          has_more_before: true,
+          first_timestamp: 't0',
+          last_timestamp: 't1',
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise(resolve => {
+          resolvePoll = resolve;
+        }),
+      )
+      .mockReturnValueOnce(new Promise(() => {}));
+
+    await ensureLoaded(key, target);
+
+    // Poll starts first (past its guard, awaiting), then an older-page fetch
+    // takes the fetch lock while the poll is still in flight.
+    const poll = pollTail(key, target);
+    const older = loadOlder(key, target);
+
+    resolvePoll(windowOf('new-1\nnew-2', { last_timestamp: 't2' }));
+    await poll;
+
+    const buffer = getNodeLogBuffer(key);
+    // Trim deferred: buffer temporarily exceeds the cap and the front is intact.
+    expect(buffer.lines.length).toBe(WORKFLOW_LOG_MAX_BUFFERED_LINES + 2);
+    expect(buffer.lines[0]).toBe('line-0');
     expect(buffer.oldestTimestamp).toBe('t0');
+    void older;
+  });
+
+  it('refetches when retrying a buffer that loaded empty and then errored', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('', { last_timestamp: null }))
+      .mockRejectedValueOnce(new APIError('Pod has been deleted', 404))
+      .mockResolvedValueOnce(windowOf('recovered', { last_timestamp: 't9' }));
+
+    await ensureLoaded(key, target);
+    await pollTail(key, target);
+
+    const errored = getNodeLogBuffer(key);
+    expect(errored.loaded).toBe(true);
+    expect(errored.lines).toEqual([]);
+    expect(errored.error).toBe('Pod has been deleted');
+
+    // ensureLoaded used to bail here because loaded is true; it must refetch.
+    await ensureLoaded(key, target);
+
+    const recovered = getNodeLogBuffer(key);
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(3);
+    expect(recovered.lines).toEqual(['recovered']);
+    expect(recovered.error).toBeNull();
   });
 
   it('leaves the buffer untouched and stays silent when a poll returns nothing', async () => {

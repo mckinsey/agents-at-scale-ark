@@ -2,6 +2,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkflowNodeLogs } from '@/components/sections/workflow-node-logs';
+import { APIError } from '@/lib/api/client';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
 import {
   getNodeLogBuffer,
@@ -512,6 +513,25 @@ describe('WorkflowNodeLogs', () => {
 
     expect(vi.mocked(fetchNodeLogWindow).mock.calls.length).toBeGreaterThan(1);
     expect(screen.getByText('recovered')).toBeInTheDocument();
+  });
+
+  it('does not auto-retry a permanent error on a running node', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchNodeLogWindow).mockRejectedValue(
+      new APIError('container main is not valid for pod', 400),
+    );
+
+    await renderLogs(true);
+    expect(screen.getByText('Failed to load logs')).toBeInTheDocument();
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9300);
+    });
+
+    // A 400 can never succeed by repeating, so the interval must not fire it.
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Failed to load logs')).toBeInTheDocument();
   });
 
   it('does not let a poll append while an older page is still loading', async () => {

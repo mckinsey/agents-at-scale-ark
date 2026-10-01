@@ -1,5 +1,6 @@
 import { APIError } from '@/lib/api/client';
 import {
+  DEFAULT_LOG_CONTAINER,
   WORKFLOW_LOG_MAX_BUFFERED_LINES,
   WORKFLOW_LOG_PAGE_LINES,
 } from '@/lib/constants/workflow-logs';
@@ -17,6 +18,7 @@ export interface NodeLogBuffer {
   oldestTimestamp: string | null;
   lastTimestamp: string | null;
   error: string | null;
+  retryable: boolean;
 }
 
 export const MAX_CACHED_BUFFERS = 20;
@@ -32,6 +34,7 @@ const EMPTY_BUFFER: NodeLogBuffer = {
   oldestTimestamp: null,
   lastTimestamp: null,
   error: null,
+  retryable: false,
 };
 
 export interface NodeLogScrollState {
@@ -50,7 +53,7 @@ export function logBufferKey(target: LogWindowTarget): string {
     target.namespace,
     target.workflowName,
     target.nodeId,
-    target.container ?? 'main',
+    target.container ?? DEFAULT_LOG_CONTAINER,
   ].join('/');
 }
 
@@ -126,15 +129,26 @@ function describeError(error: unknown): string {
   return 'Failed to load logs';
 }
 
+// Whether a failed load is worth retrying automatically. Permanent client
+// errors (bad container, forbidden) can never succeed by repeating, so they are
+// terminal; transient failures (pod still initializing, server/network) are not.
+function isRetryable(error: unknown): boolean {
+  if (error instanceof APIError && error.status !== undefined) {
+    const { status } = error;
+    return status === 404 || status === 408 || status === 429 || status >= 500;
+  }
+  return true;
+}
+
 export async function ensureLoaded(
   key: string,
   target: LogWindowTarget,
 ): Promise<void> {
   const buffer = buffers.get(key);
-  if (buffer?.loaded || fetchInFlight.has(key)) return;
+  if ((buffer?.loaded && !buffer.error) || fetchInFlight.has(key)) return;
 
   fetchInFlight.add(key);
-  update(key, { loadingInitial: true, error: null });
+  update(key, { loadingInitial: true });
 
   try {
     const window = await fetchNodeLogWindow(target, {
@@ -151,9 +165,14 @@ export async function ensureLoaded(
       oldestTimestamp: window.first_timestamp ?? null,
       lastTimestamp: window.last_timestamp ?? null,
       error: null,
+      retryable: false,
     });
   } catch (error) {
-    update(key, { loadingInitial: false, error: describeError(error) });
+    update(key, {
+      loadingInitial: false,
+      error: describeError(error),
+      retryable: isRetryable(error),
+    });
   } finally {
     fetchInFlight.delete(key);
   }
@@ -198,6 +217,7 @@ function appendTail(
   current: NodeLogBuffer,
   appended: string[],
   window: { last_timestamp?: string | null; truncated: boolean },
+  deferTrim: boolean,
 ): Partial<NodeLogBuffer> {
   const lines = [...current.lines, ...appended];
   const overflow = lines.length - WORKFLOW_LOG_MAX_BUFFERED_LINES;
@@ -209,14 +229,19 @@ function appendTail(
     error: null,
   };
 
-  if (overflow <= 0) return patch;
+  // Trimming the front drops the line loadOlder is paging from. Defer it while
+  // an older-page fetch is in flight so that fetch keeps a valid cursor; the
+  // next poll trims once it completes.
+  if (overflow <= 0 || deferTrim) return patch;
 
   patch.lines = lines.slice(overflow);
   patch.oldestSkipLines = Math.max(
     0,
     current.oldestSkipLines + appended.length - overflow,
   );
-  patch.oldestTimestamp = null;
+  // Keep oldestTimestamp as the before_timestamp cursor: it still points at
+  // genuinely older content, so loadOlder stays timestamp-anchored instead of
+  // falling back to the positional skip cursor, which is wrong on a live log.
   patch.hasMoreBefore = true;
   return patch;
 }
@@ -256,9 +281,9 @@ export async function pollTail(
       return;
     }
 
-    update(key, appendTail(current, appended, window));
+    update(key, appendTail(current, appended, window, fetchInFlight.has(key)));
   } catch (error) {
-    update(key, { error: describeError(error) });
+    update(key, { error: describeError(error), retryable: isRetryable(error) });
   } finally {
     pollInFlight.delete(key);
   }

@@ -1209,14 +1209,14 @@ async def _read_skip_history_window(
 ) -> LogWindow:
     """Read the page ``skip_tail_lines`` from the end when there is no timestamp cursor.
 
-    The tail buffer trims the line the client's ``before_timestamp`` pointed at,
-    leaving only the positional ``skip_tail_lines`` cursor. The last
-    ``skip_tail_lines + read_limit + 1`` lines are read and the oldest
-    ``read_limit`` of them are kept, so the page sits flush against and just
-    older than the client's current oldest line rather than snapping back to
-    the tail.
+    Fallback for when the client has no ``before_timestamp`` to give. The last
+    ``skip_tail_lines + read_limit`` lines are read and the oldest ``read_limit``
+    of them are kept, which is positions ``skip_tail_lines + 1 … skip_tail_lines
+    + read_limit`` from the end — the page sitting flush against and just older
+    than the client's current oldest line, including the line directly adjacent
+    to it rather than skipping it.
     """
-    tail_lines = skip_tail_lines + read_limit + 1
+    tail_lines = skip_tail_lines + read_limit
     response = await _open_pod_log_stream(
         core_v1,
         namespace,
