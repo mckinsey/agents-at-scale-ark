@@ -1887,7 +1887,7 @@ export interface paths {
         };
         /**
          * List Grouped Resources
-         * @description List grouped Kubernetes resources with optional filtering.
+         * @description List grouped Kubernetes resources with optional filtering and cursor pagination.
          *
          *     Args:
          *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
@@ -1895,18 +1895,26 @@ export interface paths {
          *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
          *         namespace: The namespace (defaults to current context)
          *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
-         *         workflowName: Filter by workflow name (partial match, case insensitive)
-         *         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
-         *         status: Filter by workflow status
+         *         workflowName: Filter by workflow name (partial match, case insensitive). Applied only
+         *             to the page returned by this call, not the whole collection — a page can come back
+         *             with few or no matches even though more exist further in the cursor sequence.
+         *         workflowTemplateName: Filter by workflow template name (partial match, case insensitive).
+         *             Same per-page limitation as workflowName.
+         *         status: Filter by workflow status. Same per-page limitation as workflowName.
+         *         limit: Maximum number of items returned by the underlying Kubernetes list call
+         *         continue_token: Opaque cursor from a previous page's response metadata
          *
          *     Returns:
-         *         Response: List of raw Kubernetes resources as JSON
+         *         Response: List of raw Kubernetes resources as JSON. When the Kubernetes API has more
+         *             items beyond this page, the response's metadata carries a "continue" token
+         *             (pass it back as ?continue=... for the next page) and "remainingItemCount".
          *
          *     Examples:
          *         - GET /v1/resources/apis/apps/v1/Deployment
          *         - GET /v1/resources/apis/batch/v1/Job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit=25
          *         - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
          */
         get: operations["list_grouped_resources_v1_resources_apis__group___version___kind__get"];
@@ -8676,6 +8684,10 @@ export interface operations {
                 workflowTemplateName?: string | null;
                 /** @description Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending */
                 status?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path: {

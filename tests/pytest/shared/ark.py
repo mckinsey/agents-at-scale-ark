@@ -1,6 +1,68 @@
 """Shared lookups for Ark resources that tests read back from the cluster."""
 
-from shared.k8s import DEFAULT_NAMESPACE, list_resources
+import json
+from typing import NamedTuple
+from uuid import uuid4
+
+from shared.k8s import DEFAULT_NAMESPACE, apply_yaml, list_resources
+
+QUERY_MANIFEST = """\
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: {name}
+  namespace: {namespace}
+spec:
+  type: user
+  input: {input}
+  target:
+    name: {target}
+    type: {target_type}
+  sessionId: {session_id}
+  conversationId: {conversation_id}
+"""
+
+
+class SeededQuery(NamedTuple):
+    """A query created directly in the cluster, and where to find it."""
+
+    name: str
+    session_id: str
+    conversation_id: str
+
+
+def submit_query(
+    target: str,
+    user_input: str,
+    target_type: str = "agent",
+    session_id: str | None = None,
+    conversation_id: str | None = None,
+    namespace: str = DEFAULT_NAMESPACE,
+) -> SeededQuery:
+    """Create a Query straight in the cluster, bypassing the dashboard.
+
+    The Sessions view is read-only, so tests seed the conversation through the
+    API and use the UI only to observe it.
+    """
+    suffix = uuid4().hex[:8]
+    seeded = SeededQuery(
+        name=f"ui-query-{suffix}",
+        session_id=session_id or f"ui-session-{suffix}",
+        conversation_id=conversation_id or f"ui-conv-{suffix}",
+    )
+    applied, message = apply_yaml(
+        QUERY_MANIFEST.format(
+            name=seeded.name,
+            namespace=namespace,
+            input=json.dumps(user_input),
+            target=json.dumps(target),
+            target_type=json.dumps(target_type),
+            session_id=json.dumps(seeded.session_id),
+            conversation_id=json.dumps(seeded.conversation_id),
+        )
+    )
+    assert applied, f"could not submit a query to {target}: {message}"
+    return seeded
 
 
 def query_for_session(session_id: str, namespace: str = DEFAULT_NAMESPACE) -> dict:

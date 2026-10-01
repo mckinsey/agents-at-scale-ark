@@ -389,12 +389,13 @@ func (t *TerminateExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 		logf.Log.Info("Error parsing tool arguments", "ToolCall", call)
 		arguments = make(map[string]any)
 	}
+	content := ""
 	if responseArg, exists := arguments["response"]; exists {
 		if responseStr, ok := responseArg.(string); ok {
-			return ToolResult{ID: call.ID, Name: call.Function.Name, Content: responseStr}, &TerminateTeam{}
+			content = responseStr
 		}
 	}
-	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: ""}, fmt.Errorf("no response")
+	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: content}, &TerminateTeam{}
 }
 
 func GetTerminateTool() ToolDefinition {
@@ -630,9 +631,30 @@ func getToolParameters(toolCRD *arkv1alpha1.Tool) map[string]any {
 		if err := json.Unmarshal(toolCRD.Spec.InputSchema.Raw, &parameters); err != nil {
 			logf.Log.Error(err, "failed to unmarshal tool input schema")
 		}
+		return parameters
+	}
+
+	if toolCRD.Spec.Type == ToolTypeBuiltin {
+		if definition, ok := getDefaultBuiltinToolDefinition(toolCRD.Name); ok {
+			return definition.Parameters
+		}
 	}
 
 	return parameters
+}
+
+// getDefaultBuiltinToolDefinition returns the canonical definition for a
+// builtin tool. It is keyed on the CRD name to match createBuiltinExecutor,
+// which resolves the executor the same way.
+func getDefaultBuiltinToolDefinition(name string) (ToolDefinition, bool) {
+	switch name {
+	case BuiltinToolNoop:
+		return GetNoopTool(), true
+	case BuiltinToolTerminate:
+		return GetTerminateTool(), true
+	default:
+		return ToolDefinition{}, false
+	}
 }
 
 func CreateHTTPTool(toolCRD *arkv1alpha1.Tool) ToolDefinition {
