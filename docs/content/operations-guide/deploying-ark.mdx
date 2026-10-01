@@ -228,6 +228,16 @@ Two deployment prerequisites are not things Ark can verify at runtime:
 - **The CNI must enforce NetworkPolicy.** Ark creates a policy that denies all runner egress and admits only the activator, but that policy is inert on a CNI that does not enforce policies (k3s with flannel, for example). Ark sends no probe traffic to test it and does not gate execution on it. Policies are also additive: a namespace-wide allow-all policy — including the optional `ark-tenant` one, whose empty pod selector allows all egress — defeats it.
 - **Per-pod PID limits are the cluster's responsibility.** A script can exhaust node PIDs before its 30-second timeout expires. CPU and memory limits do not contain that. Configure a finite per-pod limit through kubelet `podPidsLimit` or your provider's equivalent, size it for processes and threads, and verify it outside production. Ark does not set, require, or check it.
 
+#### Runner network boundary
+
+Runner policies deny all egress, including DNS, and allow backend ingress only from activator pods in the configured activator namespace on TCP 8080. Policies are additive: the optional `ark-tenant` allow-all policy defeats both restrictions. An administrator must narrow overlapping policies to exclude runner pods or grant no access beyond that boundary; Ark must not rewrite tenant policies.
+
+The policy-conflict decision checks pod selectors, not a policy's metadata labels. Ingress peers must constrain both the activator's pod identity and namespace; a pod selector alone means the policy's own namespace. Matching the activator's current labels is not enough: a broad selector could also admit other workloads. Identity constraints use `matchLabels` or a single-value `In` expression; additional constraints may narrow access. Selectors whose containment cannot be established conservatively count as conflicts, even if they currently select no workloads.
+
+**Rollout status:** the pure decision and its unit tests are in place; controller status and policy/label-watch integration are a separate phase 3 unit. Do not rely on automatic conflict reporting yet. Inline execution remains incomplete and disabled by default.
+
+An enforcing CNI is still required. On a non-enforcing CNI, outbound script connections and direct runner access may succeed despite the policy. Standard NetworkPolicy also has node-local traffic exceptions: administrators must protect node and metadata-service access and control who can change workload labels or policies. These restrictions are not per-user authentication, and Ark sends no traffic probes or synthetic control connections to verify them.
+
 #### Disabling, deleting and downgrading
 
 Order matters, because a runner Deployment outlives the flag that created it:
