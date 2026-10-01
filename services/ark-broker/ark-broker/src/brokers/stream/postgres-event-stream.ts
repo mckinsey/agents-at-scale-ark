@@ -36,6 +36,7 @@ export class PostgresEventStream
     'event',
     'created_at',
   ];
+  protected readonly notifyChannel = 'ark_broker_events';
 
   constructor(logger: Logger, db: Db, ttlSeconds: number) {
     super(logger, db, ttlSeconds);
@@ -58,17 +59,24 @@ export class PostgresEventStream
   ): Promise<BrokerItem<EventData>> {
     const effectiveTtl = ttlSeconds ?? this.ttlSeconds;
     const rows = await this.db<EventRow[]>`
-      INSERT INTO events (query_id, session_id, reason, event, expires_at)
-      VALUES (
-        ${data.data.queryId},
-        ${data.data.sessionId ?? null},
-        ${data.reason ?? null},
-        ${this.db.json(data as unknown as postgres.JSONValue)},
-        now() + make_interval(secs => ${effectiveTtl})
+      WITH inserted AS (
+        INSERT INTO events (query_id, session_id, reason, event, expires_at)
+        VALUES (
+          ${data.data.queryId},
+          ${data.data.sessionId ?? null},
+          ${data.reason ?? null},
+          ${this.db.json(data as unknown as postgres.JSONValue)},
+          now() + make_interval(secs => ${effectiveTtl})
+        )
+        RETURNING sequence_number, query_id, session_id, reason, event, created_at
+      ), notified AS (
+        SELECT ${this.notifyFragment(this.db`array_agg(sequence_number ORDER BY sequence_number)`)}
+        FROM inserted
       )
-      RETURNING sequence_number, query_id, session_id, reason, event, created_at
+      SELECT inserted.* FROM inserted, notified
     `;
     const item = rowToBrokerItem(rows[0]!);
+    this.markSeen(item.sequenceNumber);
     this.emitter.emit('item', item);
     return item;
   }
