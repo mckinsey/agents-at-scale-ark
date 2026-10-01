@@ -1442,4 +1442,81 @@ describe('SessionsSection', () => {
       expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('Pagination', () => {
+    it('should disable Previous on the first page and enable Next when more pages exist', () => {
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: null,
+        page: 0,
+        hasNext: true,
+        hasPrevious: false,
+        goToNextPage: vi.fn(),
+        goToPreviousPage: vi.fn(),
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(
+        screen.getByRole('button', { name: /go to previous page/i }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole('button', { name: /go to next page/i }),
+      ).toBeEnabled();
+    });
+
+    it('should disable Next on the last page and enable Previous', () => {
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: null,
+        page: 1,
+        hasNext: false,
+        hasPrevious: true,
+        goToNextPage: vi.fn(),
+        goToPreviousPage: vi.fn(),
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(
+        screen.getByRole('button', { name: /go to previous page/i }),
+      ).toBeEnabled();
+      expect(
+        screen.getByRole('button', { name: /go to next page/i }),
+      ).toBeDisabled();
+    });
+
+    it('should call goToNextPage and goToPreviousPage when clicked', async () => {
+      const user = userEvent.setup();
+      const goToNextPage = vi.fn();
+      const goToPreviousPage = vi.fn();
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: null,
+        page: 1,
+        hasNext: true,
+        hasPrevious: true,
+        goToNextPage,
+        goToPreviousPage,
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      await user.click(
+        screen.getByRole('button', { name: /go to next page/i }),
+      );
+      expect(goToNextPage).toHaveBeenCalledTimes(1);
+
+      await user.click(
+        screen.getByRole('button', { name: /go to previous page/i }),
+      );
+      expect(goToPreviousPage).toHaveBeenCalledTimes(1);
+    });
+  });
 });

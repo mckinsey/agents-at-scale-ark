@@ -27,6 +27,7 @@ from ...models.pod_logs import LogWindow
 from ...models.resources import AccessReviewRequest, AccessReviewResponse
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
+from .pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -188,10 +189,12 @@ async def list_grouped_resources(
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
     workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
     status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending"),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Maximum number of items to return per page"),
+    continue_token: Optional[str] = Query(None, alias="continue", description="Continuation token returned by the previous page"),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
     """
-    List grouped Kubernetes resources with optional filtering.
+    List grouped Kubernetes resources with optional filtering and cursor pagination.
 
     Args:
         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
@@ -199,18 +202,26 @@ async def list_grouped_resources(
         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
         namespace: The namespace (defaults to current context)
         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
-        workflowName: Filter by workflow name (partial match, case insensitive)
-        workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
-        status: Filter by workflow status
+        workflowName: Filter by workflow name (partial match, case insensitive). Applied only
+            to the page returned by this call, not the whole collection — a page can come back
+            with few or no matches even though more exist further in the cursor sequence.
+        workflowTemplateName: Filter by workflow template name (partial match, case insensitive).
+            Same per-page limitation as workflowName.
+        status: Filter by workflow status. Same per-page limitation as workflowName.
+        limit: Maximum number of items returned by the underlying Kubernetes list call
+        continue_token: Opaque cursor from a previous page's response metadata
 
     Returns:
-        Response: List of raw Kubernetes resources as JSON
+        Response: List of raw Kubernetes resources as JSON. When the Kubernetes API has more
+            items beyond this page, the response's metadata carries a "continue" token
+            (pass it back as ?continue=... for the next page) and "remainingItemCount".
 
     Examples:
         - GET /v1/resources/apis/apps/v1/Deployment
         - GET /v1/resources/apis/batch/v1/Job
         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
+        - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit=25
         - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
     """
     if namespace is None:
@@ -226,10 +237,18 @@ async def list_grouped_resources(
             kind=kind
         )
 
-        resources = await api_resource.get(namespace=namespace, label_selector=label_selector)
+        resources = await api_resource.get(
+            namespace=namespace,
+            label_selector=label_selector,
+            limit=limit,
+            _continue=continue_token,
+        )
         resources_dict = resources.to_dict()
 
-        # Apply filters for Workflow resources
+        # Apply filters for Workflow resources. Only resources_dict["items"] is
+        # reassigned below — resources_dict["metadata"] (which carries "continue"
+        # and "remainingItemCount" when the Kubernetes API honours `limit`) is left
+        # untouched so pagination keeps working through the filter.
         if kind == "Workflow" and "items" in resources_dict:
             items = resources_dict["items"]
             filtered_items = []

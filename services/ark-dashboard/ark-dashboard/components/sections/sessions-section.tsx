@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorBoundary } from '@/components/common/error-boundary';
 import {
   AccountTree,
+  ArrowBack,
+  ArrowForward,
   AutoAwesome,
   Bolt,
   Build,
@@ -1063,6 +1065,10 @@ export function SessionsSection({
     workflows,
     loading,
     error,
+    hasNext,
+    hasPrevious,
+    goToNextPage,
+    goToPreviousPage,
     refetch: refetchWorkflows,
   } = useWorkflows(namespace, filters);
 
@@ -1087,6 +1093,8 @@ export function SessionsSection({
     );
   }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
 
+  // workflows is now a single page from useWorkflows, so this filter/sort only
+  // ever applies within the current page, not across the whole collection.
   const filteredAndSortedSessions = allSessions
     .filter(session => {
       if (sourceFilter === 'all') return true;
@@ -1309,6 +1317,35 @@ export function SessionsSection({
           hasActiveFilters={Boolean(hasActiveFilters)}
           onClearFilters={clearFilters}
         />
+
+        <nav
+          aria-label="Workflow runs pagination"
+          className="flex shrink-0 items-center justify-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={goToPreviousPage}
+            disabled={!hasPrevious || isLoading}
+            aria-label="Go to previous page"
+            className="flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 text-fg-primary transition-opacity hover:bg-stateslayer-overlay-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            <IconShell size="sm">
+              <ArrowBack />
+            </IconShell>
+            <span className="text-sm leading-5 tracking-[-0.028px]">
+              Previous
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={goToNextPage}
+            disabled={!hasNext || isLoading}
+            aria-label="Go to next page"
+            className="flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 text-fg-primary transition-opacity hover:bg-stateslayer-overlay-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            <span className="text-sm leading-5 tracking-[-0.028px]">Next</span>
+            <IconShell size="sm">
+              <ArrowForward />
+            </IconShell>
+          </button>
+        </nav>
       </div>
     </ErrorBoundary>
   );

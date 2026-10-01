@@ -9,6 +9,8 @@ from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 
 os.environ["AUTH_MODE"] = "open"
 
+from ark_api.api.v1.pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
+
 
 def make_awaitable(return_value):
     """Create an awaitable that returns the given value."""
@@ -795,6 +797,150 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
+    def test_list_workflows_forwards_limit_and_continue_to_k8s(
+        self, mock_get_context, mock_dynamic_client_cls, mock_api_client
+    ):
+        """Test that limit and continue query params reach the Kubernetes list call."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_resources = Mock()
+        mock_resources.to_dict.return_value = {"items": []}
+        mock_api_resource.get = AsyncMock(return_value=mock_resources)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit=5&continue=abc123"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_api_resource.get.assert_called_once_with(
+            namespace="default", label_selector=None, limit=5, _continue="abc123"
+        )
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_list_workflows_default_limit_used_when_not_specified(
+        self, mock_get_context, mock_dynamic_client_cls, mock_api_client
+    ):
+        """Test that a default limit and no continue token are used when omitted."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_resources = Mock()
+        mock_resources.to_dict.return_value = {"items": []}
+        mock_api_resource.get = AsyncMock(return_value=mock_resources)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.get("/v1/resources/apis/argoproj.io/v1alpha1/Workflow")
+
+        self.assertEqual(response.status_code, 200)
+        mock_api_resource.get.assert_called_once_with(
+            namespace="default", label_selector=None, limit=DEFAULT_PAGE_LIMIT, _continue=None
+        )
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_list_workflows_passthrough_of_continue_and_remaining_count(
+        self, mock_get_context, mock_dynamic_client_cls, mock_api_client
+    ):
+        """Test that continue/remainingItemCount metadata survives the Workflow filter block untouched."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_resources = Mock()
+        mock_resources.to_dict.return_value = {
+            "metadata": {"continue": "next-token-xyz", "remainingItemCount": 42},
+            "items": [
+                {
+                    "metadata": {"name": "workflow1"},
+                    "spec": {},
+                    "status": {"phase": "Running"}
+                }
+            ]
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_resources)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.get("/v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit=1")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["metadata"]["continue"], "next-token-xyz")
+        self.assertEqual(data["metadata"]["remainingItemCount"], 42)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_list_workflows_filtered_page_can_return_fewer_than_limit(
+        self, mock_get_context, mock_dynamic_client_cls, mock_api_client
+    ):
+        """A filtered page may legitimately come back empty while more matches exist further on."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_resources = Mock()
+        mock_resources.to_dict.return_value = {
+            "metadata": {"continue": "more-to-come"},
+            "items": [
+                {
+                    "metadata": {"name": "workflow1"},
+                    "spec": {},
+                    "status": {"phase": "Running"}
+                }
+            ]
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_resources)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/Workflow?status=failed&limit=1"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["items"], [])
+        self.assertEqual(data["metadata"]["continue"], "more-to-come")
+
+    def test_list_workflows_limit_validation(self):
+        """Test that out-of-range limit values are rejected."""
+        too_low = self.client.get("/v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit=0")
+        self.assertEqual(too_low.status_code, 422)
+
+        too_high = self.client.get(
+            f"/v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit={MAX_PAGE_LIMIT + 1}"
+        )
+        self.assertEqual(too_high.status_code, 422)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
     def test_create_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful creation of a core Kubernetes resource."""
         mock_get_context.return_value = {"namespace": "default"}
@@ -1239,7 +1385,9 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["kind"], "DeploymentList")
         mock_api_resource.get.assert_called_once_with(
             namespace="default",
-            label_selector="app.kubernetes.io/instance=phoenix"
+            label_selector="app.kubernetes.io/instance=phoenix",
+            limit=DEFAULT_PAGE_LIMIT,
+            _continue=None,
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')

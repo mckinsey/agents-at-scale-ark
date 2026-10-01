@@ -1,39 +1,89 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
 
 import { type WorkflowFilters, workflowsService } from './workflows';
 
-export function useWorkflows(namespace: string, filters?: WorkflowFilters) {
+const DEFAULT_PAGE_SIZE = 25;
+
+export function useWorkflows(
+  namespace: string,
+  filters?: WorkflowFilters,
+  pageSize: number = DEFAULT_PAGE_SIZE,
+) {
   const [workflows, setWorkflows] = useState<ArgoWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [page, setPage] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
 
-  const fetchWorkflows = useCallback(async () => {
-    if (!namespace) {
-      setWorkflows([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+  // tokenStack[i] holds the continue token needed to fetch page i.
+  // tokenStack[0] is always undefined (the first page has no cursor).
+  const tokenStackRef = useRef<Array<string | undefined>>([undefined]);
 
-    try {
-      setLoading(true);
-      const data = await workflowsService.list(namespace, filters);
-      setWorkflows(data);
-      setError(null);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setLoading(false);
-    }
-  }, [namespace, filters]);
+  const fetchPage = useCallback(
+    async (targetPage: number) => {
+      if (!namespace) {
+        setWorkflows([]);
+        setError(null);
+        setLoading(false);
+        return;
+      }
 
+      try {
+        setLoading(true);
+        const continueToken = tokenStackRef.current[targetPage];
+        const result = await workflowsService.list(namespace, filters, {
+          limit: pageSize,
+          continueToken,
+        });
+        setWorkflows(result.items);
+        setHasNext(result.hasMore);
+        if (result.continueToken) {
+          tokenStackRef.current[targetPage + 1] = result.continueToken;
+        }
+        setPage(targetPage);
+        setError(null);
+      } catch (err) {
+        setError(err as Error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [namespace, filters, pageSize],
+  );
+
+  // Filters/namespace narrow what a page shows, so restart at page 0 whenever
+  // they change instead of reusing a token stack built for a different query.
   useEffect(() => {
-    fetchWorkflows();
-  }, [fetchWorkflows]);
+    tokenStackRef.current = [undefined];
+    fetchPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [namespace, filters, pageSize]);
 
-  return { workflows, loading, error, refetch: fetchWorkflows };
+  const goToNextPage = useCallback(() => {
+    if (hasNext) {
+      fetchPage(page + 1);
+    }
+  }, [hasNext, page, fetchPage]);
+
+  const goToPreviousPage = useCallback(() => {
+    if (page > 0) {
+      fetchPage(page - 1);
+    }
+  }, [page, fetchPage]);
+
+  return {
+    workflows,
+    loading,
+    error,
+    page,
+    hasNext,
+    hasPrevious: page > 0,
+    goToNextPage,
+    goToPreviousPage,
+    refetch: () => fetchPage(page),
+  };
 }
 
 export function useWorkflow(

@@ -52,11 +52,23 @@ export interface WorkflowFilters {
   status?: string;
 }
 
+export interface WorkflowListOptions {
+  limit?: number;
+  continueToken?: string;
+}
+
+export interface WorkflowPage {
+  items: ArgoWorkflow[];
+  continueToken?: string;
+  hasMore: boolean;
+}
+
 export const workflowsService = {
   async list(
     namespace: string,
     filters?: WorkflowFilters,
-  ): Promise<ArgoWorkflow[]> {
+    options?: WorkflowListOptions,
+  ): Promise<WorkflowPage> {
     const params = new URLSearchParams({ namespace });
 
     if (filters?.workflowName) {
@@ -68,11 +80,24 @@ export const workflowsService = {
     if (filters?.status) {
       params.append('status', filters.status);
     }
+    if (options?.limit) {
+      params.append('limit', String(options.limit));
+    }
+    if (options?.continueToken) {
+      params.append('continue', options.continueToken);
+    }
 
     const response = await apiClient.get<ArgoWorkflowList>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?${params.toString()}`,
     );
-    return Promise.all(response.items.map(expandCompressedNodes));
+    const items = await Promise.all(response.items.map(expandCompressedNodes));
+    const continueToken = response.metadata?.continue || undefined;
+
+    return {
+      items,
+      continueToken,
+      hasMore: Boolean(continueToken),
+    };
   },
 
   async get(namespace: string, name: string): Promise<ArgoWorkflow> {
