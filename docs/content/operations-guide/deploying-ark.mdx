@@ -240,6 +240,12 @@ The controller needs read-only access to Pods and ReplicaSets to follow runner o
 
 An enforcing CNI is still required. On a non-enforcing CNI, outbound script connections and direct runner access may succeed despite the policy. Standard NetworkPolicy also has node-local traffic exceptions: administrators must protect node and metadata-service access and control who can change workload labels or policies. These restrictions are not per-user authentication, and Ark sends no traffic probes or synthetic control connections to verify them.
 
+#### Metadata-only discovery
+
+The activator's stateless MCP handler serves initialization, notifications, ping, and `tools/list` from the current Tool metadata. Each namespace/name/UID route advertises only that Tool's name, description, input schema and annotations; an omitted schema becomes `{"type":"object"}`. Source is never included. Discovery does not read runner resources, invoke a call, or refresh an idle timer.
+
+Routes outside the explicitly watched namespaces, deleted/recreated Tools, and unknown names are rejected. API read failures and malformed schemas fail closed. Only `tools/call` reaches the separate invocation handler. **Rollout status:** the metadata handler is tested but not installed until activation and lifecycle enforcement are complete.
+
 #### Activation identity checks
 
 The activation decision requires an enabled feature, a matching Tool name and UID, and `Available=True` for the current generation with the canonical published activator address. It rejects missing, deleting, cross-namespace, or unowned runner resources and stale source/language identity. The backend address is derived from the controller's shared child names and private Service, never a caller-supplied URL.
