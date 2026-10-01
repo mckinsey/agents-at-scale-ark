@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from ark_sdk import versions
-from ark_sdk.k8s import get_context
+from ark_sdk.k8s import get_context, release_api_client
 from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.executor import (
     Parameter,
@@ -21,15 +21,13 @@ V1_PREALPHA1 = "v1prealpha1"
 
 
 def close_ark_client(ark_client) -> None:
-    """Close every Kubernetes ApiClient owned by an ARK client's resource clients."""
+    """Release every Kubernetes ApiClient owned by an ARK client's resource clients.
+
+    These are the long-lived clients used by create/update/patch/delete. The
+    per-call clients that get/list/list_page build are released by those methods.
+    """
     for attribute in vars(ark_client).values():
-        close = getattr(getattr(attribute, "api_client", None), "close", None)
-        if close is None:
-            continue
-        try:
-            close()
-        except Exception:
-            pass
+        release_api_client(getattr(attribute, "api_client", None))
 
 _default_user_agent: Optional[str] = None
 
