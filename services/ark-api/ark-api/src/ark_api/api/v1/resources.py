@@ -216,6 +216,17 @@ async def list_grouped_resources(
             items beyond this page, the response's metadata carries a "continue" token
             (pass it back as ?continue=... for the next page) and "remainingItemCount".
 
+    Note:
+        This is Kubernetes' cursor-based pagination, not traditional offset pagination:
+        there is no "jump to page N" and no reliable total page count. Pages are walked
+        forward only, one continue token at a time.
+
+        Continue-token round trip:
+            1. GET .../Workflow?limit=25
+               -> response.metadata.continue = "eyJ2IjoxLCJ..."
+            2. GET .../Workflow?limit=25&continue=eyJ2IjoxLCJ...
+               -> next 25 items, with a new (or absent) "continue" token
+
     Examples:
         - GET /v1/resources/apis/apps/v1/Deployment
         - GET /v1/resources/apis/batch/v1/Job

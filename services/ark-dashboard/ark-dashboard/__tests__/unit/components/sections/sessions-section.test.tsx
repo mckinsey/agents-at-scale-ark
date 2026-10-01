@@ -321,7 +321,12 @@ describe('SessionsSection', () => {
     it('should use the namespace resolved by the provider', () => {
       render(<SessionsSection />);
 
-      expect(useWorkflows).toHaveBeenCalledWith('default', expect.any(Object));
+      expect(useWorkflows).toHaveBeenCalledWith(
+        'default',
+        expect.any(Object),
+        undefined,
+        expect.any(Function),
+      );
     });
 
     it('should not fall back to an assumed namespace before one resolves', () => {
@@ -334,10 +339,17 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      expect(useWorkflows).toHaveBeenCalledWith('', expect.any(Object));
+      expect(useWorkflows).toHaveBeenCalledWith(
+        '',
+        expect.any(Object),
+        undefined,
+        expect.any(Function),
+      );
       expect(useWorkflows).not.toHaveBeenCalledWith(
         'default',
         expect.any(Object),
+        undefined,
+        expect.any(Function),
       );
     });
   });

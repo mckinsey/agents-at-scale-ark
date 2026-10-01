@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
 import {
@@ -48,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
 import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
 import { useDebounce } from '@/lib/hooks/use-debounce';
@@ -1061,6 +1062,10 @@ export function SessionsSection({
     router,
   ]);
 
+  const handleWorkflowsPageError = useCallback((err: Error) => {
+    toast.error('Failed to load page', { description: err.message });
+  }, []);
+
   const {
     workflows,
     loading,
@@ -1070,7 +1075,7 @@ export function SessionsSection({
     goToNextPage,
     goToPreviousPage,
     refetch: refetchWorkflows,
-  } = useWorkflows(namespace, filters);
+  } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 

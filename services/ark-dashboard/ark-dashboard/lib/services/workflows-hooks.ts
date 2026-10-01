@@ -10,6 +10,7 @@ export function useWorkflows(
   namespace: string,
   filters?: WorkflowFilters,
   pageSize: number = DEFAULT_PAGE_SIZE,
+  onPageError?: (error: Error) => void,
 ) {
   const [workflows, setWorkflows] = useState<ArgoWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,7 +23,7 @@ export function useWorkflows(
   const tokenStackRef = useRef<Array<string | undefined>>([undefined]);
 
   const fetchPage = useCallback(
-    async (targetPage: number) => {
+    async (targetPage: number, options?: { silent?: boolean }) => {
       if (!namespace) {
         setWorkflows([]);
         setError(null);
@@ -45,12 +46,19 @@ export function useWorkflows(
         setPage(targetPage);
         setError(null);
       } catch (err) {
-        setError(err as Error);
+        // A silent (page-navigation) failure keeps the already-loaded page on
+        // screen instead of replacing it with a dead-end error state - only
+        // the initial/filter-driven load blocks the view on error.
+        if (options?.silent) {
+          onPageError?.(err as Error);
+        } else {
+          setError(err as Error);
+        }
       } finally {
         setLoading(false);
       }
     },
-    [namespace, filters, pageSize],
+    [namespace, filters, pageSize, onPageError],
   );
 
   // Filters/namespace narrow what a page shows, so restart at page 0 whenever
@@ -63,13 +71,13 @@ export function useWorkflows(
 
   const goToNextPage = useCallback(() => {
     if (hasNext) {
-      fetchPage(page + 1);
+      fetchPage(page + 1, { silent: true });
     }
   }, [hasNext, page, fetchPage]);
 
   const goToPreviousPage = useCallback(() => {
     if (page > 0) {
-      fetchPage(page - 1);
+      fetchPage(page - 1, { silent: true });
     }
   }, [page, fetchPage]);
 

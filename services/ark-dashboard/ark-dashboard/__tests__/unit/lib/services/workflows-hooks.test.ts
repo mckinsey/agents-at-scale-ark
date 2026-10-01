@@ -132,6 +132,31 @@ describe('useWorkflows', () => {
     expect(workflowsService.list).toHaveBeenCalledTimes(1);
   });
 
+  it('a failed goToNextPage reports onPageError and keeps the current page on screen', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
+      .mockRejectedValueOnce(new Error('boom'));
+    const onPageError = vi.fn();
+
+    const { result } = renderHook(() =>
+      useWorkflows('default', undefined, undefined, onPageError),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.goToNextPage();
+    });
+
+    await waitFor(() => expect(onPageError).toHaveBeenCalledWith(
+      new Error('boom'),
+    ));
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.page).toBe(0);
+    expect(result.current.workflows).toEqual([terminalWorkflow]);
+  });
+
   it('goToPreviousPage replays the cached token instead of asking the server again', async () => {
     vi.mocked(workflowsService.list)
       .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
