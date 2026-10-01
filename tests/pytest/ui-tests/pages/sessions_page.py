@@ -3,7 +3,6 @@ import re
 import time
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -12,22 +11,14 @@ logger = logging.getLogger(__name__)
 
 class SessionsPage(BasePage):
 
-    NEW_SESSION_BUTTON = "button:has-text('New session')"
-    SESSION_DIALOG = "[role='dialog']:has-text('Create new session')"
-    DIALOG_SEARCH_INPUT = "[role='dialog'] input[placeholder*='Search']"
-    DIALOG_CREATE_BUTTON = "[data-testid='session-dialog-create']"
-    DIALOG_CANCEL_BUTTON = "[data-testid='session-dialog-cancel']"
     BACK_TO_SESSIONS_BUTTON = "button:has-text('Back to all sessions')"
     HISTORY_TAB = "[role='tab']:has-text('History')"
     CONVERSATION_SIDEBAR = "[data-testid='conversation-sidebar']"
     CONVERSATION_SIDEBAR_ITEM = "[data-testid='conversation-item']"
-    CHAT_TEXTAREA = "textarea[placeholder*='Message']"
     USER_MESSAGE = "div.space-y-4 div.flex.flex-col.items-end"
     ASSISTANT_MESSAGE = "div.space-y-4 > div.flex.flex-col:not(.items-end)"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
     SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-semibold"
-    NEW_CONVERSATION_PANEL = "[data-testid='new-conversation-panel']"
-    NEW_CONVERSATION_DIALOG = NEW_CONVERSATION_PANEL
 
     def navigate_to_session_history(self) -> None:
         dashboard = DashboardPage(self.page)
@@ -35,55 +26,20 @@ class SessionsPage(BasePage):
         self.wait_for_load_state("domcontentloaded")
         self.wait_for_navigation_complete()
 
-    def open_new_session_dialog(self) -> None:
-        btn = self.wait_for_element(self.NEW_SESSION_BUTTON, timeout=10000)
-        btn.click()
-        self.wait_for_modal_open()
+    def open_session(self, session_id: str) -> None:
+        """Go straight to a session's detail page.
 
-    def select_participant_in_dialog(self, participant_name: str, participant_tab: str = "All") -> None:
-        try:
-            self.page.wait_for_selector(
-                "[role='dialog'] div:has-text('Loading participants...')",
-                state="hidden",
-                timeout=10000,
-            )
-        except PlaywrightTimeoutError:
-            pass
-
-        if participant_tab != "All":
-            try:
-                tab = self.page.locator(f"[role='dialog'] [role='tab']:has-text('{participant_tab}')").first
-                if tab.is_visible(timeout=2000):
-                    tab.click()
-                    tab.wait_for(state="attached")
-            except PlaywrightTimeoutError:
-                logger.info("Could not click tab %s, using default", participant_tab)
-
-        try:
-            search = self.page.locator(self.DIALOG_SEARCH_INPUT).first
-            if search.is_visible(timeout=2000):
-                search.fill(participant_name)
-        except PlaywrightTimeoutError:
-            logger.info("Could not fill search input")
-
-        participant_item = self.page.locator(
-            f"[role='dialog'] [data-testid='session-participant-option']:has-text('{participant_name}'), "
-            f"[role='dialog'] button[role='option']:has-text('{participant_name}')"
-        ).first
-        participant_item.wait_for(state="visible", timeout=10000)
-        participant_item.click()
-
-    def confirm_create_session(self) -> str:
-        create_btn = self.page.locator(self.DIALOG_CREATE_BUTTON).first
-        create_btn.wait_for(state="visible", timeout=5000)
-        create_btn.click()
-        try:
-            self.page.wait_for_url("**/sessions/**", timeout=10000)
-        except PlaywrightTimeoutError:
-            raise AssertionError(
-                f"Session creation failed — URL did not change to /sessions/*. Current: {self.page.url}"
-            )
-        return self.get_session_id_from_url()
+        The Sessions view no longer creates anything, so tests seed a session
+        through the API and open it by id.
+        """
+        dashboard = DashboardPage(self.page)
+        self.page.goto(
+            f"{dashboard.base_url}/sessions/{session_id}",
+            wait_until="domcontentloaded",
+        )
+        self.wait_for_load_state("domcontentloaded")
+        self.wait_for_namespace_in_url()
+        self.wait_for_session_detail_page()
 
     def get_session_id_from_url(self) -> str:
         match = re.search(r"/sessions/([^/?#]+)", self.page.url)
@@ -142,33 +98,14 @@ class SessionsPage(BasePage):
         except Exception:
             return False
 
-    def send_message_in_conversation(self, message: str) -> None:
-        initial_count = self.get_user_message_count()
-        textarea = self.page.locator(self.CHAT_TEXTAREA).first
-        textarea.wait_for(state="visible", timeout=10000)
-        expect(textarea).to_be_enabled(timeout=120000)
-        textarea.click()
-        textarea.fill(message)
-        textarea.press("Enter")
-        start = time.time()
-        while time.time() - start < 10:
-            if self.get_user_message_count() > initial_count:
-                return
-            self.page.wait_for_timeout(200)
-
     def wait_for_assistant_response(self, initial_count: int = 0, timeout_s: int = 90) -> bool:
         start = time.time()
         while time.time() - start < timeout_s:
             try:
                 count = self.page.locator(self.ASSISTANT_MESSAGE).count()
                 if count > initial_count:
+                    # The transcript polls every 2s; let the reply settle.
                     self.page.wait_for_timeout(500)
-                    remaining_ms = max(1000, int((timeout_s - (time.time() - start)) * 1000))
-                    textarea = self.page.locator(self.CHAT_TEXTAREA).first
-                    try:
-                        expect(textarea).to_be_enabled(timeout=remaining_ms)
-                    except (AssertionError, PlaywrightTimeoutError):
-                        pass
                     return True
             except Exception:
                 pass
@@ -240,11 +177,6 @@ class SessionsPage(BasePage):
             if attempt < retries - 1:
                 self.page.wait_for_timeout(1500)
         return 0
-
-    def create_new_session(self, participant_name: str, participant_tab: str = "All") -> str:
-        self.open_new_session_dialog()
-        self.select_participant_in_dialog(participant_name, participant_tab)
-        return self.confirm_create_session()
 
     def click_conversations_tab(self) -> None:
         try:
@@ -387,51 +319,6 @@ class SessionsPage(BasePage):
                 self.page.reload()
                 self.wait_for_navigation_complete()
         return 0
-
-    def cancel_session_dialog(self) -> None:
-        cancel = self.page.locator(self.DIALOG_CANCEL_BUTTON).first
-        cancel.wait_for(state="visible", timeout=5000)
-        cancel.click()
-        self.wait_for_modal_close()
-
-    def is_create_button_disabled(self) -> bool:
-        try:
-            btn = self.page.locator(self.DIALOG_CREATE_BUTTON).first
-            btn.wait_for(state="visible", timeout=5000)
-            return btn.is_disabled()
-        except PlaywrightTimeoutError:
-            return True
-
-    def click_new_conversation_button(self) -> None:
-        btn = self.page.locator(
-            "button[aria-label='Create new conversation']"
-        ).first
-        btn.wait_for(state="visible", timeout=8000)
-        btn.click()
-        self.page.locator(self.NEW_CONVERSATION_PANEL).first.wait_for(
-            state="visible", timeout=10000
-        )
-
-    def select_participant_in_panel(self, participant_name: str) -> None:
-        panel = self.NEW_CONVERSATION_PANEL
-        try:
-            search = self.page.locator(
-                f"{panel} input[aria-label='Search participants']"
-            ).first
-            if search.is_visible(timeout=2000):
-                search.fill(participant_name)
-        except PlaywrightTimeoutError:
-            logger.info("Could not fill panel search input")
-
-        item = self.page.locator(
-            f"{panel} button:has-text('{participant_name}')"
-        ).first
-        item.wait_for(state="visible", timeout=10000)
-        item.click()
-
-    def confirm_new_conversation(self) -> None:
-        # No-op: the inline panel auto-closes on participant selection.
-        return
 
     def click_sort_header(self, field: str) -> None:
         try:

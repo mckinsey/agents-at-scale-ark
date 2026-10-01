@@ -32,6 +32,8 @@ export type {
 
 export const CONFIGURATION_VALUE_KEY = 'value';
 
+export const DEFAULT_SECRET_HEADER_KEY = 'token';
+
 export type AddressMode =
   | {
       kind: 'configuration';
@@ -80,7 +82,12 @@ export function buildHeader(header: HeaderData): MCPHeader {
   return {
     name: header.name,
     value: {
-      valueFrom: { secretKeyRef: { name: header.value, key: 'token' } },
+      valueFrom: {
+        secretKeyRef: {
+          name: header.value,
+          key: header.secretKey ?? DEFAULT_SECRET_HEADER_KEY,
+        },
+      },
     },
   };
 }
@@ -93,13 +100,22 @@ export function mapDetailHeaders(
   }
   return headers.map(header => {
     const isSecret = 'valueFrom' in header.value;
+    if (isSecret) {
+      const secretKeyRef = (header as SecretHeader).value.valueFrom
+        .secretKeyRef;
+      return {
+        key: generateUniqueKey(),
+        name: header.name,
+        type: 'secret' as const,
+        value: secretKeyRef.name,
+        secretKey: secretKeyRef.key,
+      };
+    }
     return {
       key: generateUniqueKey(),
       name: header.name,
-      type: isSecret ? 'secret' : 'direct',
-      value: isSecret
-        ? (header as SecretHeader).value.valueFrom.secretKeyRef.name
-        : (header as DirectHeader).value.value || '',
+      type: 'direct' as const,
+      value: (header as DirectHeader).value.value || '',
     };
   });
 }

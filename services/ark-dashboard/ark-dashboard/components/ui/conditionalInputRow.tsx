@@ -23,6 +23,7 @@ type RowData = {
   type: 'direct' | 'secret';
   value: string;
   key: string;
+  secretKey?: string;
 };
 
 interface ConditionalInputRowProps {
@@ -67,7 +68,11 @@ export function ConditionalInputRow({
         <Select
           value={data.type}
           onValueChange={value =>
-            onChange({ type: value as 'direct' | 'secret', value: '' })
+            onChange({
+              type: value as 'direct' | 'secret',
+              value: '',
+              secretKey: undefined,
+            })
           }>
           <SelectTrigger id="type" className={cn(GHOST_TRIGGER, 'w-full')}>
             <SelectValue placeholder="Select a type" />
@@ -104,7 +109,9 @@ export function ConditionalInputRow({
             <div className="flex items-center gap-3">
               <Select
                 value={data.value}
-                onValueChange={value => onChange({ value: value as string })}>
+                onValueChange={value =>
+                  onChange({ value: value as string, secretKey: undefined })
+                }>
                 <SelectTrigger
                   id="thirdValue"
                   className={cn(GHOST_TRIGGER, 'flex-1')}
@@ -121,7 +128,9 @@ export function ConditionalInputRow({
               </Select>
               <CreateResourceButton
                 kind="secret"
-                onCreated={name => onChange({ value: name })}
+                onCreated={name =>
+                  onChange({ value: name, secretKey: undefined })
+                }
               />
             </div>
             {valueError && (
