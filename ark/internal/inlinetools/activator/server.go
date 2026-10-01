@@ -18,6 +18,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/inlinetools"
 	"mckinsey.com/ark/internal/inlinetools/runner"
+	"mckinsey.com/ark/internal/inlinetools/transport"
 )
 
 // InvokeFunc is called only by tools/call, never by discovery or session setup.
@@ -72,8 +73,7 @@ func Handler(reader client.Reader, namespaces []string, invoke InvokeFunc) (http
 			return invoke(ctx, key, tool.UID, req)
 		})
 		r.Body = http.MaxBytesReader(w, r.Body, runner.MaxRequestBytes)
-		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
-			&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}).ServeHTTP(w, r)
+		transport.Handler(server).ServeHTTP(w, r)
 	})
 	return mux, nil
 }
