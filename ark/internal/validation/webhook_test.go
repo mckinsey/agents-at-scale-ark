@@ -16,7 +16,7 @@ func TestWebhookValidatorDefaulter(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("ValidateCreate delegates to Validate", func(t *testing.T) {
-		wv := &WebhookValidator{V: v}
+		wv := &WebhookValidator[*arkv1alpha1.Agent]{V: v}
 		agent := &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
 		}
@@ -27,7 +27,7 @@ func TestWebhookValidatorDefaulter(t *testing.T) {
 	})
 
 	t.Run("ValidateUpdate delegates to Validate with new obj", func(t *testing.T) {
-		wv := &WebhookValidator{V: v}
+		wv := &WebhookValidator[*arkv1alpha1.Agent]{V: v}
 		agent := &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
 		}
@@ -38,7 +38,7 @@ func TestWebhookValidatorDefaulter(t *testing.T) {
 	})
 
 	t.Run("ValidateDelete returns nil", func(t *testing.T) {
-		wv := &WebhookValidator{V: v}
+		wv := &WebhookValidator[*arkv1alpha1.Agent]{V: v}
 		_, err := wv.ValidateDelete(ctx, &arkv1alpha1.Agent{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -46,7 +46,7 @@ func TestWebhookValidatorDefaulter(t *testing.T) {
 	})
 
 	t.Run("Default applies defaults", func(t *testing.T) {
-		d := &WebhookDefaulter{}
+		d := &WebhookDefaulter[*arkv1alpha1.Agent]{}
 		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
 		err := d.Default(ctx, agent)
 		if err != nil {

@@ -6,8 +6,12 @@ from xml.etree import ElementTree as ET
 
 try:
     from defusedxml import ElementTree as DefusedET
+    from defusedxml.common import DefusedXmlException
 except ImportError:
     DefusedET = ET
+
+    class DefusedXmlException(Exception):
+        """Placeholder so the except clause below stays valid without defusedxml."""
 
 # Namespace identifiers, never fetched; https:// here would not be treated as SVG.
 ET.register_namespace("", "http://www.w3.org/2000/svg")  # NOSONAR - namespace identifier, not a URL
@@ -26,7 +30,6 @@ DANGEROUS_LOCAL_NAMES = frozenset({
     "animate",
     "animatetransform",
     "animatemotion",
-    "style",
 })
 
 # Well under sys.getrecursionlimit(), which ET.tostring() consumes when serializing.
@@ -34,11 +37,20 @@ MAX_SVG_DEPTH = 256
 
 EVENT_HANDLER_ATTR = re.compile(r"^on[a-z]+", re.I)
 HREF_SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*:", re.I)
-UNSAFE_STYLE = re.compile(r"expression\s*\(|javascript:", re.I)
+UNSAFE_STYLE = re.compile(r"expression\s*\(|javascript:|@import", re.I)
+# Only the url( opener is matched; the target is scanned for so the cost stays linear.
+CSS_URL_OPEN = re.compile(r"url\s*\(", re.I)
+# Functions that fetch from a bare string, with no url() opener to find.
+CSS_STRING_FUNC_OPEN = re.compile(r"(?:-webkit-)?image-set\s*\(|\bsrc\s*\(", re.I)
+CSS_STRING = re.compile(r"\"([^\"]*)\"|'([^']*)'")
+# A CSS escape is \ plus up to six hex digits and one optional trailing space, or
+# \ plus any single character. Escapes are legal inside an at-keyword, so "@\69 mport"
+# is "@import" to the browser.
+CSS_ESCAPE = re.compile(r"\\(?:([0-9a-fA-F]{1,6})[ \t\r\n\f]?|(.))", re.S)
+# Embedded rasters are inert as paint values; SVG-in-data-URI is a document, so it is excluded.
+SAFE_DATA_URL = re.compile(r"^data:image/(?!svg\+xml)[a-z0-9.+-]+[;,]", re.I)
 # Browsers drop these before parsing a scheme, so "java&#9;script:" runs as "javascript:".
 URL_IGNORED_CHARS = re.compile(r"[\x00-\x1f\x7f]")
-FILENAME_ATTR = re.compile(r'filename="([^"]+)"', re.I)
-CONTENT_TYPE_ATTR = re.compile(r"content-type:\s*([^\r\n]+)", re.I)
 
 
 def _local_name(tag: str) -> str:
@@ -83,18 +95,152 @@ def is_svg_payload(filename: str | None, content_type: str | None, content: byte
 
 
 def _is_safe_href(value: str) -> bool:
-    """Allow only same-document fragment refs and scheme-less relative paths.
+    """Allow same-document fragment refs, scheme-less relative paths, inline rasters.
 
-    Anything with a URL scheme (javascript:, data:, http:, ...) or a
-    protocol-relative prefix (//) is treated as unsafe and stripped, which blocks
-    both script execution and external resource loading (data exfiltration).
+    Anything with a URL scheme (javascript:, http:, ...) or a protocol-relative
+    prefix (//) is treated as unsafe and stripped, which blocks both script
+    execution and external resource loading (data exfiltration). An inline
+    data:image/* payload defeats neither -- it cannot execute and is self-contained,
+    so it has no egress channel -- and is allowed; data:image/svg+xml is a document
+    rather than a raster, so it stays blocked. Governs CSS url() targets too.
     """
-    stripped = URL_IGNORED_CHARS.sub("", value).strip()
+    # Browsers fold backslashes to slashes for special schemes, so "\\evil.com"
+    # would resolve as "//evil.com" against an https base.
+    stripped = URL_IGNORED_CHARS.sub("", value).replace("\\", "/").strip()
     if not stripped or stripped.startswith("#"):
         return True
     if stripped.startswith("//"):
         return False
+    if SAFE_DATA_URL.match(stripped):
+        return True
     return not HREF_SCHEME.match(stripped)
+
+
+def _css_url_targets(css: str):
+    """Yield each url() target; None for an unterminated url( so callers fail closed.
+
+    Scanned rather than matched with a single regex: a pattern that has to find the
+    closing paren from every url( start is quadratic on unbalanced input, and this
+    runs synchronously in the request handler. Each find resumes past the previous
+    close paren, so the whole pass is linear.
+    """
+    pos = 0
+    while (match := CSS_URL_OPEN.search(css, pos)) is not None:
+        end = css.find(")", match.end())
+        if end == -1:
+            yield None
+            return
+        yield css[match.end() : end].strip().strip("\"'")
+        pos = end + 1
+
+
+def _closing_paren(css: str, start: int) -> int:
+    """Index of the ) that closes an argument list, ignoring ones inside quotes."""
+    quote = ""
+    for i in range(start, len(css)):
+        ch = css[i]
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch == ")":
+            return i
+    return -1
+
+
+def _css_string_func_targets(css: str):
+    """Yield quoted strings passed to a fetching function; None if unterminated.
+
+    image-set() takes a bare string, so there is no url( opener to find. Only the
+    arguments of these functions are inspected: checking every string literal in
+    the sheet would flag an inert content: "http://..." and clear the element.
+    """
+    pos = 0
+    while (match := CSS_STRING_FUNC_OPEN.search(css, pos)) is not None:
+        # The closing paren has to be found outside quotes: a ")" inside the string,
+        # as in image-set("http://evil/x)y.png" 1x), would otherwise end the argument
+        # list early and leave no closing quote for CSS_STRING to pair up.
+        end = _closing_paren(css, match.end())
+        if end == -1:
+            yield None
+            return
+        for quoted in CSS_STRING.finditer(css[match.end() : end]):
+            yield quoted.group(1) if quoted.group(1) is not None else quoted.group(2)
+        pos = end + 1
+
+
+def _strip_css_comments(css: str) -> str:
+    """Remove /* */ comments in a single pass.
+
+    A lazy regex rescans to the end of the string for every unterminated opener, so
+    "/*a" repeated is quadratic - 96 KB took nine seconds on the event loop. Each find
+    here resumes past the previous terminator, matching the scan in _css_url_targets.
+    An unterminated comment swallows the remainder, which is what a browser does.
+    """
+    parts: list[str] = []
+    pos = 0
+    while (start := css.find("/*", pos)) != -1:
+        parts.append(css[pos:start])
+        end = css.find("*/", start + 2)
+        if end == -1:
+            return "".join(parts)
+        pos = end + 2
+    parts.append(css[pos:])
+    return "".join(parts)
+
+
+def _decode_css(value: str) -> str:
+    """Resolve CSS escapes and drop comments, so matching sees what the browser does.
+
+    Both are legal mid-token: "@\\69 mport" is @import, and url(/*x*/"http://evil")
+    leaves the target starting with /* unless the comment is removed first.
+    """
+
+    def unescape(match: re.Match[str]) -> str:
+        hex_digits, literal = match.group(1), match.group(2)
+        if hex_digits:
+            code_point = int(hex_digits, 16)
+            # Surrogates and out-of-range values are not valid characters; drop them
+            # rather than letting chr() raise on attacker-controlled input.
+            if code_point == 0 or 0xD800 <= code_point <= 0xDFFF or code_point > 0x10FFFF:
+                return ""
+            return chr(code_point)
+        return literal or ""
+
+    return _strip_css_comments(CSS_ESCAPE.sub(unescape, value))
+
+
+def _unsafe_css_form(value: str) -> bool:
+    cleaned = URL_IGNORED_CHARS.sub("", value)
+    if UNSAFE_STYLE.search(cleaned):
+        return True
+    return any(
+        target is None or not _is_safe_href(target)
+        for target in (
+            *_css_url_targets(cleaned),
+            *_css_string_func_targets(cleaned),
+        )
+    )
+
+
+def _has_unsafe_css(value: str) -> bool:
+    """Reject CSS that executes script, imports, or pulls in an external reference.
+
+    url() targets are held to the same policy as href: fragments and scheme-less
+    relative paths are allowed, anything with a scheme or a protocol-relative
+    prefix is not.
+
+    Checked in both the raw and the escape-resolved form, and unsafe in either one
+    is unsafe. Resolving escapes is what catches an escaped at-rule or a comment
+    wedged before a url() target, but it also collapses "\\\\" to a single
+    backslash, which would read as a same-origin path; keeping the raw pass means
+    that still counts as the protocol-relative reference a browser may resolve.
+    """
+    decoded = _decode_css(value)
+    return _unsafe_css_form(value) or (
+        decoded != value and _unsafe_css_form(decoded)
+    )
 
 
 def _sanitize_attributes(elem: ET.Element) -> None:
@@ -105,13 +251,11 @@ def _sanitize_attributes(elem: ET.Element) -> None:
         if EVENT_HANDLER_ATTR.match(local_attr):
             del elem.attrib[attr]
             continue
-        if local_attr in ("href", "xlink:href") or attr_lower.endswith("}href"):
+        if local_attr == "href":
             if not _is_safe_href(elem.attrib[attr]):
                 del elem.attrib[attr]
             continue
-        if local_attr == "style" and UNSAFE_STYLE.search(
-            URL_IGNORED_CHARS.sub("", elem.attrib[attr])
-        ):
+        if local_attr == "style" and _has_unsafe_css(elem.attrib[attr]):
             del elem.attrib[attr]
 
 
@@ -122,6 +266,17 @@ def _sanitize_element(root: ET.Element) -> None:
         elem, depth = stack.pop()
         if depth > MAX_SVG_DEPTH:
             raise ValueError(f"SVG nesting exceeds {MAX_SVG_DEPTH} levels")
+        # Checked on the popped element, not on children, so a root <style> is covered
+        # by the same pass. Kept so legitimate stylesheets still paint; cleared wholesale
+        # when any rule is unsafe, matching how an unsafe style= drops the whole attribute.
+        # itertext(), not elem.text: CSS after a child element lives in that child's
+        # tail, so "<style><desc/>a{...}</style>" is invisible to elem.text alone.
+        if _local_name(elem.tag) == "style" and _has_unsafe_css(
+            "".join(elem.itertext())
+        ):
+            elem.text = ""
+            for styled_child in list(elem):  # NOSONAR - snapshot while mutating
+                elem.remove(styled_child)
         # list() snapshots: removing from a live element skips the next sibling.
         for child in list(elem):  # NOSONAR - iterating a snapshot while mutating
             if _local_name(child.tag) in DANGEROUS_LOCAL_NAMES:
@@ -136,8 +291,10 @@ def sanitize_svg(content: bytes) -> bytes:
         return content
     try:
         root = DefusedET.fromstring(content)
-    except ET.ParseError as exc:
-        raise ValueError(f"Invalid SVG content: {exc}") from exc
+    except (ET.ParseError, DefusedXmlException) as exc:
+        # Fixed message: the parser detail and defusedxml's exception repr end up in
+        # the 400 body, and an internal DTD subset would name its entities there.
+        raise ValueError("Invalid SVG content") from exc
 
     if _local_name(root.tag) in DANGEROUS_LOCAL_NAMES:
         raise ValueError("Disallowed root element in SVG content")

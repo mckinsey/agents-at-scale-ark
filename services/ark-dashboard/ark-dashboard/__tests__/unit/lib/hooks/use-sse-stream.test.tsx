@@ -3,10 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useSSEStream } from '@/lib/hooks/use-sse-stream';
 
-vi.mock('sonner', () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
-}));
-
 type ESInstance = {
   url: string;
   onopen: ((ev?: unknown) => void) | null;
@@ -255,40 +251,6 @@ describe('useSSEStream', () => {
       await Promise.resolve();
     });
     expect(esInstances.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('purge DELETEs with memory param and clears state + fires onPurge', async () => {
-    const onPurge = vi.fn();
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-      makeFetchResponse({ items: [{ timestamp: 't' }], total: 1, hasMore: false }),
-    );
-    const { result } = renderHook(() =>
-      useSSEStream('/v1/broker/messages', 'mymem', { onPurge }),
-    );
-    await flush();
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(makeFetchResponse({}, true));
-    await act(async () => {
-      await result.current.purge();
-    });
-    const deleteCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
-      c => (c[1] as { method?: string })?.method === 'DELETE',
-    );
-    expect(deleteCall).toBeTruthy();
-    expect(deleteCall?.[0]).toContain('memory=mymem');
-    expect(result.current.entries).toEqual([]);
-    expect(result.current.hasMore).toBe(false);
-    expect(onPurge).toHaveBeenCalled();
-  });
-
-  it('purge failure triggers toast.error (no crash)', async () => {
-    const { result } = renderHook(() => useSSEStream('/v1/broker/messages', 'mem'));
-    await flush();
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(makeFetchResponse({}, false, 500));
-    await act(async () => {
-      await result.current.purge();
-    });
-    const { toast } = await import('sonner');
-    expect(toast.error).toHaveBeenCalled();
   });
 
   it('loadMore fetches next page when cursor available', async () => {

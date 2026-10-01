@@ -791,10 +791,16 @@ func (h *Handler) handleApprovalRequired(
 		contextJSON = []byte("{}")
 	}
 
+	// Timeout is optional, so an Agent stored before it had a default can leave it nil.
+	timeoutStr := ""
+	if approvalErr.Config.Timeout != nil {
+		timeoutStr = approvalErr.Config.Timeout.Duration.String()
+	}
+
 	// Build task metadata with approval details (all values as strings or primitive types)
 	metadata := map[string]interface{}{
 		"toolCalls": string(toolCallsJSON),
-		"timeout":   approvalErr.Config.Timeout.Duration.String(),
+		"timeout":   timeoutStr,
 		"onTimeout": approvalErr.Config.OnTimeout,
 		"context":   string(contextJSON),
 	}

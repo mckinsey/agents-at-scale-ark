@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-injected-memory
+spec:
+  input: "memory exists, so the webhook names it"
+  target:
+    type: agent
+    name: placeholder-agent

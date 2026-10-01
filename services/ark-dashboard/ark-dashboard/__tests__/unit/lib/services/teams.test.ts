@@ -28,8 +28,8 @@ describe('teamsService', () => {
     vi.clearAllMocks()
   })
 
-  describe('getAll', () => {
-    it('should fetch all teams and add id field', async () => {
+  describe('list', () => {
+    it('should fetch all teams without hydrating each item', async () => {
       const mockListResponse: TeamListResponse = {
         items: [
           { name: 'team1', displayName: 'Team 1' },
@@ -38,15 +38,12 @@ describe('teamsService', () => {
       }
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockListResponse)
-      vi.mocked(apiClient.get).mockResolvedValueOnce({ ...mockTeam, name: 'team1' })
-      vi.mocked(apiClient.get).mockResolvedValueOnce({ ...mockTeam, name: 'team2' })
 
-      const result = await teamsService.getAll('default')
+      const result = await teamsService.list('default')
 
+      expect(apiClient.get).toHaveBeenCalledTimes(1)
       expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`, { params: { limit: 100, namespace: 'default' } })
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team1`, { params: { namespace: 'default' } })
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team2`, { params: { namespace: 'default' } })
-      
+
       expect(result).toHaveLength(2)
       expect(result[0]).toMatchObject({ id: 'team1', name: 'team1' })
       expect(result[1]).toMatchObject({ id: 'team2', name: 'team2' })

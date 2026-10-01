@@ -5,7 +5,14 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
+import {
+  EMPTY_HEADER_ROW,
+  type HeaderData,
+  useHeaderRows,
+} from '@/components/forms/shared/header-rows';
+import { Plus } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { ConditionalInputRow } from '@/components/ui/conditionalInputRow';
 import {
   Dialog,
   DialogContent,
@@ -22,7 +29,11 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import type { A2AServerConfiguration } from '@/lib/services/a2a-servers';
+import type {
+  A2AServerConfiguration,
+  Header,
+} from '@/lib/services/a2a-servers';
+import { useGetAllSecrets } from '@/lib/services/secrets-hooks';
 
 type Props = {
   open: boolean;
@@ -46,7 +57,26 @@ const formSchema = z.object({
 
 const LABEL_CLASS = 'label-regular-primary text-fg-secondary';
 
+const SECRET_HEADER_KEY = 'token';
+
+export function buildHeader(header: HeaderData): Header {
+  if (header.type === 'direct') {
+    return { name: header.name, value: { value: header.value } };
+  }
+
+  return {
+    name: header.name,
+    value: {
+      valueFrom: {
+        secretKeyRef: { name: header.value, key: SECRET_HEADER_KEY },
+      },
+    },
+  };
+}
+
 export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
+  const headerRows = useHeaderRows();
+  const { data: secrets } = useGetAllSecrets();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -57,13 +87,22 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
     },
   });
 
+  const { setHeaders, setHeaderErrors } = headerRows;
+
   useEffect(() => {
     if (open) {
       form.reset();
+      setHeaders([EMPTY_HEADER_ROW]);
+      setHeaderErrors({});
     }
-  }, [open, form]);
+  }, [open, form, setHeaders, setHeaderErrors]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    const nonEmptyHeaders = headerRows.validate();
+    if (!nonEmptyHeaders) {
+      return;
+    }
+
     const config: A2AServerConfiguration = {
       name: values.name,
       namespace,
@@ -72,6 +111,9 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
         address: { value: values.baseUrl },
         pollingInterval: values.pollingInterval
           ? Number(values.pollingInterval)
+          : undefined,
+        headers: nonEmptyHeaders.length
+          ? nonEmptyHeaders.map(buildHeader)
           : undefined,
       },
     };
@@ -174,6 +216,35 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
                   </FormItem>
                 )}
               />
+
+              <div className="flex flex-col gap-2">
+                <span className={LABEL_CLASS}>Headers</span>
+                {headerRows.headers.map((row, index) => (
+                  <ConditionalInputRow
+                    key={row.key}
+                    data={row}
+                    onChange={updated => {
+                      headerRows.updateRow(index, updated);
+                      headerRows.clearRowError(row.key, updated);
+                    }}
+                    secrets={secrets ?? []}
+                    deleteRow={headerRows.deleteRow}
+                    nameError={headerRows.headerErrors[row.key]?.nameError}
+                    valueError={headerRows.headerErrors[row.key]?.valueError}
+                    namePlaceholder="e.g., Authorization"
+                    valuePlaceholder="e.g., Bearer token"
+                  />
+                ))}
+                <Button
+                  type="button"
+                  onClick={headerRows.addRow}
+                  variant="outline"
+                  size="icon"
+                  disabled={form.formState.isSubmitting}
+                  aria-label="Add header">
+                  <Plus />
+                </Button>
+              </div>
             </div>
 
             <DialogFooter>

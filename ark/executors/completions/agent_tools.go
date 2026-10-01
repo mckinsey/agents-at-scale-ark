@@ -247,6 +247,12 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 	}
 
 	r.RegisterTool(toolDef, executor)
+	// Keyed by the registered name, matching RegisterTool above. For a renaming partial
+	// CreatePartialToolDefinition has already replaced toolDef.Name with partial.name,
+	// which is the name the model calls and the key buildApprovalMap reads.
+	if tool.Spec.Approval != nil {
+		r.toolApproval[toolDef.Name] = tool.Spec.Approval
+	}
 	return nil
 }
 

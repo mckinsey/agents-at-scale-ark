@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import type { MCPHeader } from '@/lib/services/mcp-servers';
 import {
   type AddressMode,
+  type HeaderData,
   buildHeader,
   buildSpec,
   buildUpdateAddressMode,
   createFormSchema,
-  type HeaderData,
   mapDetailAddress,
   mapDetailHeaders,
   validateHeaders,
 } from '@/components/forms/mcp-forms/utils';
+import type { MCPHeader } from '@/lib/services/mcp-servers';
 
 const row = (overrides: Partial<HeaderData>): HeaderData => ({
   key: 'row-1',
@@ -32,7 +32,9 @@ describe('mapDetailAddress', () => {
   it('reads a configuration reference', () => {
     const state = mapDetailAddress(
       {
-        valueFrom: { configMapKeyRef: { name: 'github-mcp-url', key: 'value' } },
+        valueFrom: {
+          configMapKeyRef: { name: 'github-mcp-url', key: 'value' },
+        },
       },
       'https://api.githubcopilot.com/mcp/',
     );
@@ -195,7 +197,9 @@ describe('buildSpec', () => {
     expect(spec.headers).toEqual([
       {
         name: 'Authorization',
-        value: { valueFrom: { secretKeyRef: { name: 'github-pat', key: 'token' } } },
+        value: {
+          valueFrom: { secretKeyRef: { name: 'github-pat', key: 'token' } },
+        },
       },
     ]);
   });
@@ -217,7 +221,13 @@ describe('buildUpdateAddressMode', () => {
 
   it('keeps the serviceRef for a service address', () => {
     const serviceRef = { name: 'ark-mcp', port: 'http' };
-    expect(buildUpdateAddressMode({ kind: 'service', serviceRef, resolvedAddress: '' })).toEqual({
+    expect(
+      buildUpdateAddressMode({
+        kind: 'service',
+        serviceRef,
+        resolvedAddress: '',
+      }),
+    ).toEqual({
       kind: 'service',
       serviceRef,
     });
@@ -342,13 +352,33 @@ describe('buildHeader', () => {
     });
   });
 
-  it('builds a secret header referencing the token key', () => {
+  it('defaults a secret header to the token key when none is preserved', () => {
     expect(
-      buildHeader(row({ name: 'Authorization', type: 'secret', value: 'my-secret' })),
+      buildHeader(
+        row({ name: 'Authorization', type: 'secret', value: 'my-secret' }),
+      ),
     ).toEqual({
       name: 'Authorization',
       value: {
         valueFrom: { secretKeyRef: { name: 'my-secret', key: 'token' } },
+      },
+    });
+  });
+
+  it('preserves a non-token secret key (#3317)', () => {
+    expect(
+      buildHeader(
+        row({
+          name: 'Authorization',
+          type: 'secret',
+          value: 'my-secret',
+          secretKey: 'apiKey',
+        }),
+      ),
+    ).toEqual({
+      name: 'Authorization',
+      value: {
+        valueFrom: { secretKeyRef: { name: 'my-secret', key: 'apiKey' } },
       },
     });
   });
@@ -389,7 +419,39 @@ describe('mapDetailHeaders', () => {
       name: 'Authorization',
       type: 'secret',
       value: 'my-secret',
+      secretKey: 'token',
     });
+  });
+
+  it('preserves a non-token secret key on read (#3317)', () => {
+    const headers = [
+      {
+        name: 'Authorization',
+        value: {
+          valueFrom: { secretKeyRef: { name: 'my-secret', key: 'apiKey' } },
+        },
+      },
+    ] as MCPHeader[];
+    const result = mapDetailHeaders(headers);
+    expect(result[0]).toMatchObject({
+      name: 'Authorization',
+      type: 'secret',
+      value: 'my-secret',
+      secretKey: 'apiKey',
+    });
+  });
+
+  it('round-trips a non-token secret key unchanged (#3317)', () => {
+    const headers = [
+      {
+        name: 'Authorization',
+        value: {
+          valueFrom: { secretKeyRef: { name: 'my-secret', key: 'apiKey' } },
+        },
+      },
+    ] as MCPHeader[];
+    const rebuilt = mapDetailHeaders(headers).map(buildHeader);
+    expect(rebuilt[0]).toEqual(headers[0]);
   });
 
   it('assigns a unique key to each mapped row', () => {

@@ -11,7 +11,7 @@ import (
 
 func SetupToolWebhookWithManager(mgr ctrl.Manager) error {
 	v := validation.NewValidator(&validation.WebhookLookup{Client: mgr.GetClient()})
-	return ctrl.NewWebhookManagedBy(mgr).For(&arkv1alpha1.Tool{}).
-		WithValidator(&validation.WebhookValidator{V: v}).
+	return ctrl.NewWebhookManagedBy(mgr, &arkv1alpha1.Tool{}).
+		WithValidator(&validation.WebhookValidator[*arkv1alpha1.Tool]{V: v}).
 		Complete()
 }

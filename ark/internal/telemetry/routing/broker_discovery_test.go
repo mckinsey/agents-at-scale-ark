@@ -409,3 +409,143 @@ func TestBuildEndpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestIsBrokerPresenceConfigMapName(t *testing.T) {
+	tests := []struct {
+		name string
+		cm   string
+		want bool
+	}{
+		{name: "broker configmap", cm: "ark-config-broker", want: true},
+		{name: "streaming configmap", cm: "ark-config-streaming", want: true},
+		{name: "unrelated configmap", cm: "otel-environment-variables", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsBrokerPresenceConfigMapName(tt.cm); got != tt.want {
+				t.Errorf("IsBrokerPresenceConfigMapName(%q) = %v, want %v", tt.cm, got, tt.want)
+			}
+		})
+	}
+}
+
+type brokerServiceRefCase struct {
+	name        string
+	namespace   string
+	configMaps  []client.Object
+	wantCM      string
+	wantNilRef  bool
+	wantRefName string
+}
+
+func TestBrokerServiceRefFor(t *testing.T) {
+	tests := []brokerServiceRefCase{
+		{
+			name:       "neither configmap present",
+			namespace:  "tenant-a",
+			wantNilRef: true,
+		},
+		{
+			name:      "ark-config-broker enabled",
+			namespace: "tenant-a",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "tenant-a"},
+					Data:       map[string]string{"enabled": "true", "serviceRef": `name: "ark-broker"` + "\n" + `port: "http"`},
+				},
+			},
+			wantCM:      "ark-config-broker",
+			wantRefName: "ark-broker",
+		},
+		{
+			name:      "only ark-config-streaming enabled falls back to it",
+			namespace: "tenant-a",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-streaming", Namespace: "tenant-a"},
+					Data:       map[string]string{"enabled": "true", "serviceRef": `name: "ark-broker"` + "\n" + `port: "http"`},
+				},
+			},
+			wantCM:      "ark-config-streaming",
+			wantRefName: "ark-broker",
+		},
+		{
+			name:      "ark-config-broker present but disabled, streaming absent",
+			namespace: "tenant-a",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "tenant-a"},
+					Data:       map[string]string{"enabled": "false"},
+				},
+			},
+			wantNilRef: true,
+		},
+		{
+			name:      "both configmaps disabled",
+			namespace: "tenant-a",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "tenant-a"},
+					Data:       map[string]string{"enabled": "false"},
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-streaming", Namespace: "tenant-a"},
+					Data:       map[string]string{"enabled": "false"},
+				},
+			},
+			wantNilRef: true,
+		},
+		{
+			name:      "configmap in a different namespace is not found",
+			namespace: "tenant-a",
+			configMaps: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "ark-config-broker", Namespace: "tenant-b"},
+					Data:       map[string]string{"enabled": "true", "serviceRef": `name: "ark-broker"`},
+				},
+			},
+			wantNilRef: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k8sClient := fake.NewClientBuilder().WithObjects(tt.configMaps...).Build()
+
+			cm, ref, err := BrokerServiceRefFor(context.Background(), k8sClient, tt.namespace)
+			if err != nil {
+				t.Fatalf("BrokerServiceRefFor() error = %v", err)
+			}
+
+			assertBrokerServiceRef(t, tt, cm, ref)
+		})
+	}
+}
+
+// assertBrokerServiceRef checks a BrokerServiceRefFor result against tt,
+// split out of TestBrokerServiceRefFor's loop body to keep that function's
+// branching within the project's cognitive-complexity budget.
+func assertBrokerServiceRef(t *testing.T, tt brokerServiceRefCase, cm *corev1.ConfigMap, ref *ServiceRef) {
+	t.Helper()
+
+	if tt.wantNilRef {
+		if ref != nil {
+			t.Errorf("expected nil ServiceRef, got %+v", ref)
+		}
+		return
+	}
+
+	if cm == nil {
+		t.Fatal("expected non-nil ConfigMap")
+	}
+	if cm.Name != tt.wantCM {
+		t.Errorf("configmap name = %s, want %s", cm.Name, tt.wantCM)
+	}
+	if ref == nil {
+		t.Fatal("expected non-nil ServiceRef")
+	}
+	if ref.Name != tt.wantRefName {
+		t.Errorf("ref.Name = %s, want %s", ref.Name, tt.wantRefName)
+	}
+}

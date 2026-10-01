@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sync/semaphore"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,11 +24,16 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"go.opentelemetry.io/otel/baggage"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -51,6 +56,11 @@ import (
 // the user prompt strongly insists on the tool) can spin a new approval task
 // after every denial, never terminating.
 const maxApprovalCascades = 3
+
+// defaultMaxImpersonatedClients bounds the impersonated-client cache so it
+// cannot grow without limit across many distinct service accounts. It is an
+// internal safety bound, not an operational tuning knob.
+const defaultMaxImpersonatedClients = 256
 
 const (
 	targetTypeAgent = "agent"
@@ -79,10 +89,17 @@ const (
 	// when MaxConcurrentQueries is reached. Short enough to be responsive,
 	// long enough to avoid a busy-loop while in-flight queries drain.
 	queryCapacityRequeueDelay = 250 * time.Millisecond
+	// queryFairnessWaitWindow is how long a namespace denied a slot stays in
+	// the fair-share divisor after its last attempt. A few requeue cycles, so
+	// a still-competing tenant keeps its share while one that stops requeuing
+	// ages out and lets the remaining tenants expand.
+	queryFairnessWaitWindow = 4 * queryCapacityRequeueDelay
 	// queryRunningSafetyRequeue re-reconciles a running Query whose execution
 	// goroutine died so it converges to a terminal phase instead of stranding.
 	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
 	queryRunningSafetyRequeue = 30 * time.Second
+	// requeueChannelBufferSize sizes the async-goroutine self-requeue channel.
+	requeueChannelBufferSize = 64
 
 	// Condition reasons for QueryCompleted when spec.timeout elapses.
 	// spec.timeout is a wall-clock budget from metadata.creationTimestamp; the
@@ -93,7 +110,7 @@ const (
 	// defaultQueryTimeout mirrors the CRD default on Query.spec.timeout so
 	// callers without an explicit value get the same budget the apiserver's
 	// mutating admission would compute.
-	defaultQueryTimeout = 5 * time.Minute
+	defaultQueryTimeout = 30 * time.Minute
 )
 
 type QueryReconciler struct {
@@ -116,8 +133,27 @@ type QueryReconciler struct {
 	// default (1).
 	MaxConcurrentReconciles int
 
-	sem        *semaphore.Weighted
-	operations sync.Map
+	// APIReader bypasses the informer cache. signalRequeue's trigger is a local
+	// channel, not a watch event, so the reconcile it causes can otherwise race
+	// the cache still catching up to the write that triggered it. fetchQuery
+	// only falls back to it when pendingFreshReads says the cache is still
+	// behind; the common watch-driven path stays on the cached Client.
+	APIReader client.Reader
+
+	sched         *fairScheduler
+	operations    sync.Map
+	saClients     *impersonatedClientCache
+	saClientsOnce sync.Once
+
+	// pendingFreshReads maps a Query's namespaced name to the minimum
+	// resourceVersion signalRequeue's caller observed, so fetchQuery knows to
+	// bypass the cache until it has caught up. Entries are removed by
+	// fetchQuery once consumed (LoadAndDelete) or once the Get for that name
+	// fails, so a deleted Query can't strand a marker forever.
+	pendingFreshReads sync.Map
+
+	// requeueCh lets an async goroutine self-requeue on completion (see signalRequeue).
+	requeueCh chan event.GenericEvent
 
 	// brokerEndpoint resolves the broker endpoint for a namespace, used by the
 	// finalizer's broker cleanups. Defaults to routing.ResolveBrokerEndpoint
@@ -134,7 +170,9 @@ type QueryReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=memories,verbs=get
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=arkconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;list;watch;patch
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch;update
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
+// +kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=create
 
 func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -169,7 +207,10 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	if len(obj.Status.Conditions) == 0 {
 		r.setConditionCompleted(&obj, metav1.ConditionFalse, "QueryNotStarted", "The query has not been started yet")
-		return ctrl.Result{}, r.Status().Update(ctx, &obj)
+		// Requeue explicitly: the update predicate drops the watch event this
+		// status write would otherwise trigger, and handleQueryExecution still
+		// needs to run to actually start the query.
+		return ctrl.Result{Requeue: true}, r.Status().Update(ctx, &obj)
 	}
 
 	return r.handleQueryExecution(ctx, req, obj)
@@ -177,8 +218,37 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 func (r *QueryReconciler) fetchQuery(ctx context.Context, namespacedName types.NamespacedName) (arkv1alpha1.Query, error) {
 	var obj arkv1alpha1.Query
-	err := r.Get(ctx, namespacedName, &obj)
-	return obj, err
+	if err := r.Get(ctx, namespacedName, &obj); err != nil {
+		r.pendingFreshReads.Delete(namespacedName) // don't strand a marker for a gone object
+		return obj, err
+	}
+
+	if minRV, ok := r.pendingFreshReads.LoadAndDelete(namespacedName); ok && !resourceVersionAtLeast(obj.ResourceVersion, minRV.(string)) {
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		if err := reader.Get(ctx, namespacedName, &obj); err != nil {
+			return obj, err
+		}
+	}
+
+	return obj, nil
+}
+
+// resourceVersionAtLeast assumes a globally monotonic numeric resourceVersion,
+// true for etcd revisions and for the PostgreSQL apiserver backend (RVs come
+// from a single BIGSERIAL sequence, see internal/storage/postgresql). The
+// comparison is always same-object (cached RV vs. that object's own write
+// RV), so cross-object commit ordering doesn't apply. Falls back to string
+// equality for any backend whose RVs aren't numeric.
+func resourceVersionAtLeast(actual, min string) bool {
+	a, errA := strconv.ParseInt(actual, 10, 64)
+	m, errM := strconv.ParseInt(min, 10, 64)
+	if errA != nil || errM != nil {
+		return actual == min
+	}
+	return a >= m
 }
 
 func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.Query) (*ctrl.Result, error) {
@@ -214,7 +284,10 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		// Requeue explicitly so the terminal-phase branch below runs and
+		// computes the TTL-based GC requeue; the update predicate drops the
+		// watch event this status write would otherwise trigger.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Enforces per-round pre-execution wall-SLO.
@@ -223,7 +296,8 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		if err := r.failQueryOnTimeout(ctx, &obj, reasonTimedOutInQueue, preExecutionTimeoutMessage(obj.Status.Phase)); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		// Same as above: requeue explicitly for the TTL/GC follow-up.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	switch obj.Status.Phase {
@@ -310,7 +384,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 	}
 
-	if r.sem != nil && !r.sem.TryAcquire(1) {
+	if r.sched != nil && !r.sched.tryAcquire(req.Namespace) {
 		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
 		if obj.Status.Phase != statusQueued {
 			if err := r.updateStatus(ctx, &obj, statusQueued); err != nil {
@@ -329,8 +403,8 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 
 	if obj.Status.Phase != statusRunning {
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
-			if r.sem != nil {
-				r.sem.Release(1)
+			if r.sched != nil {
+				r.sched.release(req.Namespace)
 			}
 			return ctrl.Result{}, err
 		}
@@ -343,9 +417,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
-	// Arm the safety net. On success the goroutine writes a terminal phase and
-	// the resulting watch event reconciles ahead of this timer; if it dies, this
-	// requeue is what brings the Query back for recovery.
+	// Fallback if the goroutine dies before signalRequeue runs.
 	return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 }
 
@@ -437,9 +509,10 @@ func (r *QueryReconciler) handleDeniedOrFailedTask(ctx context.Context, obj *ark
 	if err := r.updateStatus(ctx, obj, statusError); err != nil {
 		return ctrl.Result{}, err
 	}
-	// The status update to error re-triggers reconcile, where the terminal-phase
-	// case computes the TTL-based requeue for garbage collection.
-	return ctrl.Result{}, nil
+	// Requeue explicitly so the terminal-phase case computes the TTL-based
+	// requeue for garbage collection; the update predicate drops the watch
+	// event this status write would otherwise trigger.
+	return ctrl.Result{Requeue: true}, nil
 }
 
 func logQueryError(ctx context.Context, err error, obj *arkv1alpha1.Query, stage string) {
@@ -450,7 +523,7 @@ func logQueryError(ctx context.Context, err error, obj *arkv1alpha1.Query, stage
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
 
-	defer r.finishExecuteQueryAsync(opCtx, namespacedName)
+	defer r.finishExecuteQueryAsync(opCtx, namespacedName, &obj)
 
 	// Re-fetch query to get latest status (may have been updated with A2A taskID for resumption)
 	if err := r.Get(opCtx, namespacedName, &obj); err != nil {
@@ -508,28 +581,30 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 }
 
-func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName) {
+func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName, obj *arkv1alpha1.Query) {
+	resourceVersion := obj.ResourceVersion
 	if rec := recover(); rec != nil {
 		logf.FromContext(ctx).Error(
 			fmt.Errorf("query execution goroutine panic: %v", rec),
 			"Query execution goroutine panicked",
 			"stack", string(debug.Stack()),
 		)
-		r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
+		resourceVersion = r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
 	}
 	r.operations.Delete(namespacedName)
-	if r.sem != nil {
-		r.sem.Release(1)
+	if r.sched != nil {
+		r.sched.release(namespacedName.Namespace)
 	}
+	r.signalRequeue(namespacedName, resourceVersion)
 }
 
 // markQueryErroredAfterPanic sets the query status to error so it converges
 // instead of relying on the safety-net requeue to retry the panicking dispatch.
-func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namespacedName types.NamespacedName, rec any) {
+func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namespacedName types.NamespacedName, rec any) string {
 	var q arkv1alpha1.Query
 	if err := r.Get(ctx, namespacedName, &q); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to fetch query after panic; leaving to safety-net requeue")
-		return
+		return ""
 	}
 	if q.Status.Response == nil {
 		q.Status.Response = &arkv1alpha1.Response{}
@@ -538,7 +613,9 @@ func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namesp
 	q.Status.Response.Content = fmt.Sprintf("query execution goroutine panicked: %v", rec)
 	if err := r.updateStatus(ctx, &q, statusError); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to mark query errored after panic; leaving to safety-net requeue")
+		return ""
 	}
+	return q.ResourceVersion
 }
 
 func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[string]string {
@@ -1363,19 +1440,36 @@ func (r *QueryReconciler) deleteBrokerSessionQuery(ctx context.Context, query *a
 	return r.deleteBrokerQueryResource(ctx, query, common.QuerySessionsEndpointFmt, "session query", query.Name)
 }
 
+func (r *QueryReconciler) initImpersonatedClientCache() {
+	r.saClients = newImpersonatedClientCache(defaultMaxImpersonatedClients, r.buildImpersonatedClient)
+}
+
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
 	serviceAccount := query.Spec.ServiceAccount
 	if serviceAccount == "" {
 		return r.Client, nil
 	}
+	r.saClientsOnce.Do(r.initImpersonatedClientCache)
+	return r.saClients.get(query.Namespace, serviceAccount)
+}
 
+// buildImpersonatedClient returns a direct (non-cached) client for the identity.
+// Reads hit the API server rather than a per-identity informer cache: caching
+// would need a list+watch per service account, and under the cache's entry
+// bound that is a memory hazard, so we trade a live read for bounded memory.
+func (r *QueryReconciler) buildImpersonatedClient(namespace, serviceAccount string) (client.Client, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
 
+	// Disable the client-side rate limiter (InClusterConfig would default it to
+	// 5 QPS) and rely on server-side API Priority and Fairness, as
+	// ctrl.GetConfigOrDie does; this client is now shared across queries.
+	cfg.QPS = -1
+
 	cfg.Impersonate = rest.ImpersonationConfig{
-		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", query.Namespace, serviceAccount),
+		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, serviceAccount),
 	}
 
 	impersonatedClient, err := client.New(cfg, client.Options{
@@ -1383,7 +1477,7 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 		Mapper: r.RESTMapper(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", query.Namespace, serviceAccount, err)
+		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", namespace, serviceAccount, err)
 	}
 
 	return impersonatedClient, nil
@@ -1409,9 +1503,10 @@ func (r *QueryReconciler) handleResumableDenial(ctx context.Context, obj *arkv1a
 		if err := r.updateStatus(ctx, obj, statusError); err != nil {
 			return ctrl.Result{}, err
 		}
-		// The status update to error re-triggers reconcile, where the
-		// terminal-phase case computes the TTL-based requeue for GC.
-		return ctrl.Result{}, nil
+		// Requeue explicitly so the terminal-phase case computes the
+		// TTL-based requeue for GC; the update predicate drops the watch
+		// event this status write would otherwise trigger.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	log.Info("A2ATask denied (resumable), resuming query execution for graceful handling", "taskId", taskID, "cascadeCount", count)
@@ -1527,15 +1622,45 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.initSemaphore()
+	return setupQueryController(mgr, r, r)
+}
+
+// setupQueryController takes the reconciler to complete with separately from
+// r so a test can wrap it (e.g. to count Reconcile invocations) while still
+// using r for the mapper function and controller options.
+func setupQueryController(mgr ctrl.Manager, r *QueryReconciler, rec reconcile.Reconciler) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&arkv1alpha1.Query{}).
+		For(&arkv1alpha1.Query{}, builder.WithPredicates(queryUpdatePredicate())).
+		WatchesRawSource(source.Channel(r.requeueCh, &handler.EnqueueRequestForObject{})).
 		Watches(
 			&arkv1alpha1.A2ATask{},
 			handler.EnqueueRequestsFromMapFunc(r.findQueriesForA2ATask),
 		).
 		Named("query").
 		WithOptions(r.buildControllerOptions()).
-		Complete(r)
+		Complete(rec)
+}
+
+// queryUpdatePredicate drops Update events that only changed Status
+func queryUpdatePredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldQuery, okOld := e.ObjectOld.(*arkv1alpha1.Query)
+			newQuery, okNew := e.ObjectNew.(*arkv1alpha1.Query)
+			if !okOld || !okNew {
+				return true
+			}
+			old := oldQuery.DeepCopy()
+			newQ := newQuery.DeepCopy()
+			old.Status = arkv1alpha1.QueryStatus{}
+			newQ.Status = arkv1alpha1.QueryStatus{}
+			old.ResourceVersion = ""
+			newQ.ResourceVersion = ""
+			old.ManagedFields = nil
+			newQ.ManagedFields = nil
+			return !equality.Semantic.DeepEqual(old, newQ)
+		},
+	}
 }
 
 // findQueriesForA2ATask maps an A2ATask to its associated Query for reconciliation
@@ -1674,7 +1799,26 @@ func (r *QueryReconciler) handleQueryDispatch(
 
 func (r *QueryReconciler) initSemaphore() {
 	if r.MaxConcurrentQueries > 0 {
-		r.sem = semaphore.NewWeighted(int64(r.MaxConcurrentQueries))
+		r.sched = newFairScheduler(r.MaxConcurrentQueries, queryFairnessWaitWindow)
+	}
+	r.requeueCh = make(chan event.GenericEvent, requeueChannelBufferSize)
+}
+
+// signalRequeue enqueues an immediate reconcile for namespacedName. Non-blocking:
+// a full buffer just falls back to the safety-net requeue.
+func (r *QueryReconciler) signalRequeue(namespacedName types.NamespacedName, resourceVersion string) {
+	if r.requeueCh == nil {
+		return
+	}
+	if resourceVersion != "" {
+		r.pendingFreshReads.Store(namespacedName, resourceVersion)
+	}
+	obj := &arkv1alpha1.Query{}
+	obj.Name = namespacedName.Name
+	obj.Namespace = namespacedName.Namespace
+	select {
+	case r.requeueCh <- event.GenericEvent{Object: obj}:
+	default:
 	}
 }
 

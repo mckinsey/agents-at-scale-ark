@@ -17,6 +17,10 @@ func ValidateTool(tool *arkv1alpha1.Tool) ([]string, error) {
 		}
 	}
 
+	if err := ValidateApprovalConfig(tool.Spec.Approval, ""); err != nil {
+		return nil, err
+	}
+
 	switch tool.Spec.Type {
 	case ToolTypeHTTP:
 		return validateHTTP(tool.Spec.HTTP)

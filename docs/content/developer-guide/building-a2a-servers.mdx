@@ -186,10 +186,10 @@ ARK provides flexible timeout configuration for A2A agent execution through mult
 
 A2A execution automatically respects query timeouts:
 
-1. **Query.spec.timeout** (default: 5 minutes) sets the overall time limit
+1. **Query.spec.timeout** (default: 30 minutes) sets the overall time limit
 2. **A2AServer.spec.timeout** (optional) can reduce the timeout for specific A2A servers
 
-The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses. Values above 5 minutes take effect: the HTTP client that carries A2A requests keeps only a 30 minute backstop for callers that set no deadline of their own.
+The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses. Any `spec.timeout` takes effect — the context deadline is authoritative, including values above the 30 minute default. The HTTP client applies a 30 minute backstop only to callers that set no deadline of their own; a query always carries its own budget, so the backstop never caps it.
 
 ### Configuring A2AServer Timeout
 

@@ -24,6 +24,9 @@ spec:
     - jsonPath: .spec.queryTTL
       name: QueryTTL
       type: string
+    - jsonPath: .spec.defaultMemory.name
+      name: DefaultMemory
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -53,8 +56,27 @@ spec:
             description: |-
               ArkConfigSpec defines cluster-wide Ark defaults. The singleton
               object named "default" is consulted by admission webhooks when
-              a Query is created without an explicit ttl.
+              a Query is created without an explicit ttl or memory.
             properties:
+              defaultMemory:
+                description: |-
+                  DefaultMemory names the Memory injected into Query resources
+                  that do not specify spec.memory, and only when a Memory with
+                  that name exists in the Query namespace. Only name is
+                  meaningful: the Memory is always resolved in the Query own
+                  namespace, and an explicit namespace is rejected because a
+                  cluster-wide value would commingle conversation history
+                  across tenants. If unset, no memory is injected and
+                  resolution falls back to the Memory named "default".
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                type: object
               queryTTL:
                 description: |-
                   QueryTTL is the default TTL injected into Query resources
