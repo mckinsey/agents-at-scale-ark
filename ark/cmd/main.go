@@ -253,9 +253,16 @@ func setupManager(cfg config) (ctrl.Manager, *certwatcher.CertWatcher, *certwatc
 
 	cacheOptions := cache.Options{
 		DefaultTransform: cachetransform.StripManagedFields,
-		ByObject: map[client.Object]cache.ByObject{
+	}
+	// The per-type Query transform forces controller-runtime to resolve the
+	// Query RESTMapping via discovery when the manager is built. The apiserver
+	// role serves ark.mckinsey.com/v1alpha1 itself, so that group is not yet
+	// discoverable at startup and the lookup fails. Only the controller role
+	// reconciles Queries, so scope the transform to it.
+	if cfg.role == RoleController {
+		cacheOptions.ByObject = map[client.Object]cache.ByObject{
 			&arkv1alpha1.Query{}: {Transform: cachetransform.StripQuery},
-		},
+		}
 	}
 	if ns := watchNamespaces(); len(ns) > 0 {
 		defaults := make(map[string]cache.Config, len(ns))
