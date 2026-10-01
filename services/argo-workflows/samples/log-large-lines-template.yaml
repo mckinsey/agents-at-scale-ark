@@ -1,0 +1,87 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: log-large-lines-template
+  annotations:
+    workflows.argoproj.io/title: "Log Large Lines"
+    workflows.argoproj.io/description: |
+      Emits lines large enough to span several container runtime log chunks,
+      a single line larger than the per-page byte budget, and a page whose
+      lines together exceed that budget. Exercises bounded log window reads
+      and the "some lines were dropped" notice.
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  arguments:
+    parameters:
+    - name: chunk-line-bytes
+      value: "200000"
+    - name: chunk-line-count
+      value: "5"
+    - name: oversized-line-bytes
+      value: "1572864"
+    - name: capped-line-bytes
+      value: "4096"
+    - name: capped-line-count
+      value: "3000"
+
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: chunk-spanning
+        template: emit-fat-lines
+        arguments:
+          parameters:
+          - name: bytes
+            value: "{{workflow.parameters.chunk-line-bytes}}"
+          - name: count
+            value: "{{workflow.parameters.chunk-line-count}}"
+          - name: label
+            value: "chunk-spanning"
+      - name: oversized-line
+        template: emit-fat-lines
+        arguments:
+          parameters:
+          - name: bytes
+            value: "{{workflow.parameters.oversized-line-bytes}}"
+          - name: count
+            value: "1"
+          - name: label
+            value: "oversized"
+      - name: byte-capped-page
+        template: emit-fat-lines
+        arguments:
+          parameters:
+          - name: bytes
+            value: "{{workflow.parameters.capped-line-bytes}}"
+          - name: count
+            value: "{{workflow.parameters.capped-line-count}}"
+          - name: label
+            value: "byte-capped"
+
+  - name: emit-fat-lines
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Emits N lines of a fixed large size"
+    inputs:
+      parameters:
+      - name: bytes
+      - name: count
+      - name: label
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        set -euo pipefail
+        bytes="{{inputs.parameters.bytes}}"
+        count="{{inputs.parameters.count}}"
+        label="{{inputs.parameters.label}}"
+
+        echo "start ${label}: ${count} lines of ${bytes} bytes"
+        pad="$(printf '%*s' "${bytes}" '' | tr ' ' '#')"
+        for i in $(seq 1 "${count}"); do
+          printf '%s %05d BEGIN %s END %05d\n' "${label}" "${i}" "${pad}" "${i}"
+        done
+        echo "end ${label}"

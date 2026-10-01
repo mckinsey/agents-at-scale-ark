@@ -1,6 +1,13 @@
 'use client';
 
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Build } from '@/components/icons';
@@ -8,6 +15,7 @@ import { NamespacedLink } from '@/components/namespaced-link';
 import {
   LearnMoreButton,
   ResourceEmptyState,
+  ResourceErrorState,
   ResourceNoResults,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
@@ -63,34 +71,41 @@ export function ToolsSection() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const showLoading = useDelayedLoading(loading);
   const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
+  const hasLoadedOnce = useRef(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [toolsData, agentsData] = await Promise.all([
+        toolsService.getAll(namespace),
+        agentsService.listWithTools(namespace),
+      ]);
+      setTools(toolsData);
+      setAgents(agentsData);
+      setError(null);
+      hasLoadedOnce.current = true;
+    } catch (err) {
+      const normalizedError =
+        err instanceof Error ? err : new Error('An unexpected error occurred');
+      console.error('Failed to load data:', normalizedError);
+      setError(normalizedError);
+      toast.error('Failed to Load Data', {
+        description: normalizedError.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [namespace]);
 
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const [toolsData, agentsData] = await Promise.all([
-          toolsService.getAll(namespace),
-          agentsService.listWithTools(namespace),
-        ]);
-        setTools(toolsData);
-        setAgents(agentsData);
-      } catch (error) {
-        console.error('Failed to load data:', error);
-        toast.error('Failed to Load Data', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    hasLoadedOnce.current = false;
+    setTools([]);
+    setError(null);
     loadData();
-  }, [namespace]);
+  }, [loadData]);
 
   const usage = useMemo(() => {
     const map: Record<string, { inUse: boolean; reason?: string }> = {};
@@ -136,17 +151,18 @@ export function ToolsSection() {
       await toolsService.delete(namespace, tool.name);
       setTools(prev => prev.filter(t => t.id !== id));
       toast.success('Tool deleted successfully');
-    } catch (error) {
+    } catch (err) {
       toast.error('Failed to Delete Tool', {
         description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
+          err instanceof Error ? err.message : 'An unexpected error occurred',
       });
     }
   };
 
-  const isEmpty = !loading && tools.length === 0;
+  const hasError = Boolean(error);
+  const loadFailed = hasError && !hasLoadedOnce.current;
+  const refreshFailed = hasError && hasLoadedOnce.current;
+  const isEmpty = !loading && !hasError && tools.length === 0;
 
   const addToolButton = readOnlyMode ? (
     <Button disabled>Add tool</Button>
@@ -162,6 +178,15 @@ export function ToolsSection() {
       <div className="mt-5 flex flex-1 items-center justify-center">
         <div className="py-8 text-center">Loading...</div>
       </div>
+    );
+  } else if (loadFailed) {
+    body = (
+      <ResourceErrorState
+        className="mt-5"
+        title="Couldn't load tools"
+        description={error?.message}
+        onRetry={loadData}
+      />
     );
   } else if (isEmpty) {
     body = (
@@ -185,6 +210,13 @@ export function ToolsSection() {
   } else {
     body = (
       <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+        {refreshFailed && (
+          <ResourceErrorState
+            title="Couldn't refresh tools"
+            description="Showing the last loaded version."
+            onRetry={loadData}
+          />
+        )}
         <div className="flex flex-none items-end gap-3">
           <ResourceSearchInput
             value={filters.q}

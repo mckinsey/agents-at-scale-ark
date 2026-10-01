@@ -1,20 +1,13 @@
 'use client';
 
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { toast } from '@/components/ui/sonner';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { NamespacedLink } from '@/components/namespaced-link';
 import {
   LearnMoreButton,
   ResourceEmptyState,
+  ResourceErrorState,
   ResourceNoResults,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
@@ -28,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { useDelayedLoading } from '@/lib/hooks';
 import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -80,8 +74,15 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly emptyDescription: ReactNode;
   readonly headerActions?: ReactNode;
   readonly originFilter?: ResourceListFilter<T>;
-  readonly loadItems: () => Promise<T[]>;
-  readonly deleteItem: (id: string) => Promise<unknown>;
+  // Data is owned by the caller via React Query (fetching + caching).
+  readonly items: T[];
+  readonly loading: boolean;
+  readonly error?: unknown;
+  // React Query's dataUpdatedAt: 0 until the first successful load, so it
+  // distinguishes an initial load failure from a failed refresh.
+  readonly dataUpdatedAt?: number;
+  readonly onDelete: (id: string) => void;
+  readonly onReload: () => void;
   readonly renderTable: (
     items: T[],
     onDelete: (id: string) => void,
@@ -103,18 +104,29 @@ export function ResourceListSection<T extends ResourceListItem>({
   emptyDescription,
   headerActions,
   originFilter,
-  loadItems,
-  deleteItem,
+  items,
+  loading,
+  error,
+  dataUpdatedAt,
+  onDelete,
+  onReload,
   renderTable,
 }: ResourceListSectionProps<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
   const showLoading = useDelayedLoading(loading);
-  const { readOnlyMode, namespace } = useNamespace();
+  const { readOnlyMode } = useNamespace();
 
-  const loadItemsRef = useRef(loadItems);
-  loadItemsRef.current = loadItems;
+  const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(`Failed to Load ${pluralLabel}`, {
+      description:
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+    });
+  }, [error, pluralLabel]);
 
   const originFilterOptions = useMemo(() => {
     if (!originFilter) return [];
@@ -205,7 +217,7 @@ export function ResourceListSection<T extends ResourceListItem>({
       : `There are no ${statusLabel} ${pluralLabel} at the moment.`;
 
   return (
-    <div className="flex h-full w-full content-shell flex-col">
+    <div className="content-shell flex h-full w-full flex-col">
       <ResourcePageHeader
         icon={icon}
         title={
@@ -233,7 +245,15 @@ export function ResourceListSection<T extends ResourceListItem>({
           <div className="py-8 text-center">Loading...</div>
         </div>
       )}
-      {!showLoading && isEmpty && (
+      {!showLoading && loadFailed && (
+        <ResourceErrorState
+          className="mt-5"
+          title={`Couldn't load ${pluralLabel}`}
+          description={errorMessage}
+          onRetry={onReload}
+        />
+      )}
+      {!showLoading && !loadFailed && isEmpty && (
         <ResourceEmptyState
           icon={icon}
           title={emptyTitle}
@@ -252,8 +272,15 @@ export function ResourceListSection<T extends ResourceListItem>({
           }
         />
       )}
-      {!showLoading && !isEmpty && (
+      {!showLoading && !loadFailed && !isEmpty && (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+          {refreshFailed && (
+            <ResourceErrorState
+              title={`Couldn't refresh ${pluralLabel}`}
+              description="Showing the last loaded version."
+              onRetry={onReload}
+            />
+          )}
           <div className="flex flex-none items-end gap-3">
             <ResourceSearchInput
               value={filters.q}
@@ -314,7 +341,7 @@ export function ResourceListSection<T extends ResourceListItem>({
             <ResourceNoResults icon={icon} message={noResultsMessage} />
           ) : (
             <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-              {renderTable(filteredItems, handleDelete, reload)}
+              {renderTable(filteredItems, onDelete, onReload)}
             </ScrollArea>
           )}
         </div>

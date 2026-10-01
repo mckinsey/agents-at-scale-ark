@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback } from 'react';
+import { useParams } from 'next/navigation';
 import { ChevronLeft } from '@/components/icons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -15,8 +15,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ConversationsTab } from '@/components/sessions-conversations/conversations-tab';
 import { LogsTab } from '@/components/sessions-conversations/logs-tab';
 import { SessionConversationHeader } from '@/components/sessions-conversations/session-conversation-header';
-import type { BrokerSession } from '@/lib/services/broker-sessions';
-import { generateUUID } from '@/lib/utils/uuid';
 
 const HISTORY_TAB = 'history';
 const LOGS_TAB = 'logs';
@@ -24,7 +22,6 @@ const LOGS_TAB = 'logs';
 export default function SessionDetailPage() {
   const params = useParams();
   const session_id = params.session_id as string;
-  const router = useRouter();
   const { push } = useNamespacedNavigation();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -51,62 +48,7 @@ export default function SessionDetailPage() {
     push(sessionsReturnHref);
   }, [push, sessionsReturnHref]);
 
-  // Skip API call for new sessions (avoid 404 errors)
-  const { data: backendSession, isLoading, isError } = useGetSession(session_id, {
-    enabled: !isNewSession,
-  });
-
-  // Create temporary session from query params for new sessions
-  const [temporarySession] = useState<BrokerSession | null>(() => {
-    if (!initialParticipant || !initialType) {
-      return null;
-    }
-
-    return {
-      sessionId: session_id,
-      name: session_id,
-      status: 'active',
-      errorCount: 0,
-      participants: [{
-        id: generateUUID(),
-        name: initialParticipant,
-        type: initialType,
-      }],
-      conversationCount: 0,
-      createdAt: new Date().toISOString(),
-      lastActivity: new Date().toISOString(),
-    };
-  });
-
-  const session = useMemo(() => {
-    if (!backendSession) {
-      return temporarySession;
-    }
-
-    // If backend has no participants but temporary session does, use temporary participants
-    if (backendSession.participants.length === 0 && temporarySession?.participants.length) {
-      return {
-        ...backendSession,
-        participants: temporarySession.participants,
-      };
-    }
-
-    return backendSession;
-  }, [backendSession, temporarySession]);
-
-  const memoizedInitialParticipant = useMemo(() => {
-    if (isNewSession && initialParticipant) {
-      return {
-        name: initialParticipant,
-        type: initialType || 'agent' as const
-      };
-    }
-    return undefined;
-  }, [isNewSession, initialParticipant, initialType]);
-
-  const memoizedInitialConversationId = useMemo(() => {
-    return isNewSession ? initialConversationId || undefined : undefined;
-  }, [isNewSession, initialConversationId]);
+  const { data: session, isLoading, isError } = useGetSession(session_id);
 
   if (isLoading && !session) {
     return (
@@ -180,13 +122,7 @@ export default function SessionDetailPage() {
           value={HISTORY_TAB}
           className="flex min-h-0 flex-col h-[calc(100vh-104px)]"
         >
-          <ConversationsTab
-            sessionId={session_id}
-            initialParticipant={memoizedInitialParticipant}
-            initialConversationId={memoizedInitialConversationId}
-            hasSentMessage={hasSentMessage}
-            onMessageSent={handleMessageSent}
-          />
+          <ConversationsTab sessionId={session_id} />
         </TabsContent>
 
         <TabsContent

@@ -1,17 +1,27 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   getAppRouterMock,
   resetAppRouterMock,
 } from '@/__tests__/setup/mock-app-router';
 import { SessionsSection } from '@/components/sections/sessions-section';
+import { APIError } from '@/lib/api/client';
+import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
+import { resetNodeLogStore } from '@/lib/services/workflow-logs-store';
 import {
+  type MappedStepStatus,
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
-import { workflowsService } from '@/lib/services/workflows';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 
 const mockUseNamespace = vi.fn();
@@ -36,6 +46,10 @@ vi.mock('@/lib/services/workflows', () => ({
     getPodLogs: vi.fn().mockRejectedValue(new Error('pod gone')),
     getWorkflowLogs: vi.fn().mockRejectedValue(new Error('404 not found')),
   },
+}));
+
+vi.mock('@/lib/hooks/use-debounce', () => ({
+  useDebounce: vi.fn(value => value),
 }));
 
 vi.mock('@/lib/services/workflow-mapper', () => ({
@@ -219,7 +233,6 @@ describe('SessionsSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetAppRouterMock();
     mockUseNamespace.mockReturnValue({
       namespace: 'default',
       isNamespaceResolved: true,
@@ -1251,6 +1264,9 @@ describe('SessionsSection', () => {
 
     it('should report an error when step logs cannot be loaded', async () => {
       const user = userEvent.setup();
+      vi.mocked(fetchNodeLogWindow).mockRejectedValue(
+        new APIError('Logs are no longer available for this node', 404),
+      );
       vi.mocked(useWorkflow).mockReturnValue({
         workflow: mockWorkflow,
         loading: false,
@@ -1265,18 +1281,23 @@ describe('SessionsSection', () => {
       await user.click(expandButton);
 
       await waitFor(() => {
-        expect(screen.getByText(/Logs not available/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/Logs are no longer available/i),
+        ).toBeInTheDocument();
       });
     });
 
-    it('should fall back to archived logs and skip fetching without pod details', async () => {
+    it('should render fetched step logs and skip fetching without pod details', async () => {
       const user = userEvent.setup();
-      vi.mocked(workflowsService.getPodLogs).mockRejectedValueOnce(
-        new Error('pod gone'),
-      );
-      vi.mocked(workflowsService.getWorkflowLogs).mockResolvedValueOnce(
-        'archived log line',
-      );
+      vi.mocked(fetchNodeLogWindow).mockResolvedValueOnce({
+        content: 'archived log line',
+        line_count: 1,
+        byte_count: 18,
+        has_more_before: false,
+        truncated: false,
+        first_timestamp: null,
+        last_timestamp: null,
+      });
       vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
         {
           id: 'logs-workflow',
@@ -1325,12 +1346,99 @@ describe('SessionsSection', () => {
       await waitFor(() => {
         expect(screen.getByText('archived log line')).toBeInTheDocument();
       });
+      expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+      expect(fetchNodeLogWindow).toHaveBeenCalledWith(
+        {
+          namespace: 'default',
+          workflowName: 'logs-workflow',
+          nodeId: 'node-1',
+          podName: 'logs-workflow-with-logs-123',
+        },
+        expect.anything(),
+      );
 
       await user.click(
         screen.getByRole('button', { name: /no-logs, expand/i }),
       );
 
       expect(screen.getByText('alpine:3.20')).toBeInTheDocument();
+      expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Step log polling', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function expandStepWithStatus(status: MappedStepStatus) {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({
+        advanceTimers: vi.advanceTimersByTime,
+      });
+      vi.mocked(fetchNodeLogWindow).mockResolvedValue({
+        content: 'log line',
+        line_count: 1,
+        byte_count: 8,
+        has_more_before: false,
+        truncated: false,
+        first_timestamp: null,
+        last_timestamp: 't1',
+      });
+      vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
+        {
+          id: 'poll-workflow',
+          name: 'poll-workflow',
+          type: 'workflow' as const,
+          status,
+          startedAt: '2024-01-15T10:00:00Z',
+          duration: '1m',
+          steps: [
+            {
+              id: 'poll-step',
+              name: 'poll-step',
+              displayName: 'poll-step',
+              type: 'container' as const,
+              status,
+              detail: {
+                podName: 'poll-workflow-poll-step-123',
+                workflowName: 'poll-workflow',
+                nodeId: 'node-1',
+                namespace: 'default',
+              },
+            },
+          ],
+        },
+      ]);
+
+      render(<SessionsSection />);
+
+      await user.click(
+        screen.getByRole('button', { name: /poll-step, expand/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('log line')).toBeInTheDocument();
+      });
+      expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3100);
+      });
+    }
+
+    it('should keep polling logs for a running step', async () => {
+      await expandStepWithStatus('running');
+
+      expect(vi.mocked(fetchNodeLogWindow).mock.calls.length).toBeGreaterThan(
+        1,
+      );
+    });
+
+    it('should fetch logs once for a finished step', async () => {
+      await expandStepWithStatus('succeeded');
+
+      expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
     });
   });
 });

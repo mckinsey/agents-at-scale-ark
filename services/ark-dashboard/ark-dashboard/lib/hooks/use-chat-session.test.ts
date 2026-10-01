@@ -4,6 +4,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { agentsService, chatService } from '@/lib/services';
+import { trackEvent } from '@/lib/analytics/singleton';
 
 import { useChatSession } from './use-chat-session';
 
@@ -46,6 +47,19 @@ function createWrapper() {
     React.createElement(Provider, null, children);
 }
 
+// The real chunk stream is an async generator; wrap array fixtures so tests
+// pass the same shape the hook consumes.
+async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
+  for (const item of items) {
+    yield item;
+  }
+}
+
+// Shaped like the DOM AbortError the real fetch throws.
+function makeAbortError(): Error {
+  return Object.assign(new Error('Aborted'), { name: 'AbortError' });
+}
+
 describe('useChatSession - Approval Handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -77,7 +91,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-123',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: toAsyncIterable(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -120,7 +134,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-456',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: toAsyncIterable(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -157,7 +171,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-789',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: toAsyncIterable(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -200,7 +214,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-poll',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: toAsyncIterable(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -313,7 +327,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-complete',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: toAsyncIterable(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -376,7 +390,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-error',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: toAsyncIterable(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -449,7 +463,7 @@ describe('useChatSession - Approval Handling', () => {
       const stopPhasePolling = vi.fn();
       vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
         queryName: 'test-query-stop',
-        chunks: mockChunks as AsyncIterable<unknown>,
+        chunks: toAsyncIterable(mockChunks),
       });
       vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
         stopPhasePolling,
@@ -517,10 +531,42 @@ describe('useChatSession - Conversation ID Continuity', () => {
     ];
   }
 
+  it('releases the chunk stream when the loop breaks early on an error chunk', async () => {
+    const cleanup = vi.fn();
+    async function* erroringChunks(): AsyncGenerator<Record<string, unknown>> {
+      try {
+        yield { error: { message: 'boom' } };
+        yield { choices: [{ delta: { content: 'unreached' } }] };
+      } finally {
+        cleanup();
+      }
+    }
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'test-query-error-break',
+      chunks: erroringChunks(),
+    });
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    // The error chunk breaks the consumer loop; stopStreamOnSignal must
+    // propagate that to the source generator so its reader is released.
+    await waitFor(() => {
+      expect(cleanup).toHaveBeenCalled();
+    });
+  });
+
   it('fetches conversationId via getQuery when the final stream chunk is missing', async () => {
     vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
       queryName: 'test-query-missing-final',
-      chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+      chunks: toAsyncIterable(contentChunkWithoutConversationId()),
     });
     vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
     vi.mocked(chatService.getQuery).mockResolvedValueOnce({
@@ -548,11 +594,11 @@ describe('useChatSession - Conversation ID Continuity', () => {
     vi.mocked(chatService.startStreamChatResponse)
       .mockResolvedValueOnce({
         queryName: 'test-query-first',
-        chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+        chunks: toAsyncIterable(contentChunkWithoutConversationId()),
       })
       .mockResolvedValueOnce({
         queryName: 'test-query-second',
-        chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+        chunks: toAsyncIterable(contentChunkWithoutConversationId()),
       });
     vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
     vi.mocked(chatService.getQuery).mockResolvedValue({
@@ -588,9 +634,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
   it('does not call getQuery when the stream already provides a conversationId', async () => {
     vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
       queryName: 'test-query-has-final',
-      chunks: finalChunkWithConversationId(
-        'conv-from-stream',
-      ) as AsyncIterable<unknown>,
+      chunks: toAsyncIterable(finalChunkWithConversationId('conv-from-stream')),
     });
     vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
 
@@ -613,7 +657,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
   it('recovers gracefully when the getQuery fallback throws', async () => {
     vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
       queryName: 'test-query-throws',
-      chunks: contentChunkWithoutConversationId() as AsyncIterable<unknown>,
+      chunks: toAsyncIterable(contentChunkWithoutConversationId()),
     });
     vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
     vi.mocked(chatService.getQuery).mockRejectedValueOnce(
@@ -654,7 +698,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
         const stopPhasePolling = vi.fn();
         vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
           queryName: 'test-query-metadata',
-          chunks: mockChunks as AsyncIterable<unknown>,
+          chunks: toAsyncIterable(mockChunks),
         });
         vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
           stopPhasePolling,
@@ -715,7 +759,7 @@ describe('useChatSession - Conversation ID Continuity', () => {
         const stopPhasePolling = vi.fn();
         vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
           queryName: 'test-query-tools',
-          chunks: mockChunks as AsyncIterable<unknown>,
+          chunks: toAsyncIterable(mockChunks),
         });
         vi.mocked(chatService.streamQueryStatus).mockResolvedValueOnce(
           stopPhasePolling,
@@ -748,6 +792,116 @@ describe('useChatSession - Conversation ID Continuity', () => {
           },
           { timeout: 10000 },
         );
+    });
+  });
+});
+
+describe('useChatSession - Stream force-close (#2862)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(agentsService.getByName).mockResolvedValue(null);
+    vi.mocked(chatService.resolveMemoryNotice).mockResolvedValue({
+      settled: true,
+      notice: null,
+    });
+    globalThis.sessionStorage?.clear();
+  });
+
+  it('fires chat_stream_force_closed when a terminal phase force-closes a hung stream', async () => {
+    vi.mocked(chatService.startStreamChatResponse).mockImplementation(
+      async (
+        _namespace,
+        _input,
+        _targetType,
+        _targetName,
+        _sessionId,
+        _conversationId,
+        _timeout,
+        abortSignal,
+      ) => {
+        async function* hung(): AsyncGenerator<Record<string, unknown>> {
+          yield { choices: [{ delta: { content: 'x' } }] };
+          await new Promise<void>((_resolve, reject) => {
+            if (abortSignal?.aborted) return reject(makeAbortError());
+            abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+        }
+        return { queryName: 'q-force', chunks: hung() };
+      },
+    );
+    vi.mocked(chatService.streamQueryStatus).mockImplementation(
+      async (_namespace, _queryName, _onUpdate, _pollInterval, onTerminal) => {
+        onTerminal?.('done');
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(trackEvent)).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'chat_stream_force_closed' }),
+      );
+    });
+  });
+
+  it('does not fire chat_stream_force_closed on a clean stream completion', async () => {
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'q-clean',
+      chunks: toAsyncIterable([
+        { choices: [{ delta: { content: 'hi' }, finish_reason: 'stop' }] },
+      ]),
+    });
+    // The stream ends on its own; the phase poll never reports terminal.
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    expect(vi.mocked(trackEvent)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'chat_stream_force_closed' }),
+    );
+  });
+
+  it('tears down phase polling even when the stream loop throws (user cancel)', async () => {
+    const stopPhasePolling = vi.fn();
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'q-throw',
+      chunks: (async function* (): AsyncGenerator<Record<string, unknown>> {
+        yield { choices: [{ delta: { content: 'x' } }] };
+        // External cancel aborts the read; not our terminal-phase force-close.
+        throw makeAbortError();
+      })(),
+    });
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(stopPhasePolling);
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    // The AbortError propagates out of the loop; cleanup must still have run.
+    await waitFor(() => {
+      expect(stopPhasePolling).toHaveBeenCalled();
     });
   });
 });
