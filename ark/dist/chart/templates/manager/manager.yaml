@@ -49,6 +49,14 @@ spec:
             value: "30"
           - name: ARK_INLINE_TOOLS_ENABLED
             value: {{ include "chart.inlineToolsEnabled" . | quote }}
+          {{- if eq (include "chart.inlineToolsEnabled" .) "true" }}
+          - name: ARK_INLINE_RUNNER_IMAGE_REPOSITORY
+            value: {{ .Values.inlineTools.runner.image.repository | quote }}
+          - name: ARK_INLINE_RUNNER_IMAGE_TAG
+            value: {{ .Values.inlineTools.runner.image.tag | default .Chart.AppVersion | quote }}
+          - name: ARK_INLINE_ACTIVATOR_NAMESPACE
+            value: {{ .Release.Namespace | quote }}
+          {{- end }}
           {{- with .Values.controllerManager.watchNamespaces }}
           - name: ARK_WATCH_NAMESPACES
             value: {{ join "," . | quote }}
