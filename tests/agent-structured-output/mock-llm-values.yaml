@@ -19,6 +19,7 @@ config:
   # Fail closed: a completions request that does not carry the agent's
   # outputSchema as response_format matches only this rule and errors the query.
   - path: "/v1/chat/completions"
+    match: "@"
     response:
       status: 500
       content: '"request carried no response_format.json_schema"'

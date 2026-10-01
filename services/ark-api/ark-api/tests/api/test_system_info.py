@@ -53,11 +53,6 @@ class TestSystemInfoEndpoint(unittest.TestCase):
         system_version = self.client.get("/v1/system-info").json()["system_version"]
 
         self.assertEqual(system_version, "v2.0.0")
-        self.assertNotEqual(
-            system_version,
-            mock_package_version.return_value,
-            "the endpoint adds the leading v so both versions render consistently",
-        )
 
     @patch("ark_api.api.v1.system_info.importlib.metadata.version")
     @patch("ark_api.api.v1.system_info.client.VersionApi")

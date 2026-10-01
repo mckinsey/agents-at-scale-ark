@@ -34,6 +34,7 @@ spec:
               for i in $(seq 1 20); do
                 if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
+                  | grep "\"namespace\":\"$NAMESPACE\"" \
                   | grep '"name":"audit-proxied-agent"' \
                   | grep -q '"verb":"create"'; then
                   echo "OK create of audit-proxied-agent is audited"
@@ -43,6 +44,9 @@ spec:
               done
               echo "FAIL no create audit record for audit-proxied-agent"
               exit 1
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
 
     - name: update-and-assert-audited
       try:
@@ -54,6 +58,7 @@ spec:
               for i in $(seq 1 20); do
                 if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
+                  | grep "\"namespace\":\"$NAMESPACE\"" \
                   | grep '"name":"audit-proxied-agent"' \
                   | grep -Eq '"verb":"(update|patch)"'; then
                   echo "OK update of audit-proxied-agent is audited"
@@ -77,6 +82,7 @@ spec:
               for i in $(seq 1 20); do
                 if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
+                  | grep "\"namespace\":\"$NAMESPACE\"" \
                   | grep '"name":"audit-proxied-agent"' \
                   | grep -q '"verb":"delete"'; then
                   echo "OK delete of audit-proxied-agent is audited"
@@ -163,6 +169,7 @@ spec:
               for i in $(seq 1 20); do
                 if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
+                  | grep "\"namespace\":\"$NAMESPACE\"" \
                   | grep '"name":"audit-direct-agent"' \
                   | grep -q '"verb":"create"'; then
                   echo "OK direct-path create is audited by the aggregated apiserver"

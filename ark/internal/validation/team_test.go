@@ -372,22 +372,77 @@ func TestValidateGraphForSelector(t *testing.T) {
 	}
 }
 
-func TestValidateGraphForSelectorAcceptsValidGraph(t *testing.T) {
-	team := &arkv1alpha1.Team{
-		ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
-		Spec: arkv1alpha1.TeamSpec{
-			Strategy: StrategySelector,
-			Members: []arkv1alpha1.TeamMember{
-				{Name: "researcher", Type: MemberTypeAgent},
-				{Name: "writer", Type: MemberTypeAgent},
-			},
-			Graph: &arkv1alpha1.TeamGraphSpec{Edges: []arkv1alpha1.TeamGraphEdge{
+func TestValidateGraphForSelectorAcceptsValidGraphs(t *testing.T) {
+	members := []arkv1alpha1.TeamMember{
+		{Name: "researcher", Type: MemberTypeAgent},
+		{Name: "writer", Type: MemberTypeAgent},
+		{Name: "reviewer", Type: MemberTypeAgent},
+		{Name: "editors", Type: MemberTypeTeam},
+	}
+
+	tests := []struct {
+		name  string
+		edges []arkv1alpha1.TeamGraphEdge
+	}{
+		{
+			name:  "single edge",
+			edges: []arkv1alpha1.TeamGraphEdge{{From: "researcher", To: "writer"}},
+		},
+		{
+			name: "linear chain",
+			edges: []arkv1alpha1.TeamGraphEdge{
 				{From: "researcher", To: "writer"},
-			}},
+				{From: "writer", To: "reviewer"},
+			},
+		},
+		{
+			name: "fan out",
+			edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "writer"},
+				{From: "researcher", To: "reviewer"},
+			},
+		},
+		{
+			name: "fan in",
+			edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "reviewer"},
+				{From: "writer", To: "reviewer"},
+			},
+		},
+		{
+			name: "cycle",
+			edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "writer", To: "reviewer"},
+				{From: "reviewer", To: "writer"},
+			},
+		},
+		{
+			name:  "self loop",
+			edges: []arkv1alpha1.TeamGraphEdge{{From: "writer", To: "writer"}},
+		},
+		{
+			name: "team member as endpoint",
+			edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "editors"},
+				{From: "editors", To: "writer"},
+			},
 		},
 	}
 
-	if err := validateGraphForSelector(team); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+				Spec: arkv1alpha1.TeamSpec{
+					Strategy: StrategySelector,
+					Members:  members,
+					Graph:    &arkv1alpha1.TeamGraphSpec{Edges: tt.edges},
+				},
+			}
+
+			if err := validateGraphForSelector(team); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }

@@ -3,12 +3,12 @@ import hashlib
 import re
 import subprocess
 import time
-from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 import yaml
+from shared.paths import repo_root
 
-SAMPLES_DIR = Path(__file__).resolve().parents[4] / "samples"
+SAMPLES_DIR = repo_root() / "samples"
 
 YAML_SUFFIXES = (".yaml", ".yml")
 IGNORED_DIRECTORIES = ("venv", ".venv", "node_modules")

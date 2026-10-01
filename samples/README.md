@@ -313,6 +313,14 @@ spec:
     name: specific-agent
 ```
 
+A team is targeted the same way:
+```yaml
+spec:
+  target:
+    type: team
+    name: specific-team
+```
+
 #### 2. Label Selectors
 ```yaml
 spec:

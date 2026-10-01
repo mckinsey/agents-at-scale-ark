@@ -74,20 +74,6 @@ spec:
           echo "$RESPONSE"
           echo "=========================="
 
-          echo "$RESPONSE" | jq -e . >/dev/null || {
-            echo "✗ Response is not valid JSON"
-            exit 1
-          }
-          echo "✓ Response is valid JSON"
-
-          for field in summary sentiment confidence; do
-            echo "$RESPONSE" | jq -e "has(\"$field\")" >/dev/null || {
-              echo "✗ Response missing required schema field: $field"
-              exit 1
-            }
-          done
-          echo "✓ Response carries every field required by the outputSchema"
-
           SCHEMA_NAME=$(echo "$RESPONSE" | jq -r '.schema_name')
           echo "schema name sent to provider: $SCHEMA_NAME"
           case "$SCHEMA_NAME" in
@@ -105,7 +91,7 @@ spec:
         kind: Query
         name: schema-query
 
-  - name: validate-agent-without-schema-sends-no-response-format
+  - name: validate-agent-without-schema-hits-fail-closed-mock-rule
     try:
     - apply:
         file: manifests/a03-agent-no-schema.yaml

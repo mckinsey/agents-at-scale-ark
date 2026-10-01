@@ -28,7 +28,7 @@ class A2AGatewayTestCase(unittest.TestCase):
         namespace_patcher = patch.object(
             a2a_gateway, "get_namespace", return_value="default"
         )
-        namespace_patcher.start()
+        self.get_namespace = namespace_patcher.start()
         self.addCleanup(namespace_patcher.stop)
 
         self.registry = MagicMock()
@@ -66,19 +66,20 @@ class TestListAgentsPayload(A2AGatewayTestCase):
         skills = [
             AgentSkill(id="forecast", name="Forecast", description="d", tags=["t"]),
             AgentSkill(id="alerts", name="Alerts", description="d", tags=["t"]),
+            AgentSkill(id="radar", name="Radar", description="d", tags=["t"]),
         ]
         card = _make_test_card().model_copy(update={"skills": skills})
 
         entry = self.list_agents([card])[0]
 
-        self.assertEqual(entry["capabilities"], ["Forecast", "Alerts"])
+        self.assertCountEqual(entry["capabilities"], ["Forecast", "Alerts", "Radar"])
 
     def test_lists_every_agent_the_registry_returns(self):
         cards = [_make_test_card(name="weather"), _make_test_card(name="finance")]
 
         entries = self.list_agents(cards)
 
-        self.assertEqual([entry["name"] for entry in entries], ["weather", "finance"])
+        self.assertCountEqual([entry["name"] for entry in entries], ["weather", "finance"])
 
     def test_empty_registry_returns_empty_list(self):
         self.assertEqual(self.list_agents([]), [])
@@ -115,9 +116,11 @@ class TestAgentCardLink(A2AGatewayTestCase):
 
 class TestRegistryScoping(A2AGatewayTestCase):
     def test_registry_is_scoped_to_the_pod_namespace(self):
+        self.get_namespace.return_value = "tenant-ns"
+
         self.list_agents([_make_test_card()])
 
-        self.registry_class.assert_called_once_with("default", None)
+        self.registry_class.assert_called_once_with("tenant-ns", None)
         self.registry.list_agents.assert_awaited_once()
 
 
