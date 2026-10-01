@@ -90,6 +90,7 @@ describe('PostgresMessageStream', () => {
 
       expect(queries).toHaveLength(1);
       expect(queries[0]).toMatch(/insert into messages/i);
+      expect(queries[0]).toMatch(/pg_notify/i);
       await debugDb.end();
     });
 
@@ -617,6 +618,179 @@ describe('PostgresMessageStream', () => {
       await stream.append(makeMessageData());
       expect(a).toEqual([1]);
       expect(b).toEqual([1]);
+    });
+  });
+
+  describe('cross-replica notification', () => {
+    it('delivers an item appended on one instance to a subscriber on another', async () => {
+      const replicaA = new PostgresMessageStream(silentLogger, db(), 3600);
+      const replicaB = new PostgresMessageStream(silentLogger, db(), 3600);
+      await replicaB.init();
+      await replicaB.whenListening();
+
+      const delivered = new Promise<number>((resolve) => {
+        replicaB.subscribe((item) => resolve(item.sequenceNumber));
+      });
+
+      const appended = await replicaA.append(makeMessageData());
+
+      await expect(delivered).resolves.toBe(appended.sequenceNumber);
+      replicaB.close();
+    });
+
+    it('does not double-deliver an appended item back to its own instance', async () => {
+      const replica = new PostgresMessageStream(silentLogger, db(), 3600);
+      await replica.init();
+      await replica.whenListening();
+
+      const received: number[] = [];
+      replica.subscribe((item) => received.push(item.sequenceNumber));
+
+      await replica.append(makeMessageData());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(received).toHaveLength(1);
+      replica.close();
+    });
+
+    it('unlistens a subscription that resolves after close() was already called', async () => {
+      const replica = new PostgresMessageStream(silentLogger, db(), 3600);
+      const initPromise = replica.init();
+      replica.close();
+      await initPromise;
+      await replica.whenListening();
+
+      const received: number[] = [];
+      replica.subscribe((item) => received.push(item.sequenceNumber));
+
+      const other = new PostgresMessageStream(silentLogger, db(), 3600);
+      await other.append(makeMessageData());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(received).toHaveLength(0);
+    });
+
+    it('is idempotent - calling init() twice does not double-register the listener', async () => {
+      const replica = new PostgresMessageStream(silentLogger, db(), 3600);
+      await replica.init();
+      await replica.init();
+      await replica.whenListening();
+
+      const received: number[] = [];
+      replica.subscribe((item) => received.push(item.sequenceNumber));
+
+      const other = new PostgresMessageStream(silentLogger, db(), 3600);
+      await other.append(makeMessageData());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(received).toHaveLength(1);
+      replica.close();
+    });
+
+    it('delivers a batch to another replica in ascending sequence order', async () => {
+      const replicaA = new PostgresMessageStream(silentLogger, db(), 3600);
+      const replicaB = new PostgresMessageStream(silentLogger, db(), 3600);
+      await replicaB.init();
+      await replicaB.whenListening();
+
+      const received: number[] = [];
+      const count = 25;
+      const allReceived = new Promise<void>((resolve) => {
+        replicaB.subscribe((item) => {
+          received.push(item.sequenceNumber);
+          if (received.length === count) resolve();
+        });
+      });
+
+      const appended = await replicaA.appendMany(
+        Array.from({length: count}, () => makeMessageData())
+      );
+
+      await allReceived;
+      expect(received).toEqual(appended.map((item) => item.sequenceNumber));
+      replicaB.close();
+    });
+
+    it('delivers a batch bigger than the atomic notify chunk to another replica, still in order', async () => {
+      const replicaA = new PostgresMessageStream(silentLogger, db(), 3600);
+      const replicaB = new PostgresMessageStream(silentLogger, db(), 3600);
+      await replicaB.init();
+      await replicaB.whenListening();
+
+      const received: number[] = [];
+      const count = 600; // > NOTIFY_CHUNK_SIZE (500): exercises both the
+      // atomic first-chunk notify and the non-atomic overflow chunk.
+      const allReceived = new Promise<void>((resolve) => {
+        replicaB.subscribe((item) => {
+          received.push(item.sequenceNumber);
+          if (received.length === count) resolve();
+        });
+      });
+
+      const appended = await replicaA.appendMany(
+        Array.from({length: count}, () => makeMessageData())
+      );
+
+      await allReceived;
+      expect(received).toEqual(appended.map((item) => item.sequenceNumber));
+      replicaB.close();
+    });
+
+    it('does not replay pre-existing rows when listening starts', async () => {
+      const preExisting = new PostgresMessageStream(silentLogger, db(), 3600);
+      await preExisting.append(makeMessageData());
+      await preExisting.append(makeMessageData());
+
+      const replica = new PostgresMessageStream(silentLogger, db(), 3600);
+      await replica.init();
+      await replica.whenListening();
+
+      const received: number[] = [];
+      replica.subscribe((item) => received.push(item.sequenceNumber));
+
+      const appended = await preExisting.append(makeMessageData());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(received).toEqual([appended.sequenceNumber]);
+      replica.close();
+    });
+
+    it('recovers writes made while disconnected via the reconnect catch-up', async () => {
+      const replica = new PostgresMessageStream(silentLogger, db(), 3600);
+      await replica.init();
+      await replica.whenListening();
+
+      const received: number[] = [];
+      replica.subscribe((item) => received.push(item.sequenceNumber));
+
+      // Simulate two writes that happened on another replica while this
+      // one's LISTEN connection was down: insert directly, bypassing
+      // append()/notifyAppended, so no notification is ever sent for them -
+      // the only way this replica can learn about them is the catch-up that
+      // postgres.js's onlisten callback triggers on reconnect.
+      const missed = await db()<{sequence_number: string}[]>`
+        INSERT INTO messages (conversation_id, query_id, message, expires_at)
+        VALUES
+          (${'conv'}, ${'query'}, ${db().json({role: 'user', content: 'missed-1'})}, now() + interval '1 hour'),
+          (${'conv'}, ${'query'}, ${db().json({role: 'user', content: 'missed-2'})}, now() + interval '1 hour')
+        RETURNING sequence_number
+      `;
+      const missedSequenceNumbers = missed
+        .map((row) => Number(row.sequence_number))
+        .sort((a, b) => a - b);
+
+      // Invoke the private reconnect handler directly - there is no public
+      // way to force postgres.js's dedicated listen connection to drop and
+      // reconnect from a test, but this is exactly what its onlisten
+      // callback runs on every real reconnect.
+      await (
+        replica as unknown as {
+          catchUp(applyLookback: boolean): Promise<void>;
+        }
+      ).catchUp(true);
+
+      expect(received).toEqual(missedSequenceNumbers);
+      replica.close();
     });
   });
 
