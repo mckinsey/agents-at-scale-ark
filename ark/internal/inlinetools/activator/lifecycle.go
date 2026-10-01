@@ -115,12 +115,9 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 	if err != nil {
 		return nil, err
 	}
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: inlinetools.ActivatorName, Version: "v1"}, nil)
-	session, err := mcpClient.Connect(activationCtx, &mcp.StreamableClientTransport{
-		Endpoint: current.address, HTTPClient: a.httpClient, MaxRetries: -1, DisableStandaloneSSE: true,
-	}, nil)
+	session, err := a.connect(activationCtx, current)
 	if err != nil {
-		return nil, fmt.Errorf("connect to inline runner: %w", err)
+		return nil, err
 	}
 	defer func() { _ = session.Close() }()
 	// A rollout or disable during the handshake must not execute the old target.
@@ -135,6 +132,28 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 	}
 	// One send only. A lost response is uncertain execution, never a replay.
 	return session.CallTool(executionCtx, &mcp.CallToolParams{Name: key.Name, Arguments: json.RawMessage(argument)})
+}
+
+// Readiness does not mean the Service IP is programmed: kube-proxy lags ready
+// endpoints, so a cold connect is refused until it syncs. Only the handshake is
+// retried, within the activation budget; the tool call is still sent once.
+func (a *Activator) connect(ctx context.Context, current *target) (*mcp.ClientSession, error) {
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: inlinetools.ActivatorName, Version: "v1"}, nil)
+	for {
+		session, err := mcpClient.Connect(ctx, &mcp.StreamableClientTransport{
+			Endpoint: current.address, HTTPClient: a.httpClient, MaxRetries: -1, DisableStandaloneSSE: true,
+		}, nil)
+		if err == nil {
+			return session, nil
+		}
+		timer := time.NewTimer(a.pollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("connect to inline runner: %w", err)
+		case <-timer.C:
+		}
+	}
 }
 
 // record runs during construction or with mu held. Recovered warm runners get
