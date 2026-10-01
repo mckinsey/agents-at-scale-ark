@@ -39,6 +39,14 @@ func (r *ToolReconciler) evaluateInline(ctx context.Context, tool *arkv1alpha1.T
 		}
 	}
 
+	conflict, err := r.checkInlinePolicies(ctx, tool)
+	if err != nil {
+		return inlineVerdict{reason: arkv1alpha1.ToolReasonProvisioningFailed, message: err.Error()}
+	}
+	if conflict != "" {
+		return inlineVerdict{reason: arkv1alpha1.ToolReasonConflictingPolicy, message: conflict}
+	}
+
 	namespace := activatorNamespace()
 	activator := &appsv1.Deployment{}
 	key := types.NamespacedName{Name: inlinetools.ActivatorName, Namespace: namespace}
