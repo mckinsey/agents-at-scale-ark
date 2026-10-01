@@ -4,10 +4,6 @@ import { useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { ChevronLeft } from '@/components/icons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  buildUrlWithoutNewSessionParams,
-  hasNewSessionParams,
-} from '@/lib/utils/session-params';
 import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
@@ -23,24 +19,6 @@ export default function SessionDetailPage() {
   const params = useParams();
   const session_id = params.session_id as string;
   const { push } = useNamespacedNavigation();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const initialParticipant = searchParams.get('participant');
-  const initialType = searchParams.get('type') as 'agent' | 'team' | 'tool' | null;
-  const initialConversationId = searchParams.get('conversationId');
-
-  const [hasSentMessage, setHasSentMessage] = useState(() => !initialParticipant);
-  const isNewSession = !hasSentMessage;
-
-  const handleMessageSent = useCallback(() => {
-    setHasSentMessage(true);
-
-    if (!hasNewSessionParams(searchParams)) {
-      return;
-    }
-    router.replace(buildUrlWithoutNewSessionParams(searchParams, pathname));
-  }, [searchParams, router, pathname]);
 
   const sessionsReturnHref = useListReturnHref('/sessions');
 

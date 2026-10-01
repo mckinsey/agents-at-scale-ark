@@ -12,7 +12,6 @@ const mockMutate = vi.fn();
 const mockRefetch = vi.fn();
 const mockReadOnly = { value: false };
 
-<<<<<<< HEAD
 vi.mock('next/navigation', async () => {
   const { createAppRouterMock } =
     await import('@/__tests__/setup/mock-app-router');
@@ -23,11 +22,9 @@ beforeEach(() => {
   resetAppRouterMock();
 });
 
-vi.mock('@/lib/services', () => ({
-  agentsService: {
-    list: (...args: unknown[]) => mockList(...args),
-    deleteById: (...args: unknown[]) => mockDeleteById(...args),
-  },
+vi.mock('@/lib/services/agents-hooks', () => ({
+  useGetAllAgents: () => mockUseGetAllAgents(),
+  useDeleteAgent: () => ({ mutate: mockMutate }),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({

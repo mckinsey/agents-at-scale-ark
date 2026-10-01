@@ -6,7 +6,6 @@ import {
   waitFor,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -41,15 +40,8 @@ vi.mock('@/lib/services/workflows-hooks', () => ({
   useWorkflow: vi.fn(),
 }));
 
-vi.mock('@/lib/services/workflows', () => ({
-  workflowsService: {
-    getPodLogs: vi.fn().mockRejectedValue(new Error('pod gone')),
-    getWorkflowLogs: vi.fn().mockRejectedValue(new Error('404 not found')),
-  },
-}));
-
-vi.mock('@/lib/hooks/use-debounce', () => ({
-  useDebounce: vi.fn(value => value),
+vi.mock('@/lib/services/workflow-logs', () => ({
+  fetchNodeLogWindow: vi.fn().mockRejectedValue(new Error('404 not found')),
 }));
 
 vi.mock('@/lib/services/workflow-mapper', () => ({
@@ -233,6 +225,8 @@ describe('SessionsSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAppRouterMock();
+    resetNodeLogStore();
     mockUseNamespace.mockReturnValue({
       namespace: 'default',
       isNamespaceResolved: true,
