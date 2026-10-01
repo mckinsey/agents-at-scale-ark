@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -19,6 +20,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/inlinetools"
 )
 
 type recordedEvent struct {
@@ -230,6 +232,36 @@ func TestReconcileInlineWithoutInlineBlockEmitsNothing(t *testing.T) {
 	}
 	if len(events.events) != 0 {
 		t.Fatalf("events = %d, want 0 without inline source", len(events.events))
+	}
+}
+
+func TestReconcileInlineWithoutInlineBlockReportsProvisioningFailed(t *testing.T) {
+	t.Setenv(inlinetools.EnabledEnvVar, "true")
+	tool := inlineTool(func(tool *arkv1alpha1.Tool) { tool.Spec.Inline = nil })
+	s := inlineScheme(t)
+	c := fake.NewClientBuilder().WithScheme(s).WithObjects(tool).WithStatusSubresource(tool).Build()
+	r := &ToolReconciler{Client: c, Scheme: s}
+
+	if _, err := reconcileTool(t, r, tool); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	stored := &arkv1alpha1.Tool{}
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(tool), stored); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if stored.Status.State != arkv1alpha1.ToolStatePending {
+		t.Fatalf("state = %q, want %q", stored.Status.State, arkv1alpha1.ToolStatePending)
+	}
+	cond := meta.FindStatusCondition(stored.Status.Conditions, arkv1alpha1.ToolConditionAvailable)
+	if cond == nil {
+		t.Fatal("Available condition missing")
+	}
+	if cond.Reason != arkv1alpha1.ToolReasonProvisioningFailed {
+		t.Fatalf("reason = %q, want %q", cond.Reason, arkv1alpha1.ToolReasonProvisioningFailed)
+	}
+	if !strings.Contains(cond.Message, "inline spec is required") {
+		t.Fatalf("message = %q, want it to name the missing spec.inline", cond.Message)
 	}
 }
 
