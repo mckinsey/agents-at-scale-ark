@@ -50,7 +50,9 @@ export type WorkflowLifecycleAction =
   | 'suspend'
   | 'resume'
   | 'stop'
-  | 'terminate';
+  | 'terminate'
+  | 'retry'
+  | 'resubmit';
 
 export interface WorkflowFilters {
   workflowName?: string;

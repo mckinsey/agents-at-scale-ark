@@ -89,13 +89,30 @@ describe('useWorkflows', () => {
     await waitFor(() => expect(result.current.workflows).toHaveLength(2));
 
     act(() => {
-      result.current.replaceWorkflow(
+      result.current.upsertWorkflow(
         runningWorkflow('wf-2', { spec: { suspend: true } }),
       );
     });
 
     expect(result.current.workflows[0].spec.suspend).toBeUndefined();
     expect(result.current.workflows[1].spec.suspend).toBe(true);
+  });
+
+  it('should prepend a workflow that is not in the list yet', async () => {
+    vi.mocked(workflowsService.list).mockResolvedValue([
+      runningWorkflow('wf-1'),
+    ]);
+    const { result } = renderHook(() => useWorkflows('default'));
+    await waitFor(() => expect(result.current.workflows).toHaveLength(1));
+
+    act(() => {
+      result.current.upsertWorkflow(runningWorkflow('wf-new'));
+    });
+
+    expect(result.current.workflows.map(w => w.metadata.name)).toEqual([
+      'wf-new',
+      'wf-1',
+    ]);
   });
 
   it('should poll a workflow while its shutdown is in progress', async () => {
@@ -169,6 +186,21 @@ describe('useWorkflowLifecycleActions', () => {
     );
     expect(onWorkflowUpdated).toHaveBeenCalledWith(updated);
     expect(result.current.isPending('wf-1')).toBe(false);
+  });
+
+  it('should resolve with the workflow returned by the action', async () => {
+    const created = runningWorkflow('wf-1-abcde');
+    vi.mocked(workflowsService.runLifecycleAction).mockResolvedValue(created);
+    const { result } = renderHook(() =>
+      useWorkflowLifecycleActions('default', vi.fn()),
+    );
+
+    let returned: ArgoWorkflow | undefined;
+    await act(async () => {
+      returned = await result.current.runAction('wf-1', 'resubmit');
+    });
+
+    expect(returned).toEqual(created);
   });
 
   it('should mark the workflow pending until the response arrives', async () => {

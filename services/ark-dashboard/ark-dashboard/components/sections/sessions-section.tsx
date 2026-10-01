@@ -25,6 +25,8 @@ import {
   PlayArrow,
   RunCancel,
   RunPause,
+  RunResubmit,
+  RunRetry,
   RunStop,
   Schedule,
   Search as SearchIcon,
@@ -787,9 +789,18 @@ const RUN_ACTION_ERROR_TITLES: Record<WorkflowLifecycleAction, string> = {
   resume: 'Failed to resume workflow',
   stop: 'Failed to stop workflow',
   terminate: 'Failed to cancel workflow',
+  retry: 'Failed to retry workflow',
+  resubmit: 'Failed to resubmit workflow',
 };
 
+const RUN_CONTROL_STATUSES = new Set<StepStatus>([
+  'running',
+  'succeeded',
+  'failed',
+]);
+
 interface WorkflowRunControlsProps {
+  readonly status: StepStatus;
   readonly suspended: boolean;
   readonly disabled: boolean;
   readonly onAction: (action: WorkflowLifecycleAction) => void;
@@ -797,19 +808,61 @@ interface WorkflowRunControlsProps {
 }
 
 function WorkflowRunControls({
+  status,
   suspended,
   disabled,
   onAction,
   className,
 }: WorkflowRunControlsProps) {
+  const wrapperClassName = cn(
+    'flex items-center gap-2 transition-opacity',
+    disabled && 'opacity-40',
+    className,
+  );
+
+  if (status === 'succeeded') {
+    return (
+      <div aria-busy={disabled} className={wrapperClassName}>
+        <Button
+          variant="outline"
+          size="xxs"
+          className="h-5"
+          disabled={disabled}
+          onClick={() => onAction('resubmit')}>
+          Resubmit
+          <IconShell size="sm" variant="secondary">
+            <RunResubmit />
+          </IconShell>
+        </Button>
+      </div>
+    );
+  }
+
+  if (status === 'failed') {
+    return (
+      <div aria-busy={disabled} className={wrapperClassName}>
+        <IconActionButton
+          label="Retry"
+          variant="outline"
+          size="icon-xs"
+          disabled={disabled}
+          onClick={() => onAction('retry')}>
+          <RunRetry />
+        </IconActionButton>
+        <IconActionButton
+          label="Resubmit"
+          variant="outline"
+          size="icon-xs"
+          disabled={disabled}
+          onClick={() => onAction('resubmit')}>
+          <RunResubmit />
+        </IconActionButton>
+      </div>
+    );
+  }
+
   return (
-    <div
-      aria-busy={disabled}
-      className={cn(
-        'flex items-center gap-2 transition-opacity',
-        disabled && 'opacity-40',
-        className,
-      )}>
+    <div aria-busy={disabled} className={wrapperClassName}>
       {suspended ? (
         <IconActionButton
           label="Resume"
@@ -863,7 +916,11 @@ function SessionListItem({
   isRunActionPending: boolean;
 }) {
   const showRunControls =
-    session.type === 'workflow' && session.status === 'running';
+    session.type === 'workflow' && RUN_CONTROL_STATUSES.has(session.status);
+  const shutdownInProgress =
+    session.type === 'workflow' &&
+    session.status === 'running' &&
+    Boolean(session.shutdownRequested);
 
   return (
     <div className="relative">
@@ -904,8 +961,9 @@ function SessionListItem({
       </button>
       {showRunControls && (
         <WorkflowRunControls
+          status={session.status}
           suspended={Boolean(session.suspended)}
-          disabled={isRunActionPending || Boolean(session.shutdownRequested)}
+          disabled={isRunActionPending || shutdownInProgress}
           onAction={onRunAction}
           className="absolute right-3 bottom-2"
         />
@@ -1171,20 +1229,28 @@ export function SessionsSection({
     loading,
     error,
     refetch: refetchWorkflows,
-    replaceWorkflow,
+    upsertWorkflow,
   } = useWorkflows(namespace, filters);
 
   const { runAction, isPending: isRunActionPending } =
-    useWorkflowLifecycleActions(namespace, replaceWorkflow);
+    useWorkflowLifecycleActions(namespace, upsertWorkflow);
 
   const handleRunAction = useCallback(
     (workflowName: string, action: WorkflowLifecycleAction) => {
-      runAction(workflowName, action).catch((err: unknown) => {
-        toast.error(RUN_ACTION_ERROR_TITLES[action], {
-          description:
-            err instanceof Error ? err.message : 'An unexpected error occurred',
+      runAction(workflowName, action)
+        .then(updated => {
+          if (action === 'resubmit' && updated) {
+            setSelectedSessionId(updated.metadata.name);
+          }
+        })
+        .catch((err: unknown) => {
+          toast.error(RUN_ACTION_ERROR_TITLES[action], {
+            description:
+              err instanceof Error
+                ? err.message
+                : 'An unexpected error occurred',
+          });
         });
-      });
     },
     [runAction],
   );

@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionsSection } from '@/components/sections/sessions-section';
@@ -19,8 +20,6 @@ import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
-import { toast } from 'sonner';
-
 import {
   useWorkflow,
   useWorkflowLifecycleActions,
@@ -241,7 +240,10 @@ describe('SessionsSection', () => {
   let currentSearch = '';
   const allWorkflows = [mockWorkflow, mockFailedWorkflow, mockRunningWorkflow];
   const mockRunAction = vi.fn();
-  const mockReplaceWorkflow = vi.fn();
+  const mockUpsertWorkflow = vi.fn();
+
+  const getCard = (name: RegExp) =>
+    within(screen.getByRole('button', { name }).parentElement!);
 
   const getRunningCard = () =>
     within(
@@ -259,7 +261,7 @@ describe('SessionsSection', () => {
       loading: false,
       error: null,
       refetch: vi.fn(),
-      replaceWorkflow: mockReplaceWorkflow,
+      upsertWorkflow: mockUpsertWorkflow,
     } as any);
     render(<SessionsSection />);
   };
@@ -346,7 +348,7 @@ describe('SessionsSection', () => {
       loading: false,
       error: null,
       refetch: vi.fn(),
-      replaceWorkflow: mockReplaceWorkflow,
+      upsertWorkflow: mockUpsertWorkflow,
     } as any);
     vi.mocked(useWorkflow).mockReturnValue({
       workflow: null,
@@ -500,7 +502,7 @@ describe('SessionsSection', () => {
       expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should show run controls only on running workflow sessions', () => {
+    it('should show pause, stop, and cancel only on running workflow sessions', () => {
       render(<SessionsSection />);
 
       const runningCard = screen.getByRole('button', {
@@ -569,7 +571,7 @@ describe('SessionsSection', () => {
 
       expect(useWorkflowLifecycleActions).toHaveBeenCalledWith(
         'default',
-        mockReplaceWorkflow,
+        mockUpsertWorkflow,
       );
     });
 
@@ -625,6 +627,93 @@ describe('SessionsSection', () => {
           description: 'Cannot shut down a completed workflow',
         });
       });
+    });
+
+    it('should offer Resubmit on a succeeded workflow', async () => {
+      const user = userEvent.setup();
+      render(<SessionsSection />);
+
+      const card = getCard(/test-workflow-123/i);
+      expect(
+        card.queryByRole('button', { name: 'Retry' }),
+      ).not.toBeInTheDocument();
+      await user.click(card.getByRole('button', { name: /Resubmit/ }));
+
+      expect(mockRunAction).toHaveBeenCalledWith(
+        'test-workflow-123',
+        'resubmit',
+      );
+    });
+
+    it.each([
+      ['Retry', 'retry'],
+      ['Resubmit', 'resubmit'],
+    ])('should run %s on a failed workflow', async (label, action) => {
+      const user = userEvent.setup();
+      render(<SessionsSection />);
+
+      await user.click(
+        getCard(/failed-workflow-456/i).getByRole('button', { name: label }),
+      );
+
+      expect(mockRunAction).toHaveBeenCalledWith('failed-workflow-456', action);
+    });
+
+    it('should select the new run after a resubmit', async () => {
+      const user = userEvent.setup();
+      const resubmitted = {
+        ...mockRunningWorkflow,
+        metadata: {
+          ...mockRunningWorkflow.metadata,
+          name: 'resubmitted-workflow-001',
+          uid: 'resubmitted-001',
+        },
+        status: {
+          ...mockRunningWorkflow.status,
+          startedAt: '2020-01-01T00:00:00Z',
+        },
+      };
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [...allWorkflows, resubmitted],
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        upsertWorkflow: mockUpsertWorkflow,
+      } as any);
+      mockRunAction.mockResolvedValue(resubmitted);
+      render(<SessionsSection />);
+
+      await user.click(
+        getCard(/failed-workflow-456/i).getByRole('button', {
+          name: 'Resubmit',
+        }),
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: /resubmitted-workflow-001/i }),
+        ).toHaveAttribute('aria-current', 'true');
+      });
+    });
+
+    it('should not select another run after a non-resubmit action', async () => {
+      const user = userEvent.setup();
+      mockRunAction.mockResolvedValue(mockFailedWorkflow);
+      render(<SessionsSection />);
+      const selectedBefore = screen
+        .getAllByRole('button')
+        .find(button => button.getAttribute('aria-current') === 'true');
+
+      await user.click(
+        getCard(/failed-workflow-456/i).getByRole('button', { name: 'Retry' }),
+      );
+
+      await waitFor(() => expect(mockRunAction).toHaveBeenCalled());
+      expect(
+        screen
+          .getAllByRole('button')
+          .find(button => button.getAttribute('aria-current') === 'true'),
+      ).toBe(selectedBefore);
     });
 
     it('should select newest session by default', async () => {

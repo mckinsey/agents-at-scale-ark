@@ -47,12 +47,18 @@ export function useWorkflows(namespace: string, filters?: WorkflowFilters) {
     fetchWorkflows();
   }, [fetchWorkflows]);
 
-  const replaceWorkflow = useCallback((updated: ArgoWorkflow) => {
-    setWorkflows(current =>
-      current.map(workflow =>
+  const upsertWorkflow = useCallback((updated: ArgoWorkflow) => {
+    setWorkflows(current => {
+      const exists = current.some(
+        workflow => workflow.metadata.name === updated.metadata.name,
+      );
+      if (!exists) {
+        return [updated, ...current];
+      }
+      return current.map(workflow =>
         workflow.metadata.name === updated.metadata.name ? updated : workflow,
-      ),
-    );
+      );
+    });
   }, []);
 
   const shuttingDownNames = workflows
@@ -70,7 +76,7 @@ export function useWorkflows(namespace: string, filters?: WorkflowFilters) {
       for (const name of names) {
         workflowsService
           .get(namespace, name)
-          .then(replaceWorkflow)
+          .then(upsertWorkflow)
           .catch(refreshError => {
             console.error(`Failed to refresh workflow ${name}`, refreshError);
           });
@@ -78,14 +84,14 @@ export function useWorkflows(namespace: string, filters?: WorkflowFilters) {
     }, SHUTDOWN_POLL_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [namespace, shuttingDownNames, replaceWorkflow]);
+  }, [namespace, shuttingDownNames, upsertWorkflow]);
 
   return {
     workflows,
     loading,
     error,
     refetch: fetchWorkflows,
-    replaceWorkflow,
+    upsertWorkflow,
   };
 }
 
@@ -99,9 +105,12 @@ export function useWorkflowLifecycleActions(
   const inFlightRef = useRef(new Set<string>());
 
   const runAction = useCallback(
-    async (name: string, action: WorkflowLifecycleAction) => {
+    async (
+      name: string,
+      action: WorkflowLifecycleAction,
+    ): Promise<ArgoWorkflow | undefined> => {
       if (inFlightRef.current.has(name)) {
-        return;
+        return undefined;
       }
 
       inFlightRef.current.add(name);
@@ -114,6 +123,7 @@ export function useWorkflowLifecycleActions(
           action,
         );
         onWorkflowUpdated(updated);
+        return updated;
       } finally {
         inFlightRef.current.delete(name);
         setPendingNames(new Set(inFlightRef.current));

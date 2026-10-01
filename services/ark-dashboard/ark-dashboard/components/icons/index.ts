@@ -63,6 +63,8 @@ export { Poll } from './poll';
 export { RestartAlt } from './restart-alt';
 export { RunCancel } from './run-cancel';
 export { RunPause } from './run-pause';
+export { RunResubmit } from './run-resubmit';
+export { RunRetry } from './run-retry';
 export { RunStop } from './run-stop';
 export { SaveAlt } from './save-alt';
 export { Schedule } from './schedule';

@@ -152,7 +152,14 @@ describe('workflowsService', () => {
   });
 
   describe('runLifecycleAction', () => {
-    it.each(['suspend', 'resume', 'stop', 'terminate'] as const)(
+    it.each([
+      'suspend',
+      'resume',
+      'stop',
+      'terminate',
+      'retry',
+      'resubmit',
+    ] as const)(
       'should PUT the %s action to the namespaced workflow endpoint',
       async action => {
         const updated = {
