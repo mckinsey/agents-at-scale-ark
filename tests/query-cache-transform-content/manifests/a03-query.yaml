@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: cache-transform-query
+spec:
+  input: "Return the long marker payload."
+  target:
+    type: model
+    name: test-model-mock
