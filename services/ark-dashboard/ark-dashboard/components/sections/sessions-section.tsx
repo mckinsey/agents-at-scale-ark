@@ -899,9 +899,6 @@ function SessionListItem({
               showRunControls && 'min-h-5',
             )}>
             <DurationLabel duration={session.duration} />
-            {/* <span className="label-small-primary text-fg-secondary py-1 capitalize">
-              {session.type}
-            </span> */}
           </div>
         </div>
       </button>

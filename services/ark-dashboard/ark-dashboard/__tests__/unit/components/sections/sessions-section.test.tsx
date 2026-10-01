@@ -500,13 +500,6 @@ describe('SessionsSection', () => {
       expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
     });
 
-    it.skip('should display workflow type badge for each session', () => {
-      render(<SessionsSection />);
-
-      const workflowBadges = screen.getAllByText('workflow');
-      expect(workflowBadges.length).toBeGreaterThanOrEqual(3);
-    });
-
     it('should show run controls only on running workflow sessions', () => {
       render(<SessionsSection />);
 
