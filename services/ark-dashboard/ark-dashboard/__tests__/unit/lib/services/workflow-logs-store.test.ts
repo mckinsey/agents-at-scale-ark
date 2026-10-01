@@ -332,70 +332,73 @@ describe('workflow log store', () => {
     });
   });
 
-  it('drops the oldest lines but keeps the timestamp cursor when the buffer exceeds its cap', async () => {
-    const head = Array.from(
-      { length: WORKFLOW_LOG_MAX_BUFFERED_LINES },
-      (_, index) => `line-${index}`,
-    ).join('\n');
+  // Fills a buffer past the cap from several poll windows, then trims. The
+  // windows are large so the trim crosses a window boundary.
+  async function fillPastCapInWindows(): Promise<void> {
+    const block = (prefix: string, n: number) =>
+      Array.from({ length: n }, (_, index) => `${prefix}-${index}`).join('\n');
+    const pageSize = Math.ceil(WORKFLOW_LOG_MAX_BUFFERED_LINES / 4);
     vi.mocked(fetchNodeLogWindow)
       .mockResolvedValueOnce(
-        windowOf(head, {
-          has_more_before: false,
-          first_timestamp: 't0',
-          last_timestamp: 't1',
+        windowOf(block('init', 1000), {
+          has_more_before: true,
+          first_timestamp: 't-init',
+          last_timestamp: 'l-init',
         }),
       )
       .mockResolvedValueOnce(
-        windowOf('new-1\nnew-2', { last_timestamp: 't2' }),
+        windowOf(block('p0', pageSize), { first_timestamp: 'tp0' }),
+      )
+      .mockResolvedValueOnce(
+        windowOf(block('p1', pageSize), { first_timestamp: 'tp1' }),
+      )
+      .mockResolvedValueOnce(
+        windowOf(block('p2', pageSize), { first_timestamp: 'tp2' }),
+      )
+      .mockResolvedValueOnce(
+        windowOf(block('p3', pageSize), { first_timestamp: 'tp3' }),
       );
 
     await ensureLoaded(key, target);
     await pollTail(key, target);
+    await pollTail(key, target);
+    await pollTail(key, target);
+    await pollTail(key, target);
+  }
+
+  it('drops whole oldest windows and anchors the cursor to the oldest remaining window', async () => {
+    await fillPastCapInWindows();
 
     const buffer = getNodeLogBuffer(key);
-    expect(buffer.lines.length).toBe(WORKFLOW_LOG_MAX_BUFFERED_LINES);
-    expect(buffer.lines[0]).toBe('line-2');
-    expect(buffer.lines[buffer.lines.length - 1]).toBe('new-2');
-    expect(buffer.oldestSkipLines).toBe(WORKFLOW_LOG_MAX_BUFFERED_LINES);
-    expect(buffer.oldestTimestamp).toBe('t0');
+    expect(buffer.lines.length).toBeLessThanOrEqual(
+      WORKFLOW_LOG_MAX_BUFFERED_LINES,
+    );
+    // the whole 'init' window was dropped; the oldest held line is now p0's first
+    expect(buffer.lines[0]).toBe('p0-0');
+    // exact first_timestamp of the oldest window still fully held
+    expect(buffer.oldestTimestamp).toBe('tp0');
     expect(buffer.hasMoreBefore).toBe(true);
   });
 
-  it('stays timestamp-anchored when paging older after a trim', async () => {
-    const head = Array.from(
-      { length: WORKFLOW_LOG_MAX_BUFFERED_LINES },
-      (_, index) => `line-${index}`,
-    ).join('\n');
-    vi.mocked(fetchNodeLogWindow)
-      .mockResolvedValueOnce(
-        windowOf(head, {
-          has_more_before: false,
-          first_timestamp: 't0',
-          last_timestamp: 't1',
-        }),
-      )
-      .mockResolvedValueOnce(windowOf('new-1\nnew-2', { last_timestamp: 't2' }))
-      .mockResolvedValueOnce(
-        windowOf('older-1\nolder-2', {
-          has_more_before: true,
-          first_timestamp: 'tminus1',
-        }),
-      );
-
-    await ensureLoaded(key, target);
-    await pollTail(key, target);
-
-    expect(getNodeLogBuffer(key).oldestTimestamp).toBe('t0');
+  it('pages the trimmed region back using the window-boundary timestamp', async () => {
+    await fillPastCapInWindows();
+    vi.mocked(fetchNodeLogWindow).mockResolvedValueOnce(
+      windowOf('older-1\nolder-2', {
+        has_more_before: true,
+        first_timestamp: 't-older',
+      }),
+    );
 
     await loadOlder(key, target);
 
-    // loadOlder sends the preserved before_timestamp, not a bare skip cursor.
-    const olderCall = vi.mocked(fetchNodeLogWindow).mock.calls[2][1];
-    expect(olderCall).toMatchObject({ beforeTimestamp: 't0' });
+    // loadOlder sends the oldest remaining window's timestamp, so the trimmed
+    // region is reachable — not the dropped oldest-ever line's timestamp.
+    const olderCall = vi.mocked(fetchNodeLogWindow).mock.calls[5][1];
+    expect(olderCall).toMatchObject({ beforeTimestamp: 'tp0' });
 
     const buffer = getNodeLogBuffer(key);
     expect(buffer.lines.slice(0, 2)).toEqual(['older-1', 'older-2']);
-    expect(buffer.oldestTimestamp).toBe('tminus1');
+    expect(buffer.oldestTimestamp).toBe('t-older');
   });
 
   it('defers the trim while an older-page fetch is in flight', async () => {

@@ -7,8 +7,18 @@ import {
 
 import { type LogWindowTarget, fetchNodeLogWindow } from './workflow-logs';
 
+// One fetched page's worth of lines. The trim drops whole segments so the
+// oldest remaining segment's firstTimestamp is an exact before_timestamp
+// cursor for the oldest line still held — the client has no per-line
+// timestamps, so a window boundary is the finest cursor it can keep.
+interface LogSegment {
+  firstTimestamp: string | null;
+  lineCount: number;
+}
+
 export interface NodeLogBuffer {
   lines: string[];
+  segments: LogSegment[];
   loaded: boolean;
   loadingInitial: boolean;
   loadingOlder: boolean;
@@ -25,6 +35,7 @@ export const MAX_CACHED_BUFFERS = 20;
 
 const EMPTY_BUFFER: NodeLogBuffer = {
   lines: [],
+  segments: [],
   loaded: false,
   loadingInitial: false,
   loadingOlder: false,
@@ -36,6 +47,15 @@ const EMPTY_BUFFER: NodeLogBuffer = {
   error: null,
   retryable: false,
 };
+
+function makeSegment(
+  firstTimestamp: string | null | undefined,
+  lineCount: number,
+): LogSegment[] {
+  return lineCount > 0
+    ? [{ firstTimestamp: firstTimestamp ?? null, lineCount }]
+    : [];
+}
 
 export interface NodeLogScrollState {
   scrollTop: number;
@@ -155,8 +175,10 @@ export async function ensureLoaded(
       maxLines: WORKFLOW_LOG_PAGE_LINES,
     });
 
+    const lines = splitContent(window.content);
     update(key, {
-      lines: splitContent(window.content),
+      lines,
+      segments: makeSegment(window.first_timestamp, lines.length),
       loaded: true,
       loadingInitial: false,
       hasMoreBefore: window.has_more_before,
@@ -196,9 +218,14 @@ export async function loadOlder(
       beforeTimestamp: buffer.oldestTimestamp ?? undefined,
     });
     const current = getNodeLogBuffer(key);
+    const older = splitContent(window.content);
 
     update(key, {
-      lines: [...splitContent(window.content), ...current.lines],
+      lines: [...older, ...current.lines],
+      segments: [
+        ...makeSegment(window.first_timestamp, older.length),
+        ...current.segments,
+      ],
       loadingOlder: false,
       hasMoreBefore: window.has_more_before,
       truncated: current.truncated || window.truncated,
@@ -216,13 +243,21 @@ export async function loadOlder(
 function appendTail(
   current: NodeLogBuffer,
   appended: string[],
-  window: { last_timestamp?: string | null; truncated: boolean },
+  window: {
+    first_timestamp?: string | null;
+    last_timestamp?: string | null;
+    truncated: boolean;
+  },
   deferTrim: boolean,
 ): Partial<NodeLogBuffer> {
   const lines = [...current.lines, ...appended];
-  const overflow = lines.length - WORKFLOW_LOG_MAX_BUFFERED_LINES;
+  const segments = [
+    ...current.segments,
+    ...makeSegment(window.first_timestamp, appended.length),
+  ];
   const patch: Partial<NodeLogBuffer> = {
     lines,
+    segments,
     lastTimestamp: window.last_timestamp ?? current.lastTimestamp,
     truncated: current.truncated || window.truncated,
     oldestSkipLines: current.oldestSkipLines + appended.length,
@@ -232,16 +267,30 @@ function appendTail(
   // Trimming the front drops the line loadOlder is paging from. Defer it while
   // an older-page fetch is in flight so that fetch keeps a valid cursor; the
   // next poll trims once it completes.
-  if (overflow <= 0 || deferTrim) return patch;
+  if (lines.length <= WORKFLOW_LOG_MAX_BUFFERED_LINES || deferTrim)
+    return patch;
 
-  patch.lines = lines.slice(overflow);
+  // Drop whole oldest segments so the oldest line still held is exactly the
+  // first line of the oldest remaining segment. Its firstTimestamp is then an
+  // exact before_timestamp cursor, so loadOlder pages back the trimmed region
+  // rather than skipping it.
+  const kept = [...segments];
+  let dropped = 0;
+  while (
+    kept.length > 1 &&
+    lines.length - dropped > WORKFLOW_LOG_MAX_BUFFERED_LINES
+  ) {
+    dropped += kept[0].lineCount;
+    kept.shift();
+  }
+
+  patch.lines = lines.slice(dropped);
+  patch.segments = kept;
   patch.oldestSkipLines = Math.max(
     0,
-    current.oldestSkipLines + appended.length - overflow,
+    current.oldestSkipLines + appended.length - dropped,
   );
-  // Keep oldestTimestamp as the before_timestamp cursor: it still points at
-  // genuinely older content, so loadOlder stays timestamp-anchored instead of
-  // falling back to the positional skip cursor, which is wrong on a live log.
+  patch.oldestTimestamp = kept[0]?.firstTimestamp ?? current.oldestTimestamp;
   patch.hasMoreBefore = true;
   return patch;
 }
@@ -271,6 +320,7 @@ export async function pollTail(
     if (!current.lastTimestamp && current.lines.length === 0) {
       update(key, {
         lines: appended,
+        segments: makeSegment(window.first_timestamp, appended.length),
         hasMoreBefore: window.has_more_before,
         truncated: window.truncated,
         oldestSkipLines: window.line_count,
