@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
 import {
@@ -21,6 +22,10 @@ import {
   InsertDriveFile,
   Memory as MemoryIcon,
   OpenInNew,
+  PlayArrow,
+  RunCancel,
+  RunPause,
+  RunStop,
   Schedule,
   Search as SearchIcon,
   SmartToy,
@@ -36,6 +41,7 @@ import {
 } from '@/components/sections/resource-list-states';
 import { WorkflowNodeLogs } from '@/components/sections/workflow-node-logs';
 import { Button } from '@/components/ui/button';
+import { IconActionButton } from '@/components/ui/icon-action-button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import {
@@ -53,7 +59,12 @@ import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
-import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
+import type { WorkflowLifecycleAction } from '@/lib/services/workflows';
+import {
+  useWorkflow,
+  useWorkflowLifecycleActions,
+  useWorkflows,
+} from '@/lib/services/workflows-hooks';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -159,6 +170,8 @@ interface BaseSession {
 interface WorkflowSession extends BaseSession {
   type: 'workflow';
   steps: WorkflowStep[];
+  suspended?: boolean;
+  shutdownRequested?: boolean;
 }
 
 interface TeamSession extends BaseSession {
@@ -769,50 +782,138 @@ function SessionDetailView({
   );
 }
 
+const RUN_ACTION_ERROR_TITLES: Record<WorkflowLifecycleAction, string> = {
+  suspend: 'Failed to pause workflow',
+  resume: 'Failed to resume workflow',
+  stop: 'Failed to stop workflow',
+  terminate: 'Failed to cancel workflow',
+};
+
+interface WorkflowRunControlsProps {
+  readonly suspended: boolean;
+  readonly disabled: boolean;
+  readonly onAction: (action: WorkflowLifecycleAction) => void;
+  readonly className?: string;
+}
+
+function WorkflowRunControls({
+  suspended,
+  disabled,
+  onAction,
+  className,
+}: WorkflowRunControlsProps) {
+  return (
+    <div
+      aria-busy={disabled}
+      className={cn(
+        'flex items-center gap-2 transition-opacity',
+        disabled && 'opacity-40',
+        className,
+      )}>
+      {suspended ? (
+        <IconActionButton
+          label="Resume"
+          variant="outline"
+          size="icon-xs"
+          disabled={disabled}
+          onClick={() => onAction('resume')}>
+          <PlayArrow />
+        </IconActionButton>
+      ) : (
+        <IconActionButton
+          label="Pause"
+          variant="outline"
+          size="icon-xs"
+          disabled={disabled}
+          onClick={() => onAction('suspend')}>
+          <RunPause />
+        </IconActionButton>
+      )}
+      <IconActionButton
+        label="Stop"
+        variant="outline"
+        size="icon-xs"
+        disabled={disabled}
+        onClick={() => onAction('stop')}>
+        <RunStop />
+      </IconActionButton>
+      <IconActionButton
+        label="Cancel"
+        variant="outline"
+        size="icon-xs"
+        disabled={disabled}
+        onClick={() => onAction('terminate')}>
+        <RunCancel />
+      </IconActionButton>
+    </div>
+  );
+}
+
 function SessionListItem({
   session,
   isSelected,
   onClick,
+  onRunAction,
+  isRunActionPending,
 }: {
   session: Session;
   isSelected: boolean;
   onClick: () => void;
+  onRunAction: (action: WorkflowLifecycleAction) => void;
+  isRunActionPending: boolean;
 }) {
+  const showRunControls =
+    session.type === 'workflow' && session.status === 'running';
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={session.name}
-      aria-current={isSelected ? 'true' : undefined}
-      className={cn(
-        'flex w-full min-w-0 cursor-pointer items-center px-3 py-2 text-left transition-colors',
-        isSelected
-          ? 'bg-fill-onsurface-ui-1'
-          : 'hover:bg-stateslayer-overlay-hover',
-      )}>
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <span data-testid="session-status" data-status={session.status}>
-              {getStatusIcon(session.status)}
-              <span className="sr-only">{STATUS_LABELS[session.status]}</span>
-            </span>
-            <span className="paragraph-small-primary text-fg-secondary">
-              {new Date(session.startedAt).toLocaleString()}
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onClick}
+        title={session.name}
+        aria-current={isSelected ? 'true' : undefined}
+        className={cn(
+          'flex w-full min-w-0 cursor-pointer items-center px-3 py-2 text-left transition-colors',
+          isSelected
+            ? 'bg-fill-onsurface-ui-1'
+            : 'hover:bg-stateslayer-overlay-hover',
+        )}>
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <span data-testid="session-status" data-status={session.status}>
+                {getStatusIcon(session.status)}
+                <span className="sr-only">{STATUS_LABELS[session.status]}</span>
+              </span>
+              <span className="paragraph-small-primary text-fg-secondary">
+                {new Date(session.startedAt).toLocaleString()}
+              </span>
+            </div>
+            <span className="paragraph-regular-primary text-fg-primary w-full truncate">
+              {session.name}
             </span>
           </div>
-          <span className="paragraph-regular-primary text-fg-primary w-full truncate">
-            {session.name}
-          </span>
+          <div
+            className={cn(
+              'flex min-w-0 items-center justify-between gap-1',
+              showRunControls && 'min-h-5',
+            )}>
+            <DurationLabel duration={session.duration} />
+            {/* <span className="label-small-primary text-fg-secondary py-1 capitalize">
+              {session.type}
+            </span> */}
+          </div>
         </div>
-        <div className="flex min-w-0 items-center justify-between gap-1">
-          <DurationLabel duration={session.duration} />
-          <span className="label-small-primary text-fg-secondary py-1 capitalize">
-            {session.type}
-          </span>
-        </div>
-      </div>
-    </button>
+      </button>
+      {showRunControls && (
+        <WorkflowRunControls
+          suspended={Boolean(session.suspended)}
+          disabled={isRunActionPending || Boolean(session.shutdownRequested)}
+          onAction={onRunAction}
+          className="absolute right-3 bottom-2"
+        />
+      )}
+    </div>
   );
 }
 
@@ -884,6 +985,8 @@ function SessionsBody({
   isDetailLoading,
   hasActiveFilters,
   onClearFilters,
+  onRunAction,
+  isRunActionPending,
 }: {
   readonly error: Error | null;
   readonly isLoading: boolean;
@@ -894,6 +997,11 @@ function SessionsBody({
   readonly isDetailLoading: boolean;
   readonly hasActiveFilters: boolean;
   readonly onClearFilters: () => void;
+  readonly onRunAction: (
+    sessionId: string,
+    action: WorkflowLifecycleAction,
+  ) => void;
+  readonly isRunActionPending: (sessionId: string) => boolean;
 }) {
   if (error) {
     return (
@@ -952,6 +1060,8 @@ function SessionsBody({
             session={session}
             isSelected={session.id === selectedSessionId}
             onClick={() => onSelectSession(session.id)}
+            onRunAction={action => onRunAction(session.id, action)}
+            isRunActionPending={isRunActionPending(session.id)}
           />
         ))}
       </div>
@@ -1064,7 +1174,23 @@ export function SessionsSection({
     loading,
     error,
     refetch: refetchWorkflows,
+    replaceWorkflow,
   } = useWorkflows(namespace, filters);
+
+  const { runAction, isPending: isRunActionPending } =
+    useWorkflowLifecycleActions(namespace, replaceWorkflow);
+
+  const handleRunAction = useCallback(
+    (workflowName: string, action: WorkflowLifecycleAction) => {
+      runAction(workflowName, action).catch((err: unknown) => {
+        toast.error(RUN_ACTION_ERROR_TITLES[action], {
+          description:
+            err instanceof Error ? err.message : 'An unexpected error occurred',
+        });
+      });
+    },
+    [runAction],
+  );
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
@@ -1308,6 +1434,8 @@ export function SessionsSection({
           isDetailLoading={loadingDetail && useRealData}
           hasActiveFilters={Boolean(hasActiveFilters)}
           onClearFilters={clearFilters}
+          onRunAction={handleRunAction}
+          isRunActionPending={isRunActionPending}
         />
       </div>
     </ErrorBoundary>

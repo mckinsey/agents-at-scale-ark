@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -18,7 +19,13 @@ import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
-import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
+import { toast } from 'sonner';
+
+import {
+  useWorkflow,
+  useWorkflowLifecycleActions,
+  useWorkflows,
+} from '@/lib/services/workflows-hooks';
 
 const mockUseNamespace = vi.fn();
 
@@ -34,6 +41,11 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/services/workflows-hooks', () => ({
   useWorkflows: vi.fn(),
   useWorkflow: vi.fn(),
+  useWorkflowLifecycleActions: vi.fn(),
+}));
+
+vi.mock('sonner', () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
 }));
 
 vi.mock('@/lib/services/workflow-logs', () => ({
@@ -228,6 +240,29 @@ describe('SessionsSection', () => {
 
   let currentSearch = '';
   const allWorkflows = [mockWorkflow, mockFailedWorkflow, mockRunningWorkflow];
+  const mockRunAction = vi.fn();
+  const mockReplaceWorkflow = vi.fn();
+
+  const getRunningCard = () =>
+    within(
+      screen.getByRole('button', { name: /running-workflow-789/i })
+        .parentElement!,
+    );
+
+  const renderWithRunningWorkflowSpec = (spec: Record<string, unknown>) => {
+    vi.mocked(useWorkflows).mockReturnValue({
+      workflows: [
+        mockWorkflow,
+        mockFailedWorkflow,
+        { ...mockRunningWorkflow, spec },
+      ],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      replaceWorkflow: mockReplaceWorkflow,
+    } as any);
+    render(<SessionsSection />);
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -259,6 +294,8 @@ describe('SessionsSection', () => {
         steps: [],
         namespace: w.metadata.namespace,
         uid: w.metadata.uid,
+        suspended: w.spec?.suspend === true,
+        shutdownRequested: Boolean(w.spec?.shutdown),
       })),
     );
 
@@ -309,12 +346,18 @@ describe('SessionsSection', () => {
       loading: false,
       error: null,
       refetch: vi.fn(),
+      replaceWorkflow: mockReplaceWorkflow,
     } as any);
     vi.mocked(useWorkflow).mockReturnValue({
       workflow: null,
       loading: false,
       error: null,
     } as any);
+    mockRunAction.mockResolvedValue(undefined);
+    vi.mocked(useWorkflowLifecycleActions).mockReturnValue({
+      runAction: mockRunAction,
+      isPending: () => false,
+    });
   });
 
   describe('Namespace', () => {
@@ -457,11 +500,138 @@ describe('SessionsSection', () => {
       expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should display workflow type badge for each session', () => {
+    it.skip('should display workflow type badge for each session', () => {
       render(<SessionsSection />);
 
       const workflowBadges = screen.getAllByText('workflow');
       expect(workflowBadges.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('should show run controls only on running workflow sessions', () => {
+      render(<SessionsSection />);
+
+      const runningCard = screen.getByRole('button', {
+        name: /running-workflow-789/i,
+      }).parentElement!;
+      const runningControls = within(runningCard);
+      expect(
+        runningControls.getByRole('button', { name: 'Pause' }),
+      ).toBeInTheDocument();
+      expect(
+        runningControls.getByRole('button', { name: 'Stop' }),
+      ).toBeInTheDocument();
+      expect(
+        runningControls.getByRole('button', { name: 'Cancel' }),
+      ).toBeInTheDocument();
+
+      for (const name of [/test-workflow-123/i, /failed-workflow-456/i]) {
+        const card = screen.getByRole('button', { name }).parentElement!;
+        expect(
+          within(card).queryByRole('button', { name: 'Pause' }),
+        ).not.toBeInTheDocument();
+      }
+    });
+
+    it('should not select the session when a run control is clicked', async () => {
+      const user = userEvent.setup();
+      render(<SessionsSection />);
+
+      const runningCardButton = screen.getByRole('button', {
+        name: /running-workflow-789/i,
+      });
+      const selectedBefore = runningCardButton.getAttribute('aria-current');
+
+      await user.click(
+        within(runningCardButton.parentElement!).getByRole('button', {
+          name: 'Pause',
+        }),
+      );
+
+      expect(runningCardButton.getAttribute('aria-current')).toBe(
+        selectedBefore,
+      );
+    });
+
+    it.each([
+      ['Pause', 'suspend'],
+      ['Stop', 'stop'],
+      ['Cancel', 'terminate'],
+    ])(
+      'should run the %s action against the workflow',
+      async (label, action) => {
+        const user = userEvent.setup();
+        render(<SessionsSection />);
+
+        await user.click(getRunningCard().getByRole('button', { name: label }));
+
+        expect(mockRunAction).toHaveBeenCalledWith(
+          'running-workflow-789',
+          action,
+        );
+      },
+    );
+
+    it('should pass the namespace and list updater to the lifecycle actions hook', () => {
+      render(<SessionsSection />);
+
+      expect(useWorkflowLifecycleActions).toHaveBeenCalledWith(
+        'default',
+        mockReplaceWorkflow,
+      );
+    });
+
+    it('should offer Resume instead of Pause for a suspended workflow', async () => {
+      const user = userEvent.setup();
+      renderWithRunningWorkflowSpec({ suspend: true });
+
+      const card = getRunningCard();
+      expect(
+        card.queryByRole('button', { name: 'Pause' }),
+      ).not.toBeInTheDocument();
+      await user.click(card.getByRole('button', { name: 'Resume' }));
+
+      expect(mockRunAction).toHaveBeenCalledWith(
+        'running-workflow-789',
+        'resume',
+      );
+    });
+
+    it('should disable run controls while an action is pending', () => {
+      vi.mocked(useWorkflowLifecycleActions).mockReturnValue({
+        runAction: mockRunAction,
+        isPending: (name: string) => name === 'running-workflow-789',
+      });
+      render(<SessionsSection />);
+
+      const card = getRunningCard();
+      for (const label of ['Pause', 'Stop', 'Cancel']) {
+        expect(card.getByRole('button', { name: label })).toBeDisabled();
+      }
+    });
+
+    it('should disable run controls while a shutdown is in progress', () => {
+      renderWithRunningWorkflowSpec({ shutdown: 'Stop' });
+
+      const card = getRunningCard();
+      for (const label of ['Pause', 'Stop', 'Cancel']) {
+        expect(card.getByRole('button', { name: label })).toBeDisabled();
+      }
+    });
+
+    it('should show an error toast when a run action fails', async () => {
+      const user = userEvent.setup();
+      mockRunAction.mockRejectedValue(
+        new Error('Cannot shut down a completed workflow'),
+      );
+      render(<SessionsSection />);
+
+      await user.click(getRunningCard().getByRole('button', { name: 'Stop' }));
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith('Failed to stop workflow', {
+          description: 'Cannot shut down a completed workflow',
+        });
+      });
     });
 
     it('should select newest session by default', async () => {
