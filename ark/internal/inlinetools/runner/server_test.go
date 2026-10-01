@@ -5,12 +5,16 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -102,6 +106,39 @@ func TestToolCallRunsTheScript(t *testing.T) {
 
 	require.False(t, result.IsError, resultText(result))
 	assert.JSONEq(t, `{"v":"value"}`, resultText(result))
+}
+
+func TestHTTPCallCancellationStopsTheRunningScript(t *testing.T) {
+	pidPath := filepath.Join(t.TempDir(), "pid")
+	running := script(t, fmt.Sprintf(`printf '%%s' "$$" > %q; sleep 5`, pidPath))
+	server := httptest.NewServer(Handler(Config{ToolName: "echo-args"}, running))
+	defer server.Close()
+	session := connect(t, server.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "echo-args", Arguments: map[string]any{}})
+		done <- err
+	}()
+	var pid int
+	require.Eventually(t, func() bool {
+		contents, err := os.ReadFile(pidPath)
+		if err != nil {
+			return false
+		}
+		pid, err = strconv.Atoi(string(contents))
+		return err == nil
+	}, time.Second, time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("canceled MCP call did not return")
+	}
+	require.Eventually(t, func() bool { return syscall.Kill(pid, 0) == syscall.ESRCH }, time.Second, time.Millisecond,
+		"HTTP cancellation must kill the script, not wait for its execution timeout")
 }
 
 func TestToolCallReportsScriptErrorsAsIsError(t *testing.T) {
