@@ -46,6 +46,11 @@ spec:
             - containerPort: {{ .Values.targetPort }}
               protocol: TCP
           env:
+          # client-go 0.37 enables WatchListClient by default, but the PG aggregated
+          # apiserver does not yet satisfy the WatchList contract (#3575). Disable it
+          # so reflectors use classic LIST+WATCH until server-side support lands.
+          - name: KUBE_FEATURE_WatchListClient
+            value: "false"
           - name: OTEL_SERVICE_NAME
             value: "ark-completions"
           - name: ARK_TELEMETRY_OTEL_DISCOVERY

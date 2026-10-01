@@ -1,7 +1,7 @@
 import type { UseFormReturn } from 'react-hook-form';
 import * as z from 'zod';
 
-import type { AgentListItem, Team } from '@/lib/services';
+import type { AgentListItem, TeamListItem } from '@/lib/services';
 import type { ToolDetail } from '@/lib/services/tools';
 
 export const toolFormSchema = z
@@ -72,7 +72,7 @@ export interface ToolFormState {
   saving: boolean;
   tool: ToolDetail | null;
   agents: AgentListItem[];
-  teams: Team[];
+  teams: TeamListItem[];
   agentsLoading: boolean;
   teamsLoading: boolean;
   selectedType: string;

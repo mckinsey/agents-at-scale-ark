@@ -26,7 +26,7 @@ export function TeamsSection() {
           <p>Get started by creating your first team.</p>
         </>
       }
-      loadItems={() => teamsService.getAll(namespace)}
+      loadItems={() => teamsService.list(namespace)}
       deleteItem={id => teamsService.deleteById(namespace, id)}
       renderTable={(teams, onDelete) => (
         <TeamsTable teams={teams} onDelete={onDelete} />
