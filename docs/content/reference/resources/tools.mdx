@@ -305,7 +305,9 @@ A non-zero exit, a timeout, cancellation, or stdout that is not valid UTF-8 is r
 | `status.conditions[type=Available]` | `True` (reason `Available`) when callable, otherwise `False` with reason `RuntimeNotInstalled`, `ConflictingNetworkPolicy`, `ActivatorUnavailable`, or `ProvisioningFailed`. |
 | `status.resolvedAddress` | Internal activator address. Only meaningful while `Available` is `True` for the current `metadata.generation`. |
 
-**No inline runner ships in this release.** Authored inline tools stay `Pending` with reason `RuntimeNotInstalled`, so they cannot be called yet. The schema, admission and authoring UI exist so that authorship and permissions are in place before the runtime lands.
+With the feature enabled, the controller provisions the tool's runner: a source ConfigMap, a ServiceAccount with no mounted token, a deny-egress NetworkPolicy, a ClusterIP Service and a Deployment that starts at **zero replicas**. `Available: True` means the endpoint and current configuration are usable — not that a pod is running.
+
+**Calls are not served yet.** The activator that fronts the runners is not part of this release, so an inline tool reports `Available: False` with reason `ActivatorUnavailable` once its runner exists, and `RuntimeNotInstalled` while `inlineTools.enabled` is false. Editing source updates the ConfigMap in place and rolls the pod template; a runner verifies the checksum of its mounted snapshot at startup and refuses to serve a revision other than the one it was created for.
 
 ### Runner process cleanup
 
