@@ -18,9 +18,6 @@ vi.mock('@/components/sessions-conversations/session-table-row', () => ({
     <div data-testid={`session-row-${session.sessionId}`}>{session.name}</div>
   ),
 }));
-vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
-  NewSessionDialog: () => null,
-}));
 vi.mock('@/components/ui/pagination', () => ({
   Pagination: ({ currentPage, totalPages, onPageChange }: any) => (
     <div

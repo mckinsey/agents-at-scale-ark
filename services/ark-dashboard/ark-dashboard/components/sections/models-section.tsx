@@ -7,7 +7,13 @@ import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDeleteModel, useGetAllModels } from '@/lib/services/models-hooks';
 
 export function ModelsSection() {
-  const { data: models = [], isPending, error, refetch } = useGetAllModels();
+  const {
+    data: models = [],
+    isPending,
+    error,
+    refetch,
+    dataUpdatedAt,
+  } = useGetAllModels();
   const deleteModel = useDeleteModel();
 
   return (
@@ -30,6 +36,7 @@ export function ModelsSection() {
       items={models}
       loading={isPending}
       error={error}
+      dataUpdatedAt={dataUpdatedAt}
       onDelete={id => deleteModel.mutate(id)}
       onReload={() => refetch()}
       renderTable={(items, onDelete) => (
