@@ -29,7 +29,7 @@
 - [x] 4.1 Reconcile the stable source ConfigMap, ServiceAccount, hardened Deployment with explicit requests below its limits, backend Service, and NetworkPolicy; test deterministic length-safe names, UID labels, owner references, collisions, and idempotency.
 - [x] 4.2 Implement source checksums, language-appropriate read-only snapshot mounts, startup revision checks, and current-generation status; test edits and child drift after the Tool is available, ConfigMap/template races, and no orphaned source ConfigMaps.
 - [x] 4.3 Keep initial runners at zero replicas without resetting active replicas during ordinary reconciliation; cover each `Available=False` reason including an unavailable activator, per-condition `observedGeneration`, and the distinction between available and warm.
-- [ ] 4.4 Implement disable/delete cleanup and endpoint invalidation, with disable keeping the activator installed and reconciliation running while the controller drains and scales runners to zero; test that a scaled-up runner does not survive disable, and that uninstall is gated on no inline Tools remaining. Verify removal of owned objects with both storage backends and document cleanup-before-downgrade. Do not rely on envtest alone to prove garbage collection.
+- [x] 4.4 Implement disable/delete cleanup and endpoint invalidation, with disable keeping the activator installed and reconciliation running while the controller drains and scales runners to zero; test that a scaled-up runner does not survive disable, and that uninstall is gated on no inline Tools remaining. Verify removal of owned objects with both storage backends and document cleanup-before-downgrade. Do not rely on envtest alone to prove garbage collection.
 
 ## 5. Phase 3: runner networking and activation
 

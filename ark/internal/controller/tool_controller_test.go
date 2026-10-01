@@ -113,6 +113,15 @@ var _ = Describe("Tool Controller", func() {
 			resource := &arkv1alpha1.Tool{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			// An inline Tool carries a finalizer, so deletion completes only
+			// once the controller has removed its children.
+			controllerReconciler := &ToolReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			Eventually(func() bool {
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+				return errors.IsNotFound(k8sClient.Get(ctx, typeNamespacedName, &arkv1alpha1.Tool{}))
+			}).Should(BeTrue())
 		})
 
 		It("reports Pending with RuntimeNotInstalled and no endpoint", func() {
@@ -171,6 +180,15 @@ var _ = Describe("Tool Controller", func() {
 			resource := &arkv1alpha1.Tool{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			// An inline Tool carries a finalizer, so deletion completes only
+			// once the controller has removed its children.
+			controllerReconciler := &ToolReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			Eventually(func() bool {
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+				return errors.IsNotFound(k8sClient.Get(ctx, typeNamespacedName, &arkv1alpha1.Tool{}))
+			}).Should(BeTrue())
 		})
 
 		It("provisions the owned children and still reports Pending", func() {

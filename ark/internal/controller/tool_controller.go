@@ -17,9 +17,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/inlinetools"
 )
 
 // inlineRuntimeNotInstalledMessage is what an author sees until the runner
@@ -62,6 +64,9 @@ func (r *ToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if tool.Spec.Type == arkv1alpha1.ToolTypeInline {
+		if !tool.DeletionTimestamp.IsZero() {
+			return r.finalizeInline(ctx, tool)
+		}
 		return r.reconcileInline(ctx, tool)
 	}
 
@@ -80,9 +85,21 @@ func (r *ToolReconciler) reconcileInline(ctx context.Context, tool *arkv1alpha1.
 	// spec.inline is optional in the CRD and the structural check lives in a
 	// webhook a writer can skip, so a Tool can reach here with nothing to
 	// provision. Report it instead of dereferencing nil; no retry can fix a spec.
+	// This precedes the finalizer deliberately: nothing was ever provisioned, so
+	// there is nothing to clean up and no reason to block the delete.
 	if tool.Spec.Inline == nil {
-		return ctrl.Result{}, r.setInlineUnavailable(ctx, tool,
-			arkv1alpha1.ToolReasonProvisioningFailed, "inline spec is required for inline type")
+		return ctrl.Result{}, r.setInlineStatus(ctx, tool, inlineVerdict{
+			reason:  arkv1alpha1.ToolReasonProvisioningFailed,
+			message: "inline spec is required for inline type",
+		})
+	}
+
+	// The finalizer goes on before any child exists, so a Tool deleted mid-way
+	// through provisioning still has its children removed.
+	if controllerutil.AddFinalizer(tool, InlineFinalizer) {
+		if err := r.Update(ctx, tool); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to add the inline finalizer: %v", err)
+		}
 	}
 
 	r.emitSourceChange(ctx, tool)
@@ -96,6 +113,14 @@ func (r *ToolReconciler) reconcileInline(ctx context.Context, tool *arkv1alpha1.
 	}
 	if verdict.reason == arkv1alpha1.ToolReasonProvisioningFailed {
 		return ctrl.Result{}, fmt.Errorf("%s", verdict.message)
+	}
+
+	// Disabling the feature does not stop reconciliation, because the runner a
+	// previous call scaled up would then have nothing authorised to scale it
+	// down. The endpoint is already cleared above; this ends the pods.
+	if !inlinetools.Enabled() {
+		retry, err := r.drainInlineRunner(ctx, tool)
+		return ctrl.Result{RequeueAfter: retry}, err
 	}
 	return ctrl.Result{}, nil
 }
