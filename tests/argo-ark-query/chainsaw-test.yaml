@@ -263,7 +263,7 @@ spec:
           ttl=$(qj ark-query-optional-spec '.spec.ttl')
           sid=$(qj ark-query-optional-spec '.spec.sessionId')
           [ "$name" = "ark-query-custom-name" ]      || { echo "  FAIL: expected custom query name, got $name"; failed=1; }
-          [ "$ttl"  = "1m0s" ]                        || { echo "  FAIL: expected ttl 1m0s, got $ttl"; failed=1; }
+          [ "$ttl"  = "60s" ]                         || { echo "  FAIL: expected ttl 60s, got $ttl"; failed=1; }
           [ "$sid"  = "argo-ark-query-session" ]      || { echo "  FAIL: expected sessionId argo-ark-query-session, got $sid"; failed=1; }
 
           exit $failed

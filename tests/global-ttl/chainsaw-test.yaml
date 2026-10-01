@@ -59,7 +59,7 @@ spec:
           metadata:
             name: test-query-override-ttl
           spec:
-            ttl: 5m0s
+            ttl: 5m
     catch:
     - events: {}
     - describe:
