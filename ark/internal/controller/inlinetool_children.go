@@ -109,6 +109,10 @@ func (r *ToolReconciler) reconcileInlineChildren(ctx context.Context, tool *arkv
 		replicas := current.Spec.Replicas
 		current.Spec = desiredDeployment
 		current.Spec.Replicas = replicas
+		// Re-enabling abandons any drain in progress. Leaving its timestamp on the
+		// object would make the next disable read the window as already expired and
+		// scale the runner to zero with no drain at all.
+		delete(current.Annotations, AnnotationInlineDrainStartedAt)
 	})
 }
 

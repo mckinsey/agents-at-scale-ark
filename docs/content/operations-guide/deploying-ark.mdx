@@ -206,7 +206,41 @@ kubectl create rolebinding inline-authors \
   --namespace=tenant-1
 ```
 
-Writes through ark-api additionally require impersonation, so inline source is never stored under ark-api's service account. Ark stamps `ark.mckinsey.com/inline-authored-by` and `ark.mckinsey.com/inline-authored-at` on each admitted write as a durable authorship record independent of audit logging. No inline runner ships in this release, so authored inline tools stay `Pending`. See [Reference → Tools → Inline tools](/reference/resources/tools#inline-tools).
+Writes through ark-api additionally require impersonation, so inline source is never stored under ark-api's service account. Ark stamps `ark.mckinsey.com/inline-authored-by` and `ark.mckinsey.com/inline-authored-at` on each admitted write as a durable authorship record independent of audit logging. See [Reference → Tools → Inline tools](/reference/resources/tools#inline-tools).
+
+#### Runner infrastructure
+
+With the feature enabled, the controller provisions one ConfigMap, ServiceAccount, Service, NetworkPolicy and Deployment per inline tool, in the tool's namespace. The Deployment starts at zero replicas, so an authored-but-unused tool costs no pods. Runner images are fixed per language and not overridable per tool:
+
+```yaml
+inlineTools:
+  enabled: true
+  runner:
+    image:
+      repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-inline-runner
+      tag: ""   # defaults to the chart's appVersion
+```
+
+The controller appends `-bash`, `-python` or `-node` to that repository; the node image also runs the `ts` language.
+
+Two deployment prerequisites are not things Ark can verify at runtime:
+
+- **The CNI must enforce NetworkPolicy.** Ark creates a policy that denies all runner egress and admits only the activator, but that policy is inert on a CNI that does not enforce policies (k3s with flannel, for example). Ark sends no probe traffic to test it and does not gate execution on it. Policies are also additive: a namespace-wide allow-all policy — including the optional `ark-tenant` one, whose empty pod selector allows all egress — defeats it.
+- **Per-pod PID limits are the cluster's responsibility.** A script can exhaust node PIDs before its 30-second timeout expires. CPU and memory limits do not contain that. Configure a finite per-pod limit through kubelet `podPidsLimit` or your provider's equivalent, size it for processes and threads, and verify it outside production. Ark does not set, require, or check it.
+
+#### Disabling, deleting and downgrading
+
+Order matters, because a runner Deployment outlives the flag that created it:
+
+1. **Disable authoring and invocation:** set `inlineTools.enabled=false` and upgrade. The controller withdraws each tool's endpoint immediately, then scales any running runner to zero after a bounded drain so work already in flight is not cut off mid-call. Reconciliation deliberately keeps running while disabled — it is what scales those pods down — and the controller keeps its workload permissions for the same reason.
+2. **Delete the inline tools:** `kubectl delete tool <name>`. The controller removes the owned children itself rather than relying on garbage collection, so this behaves the same on the etcd and PostgreSQL backends. Verify before continuing:
+
+   ```bash
+   kubectl get tools -A -o jsonpath='{range .items[?(@.spec.type=="inline")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'
+   kubectl get deploy,svc,cm,netpol -A -l app.kubernetes.io/name=ark-inline-runner
+   ```
+
+3. **Only then replace or downgrade the operator.** Reverting to a release that does not understand `type: inline` does not stop surviving runner pods or make them inert — nothing would be left to reconcile or delete them. Removing the runtime components is valid once no inline tools remain.
 
 ### Setting Up Tenant Namespaces
 
