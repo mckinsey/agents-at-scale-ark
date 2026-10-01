@@ -10,8 +10,12 @@ rules:
   - configmaps
   - services
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - ""
@@ -37,7 +41,26 @@ rules:
   resources:
   - serviceaccounts
   verbs:
+  - create
+  - delete
+  - get
   - impersonate
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - ark.mckinsey.com
   resources:
@@ -125,3 +148,15 @@ rules:
   - create
   - patch
   - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
