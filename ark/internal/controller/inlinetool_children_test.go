@@ -60,7 +60,9 @@ func newInlineReconciler(t *testing.T, objects ...client.Object) *ToolReconciler
 	t.Setenv(runner.EnvImageTag, "v1.2.3")
 	scheme := newInlineScheme()
 	return &ToolReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
+		Client: fake.NewClientBuilder().WithScheme(scheme).
+			WithStatusSubresource(&arkv1alpha1.Tool{}).
+			WithObjects(objects...).Build(),
 		Scheme: scheme,
 	}
 }
