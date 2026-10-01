@@ -255,7 +255,7 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 	if obj.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(obj, finalizer) {
 			controllerutil.AddFinalizer(obj, finalizer)
-			return &ctrl.Result{}, r.Update(ctx, obj)
+			return &ctrl.Result{}, r.patchFinalizers(ctx, obj)
 		}
 		return nil, nil
 	}
@@ -266,16 +266,34 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 			if time.Since(obj.DeletionTimestamp.Time) > messageCleanupGracePeriod {
 				log.Error(err, "giving up on broker message cleanup after grace period", "query", obj.Name)
 				controllerutil.RemoveFinalizer(obj, finalizer)
-				return &ctrl.Result{}, r.Update(ctx, obj)
+				return &ctrl.Result{}, r.patchFinalizers(ctx, obj)
 			}
 			log.Error(err, "broker message cleanup failed, will retry", "query", obj.Name)
 			return &ctrl.Result{RequeueAfter: messageCleanupRetryInterval}, nil
 		}
 		controllerutil.RemoveFinalizer(obj, finalizer)
-		return &ctrl.Result{}, r.Update(ctx, obj)
+		return &ctrl.Result{}, r.patchFinalizers(ctx, obj)
 	}
 
 	return &ctrl.Result{}, nil
+}
+
+// patchFinalizers writes only metadata.finalizers via a merge patch. A plain
+// Update would send the whole object, including the status; when the object
+// came from a cache that stripped status.response.content (see cachetransform),
+// that empty status overwrites the stored one on backends without a status
+// subresource (aggregated API server / non-CRD storage). Patching just the
+// finalizers list carries no status at all.
+func (r *QueryReconciler) patchFinalizers(ctx context.Context, obj *arkv1alpha1.Query) error {
+	body, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{
+			"finalizers": obj.GetFinalizers(),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return r.Patch(ctx, obj, client.RawPatch(types.MergePatchType, body))
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
@@ -1007,11 +1025,7 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 }
 
 func isTerminalPhase(phase string) bool {
-	switch phase {
-	case statusDone, statusError, statusCanceled:
-		return true
-	}
-	return false
+	return arkv1alpha1.IsTerminalPhase(phase)
 }
 
 // isPreExecutionPhase reports whether a Query is still waiting for Ark to
@@ -1198,7 +1212,9 @@ func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1al
 		// and raw payload survive. Read from the refetched object: it holds the
 		// last persisted status, whereas the caller's Response may be an
 		// in-memory, unpersisted A2A-less error scratch value set by the
-		// dispatch error path that would drop the correlation.
+		// dispatch error path that would drop the correlation. The cache strips
+		// Raw only in terminal phases, and this arm runs only on a non-terminal
+		// Query, so the refetched Raw is intact here.
 		target := arkv1alpha1.QueryTarget{}
 		var raw string
 		var a2a *arkv1alpha1.A2AMetadata
