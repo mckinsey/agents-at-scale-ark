@@ -92,7 +92,8 @@ func NewSharedTransport() *http.Transport {
 // BackstopTransport bounds requests that carry no deadline of their own. It is
 // deliberately not an http.Client.Timeout: that bounds every exchange regardless
 // of context, so it would cap a caller that asked for longer via its own context
-// deadline instead of backstopping one that asked for nothing.
+// deadline instead of backstopping one that asked for nothing. A non-positive
+// Backstop disables the bound, matching http.Client.Timeout's zero value.
 type BackstopTransport struct {
 	Base     http.RoundTripper
 	Backstop time.Duration
@@ -104,7 +105,7 @@ func (t *BackstopTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		base = http.DefaultTransport
 	}
 
-	if _, hasDeadline := req.Context().Deadline(); hasDeadline {
+	if _, hasDeadline := req.Context().Deadline(); hasDeadline || t.Backstop <= 0 {
 		return base.RoundTrip(req)
 	}
 

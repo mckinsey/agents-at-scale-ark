@@ -173,6 +173,21 @@ func TestBackstopTransportBoundsDeadlinelessRequest(t *testing.T) {
 	require.ErrorIs(t, recorder.ctx.Err(), context.Canceled, "closing the body must release the context")
 }
 
+func TestBackstopTransportNonPositiveBackstopDisablesBound(t *testing.T) {
+	for _, backstop := range []time.Duration{0, -time.Second} {
+		recorder := &recordingRoundTripper{}
+		transport := &BackstopTransport{Base: recorder, Backstop: backstop}
+
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.invalid", nil)
+		require.NoError(t, err)
+
+		resp, err := transport.RoundTrip(req)
+		require.NoError(t, err, "a non-positive backstop must not expire the request immediately")
+		require.NoError(t, resp.Body.Close())
+		require.False(t, recorder.hasDeadline, "a non-positive backstop must not add a deadline")
+	}
+}
+
 func TestBackstopTransportReleasesContextOnError(t *testing.T) {
 	recorder := &recordingRoundTripper{err: errors.New("dial failed")}
 	transport := &BackstopTransport{Base: recorder, Backstop: 30 * time.Minute}

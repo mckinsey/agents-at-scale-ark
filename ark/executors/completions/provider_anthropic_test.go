@@ -14,13 +14,13 @@ func TestGetAnthropicBackstop_Default(t *testing.T) {
 }
 
 func TestGetAnthropicBackstop_EnvOverride(t *testing.T) {
-	t.Setenv("ARK_ANTHROPIC_HTTP_TIMEOUT_SECONDS", "120")
+	t.Setenv("ARK_ANTHROPIC_HTTP_BACKSTOP_SECONDS", "120")
 	assert.Equal(t, 120*time.Second, getAnthropicBackstop())
 }
 
 func TestGetAnthropicBackstop_InvalidEnvFallsBackToDefault(t *testing.T) {
 	for _, v := range []string{"0", "-5", "notanumber"} {
-		t.Setenv("ARK_ANTHROPIC_HTTP_TIMEOUT_SECONDS", v)
+		t.Setenv("ARK_ANTHROPIC_HTTP_BACKSTOP_SECONDS", v)
 		assert.Equal(t, defaultAnthropicBackstopSeconds*time.Second, getAnthropicBackstop())
 	}
 }

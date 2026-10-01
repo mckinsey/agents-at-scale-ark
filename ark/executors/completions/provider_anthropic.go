@@ -28,11 +28,12 @@ var anthropicHTTPClient = &http.Client{
 	},
 }
 
-// getAnthropicBackstop reads ARK_ANTHROPIC_HTTP_TIMEOUT_SECONDS env var or returns default
+// getAnthropicBackstop reads ARK_ANTHROPIC_HTTP_BACKSTOP_SECONDS env var or returns default
 func getAnthropicBackstop() time.Duration {
-	if timeoutStr := os.Getenv("ARK_ANTHROPIC_HTTP_TIMEOUT_SECONDS"); timeoutStr != "" {
-		if timeoutSec, err := strconv.Atoi(timeoutStr); err == nil && timeoutSec > 0 {
-			return time.Duration(timeoutSec) * time.Second
+	if backstopStr := os.Getenv("ARK_ANTHROPIC_HTTP_BACKSTOP_SECONDS"); backstopStr != "" {
+		if backstopSec, err := strconv.Atoi(backstopStr); err == nil && backstopSec > 0 {
+			logf.Log.V(1).Info("Using custom Anthropic HTTP backstop", "seconds", backstopSec)
+			return time.Duration(backstopSec) * time.Second
 		}
 	}
 	return defaultAnthropicBackstopSeconds * time.Second
