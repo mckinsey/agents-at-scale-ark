@@ -253,9 +253,16 @@ func setupManager(cfg config) (ctrl.Manager, *certwatcher.CertWatcher, *certwatc
 
 	cacheOptions := cache.Options{
 		DefaultTransform: cachetransform.StripManagedFields,
-		ByObject: map[client.Object]cache.ByObject{
+	}
+	// Only the controller role reconciles Query via the cache; apiserver
+	// serves it straight off Postgres (mgr.GetAPIReader()). Registering this
+	// ByObject there deadlocks startup: resolving Query's RESTMapping routes
+	// through the aggregated APIService this same process implements, which
+	// isn't up yet.
+	if cfg.role == RoleController {
+		cacheOptions.ByObject = map[client.Object]cache.ByObject{
 			&arkv1alpha1.Query{}: {Transform: cachetransform.StripQuery},
-		},
+		}
 	}
 	if ns := watchNamespaces(); len(ns) > 0 {
 		defaults := make(map[string]cache.Config, len(ns))

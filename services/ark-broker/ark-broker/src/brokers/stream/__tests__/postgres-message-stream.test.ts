@@ -760,6 +760,12 @@ describe('PostgresMessageStream', () => {
       await replica.init();
       await replica.whenListening();
 
+      // whenListening() doesn't wait for the background no-op catch-up the
+      // same onlisten event fires; under load it can still be running when
+      // catchUp(true) below runs and the catchingUp guard no-ops it. Settle
+      // first, same as the other NOTIFY-timing tests here.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
       const received: number[] = [];
       replica.subscribe((item) => received.push(item.sequenceNumber));
 
