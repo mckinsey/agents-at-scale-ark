@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { toast } from '@/components/ui/sonner';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import {
   type LogoutAuthOptions,
-  mcpServersService,
   type StartAuthOptions,
+  mcpServersService,
 } from './mcp-servers';
 
 export const GET_ALL_MCP_SERVERS_QUERY_KEY = 'get-all-mcp-servers';
 export const GET_MCP_SERVER_QUERY_KEY = 'get-mcp-server';
+export const DELETE_MCP_SERVER_MUTATION_KEY = 'delete-mcp-server';
 
 export const useGetAllMcpServers = () => {
   const { namespace } = useNamespace();
@@ -28,6 +30,37 @@ export const useGetMcpServerByName = (name: string) => {
     queryKey: [GET_MCP_SERVER_QUERY_KEY, name, namespace],
     queryFn: () => mcpServersService.get(namespace, name),
     enabled: Boolean(name && namespace),
+  });
+};
+
+type UseDeleteMcpServerProps = {
+  onSuccess?: () => void;
+};
+
+export const useDeleteMcpServer = (props?: UseDeleteMcpServerProps) => {
+  const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
+
+  return useMutation({
+    mutationKey: [DELETE_MCP_SERVER_MUTATION_KEY],
+    mutationFn: (id: string) => mcpServersService.delete(namespace, id),
+    onSuccess: () => {
+      toast.success('MCP Server deleted successfully');
+      props?.onSuccess?.();
+    },
+    onError: error => {
+      toast.error('Failed to delete MCP Server', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: [GET_ALL_MCP_SERVERS_QUERY_KEY],
+      });
+    },
   });
 };
 

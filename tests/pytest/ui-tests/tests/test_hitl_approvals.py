@@ -4,6 +4,9 @@ An approval card only appears once an agent emits a tool call, so these run on
 the suite's mock model, scripted to answer a rollout request with one call to
 hitl-protected-action. See ../mock-llm-values.yaml for how that tool call is
 served over the streaming path the dashboard uses.
+
+The Sessions view is read-only, so the rollout query is submitted through the
+API and the dashboard is used only to see the approval and decide on it.
 """
 
 from pathlib import Path
@@ -14,7 +17,7 @@ from playwright.sync_api import Page
 from pages.a2a_tasks_page import A2ATasksPage
 from pages.hitl_approvals_page import HitlApprovalsPage
 from pages.sessions_page import SessionsPage
-from shared.ark import a2a_task_name, query_for_session
+from shared.ark import a2a_task_name, query_for_session, submit_query
 from shared.k8s import (
     apply_yaml,
     delete_resource,
@@ -44,16 +47,13 @@ QUERY_SETTLE_TIMEOUT_S = 120
 
 
 def _start_rollout_conversation(page: Page, agent_name: str) -> str:
-    """Open a conversation with an agent and ask for a rollout. Returns the session id."""
-    sessions = SessionsPage(page)
-    sessions.navigate_to_session_history()
-    session_id = sessions.create_new_session(agent_name, participant_tab="Agents")
-    assert session_id, f"no session was created for {agent_name}"
+    """Ask an agent for a rollout, then open its session. Returns the session id."""
+    seeded = submit_query(agent_name, ROLLOUT_REQUEST)
 
-    sessions.wait_for_session_detail_page()
+    sessions = SessionsPage(page)
+    sessions.open_session(seeded.session_id)
     sessions.click_conversations_tab()
-    sessions.send_message_in_conversation(ROLLOUT_REQUEST)
-    return session_id
+    return seeded.session_id
 
 
 @pytest.fixture(scope="module")
