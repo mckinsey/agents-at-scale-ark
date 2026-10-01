@@ -240,6 +240,12 @@ The controller needs read-only access to Pods and ReplicaSets to follow runner o
 
 An enforcing CNI is still required. On a non-enforcing CNI, outbound script connections and direct runner access may succeed despite the policy. Standard NetworkPolicy also has node-local traffic exceptions: administrators must protect node and metadata-service access and control who can change workload labels or policies. These restrictions are not per-user authentication, and Ark sends no traffic probes or synthetic control connections to verify them.
 
+#### Activation identity checks
+
+The activation decision requires an enabled feature, a matching Tool name and UID, and `Available=True` for the current generation with the canonical published activator address. It rejects missing, deleting, cross-namespace, or unowned runner resources and stale source/language identity. The backend address is derived from the controller's shared child names and private Service, never a caller-supplied URL.
+
+An idle Deployment may pass this decision: it authorizes a target, not execution. Argument validation, activation, current-revision readiness and call tracking must still run before a script call. **Rollout status:** the decision is unit-tested separately; the activator call path and packaging are not installed by this unit.
+
 #### Disabling, deleting and downgrading
 
 Order matters, because a runner Deployment outlives the flag that created it:
