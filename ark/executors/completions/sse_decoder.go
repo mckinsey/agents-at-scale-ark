@@ -6,15 +6,18 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"sync"
+	"mime"
+	"net/http"
 
 	"github.com/openai/openai-go/packages/ssestream"
 )
 
-var registerSSEDecoderOnce sync.Once
+const sseContentType = "text/event-stream"
 
-// registerKeepaliveTolerantSSEDecoder installs a text/event-stream decoder that
-// skips frames whose data buffer is empty or whitespace-only.
+// init installs a text/event-stream decoder that skips frames whose data buffer
+// is empty or whitespace-only. Registration happens at package load so it covers
+// every openai-go streaming path (OpenAI, Azure), not only providers that build
+// a client first.
 //
 // Anthropic's OpenAI-compatible endpoint emits SSE keepalive comment frames
 // (": ping - ...") roughly every 15s during a stream. The openai-go default
@@ -24,14 +27,33 @@ var registerSSEDecoderOnce sync.Once
 // WHATWG SSE spec says an event with an empty data buffer must not be
 // dispatched, so we skip those frames here while leaving real data frames
 // (including genuinely malformed JSON) untouched.
-func registerKeepaliveTolerantSSEDecoder() {
-	registerSSEDecoderOnce.Do(func() {
-		ssestream.RegisterDecoder("text/event-stream", func(rc io.ReadCloser) ssestream.Decoder {
-			scn := bufio.NewScanner(rc)
-			scn.Buffer(nil, bufio.MaxScanTokenSize<<4)
-			return &keepaliveTolerantDecoder{rc: rc, scn: scn}
-		})
+func init() {
+	ssestream.RegisterDecoder(sseContentType, func(rc io.ReadCloser) ssestream.Decoder {
+		scn := bufio.NewScanner(rc)
+		scn.Buffer(nil, bufio.MaxScanTokenSize<<4)
+		return &keepaliveTolerantDecoder{rc: rc, scn: scn}
 	})
+}
+
+// sseContentTypeNormalizer canonicalizes a text/event-stream response header to
+// the bare "text/event-stream" media type. openai-go's ssestream.NewDecoder
+// looks up the decoder by the raw Content-Type value, case-sensitively and
+// without stripping parameters, so a response like "text/event-stream;
+// charset=UTF-8" would miss the registered decoder and fall back to the default
+// one that breaks on keepalives. Normalizing here makes the lookup match.
+type sseContentTypeNormalizer struct {
+	base http.RoundTripper
+}
+
+func (n *sseContentTypeNormalizer) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := n.base.RoundTrip(req)
+	if err != nil || resp == nil {
+		return resp, err
+	}
+	if mediaType, _, mimeErr := mime.ParseMediaType(resp.Header.Get("Content-Type")); mimeErr == nil && mediaType == sseContentType {
+		resp.Header.Set("Content-Type", sseContentType)
+	}
+	return resp, err
 }
 
 type keepaliveTolerantDecoder struct {
