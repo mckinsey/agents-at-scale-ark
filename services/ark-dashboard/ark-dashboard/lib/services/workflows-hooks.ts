@@ -22,9 +22,7 @@ export function useWorkflows(
   // tokenStack[0] is always undefined (the first page has no cursor).
   const tokenStackRef = useRef<Array<string | undefined>>([undefined]);
 
-  // Guards against a slow, in-flight request overwriting state after a
-  // newer one (a filter/namespace change, or another page navigation) has
-  // already superseded it.
+  // Lets a newer fetch cancel a stale in-flight one.
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchPage = useCallback(
@@ -48,9 +46,7 @@ export function useWorkflows(
           continueToken,
           signal: controller.signal,
         });
-        // Defensive guard in addition to the AbortSignal: a test double or a
-        // caller that doesn't actually reject on abort could otherwise still
-        // let a superseded response overwrite state set by a newer request.
+        // Belt-and-suspenders: drop a stale response even if it didn't reject on abort.
         if (abortControllerRef.current !== controller) {
           return;
         }
@@ -62,17 +58,11 @@ export function useWorkflows(
         setPage(targetPage);
         setError(null);
       } catch (err) {
-        // A superseded request was cancelled on purpose, not a failure - its
-        // response (if any) is already irrelevant, so don't surface it.
+        // Cancelled on purpose, not a failure.
         if ((err as Error).name === 'AbortError') {
           return;
         }
-        // A cached continue token pins the list to the resourceVersion
-        // snapshot of the page-0 request that started the sequence. Once
-        // etcd compacts that snapshot away (~5 min by default), the token
-        // is permanently unusable and every page built on top of it 410s -
-        // there's no page to recover to, so restart the sequence at page 0
-        // instead of leaving the user stuck on a dead end.
+        // A cached token's snapshot gets compacted by etcd after ~5 min - recover instead of dead-ending.
         const status = (err as { status?: number }).status;
         if (options?.silent && status === 410) {
           tokenStackRef.current = [undefined];
@@ -80,9 +70,6 @@ export function useWorkflows(
           fetchPage(0, { silent: true });
           return;
         }
-        // A silent (page-navigation) failure keeps the already-loaded page on
-        // screen instead of replacing it with a dead-end error state - only
-        // the initial/filter-driven load blocks the view on error.
         if (options?.silent) {
           onPageError?.(err as Error);
         } else {
@@ -120,10 +107,7 @@ export function useWorkflows(
     }
   }, [page, fetchPage]);
 
-  // Replaces one item in place (matched by name) instead of re-fetching the
-  // page. A re-fetch would replay the page's cached continue token, which is
-  // pinned to the resourceVersion snapshot of the original request - that
-  // returns stale data immediately and a 410 once etcd compacts it away.
+  // Patches one item in place - avoids re-fetching with a stale cached token.
   const updateWorkflowItem = useCallback((updated: ArgoWorkflow) => {
     setWorkflows(prev =>
       prev.map(workflow =>

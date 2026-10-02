@@ -830,11 +830,7 @@ class TestResourcesEndpoint(unittest.TestCase):
     def test_list_workflows_no_limit_used_when_not_specified(
         self, mock_get_context, mock_dynamic_client_cls, mock_api_client
     ):
-        """Test that no limit (full list) and no continue token are used when omitted.
-
-        This is a generic endpoint shared by non-paginated callers (Team, Agent,
-        WorkflowTemplate, ...), so omitting `limit` must not silently truncate them.
-        """
+        """Test that no limit (full list) and no continue token are used when omitted."""
         mock_get_context.return_value = {"namespace": "default"}
 
         mock_api_client_instance = AsyncMock()

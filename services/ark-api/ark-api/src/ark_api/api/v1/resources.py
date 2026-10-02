@@ -209,9 +209,7 @@ async def list_grouped_resources(
             Same per-page limitation as workflowName.
         status: Filter by workflow status. Same per-page limitation as workflowName.
         limit: Maximum number of items returned by the underlying Kubernetes list call.
-            Omit for the full, unpaginated list — this endpoint is shared by callers
-            that don't paginate (e.g. Team/Agent/WorkflowTemplate listings), so it must
-            not truncate silently when a caller doesn't ask for a page.
+            Omit for the full, unpaginated list (used by non-paginated callers).
         continue_token: Opaque cursor from a previous page's response metadata
 
     Returns:

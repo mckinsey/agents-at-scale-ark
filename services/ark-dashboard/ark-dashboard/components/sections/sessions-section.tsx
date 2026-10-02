@@ -913,9 +913,7 @@ function SessionsBody({
   }
 
   if (sessions.length === 0 && hasActiveFilters) {
-    // Filters apply only to this page (see the API docstring), so an empty
-    // page with hasNext=true doesn't mean "no matches" - matches may sit on
-    // a page we haven't fetched yet.
+    // Filters apply per-page, so an empty page with hasNext doesn't mean "no matches".
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <ResourceNoResults
@@ -1094,11 +1092,7 @@ export function SessionsSection({
     );
   }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
 
-  // workflows is now a single page from useWorkflows, so this filter only
-  // ever applies within the current page, not across the whole collection.
-  // The K8s list API has no server-side sort, so sessions are shown in
-  // whatever order the current page returns them - sorting them here would
-  // only reorder the page, not the true "newest"/"oldest" run.
+  // Filters apply only within the current page, not the whole collection.
   const filteredSessions = allSessions.filter(session => {
     if (sourceFilter === 'all') return true;
     if (sourceFilter === 'workflows') return session.type === 'workflow';

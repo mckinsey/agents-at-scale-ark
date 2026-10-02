@@ -229,14 +229,11 @@ describe('useWorkflows', () => {
       { initialProps: { filters: undefined as { status?: string } | undefined } },
     );
 
-    // First request is still pending when the filter changes.
     rerender({ filters: { status: 'running' } });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.workflows).toEqual([terminalWorkflow]);
 
-    // The superseded request's signal was aborted, and resolving it late
-    // must not clobber the state the second (current) request already set.
     expect(firstCallSignals[0]?.aborted).toBe(true);
     act(() => {
       resolveFirst(makePage([]));
@@ -249,8 +246,6 @@ describe('useWorkflows', () => {
   it('a 410 on a cached page token resets to page 0 instead of leaving a dead end', async () => {
     vi.mocked(workflowsService.list)
       .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
-      // By the time the user clicks Next, the token's resourceVersion
-      // snapshot has been compacted away by etcd.
       .mockRejectedValueOnce(new APIError('Gone', 410))
       .mockResolvedValueOnce(makePage([terminalWorkflow]));
     const onPageError = vi.fn();
