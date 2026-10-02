@@ -263,7 +263,12 @@ spec:
           ttl=$(qj ark-query-optional-spec '.spec.ttl')
           sid=$(qj ark-query-optional-spec '.spec.sessionId')
           [ "$name" = "ark-query-custom-name" ]      || { echo "  FAIL: expected custom query name, got $name"; failed=1; }
-          [ "$ttl"  = "1m0s" ]                        || { echo "  FAIL: expected ttl 1m0s, got $ttl"; failed=1; }
+          # The user-supplied ttl ("60s") is not guaranteed to be rewritten into
+          # Go's canonical Duration string ("1m0s") - that only ever happened as
+          # a side effect of the controller's own full-object Update(), not a
+          # documented contract of the mutating webhook. Accept either form;
+          # the controller parses both identically via metav1.Duration.
+          [ "$ttl" = "60s" ] || [ "$ttl" = "1m0s" ]   || { echo "  FAIL: expected ttl 60s or 1m0s, got $ttl"; failed=1; }
           [ "$sid"  = "argo-ark-query-session" ]      || { echo "  FAIL: expected sessionId argo-ark-query-session, got $sid"; failed=1; }
 
           exit $failed
