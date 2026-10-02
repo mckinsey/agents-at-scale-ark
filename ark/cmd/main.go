@@ -8,6 +8,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -39,6 +41,8 @@ import (
 	"mckinsey.com/ark/internal/apiserver"
 	"mckinsey.com/ark/internal/controller"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/inlinetools"
+	"mckinsey.com/ark/internal/inlinetools/activator"
 	"mckinsey.com/ark/internal/storage/postgresql"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	webhookv1 "mckinsey.com/ark/internal/webhook/v1"
@@ -83,9 +87,10 @@ const (
 	RoleAPIServer       = "apiserver"
 	RoleController      = "controller"
 	RolePostgresCleanup = "postgres-cleanup"
+	RoleInlineActivator = "inline-activator"
 )
 
-var validRoles = []string{RoleAPIServer, RoleController, RolePostgresCleanup}
+var validRoles = []string{RoleAPIServer, RoleController, RolePostgresCleanup, RoleInlineActivator}
 
 func validateRole(role string) error {
 	if slices.Contains(validRoles, role) {
@@ -151,6 +156,14 @@ func main() {
 		return
 	}
 
+	if result.role == RoleInlineActivator {
+		if err := runInlineActivator(ctrl.SetupSignalHandler()); err != nil {
+			setupLog.Error(err, "inline activator failed")
+			os.Exit(1)
+		}
+		return
+	}
+
 	mgr, metricsCertWatcher, webhookCertWatcher := setupManager(result.config)
 
 	switch result.role {
@@ -177,6 +190,66 @@ func main() {
 	}
 
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
+}
+
+func runInlineActivator(ctx context.Context) error {
+	namespace := os.Getenv("ARK_INLINE_ACTIVATOR_NAMESPACE")
+	namespaces := watchNamespaces()
+	if namespace == "" || len(namespaces) == 0 {
+		return fmt.Errorf("ARK_INLINE_ACTIVATOR_NAMESPACE and non-empty ARK_WATCH_NAMESPACES are required")
+	}
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		return err
+	}
+	kube, err := client.New(config, client.Options{Scheme: scheme})
+	if err != nil {
+		return err
+	}
+	startupCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	a, err := activator.New(startupCtx, kube, namespace, namespaces)
+	cancel()
+	if err != nil {
+		return err
+	}
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", inlinetools.ActivatorPort))
+	if err != nil {
+		return err
+	}
+	return serveInlineActivator(ctx, listener, a)
+}
+
+func serveInlineActivator(ctx context.Context, listener net.Listener, a *activator.Activator) error {
+	mux := http.NewServeMux()
+	mux.Handle("/", a)
+	for _, path := range []string{"/healthz", "/readyz"} {
+		mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	}
+	server := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	defer func() { _ = server.Close() }()
+	runCtx, stopRun := context.WithCancel(ctx)
+	loopDone := make(chan struct{})
+	go func() { defer close(loopDone); _ = a.Run(runCtx) }()
+	defer func() { stopRun(); <-loopDone }()
+	served := make(chan error, 1)
+	go func() { served <- server.Serve(listener) }()
+	select {
+	case err := <-served:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		// Recreate must not start a replacement authority while this process
+		// still owns calls. Wait for shutdown, not merely Serve returning.
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
+		defer cancel()
+		err := server.Shutdown(shutdownCtx)
+		if err == nil {
+			<-served
+		}
+		return err
+	}
 }
 
 func parseFlags() struct {
@@ -207,7 +280,7 @@ func parseFlags() struct {
 	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system",
 		"Address of the completions engine for A2A communication")
 	flag.StringVar(&cfg.role, "role", "",
-		"Required: process role — 'apiserver' (runs only the aggregated API server), 'controller' (runs only reconcilers and webhooks) or 'postgres-cleanup' (drops the PostgreSQL replication slot and publication, then exits)")
+		"Required: process role — 'apiserver', 'controller', 'inline-activator' (serves inline MCP calls and idle scaling) or 'postgres-cleanup'")
 	flag.IntVar(&cfg.maxConcurrentQueries, "max-concurrent-queries", 32,
 		"Maximum number of Query executions running concurrently in goroutines. "+
 			"When the cap is reached, Reconcile requeues so the workqueue holds the backlog "+
