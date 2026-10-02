@@ -50,7 +50,7 @@ const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   'canceled',
   'unknown',
 ] as const;
-const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
+export const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
   ['pending', 'provisioning', 'running', 'queued', 'input-required'] as const;
 const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...TERMINAL_QUERY_STATUS_PHASES,
