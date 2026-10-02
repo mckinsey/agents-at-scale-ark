@@ -1,5 +1,21 @@
 import { APIError } from '@/lib/api/client';
 
+export function createRetryQueryHandler(maxRetries: number) {
+  return (failureCount: number, error: unknown): boolean => {
+    // Don't retry client errors (4xx) - they won't resolve with retries
+    if (
+      error instanceof APIError &&
+      error.status &&
+      error.status >= 400 &&
+      error.status < 500
+    ) {
+      return false;
+    }
+
+    return failureCount < maxRetries;
+  };
+}
+
 /**
  * Retry handler for React Query that determines whether a failed query should be retried.
  *
@@ -24,15 +40,4 @@ import { APIError } from '@/lib/api/client';
  * });
  * ```
  */
-export function retryQueryHandler(
-  failureCount: number,
-  error: unknown,
-): boolean {
-  // Don't retry client errors (4xx) - they won't resolve with retries
-  if (error instanceof APIError && error.status && error.status >= 400 && error.status < 500) {
-    return false;
-  }
-
-  // Retry server errors (5xx) and network errors up to 3 times
-  return failureCount < 3;
-}
+export const retryQueryHandler = createRetryQueryHandler(3);

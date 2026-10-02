@@ -1,8 +1,17 @@
 'use client';
 
-import { type RefObject, memo, useEffect, useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import {
+  type RefObject,
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from 'react';
 
+import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
@@ -135,6 +144,8 @@ interface MessageContentProps {
   readonly onApprove?: () => Promise<void>;
   readonly onReject?: () => Promise<void>;
   readonly endRef: RefObject<HTMLDivElement | null>;
+  readonly loadError: Error | null;
+  readonly onRetry: () => void;
 }
 
 const MessageContent = memo(function MessageContent({
@@ -148,6 +159,8 @@ const MessageContent = memo(function MessageContent({
   onApprove,
   onReject,
   endRef,
+  loadError,
+  onRetry,
 }: MessageContentProps) {
   const processedMessages =
     messages && messages.length > 0
@@ -211,6 +224,16 @@ const MessageContent = memo(function MessageContent({
     );
   }
 
+  if (loadError) {
+    return (
+      <ResourceErrorState
+        title="Failed to load messages"
+        description={loadError.message}
+        onRetry={onRetry}
+      />
+    );
+  }
+
   return (
     <div className="text-muted-foreground flex h-full items-center justify-center text-center">
       <div>
@@ -231,10 +254,13 @@ export function MessageDisplay({
   showToolCalls,
   onShowToolCallsChange,
 }: Props) {
-  const { data: messages, isLoading } = useGetMessages(
-    sessionId,
-    conversationId,
-  );
+  const {
+    data: messages,
+    isLoading,
+    error,
+    refetch,
+  } = useGetMessages(sessionId, conversationId);
+  const handleRetry = useCallback(() => refetch(), [refetch]);
   const {
     scrollContainerRef,
     messagesEndRef,
@@ -499,6 +525,8 @@ export function MessageDisplay({
             onApprove={handleApprove}
             onReject={handleReject}
             endRef={messagesEndRef}
+            loadError={error}
+            onRetry={handleRetry}
           />
         </div>
       </ScrollArea>
