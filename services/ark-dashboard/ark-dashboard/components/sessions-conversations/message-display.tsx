@@ -3,6 +3,7 @@
 import { type RefObject, memo, useEffect, useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
+import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
@@ -231,10 +232,13 @@ export function MessageDisplay({
   showToolCalls,
   onShowToolCallsChange,
 }: Props) {
-  const { data: messages, isLoading } = useGetMessages(
-    sessionId,
-    conversationId,
-  );
+  const {
+    data: messages,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useGetMessages(sessionId, conversationId);
   const {
     scrollContainerRef,
     messagesEndRef,
@@ -486,20 +490,28 @@ export function MessageDisplay({
         onViewportScroll={handleScroll}
         className="flex-1 h-0 border-r border-stroke-divider">
         <div className="space-y-4 p-4">
-          <MessageContent
-            messages={messages}
-            showToolCalls={showToolCalls}
-            queryName={effectiveQueryId || undefined}
-            queryNamespace={namespace}
-            approvalData={
-              needsApproval && approvalDetails ? approvalDetails : undefined
-            }
-            existingDecision={existingDecision}
-            isWaitingForNextMessage={isWaitingForNextMessage}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            endRef={messagesEndRef}
-          />
+          {isError && !messages ? (
+            <ResourceErrorState
+              title="Failed to load messages"
+              description={error instanceof Error ? error.message : undefined}
+              onRetry={() => refetch()}
+            />
+          ) : (
+            <MessageContent
+              messages={messages}
+              showToolCalls={showToolCalls}
+              queryName={effectiveQueryId || undefined}
+              queryNamespace={namespace}
+              approvalData={
+                needsApproval && approvalDetails ? approvalDetails : undefined
+              }
+              existingDecision={existingDecision}
+              isWaitingForNextMessage={isWaitingForNextMessage}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              endRef={messagesEndRef}
+            />
+          )}
         </div>
       </ScrollArea>
     </div>

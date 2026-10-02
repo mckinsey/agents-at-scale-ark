@@ -256,4 +256,60 @@ describe('MessageDisplay', () => {
       );
     });
   });
+
+  it('should show an error state instead of the empty state when messages fail to load', () => {
+    const refetch = vi.fn();
+    vi.mocked(useGetMessages).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('Internal Server Error'),
+      refetch,
+    } as unknown as ReturnType<typeof useGetMessages>);
+
+    render(
+      <MessageDisplay
+        conversationId="conv-1"
+        sessionId="session-1"
+        conversation={mockConversation}
+        showToolCalls={true}
+        onShowToolCallsChange={mockOnShowToolCallsChange}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    expect(screen.getByText('Failed to load messages')).toBeInTheDocument();
+    expect(screen.getByText('Internal Server Error')).toBeInTheDocument();
+    expect(
+      screen.queryByText('No conversation messages available'),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('should keep showing loaded messages when a later poll fails', () => {
+    vi.mocked(useGetMessages).mockReturnValue({
+      data: mockMessages,
+      isLoading: false,
+      isError: true,
+      error: new Error('Internal Server Error'),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetMessages>);
+
+    render(
+      <MessageDisplay
+        conversationId="conv-1"
+        sessionId="session-1"
+        conversation={mockConversation}
+        showToolCalls={true}
+        onShowToolCallsChange={mockOnShowToolCallsChange}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    expect(
+      screen.queryByText('Failed to load messages'),
+    ).not.toBeInTheDocument();
+  });
 });
