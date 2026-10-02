@@ -735,3 +735,41 @@ func TestActivatorRejectsStaleOrUnownedEndpoints(t *testing.T) {
 		})
 	}
 }
+
+func TestActivatorRetriesRefusedHandshakeWithoutRetryingTheCall(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	var calls atomic.Int32
+	backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls.Add(1)
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "done"}}}, nil
+	})
+	transport := a.httpClient.Transport
+	var refused atomic.Int32
+	a.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if refused.Add(1) <= 3 {
+			return nil, fmt.Errorf("dial tcp 10.96.0.1:8080: connect: connection refused")
+		}
+		return transport.RoundTrip(r)
+	})
+	result, err := invoke(a, context.Background(), fixture)
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+	assert.EqualValues(t, 1, calls.Load(), "the tool call is sent once")
+	assert.Greater(t, refused.Load(), int32(3), "the refused handshake was retried")
+}
+
+func TestActivatorStopsRetryingTheHandshakeAtTheActivationBudget(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		t.Error("a refused handshake must not execute the script")
+		return nil, fmt.Errorf("unreachable")
+	})
+	a.activationTimeout = 50 * time.Millisecond
+	a.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("connect: connection refused")
+	})
+	_, err := invoke(a, context.Background(), fixture)
+	require.ErrorContains(t, err, "connect to inline runner")
+}
