@@ -1,10 +1,11 @@
-import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import { brokerSessionsService, type SessionsListParams, type BrokerSession } from './broker-sessions';
 
 export const useListSessions = (params?: SessionsListParams) => {
   return useQuery({
     queryKey: ['broker-sessions', params],
     queryFn: () => brokerSessionsService.getSessions(params),
+    placeholderData: keepPreviousData,
     refetchInterval: 5000,
   });
 };
