@@ -60,4 +60,4 @@
 - [x] 7.3 Document author grants, user impersonation, the authorship annotations and event, existing execution permissions, internal endpoint access, the CNI-enforcement prerequisite and NetworkPolicy limitations, fixed limits, and troubleshooting with bounded stderr.
 - [x] 7.4 Document PID exhaustion as a residual risk and recommend provider-supported finite per-pod PID limits sized and tested by administrators. Do not add an Ark PID setting, verified-node-pool requirement, or PID-based execution gate.
 - [x] 7.5 Document staged rollout and safe disable/delete/downgrade; verify no synthetic MCPServer/duplicate Tool, public runner endpoint, automatic author grant, or misleading available state is introduced.
-- [ ] 7.6 Run the required lint/test gates for every implementation stack touched, image smoke tests, and end-to-end checks; record remaining platform limitations before enabling execution.
+- [x] 7.6 Run the required lint/test gates for every implementation stack touched, image smoke tests, and end-to-end checks; record remaining platform limitations before enabling execution.
