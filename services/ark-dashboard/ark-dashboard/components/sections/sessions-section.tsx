@@ -1,11 +1,13 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
 import {
   AccountTree,
+  ArrowBack,
+  ArrowForward,
   AutoAwesome,
   Bolt,
   Build,
@@ -46,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
 import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
 import { useDebounce } from '@/lib/hooks/use-debounce';
@@ -66,18 +69,12 @@ type WorkflowStepType =
   | 'container'
   | 'script'
   | 'suspend';
-type SortOrder = 'newest' | 'oldest';
 type TeamStepType =
   | 'orchestrator'
   | 'agent'
   | 'delegation'
   | 'tool-call'
   | 'response';
-
-const sortOrderItems = [
-  { label: 'Newest First', value: 'newest' },
-  { label: 'Oldest First', value: 'oldest' },
-];
 
 const statusFilterItems = [
   { label: 'All', value: 'all' },
@@ -883,6 +880,7 @@ function SessionsBody({
   selectedSession,
   isDetailLoading,
   hasActiveFilters,
+  hasNext,
   onClearFilters,
 }: {
   readonly error: Error | null;
@@ -893,6 +891,7 @@ function SessionsBody({
   readonly selectedSession?: Session;
   readonly isDetailLoading: boolean;
   readonly hasActiveFilters: boolean;
+  readonly hasNext: boolean;
   readonly onClearFilters: () => void;
 }) {
   if (error) {
@@ -914,11 +913,16 @@ function SessionsBody({
   }
 
   if (sessions.length === 0 && hasActiveFilters) {
+    // Filters apply per-page, so an empty page with hasNext doesn't mean "no matches".
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <ResourceNoResults
           icon={<SearchIcon className="size-full" />}
-          message="No workflow runs found matching your filters"
+          message={
+            hasNext
+              ? 'No matches on this page — more runs exist further on. Try Next page.'
+              : 'No workflow runs found matching your filters'
+          }
         />
         <Button variant="outline" onClick={onClearFilters}>
           Clear filters
@@ -986,8 +990,11 @@ export function SessionsSection({
   // Note: sourceFilter is currently unused but reserved for future support of Team sessions
   // Currently only workflow sessions are implemented
   const [sourceFilter] = useState<SessionSourceFilter>('all');
+  // A one-shot deep link (e.g. from the "View run" toast) to an exact,
+  // known workflow - shown directly regardless of filters/pagination.
+  const initialRunRef = useRef(searchParams.get('run'));
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
-    null,
+    () => initialRunRef.current,
   );
   const [useRealData] = useState(true);
 
@@ -999,9 +1006,6 @@ export function SessionsSection({
   );
   const [statusFilter, setStatusFilter] = useState(
     normalizeStatus(searchParams.get('status') || 'all'),
-  );
-  const [sortOrder, setSortOrder] = useState<SortOrder>(
-    (searchParams.get('sort') as SortOrder) || 'newest',
   );
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const templateInputRef = useRef<HTMLDivElement>(null);
@@ -1021,7 +1025,7 @@ export function SessionsSection({
     [debouncedWorkflowName, debouncedWorkflowTemplateName, statusFilter],
   );
 
-  // Update URL when filters or sort change
+  // Update URL when filters change
   useEffect(() => {
     const params = new URLSearchParams();
 
@@ -1040,9 +1044,6 @@ export function SessionsSection({
     if (statusFilter && statusFilter !== 'all') {
       params.set('status', statusFilter.toLowerCase());
     }
-    if (sortOrder !== 'newest') {
-      params.set('sort', sortOrder);
-    }
 
     const queryString = params.toString();
     if (queryString === searchParams.toString()) {
@@ -1055,16 +1056,23 @@ export function SessionsSection({
     debouncedWorkflowName,
     debouncedWorkflowTemplateName,
     statusFilter,
-    sortOrder,
     router,
   ]);
+
+  const handleWorkflowsPageError = useCallback((err: Error) => {
+    toast.error('Failed to load page', { description: err.message });
+  }, []);
 
   const {
     workflows,
     loading,
     error,
-    refetch: refetchWorkflows,
-  } = useWorkflows(namespace, filters);
+    hasNext,
+    hasPrevious,
+    goToNextPage,
+    goToPreviousPage,
+    updateWorkflowItem,
+  } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
@@ -1087,43 +1095,39 @@ export function SessionsSection({
     );
   }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
 
-  const filteredAndSortedSessions = allSessions
-    .filter(session => {
-      if (sourceFilter === 'all') return true;
-      if (sourceFilter === 'workflows') return session.type === 'workflow';
-      return true;
-    })
-    .sort((a, b) => {
-      const timeA = new Date(a.startedAt).getTime();
-      const timeB = new Date(b.startedAt).getTime();
-      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
-    });
+  // Filters apply only within the current page, not the whole collection.
+  const filteredSessions = allSessions.filter(session => {
+    if (sourceFilter === 'all') return true;
+    if (sourceFilter === 'workflows') return session.type === 'workflow';
+    return true;
+  });
 
   useEffect(() => {
+    const isUnresolvedDeepLink =
+      initialRunRef.current && selectedSessionId === initialRunRef.current;
     if (
-      filteredAndSortedSessions.length > 0 &&
-      !filteredAndSortedSessions.find(s => s.id === selectedSessionId)
+      filteredSessions.length > 0 &&
+      !filteredSessions.find(s => s.id === selectedSessionId) &&
+      !isUnresolvedDeepLink
     ) {
-      setSelectedSessionId(filteredAndSortedSessions[0].id);
+      setSelectedSessionId(filteredSessions[0].id);
     }
-  }, [filteredAndSortedSessions, selectedSessionId]);
+  }, [filteredSessions, selectedSessionId]);
 
-  const sessionCount = filteredAndSortedSessions.length;
+  const sessionCount = filteredSessions.length;
 
   useEffect(() => {
     onCountChange?.(sessionCount);
   }, [onCountChange, sessionCount]);
 
-  const selectedSessionFromList = filteredAndSortedSessions.find(
+  const selectedSessionFromList = filteredSessions.find(
     s => s.id === selectedSessionId,
   );
 
   const { workflow: selectedWorkflowDetail, loading: loadingDetail } =
     useWorkflow(
       namespace,
-      useRealData && selectedSessionFromList?.type === 'workflow'
-        ? selectedSessionId || ''
-        : '',
+      useRealData && selectedSessionId ? selectedSessionId : '',
     );
 
   const selectedSession =
@@ -1147,12 +1151,12 @@ export function SessionsSection({
         previousStatus === 'Running' || previousStatus === 'Pending';
 
       if (isTerminalState && wasRunning) {
-        void refetchWorkflows();
+        updateWorkflowItem(selectedWorkflowDetail);
       }
 
       previousStatusRef.current = currentStatus;
     }
-  }, [selectedWorkflowDetail, useRealData, refetchWorkflows]);
+  }, [selectedWorkflowDetail, useRealData, updateWorkflowItem]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1175,8 +1179,7 @@ export function SessionsSection({
   const hasActiveFilters =
     workflowNameInput ||
     workflowTemplateNameInput ||
-    (statusFilter && statusFilter !== 'all') ||
-    sortOrder !== 'newest';
+    (statusFilter && statusFilter !== 'all');
 
   const isLoading = loading || !isNamespaceResolved;
 
@@ -1184,7 +1187,6 @@ export function SessionsSection({
     setWorkflowNameInput('');
     setWorkflowTemplateNameInput('');
     setStatusFilter('all');
-    setSortOrder('newest');
   };
 
   return (
@@ -1241,31 +1243,6 @@ export function SessionsSection({
 
           <div className="flex w-full flex-col gap-2 lg:w-[197px]">
             <span
-              id="workflow-sort-label"
-              className="label-regular-primary text-fg-secondary">
-              Sort
-            </span>
-            <Select
-              items={sortOrderItems}
-              value={sortOrder}
-              onValueChange={value => setSortOrder(value as SortOrder)}>
-              <SelectTrigger
-                aria-labelledby="workflow-sort-label"
-                className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sortOrderItems.map(item => (
-                  <SelectItem key={item.value} value={item.value}>
-                    <SelectItemText>{item.label}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex w-full flex-col gap-2 lg:w-[197px]">
-            <span
               id="workflow-status-label"
               className="label-regular-primary text-fg-secondary">
               Status
@@ -1301,14 +1278,44 @@ export function SessionsSection({
         <SessionsBody
           error={error}
           isLoading={isLoading}
-          sessions={filteredAndSortedSessions}
+          sessions={filteredSessions}
           selectedSessionId={selectedSessionId}
           onSelectSession={setSelectedSessionId}
           selectedSession={selectedSession}
           isDetailLoading={loadingDetail && useRealData}
           hasActiveFilters={Boolean(hasActiveFilters)}
+          hasNext={hasNext}
           onClearFilters={clearFilters}
         />
+
+        <nav
+          aria-label="Workflow runs pagination"
+          className="flex shrink-0 items-center justify-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={goToPreviousPage}
+            disabled={!hasPrevious || isLoading}
+            aria-label="Go to previous page"
+            className="flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 text-fg-primary transition-opacity hover:bg-stateslayer-overlay-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            <IconShell size="sm">
+              <ArrowBack />
+            </IconShell>
+            <span className="text-sm leading-5 tracking-[-0.028px]">
+              Previous
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={goToNextPage}
+            disabled={!hasNext || isLoading}
+            aria-label="Go to next page"
+            className="flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 text-fg-primary transition-opacity hover:bg-stateslayer-overlay-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            <span className="text-sm leading-5 tracking-[-0.028px]">Next</span>
+            <IconShell size="sm">
+              <ArrowForward />
+            </IconShell>
+          </button>
+        </nav>
       </div>
     </ErrorBoundary>
   );
