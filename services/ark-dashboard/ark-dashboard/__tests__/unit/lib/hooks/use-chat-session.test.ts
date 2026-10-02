@@ -12,6 +12,7 @@ import {
 import { storedIsChatStreamingEnabledAtom } from '@/atoms/experimental-features';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { useChatSession } from '@/lib/hooks/use-chat-session';
+import { BrokerUnavailableError } from '@/lib/services/chat';
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
@@ -543,6 +544,155 @@ describe('useChatSession', () => {
           result.current.messages[result.current.messages.length - 1];
         expect(lastMessage.content).toBe('Query execution failed');
       });
+    });
+
+    it('falls back to polling the existing query when the stream rejects with a 503 BrokerUnavailableError', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new BrokerUnavailableError(
+          'Failed to connect to stream: Service Unavailable',
+          503,
+          'broker_unavailable',
+          'poll',
+          'test-query',
+        );
+      });
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled response',
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
+      expect(mockGetQueryResult).toHaveBeenCalledWith(
+        'default',
+        'test-query',
+      );
+
+      expect(result.current.error).toBeNull();
+      const lastMessage =
+        result.current.messages[result.current.messages.length - 1];
+      expect(lastMessage.content).toBe('Polled response');
+      expect(
+        result.current.messages.some(
+          m => m.content === 'Failed to connect to stream: Service Unavailable',
+        ),
+      ).toBe(false);
+      expect(
+        result.current.messages.filter(
+          m => m.role === 'assistant' && !m.content,
+        ),
+      ).toHaveLength(0);
+      expect(result.current.brokerFallbackNoticeVisible).toBe(true);
+    });
+
+    it('falls back to polling on an in-band broker_unavailable stream chunk', async () => {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          {
+            error: {
+              message: 'Failed to connect to broker service',
+              type: 'connection_error',
+            },
+            code: 'broker_unavailable',
+            fallback: 'poll',
+          },
+        ]),
+      );
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled from chunk',
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
+      expect(mockGetQueryResult).toHaveBeenCalledWith(
+        'default',
+        'test-query',
+      );
+      expect(result.current.messages.at(-1)?.content).toBe('Polled from chunk');
+      expect(result.current.brokerFallbackNoticeVisible).toBe(true);
+    });
+
+    it('keeps polling for later turns after a broker fallback', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new BrokerUnavailableError(
+          'Failed to connect to stream: Service Unavailable',
+          503,
+          'broker_unavailable',
+          'poll',
+          'test-query',
+        );
+      });
+      mockGetQueryResult
+        .mockResolvedValueOnce({
+          status: 'done',
+          terminal: true,
+          response: 'First polled',
+        })
+        .mockResolvedValueOnce({
+          status: 'done',
+          terminal: true,
+          response: 'Second polled',
+        });
+      mockSubmitChatQuery.mockResolvedValue({ name: 'second-query' });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      mockStartStreamChatResponse.mockClear();
+      mockSubmitChatQuery.mockClear();
+
+      await act(async () => {
+        await result.current.sendMessage('Again');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
+      expect(mockSubmitChatQuery).toHaveBeenCalledTimes(1);
+      expect(mockGetQueryResult).toHaveBeenCalledWith(
+        'default',
+        'second-query',
+      );
+      expect(result.current.messages.at(-1)?.content).toBe('Second polled');
     });
   });
 
