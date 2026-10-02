@@ -724,6 +724,39 @@ func TestConvertMessagesToAnthropicToolBlockFallback(t *testing.T) {
 		wire := string(mustMarshalRaw(result))
 		assert.Equal(t, 1, strings.Count(wire, `"type":"tool_use"`))
 		assert.Equal(t, 1, strings.Count(wire, `"type":"tool_result"`))
-		assert.Contains(t, wire, "agent2 result")
+
+		last := contentBlocksOf(t, result[len(result)-1])
+		require.Len(t, last, 1)
+		assert.Equal(t, "tool_result", last[0].Type)
+		assert.Equal(t, "agent2 result", last[0].Content, "the later turn keeps the blocks")
+		assert.Contains(t, wire, "agent1 result")
+	})
+
+	t.Run("keeps blocks for the current turn when an earlier turn reused its ID", func(t *testing.T) {
+		earlier := addAgentNameToMessages([]Message{assistantToolCalls("", toolCall("call_1", "search", `{"q":"old"}`))}, "agent1")[0]
+		messages := []Message{
+			NewUserMessage("start"),
+			earlier,
+			ToolMessage("agent1 result", "call_1"),
+			NewUserMessage("It is your turn, agent2."),
+			assistantToolCalls("", toolCall("call_1", "search", `{"q":"new"}`)),
+			ToolMessage("agent2 result", "call_1"),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages, functionTools("search"))
+
+		require.Len(t, result, 3)
+
+		toolUse := contentBlocksOf(t, result[1])
+		require.Len(t, toolUse, 1)
+		assert.Equal(t, "tool_use", toolUse[0].Type)
+		assert.JSONEq(t, `{"q":"new"}`, string(toolUse[0].Input))
+
+		toolResult := contentBlocksOf(t, result[2])
+		require.Len(t, toolResult, 1)
+		assert.Equal(t, "tool_result", toolResult[0].Type)
+		assert.Equal(t, "agent2 result", toolResult[0].Content)
+
+		assert.Contains(t, string(result[0].Content), "agent1 result")
 	})
 }

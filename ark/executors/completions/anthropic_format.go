@@ -203,8 +203,8 @@ func pairToolCalls(messages []Message, available map[string]bool) toolPairing {
 	}
 
 	used := make(map[string]bool)
-	for i, msg := range messages {
-		assistant := msg.OfAssistant
+	for i := len(messages) - 1; i >= 0; i-- {
+		assistant := messages[i].OfAssistant
 		if assistant == nil || len(assistant.ToolCalls) == 0 {
 			continue
 		}
