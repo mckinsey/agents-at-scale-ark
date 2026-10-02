@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: cancel-gated-agent
+spec:
+  prompt: You are a helpful assistant. Use the run-command tool when asked to check the host.
+  modelRef:
+    name: test-model-mock
+  tools:
+  - type: custom
+    name: run-command
+    approval:
+      required: true
+      timeout: 5m
+      onTimeout: reject

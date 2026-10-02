@@ -2,6 +2,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkflowNodeLogs } from '@/components/sections/workflow-node-logs';
+import { APIError } from '@/lib/api/client';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
 import {
   getNodeLogBuffer,
@@ -476,6 +477,94 @@ describe('WorkflowNodeLogs', () => {
     expect(
       screen.getByRole('link', { name: /View logs in Argo UI/ }),
     ).toHaveAttribute('href', 'http://argo.test');
+  });
+
+  it('recovers on retry after a failed initial load without a remount', async () => {
+    vi.mocked(fetchNodeLogWindow)
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce(windowOf('recovered'));
+
+    await renderLogs();
+    expect(screen.getByText('Failed to load logs')).toBeInTheDocument();
+
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    await act(async () => {
+      retry.click();
+    });
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('recovered')).toBeInTheDocument();
+    expect(screen.queryByText('Failed to load logs')).not.toBeInTheDocument();
+  });
+
+  it('retries a failed initial load on an interval while the node is running', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchNodeLogWindow)
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValue(windowOf('recovered'));
+
+    await renderLogs(true);
+    expect(screen.getByText('Failed to load logs')).toBeInTheDocument();
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+
+    expect(vi.mocked(fetchNodeLogWindow).mock.calls.length).toBeGreaterThan(1);
+    expect(screen.getByText('recovered')).toBeInTheDocument();
+  });
+
+  it('does not auto-retry a permanent error on a running node', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchNodeLogWindow).mockRejectedValue(
+      new APIError('container main is not valid for pod', 400),
+    );
+
+    await renderLogs(true);
+    expect(screen.getByText('Failed to load logs')).toBeInTheDocument();
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9300);
+    });
+
+    // A 400 can never succeed by repeating, so the interval must not fire it.
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Failed to load logs')).toBeInTheDocument();
+  });
+
+  it('does not let a poll append while an older page is still loading', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchNodeLogWindow)
+      .mockResolvedValueOnce(windowOf('newer', true))
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue(windowOf('polled'));
+
+    render(
+      <WorkflowNodeLogs
+        target={target}
+        isRunning={true}
+        argoUrl="http://argo.test"
+      />,
+    );
+    const container = screen.getByTestId('workflow-node-logs-scroll');
+    stubScrollMetrics(container, 1000, 100);
+    await act(async () => {});
+
+    container.scrollTop = 150;
+    await act(async () => {
+      container.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+
+    stubScrollMetrics(container, 1600, 100);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+
+    expect(fetchNodeLogWindow).toHaveBeenCalledTimes(2);
+    expect(getNodeLogBuffer(logBufferKey(target)).lines).toEqual(['newer']);
   });
 
   it('shows a poll failure beneath the logs without hiding them', async () => {
