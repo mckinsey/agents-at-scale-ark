@@ -1051,7 +1051,7 @@ jobs:
         run: |
           cd tests/pytest/ui-tests
           mkdir -p screenshots
-          pytest tests/ -n 2 --dist loadgroup --reruns 1 -v --tb=short --log-cli-level=INFO
+          pytest tests/ -n 3 --dist loadgroup --reruns 1 -v --tb=short --log-cli-level=INFO
 
       - name: Upload test screenshots
         if: always()
