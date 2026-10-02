@@ -566,7 +566,12 @@ export function useChatSession({
         phase => {
           // Only real terminal phases force-close; leave `unknown` to the poll so
           // an unrecognized phase can't truncate a live answer.
-          if (phase !== 'done' && phase !== 'error' && phase !== 'canceled') {
+          if (
+            phase !== 'done' &&
+            phase !== 'error' &&
+            phase !== 'cancelled' &&
+            phase !== 'canceled'
+          ) {
             return;
           }
           forceCloseTimer ??= setTimeout(() => {

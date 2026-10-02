@@ -138,6 +138,7 @@ export const queriesService = {
           if (
             status === 'done' ||
             status === 'error' ||
+            status === 'cancelled' ||
             status === 'canceled'
           ) {
             resolve({ terminal: true, finalStatus: status });

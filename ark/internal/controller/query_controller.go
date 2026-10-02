@@ -299,7 +299,7 @@ func (r *QueryReconciler) patchFinalizers(ctx context.Context, obj *arkv1alpha1.
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
 	if obj.Spec.Cancel && !isTerminalPhase(obj.Status.Phase) {
 		r.cleanupExistingOperation(req.NamespacedName)
-		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
+		if err := r.updateStatus(ctx, &obj, statusCancelled); err != nil {
 			return ctrl.Result{}, err
 		}
 		// Requeue explicitly so the terminal-phase branch below runs and
@@ -319,7 +319,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	}
 
 	switch obj.Status.Phase {
-	case statusDone, statusError, statusCanceled:
+	case statusDone, statusError, statusCancelled, arkv1alpha1.QueryPhaseLegacyCanceled:
 		remaining := ttlRemaining(&obj)
 		if remaining == 0 {
 			return ctrl.Result{}, nil
@@ -1121,7 +1121,7 @@ func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status 
 			errorMsg = query.Status.Response.Content
 		}
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", errorMsg)
-	case statusCanceled:
+	case statusCancelled:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
 	}
 }
@@ -1179,7 +1179,7 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	// The executor needs the taskID to detect this is a resumption after approval
 	// and clears it after processing (handler.go).
 	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
-		if status == statusCanceled && isTerminalPhase(q.Status.Phase) {
+		if status == statusCancelled && isTerminalPhase(q.Status.Phase) {
 			return false
 		}
 		saved.restoreOnto(q)
@@ -1764,7 +1764,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 	response, engineMeta, err := r.sendQueryA2A(opCtx, address, *obj, *target)
 	if err != nil {
 		if stderrors.Is(err, context.Canceled) {
-			dispatchSpan.SetStatus(telemetry.StatusOk, "canceled")
+			dispatchSpan.SetStatus(telemetry.StatusOk, "cancelled")
 			r.Eventing.QueryRecorder().Cancel(opCtx, "QueryExecution", "Query execution canceled", nil)
 			return err
 		}

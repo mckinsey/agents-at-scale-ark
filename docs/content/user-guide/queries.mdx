@@ -187,11 +187,11 @@ The admission webhook requires **either** `target` **or** `selector` — applyin
 
 ## Cancel a running query
 
-Set `spec.cancel: true` on the Query (via `kubectl edit` or a patch) and the controller transitions it to `phase: canceled`:
+Set `spec.cancel: true` on the Query (via `kubectl edit` or a patch) and the controller transitions it to `phase: cancelled`:
 
 ```bash
 kubectl patch query slow-q1 --type='merge' -p='{"spec":{"cancel": true}}'
-kubectl get query slow-q1 -o jsonpath='{.status.phase}'   # canceled
+kubectl get query slow-q1 -o jsonpath='{.status.phase}'   # cancelled
 ```
 
 The dashboard chat panel's **Stop** button does the same thing for embedded chats.

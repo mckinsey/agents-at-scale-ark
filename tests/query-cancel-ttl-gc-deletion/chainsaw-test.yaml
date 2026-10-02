@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: query-cancel-ttl-gc-deletion
 spec:
-  description: spec.cancel on a running Query must transition it to canceled and, once its TTL elapses, the GC path must fully reap it (companion to query-ttl-gc-deletion, which covers the done/error terminal paths).
+  description: spec.cancel on a running Query must transition it to cancelled and, once its TTL elapses, the GC path must fully reap it (companion to query-ttl-gc-deletion, which covers the done/error terminal paths).
   timeouts:
     delete: 15s
     cleanup: 30s
@@ -84,7 +84,7 @@ spec:
         for:
           jsonPath:
             path: '{.status.phase}'
-            value: canceled
+            value: cancelled
     catch:
     - events: {}
     - describe:

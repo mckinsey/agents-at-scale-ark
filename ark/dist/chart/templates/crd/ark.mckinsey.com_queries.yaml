@@ -486,6 +486,7 @@ spec:
                 - input-required
                 - error
                 - done
+                - cancelled
                 - canceled
                 type: string
               response:

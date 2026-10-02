@@ -15,7 +15,7 @@ const (
 	statusInputRequired = arkv1alpha1.QueryPhaseInputRequired
 	statusDone          = arkv1alpha1.QueryPhaseDone
 	statusError         = arkv1alpha1.QueryPhaseError
-	statusCanceled      = arkv1alpha1.QueryPhaseCanceled
+	statusCancelled     = arkv1alpha1.QueryPhaseCancelled
 	statusReady         = "ready"
 
 	finalizer = annotations.Finalizer
