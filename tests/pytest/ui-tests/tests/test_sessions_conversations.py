@@ -315,16 +315,17 @@ class TestSessionsAndConversations:
         first = sessions.get_visible_session_names()
         assert len(first) >= 2, \
             f"sorting needs at least two sessions to be observable, saw {first}"
-        first_ascending = first == sorted(first)
-        assert first_ascending or first == sorted(first, reverse=True), \
-            f"sorting by Name should order the rows, but they read {first}"
+        assert len(set(first)) == len(first), \
+            f"sorting is only observable when every name is distinct, but the rows read {first}"
+        assert first == sorted(first, reverse=True), \
+            f"the first click on Name should sort descending, but the rows read {first}"
 
         sessions.click_sort_header("Name")
         second = sessions.get_visible_session_names()
-        expected = sorted(second, reverse=True) if first_ascending else sorted(second)
-        assert second == expected, \
-            ("clicking Name again should reverse the order, but the rows read "
-             f"{second}")
+        assert len(set(second)) == len(second), \
+            f"sorting is only observable when every name is distinct, but the rows read {second}"
+        assert second == sorted(second), \
+            f"clicking Name again should sort ascending, but the rows read {second}"
 
     # -------------------------------------------------------------------------
     # Empty search results
