@@ -18,10 +18,13 @@ import (
 	"mckinsey.com/ark/internal/inlinetools/runner"
 )
 
-func activationObjects(name string) (*arkv1alpha1.Tool, *appsv1.Deployment, *corev1.Service) {
+func activationObjects(name, language string) (*arkv1alpha1.Tool, *appsv1.Deployment, *corev1.Service) {
+	source := map[string]string{
+		"bash": "printf '1'", "python": "print(1)", "node": "console.log(1)", "ts": "const n: number = 1; console.log(n)",
+	}[language]
 	tool := &arkv1alpha1.Tool{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "tenant", UID: "tool-uid", Generation: 1},
-		Spec:       arkv1alpha1.ToolSpec{Type: arkv1alpha1.ToolTypeInline, Inline: &arkv1alpha1.InlineSpec{Language: "python", Source: "print(1)"}},
+		Spec:       arkv1alpha1.ToolSpec{Type: arkv1alpha1.ToolTypeInline, Inline: &arkv1alpha1.InlineSpec{Language: language, Source: source}},
 		Status: arkv1alpha1.ToolStatus{State: arkv1alpha1.ToolStateReady, Conditions: []metav1.Condition{{
 			Type: arkv1alpha1.ToolConditionAvailable, Status: metav1.ConditionTrue, Reason: arkv1alpha1.ToolReasonAvailable, ObservedGeneration: 1,
 		}}},
@@ -37,7 +40,7 @@ func activationObjects(name string) (*arkv1alpha1.Tool, *appsv1.Deployment, *cor
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{Labels: RunnerLabels(tool), Annotations: map[string]string{SourceHashAnnotation: hash}},
 			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "runner", Env: []corev1.EnvVar{
-				{Name: runner.EnvToolName, Value: name}, {Name: runner.EnvLanguage, Value: "python"}, {Name: runner.EnvSourceHash, Value: hash},
+				{Name: runner.EnvToolName, Value: name}, {Name: runner.EnvLanguage, Value: language}, {Name: runner.EnvSourceHash, Value: hash},
 			}}}},
 		},
 	}}
@@ -49,17 +52,30 @@ func activationObjects(name string) (*arkv1alpha1.Tool, *appsv1.Deployment, *cor
 }
 
 func TestResolveActivationAcceptsCurrentOwnedIdleOrWarmBackend(t *testing.T) {
-	for _, name := range []string{"echo", strings.Repeat("long-name-", 20) + "echo"} {
-		for _, replicas := range []int32{0, 1} {
-			tool, deployment, service := activationObjects(name)
-			deployment.Spec.Replicas = ptr.To(replicas)
-			before := deployment.DeepCopy()
-			address, err := ResolveActivation(true, tool, tool.UID, tool.Name, "ark-system", deployment, service)
-			require.NoError(t, err)
-			assert.Equal(t, "http://"+NamesFor(name).Runner+".tenant.svc.cluster.local:8080/mcp", address)
-			assert.Equal(t, before, deployment, "admission must not change replicas or any other child field")
-		}
+	for _, language := range []string{"bash", "python", "node", "ts"} {
+		t.Run(language, func(t *testing.T) {
+			for _, name := range []string{"echo", strings.Repeat("long-name-", 20) + "echo"} {
+				for _, replicas := range []int32{0, 1} {
+					tool, deployment, service := activationObjects(name, language)
+					deployment.Spec.Replicas = ptr.To(replicas)
+					before := deployment.DeepCopy()
+					address, err := ResolveActivation(true, tool, tool.UID, tool.Name, "ark-system", deployment, service)
+					require.NoError(t, err)
+					assert.Equal(t, "http://"+NamesFor(name).Runner+".tenant.svc.cluster.local:8080/mcp", address)
+					assert.Equal(t, before, deployment, "admission must not change replicas or any other child field")
+				}
+			}
+		})
 	}
+}
+
+func TestResolveActivationRejectsUnsupportedLanguage(t *testing.T) {
+	tool, deployment, service := activationObjects("echo", "python")
+	tool.Spec.Inline.Language = "ruby"
+	deployment.Spec.Template.Spec.Containers[0].Env[1].Value = "ruby"
+	address, err := ResolveActivation(true, tool, tool.UID, tool.Name, "ark-system", deployment, service)
+	require.ErrorContains(t, err, `unsupported inline language "ruby"`)
+	assert.Empty(t, address)
 }
 
 func TestResolveActivationRejectsUnsafeState(t *testing.T) {
@@ -96,7 +112,6 @@ func TestResolveActivationRejectsUnsafeState(t *testing.T) {
 		{"arbitrary endpoint", func(t *arkv1alpha1.Tool, _ *appsv1.Deployment, _ *corev1.Service) {
 			t.Status.ResolvedAddress = "http://attacker/"
 		}},
-		{"unsupported language", func(t *arkv1alpha1.Tool, _ *appsv1.Deployment, _ *corev1.Service) { t.Spec.Inline.Language = "ruby" }},
 		{"wrong deployment name", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Name = "other" }},
 		{"cross-namespace deployment", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Namespace = "elsewhere" }},
 		{"missing deployment UID", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.UID = "" }},
@@ -176,7 +191,7 @@ func TestResolveActivationRejectsUnsafeState(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tool, deployment, service := activationObjects("echo")
+			tool, deployment, service := activationObjects("echo", "python")
 			tc.change(tool, deployment, service)
 			beforeTool, beforeDeployment, beforeService := tool.DeepCopy(), deployment.DeepCopy(), service.DeepCopy()
 			address, err := ResolveActivation(true, tool, tool.UID, tool.Name, "ark-system", deployment, service)
@@ -190,7 +205,7 @@ func TestResolveActivationRejectsUnsafeState(t *testing.T) {
 }
 
 func TestResolveActivationRejectsDisabledStaleUnknownOrMissingTargets(t *testing.T) {
-	tool, deployment, service := activationObjects("echo")
+	tool, deployment, service := activationObjects("echo", "python")
 	cases := []struct {
 		name    string
 		resolve func() (string, error)
