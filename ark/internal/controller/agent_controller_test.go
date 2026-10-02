@@ -251,6 +251,26 @@ var _ = Describe("Agent Controller", func() {
 			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			Expect(condition.Reason).To(Equal("ModelNotConfigured"))
 			Expect(condition.Message).To(ContainSubstring("Agent has no model configured"))
+
+			By("creating a 'default' model that has not become available")
+			defaultModel := newAvailableModel("default", "default")
+			Expect(k8sClient.Create(ctx, defaultModel)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, defaultModel)).To(Succeed())
+			}()
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: defaultedAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the unavailable fallback is reported as ModelNotReady and still names the missing configuration")
+			Expect(k8sClient.Get(ctx, defaultedAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition = reconciledAgent.Status.Conditions[0]
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ModelNotReady"))
+			Expect(condition.Message).To(Equal("Agent has no model configured; the 'default' model it falls back to is not available"))
 		})
 
 		It("should report ModelNotFound when an explicit default model is missing", func() {
@@ -301,6 +321,26 @@ var _ = Describe("Agent Controller", func() {
 			Expect(condition.Type).To(Equal("Available"))
 			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			Expect(condition.Reason).To(Equal("ModelNotFound"))
+
+			By("creating the referenced model without it becoming available")
+			defaultModel := newAvailableModel("default", "default")
+			Expect(k8sClient.Create(ctx, defaultModel)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, defaultModel)).To(Succeed())
+			}()
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: explicitAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying a user-supplied model that is not ready is reported as ModelNotReady")
+			Expect(k8sClient.Get(ctx, explicitAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition = reconciledAgent.Status.Conditions[0]
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ModelNotReady"))
+			Expect(condition.Message).To(Equal("Model 'default' is not available"))
 		})
 
 		It("should keep an A2A agent available when it has no model", func() {

@@ -126,9 +126,10 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 
 // checkModel resolves the agent's model and reports the condition reason to use
 // when it cannot be used. An agent whose modelRef was injected by the mutating
-// webhook has no model of its own, so a missing default is reported as
-// ModelNotConfigured rather than sending operators looking for a Model resource
-// they never referenced.
+// webhook has no model of its own, so every failure says so: a missing default
+// is reported as ModelNotConfigured rather than sending operators looking for a
+// Model resource they never referenced, and the other failures name the
+// fallback instead of presenting 'default' as the user's choice.
 func (r *AgentReconciler) checkModel(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string, string) {
 	if !validation.AgentRequiresModel(agent) {
 		return true, "", ""
@@ -138,22 +139,31 @@ func (r *AgentReconciler) checkModel(ctx context.Context, agent *arkv1alpha1.Age
 		return false, "ModelNotConfigured", "Agent has no model configured; the default executor requires a model"
 	}
 
-	ok, notFound, msg := r.checkModelDependency(ctx, agent)
+	reason, msg, lookupErr := r.checkModelDependency(ctx, agent)
 	switch {
-	case ok:
+	case reason == "":
 		return true, "", ""
-	case notFound && validation.HasDefaultedModelRef(agent):
+	case !validation.HasDefaultedModelRef(agent):
+		return false, reason, msg
+	case lookupErr != nil:
+		return false, reason, fmt.Sprintf(
+			"Agent has no model configured; error checking fallback '%s' model: %v",
+			validation.DefaultModelName, lookupErr)
+	case reason == "ModelNotReady":
+		return false, reason, fmt.Sprintf(
+			"Agent has no model configured; the '%s' model it falls back to is not available",
+			validation.DefaultModelName)
+	default:
 		return false, "ModelNotConfigured", fmt.Sprintf(
 			"Agent has no model configured and no '%s' model exists in namespace '%s'; the default executor requires a model",
 			validation.DefaultModelName, agent.Namespace)
-	default:
-		return false, "ModelNotFound", msg
 	}
 }
 
-// checkModelDependency validates model dependency, reporting separately whether
-// the referenced model was absent rather than merely unavailable.
-func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (ok, notFound bool, message string) {
+// checkModelDependency validates model dependency and returns the condition
+// reason for an unusable model, or an empty reason when the model is ready.
+// lookupErr is set when the model could not be read at all.
+func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (reason, message string, lookupErr error) {
 	modelName := agent.Spec.ModelRef.Name
 	modelNamespace := agent.Namespace
 
@@ -166,19 +176,19 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 	if err := r.Get(ctx, modelKey, &model); err != nil {
 		if errors.IsNotFound(err) {
 			msg := fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace)
-			return false, true, msg
+			return "ModelNotFound", msg, nil
 		}
-		return false, false, fmt.Sprintf("Error checking model: %v", err)
+		return "ModelNotFound", fmt.Sprintf("Error checking model: %v", err), err
 	}
 
 	// Check if model is available
 	modelCondition := meta.FindStatusCondition(model.Status.Conditions, "ModelAvailable")
 	if modelCondition == nil || modelCondition.Status != metav1.ConditionTrue {
 		msg := fmt.Sprintf("Model '%s' is not available", modelName)
-		return false, false, msg
+		return "ModelNotReady", msg, nil
 	}
 
-	return true, false, ""
+	return "", "", nil
 }
 
 // checkToolDependencies validates tool dependencies
