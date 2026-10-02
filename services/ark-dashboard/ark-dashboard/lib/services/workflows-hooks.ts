@@ -22,6 +22,11 @@ export function useWorkflows(
   // tokenStack[0] is always undefined (the first page has no cursor).
   const tokenStackRef = useRef<Array<string | undefined>>([undefined]);
 
+  // Guards against a slow, in-flight request overwriting state after a
+  // newer one (a filter/namespace change, or another page navigation) has
+  // already superseded it.
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const fetchPage = useCallback(
     async (targetPage: number, options?: { silent?: boolean }) => {
       if (!namespace) {
@@ -31,13 +36,24 @@ export function useWorkflows(
         return;
       }
 
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       try {
         setLoading(true);
         const continueToken = tokenStackRef.current[targetPage];
         const result = await workflowsService.list(namespace, filters, {
           limit: pageSize,
           continueToken,
+          signal: controller.signal,
         });
+        // Defensive guard in addition to the AbortSignal: a test double or a
+        // caller that doesn't actually reject on abort could otherwise still
+        // let a superseded response overwrite state set by a newer request.
+        if (abortControllerRef.current !== controller) {
+          return;
+        }
         setWorkflows(result.items);
         setHasNext(result.hasMore);
         if (result.continueToken) {
@@ -46,6 +62,11 @@ export function useWorkflows(
         setPage(targetPage);
         setError(null);
       } catch (err) {
+        // A superseded request was cancelled on purpose, not a failure - its
+        // response (if any) is already irrelevant, so don't surface it.
+        if ((err as Error).name === 'AbortError') {
+          return;
+        }
         // A silent (page-navigation) failure keeps the already-loaded page on
         // screen instead of replacing it with a dead-end error state - only
         // the initial/filter-driven load blocks the view on error.
@@ -55,7 +76,9 @@ export function useWorkflows(
           setError(err as Error);
         }
       } finally {
-        setLoading(false);
+        if (abortControllerRef.current === controller) {
+          setLoading(false);
+        }
       }
     },
     [namespace, filters, pageSize, onPageError],
@@ -66,6 +89,9 @@ export function useWorkflows(
   useEffect(() => {
     tokenStackRef.current = [undefined];
     fetchPage(0);
+    return () => {
+      abortControllerRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [namespace, filters, pageSize]);
 
@@ -81,6 +107,18 @@ export function useWorkflows(
     }
   }, [page, fetchPage]);
 
+  // Replaces one item in place (matched by name) instead of re-fetching the
+  // page. A re-fetch would replay the page's cached continue token, which is
+  // pinned to the resourceVersion snapshot of the original request - that
+  // returns stale data immediately and a 410 once etcd compacts it away.
+  const updateWorkflowItem = useCallback((updated: ArgoWorkflow) => {
+    setWorkflows(prev =>
+      prev.map(workflow =>
+        workflow.metadata.name === updated.metadata.name ? updated : workflow,
+      ),
+    );
+  }, []);
+
   return {
     workflows,
     loading,
@@ -90,6 +128,7 @@ export function useWorkflows(
     hasPrevious: page > 0,
     goToNextPage,
     goToPreviousPage,
+    updateWorkflowItem,
     refetch: () => fetchPage(page),
   };
 }

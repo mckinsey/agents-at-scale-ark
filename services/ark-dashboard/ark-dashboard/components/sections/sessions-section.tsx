@@ -69,18 +69,12 @@ type WorkflowStepType =
   | 'container'
   | 'script'
   | 'suspend';
-type SortOrder = 'newest' | 'oldest';
 type TeamStepType =
   | 'orchestrator'
   | 'agent'
   | 'delegation'
   | 'tool-call'
   | 'response';
-
-const sortOrderItems = [
-  { label: 'Newest First', value: 'newest' },
-  { label: 'Oldest First', value: 'oldest' },
-];
 
 const statusFilterItems = [
   { label: 'All', value: 'all' },
@@ -886,6 +880,7 @@ function SessionsBody({
   selectedSession,
   isDetailLoading,
   hasActiveFilters,
+  hasNext,
   onClearFilters,
 }: {
   readonly error: Error | null;
@@ -896,6 +891,7 @@ function SessionsBody({
   readonly selectedSession?: Session;
   readonly isDetailLoading: boolean;
   readonly hasActiveFilters: boolean;
+  readonly hasNext: boolean;
   readonly onClearFilters: () => void;
 }) {
   if (error) {
@@ -917,11 +913,18 @@ function SessionsBody({
   }
 
   if (sessions.length === 0 && hasActiveFilters) {
+    // Filters apply only to this page (see the API docstring), so an empty
+    // page with hasNext=true doesn't mean "no matches" - matches may sit on
+    // a page we haven't fetched yet.
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <ResourceNoResults
           icon={<SearchIcon className="size-full" />}
-          message="No workflow runs found matching your filters"
+          message={
+            hasNext
+              ? 'No matches on this page — more runs exist further on. Try Next page.'
+              : 'No workflow runs found matching your filters'
+          }
         />
         <Button variant="outline" onClick={onClearFilters}>
           Clear filters
@@ -1003,9 +1006,6 @@ export function SessionsSection({
   const [statusFilter, setStatusFilter] = useState(
     normalizeStatus(searchParams.get('status') || 'all'),
   );
-  const [sortOrder, setSortOrder] = useState<SortOrder>(
-    (searchParams.get('sort') as SortOrder) || 'newest',
-  );
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const templateInputRef = useRef<HTMLDivElement>(null);
 
@@ -1024,7 +1024,7 @@ export function SessionsSection({
     [debouncedWorkflowName, debouncedWorkflowTemplateName, statusFilter],
   );
 
-  // Update URL when filters or sort change
+  // Update URL when filters change
   useEffect(() => {
     const params = new URLSearchParams();
 
@@ -1043,9 +1043,6 @@ export function SessionsSection({
     if (statusFilter && statusFilter !== 'all') {
       params.set('status', statusFilter.toLowerCase());
     }
-    if (sortOrder !== 'newest') {
-      params.set('sort', sortOrder);
-    }
 
     const queryString = params.toString();
     if (queryString === searchParams.toString()) {
@@ -1058,7 +1055,6 @@ export function SessionsSection({
     debouncedWorkflowName,
     debouncedWorkflowTemplateName,
     statusFilter,
-    sortOrder,
     router,
   ]);
 
@@ -1074,7 +1070,7 @@ export function SessionsSection({
     hasPrevious,
     goToNextPage,
     goToPreviousPage,
-    refetch: refetchWorkflows,
+    updateWorkflowItem,
   } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
@@ -1098,36 +1094,33 @@ export function SessionsSection({
     );
   }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
 
-  // workflows is now a single page from useWorkflows, so this filter/sort only
+  // workflows is now a single page from useWorkflows, so this filter only
   // ever applies within the current page, not across the whole collection.
-  const filteredAndSortedSessions = allSessions
-    .filter(session => {
-      if (sourceFilter === 'all') return true;
-      if (sourceFilter === 'workflows') return session.type === 'workflow';
-      return true;
-    })
-    .sort((a, b) => {
-      const timeA = new Date(a.startedAt).getTime();
-      const timeB = new Date(b.startedAt).getTime();
-      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
-    });
+  // The K8s list API has no server-side sort, so sessions are shown in
+  // whatever order the current page returns them - sorting them here would
+  // only reorder the page, not the true "newest"/"oldest" run.
+  const filteredSessions = allSessions.filter(session => {
+    if (sourceFilter === 'all') return true;
+    if (sourceFilter === 'workflows') return session.type === 'workflow';
+    return true;
+  });
 
   useEffect(() => {
     if (
-      filteredAndSortedSessions.length > 0 &&
-      !filteredAndSortedSessions.find(s => s.id === selectedSessionId)
+      filteredSessions.length > 0 &&
+      !filteredSessions.find(s => s.id === selectedSessionId)
     ) {
-      setSelectedSessionId(filteredAndSortedSessions[0].id);
+      setSelectedSessionId(filteredSessions[0].id);
     }
-  }, [filteredAndSortedSessions, selectedSessionId]);
+  }, [filteredSessions, selectedSessionId]);
 
-  const sessionCount = filteredAndSortedSessions.length;
+  const sessionCount = filteredSessions.length;
 
   useEffect(() => {
     onCountChange?.(sessionCount);
   }, [onCountChange, sessionCount]);
 
-  const selectedSessionFromList = filteredAndSortedSessions.find(
+  const selectedSessionFromList = filteredSessions.find(
     s => s.id === selectedSessionId,
   );
 
@@ -1160,12 +1153,12 @@ export function SessionsSection({
         previousStatus === 'Running' || previousStatus === 'Pending';
 
       if (isTerminalState && wasRunning) {
-        void refetchWorkflows();
+        updateWorkflowItem(selectedWorkflowDetail);
       }
 
       previousStatusRef.current = currentStatus;
     }
-  }, [selectedWorkflowDetail, useRealData, refetchWorkflows]);
+  }, [selectedWorkflowDetail, useRealData, updateWorkflowItem]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1188,8 +1181,7 @@ export function SessionsSection({
   const hasActiveFilters =
     workflowNameInput ||
     workflowTemplateNameInput ||
-    (statusFilter && statusFilter !== 'all') ||
-    sortOrder !== 'newest';
+    (statusFilter && statusFilter !== 'all');
 
   const isLoading = loading || !isNamespaceResolved;
 
@@ -1197,7 +1189,6 @@ export function SessionsSection({
     setWorkflowNameInput('');
     setWorkflowTemplateNameInput('');
     setStatusFilter('all');
-    setSortOrder('newest');
   };
 
   return (
@@ -1254,31 +1245,6 @@ export function SessionsSection({
 
           <div className="flex w-full flex-col gap-2 lg:w-[197px]">
             <span
-              id="workflow-sort-label"
-              className="label-regular-primary text-fg-secondary">
-              Sort
-            </span>
-            <Select
-              items={sortOrderItems}
-              value={sortOrder}
-              onValueChange={value => setSortOrder(value as SortOrder)}>
-              <SelectTrigger
-                aria-labelledby="workflow-sort-label"
-                className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sortOrderItems.map(item => (
-                  <SelectItem key={item.value} value={item.value}>
-                    <SelectItemText>{item.label}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex w-full flex-col gap-2 lg:w-[197px]">
-            <span
               id="workflow-status-label"
               className="label-regular-primary text-fg-secondary">
               Status
@@ -1314,12 +1280,13 @@ export function SessionsSection({
         <SessionsBody
           error={error}
           isLoading={isLoading}
-          sessions={filteredAndSortedSessions}
+          sessions={filteredSessions}
           selectedSessionId={selectedSessionId}
           onSelectSession={setSelectedSessionId}
           selectedSession={selectedSession}
           isDetailLoading={loadingDetail && useRealData}
           hasActiveFilters={Boolean(hasActiveFilters)}
+          hasNext={hasNext}
           onClearFilters={clearFilters}
         />
 

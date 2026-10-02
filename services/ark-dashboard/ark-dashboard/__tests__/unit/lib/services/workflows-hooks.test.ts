@@ -77,6 +77,7 @@ describe('useWorkflows', () => {
     expect(workflowsService.list).toHaveBeenCalledWith('default', undefined, {
       limit: 25,
       continueToken: undefined,
+      signal: expect.any(AbortSignal),
     });
     expect(result.current.page).toBe(0);
     expect(result.current.hasPrevious).toBe(false);
@@ -113,7 +114,7 @@ describe('useWorkflows', () => {
     expect(workflowsService.list).toHaveBeenLastCalledWith(
       'default',
       undefined,
-      { limit: 25, continueToken: 'token-1' },
+      { limit: 25, continueToken: 'token-1', signal: expect.any(AbortSignal) },
     );
     expect(result.current.hasPrevious).toBe(true);
   });
@@ -180,8 +181,68 @@ describe('useWorkflows', () => {
     expect(workflowsService.list).toHaveBeenLastCalledWith(
       'default',
       undefined,
-      { limit: 25, continueToken: undefined },
+      { limit: 25, continueToken: undefined, signal: expect.any(AbortSignal) },
     );
+  });
+
+  it('updateWorkflowItem replaces one item in place without re-fetching', async () => {
+    vi.mocked(workflowsService.list).mockResolvedValue(
+      makePage([terminalWorkflow]),
+    );
+
+    const { result } = renderHook(() => useWorkflows('default'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const updated: ArgoWorkflow = {
+      ...terminalWorkflow,
+      status: { phase: 'Failed' },
+    };
+
+    act(() => {
+      result.current.updateWorkflowItem(updated);
+    });
+
+    expect(result.current.workflows).toEqual([updated]);
+    expect(workflowsService.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('a superseded in-flight request does not overwrite state from a later one', async () => {
+    let resolveFirst: (page: WorkflowPage) => void = () => {};
+    const firstCallSignals: Array<AbortSignal | undefined> = [];
+
+    vi.mocked(workflowsService.list).mockImplementation(
+      (_namespace, _filters, opts) => {
+        firstCallSignals.push(opts?.signal);
+        if (firstCallSignals.length === 1) {
+          return new Promise<WorkflowPage>(resolve => {
+            resolveFirst = resolve;
+          });
+        }
+        return Promise.resolve(makePage([terminalWorkflow]));
+      },
+    );
+
+    const { result, rerender } = renderHook(
+      ({ filters }) => useWorkflows('default', filters),
+      { initialProps: { filters: undefined as { status?: string } | undefined } },
+    );
+
+    // First request is still pending when the filter changes.
+    rerender({ filters: { status: 'running' } });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.workflows).toEqual([terminalWorkflow]);
+
+    // The superseded request's signal was aborted, and resolving it late
+    // must not clobber the state the second (current) request already set.
+    expect(firstCallSignals[0]?.aborted).toBe(true);
+    act(() => {
+      resolveFirst(makePage([]));
+    });
+
+    expect(result.current.workflows).toEqual([terminalWorkflow]);
+    expect(result.current.error).toBeNull();
   });
 
   it('resets to page 0 when filters change', async () => {
@@ -208,7 +269,7 @@ describe('useWorkflows', () => {
     expect(workflowsService.list).toHaveBeenLastCalledWith(
       'default',
       { status: 'running' },
-      { limit: 25, continueToken: undefined },
+      { limit: 25, continueToken: undefined, signal: expect.any(AbortSignal) },
     );
   });
 });

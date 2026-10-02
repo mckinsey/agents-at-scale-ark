@@ -476,7 +476,7 @@ describe('SessionsSection', () => {
       expect(workflowBadges.length).toBeGreaterThanOrEqual(3);
     });
 
-    it('should select newest session by default', async () => {
+    it('should select the first session in the returned page by default', async () => {
       render(<SessionsSection />);
 
       await waitFor(() => {
@@ -490,7 +490,7 @@ describe('SessionsSection', () => {
                 btn.title === 'running-workflow-789'),
           );
 
-        expect(sessionList[0]).toHaveAttribute('title', 'running-workflow-789');
+        expect(sessionList[0]).toHaveAttribute('title', 'test-workflow-123');
       });
     });
   });
@@ -606,41 +606,6 @@ describe('SessionsSection', () => {
       });
     });
 
-    it('should sort sessions by newest first by default', () => {
-      render(<SessionsSection />);
-
-      const sessionButtons = screen
-        .getAllByRole('button')
-        .filter(
-          btn =>
-            btn.title === 'test-workflow-123' ||
-            btn.title === 'failed-workflow-456' ||
-            btn.title === 'running-workflow-789',
-        );
-
-      expect(sessionButtons[0]).toHaveAttribute(
-        'title',
-        'running-workflow-789',
-      );
-    });
-
-    it('should allow changing sort order to oldest first', async () => {
-      const user = userEvent.setup();
-      render(<SessionsSection />);
-
-      const sortSelect = screen.getByRole('combobox', { name: 'Sort' });
-      await user.click(sortSelect);
-
-      const oldestOption = await screen.findByRole('option', {
-        name: /oldest first/i,
-      });
-      expect(oldestOption).toBeInTheDocument();
-      await user.click(oldestOption);
-
-      await waitFor(() => {
-        expect(sortSelect).toHaveTextContent(/oldest first/i);
-      });
-    });
   });
 
   describe('Step Details and Expansion', () => {
@@ -916,26 +881,6 @@ describe('SessionsSection', () => {
       await waitFor(() => {
         expect(mockRouter.replace).toHaveBeenCalledWith(
           expect.stringContaining('status=failed'),
-          expect.any(Object),
-        );
-      });
-    });
-
-    it('should update URL when sort order changes', async () => {
-      const user = userEvent.setup();
-      render(<SessionsSection />);
-
-      const sortSelect = screen.getByRole('combobox', { name: 'Sort' });
-      await user.click(sortSelect);
-
-      const oldestOption = await screen.findByRole('option', {
-        name: /oldest first/i,
-      });
-      await user.click(oldestOption);
-
-      await waitFor(() => {
-        expect(mockRouter.replace).toHaveBeenCalledWith(
-          expect.stringContaining('sort=oldest'),
           expect.any(Object),
         );
       });

@@ -185,6 +185,21 @@ class APIClient {
       throw error;
     }
 
+    // An aborted fetch (AbortController.abort()) throws a DOMException named
+    // 'AbortError' - rethrow as-is so callers can tell "cancelled on purpose"
+    // apart from a real network failure. Wrapping it into APIError below would
+    // lose that name. Checked via duck-typing, not `instanceof Error`, since
+    // DOMException doesn't reliably extend Error across environments (e.g.
+    // jsdom in tests).
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      error.name === 'AbortError'
+    ) {
+      throw error;
+    }
+
     const message =
       error instanceof Error ? error.message : 'An unknown error occurred';
 

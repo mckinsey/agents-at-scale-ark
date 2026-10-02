@@ -131,6 +131,22 @@ describe('workflowsService', () => {
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&limit=25&continue=abc123');
     });
 
+    it('forwards an AbortSignal to apiClient.get when given', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+      } as unknown as ArgoWorkflowList);
+      const controller = new AbortController();
+
+      await workflowsService.list('default', undefined, {
+        signal: controller.signal,
+      });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default',
+        { signal: controller.signal },
+      );
+    });
+
     it('should report hasMore true and surface the continue token when present', async () => {
       vi.mocked(apiClient.get).mockResolvedValue({
         items: [],

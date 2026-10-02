@@ -55,6 +55,7 @@ export interface WorkflowFilters {
 export interface WorkflowListOptions {
   limit?: number;
   continueToken?: string;
+  signal?: AbortSignal;
 }
 
 export interface WorkflowPage {
@@ -87,9 +88,10 @@ export const workflowsService = {
       params.append('continue', options.continueToken);
     }
 
-    const response = await apiClient.get<ArgoWorkflowList>(
-      `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?${params.toString()}`,
-    );
+    const url = `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?${params.toString()}`;
+    const response = options?.signal
+      ? await apiClient.get<ArgoWorkflowList>(url, { signal: options.signal })
+      : await apiClient.get<ArgoWorkflowList>(url);
     const items = await Promise.all(response.items.map(expandCompressedNodes));
     const continueToken = response.metadata?.continue || undefined;
 

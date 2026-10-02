@@ -9,7 +9,7 @@ from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 
 os.environ["AUTH_MODE"] = "open"
 
-from ark_api.api.v1.pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
+from ark_api.api.v1.pagination import MAX_PAGE_LIMIT
 
 
 def make_awaitable(return_value):
@@ -827,10 +827,14 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
-    def test_list_workflows_default_limit_used_when_not_specified(
+    def test_list_workflows_no_limit_used_when_not_specified(
         self, mock_get_context, mock_dynamic_client_cls, mock_api_client
     ):
-        """Test that a default limit and no continue token are used when omitted."""
+        """Test that no limit (full list) and no continue token are used when omitted.
+
+        This is a generic endpoint shared by non-paginated callers (Team, Agent,
+        WorkflowTemplate, ...), so omitting `limit` must not silently truncate them.
+        """
         mock_get_context.return_value = {"namespace": "default"}
 
         mock_api_client_instance = AsyncMock()
@@ -849,7 +853,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         mock_api_resource.get.assert_called_once_with(
-            namespace="default", label_selector=None, limit=DEFAULT_PAGE_LIMIT, _continue=None
+            namespace="default", label_selector=None, limit=None, _continue=None
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
@@ -1386,7 +1390,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource.get.assert_called_once_with(
             namespace="default",
             label_selector="app.kubernetes.io/instance=phoenix",
-            limit=DEFAULT_PAGE_LIMIT,
+            limit=None,
             _continue=None,
         )
 

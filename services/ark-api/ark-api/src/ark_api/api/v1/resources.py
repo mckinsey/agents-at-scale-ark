@@ -27,7 +27,7 @@ from ...models.pod_logs import LogWindow
 from ...models.resources import AccessReviewRequest, AccessReviewResponse
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
-from .pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
+from .pagination import MAX_PAGE_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +189,7 @@ async def list_grouped_resources(
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
     workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
     status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending"),
-    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Maximum number of items to return per page"),
+    limit: Optional[int] = Query(None, ge=1, le=MAX_PAGE_LIMIT, description="Maximum number of items to return per page (omit for the full list)"),
     continue_token: Optional[str] = Query(None, alias="continue", description="Continuation token returned by the previous page"),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
 ) -> Response:
@@ -208,7 +208,10 @@ async def list_grouped_resources(
         workflowTemplateName: Filter by workflow template name (partial match, case insensitive).
             Same per-page limitation as workflowName.
         status: Filter by workflow status. Same per-page limitation as workflowName.
-        limit: Maximum number of items returned by the underlying Kubernetes list call
+        limit: Maximum number of items returned by the underlying Kubernetes list call.
+            Omit for the full, unpaginated list — this endpoint is shared by callers
+            that don't paginate (e.g. Team/Agent/WorkflowTemplate listings), so it must
+            not truncate silently when a caller doesn't ask for a page.
         continue_token: Opaque cursor from a previous page's response metadata
 
     Returns:
