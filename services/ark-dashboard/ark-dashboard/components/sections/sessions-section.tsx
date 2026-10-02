@@ -990,8 +990,11 @@ export function SessionsSection({
   // Note: sourceFilter is currently unused but reserved for future support of Team sessions
   // Currently only workflow sessions are implemented
   const [sourceFilter] = useState<SessionSourceFilter>('all');
+  // A one-shot deep link (e.g. from the "View run" toast) to an exact,
+  // known workflow - shown directly regardless of filters/pagination.
+  const initialRunRef = useRef(searchParams.get('run'));
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
-    null,
+    () => initialRunRef.current,
   );
   const [useRealData] = useState(true);
 
@@ -1100,9 +1103,12 @@ export function SessionsSection({
   });
 
   useEffect(() => {
+    const isUnresolvedDeepLink =
+      initialRunRef.current && selectedSessionId === initialRunRef.current;
     if (
       filteredSessions.length > 0 &&
-      !filteredSessions.find(s => s.id === selectedSessionId)
+      !filteredSessions.find(s => s.id === selectedSessionId) &&
+      !isUnresolvedDeepLink
     ) {
       setSelectedSessionId(filteredSessions[0].id);
     }
@@ -1121,9 +1127,7 @@ export function SessionsSection({
   const { workflow: selectedWorkflowDetail, loading: loadingDetail } =
     useWorkflow(
       namespace,
-      useRealData && selectedSessionFromList?.type === 'workflow'
-        ? selectedSessionId || ''
-        : '',
+      useRealData && selectedSessionId ? selectedSessionId : '',
     );
 
   const selectedSession =

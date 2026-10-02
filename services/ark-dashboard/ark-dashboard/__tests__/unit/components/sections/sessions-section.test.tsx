@@ -921,6 +921,31 @@ describe('SessionsSection', () => {
   });
 
   describe('Session Detail View', () => {
+    it('deep-links to a run via ?run= even when it is not on the loaded page', async () => {
+      currentSearch = 'run=brand-new-workflow-xyz123';
+      const deepLinkedWorkflow = {
+        ...mockWorkflow,
+        metadata: { ...mockWorkflow.metadata, name: 'brand-new-workflow-xyz123' },
+      };
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: deepLinkedWorkflow,
+        loading: false,
+        error: null,
+      } as any);
+
+      render(<SessionsSection />);
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByText('brand-new-workflow-xyz123').length,
+        ).toBeGreaterThanOrEqual(1);
+      });
+      expect(useWorkflow).toHaveBeenCalledWith(
+        'default',
+        'brand-new-workflow-xyz123',
+      );
+    });
+
     it('should display selected session name in list and detail view', async () => {
       vi.mocked(useWorkflow).mockReturnValue({
         workflow: mockWorkflow,

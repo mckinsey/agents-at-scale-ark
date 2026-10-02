@@ -33,6 +33,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/resources", tags=["resources"])
 
+WORKFLOW_PHASE_LABEL = "workflows.argoproj.io/phase"
+WORKFLOW_TEMPLATE_LABEL = "workflows.argoproj.io/workflow-template"
+
+# `notin` for "pending" also matches resources where the label is absent
+# entirely, which covers a workflow the controller hasn't reconciled yet.
+WORKFLOW_STATUS_LABEL_SELECTORS = {
+    "succeeded": f"{WORKFLOW_PHASE_LABEL}=Succeeded",
+    "running": f"{WORKFLOW_PHASE_LABEL}=Running",
+    "failed": f"{WORKFLOW_PHASE_LABEL} in (Failed,Error)",
+    "pending": f"{WORKFLOW_PHASE_LABEL} notin (Running,Succeeded,Failed,Error)",
+}
+
 
 def _create_resource_response(data: dict, request: Request) -> Response:
     accept_header = request.headers.get("accept", "application/json")
@@ -187,7 +199,7 @@ async def list_grouped_resources(
     namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
     label_selector: Optional[str] = Query(None, alias="labelSelector", description=LABEL_SELECTOR_DESCRIPTION),
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
-    workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
+    workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (exact match)"),
     status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending"),
     limit: Optional[int] = Query(None, ge=1, le=MAX_PAGE_LIMIT, description="Maximum number of items to return per page (omit for the full list)"),
     continue_token: Optional[str] = Query(None, alias="continue", description="Continuation token returned by the previous page"),
@@ -205,9 +217,10 @@ async def list_grouped_resources(
         workflowName: Filter by workflow name (partial match, case insensitive). Applied only
             to the page returned by this call, not the whole collection — a page can come back
             with few or no matches even though more exist further in the cursor sequence.
-        workflowTemplateName: Filter by workflow template name (partial match, case insensitive).
-            Same per-page limitation as workflowName.
-        status: Filter by workflow status. Same per-page limitation as workflowName.
+        workflowTemplateName: Filter by workflow template name (exact match). Applied
+            server-side via a label selector, so pagination stays correct across pages.
+        status: Filter by workflow status. Same server-side label selector as
+            workflowTemplateName.
         limit: Maximum number of items returned by the underlying Kubernetes list call.
             Omit for the full, unpaginated list (used by non-paginated callers).
         continue_token: Opaque cursor from a previous page's response metadata
@@ -241,6 +254,16 @@ async def list_grouped_resources(
 
     api_version = f"{group}/{version}"
 
+    workflow_label_selectors = []
+    if kind == "Workflow":
+        if workflowTemplateName:
+            workflow_label_selectors.append(f"{WORKFLOW_TEMPLATE_LABEL}={workflowTemplateName}")
+        if status:
+            status_selector = WORKFLOW_STATUS_LABEL_SELECTORS.get(status.lower())
+            if status_selector:
+                workflow_label_selectors.append(status_selector)
+    combined_label_selector = ",".join(filter(None, [label_selector, *workflow_label_selectors]))
+
     async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
 
@@ -251,48 +274,20 @@ async def list_grouped_resources(
 
         resources = await api_resource.get(
             namespace=namespace,
-            label_selector=label_selector,
+            label_selector=combined_label_selector or None,
             limit=limit,
             _continue=continue_token,
         )
         resources_dict = resources.to_dict()
 
-        # Apply filters for Workflow resources. Only resources_dict["items"] is
-        # reassigned below — resources_dict["metadata"] (which carries "continue"
-        # and "remainingItemCount" when the Kubernetes API honours `limit`) is left
-        # untouched so pagination keeps working through the filter.
-        if kind == "Workflow" and "items" in resources_dict:
-            items = resources_dict["items"]
-            filtered_items = []
-
-            for item in items:
-                # Filter by workflow name
-                if workflowName:
-                    item_name = item.get("metadata", {}).get("name", "")
-                    if workflowName.lower() not in item_name.lower():
-                        continue
-
-                # Filter by workflow template name
-                if workflowTemplateName:
-                    template_ref = item.get("spec", {}).get("workflowTemplateRef", {}).get("name", "")
-                    if workflowTemplateName.lower() not in template_ref.lower():
-                        continue
-
-                # Filter by status
-                # Note: "failed" filter matches both "Failed" and "Error" statuses
-                if status:
-                    item_status = item.get("status", {}).get("phase", "")
-                    if status.lower() == "failed":
-                        if item_status.lower() not in ["failed", "error"]:
-                            continue
-                    else:
-                        # Exact match for other statuses
-                        if status.lower() != item_status.lower():
-                            continue
-
-                filtered_items.append(item)
-
-            resources_dict["items"] = filtered_items
+        # workflowName stays a post-fetch partial match, applied only to the
+        # page returned by this call, not the whole collection.
+        if kind == "Workflow" and workflowName and "items" in resources_dict:
+            resources_dict["items"] = [
+                item
+                for item in resources_dict["items"]
+                if workflowName.lower() in item.get("metadata", {}).get("name", "").lower()
+            ]
 
         return _create_resource_response(resources_dict, request)
 

@@ -8,7 +8,7 @@ interface WorkflowLinkProps {
 }
 
 export function WorkflowLink({ workflowName }: WorkflowLinkProps) {
-  const sessionsUrl = `/workflow-runs?workflowName=${encodeURIComponent(workflowName)}`;
+  const sessionsUrl = `/workflow-runs?run=${encodeURIComponent(workflowName)}`;
 
   return (
     <NamespacedLink
