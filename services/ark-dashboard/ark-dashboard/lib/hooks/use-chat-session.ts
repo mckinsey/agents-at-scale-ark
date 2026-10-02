@@ -31,6 +31,7 @@ import type {
   MemoryNotice,
   MemoryNoticeLookup,
 } from '@/lib/services/chat';
+import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
 import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
@@ -196,6 +197,7 @@ export function useChatSession({
   type,
 }: UseChatSessionParams): UseChatSessionReturn {
   const { namespace } = useNamespace();
+  const invalidateQueriesList = useInvalidateQueriesList();
   const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
   const [lastConversationId, setLastConversationId] = useAtom(
     lastConversationIdAtom,
@@ -544,6 +546,7 @@ export function useChatSession({
 
       queryName = streamQueryName;
       lastQueryName.current = queryName;
+      invalidateQueriesList();
 
       // The Query CR phase is the authoritative done signal; the stream's [DONE]
       // is best-effort and may never arrive (broker unreachable / executor
@@ -953,6 +956,7 @@ export function useChatSession({
       chatKey,
       chatMessages,
       conversationId,
+      invalidateQueriesList,
       name,
       namespace,
       queryTimeout,
@@ -981,6 +985,7 @@ export function useChatSession({
       );
 
       lastQueryName.current = query.name;
+      invalidateQueriesList();
 
       let pollingStopped = false;
       stopPollingRef.current = () => {
@@ -1128,6 +1133,7 @@ export function useChatSession({
       applyMemoryLookup,
       buildChatMessages,
       chatMessages,
+      invalidateQueriesList,
       name,
       namespace,
       queryTimeout,

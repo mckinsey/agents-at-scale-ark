@@ -34,6 +34,12 @@ vi.mock('@/lib/services', () => ({
   },
 }));
 
+const mockInvalidateQueriesList = vi.fn();
+
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useInvalidateQueriesList: () => mockInvalidateQueriesList,
+}));
+
 vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
 }));
