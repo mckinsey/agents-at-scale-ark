@@ -22,10 +22,7 @@ import type {
 } from '@/lib/services/conversations';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
 import { queriesService } from '@/lib/services/queries';
-import {
-  LIST_ALL_QUERIES_QUERY_KEY,
-  useGetQuery,
-} from '@/lib/services/queries-hooks';
+import { useGetQuery } from '@/lib/services/queries-hooks';
 import type { ChatMessage } from '@/lib/types/chat-message';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -39,6 +36,7 @@ import { SessionMessage } from './session-message';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
+const RECENT_QUERIES_QUERY_KEY = 'recent-queries';
 const RECENT_QUERIES_PARAMS = { page: 1, pageSize: 50 };
 const RECENT_QUERIES_POLL_MS = 5000;
 const RECENT_QUERIES_MAX_POLLS = 24;
@@ -268,7 +266,7 @@ export function MessageDisplay({
   // and give up after a bounded number of attempts, because a conversation whose
   // query never produced a message would otherwise poll for as long as it is open.
   const { data: recentQueries } = useQuery({
-    queryKey: [LIST_ALL_QUERIES_QUERY_KEY, RECENT_QUERIES_PARAMS, namespace],
+    queryKey: [RECENT_QUERIES_QUERY_KEY, RECENT_QUERIES_PARAMS, namespace],
     queryFn: () => queriesService.list(namespace, RECENT_QUERIES_PARAMS),
     enabled: !latestQueryId && Boolean(namespace),
     refetchInterval: query => {

@@ -11,11 +11,11 @@ import type { Conversation } from '@/lib/services/conversations';
 
 vi.mock('@/lib/services/conversations-hooks');
 vi.mock('@/lib/services/queries-hooks', () => ({
-  LIST_ALL_QUERIES_QUERY_KEY: 'list-all-queries',
   useGetQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
+const mockListQueries = vi.fn(async () => ({ items: [] }));
 vi.mock('@/lib/services/queries', () => ({
-  queriesService: { list: vi.fn(async () => ({ items: [] })) },
+  queriesService: { list: () => mockListQueries() },
 }));
 vi.mock('@/lib/services/a2a-tasks-hooks', () => ({
   useA2ATask: vi.fn(() => ({ data: undefined, isLoading: false })),
@@ -163,6 +163,34 @@ describe('MessageDisplay', () => {
 
     expect(screen.getByText(/No conversation messages available/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow sessions/i)).toBeInTheDocument();
+  });
+
+  it('should not refetch the recent queries lookup when the queries list is invalidated', async () => {
+    vi.mocked(useGetMessages).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useGetMessages>);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MessageDisplay
+          conversationId="conv-1"
+          sessionId="session-1"
+          conversation={mockConversation}
+          showToolCalls={true}
+          onShowToolCallsChange={mockOnShowToolCallsChange}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(mockListQueries).toHaveBeenCalledTimes(1));
+
+    await queryClient.invalidateQueries({ queryKey: ['list-all-queries'] });
+
+    expect(mockListQueries).toHaveBeenCalledTimes(1);
   });
 
   describe('tool approval', () => {
