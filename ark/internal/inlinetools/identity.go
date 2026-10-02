@@ -5,6 +5,7 @@ package inlinetools
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -40,7 +41,13 @@ func RunnerLabels(tool *arkv1alpha1.Tool) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "ark-inline-runner",
 		"app.kubernetes.io/managed-by": "ark-controller",
-		LabelTool:                      tool.Name[:min(len(tool.Name), 63)],
+		LabelTool:                      labelValue(tool.Name),
 		LabelToolUID:                   string(tool.UID),
 	}
+}
+
+// A label value must end alphanumeric, so truncating a Tool name can land on a
+// separator the API server then rejects for every child.
+func labelValue(toolName string) string {
+	return strings.TrimRight(toolName[:min(len(toolName), 63)], "-_.")
 }
