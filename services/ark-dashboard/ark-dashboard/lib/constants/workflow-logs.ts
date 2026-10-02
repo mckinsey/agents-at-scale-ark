@@ -22,3 +22,5 @@ export const WORKFLOW_LOG_MAX_BUFFERED_LINES = readPositiveInt(
   process.env.NEXT_PUBLIC_WORKFLOW_LOG_MAX_BUFFERED_LINES,
   20000,
 );
+
+export const DEFAULT_LOG_CONTAINER = 'main';
