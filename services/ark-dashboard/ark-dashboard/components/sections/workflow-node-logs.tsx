@@ -76,6 +76,21 @@ export function WorkflowNodeLogs({
   }, [key]);
 
   useEffect(() => {
+    if (!isRunning || buffer.loaded || !buffer.error || !buffer.retryable)
+      return;
+
+    const intervalId = setInterval(() => {
+      void ensureLoaded(key, targetRef.current);
+    }, WORKFLOW_LOG_POLL_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [isRunning, buffer.loaded, buffer.error, buffer.retryable, key]);
+
+  const retryLoad = useCallback(() => {
+    void ensureLoaded(key, targetRef.current);
+  }, [key]);
+
+  useEffect(() => {
     if (!isRunning || !buffer.loaded) return;
 
     const intervalId = setInterval(() => {
@@ -197,14 +212,23 @@ export function WorkflowNodeLogs({
         <p className="paragraph-small-primary text-fg-warning">
           {buffer.error}
         </p>
-        <Button variant="ghost" size="xs" asChild>
-          <a href={argoUrl} target="_blank" rel="noopener noreferrer">
-            View logs in Argo UI
-            <IconShell size="sm">
-              <OpenInNew />
-            </IconShell>
-          </a>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={retryLoad}
+            disabled={buffer.loadingInitial}>
+            Retry
+          </Button>
+          <Button variant="ghost" size="xs" asChild>
+            <a href={argoUrl} target="_blank" rel="noopener noreferrer">
+              View logs in Argo UI
+              <IconShell size="sm">
+                <OpenInNew />
+              </IconShell>
+            </a>
+          </Button>
+        </div>
       </div>
     );
   }
