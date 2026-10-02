@@ -253,7 +253,7 @@ var _ = Describe("Agent Controller", func() {
 			Expect(condition.Message).To(ContainSubstring("Agent has no model configured"))
 
 			By("creating a 'default' model that has not become available")
-			defaultModel := newAvailableModel("default", "default")
+			defaultModel := newModel("default", "default")
 			Expect(k8sClient.Create(ctx, defaultModel)).To(Succeed())
 			defer func() {
 				Expect(k8sClient.Delete(ctx, defaultModel)).To(Succeed())
@@ -323,7 +323,7 @@ var _ = Describe("Agent Controller", func() {
 			Expect(condition.Reason).To(Equal("ModelNotFound"))
 
 			By("creating the referenced model without it becoming available")
-			defaultModel := newAvailableModel("default", "default")
+			defaultModel := newModel("default", "default")
 			Expect(k8sClient.Create(ctx, defaultModel)).To(Succeed())
 			defer func() {
 				Expect(k8sClient.Delete(ctx, defaultModel)).To(Succeed())
@@ -594,7 +594,7 @@ var _ = Describe("Agent Controller", func() {
 
 			By("seeding an available model so the tool check is the failing dependency")
 			const missingToolModelName = "tool-test-model"
-			missingToolModel := newAvailableModel(missingToolModelName, "default")
+			missingToolModel := newModel(missingToolModelName, "default")
 			Expect(k8sClient.Create(ctx, missingToolModel)).To(Succeed())
 			missingToolModel.Status.Conditions = []metav1.Condition{{
 				Type:               ModelAvailable,
@@ -982,7 +982,7 @@ var _ = Describe("Agent Controller", func() {
 	})
 })
 
-func newAvailableModel(name, namespace string) *arkv1alpha1.Model {
+func newModel(name, namespace string) *arkv1alpha1.Model {
 	return &arkv1alpha1.Model{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,

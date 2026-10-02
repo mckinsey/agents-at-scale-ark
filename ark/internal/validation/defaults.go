@@ -31,8 +31,7 @@ func AgentRequiresModel(agent *arkv1alpha1.Agent) bool {
 // HasDefaultedModelRef reports whether the agent's modelRef was injected by
 // DefaultAgent rather than supplied by the user.
 func HasDefaultedModelRef(agent *arkv1alpha1.Agent) bool {
-	_, defaulted := agent.Annotations[annotations.DefaultedModelRef]
-	return defaulted
+	return agent.Annotations[annotations.DefaultedModelRef] == "true"
 }
 
 func defaultAgentModelRef(agent *arkv1alpha1.Agent) {
