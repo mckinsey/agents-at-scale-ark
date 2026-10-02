@@ -1898,10 +1898,12 @@ export interface paths {
          *         workflowName: Filter by workflow name (partial match, case insensitive). Applied only
          *             to the page returned by this call, not the whole collection — a page can come back
          *             with few or no matches even though more exist further in the cursor sequence.
-         *         workflowTemplateName: Filter by workflow template name (partial match, case insensitive).
-         *             Same per-page limitation as workflowName.
-         *         status: Filter by workflow status. Same per-page limitation as workflowName.
-         *         limit: Maximum number of items returned by the underlying Kubernetes list call
+         *         workflowTemplateName: Filter by workflow template name (exact match). Applied
+         *             server-side via a label selector, so pagination stays correct across pages.
+         *         status: Filter by workflow status. Same server-side label selector as
+         *             workflowTemplateName.
+         *         limit: Maximum number of items returned by the underlying Kubernetes list call.
+         *             Omit for the full, unpaginated list (used by non-paginated callers).
          *         continue_token: Opaque cursor from a previous page's response metadata
          *
          *     Returns:
@@ -8691,12 +8693,12 @@ export interface operations {
                 labelSelector?: string | null;
                 /** @description Filter by workflow name (partial match, case insensitive) */
                 workflowName?: string | null;
-                /** @description Filter by workflow template name (partial match, case insensitive) */
+                /** @description Filter by workflow template name (exact match) */
                 workflowTemplateName?: string | null;
                 /** @description Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending */
                 status?: string | null;
-                /** @description Maximum number of items to return per page */
-                limit?: number;
+                /** @description Maximum number of items to return per page (omit for the full list) */
+                limit?: number | null;
                 /** @description Continuation token returned by the previous page */
                 continue?: string | null;
             };
