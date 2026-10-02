@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { ChevronLeft } from '@/components/icons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,9 +20,11 @@ export default function SessionDetailPage() {
   const session_id = params.session_id as string;
   const { push } = useNamespacedNavigation();
 
+  const sessionsReturnHref = useListReturnHref('/sessions');
+
   const handleBackToSessions = useCallback(() => {
-    push('/sessions');
-  }, [push]);
+    push(sessionsReturnHref);
+  }, [push, sessionsReturnHref]);
 
   const { data: session, isLoading, isError } = useGetSession(session_id);
 

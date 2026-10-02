@@ -27,7 +27,7 @@ The dashboard SHALL classify `namespace` as an app-scoped parameter and SHALL pr
 
 ### Requirement: Page-local parameters are dropped when leaving a screen
 
-Any query parameter that is not app-scoped SHALL be removed from the URL when a navigation changes which screen is displayed.
+Any query parameter that is not app-scoped SHALL be removed from the URL when a navigation changes which screen is displayed, unless the navigation is a return to a screen the user has already visited (see "Returning to a screen restores the state it was left in").
 
 #### Scenario: A form prefill parameter does not follow the user
 
@@ -52,6 +52,42 @@ Parameters named by a navigation target SHALL be applied to the destination URL 
 
 - **WHEN** the user follows a link whose target names a namespace other than the active one
 - **THEN** the destination keeps the namespace the link supplied, and the namespace left behind is not restored
+
+### Requirement: Returning to a screen restores the state it was left in
+
+The dashboard SHALL record the URL of each list screen the user visits since the page was loaded. A return control - a detail page's breadcrumb, a studio or form's back or cancel action, or closing Settings - SHALL restore that screen's own parameters - filters, sorting and pagination - so the user does not have to reapply them. The recorded URL SHALL NOT carry app-scoped parameters, so the namespace in use at the time of the return is the one applied.
+
+Sidebar entries are not return controls and SHALL open a screen with no parameters applied, so the sidebar remains a way to reach a screen in its default state. This is uniform across the sidebar: no entry restores, and none may special-case a single screen.
+
+#### Scenario: A breadcrumb returns to the list as it was left
+
+- **WHEN** the user filters a list, opens one of its rows, and returns using the detail page's breadcrumb
+- **THEN** the list is displayed with the same filters, sorting and page as when the row was opened
+
+#### Scenario: Closing Settings returns to the screen state it was entered from
+
+- **WHEN** the user filters a screen, opens Settings, and closes Settings
+- **THEN** that screen is displayed again with the same filters, sorting and page
+
+#### Scenario: A detail page reached directly returns to the unfiltered list
+
+- **WHEN** the user opens a detail page URL directly, without having visited its list since the page was loaded, and follows the breadcrumb
+- **THEN** the list is displayed with no filters applied, and no parameters are invented
+
+#### Scenario: A restored screen uses the current namespace
+
+- **WHEN** the user returns to a screen that was last visited under a different namespace
+- **THEN** the screen's own parameters are restored and the namespace currently in use is applied, not the one recorded earlier
+
+#### Scenario: A sidebar entry opens the screen in its default state
+
+- **WHEN** the user filters a list, navigates away, and returns to it from the sidebar
+- **THEN** the list is displayed with no filters applied, and the same holds for every sidebar entry
+
+#### Scenario: Browser history is unaffected by filter changes
+
+- **WHEN** the user changes filters, sorting or pagination on a screen and then presses the browser back button
+- **THEN** they return to the screen they visited before that one, rather than stepping back through each filter change
 
 ### Requirement: Screen-owned parameters survive navigation within the same screen
 

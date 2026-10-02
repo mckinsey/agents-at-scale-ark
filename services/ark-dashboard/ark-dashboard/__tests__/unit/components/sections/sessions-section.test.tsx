@@ -6,9 +6,12 @@ import {
   waitFor,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  getAppRouterMock,
+  resetAppRouterMock,
+} from '@/__tests__/setup/mock-app-router';
 import { SessionsSection } from '@/components/sections/sessions-section';
 import { APIError } from '@/lib/api/client';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
@@ -26,10 +29,11 @@ vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => mockUseNamespace(),
 }));
 
-vi.mock('next/navigation', () => ({
-  useRouter: vi.fn(),
-  useSearchParams: vi.fn(),
-}));
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock('/workflow-runs');
+});
 
 vi.mock('@/lib/services/workflows-hooks', () => ({
   useWorkflows: vi.fn(),
@@ -38,10 +42,6 @@ vi.mock('@/lib/services/workflows-hooks', () => ({
 
 vi.mock('@/lib/services/workflow-logs', () => ({
   fetchNodeLogWindow: vi.fn().mockRejectedValue(new Error('404 not found')),
-}));
-
-vi.mock('@/lib/hooks/use-debounce', () => ({
-  useDebounce: vi.fn(value => value),
 }));
 
 vi.mock('@/lib/services/workflow-mapper', () => ({
@@ -220,33 +220,19 @@ const mockWorkflowWithoutTemplate = {
 };
 
 describe('SessionsSection', () => {
-  const mockRouter = {
-    push: vi.fn(),
-    replace: vi.fn(),
-    refresh: vi.fn(),
-  };
-
-  let currentSearch = '';
+  const mockRouter = getAppRouterMock();
   const allWorkflows = [mockWorkflow, mockFailedWorkflow, mockRunningWorkflow];
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAppRouterMock();
     resetNodeLogStore();
-    currentSearch = '';
     mockUseNamespace.mockReturnValue({
       namespace: 'default',
       isNamespaceResolved: true,
       isPending: false,
       readOnlyMode: false,
     });
-    mockRouter.replace.mockImplementation((url: string) => {
-      currentSearch = url.split('?')[1] ?? '';
-    });
-    vi.mocked(useRouter).mockReturnValue(mockRouter as any);
-    vi.mocked(useSearchParams).mockImplementation(
-      () => new URLSearchParams(currentSearch) as any,
-    );
-
     vi.mocked(mapArgoWorkflowsToSessions).mockImplementation(workflows =>
       workflows.map((w: any) => ({
         id: w.metadata.name,
@@ -936,6 +922,15 @@ describe('SessionsSection', () => {
       const searchInput = screen.getByPlaceholderText('Search');
       await user.type(searchInput, 'test');
 
+      await waitFor(() => {
+        expect(mockRouter.replace).toHaveBeenCalledWith(
+          expect.stringContaining('workflowName=test'),
+          expect.any(Object),
+        );
+      });
+
+      resetAppRouterMock('workflowName=test');
+
       const clearButton = screen.getByRole('button', {
         name: /clear filters/i,
       });
@@ -951,7 +946,7 @@ describe('SessionsSection', () => {
     });
 
     it('should not replace URL when it already matches current filters', async () => {
-      currentSearch = 'workflowName=test';
+      resetAppRouterMock('workflowName=test');
 
       render(<SessionsSection />);
 
@@ -1156,9 +1151,7 @@ describe('SessionsSection', () => {
 
   describe('Uncovered branches', () => {
     it('should seed filters from the URL and keep the namespace param', () => {
-      vi.mocked(useSearchParams).mockImplementation(
-        () => new URLSearchParams('namespace=ns-1&status=failed') as any,
-      );
+      resetAppRouterMock('namespace=ns-1&status=failed');
 
       render(<SessionsSection />);
 

@@ -21,6 +21,26 @@ The dashboard will open in your browser:
 
 The dashboard can be used to create models, agents, teams, tools, run queries, check events, view workflow templates, and more.
 
+## List filters and the URL
+
+A list screen keeps its filters, sorting and page in the URL, so the view you are
+looking at can be bookmarked, shared, or reloaded without setting it up again.
+The Files section keeps its current folder there the same way.
+
+Two ways back to a list behave differently:
+
+- **Return controls restore the list.** A detail page's breadcrumb, a form's back
+  or cancel action, and closing Settings all return the list as you left it, with
+  your filters still applied.
+- **Sidebar entries open the screen fresh.** Clicking a section in the sidebar
+  applies no filters, which is how you get back to a screen's default state. This
+  is the same for every section, so a sidebar click never carries a filter you
+  have forgotten about.
+
+Opening a detail page from a link rather than from its list returns you to an
+unfiltered list, since there is no earlier state to restore. Restoring always
+uses the namespace you are in now, not the one recorded earlier.
+
 ---
 
 **Ready to build?** Start by creating and managing [Models](/user-guide/models).
