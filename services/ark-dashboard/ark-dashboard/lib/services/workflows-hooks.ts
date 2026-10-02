@@ -67,6 +67,19 @@ export function useWorkflows(
         if ((err as Error).name === 'AbortError') {
           return;
         }
+        // A cached continue token pins the list to the resourceVersion
+        // snapshot of the page-0 request that started the sequence. Once
+        // etcd compacts that snapshot away (~5 min by default), the token
+        // is permanently unusable and every page built on top of it 410s -
+        // there's no page to recover to, so restart the sequence at page 0
+        // instead of leaving the user stuck on a dead end.
+        const status = (err as { status?: number }).status;
+        if (options?.silent && status === 410) {
+          tokenStackRef.current = [undefined];
+          onPageError?.(new Error('List changed — back to the first page'));
+          fetchPage(0, { silent: true });
+          return;
+        }
         // A silent (page-navigation) failure keeps the already-loaded page on
         // screen instead of replacing it with a dead-end error state - only
         // the initial/filter-driven load blocks the view on error.

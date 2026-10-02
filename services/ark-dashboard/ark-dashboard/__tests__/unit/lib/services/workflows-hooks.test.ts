@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { APIError } from '@/lib/api/client';
 import { type WorkflowPage, workflowsService } from '@/lib/services/workflows';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
@@ -243,6 +244,46 @@ describe('useWorkflows', () => {
 
     expect(result.current.workflows).toEqual([terminalWorkflow]);
     expect(result.current.error).toBeNull();
+  });
+
+  it('a 410 on a cached page token resets to page 0 instead of leaving a dead end', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
+      // By the time the user clicks Next, the token's resourceVersion
+      // snapshot has been compacted away by etcd.
+      .mockRejectedValueOnce(new APIError('Gone', 410))
+      .mockResolvedValueOnce(makePage([terminalWorkflow]));
+    const onPageError = vi.fn();
+
+    const { result } = renderHook(() =>
+      useWorkflows('default', undefined, undefined, onPageError),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.goToNextPage();
+    });
+
+    await waitFor(() => expect(onPageError).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(workflowsService.list).toHaveBeenCalledTimes(3),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.page).toBe(0);
+    expect(result.current.error).toBeNull();
+    expect(result.current.workflows).toEqual([terminalWorkflow]);
+    expect(onPageError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('back to the first page'),
+      }),
+    );
+    expect(workflowsService.list).toHaveBeenLastCalledWith(
+      'default',
+      undefined,
+      { limit: 25, continueToken: undefined, signal: expect.any(AbortSignal) },
+    );
   });
 
   it('resets to page 0 when filters change', async () => {
