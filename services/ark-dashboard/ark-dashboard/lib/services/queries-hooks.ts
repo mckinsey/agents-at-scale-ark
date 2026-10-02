@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -8,11 +9,13 @@ import type { components } from '@/lib/api/generated/types';
 
 type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 
+export const LIST_ALL_QUERIES_QUERY_KEY = 'list-all-queries';
+
 export const useListQueries = (params: ListQueriesParams = {}, enabled = true) => {
   const { namespace } = useNamespace();
 
   return useQuery({
-    queryKey: ['list-all-queries', params, namespace],
+    queryKey: [LIST_ALL_QUERIES_QUERY_KEY, params, namespace],
     queryFn: () => queriesService.list(namespace, params),
     enabled: enabled && Boolean(namespace),
   });
@@ -34,3 +37,15 @@ export function useGetQuery(queryName: string | null | undefined, enabled = true
     refetchInterval: 5000,
   });
 }
+
+export const useInvalidateQueriesList = () => {
+  const queryClient = useQueryClient();
+
+  return useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: [LIST_ALL_QUERIES_QUERY_KEY],
+      }),
+    [queryClient],
+  );
+};

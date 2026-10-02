@@ -11,6 +11,7 @@ import type { Conversation } from '@/lib/services/conversations';
 
 vi.mock('@/lib/services/conversations-hooks');
 vi.mock('@/lib/services/queries-hooks', () => ({
+  LIST_ALL_QUERIES_QUERY_KEY: 'list-all-queries',
   useGetQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
 vi.mock('@/lib/services/queries', () => ({

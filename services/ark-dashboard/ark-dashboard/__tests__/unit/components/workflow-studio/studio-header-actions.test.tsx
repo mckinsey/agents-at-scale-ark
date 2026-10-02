@@ -9,6 +9,12 @@ const pushMock = vi.fn();
 const replaceMock = vi.fn();
 let readOnlyMode = false;
 
+const mockInvalidateQueriesList = vi.fn();
+
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useInvalidateQueriesList: () => mockInvalidateQueriesList,
+}));
+
 vi.mock('@/lib/services/workflow-templates', () => ({
   WORKFLOW_TEMPLATE_ANNOTATIONS: {
     TITLE: 'workflows.argoproj.io/title',

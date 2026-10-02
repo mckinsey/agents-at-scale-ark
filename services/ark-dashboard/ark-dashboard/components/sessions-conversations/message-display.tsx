@@ -22,7 +22,10 @@ import type {
 } from '@/lib/services/conversations';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
 import { queriesService } from '@/lib/services/queries';
-import { useGetQuery } from '@/lib/services/queries-hooks';
+import {
+  LIST_ALL_QUERIES_QUERY_KEY,
+  useGetQuery,
+} from '@/lib/services/queries-hooks';
 import type { ChatMessage } from '@/lib/types/chat-message';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -265,7 +268,7 @@ export function MessageDisplay({
   // and give up after a bounded number of attempts, because a conversation whose
   // query never produced a message would otherwise poll for as long as it is open.
   const { data: recentQueries } = useQuery({
-    queryKey: ['list-all-queries', RECENT_QUERIES_PARAMS, namespace],
+    queryKey: [LIST_ALL_QUERIES_QUERY_KEY, RECENT_QUERIES_PARAMS, namespace],
     queryFn: () => queriesService.list(namespace, RECENT_QUERIES_PARAMS),
     enabled: !latestQueryId && Boolean(namespace),
     refetchInterval: query => {
