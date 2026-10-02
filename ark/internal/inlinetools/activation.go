@@ -40,7 +40,7 @@ func ResolveActivation(enabled bool, tool *arkv1alpha1.Tool, routeUID types.UID,
 	if activatorNamespace == "" || tool.Status.ResolvedAddress != ResolvedAddress(activatorNamespace, tool) {
 		return "", fmt.Errorf("inline Tool has no matching published activator endpoint")
 	}
-	if _, err := runner.Interpreter(tool.Spec.Inline.Language); err != nil {
+	if _, err := runner.SourceFilename(tool.Spec.Inline.Language); err != nil {
 		return "", err
 	}
 	if deployment == nil || service == nil || !OwnsRunner(deployment, tool) || !OwnsRunner(service, tool) {
