@@ -52,7 +52,11 @@ To move resources between storage backends within one cluster (etcd to PostgreSQ
 ark export -o ark-export.yaml
 ```
 
-This captures `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, and `a2aservers`. The export removes Kubernetes runtime metadata, status, ownership references, finalizers, and the last-applied annotation. It includes application Secrets but omits Helm release records, service account token Secrets, MCPServer-generated Tools, and A2AServer-generated Agents. The destination controllers regenerate those child resources with valid ownership.
+This captures `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, and `a2aservers`, plus the Argo workflow resources the dashboard treats as first-class: `clusterworkflowtemplates`, `workflowtemplates`, and `cronworkflows`. The export removes Kubernetes runtime metadata, status, ownership references, finalizers, and the last-applied annotation. It includes application Secrets but omits Helm release records, service account token Secrets, MCPServer-generated Tools, and A2AServer-generated Agents. The destination controllers regenerate those child resources with valid ownership.
+
+If the Argo CRDs are not installed on the source cluster, those types are warned and skipped rather than failing the export.
+
+`clusterworkflowtemplates` are cluster-scoped, so they are only included when the export is not scoped with `-n`. When you scope the export to a namespace with `-n`, they are skipped — a namespace-scoped export captures that namespace's resources, not the cluster-wide templates shared across tenants.
 
 Useful flags:
 
@@ -60,7 +64,7 @@ Useful flags:
 - `-t, --types <types>` — comma-separated list of resource types (e.g. `-t models,agents,teams`)
 
 <Callout type="warning">
-Not included in the default export: `queries`, `memories`, `executionengines`, `a2atasks`, and any non-Ark CRDs such as Argo `WorkflowTemplate`. Back those up separately with `kubectl get <kind> -A -o yaml` if you need them on the destination.
+Not included in the default export: `queries`, `memories`, `executionengines`, `a2atasks`, and Argo `Workflow` instances (the running executions, as opposed to `WorkflowTemplate`s). These are runtime, status-bearing resources; back them up separately with `kubectl get <kind> -A -o yaml` if you need them, though restoring them onto a fresh cluster recreates a historical record rather than re-running anything.
 </Callout>
 
 #### 2. Install Ark on the destination cluster
@@ -88,6 +92,34 @@ ark import ark-export.yaml --upsert
 </Callout>
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
+
+## v0.1.70
+
+### Broker Purge Endpoints Removed
+
+The broker's purge-all `DELETE` endpoints are gone, together with the `ark-api` proxies in front of them and the dashboard **Purge** buttons that called them. Each one wiped a whole data domain for every query, conversation and tenant sharing the broker, and the broker routes had no authentication in front of them. Deleting broker data now means naming what to delete.
+
+**Migration** — broker routes:
+
+| Removed | Replacement |
+|---------|-------------|
+| `DELETE /messages` | `DELETE /queries/{queryId}/messages`, or `DELETE /conversations/{conversationId}/queries/{queryId}/messages`, or `DELETE /conversations/{conversationId}` for a whole conversation |
+| `DELETE /events` | `DELETE /events/{queryId}` (keyed by Query UID) |
+| `DELETE /sessions` | `DELETE /sessions/queries/{queryId}` (keyed by Query name) |
+| `DELETE /stream` | None. Chunks are bounded by `limits.chunkMaxBytes` and `limits.chunkTtlSeconds` |
+| `DELETE /traces` | None. Spans are bounded by `limits.traceMaxBytes` |
+
+**Migration** — `ark-api` routes:
+
+| Removed | Replacement |
+|---------|-------------|
+| `DELETE /v1/broker/messages` | `DELETE /v1/conversations` to clear memory, or `DELETE /v1/conversations/{conversationId}` and `DELETE /v1/conversations/{conversationId}/queries/{queryId}/messages` to scope it |
+| `DELETE /v1/broker/events`, `DELETE /v1/broker/sessions` | None. The scoped broker routes are not proxied; call the broker directly, or let the Query finalizer clean up |
+| `DELETE /v1/broker/chunks`, `DELETE /v1/broker/traces` | None, as above |
+
+`DELETE /conversations` on the broker and `DELETE /v1/conversations` on `ark-api` are unchanged. They still clear the whole memory store, and back the dashboard's **Reset memory** action.
+
+If you were purging to clean up after deleted queries, you no longer have to: the controller's finalizer removes a Query's messages, operation events and sessions entry when the Query goes away. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
 ## v0.1.67
 
@@ -126,7 +158,7 @@ The `/openai/v1/chat/completions` and `/openai/v1/models` endpoints have been re
 **Migration:**
 - Replace `POST /openai/v1/chat/completions` with `POST /v1/queries/` using `type: "user"` and string `input`
 - Replace `GET /openai/v1/models` with `GET /v1/agents/`, `GET /v1/models/`, etc.
-- For streaming, create a query with the `ark.mckinsey.com/streaming-enabled: "true"` annotation and consume SSE from `/v1/broker/chunks?watch=true&query-id={name}`
+- For streaming, consume SSE from `/v1/broker/chunks?watch=true&query-id={name}` (streaming is enabled cluster-side via the event streaming ConfigMap; no per-query annotation is required)
 - OpenAI SDK wrappers (Python/JS) are no longer supported; use direct HTTP calls to the query API
 
 ## v0.1.51

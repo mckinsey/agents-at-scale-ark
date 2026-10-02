@@ -392,9 +392,7 @@ export function EmbeddedChatPanel({
                 <AlertContent>
                   <AlertTitle>Broker service not available</AlertTitle>
                   <AlertDescription>
-                    For the debug view to work, install the broker service and
-                    turn on the setting in the experimental features window
-                    (Ctrl+E).
+                    For the debug view to work, install the broker service.
                   </AlertDescription>
                 </AlertContent>
               </Alert>

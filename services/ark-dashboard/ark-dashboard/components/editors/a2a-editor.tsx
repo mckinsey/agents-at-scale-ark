@@ -5,11 +5,17 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
+import {
+  EMPTY_HEADER_ROW,
+  type HeaderData,
+  useHeaderRows,
+} from '@/components/forms/shared/header-rows';
+import { Plus } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { ConditionalInputRow } from '@/components/ui/conditionalInputRow';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -23,13 +29,17 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import type { A2AServerConfiguration } from '@/lib/services/a2a-servers';
+import type {
+  A2AServerConfiguration,
+  Header,
+} from '@/lib/services/a2a-servers';
+import { useGetAllSecrets } from '@/lib/services/secrets-hooks';
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   namespace: string;
-  onSave: (config: A2AServerConfiguration) => void;
+  onSave: (config: A2AServerConfiguration) => void | Promise<void>;
 };
 
 const formSchema = z.object({
@@ -45,7 +55,28 @@ const formSchema = z.object({
     ),
 });
 
+const LABEL_CLASS = 'label-regular-primary text-fg-secondary';
+
+const SECRET_HEADER_KEY = 'token';
+
+export function buildHeader(header: HeaderData): Header {
+  if (header.type === 'direct') {
+    return { name: header.name, value: { value: header.value } };
+  }
+
+  return {
+    name: header.name,
+    value: {
+      valueFrom: {
+        secretKeyRef: { name: header.value, key: SECRET_HEADER_KEY },
+      },
+    },
+  };
+}
+
 export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
+  const headerRows = useHeaderRows();
+  const { data: secrets } = useGetAllSecrets();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -56,13 +87,22 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
     },
   });
 
+  const { setHeaders, setHeaderErrors } = headerRows;
+
   useEffect(() => {
     if (open) {
       form.reset();
+      setHeaders([EMPTY_HEADER_ROW]);
+      setHeaderErrors({});
     }
-  }, [open, form]);
+  }, [open, form, setHeaders, setHeaderErrors]);
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    const nonEmptyHeaders = headerRows.validate();
+    if (!nonEmptyHeaders) {
+      return;
+    }
+
     const config: A2AServerConfiguration = {
       name: values.name,
       namespace,
@@ -72,36 +112,41 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
         pollingInterval: values.pollingInterval
           ? Number(values.pollingInterval)
           : undefined,
+        headers: nonEmptyHeaders.length
+          ? nonEmptyHeaders.map(buildHeader)
+          : undefined,
       },
     };
 
-    onSave(config);
-    onOpenChange(false);
+    await onSave(config);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next && form.formState.isSubmitting) {
+      return;
+    }
+    onOpenChange(next);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-[586px]">
         <DialogHeader>
-          <DialogTitle>Create New A2A Server</DialogTitle>
-          <DialogDescription>
-            Fill in the information for the new A2A server.
-          </DialogDescription>
+          <DialogTitle>Create new A2A server</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-4 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="contents">
+            <div className="flex flex-col gap-6">
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Name <span className="text-red-500">*</span>
-                    </FormLabel>
+                    <FormLabel className={LABEL_CLASS}>Name *</FormLabel>
                     <FormControl>
                       <Input
+                        variant="inline"
                         placeholder="e.g., deep-research"
                         disabled={form.formState.isSubmitting}
                         {...field}
@@ -117,10 +162,11 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel className={LABEL_CLASS}>Description</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="What this server does"
+                        variant="inline"
+                        placeholder="what this server does"
                         disabled={form.formState.isSubmitting}
                         {...field}
                       />
@@ -135,11 +181,10 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
                 name="baseUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      URL <span className="text-red-500">*</span>
-                    </FormLabel>
+                    <FormLabel className={LABEL_CLASS}>URL *</FormLabel>
                     <FormControl>
                       <Input
+                        variant="inline"
                         placeholder="https://agentspace-a2a.default.svc.cluster.local:2973/a2a/agent/..."
                         disabled={form.formState.isSubmitting}
                         {...field}
@@ -155,9 +200,12 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
                 name="pollingInterval"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Polling Interval (seconds)</FormLabel>
+                    <FormLabel className={LABEL_CLASS}>
+                      Polling Interval (seconds)
+                    </FormLabel>
                     <FormControl>
                       <Input
+                        variant="inline"
                         type="number"
                         placeholder="e.g., 60"
                         disabled={form.formState.isSubmitting}
@@ -168,6 +216,35 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
                   </FormItem>
                 )}
               />
+
+              <div className="flex flex-col gap-2">
+                <span className={LABEL_CLASS}>Headers</span>
+                {headerRows.headers.map((row, index) => (
+                  <ConditionalInputRow
+                    key={row.key}
+                    data={row}
+                    onChange={updated => {
+                      headerRows.updateRow(index, updated);
+                      headerRows.clearRowError(row.key, updated);
+                    }}
+                    secrets={secrets ?? []}
+                    deleteRow={headerRows.deleteRow}
+                    nameError={headerRows.headerErrors[row.key]?.nameError}
+                    valueError={headerRows.headerErrors[row.key]?.valueError}
+                    namePlaceholder="e.g., Authorization"
+                    valuePlaceholder="e.g., Bearer token"
+                  />
+                ))}
+                <Button
+                  type="button"
+                  onClick={headerRows.addRow}
+                  variant="outline"
+                  size="icon"
+                  disabled={form.formState.isSubmitting}
+                  aria-label="Add header">
+                  <Plus />
+                </Button>
+              </div>
             </div>
 
             <DialogFooter>

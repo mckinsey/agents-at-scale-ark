@@ -367,7 +367,7 @@ export function MemorySection() {
           <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
             <Table
               aria-label="Memory messages"
-              className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+              className="min-w-[936px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
               <TableHeader>
                 <TableRow>
                   <TableHead size="small" className={COL.added}>

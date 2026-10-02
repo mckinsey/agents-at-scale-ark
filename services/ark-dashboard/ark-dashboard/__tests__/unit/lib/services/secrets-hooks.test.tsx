@@ -3,17 +3,24 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { toast } from '@/components/ui/sonner';
 import { APIError } from '@/lib/api/client';
 import { secretsService } from '@/lib/services/secrets';
+import type {
+  Secret,
+  SecretCreateRequest,
+  SecretDetailResponse,
+  SecretUpdateRequest,
+} from '@/lib/services/secrets';
 import {
   GET_ALL_SECRETS_QUERY_KEY,
+  GET_SECRET_QUERY_KEY,
   useCreateSecret,
   useDeleteSecret,
   useGetAllSecrets,
   useGetSecret,
   useUpdateSecret,
 } from '@/lib/services/secrets-hooks';
-import { toast } from '@/components/ui/sonner';
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
@@ -41,20 +48,50 @@ vi.mock('@/components/ui/sonner', () => ({
   },
 }));
 
-const createWrapper = () => {
-  const queryClient = new QueryClient({
+const createQueryClient = () =>
+  new QueryClient({
     defaultOptions: {
-      queries: {
-        retry: false,
-      },
-      mutations: {
-        retry: false,
-      },
+      queries: { retry: false },
+      mutations: { retry: false },
     },
   });
+
+const wrapperFor = (queryClient: QueryClient) => {
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
+};
+
+const createWrapper = () => wrapperFor(createQueryClient());
+
+const secret: Secret = {
+  id: 'aws-credentials',
+  name: 'aws-credentials',
+  description: null,
+  alias: null,
+  labels: [],
+};
+
+const secretDetail: SecretDetailResponse = {
+  id: 'aws-credentials',
+  name: 'aws-credentials',
+  type: 'Opaque',
+  keys: ['token'],
+  description: null,
+  alias: null,
+  labels: [],
+};
+
+const createRequest: SecretCreateRequest = {
+  name: 'aws-credentials',
+  string_data: { token: 'password123' },
+  type: 'Opaque',
+  labels: [],
+};
+
+const updateRequest: SecretUpdateRequest = {
+  string_data: { token: 'newpassword123' },
+  labels: [],
 };
 
 describe('secrets-hooks', () => {
@@ -64,11 +101,7 @@ describe('secrets-hooks', () => {
 
   describe('useGetAllSecrets', () => {
     it('should fetch all secrets', async () => {
-      const mockSecrets = [
-        { id: 'secret-1', name: 'secret-1' },
-        { id: 'secret-2', name: 'secret-2' },
-      ];
-      vi.mocked(secretsService.getAll).mockResolvedValue(mockSecrets as any);
+      vi.mocked(secretsService.getAll).mockResolvedValue([secret]);
 
       const { result } = renderHook(() => useGetAllSecrets(), {
         wrapper: createWrapper(),
@@ -76,11 +109,11 @@ describe('secrets-hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(result.current.data).toEqual(mockSecrets);
+      expect(result.current.data).toEqual([secret]);
       expect(secretsService.getAll).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle errors when fetching secrets', async () => {
+    it('should surface fetch errors', async () => {
       const error = new Error('Failed to fetch');
       vi.mocked(secretsService.getAll).mockRejectedValue(error);
 
@@ -95,15 +128,8 @@ describe('secrets-hooks', () => {
   });
 
   describe('useGetSecret', () => {
-    it('should fetch a secret and return its keys when a name is provided', async () => {
-      const mockSecret = {
-        name: 'aws-credentials',
-        id: 'aws-credentials',
-        type: 'Opaque',
-        secret_length: 2,
-        keys: ['accessKeyId', 'secretAccessKey'],
-      };
-      vi.mocked(secretsService.get).mockResolvedValue(mockSecret as any);
+    it('should fetch the secret when a name is provided', async () => {
+      vi.mocked(secretsService.get).mockResolvedValue(secretDetail);
 
       const { result } = renderHook(() => useGetSecret('aws-credentials'), {
         wrapper: createWrapper(),
@@ -111,14 +137,14 @@ describe('secrets-hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(secretsService.get).toHaveBeenCalledWith('default', 'aws-credentials');
-      expect(result.current.data?.keys).toEqual([
-        'accessKeyId',
-        'secretAccessKey',
-      ]);
+      expect(secretsService.get).toHaveBeenCalledWith(
+        'default',
+        'aws-credentials',
+      );
+      expect(result.current.data).toEqual(secretDetail);
     });
 
-    it('should be disabled and not fetch when name is undefined', () => {
+    it('should not fetch when the name is undefined', () => {
       const { result } = renderHook(() => useGetSecret(undefined), {
         wrapper: createWrapper(),
       });
@@ -127,7 +153,7 @@ describe('secrets-hooks', () => {
       expect(secretsService.get).not.toHaveBeenCalled();
     });
 
-    it('should handle errors when fetching a secret', async () => {
+    it('should surface fetch errors', async () => {
       const error = new Error('Failed to fetch secret');
       vi.mocked(secretsService.get).mockRejectedValue(error);
 
@@ -142,198 +168,78 @@ describe('secrets-hooks', () => {
   });
 
   describe('useCreateSecret', () => {
-    it('should create a secret successfully', async () => {
-      const mockResponse = { name: 'test-secret' };
-      vi.mocked(secretsService.create).mockResolvedValue(mockResponse as any);
-
-      const queryClient = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false },
-          mutations: { retry: false },
-        },
-      });
-      queryClient.setQueryData([GET_ALL_SECRETS_QUERY_KEY], []);
-
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
-      );
+    it('should create a secret and notify the caller', async () => {
+      vi.mocked(secretsService.create).mockResolvedValue(secretDetail);
 
       const onSuccess = vi.fn();
       const { result } = renderHook(() => useCreateSecret({ onSuccess }), {
-        wrapper,
+        wrapper: createWrapper(),
       });
 
-      result.current.mutate({ name: 'test-secret', password: 'password123' });
+      result.current.mutate(createRequest);
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(secretsService.create).toHaveBeenCalledWith(
         'default',
-        'test-secret',
-        'password123',
+        createRequest,
       );
       expect(toast.success).toHaveBeenCalledWith('Secret created successfully');
-      expect(onSuccess).toHaveBeenCalledWith(mockResponse);
+      expect(onSuccess).toHaveBeenCalledWith(secretDetail);
     });
 
-    it('should handle 409 conflict error when creating', async () => {
-      const error = new APIError('Conflict', 409);
-      vi.mocked(secretsService.create).mockRejectedValue(error);
-
-      const queryClient = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false },
-          mutations: { retry: false },
-        },
-      });
-      queryClient.setQueryData([GET_ALL_SECRETS_QUERY_KEY], []);
-
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
+    it('should report a name clash on 409', async () => {
+      vi.mocked(secretsService.create).mockRejectedValue(
+        new APIError('Conflict', 409),
       );
 
-      const { result } = renderHook(() => useCreateSecret({}), {
-        wrapper,
-      });
-
-      result.current.mutate({ name: 'duplicate-secret', password: 'pass' });
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect(toast.error).toHaveBeenCalledWith(
-        'Failed to create Secret: duplicate-secret',
-        {
-          description: 'A Secret with the name "duplicate-secret" already exists.',
-        },
-      );
-    });
-
-    it('should handle generic errors when creating', async () => {
-      const error = new Error('Network error');
-      vi.mocked(secretsService.create).mockRejectedValue(error);
-
-      const queryClient = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false },
-          mutations: { retry: false },
-        },
-      });
-      queryClient.setQueryData([GET_ALL_SECRETS_QUERY_KEY], []);
-
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
-      );
-
-      const { result } = renderHook(() => useCreateSecret({}), {
-        wrapper,
-      });
-
-      result.current.mutate({ name: 'test-secret', password: 'pass' });
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect(toast.error).toHaveBeenCalledWith(
-        'Failed to create Secret: test-secret',
-        {
-          description: 'Network error',
-        },
-      );
-    });
-  });
-
-  describe('useUpdateSecret', () => {
-    it('should update a secret successfully', async () => {
-      const mockResponse = { name: 'updated-secret' };
-      vi.mocked(secretsService.update).mockResolvedValue(mockResponse as any);
-
-      const onSuccess = vi.fn();
-      const { result } = renderHook(() => useUpdateSecret({ onSuccess }), {
+      const { result } = renderHook(() => useCreateSecret(), {
         wrapper: createWrapper(),
       });
 
-      result.current.mutate({
-        name: 'updated-secret',
-        password: 'newpassword123',
-      });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(secretsService.update).toHaveBeenCalledWith(
-        'default',
-        'updated-secret',
-        'newpassword123',
-      );
-      expect(toast.success).toHaveBeenCalledWith('Secret updated successfully');
-      expect(onSuccess).toHaveBeenCalledWith(mockResponse);
-    });
-
-    it('should handle 404 error when updating non-existent secret', async () => {
-      const error = new APIError('Not Found', 404);
-      vi.mocked(secretsService.update).mockRejectedValue(error);
-
-      const { result } = renderHook(() => useUpdateSecret({}), {
-        wrapper: createWrapper(),
-      });
-
-      result.current.mutate({
-        name: 'nonexistent-secret',
-        password: 'pass',
-      });
+      result.current.mutate(createRequest);
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(toast.error).toHaveBeenCalledWith(
-        'Failed to update Secret: nonexistent-secret',
+        'Failed to create Secret: aws-credentials',
         {
-          description: 'Secret "nonexistent-secret" not found.',
+          description:
+            'A Secret with the name "aws-credentials" already exists.',
         },
       );
     });
 
-    it('should handle generic errors when updating', async () => {
-      const error = new Error('Update failed');
-      vi.mocked(secretsService.update).mockRejectedValue(error);
+    it('should fall back to the error message on other failures', async () => {
+      vi.mocked(secretsService.create).mockRejectedValue(
+        new Error('Network error'),
+      );
 
-      const { result } = renderHook(() => useUpdateSecret({}), {
+      const { result } = renderHook(() => useCreateSecret(), {
         wrapper: createWrapper(),
       });
 
-      result.current.mutate({ name: 'test-secret', password: 'pass' });
+      result.current.mutate(createRequest);
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(toast.error).toHaveBeenCalledWith(
-        'Failed to update Secret: test-secret',
-        {
-          description: 'Update failed',
-        },
+        'Failed to create Secret: aws-credentials',
+        { description: 'Network error' },
       );
     });
 
-    it('should invalidate queries on success', async () => {
-      const mockResponse = { name: 'test-secret' };
-      vi.mocked(secretsService.update).mockResolvedValue(mockResponse as any);
+    it('should invalidate the list once settled', async () => {
+      vi.mocked(secretsService.create).mockResolvedValue(secretDetail);
 
-      const queryClient = new QueryClient({
-        defaultOptions: { mutations: { retry: false } },
-      });
+      const queryClient = createQueryClient();
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
-      );
+      const { result } = renderHook(() => useCreateSecret(), {
+        wrapper: wrapperFor(queryClient),
+      });
 
-      const { result } = renderHook(() => useUpdateSecret({}), { wrapper });
-
-      result.current.mutate({ name: 'test-secret', password: 'pass' });
+      result.current.mutate(createRequest);
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -343,51 +249,133 @@ describe('secrets-hooks', () => {
     });
   });
 
-  describe('useDeleteSecret', () => {
-    it('should delete a secret successfully', async () => {
-      vi.mocked(secretsService.delete).mockResolvedValue(undefined as any);
+  describe('useUpdateSecret', () => {
+    it('should update a secret and notify the caller', async () => {
+      vi.mocked(secretsService.update).mockResolvedValue(secretDetail);
 
       const onSuccess = vi.fn();
-      const { result } = renderHook(
-        () => useDeleteSecret({ onSuccess }),
-        {
-          wrapper: createWrapper(),
-        },
-      );
+      const { result } = renderHook(() => useUpdateSecret({ onSuccess }), {
+        wrapper: createWrapper(),
+      });
 
-      result.current.mutate('delete-me');
+      result.current.mutate({ name: 'aws-credentials', request: updateRequest });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(secretsService.delete).toHaveBeenCalledWith('default', 'delete-me');
+      expect(secretsService.update).toHaveBeenCalledWith(
+        'default',
+        'aws-credentials',
+        updateRequest,
+      );
+      expect(toast.success).toHaveBeenCalledWith('Secret updated successfully');
+      expect(onSuccess).toHaveBeenCalledWith(secretDetail);
+    });
+
+    it('should report a missing secret on 404', async () => {
+      vi.mocked(secretsService.update).mockRejectedValue(
+        new APIError('Not Found', 404),
+      );
+
+      const { result } = renderHook(() => useUpdateSecret(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({ name: 'gone', request: updateRequest });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(toast.error).toHaveBeenCalledWith('Failed to update Secret: gone', {
+        description: 'Secret "gone" not found.',
+      });
+    });
+
+    it('should fall back to the error message on other failures', async () => {
+      vi.mocked(secretsService.update).mockRejectedValue(
+        new Error('Update failed'),
+      );
+
+      const { result } = renderHook(() => useUpdateSecret(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({ name: 'aws-credentials', request: updateRequest });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to update Secret: aws-credentials',
+        { description: 'Update failed' },
+      );
+    });
+
+    it('should invalidate both the list and the updated secret', async () => {
+      vi.mocked(secretsService.update).mockResolvedValue(secretDetail);
+
+      const queryClient = createQueryClient();
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+      const { result } = renderHook(() => useUpdateSecret(), {
+        wrapper: wrapperFor(queryClient),
+      });
+
+      result.current.mutate({ name: 'aws-credentials', request: updateRequest });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: [GET_ALL_SECRETS_QUERY_KEY],
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: [GET_SECRET_QUERY_KEY, 'aws-credentials'],
+      });
+    });
+  });
+
+  describe('useDeleteSecret', () => {
+    it('should delete a secret and notify the caller', async () => {
+      vi.mocked(secretsService.delete).mockResolvedValue(undefined);
+
+      const onSuccess = vi.fn();
+      const { result } = renderHook(() => useDeleteSecret({ onSuccess }), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate('aws-credentials');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(secretsService.delete).toHaveBeenCalledWith(
+        'default',
+        'aws-credentials',
+      );
       expect(toast.success).toHaveBeenCalledWith('Secret deleted successfully');
       expect(onSuccess).toHaveBeenCalled();
     });
 
-    it('should work without onSuccess callback', async () => {
-      vi.mocked(secretsService.delete).mockResolvedValue(undefined as any);
+    it('should work without an onSuccess callback', async () => {
+      vi.mocked(secretsService.delete).mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useDeleteSecret(), {
         wrapper: createWrapper(),
       });
 
-      result.current.mutate('delete-me');
+      result.current.mutate('aws-credentials');
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(secretsService.delete).toHaveBeenCalledWith('default', 'delete-me');
       expect(toast.success).toHaveBeenCalled();
     });
 
-    it('should handle errors when deleting', async () => {
-      const error = new Error('Delete failed');
-      vi.mocked(secretsService.delete).mockRejectedValue(error);
+    it('should report the error message on failure', async () => {
+      vi.mocked(secretsService.delete).mockRejectedValue(
+        new Error('Delete failed'),
+      );
 
       const { result } = renderHook(() => useDeleteSecret(), {
         wrapper: createWrapper(),
       });
 
-      result.current.mutate('test-secret');
+      result.current.mutate('aws-credentials');
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
@@ -396,14 +384,14 @@ describe('secrets-hooks', () => {
       });
     });
 
-    it('should handle non-Error objects when deleting', async () => {
-      vi.mocked(secretsService.delete).mockRejectedValue('string error' as any);
+    it('should fall back to a generic message for non-Error rejections', async () => {
+      vi.mocked(secretsService.delete).mockRejectedValue('string error' as never);
 
       const { result } = renderHook(() => useDeleteSecret(), {
         wrapper: createWrapper(),
       });
 
-      result.current.mutate('test-secret');
+      result.current.mutate('aws-credentials');
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
@@ -412,29 +400,64 @@ describe('secrets-hooks', () => {
       });
     });
 
-    it('should invalidate queries on success', async () => {
-      vi.mocked(secretsService.delete).mockResolvedValue(undefined as any);
+    it('should invalidate the list once settled', async () => {
+      vi.mocked(secretsService.delete).mockResolvedValue(undefined);
 
-      const queryClient = new QueryClient({
-        defaultOptions: { mutations: { retry: false } },
-      });
+      const queryClient = createQueryClient();
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
-      );
+      const { result } = renderHook(() => useDeleteSecret(), {
+        wrapper: wrapperFor(queryClient),
+      });
 
-      const { result } = renderHook(() => useDeleteSecret(), { wrapper });
-
-      result.current.mutate('test-secret');
+      result.current.mutate('aws-credentials');
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(invalidateSpy).toHaveBeenCalledWith({
         queryKey: [GET_ALL_SECRETS_QUERY_KEY],
       });
+    });
+
+    it('should drop the cached secret', async () => {
+      vi.mocked(secretsService.delete).mockResolvedValue(undefined);
+
+      const queryClient = createQueryClient();
+      queryClient.setQueryData(
+        [GET_SECRET_QUERY_KEY, 'aws-credentials'],
+        secretDetail,
+      );
+
+      const { result } = renderHook(() => useDeleteSecret(), {
+        wrapper: wrapperFor(queryClient),
+      });
+
+      result.current.mutate('aws-credentials');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(
+        queryClient.getQueryData([GET_SECRET_QUERY_KEY, 'aws-credentials']),
+      ).toBeUndefined();
+    });
+
+    it('should leave other cached secrets alone', async () => {
+      vi.mocked(secretsService.delete).mockResolvedValue(undefined);
+
+      const queryClient = createQueryClient();
+      queryClient.setQueryData([GET_SECRET_QUERY_KEY, 'other'], secretDetail);
+
+      const { result } = renderHook(() => useDeleteSecret(), {
+        wrapper: wrapperFor(queryClient),
+      });
+
+      result.current.mutate('aws-credentials');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(
+        queryClient.getQueryData([GET_SECRET_QUERY_KEY, 'other']),
+      ).toEqual(secretDetail);
     });
   });
 });

@@ -40,6 +40,9 @@ const RequiredMarker = () => (
 const inlineSelectTriggerClassName =
   'focus-visible:border-b-stroke-status-focus w-full rounded-none border-0 border-b border-white/[0.24] bg-transparent px-0 hover:border-b-white/40';
 
+const inlineTextareaClassName =
+  'min-h-9 resize-none border-0 border-b-[1px] border-b-stroke-tertiary bg-transparent px-0 py-1 shadow-none hover:border-b-stroke-tertiary-hover hover:bg-transparent focus-visible:border-b-stroke-status-focus focus-visible:bg-transparent focus-visible:shadow-elevation-0 focus-visible:ring-0 aria-invalid:border-b-status-error aria-invalid:ring-0 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-fg-disabled disabled:placeholder:text-fg-disabled';
+
 const jsonTextareaClassName = (expanded: boolean) =>
   cn(
     'resize-none font-mono transition-all duration-200',
@@ -207,11 +210,13 @@ export function ToolForm({
                   <FieldTitle>
                     Description {!isViewing && <RequiredMarker />}
                   </FieldTitle>
-                  <Input
-                    variant="inline"
+                  <Textarea
+                    autoResize
+                    rows={1}
                     placeholder="Tool description"
                     disabled={isDisabled}
                     aria-invalid={!!fieldState.error}
+                    className={inlineTextareaClassName}
                     {...field}
                   />
                   <FieldError>{fieldState.error?.message}</FieldError>

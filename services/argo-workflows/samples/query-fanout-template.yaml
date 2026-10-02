@@ -82,14 +82,14 @@ spec:
             target:
               name: "{{inputs.parameters.model-name}}"
               type: model
-            timeout: 5m
+            timeout: 30m
             ttl: 24h
           EOF
 
           # Wait for the query to complete. The 'Completed' condition is error
           # or success - essentially that no more changes will be made.
           kubectl wait --for=condition=Completed \
-            --timeout=5m query/$QUERY_NAME || true
+            --timeout=30m query/$QUERY_NAME || true
 
           # Save full Query object as output, show the phase (error/done).
           kubectl get query $QUERY_NAME -o json > /tmp/query.json

@@ -3,6 +3,9 @@ from typing import Dict, Optional
 from ark_sdk.constants import ARK_DOMAIN
 
 ARK_ANNOTATION_PREFIX = ARK_DOMAIN
+ARK_RESOURCE_TYPE_ANNOTATION = f"{ARK_ANNOTATION_PREFIX}resource-type"
+
+CONFIGURATION_RESOURCE_TYPE = "configuration"
 
 
 def filter_ark_annotations(annotations: Optional[Dict[str, str]]) -> Dict[str, str]:

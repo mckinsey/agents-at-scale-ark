@@ -3,7 +3,7 @@ import time
 import pytest
 import requests
 
-from helpers import k8s
+from shared import k8s
 from helpers.broker_helper import (
     find_trace_for_query,
     get_agent_spans,

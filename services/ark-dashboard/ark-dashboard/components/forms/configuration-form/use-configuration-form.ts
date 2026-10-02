@@ -6,10 +6,12 @@ import { useForm } from 'react-hook-form';
 
 import {
   useCreateConfiguration,
+  useGetAllConfigurations,
   useGetConfiguration,
   useUpdateConfiguration,
 } from '@/lib/services/configurations-hooks';
 
+import { useAliasOptions } from '../fields/use-alias-options';
 import {
   ConfigurationFormMode,
   configurationFormSchema,
@@ -42,6 +44,9 @@ export function useConfigurationForm({
   const { data: configuration, isLoading } = useGetConfiguration(
     isEdit ? configurationName : undefined,
   );
+
+  const { data: allConfigurations } = useGetAllConfigurations();
+  const aliasOptions = useAliasOptions(allConfigurations, configurationName);
 
   const { reset } = form;
   useEffect(() => {
@@ -86,5 +91,6 @@ export function useConfigurationForm({
     loading: isEdit && isLoading,
     saving: createConfiguration.isPending || updateConfiguration.isPending,
     onSubmit,
+    aliasOptions,
   };
 }

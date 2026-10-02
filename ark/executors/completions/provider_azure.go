@@ -209,7 +209,7 @@ func (ap *AzureProvider) ensureUsageData(fullResponse *openai.ChatCompletion) {
 }
 
 func (ap *AzureProvider) initClients() {
-	ap.httpClient = &http.Client{Transport: common.NewLoggingTransport(common.NewSharedTransport())}
+	ap.httpClient = &http.Client{Transport: common.NewLoggingTransport(&sseContentTypeNormalizer{base: common.NewSharedTransport()})}
 	ap.probeClient = common.NewHTTPClientWithoutTracing()
 }
 

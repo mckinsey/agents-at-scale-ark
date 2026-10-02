@@ -289,7 +289,6 @@ describe('chatService', () => {
         'TestAgent',
         undefined,
         undefined,
-        undefined,
         '5m',
       );
 
@@ -297,28 +296,6 @@ describe('chatService', () => {
         '/api/v1/queries/',
         expect.objectContaining({
           timeout: '5m',
-        }), { params: { namespace: 'default' } });
-    });
-
-    it('should handle enableStreaming parameter', async () => {
-      await chatService.submitChatQuery(
-        'default',
-        'Hello',
-        'agent',
-        'TestAgent',
-        undefined,
-        undefined,
-        true,
-      );
-
-      expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/v1/queries/',
-        expect.objectContaining({
-          metadata: {
-            annotations: {
-              'ark.mckinsey.com/streaming-enabled': 'true',
-            },
-          },
         }), { params: { namespace: 'default' } });
     });
   });
@@ -666,7 +643,7 @@ describe('chatService', () => {
             value: new TextEncoder().encode('data: {"content":"World"}\n\n'),
           })
           .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: vi.fn(),
+        cancel: vi.fn().mockResolvedValue(undefined),
       };
 
       mockFetch.mockResolvedValue({
@@ -705,7 +682,7 @@ describe('chatService', () => {
             value: new TextEncoder().encode('tent":"Hello"}\n\n'),
           })
           .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: vi.fn(),
+        cancel: vi.fn().mockResolvedValue(undefined),
       };
 
       mockFetch.mockResolvedValue({
@@ -740,7 +717,7 @@ describe('chatService', () => {
             value: new TextEncoder().encode('data: [DONE]\n\n'),
           })
           .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: vi.fn(),
+        cancel: vi.fn().mockResolvedValue(undefined),
       };
 
       mockFetch.mockResolvedValue({
@@ -800,10 +777,10 @@ describe('chatService', () => {
       }).rejects.toThrow('No response body available for streaming');
     });
 
-    it('should release reader lock when done', async () => {
+    it('should cancel the reader when done', async () => {
       const mockReader = {
         read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
-        releaseLock: vi.fn(),
+        cancel: vi.fn().mockResolvedValue(undefined),
       };
 
       mockFetch.mockResolvedValue({
@@ -820,13 +797,13 @@ describe('chatService', () => {
       )) {
       }
 
-      expect(mockReader.releaseLock).toHaveBeenCalled();
+      expect(mockReader.cancel).toHaveBeenCalled();
     });
 
-    it('should release reader lock on error', async () => {
+    it('should cancel the reader on error', async () => {
       const mockReader = {
         read: vi.fn().mockRejectedValue(new Error('Read error')),
-        releaseLock: vi.fn(),
+        cancel: vi.fn().mockResolvedValue(undefined),
       };
 
       mockFetch.mockResolvedValue({
@@ -847,13 +824,13 @@ describe('chatService', () => {
         }
       }).rejects.toThrow('Read error');
 
-      expect(mockReader.releaseLock).toHaveBeenCalled();
+      expect(mockReader.cancel).toHaveBeenCalled();
     });
 
     it('should forward abort signal to fetch', async () => {
       const mockReader = {
         read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
-        releaseLock: vi.fn(),
+        cancel: vi.fn().mockResolvedValue(undefined),
       };
 
       mockFetch.mockResolvedValue({

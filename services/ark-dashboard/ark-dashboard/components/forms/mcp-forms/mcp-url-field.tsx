@@ -54,57 +54,57 @@ export function McpUrlField({ form, state }: McpUrlFieldProps) {
     <FormField
       control={form.control}
       name="configurationName"
-      render={({ field, fieldState }) => (
-        <FieldSet className="gap-2">
-          <FieldTitle>URL</FieldTitle>
-          {state.kind === 'literal' && (
-            <p className="text-sm">
-              This URL is currently stored in the MCP server itself:{' '}
-              {state.url}
-            </p>
-          )}
-          <div className="flex items-center gap-3">
-            <Select onValueChange={field.onChange} value={field.value}>
-              <SelectTrigger
-                className={cn(GHOST_TRIGGER, 'flex-1')}
-                aria-invalid={!!fieldState.error}>
-                <SelectValue placeholder="Select a configuration" />
-              </SelectTrigger>
-              <SelectContent className="bg-fill-onsurface-ui-2">
-                {configurations?.map(configuration => (
-                  <SelectItem
-                    key={configuration.name}
-                    value={configuration.name}>
-                    <SelectItemText>{configuration.name}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <CreateResourceButton
-              kind="configuration"
-              label={
-                state.kind === 'literal' ? 'Move to configuration' : 'Add New'
-              }
-              dialogTitle={
-                state.kind === 'literal'
-                  ? 'Move URL to a configuration'
-                  : undefined
-              }
-              defaultValue={currentUrl}
-              onCreated={name =>
-                form.setValue('configurationName', name, {
-                  shouldValidate: true,
-                  shouldDirty: true,
-                })
-              }
-            />
-          </div>
-          {configurations?.length === 0 && (
-            <p className="text-sm">No configurations in this namespace.</p>
-          )}
-          <FieldError>{fieldState.error?.message}</FieldError>
-        </FieldSet>
-      )}
+      render={({ field, fieldState }) => {
+        const stillLiteral = state.kind === 'literal' && !field.value;
+
+        return (
+          <FieldSet className="gap-2">
+            <FieldTitle>URL</FieldTitle>
+            {stillLiteral && (
+              <p className="text-sm">
+                This URL is currently stored in the MCP server itself:{' '}
+                {state.url}
+              </p>
+            )}
+            <div className="flex items-center gap-3">
+              <Select onValueChange={field.onChange} value={field.value}>
+                <SelectTrigger
+                  className={cn(GHOST_TRIGGER, 'flex-1')}
+                  aria-invalid={!!fieldState.error}>
+                  <SelectValue placeholder="Select a configuration" />
+                </SelectTrigger>
+                <SelectContent className="bg-fill-onsurface-ui-2">
+                  {configurations?.map(configuration => (
+                    <SelectItem
+                      key={configuration.name}
+                      value={configuration.name}>
+                      <SelectItemText>{configuration.name}</SelectItemText>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <CreateResourceButton
+                kind="configuration"
+                label={stillLiteral ? 'Move to configuration' : 'Add New'}
+                dialogTitle={
+                  stillLiteral ? 'Move URL to a configuration' : undefined
+                }
+                defaultValue={currentUrl}
+                onCreated={name =>
+                  form.setValue('configurationName', name, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
+              />
+            </div>
+            {configurations?.length === 0 && (
+              <p className="text-sm">No configurations in this namespace.</p>
+            )}
+            <FieldError>{fieldState.error?.message}</FieldError>
+          </FieldSet>
+        );
+      }}
     />
   );
 }

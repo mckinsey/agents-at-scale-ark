@@ -15,6 +15,10 @@ import {
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import {
+  StatusIndicator,
+  getAvailabilityStatus,
+} from '@/components/ui/status-indicator';
+import {
   Table,
   TableBody,
   TableCell,
@@ -37,12 +41,6 @@ interface ModelsTableProps {
   readonly models: readonly ModelListItem[];
   readonly onDelete: (id: string) => void;
 }
-
-const STATUS_CONFIG = {
-  True: { label: 'Active', dotClass: 'bg-status-success' },
-  False: { label: 'Error', dotClass: 'bg-status-error' },
-  Unknown: { label: 'Unknown', dotClass: 'bg-fg-tertiary' },
-} as const;
 
 const PROVIDER_ICONS: Record<
   string,
@@ -67,21 +65,6 @@ const COL = {
   status: 'w-[120px]',
   action: 'w-[72px]',
 };
-
-function ModelStatus({
-  status,
-}: Readonly<{ status?: ModelListItem['available'] | null }>) {
-  const value = status ?? 'Unknown';
-  const config = STATUS_CONFIG[value];
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span className={cn('size-2 rounded-full', config.dotClass)} />
-      <span className="label-regular-primary text-fg-primary">
-        {config.label}
-      </span>
-    </span>
-  );
-}
 
 interface ModelTableRowProps {
   readonly model: ModelListItem;
@@ -136,7 +119,7 @@ function ModelTableRow({ model, onDelete }: Readonly<ModelTableRowProps>) {
           </span>
         </TableCell>
         <TableCell size="small">
-          <ModelStatus status={model.available} />
+          <StatusIndicator {...getAvailabilityStatus(model.available)} />
         </TableCell>
         <TableCell size="small" className="relative z-10">
           <div className="flex items-center justify-center">
@@ -169,7 +152,7 @@ export function ModelsTable({ models, onDelete }: Readonly<ModelsTableProps>) {
   return (
     <Table
       aria-label="Models"
-      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[1008px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>

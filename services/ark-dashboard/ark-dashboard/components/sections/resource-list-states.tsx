@@ -29,6 +29,7 @@ interface ResourceSearchInputProps {
   readonly onChange: (value: string) => void;
   readonly placeholder?: string;
   readonly className?: string;
+  readonly testId?: string;
 }
 
 export function ResourceSearchInput({
@@ -36,6 +37,7 @@ export function ResourceSearchInput({
   onChange,
   placeholder = 'Search',
   className,
+  testId,
 }: ResourceSearchInputProps) {
   return (
     <div className={cn('relative w-[304px] max-w-full', className)}>
@@ -46,6 +48,7 @@ export function ResourceSearchInput({
       </span>
       <Input
         type="search"
+        data-testid={testId}
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -85,7 +88,7 @@ export function ResourceEmptyState({
               {description}
             </div>
           </div>
-          <div className="flex items-start gap-3 [&>*]:min-w-[100px] [&_button]:min-w-[100px]">
+          <div className="flex items-start gap-3 [&_button]:min-w-[100px] [&>*]:min-w-[100px]">
             {actions}
           </div>
         </div>
@@ -117,12 +120,16 @@ interface ResourceErrorStateProps {
   readonly title: string;
   readonly description?: ReactNode;
   readonly className?: string;
+  readonly onRetry?: () => void;
+  readonly retryLabel?: string;
 }
 
 export function ResourceErrorState({
   title,
   description,
   className,
+  onRetry,
+  retryLabel = 'Retry',
 }: Readonly<ResourceErrorStateProps>) {
   return (
     <div
@@ -134,7 +141,7 @@ export function ResourceErrorState({
       <IconShell size="sm" className="text-fg-error mt-0.5 shrink-0">
         <Warning />
       </IconShell>
-      <div>
+      <div className="flex-1">
         <p className="label-regular-primary text-fg-error">{title}</p>
         {description ? (
           <p className="paragraph-regular-primary text-fg-secondary mt-1">
@@ -142,6 +149,15 @@ export function ResourceErrorState({
           </p>
         ) : null}
       </div>
+      {onRetry ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          className="shrink-0">
+          {wrapTextNodes(retryLabel)}
+        </Button>
+      ) : null}
     </div>
   );
 }

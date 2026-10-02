@@ -196,6 +196,7 @@ func (h *HTTPExecutor) resolveRequestBody(ctx context.Context, httpSpec *arkv1al
 type ToolRegistry struct {
 	tools             map[string]ToolDefinition
 	executors         map[string]ToolExecutor
+	toolApproval      map[string]*arkv1alpha1.ToolApprovalConfig
 	mcpPool           *arkmcp.MCPClientPool
 	mcpSettings       map[string]arkmcp.MCPSettings
 	telemetryRecorder telemetry.ToolRecorder
@@ -206,11 +207,22 @@ func NewToolRegistry(mcpSettings map[string]arkmcp.MCPSettings, telemetryRecorde
 	return &ToolRegistry{
 		tools:             make(map[string]ToolDefinition),
 		executors:         make(map[string]ToolExecutor),
+		toolApproval:      make(map[string]*arkv1alpha1.ToolApprovalConfig),
 		mcpPool:           arkmcp.NewMCPClientPool(arkmcp.WithToolCallRetry(mcpToolCallRetryConfig())),
 		mcpSettings:       mcpSettings,
 		telemetryRecorder: telemetryRecorder,
 		eventingRecorder:  eventingRecorder,
 	}
+}
+
+// ToolApproval returns the approval config declared on the Tool CRD, keyed by the name
+// the tool is registered under - for a renaming partial that is partial.name, which is
+// also the name the model calls.
+func (tr *ToolRegistry) ToolApproval(registeredName string) *arkv1alpha1.ToolApprovalConfig {
+	if tr == nil || tr.toolApproval == nil {
+		return nil
+	}
+	return tr.toolApproval[registeredName]
 }
 
 func (tr *ToolRegistry) RegisterTool(def ToolDefinition, executor ToolExecutor) {
@@ -221,11 +233,13 @@ func (tr *ToolRegistry) RegisterTool(def ToolDefinition, executor ToolExecutor) 
 func (tr *ToolRegistry) RemoveTool(name string) {
 	delete(tr.tools, name)
 	delete(tr.executors, name)
+	delete(tr.toolApproval, name)
 }
 
 func (tr *ToolRegistry) ClearTools() {
 	clear(tr.tools)
 	clear(tr.executors)
+	clear(tr.toolApproval)
 }
 
 func (tr *ToolRegistry) GetToolDefinitions() []ToolDefinition {
@@ -375,12 +389,13 @@ func (t *TerminateExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 		logf.Log.Info("Error parsing tool arguments", "ToolCall", call)
 		arguments = make(map[string]any)
 	}
+	content := ""
 	if responseArg, exists := arguments["response"]; exists {
 		if responseStr, ok := responseArg.(string); ok {
-			return ToolResult{ID: call.ID, Name: call.Function.Name, Content: responseStr}, &TerminateTeam{}
+			content = responseStr
 		}
 	}
-	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: ""}, fmt.Errorf("no response")
+	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: content}, &TerminateTeam{}
 }
 
 func GetTerminateTool() ToolDefinition {
@@ -616,9 +631,30 @@ func getToolParameters(toolCRD *arkv1alpha1.Tool) map[string]any {
 		if err := json.Unmarshal(toolCRD.Spec.InputSchema.Raw, &parameters); err != nil {
 			logf.Log.Error(err, "failed to unmarshal tool input schema")
 		}
+		return parameters
+	}
+
+	if toolCRD.Spec.Type == ToolTypeBuiltin {
+		if definition, ok := getDefaultBuiltinToolDefinition(toolCRD.Name); ok {
+			return definition.Parameters
+		}
 	}
 
 	return parameters
+}
+
+// getDefaultBuiltinToolDefinition returns the canonical definition for a
+// builtin tool. It is keyed on the CRD name to match createBuiltinExecutor,
+// which resolves the executor the same way.
+func getDefaultBuiltinToolDefinition(name string) (ToolDefinition, bool) {
+	switch name {
+	case BuiltinToolNoop:
+		return GetNoopTool(), true
+	case BuiltinToolTerminate:
+		return GetTerminateTool(), true
+	default:
+		return ToolDefinition{}, false
+	}
 }
 
 func CreateHTTPTool(toolCRD *arkv1alpha1.Tool) ToolDefinition {

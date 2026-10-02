@@ -1,6 +1,8 @@
 # Ark Landing Page
 
-Multi-demo landing page that discovers and lists Ark demos running in the cluster by checking namespaces with label `ark.mckinsey.com/demo=true`.
+Landing page that discovers and lists Ark namespaces the signed-in user can access. Candidate namespaces are those carrying the label `ark.mckinsey.com/landing-page=true` (via the `ARK_TENANT_NAMESPACE_SELECTOR` env selector); the list is then gated per-user by RBAC (SelfSubjectAccessReview). Card name/description come from the `ark.mckinsey.com/landing-page-name` / `ark.mckinsey.com/landing-page-description` annotations. The label affects landing-page visibility only — it has no bearing on dashboard editability, which is governed by RBAC.
+
+> **Upgrade note.** The chart now defaults `ARK_TENANT_NAMESPACE_SELECTOR` to `ark.mckinsey.com/landing-page=true`, so only labelled namespaces are listed. Existing installs must add that label to each namespace that should appear (or set the selector to `""` to list all accessible namespaces as before). The card annotations were also renamed from `ark.mckinsey.com/display-name` / `namespace-description` to `landing-page-name` / `landing-page-description`; the old keys are still read as a fallback, so relabelling is not required for names to render.
 
 ## Prerequisites
 
@@ -22,7 +24,7 @@ make demo-page
 
 This will:
 1. Build `ark-dashboard` and `ark-api` Docker images and load them into Minikube
-2. Create the `kyc-demo` namespace with the demo label
+2. Create the `kyc-demo` namespace with the `ark.mckinsey.com/landing-page=true` label
 3. Deploy `ark-dashboard` (with HTTPRoute) and `ark-api` (with read-only mode) via Helm
 4. Start port-forwards for dashboard (`:3003`) and API (`:8000`)
 5. Run the landing page dev server on `http://localhost:3002`
@@ -42,9 +44,18 @@ make dev                # Run landing page dev server on http://localhost:3002
 - Dashboard (direct): http://localhost:3003?namespace=kyc-demo
 - API (direct): http://localhost:8000
 
-## Read-Only Demo Mode
+## Read-Only Mode
 
-The `kyc-demo-values.yaml` enables `READ_ONLY_MODE=true` on the API. This allows viewing, chat, and workflow runs, but blocks create/edit/delete operations (returns 403). The dashboard also disables all mutation buttons when read-only mode is active.
+The dashboard renders read-only when either of two things is true:
+
+1. **Deployment-wide toggle** — `READ_ONLY_MODE=true` on the API (set by `kyc-demo-values.yaml`) blocks create/edit/delete for everyone at the API (returns 403), allowing only viewing, chat, and workflow runs.
+2. **Per-user RBAC** — when the toggle is off, `/v1/context` checks whether the impersonated user can create any editable Ark resource in the namespace. Users who can't get a read-only dashboard, so mutation controls are disabled up front rather than shown enabled and 403-ing on click.
+
+Read-only is not derived from any namespace label; landing-page visibility (the `ark.mckinsey.com/landing-page` label) has no bearing on editability.
+
+### Migration note
+
+The old `ark.mckinsey.com/demo` label used to mark a namespace read-only for **everyone**, admins included, and it did so per-namespace. That coupling is removed. `READ_ONLY_MODE` is deployment-wide, so a single dashboard deployment can no longer serve one demo namespace as view-only alongside other tenants that stay editable; per-user editability is now RBAC-driven instead. If you relied on the label to freeze a specific namespace for all users, run a separate read-only API deployment for it.
 
 ## Architecture
 
@@ -53,25 +64,14 @@ The `kyc-demo-values.yaml` enables `READ_ONLY_MODE=true` on the API. This allows
 ```
 Landing Page API
     ↓
-Kubernetes API: listNamespace()
+Kubernetes API: listNamespace(labelSelector: ARK_TENANT_NAMESPACE_SELECTOR)
     ↓
-Filter: label ark.mckinsey.com/demo=true
+Filter: label ark.mckinsey.com/landing-page=true (via the selector)
     ↓
-Kubernetes API: listClusterCustomObject('httproutes')
+Per-namespace SelfSubjectAccessReview as the signed-in user (RBAC)
     ↓
-Filter: namespace has HTTPRoute?
-    ↓
-Return only accessible demos
+Return only namespaces the user can access
 ```
-
-### Why Check HTTPRoute?
-
-HTTPRoute serves two purposes:
-
-1. **Routing** (primary): Routes `{namespace}.127.0.0.1.nip.io` → dashboard service
-2. **Health indicator**: Proves dashboard is deployed and accessible
-
-Without HTTPRoute verification, landing page would show "phantom" demos that give 404 errors.
 
 ### URL Convention
 

@@ -237,6 +237,38 @@ describe('InMemoryStream — persistence', () => {
   });
 });
 
+describe('InMemoryStream — delete compacts (no resurrection)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'in-memory-stream-delete-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, {recursive: true, force: true});
+  });
+
+  it('does not resurrect deleted records after reload, and keeps the sequence', async () => {
+    const path = join(tmpDir, 'store.json');
+    const stream = new InMemoryStream<string>(silentLogger, 'test', {path});
+    await stream.append('a');
+    const b = await stream.append('b');
+    await stream.append('c');
+    await stream.save();
+
+    await stream.delete((item) => item.sequenceNumber === b.sequenceNumber);
+
+    const reloaded = new InMemoryStream<string>(silentLogger, 'test', {path});
+    await reloaded.init();
+    reloaded.close();
+
+    expect((await reloaded.all()).map((i) => i.data)).toEqual(['a', 'c']);
+    // The deleted record must not push the counter backwards.
+    const d = await reloaded.append('d');
+    expect(d.sequenceNumber).toBe(4);
+  });
+});
+
 describe('InMemoryStream — TTL eviction', () => {
   it('evicts items past their ttl on maintain, regardless of completion', async () => {
     const stream = new InMemoryStream<string>(silentLogger, 'test', {

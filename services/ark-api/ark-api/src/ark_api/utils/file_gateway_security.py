@@ -4,11 +4,12 @@ import re
 from urllib.parse import quote, unquote
 
 from fastapi import HTTPException
+from python_multipart.multipart import parse_options_header
 
+from .active_content import assert_declared_type
 from .svg_sanitize import (
-    CONTENT_TYPE_ATTR,
-    FILENAME_ATTR,
     is_svg_payload,
+    sanitize_svg,
     sanitize_svg_if_needed,
 )
 
@@ -29,6 +30,9 @@ SVG_DOWNLOAD_CSP = (
 # Content-Disposition filename and enable header injection / filename spoofing.
 UNSAFE_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f"\\]')
 
+# RFC 5987 extended parameter; parse_options_header does not surface it.
+EXT_FILENAME_ATTR = re.compile(r"filename\*\s*=\s*([^;]+)", re.I)
+
 
 def _content_disposition(filename: str | None) -> str:
     """Build a safe attachment Content-Disposition for an attacker-controlled name.
@@ -46,37 +50,95 @@ def _content_disposition(filename: str | None) -> str:
 
 
 def _extract_boundary(content_type: str) -> str | None:
-    match = re.search(r"boundary=([^;]+)", content_type, flags=re.I)
-    if not match:
+    """Read the boundary with the same parser the ASGI server uses.
+
+    A regex on a literal "boundary=" misses the linear white space that is legal
+    around a MIME parameter, and picks up a "boundary=" that appears inside an
+    earlier quoted parameter value. Either way the caller would read a different
+    boundary than the server does.
+    """
+    _, params = parse_options_header(content_type)
+    raw = params.get(b"boundary")
+    if raw is None:
         return None
-    return match.group(1).strip().strip('"')
+    return raw.decode("utf-8", errors="replace").strip() or None
+
+
+def _decode_ext_filename(raw: str) -> str | None:
+    """Decode an RFC 5987 filename* value (charset'lang'percent-encoded)."""
+    parts = raw.strip().strip('"').split("'", 2)
+    if len(parts) != 3:
+        return None
+    charset, _lang, encoded = parts
+    try:
+        return unquote(encoded, encoding=charset or "utf-8", errors="strict") or None
+    except (LookupError, UnicodeDecodeError):
+        return None
 
 
 def _parse_multipart_headers(headers: str) -> tuple[str | None, str | None]:
-    filename = None
+    """Read the part's filename and content-type from its own headers.
+
+    The filename is taken only from the parsed Content-Disposition parameters. A
+    scan of the whole header block would let any earlier textual "filename=" - in
+    a decoy header line, or inside a quoted name - win over the real parameter,
+    and the check would then compare the sniffed bytes against a name that is not
+    the one the file is stored under.
+    """
+    disposition = None
     content_type = None
-    filename_match = FILENAME_ATTR.search(headers)
-    if filename_match:
-        filename = filename_match.group(1)
-    content_type_match = CONTENT_TYPE_ATTR.search(headers)
-    if content_type_match:
-        content_type = content_type_match.group(1).strip()
+    for line in headers.splitlines():
+        name, separator, value = line.partition(":")
+        if not separator:
+            continue
+        key = name.strip().lower()
+        if key == "content-disposition" and disposition is None:
+            disposition = value.strip()
+        elif key == "content-type" and content_type is None:
+            content_type = value.strip() or None
+
+    filename = None
+    if disposition:
+        _, params = parse_options_header(disposition)
+        raw = params.get(b"filename")
+        if raw is not None:
+            decoded = raw.decode("utf-8", errors="replace").strip()
+            # Single quotes are not RFC 2045 quoting, so the parser keeps them; a
+            # client sending filename='x.svg' means x.svg, as the old match read it.
+            if len(decoded) >= 2 and decoded[0] == decoded[-1] == "'":
+                decoded = decoded[1:-1].strip()
+            filename = decoded or None
+        else:
+            # parse_options_header drops filename*, so read it separately rather
+            # than leaving the declared type unknown and skipping the check.
+            ext = EXT_FILENAME_ATTR.search(disposition)
+            if ext:
+                filename = _decode_ext_filename(ext.group(1))
     return filename, content_type
 
 
 def _iter_multipart_parts(body: bytes, boundary: str):
+    # LF-only framing is tolerated rather than skipped: Go's mime/multipart accepts
+    # it deliberately, so a body the file-gateway parses must not slip past unchecked.
     delimiter = f"--{boundary}".encode()
     for part in body.split(delimiter):
-        if not part or part in (b"--", b"--\r\n"):
+        if not part or part.strip() in (b"", b"--"):
             continue
         chunk = part.lstrip(b"\r\n")
+        # Exactly one trailing break, not a run: an empty-bodied part ends in three
+        # line breaks, and stripping them all leaves no header terminator to find, so
+        # the part is skipped and _rebuild_multipart drops the field from the upload.
         if chunk.endswith(b"\r\n"):
             chunk = chunk[:-2]
-        header_end = chunk.find(b"\r\n\r\n")
-        if header_end == -1:
+        elif chunk.endswith(b"\n"):
+            chunk = chunk[:-1]
+        # Matches all four spellings; "\n\r\n" matched neither fixed search before, and
+        # that skip also bypassed sanitising rather than only the declared-type check.
+        terminator = re.search(rb"\r?\n\r?\n", chunk)
+        if terminator is None:
             continue
-        headers = chunk[:header_end].decode("utf-8", errors="replace")
-        content = chunk[header_end + 4 :]
+        headers = chunk[: terminator.start()].decode("utf-8", errors="replace")
+        content = chunk[terminator.end() :]
         yield headers, content
 
 
@@ -115,7 +177,12 @@ def sanitize_file_gateway_upload(body: bytes, content_type: str | None) -> bytes
 
     boundary = _extract_boundary(content_type)
     if not boundary:
-        return body
+        # Forwarding a multipart body whose boundary will not parse would skip every
+        # check below while the ASGI server may still parse it happily, so refuse it.
+        raise HTTPException(
+            status_code=400,
+            detail="Malformed multipart upload: no usable boundary",
+        )
 
     rebuilt_parts: list[tuple[str, bytes]] = []
     changed = False
@@ -124,6 +191,8 @@ def sanitize_file_gateway_upload(body: bytes, content_type: str | None) -> bytes
     for headers, content in _iter_multipart_parts(body, boundary):
         filename, part_content_type = _parse_multipart_headers(headers)
         try:
+            if filename:
+                assert_declared_type(filename, part_content_type, content)
             sanitized = sanitize_svg_if_needed(filename, part_content_type, content)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -141,10 +210,12 @@ def _filename_from_download_path(path: str) -> str | None:
     trimmed = path.rstrip("/")
     if not trimmed.endswith(DOWNLOAD_SUFFIX):
         return None
+    # The ASGI server already percent-decoded the path, so decoding again here would
+    # turn a file genuinely named "a%20b.svg" into "a b.svg".
     file_path = trimmed[: -len(DOWNLOAD_SUFFIX)]
     if "/" not in file_path:
-        return unquote(file_path)
-    return unquote(file_path.rsplit("/", 1)[-1])
+        return file_path
+    return file_path.rsplit("/", 1)[-1]
 
 
 def secure_file_gateway_download(
@@ -158,7 +229,7 @@ def secure_file_gateway_download(
     is_svg = is_svg_payload(filename, content_type, content)
     if is_svg:
         try:
-            content = sanitize_svg_if_needed(filename, content_type, content)
+            content = sanitize_svg(content)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -166,7 +237,9 @@ def secure_file_gateway_download(
     # header is the primary control: it neutralizes stored XSS for any file type
     # (SVG, HTML, etc.) regardless of content. SVG sanitize + CSP are added on top
     # as defense-in-depth.
-    dropped = {"content-length", "content-disposition"}
+    # content-encoding is also stripped by the proxy's response filter; kept here so
+    # this function stays correct on its own for any future caller.
+    dropped = {"content-length", "content-disposition", "content-encoding"}
     base_type = (content_type or "").split(";")[0].strip().lower()
     neutralize_type = base_type in ACTIVE_CONTENT_TYPES
     if neutralize_type:

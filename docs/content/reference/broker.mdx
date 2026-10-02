@@ -7,6 +7,8 @@ description: The ark-broker HTTP API for messages, chunks, traces, events, and s
 
 The `ark-broker` service is an event bus that captures the runtime data a query produces: chat **messages**, streaming **chunks**, OTEL **traces**, controller **events**, and materialized **sessions**. The Ark controller and executors write to it during a query; the dashboard and `ark-api` read from it to render live output, conversation history, and telemetry.
 
+Dashboard chat uses this service for SSE streaming by default. Without a reachable broker, chat falls back to polling the `Query` resource instead of streaming.
+
 Storage defaults to in-memory, with pluggable persistent backends selected via environment variables: messages, operation events, and sessions can be backed by PostgreSQL (`MESSAGE_BACKEND=postgres` / `EVENT_BACKEND=postgres` / `SESSIONS_BACKEND=postgres`, sharing one `DATABASE_URL`) and chunks by Redis (`CHUNK_BACKEND=redis`, `REDIS_URL`). With a persistent backend configured, that data survives pod restarts.
 
 This page documents the broker's HTTP API directly. `ark-api` also re-exposes read access to the same data under `/v1/broker/*` — see the [Ark API](/reference/ark-apis#broker-data) reference.
@@ -26,7 +28,7 @@ A few conventions apply across the broker's read endpoints:
 
 - **Pagination.** List endpoints return `{ "items": [...], "total": N, "hasMore": bool, "nextCursor": M }`. Pass `?limit=<n>` to size the page and `?cursor=<nextCursor>` to fetch the next one.
 - **SSE streaming.** Any list endpoint accepts `?watch=true` to switch from a JSON page to a Server-Sent Events stream. New items arrive as `data:` lines. Add `?from-beginning=true` to replay existing items before streaming new ones, or `?cursor=<n>` to resume after a known sequence number.
-- **Write vs read.** The controller and executors POST data in (chunks, traces, events, messages); the dashboard and `ark-api` GET it out. Each domain also exposes a `DELETE` to purge it.
+- **Write vs read.** The controller and executors POST data in (chunks, traces, events, messages); the dashboard and `ark-api` GET it out. Deletes name what to remove — a conversation or a query. The one exception is `DELETE /conversations`, which clears the whole memory store.
 
 ## Messages
 
@@ -35,7 +37,6 @@ Chat messages exchanged during queries, grouped by conversation and query ID. Th
 ```
 GET    /messages
 POST   /messages
-DELETE /messages
 GET    /memory-status
 GET    /conversations
 POST   /conversations
@@ -45,6 +46,8 @@ DELETE /conversations
 DELETE /queries/{queryId}/messages
 DELETE /conversations/{conversationId}/queries/{queryId}/messages
 ```
+
+`DELETE /conversations` clears the message store only — it backs the dashboard's **Reset memory** action. The [sessions](#sessions) read model survives it: a session keeps its queries, conversation summaries and participants, because those are folded from the session's own query rows rather than from messages. A query leaves a session when its `Query` is deleted, and a session left with no queries goes with it.
 
 List messages:
 
@@ -90,7 +93,6 @@ GET    /stream                      # paginated chunks, or SSE with ?watch=true
 GET    /stream/{query_name}         # SSE stream for one query
 POST   /stream/{query_id}           # controller/executor pushes a chunk
 POST   /stream/{query_id}/complete  # mark the query stream complete
-DELETE /stream
 ```
 
 | Parameter | Applies to | Description |
@@ -99,8 +101,9 @@ DELETE /stream
 | `cursor` | `GET /stream` | Sequence number to paginate from |
 | `watch` | `GET /stream` | Set `true` for SSE streaming |
 | `from-beginning` | `GET /stream/{query_name}` | Replay existing chunks before streaming |
-| `wait-for-query` | `GET /stream/{query_name}` | Wait for the query to appear before streaming |
 | `max-chunk-size` | `GET /stream/{query_name}` | Split large chunks to this byte size |
+
+A stream that receives no chunk (nor its terminal `[DONE]`) for `STREAM_IDLE_TIMEOUT_MS` (default 300000) is closed with a terminal error event (`code: stream_idle_timeout`) followed by `[DONE]`. This is a broker-side inactivity backstop, not a query failure — the Query's status is authoritative and the query may still be running.
 
 Stream one query's output as it is generated:
 
@@ -145,7 +148,6 @@ Returns `{}` on success.
 ```
 GET    /traces
 GET    /traces/{traceId}
-DELETE /traces
 ```
 
 Returns traces grouped by trace ID.
@@ -205,7 +207,6 @@ Controller operation events emitted as a query executes — `QueryExecutionStart
 GET    /events
 GET    /events/{queryId}
 POST   /events
-DELETE /events
 DELETE /events/{queryId}
 ```
 
@@ -231,7 +232,7 @@ Held in memory by default, per replica. With `SESSIONS_BACKEND=postgres` session
 GET    /sessions
 GET    /sessions/{sessionId}
 POST   /sessions
-DELETE /sessions
+DELETE /sessions/queries/{queryId}
 ```
 
 | Parameter | Description |
@@ -263,10 +264,10 @@ curl "http://localhost:8080/sessions?limit=10&status=active"
 
 | Domain | Endpoints |
 |--------|-----------|
-| Messages | `GET`/`POST`/`DELETE` `/messages`, `GET /memory-status` |
+| Messages | `GET`/`POST` `/messages`, `GET /memory-status` |
 | Conversations | `GET`/`POST`/`DELETE` `/conversations`, `GET`/`DELETE` `/conversations/{id}`, `DELETE /queries/{queryId}/messages`, `DELETE /conversations/{id}/queries/{queryId}/messages` |
-| Chunks | `GET`/`DELETE` `/stream`, `GET /stream/{query_name}`, `POST /stream/{query_id}`, `POST /stream/{query_id}/complete` |
-| Traces | `POST /v1/traces` (OTLP), `GET`/`DELETE` `/traces`, `GET /traces/{traceId}` |
-| Events | `GET`/`POST`/`DELETE` `/events`, `GET`/`DELETE` `/events/{queryId}` |
-| Sessions | `GET`/`POST`/`DELETE` `/sessions`, `GET /sessions/{sessionId}` |
+| Chunks | `GET /stream`, `GET /stream/{query_name}`, `POST /stream/{query_id}`, `POST /stream/{query_id}/complete` |
+| Traces | `POST /v1/traces` (OTLP), `GET /traces`, `GET /traces/{traceId}` |
+| Events | `GET`/`POST` `/events`, `GET`/`DELETE` `/events/{queryId}` |
+| Sessions | `GET`/`POST` `/sessions`, `GET /sessions/{sessionId}`, `DELETE /sessions/queries/{queryId}` |
 | Health | `GET /health` (liveness), `GET /readyz` (readiness) |

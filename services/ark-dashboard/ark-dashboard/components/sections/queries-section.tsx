@@ -6,9 +6,15 @@ import { toast } from 'sonner';
 import { SortableColumnHeader } from '@/components/common/sortable-column-header';
 import { DatabaseSearch, Info, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
+import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import { IconShell } from '@/components/ui/icon-shell';
+import {
+  type StatusConfig,
+  StatusIndicator,
+  UNKNOWN_STATUS,
+} from '@/components/ui/status-indicator';
 import {
   Table,
   TableBody,
@@ -27,10 +33,9 @@ import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { timestampValue, useValueSort } from '@/lib/hooks/use-value-sort';
 import { queriesService } from '@/lib/services/queries';
-import { useNamespace } from '@/providers/NamespaceProvider';
 import type { useListQueries } from '@/lib/services/queries-hooks';
-import { cn } from '@/lib/utils';
 import { formatAge } from '@/lib/utils/time';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 type QueryResponse = components['schemas']['QueryResponse'];
 type ListQueriesResult = ReturnType<typeof useListQueries>;
@@ -44,7 +49,7 @@ interface QueriesSectionProps {
 const getCreatedTime = (query: QueryResponse) =>
   timestampValue(query.creationTimestamp);
 
-const STATUS_CONFIG: Record<string, { label: string; dotClass: string }> = {
+const STATUS_CONFIG: Record<string, StatusConfig> = {
   done: { label: 'Done', dotClass: 'bg-status-success' },
   error: { label: 'Error', dotClass: 'bg-status-error' },
   failed: { label: 'Error', dotClass: 'bg-status-error' },
@@ -71,7 +76,11 @@ function getInputDisplayText(
 
 function formatTokenUsage(query: QueryResponse): string {
   const usage = (query.status as { tokenUsage?: unknown })?.tokenUsage as
-    | { promptTokens?: number; completionTokens?: number; cachedTokens?: number }
+    | {
+        promptTokens?: number;
+        completionTokens?: number;
+        cachedTokens?: number;
+      }
     | undefined;
   if (!usage) return '—';
   const cached = usage.cachedTokens || 0;
@@ -108,14 +117,10 @@ function QueryStatus({
   const normalized = phase.toLowerCase();
   const config = STATUS_CONFIG[normalized] ?? {
     label: phase,
-    dotClass: 'bg-fg-tertiary',
+    dotClass: UNKNOWN_STATUS.dotClass,
   };
   return (
-    <span className="group/status inline-flex items-center gap-2">
-      <span className={cn('size-2 shrink-0 rounded-full', config.dotClass)} />
-      <span className="label-regular-primary text-fg-primary">
-        {config.label}
-      </span>
+    <StatusIndicator {...config} className="group/status">
       {normalized === 'running' && onCancel && (
         <button
           type="button"
@@ -129,7 +134,7 @@ function QueryStatus({
           Cancel
         </button>
       )}
-    </span>
+    </StatusIndicator>
   );
 }
 
@@ -246,7 +251,9 @@ export function QueriesSection({
     if (isError) {
       toast.error('Failed to Load Queries', {
         description:
-          error instanceof Error ? error.message : 'An unexpected error occurred',
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
       });
     }
   }, [isError, error]);
@@ -290,11 +297,25 @@ export function QueriesSection({
     }
   };
 
+  const loadFailed = isError && queries.length === 0;
+  const refreshFailed = isError && queries.length > 0;
+
   if (isLoading) {
     return (
       <div className="flex h-full flex-1 items-center justify-center">
         <div className="text-fg-secondary">Loading...</div>
       </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <ResourceErrorState
+        className="m-5"
+        title="Couldn't load queries"
+        description={error instanceof Error ? error.message : undefined}
+        onRetry={() => refetch()}
+      />
     );
   }
 
@@ -318,7 +339,15 @@ export function QueriesSection({
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
-      <Table className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      {refreshFailed && (
+        <ResourceErrorState
+          className="m-5 mb-0"
+          title="Couldn't refresh queries"
+          description="Showing the last loaded version."
+          onRetry={() => refetch()}
+        />
+      )}
+      <Table className="min-w-[1272px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
         <TableHeader>
           <TableRow>
             <TableHead size="small" className="w-[110px]">

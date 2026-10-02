@@ -1,0 +1,93 @@
+# Pasted into the Workflow Studio's YAML editor, not applied with kubectl, and
+# then run from the studio - so it has to be a workflow that really completes.
+#
+# metadata.name is deliberately not the name the test types into the dialog:
+# the studio stamps the chosen name over whatever the pasted manifest carries,
+# while the manifest's own title and description annotations are kept.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: name-replaced-by-the-studio
+  annotations:
+    workflows.argoproj.io/title: "Pasted Studio Workflow"
+    workflows.argoproj.io/description: "Declared in the pasted manifest"
+spec:
+  entrypoint: pipeline
+  serviceAccountName: argo-workflow
+  arguments:
+    parameters:
+      - name: dataset
+        value: orders
+  templates:
+    - name: pipeline
+      dag:
+        tasks:
+          - name: extract
+            template: extract-rows
+            arguments:
+              parameters:
+                - name: dataset
+                  value: "{{workflow.parameters.dataset}}"
+          - name: validate
+            template: validate-rows
+            dependencies: [extract]
+            arguments:
+              parameters:
+                - name: rows
+                  value: "{{tasks.extract.outputs.parameters.rows}}"
+          - name: summarise
+            template: summarise-run
+            dependencies: [validate]
+            arguments:
+              parameters:
+                - name: dataset
+                  value: "{{workflow.parameters.dataset}}"
+                - name: rows
+                  value: "{{tasks.extract.outputs.parameters.rows}}"
+
+    - name: extract-rows
+      inputs:
+        parameters:
+          - name: dataset
+      outputs:
+        parameters:
+          - name: rows
+            valueFrom:
+              path: /tmp/rows
+      script:
+        image: alpine:3.22
+        command: [sh]
+        source: |
+          set -e
+          dataset="{{inputs.parameters.dataset}}"
+          printf 'id,item,total\n1,widget,9.99\n2,sprocket,24.50\n3,gasket,4.25\n' > /tmp/${dataset}.csv
+          tail -n +2 /tmp/${dataset}.csv | wc -l | tr -d ' \n' > /tmp/rows
+          echo "extracted $(cat /tmp/rows) rows from ${dataset}"
+
+    - name: validate-rows
+      inputs:
+        parameters:
+          - name: rows
+      script:
+        image: alpine:3.22
+        command: [sh]
+        source: |
+          set -e
+          rows="{{inputs.parameters.rows}}"
+          if [ "${rows}" -lt 1 ]; then
+            echo "no rows extracted, failing the run"
+            exit 1
+          fi
+          echo "validated ${rows} rows"
+
+    - name: summarise-run
+      inputs:
+        parameters:
+          - name: dataset
+          - name: rows
+      script:
+        image: alpine:3.22
+        command: [sh]
+        source: |
+          set -e
+          echo "dataset={{inputs.parameters.dataset}} rows={{inputs.parameters.rows}} status=ok"

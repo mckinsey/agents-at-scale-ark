@@ -13,7 +13,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, TypeVar, Generic, Type
 from kubernetes import client, config
-from ark_sdk.k8s import get_context, create_sync_api_client
+from ark_sdk.k8s import get_context, create_sync_api_client, release_api_client
 import yaml
 import json
 
@@ -170,7 +170,7 @@ class ARKResourceClient(Generic[T]):
             )
             return self._dict_to_model(result)
         finally:
-            fresh_api_client.close()
+            release_api_client(fresh_api_client)
     
     def list(self, namespace: Optional[str] = None, label_selector: Optional[str] = None) -> List[T]:
         """List all resources
@@ -203,7 +203,7 @@ class ARKResourceClient(Generic[T]):
             items = result.get('items', [])
             return [self._dict_to_model(item) for item in items]
         finally:
-            fresh_api_client.close()
+            release_api_client(fresh_api_client)
 
     def list_page(
         self,
@@ -256,7 +256,7 @@ class ARKResourceClient(Generic[T]):
                 remaining_item_count=metadata.get('remainingItemCount'),
             )
         finally:
-            fresh_api_client.close()
+            release_api_client(fresh_api_client)
 
     def update(self, resource: T, namespace: Optional[str] = None) -> T:
         """Update an existing resource

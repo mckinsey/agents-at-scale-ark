@@ -21,6 +21,11 @@ import {
 import { IconShell } from '@/components/ui/icon-shell';
 import { toast } from '@/components/ui/sonner';
 import {
+  type StatusConfig,
+  StatusIndicator,
+  getAvailabilityStatus,
+} from '@/components/ui/status-indicator';
+import {
   Table,
   TableBody,
   TableCell,
@@ -54,20 +59,12 @@ interface McpServersTableProps {
   readonly onAuthChanged?: () => void;
 }
 
-// Fallback status for servers without an MCP authorization block (non-OAuth).
-const AVAILABILITY_CONFIG = {
-  True: { label: 'Active', dotClass: 'bg-status-success' },
-  False: { label: 'Error', dotClass: 'bg-status-error' },
-  Unknown: { label: 'Unknown', dotClass: 'bg-fg-tertiary' },
-} as const;
-
 // Maps backend MCP authorization.state to the Status column labels + dot colors.
-const AUTH_STATUS_CONFIG: Record<string, { label: string; dotClass: string }> =
-  {
-    Authorized: { label: 'Authorized', dotClass: 'bg-status-success' },
-    Required: { label: 'Unauthenticated', dotClass: 'bg-status-error' },
-    DiscoveryFailed: { label: 'Error', dotClass: 'bg-status-error' },
-  };
+const AUTH_STATUS_CONFIG: Record<string, StatusConfig> = {
+  Authorized: { label: 'Authorized', dotClass: 'bg-status-success' },
+  Required: { label: 'Unauthenticated', dotClass: 'bg-status-error' },
+  DiscoveryFailed: { label: 'Error', dotClass: 'bg-status-error' },
+};
 
 const COL = {
   name: 'w-[140px]',
@@ -82,18 +79,8 @@ const COL = {
 function McpServerStatus({ server }: Readonly<{ server: MCPServer }>) {
   const authState = server.authorization?.state;
   const authConfig = authState ? AUTH_STATUS_CONFIG[authState] : undefined;
-  const config =
-    authConfig ?? AVAILABILITY_CONFIG[server.available ?? 'Unknown'];
-  return (
-    <span className="inline-flex w-full min-w-0 items-center gap-2">
-      <span className={cn('size-2 shrink-0 rounded-full', config.dotClass)} />
-      <TruncatedTooltip label={config.label}>
-        <span className="label-regular-primary text-fg-primary block truncate">
-          {config.label}
-        </span>
-      </TruncatedTooltip>
-    </span>
-  );
+  const config = authConfig ?? getAvailabilityStatus(server.available);
+  return <StatusIndicator {...config} truncate />;
 }
 
 function McpServerExpires({ server }: Readonly<{ server: MCPServer }>) {
@@ -162,8 +149,8 @@ function MachineManagedAuthMenuItem({
         </span>
       </TooltipTrigger>
       <TooltipContent>
-        This MCP uses client credentials — Ark obtains and renews its
-        token automatically
+        This MCP uses client credentials — Ark obtains and renews its token
+        automatically
       </TooltipContent>
     </Tooltip>
   );
@@ -395,7 +382,7 @@ export function McpServersTable({
   return (
     <Table
       aria-label="MCP Servers"
-      className="table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[1104px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>

@@ -131,7 +131,12 @@ export function CreateResourceButton({
 
   const handleSubmit = (values: CreateResourceData) => {
     if (kind === 'secret') {
-      secret.mutate({ name: values.name, password: values.value });
+      secret.mutate({
+        name: values.name,
+        string_data: { token: values.value },
+        labels: [],
+        type: 'Opaque',
+      });
       return;
     }
     configuration.mutate({

@@ -270,3 +270,111 @@ func TestExtractMessageContent(t *testing.T) {
 		assert.Equal(t, "assistant", role)
 	})
 }
+
+func TestConvertMessagesToAnthropicPreservesAgentName(t *testing.T) {
+	t.Run("prefixes assistant content with agent name", func(t *testing.T) {
+		messages := addAgentNameToMessages([]Message{NewAssistantMessage("here is the code")}, "agent1")
+		messages = append(messages, NewUserMessage("review it"))
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.Len(t, result, 2)
+		assert.Equal(t, "assistant", result[0].Role)
+		assert.Contains(t, string(result[0].Content), "agent1: here is the code")
+	})
+
+	t.Run("leaves unnamed assistant content unchanged", func(t *testing.T) {
+		messages := []Message{
+			NewUserMessage("hi"),
+			NewAssistantMessage("plain reply"),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.Len(t, result, 2)
+		assert.Equal(t, json.RawMessage(`"plain reply"`), result[1].Content)
+	})
+
+	t.Run("an agent is not labelled to itself but keeps its name for the dashboard", func(t *testing.T) {
+		agent := &Agent{Name: "weather-agent"}
+		choice := openai.ChatCompletionChoice{
+			Message: openai.ChatCompletionMessage{Role: RoleAssistant, Content: "Let me check."},
+		}
+
+		msg := agent.processAssistantMessage(choice)
+
+		require.NotNil(t, msg.OfAssistant)
+		assert.Equal(t, "weather-agent", msg.OfAssistant.Name.Value, "the stored message keeps the name so the dashboard can label the sender")
+
+		sent := withoutOwnAgentName([]Message{NewUserMessage("weather?"), msg}, agent.Name)
+		result, _ := convertMessagesToAnthropic(sent)
+		require.Len(t, result, 2)
+		assert.Equal(t, json.RawMessage(`"Let me check."`), result[1].Content)
+
+		assert.Equal(t, "weather-agent", msg.OfAssistant.Name.Value, "suppressing the name for the model must not strip it from the stored message")
+	})
+
+	t.Run("another member's name survives suppression", func(t *testing.T) {
+		other := addAgentNameToMessages([]Message{NewAssistantMessage("here is the code")}, "agent1")[0]
+
+		sent := withoutOwnAgentName([]Message{other, NewUserMessage("review it")}, "agent2")
+		result, _ := convertMessagesToAnthropic(sent)
+
+		require.Len(t, result, 2)
+		assert.Contains(t, string(result[0].Content), "agent1: here is the code")
+	})
+}
+
+func TestConvertMessagesToAnthropicMergesConsecutiveRoles(t *testing.T) {
+	t.Run("tool transcript after a user turn stays alternating", func(t *testing.T) {
+		toolCallAssistant := Message{OfAssistant: &openai.ChatCompletionAssistantMessageParam{}}
+		toolCallAssistant.OfAssistant.Name = openai.String("agent1")
+
+		messages := []Message{
+			NewUserMessage("what is the weather?"),
+			toolCallAssistant,
+			ToolMessage("sunny, 20C", "call_1"),
+			addAgentNameToMessages([]Message{NewAssistantMessage("It is sunny.")}, "agent1")[0],
+			NewUserMessage("It is your turn, agent2."),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.NotEmpty(t, result)
+		for i := 1; i < len(result); i++ {
+			assert.NotEqual(t, result[i-1].Role, result[i].Role, "consecutive same-role messages at %d", i)
+		}
+	})
+
+	t.Run("no cache breakpoint lands on a merged block", func(t *testing.T) {
+		messages := []Message{
+			NewUserMessage("write then review"),
+			addAgentNameToMessages([]Message{NewAssistantMessage("draft")}, "agent1")[0],
+			addAgentNameToMessages([]Message{NewAssistantMessage("review")}, "agent2")[0],
+			NewUserMessage("It is your turn, agent3."),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.Len(t, result, 3)
+		assert.Equal(t, "assistant", result[1].Role)
+		assert.Equal(t, json.RawMessage(`"agent1: draft\n\nagent2: review"`), result[1].Content)
+		assert.NotContains(t, string(result[1].Content), "cache_control",
+			"a merged block's content changes between requests, so it must not anchor the cache prefix")
+	})
+
+	t.Run("merges consecutive tool results into one user turn", func(t *testing.T) {
+		messages := []Message{
+			NewUserMessage("compare them"),
+			ToolMessage("first", "call_1"),
+			ToolMessage("second", "call_2"),
+		}
+
+		result, _ := convertMessagesToAnthropic(messages)
+
+		require.Len(t, result, 1)
+		assert.Equal(t, "user", result[0].Role)
+		assert.Contains(t, string(result[0].Content), "first")
+		assert.Contains(t, string(result[0].Content), "second")
+	})
+}
