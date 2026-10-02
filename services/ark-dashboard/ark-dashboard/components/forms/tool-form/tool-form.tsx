@@ -56,10 +56,14 @@ const inlineTextareaClassName =
 
 const jsonTextareaClassName = (expanded: boolean) =>
   cn(
-    'resize-none font-mono transition-all duration-200',
-    expanded
-      ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
-      : 'max-h-[180px] min-h-[120px]',
+    'resize-y overflow-auto font-mono! text-sm leading-relaxed transition-[height] duration-200',
+    expanded ? 'max-h-[80vh] min-h-[640px]' : 'max-h-[420px] min-h-[280px]',
+  );
+
+const sourceTextareaClassName = (expanded: boolean) =>
+  cn(
+    jsonTextareaClassName(expanded),
+    expanded ? 'min-h-[72vh]' : 'min-h-[460px] max-h-[640px]',
   );
 
 export function ToolForm({
@@ -189,8 +193,8 @@ export function ToolForm({
       <Form {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex min-h-0 flex-1 items-start overflow-hidden pb-2 pl-px">
-          <div className="flex max-h-full min-h-0 w-[576px] flex-col gap-6 overflow-y-auto">
+          className="flex min-h-0 flex-1 items-start overflow-y-auto pb-2 pl-px">
+          <div className="flex w-[576px] flex-col gap-6">
             <FormField
               control={form.control}
               name="name"
@@ -441,8 +445,10 @@ export function ToolForm({
                         <Textarea
                           placeholder="#!/usr/bin/env script body"
                           disabled={isDisabled}
+                          spellCheck={false}
+                          wrap="off"
                           aria-invalid={!!fieldState.error}
-                          className={jsonTextareaClassName(isSourceExpanded)}
+                          className={sourceTextareaClassName(isSourceExpanded)}
                           {...field}
                         />
                         <FieldDescription>
@@ -488,6 +494,7 @@ export function ToolForm({
                   <Textarea
                     placeholder='e.g., {"param": "value"}'
                     disabled={isDisabled}
+                    spellCheck={false}
                     aria-invalid={!!fieldState.error}
                     className={jsonTextareaClassName(isInputSchemaExpanded)}
                     {...field}
@@ -525,6 +532,7 @@ export function ToolForm({
                   <Textarea
                     placeholder='e.g., {"note": "important"}'
                     disabled={isDisabled}
+                    spellCheck={false}
                     aria-invalid={!!fieldState.error}
                     className={jsonTextareaClassName(isAnnotationsExpanded)}
                     {...field}
