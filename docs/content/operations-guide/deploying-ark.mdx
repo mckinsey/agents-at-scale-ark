@@ -236,7 +236,7 @@ The policy-conflict decision checks pod selectors, not a policy's metadata label
 
 The controller checks policies against both the runner template and live runner pod labels. A conflict clears `status.resolvedAddress` and reports `Available=False`, reason `ConflictingNetworkPolicy`, with the policy name and an instruction to narrow it. Narrowing or deleting the policy restores availability once other runtime prerequisites are met. Policy and pod-label changes trigger re-evaluation; a 30-second API-only refresh also recovers missed events. If required policy or pod reads fail, the tool remains Pending with `ProvisioningFailed`. Removing identifying labels from a runner pod also blocks availability until an administrator restores them.
 
-The controller needs read-only access to Pods and ReplicaSets to follow runner ownership even after labels change. It changes only the policy it owns, never a tenant policy. **Rollout status:** activation and executor integration remain incomplete; inline tools are disabled by default.
+The controller needs read-only access to Pods and ReplicaSets to follow runner ownership even after labels change. It changes only the policy it owns, never a tenant policy. **Rollout status:** runtime packaging and executor integration remain incomplete; inline tools are disabled by default.
 
 An enforcing CNI is still required. On a non-enforcing CNI, outbound script connections and direct runner access may succeed despite the policy. Standard NetworkPolicy also has node-local traffic exceptions: administrators must protect node and metadata-service access and control who can change workload labels or policies. These restrictions are not per-user authentication, and Ark sends no traffic probes or synthetic control connections to verify them.
 
@@ -244,7 +244,7 @@ An enforcing CNI is still required. On a non-enforcing CNI, outbound script conn
 
 The activator's stateless MCP handler serves initialization, notifications, ping, and `tools/list` from the current Tool metadata. Each namespace/name/UID route advertises only that Tool's name, description, input schema and annotations; an omitted schema becomes `{"type":"object"}`. Source is never included. Discovery does not read runner resources, invoke a call, or refresh an idle timer.
 
-Routes outside the explicitly watched namespaces, deleted/recreated Tools, and unknown names are rejected. API read failures and malformed schemas fail closed. Only `tools/call` reaches the separate invocation handler. **Rollout status:** the metadata handler is tested but not installed until activation and lifecycle enforcement are complete.
+Routes outside the explicitly watched namespaces, deleted/recreated Tools, and unknown names are rejected. API read failures and malformed schemas fail closed. Only `tools/call` reaches the separate invocation handler. **Rollout status:** the metadata handler and invocation lifecycle are implemented; singleton packaging remains pending.
 
 Stateless `tools/call` work is tied to its HTTP request lifetime. Disconnecting cancels the invocation context and terminates a running script's process group rather than waiting for the execution limit. Cancellation cannot roll back effects already dispatched; treat a lost response as uncertain execution.
 
@@ -252,7 +252,15 @@ Stateless `tools/call` work is tied to its HTTP request lifetime. Disconnecting 
 
 The activation decision requires an enabled feature, a matching Tool name and UID, and `Available=True` for the current generation with the canonical published activator address. It rejects missing, deleting, cross-namespace, or unowned runner resources and stale source/language identity. The backend address is derived from the controller's shared child names and private Service, never a caller-supplied URL.
 
-An idle Deployment may pass this decision: it authorizes a target, not execution. Argument validation, activation, current-revision readiness and call tracking must still run before a script call. **Rollout status:** the decision is unit-tested separately; the activator call path and packaging are not installed by this unit.
+An idle Deployment may pass this decision: it authorizes a target, not execution. The activator validates bounded JSON-object arguments before scaling, coalesces cold starts for the selected Tool, and waits for an observed Deployment rollout plus current, owned Pod endpoints. EndpointSlice addresses, Pod UID/source/language, and ReplicaSet ownership must match; stale or unverifiable endpoints block connection. It rechecks identity and readiness after the MCP handshake and rejects backend redirects.
+
+#### Activation and idle lifetime
+
+Activation, including the handshake, has a 60-second budget. Execution then has a separate 30-second budget; caller cancellation or an earlier caller deadline bounds both. Pending and active calls prevent idle scale-down. With neither remaining, the activator scales to zero after 60 seconds since the last completed call; discovery never refreshes that clock.
+
+On restart, existing warm owned runners receive a fresh 60-second grace period before idle cleanup. Scale writes use the scale subresource with optimistic concurrency, and failed reads or changed ownership prevent the write. The controller alone performs bounded drain while the feature is disabled. Backend calls are sent once: uncertain responses are not replayed.
+
+**Rollout status:** singleton packaging and executor integration remain pending. Keep inline tools disabled until runtime support is installed.
 
 #### Disabling, deleting and downgrading
 
