@@ -15,6 +15,7 @@ from ark_sdk.extensions.query import (
     resolve_query,
     _query_impersonation,
     _resolve_value_source,
+    _build_mcp_servers,
     _parse_go_duration_to_seconds,
     _resolve_from_query,
 )
@@ -841,6 +842,31 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
             server_crd.spec.headers = None
         return server_crd
 
+    def _make_inline_tool_crd(
+        self,
+        uid: str | None = "uid-1",
+        generation: int | None = 2,
+        condition_status: str = "True",
+        observed_generation: int | None = 2,
+        address: str | None = "http://ark-inline-tool-activator.ark-system:8080/inline/default/csv-summarise/uid-1",
+    ):
+        tool_crd = MagicMock()
+        tool_crd.spec.type = "inline"
+        tool_crd.spec.mcp = None
+        tool_crd.metadata = {"uid": uid, "generation": generation}
+        tool_crd.status = SimpleNamespace(
+            resolved_address=address,
+            conditions=[
+                SimpleNamespace(
+                    type="Available",
+                    status=condition_status,
+                    reason="Available",
+                    observed_generation=observed_generation,
+                )
+            ],
+        )
+        return tool_crd
+
     def _make_agent_tool(self, name):
         tool = MagicMock()
         tool.name = name
@@ -1209,6 +1235,106 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(request.mcpServers), 0)
         self.assertTrue(any("no resolvable address" in msg for msg in log.output))
+
+    def _agent(self, tool_names):
+        agent = MagicMock()
+        agent.metadata = {"name": "a1", "labels": {}}
+        agent.spec.tools = [self._make_agent_tool(n) for n in tool_names]
+        return agent
+
+    async def _inline_servers(self, tool_crds, tool_names=("csv-summarise",)):
+        ark = AsyncMock()
+        ark.tools.a_get = AsyncMock(side_effect=list(tool_crds))
+        ark.mcpservers.a_get = AsyncMock(side_effect=AssertionError("unexpected MCPServer read"))
+        servers = await _build_mcp_servers(ark, self._agent(tool_names), "default")
+        return ark, servers
+
+    async def test_available_inline_tool_becomes_a_connection(self):
+        ark, servers = await self._inline_servers([self._make_inline_tool_crd()])
+
+        self.assertEqual(len(servers), 1)
+        server = servers[0]
+        self.assertEqual(server.name, "inline-default-csv-summarise-uid-1")
+        self.assertEqual(
+            server.url,
+            "http://ark-inline-tool-activator.ark-system:8080/inline/default/csv-summarise/uid-1",
+        )
+        self.assertEqual(server.transport, "http")
+        self.assertEqual(server.timeout, "90s")
+        self.assertEqual(server.tools, ["csv-summarise"])
+        self.assertEqual(server.headers, {})
+        ark.tools.a_get.assert_awaited_once_with("csv-summarise", "default")
+        ark.mcpservers.a_get.assert_not_awaited()
+
+    async def test_each_inline_tool_gets_its_own_connection(self):
+        first = self._make_inline_tool_crd(uid="uid-1")
+        second = self._make_inline_tool_crd(uid="uid-2")
+        _, servers = await self._inline_servers(
+            [first, second], tool_names=("csv-summarise", "other")
+        )
+
+        self.assertEqual(
+            [s.name for s in servers],
+            ["inline-default-csv-summarise-uid-1", "inline-default-other-uid-2"],
+        )
+        self.assertEqual([s.tools for s in servers], [["csv-summarise"], ["other"]])
+
+    async def test_inline_and_mcp_tools_resolve_side_by_side(self):
+        ark = AsyncMock()
+        ark.tools.a_get = AsyncMock(
+            side_effect=[
+                self._make_inline_tool_crd(),
+                self._make_tool_crd("mcp", "github-mcp", "search_repos"),
+                self._make_tool_crd("http"),
+            ]
+        )
+        ark.mcpservers.a_get = AsyncMock(return_value=self._make_mcp_server_crd())
+
+        agent = self._agent(["csv-summarise", "github-mcp-search-repos", "weather-api"])
+        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+            servers = await _build_mcp_servers(ark, agent, "default")
+
+        self.assertEqual(
+            [s.name for s in servers],
+            ["inline-default-csv-summarise-uid-1", "github-mcp"],
+        )
+        self.assertEqual(servers[1].tools, ["search_repos"])
+        message = "\n".join(log.output)
+        self.assertIn("weather-api (http)", message)
+        self.assertNotIn("csv-summarise", message)
+
+    async def test_inline_connection_does_not_replace_a_same_named_mcp_server(self):
+        ark = AsyncMock()
+        ark.tools.a_get = AsyncMock(
+            side_effect=[
+                self._make_inline_tool_crd(),
+                self._make_tool_crd("mcp", "csv-summarise", "summarise"),
+            ]
+        )
+        ark.mcpservers.a_get = AsyncMock(return_value=self._make_mcp_server_crd())
+
+        agent = self._agent(["csv-summarise", "mcp-attachment"])
+        servers = await _build_mcp_servers(ark, agent, "default")
+
+        self.assertEqual(len(servers), 2)
+        self.assertEqual(
+            {s.name for s in servers},
+            {"inline-default-csv-summarise-uid-1", "csv-summarise"},
+        )
+
+    async def test_stale_or_unavailable_inline_tools_are_skipped_with_a_warning(self):
+        cases = {
+            "stale generation": self._make_inline_tool_crd(observed_generation=1),
+            "not available": self._make_inline_tool_crd(condition_status="False"),
+            "no endpoint": self._make_inline_tool_crd(address=None),
+            "no uid": self._make_inline_tool_crd(uid=None),
+        }
+        for label, tool_crd in cases.items():
+            with self.subTest(label):
+                with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+                    _, servers = await self._inline_servers([tool_crd])
+                self.assertEqual(servers, [])
+                self.assertTrue(any("csv-summarise" in msg for msg in log.output))
 
 
 class TestExtensionConstants(unittest.TestCase):
