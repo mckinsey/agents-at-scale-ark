@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.70-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70-rc.1...v0.1.70-rc.2) (2026-10-02)
+
+
+### Bug Fixes
+
+* **dashboard:** refresh teams list after creating or updating a team ([#3690](https://github.com/mckinsey/agents-at-scale-ark/issues/3690)) ([611b1c6](https://github.com/mckinsey/agents-at-scale-ark/commit/611b1c6ed0bfb3d025b2831303c02e025070a77a))
+
 ## [0.1.70-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70-rc...v0.1.70-rc.1) (2026-10-02)
 
 
