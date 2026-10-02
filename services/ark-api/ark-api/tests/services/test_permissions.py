@@ -11,7 +11,9 @@ from ark_sdk.impersonation import ImpersonationConfig
 from ark_api.core.permissions import (
     UNAVAILABLE_REASON,
     build_ark_rules,
+    can_edit_from_rules,
     get_ark_permissions,
+    user_can_edit,
 )
 
 
@@ -52,19 +54,23 @@ class TestBuildArkRules(unittest.TestCase):
         self.assertEqual(build_ark_rules(None), {})
 
 
-def _access_review(allowed_resources=(), raises=None):
+def _access_review(allowed_resources=(), verb="list", raises=None):
     """Build a create_self_subject_access_review mock.
 
-    Returns allowed=True for resources in ``allowed_resources``, based on the
-    resource read back from the submitted V1SelfSubjectAccessReview spec.
+    Returns allowed=True only when the submitted review names a resource in
+    ``allowed_resources`` AND its verb equals ``verb``. Asserting the verb is
+    deliberate: user_can_edit checks ``create`` while the permissions fallback
+    checks ``list``, and that distinction is the whole point of the edit gate.
     """
     if raises is not None:
         return AsyncMock(side_effect=raises)
 
     def _call(body):
-        resource = body.spec.resource_attributes.resource
+        attrs = body.spec.resource_attributes
         review = Mock()
-        review.status.allowed = resource in allowed_resources
+        review.status.allowed = (
+            attrs.resource in allowed_resources and attrs.verb == verb
+        )
         return review
 
     return AsyncMock(side_effect=_call)
@@ -199,6 +205,119 @@ class TestGetArkPermissions(unittest.IsolatedAsyncioTestCase):
         # Exception text must not leak to the client.
         self.assertEqual(result.reason, UNAVAILABLE_REASON)
         self.assertNotIn("boom", result.reason or "")
+
+
+class TestCanEditFromRules(unittest.TestCase):
+    """can_edit_from_rules derives the edit decision from a fetched rule map."""
+
+    def test_wildcard_verb_is_editable(self):
+        self.assertTrue(can_edit_from_rules({"*": ["*"]}))
+
+    def test_wildcard_resource_with_create_is_editable(self):
+        self.assertTrue(can_edit_from_rules({"*": ["create"]}))
+
+    def test_create_on_editable_resource_is_editable(self):
+        self.assertTrue(
+            can_edit_from_rules({"agents": ["get", "list", "create"]})
+        )
+
+    def test_create_on_queries_only_is_not_editable(self):
+        # Chat creates a Query, so create-on-queries must NOT count as editing;
+        # queries is excluded from EDITABLE_RESOURCES.
+        self.assertFalse(
+            can_edit_from_rules({"queries": ["get", "list", "create"]})
+        )
+
+    def test_reader_rules_are_not_editable(self):
+        # Authoritative rules (verbs beyond list) with no create -> read-only.
+        self.assertFalse(
+            can_edit_from_rules(
+                {"agents": ["get", "list", "watch"], "models": ["get"]}
+            )
+        )
+
+    def test_list_only_rules_are_inconclusive(self):
+        # The access-review fallback yields list-only rules, which cannot answer
+        # create -> None signals the caller to issue explicit access reviews.
+        self.assertIsNone(can_edit_from_rules({"agents": ["list"]}))
+
+    def test_empty_rules_are_inconclusive(self):
+        self.assertIsNone(can_edit_from_rules({}))
+
+
+class TestUserCanEdit(unittest.IsolatedAsyncioTestCase):
+    """user_can_edit drives the dashboard's per-user read-only gate."""
+
+    async def _run(self, access):
+        api, cm = _mock_helper(access=access)
+        with patch(
+            "ark_api.api.v1.client_utils.get_impersonating_api_client", return_value=cm
+        ), patch(
+            "ark_api.core.permissions.client.AuthorizationV1Api", return_value=api
+        ):
+            return await user_can_edit(
+                ImpersonationConfig(username="u", groups=["g"]), "default"
+            )
+
+    async def test_true_when_user_can_create_a_resource(self):
+        # Admin: create allowed on at least one editable resource -> can edit.
+        self.assertTrue(
+            await self._run(_access_review(allowed_resources={"agents"}, verb="create"))
+        )
+
+    async def test_false_when_no_create_allowed(self):
+        # Reader: no create anywhere -> read-only.
+        self.assertFalse(
+            await self._run(_access_review(allowed_resources=set(), verb="create"))
+        )
+
+    async def test_create_on_queries_only_is_read_only(self):
+        # A "viewer who can chat" can create Queries but nothing else; that must
+        # NOT make the dashboard editable (queries is not an editable resource).
+        self.assertFalse(
+            await self._run(_access_review(allowed_resources={"queries"}, verb="create"))
+        )
+
+    async def test_fails_open_on_error(self):
+        # If the check errors, do NOT falsely lock out (API still enforces RBAC).
+        self.assertTrue(await self._run(_access_review(raises=RuntimeError("boom"))))
+
+    async def test_rules_fast_path_skips_access_reviews(self):
+        # When authoritative rules already carry create, decide from them without
+        # issuing any access reviews (the SSAR mock would raise if called).
+        access = _access_review(raises=RuntimeError("should not be called"))
+        api, cm = _mock_helper(access=access)
+        with patch(
+            "ark_api.api.v1.client_utils.get_impersonating_api_client", return_value=cm
+        ), patch(
+            "ark_api.core.permissions.client.AuthorizationV1Api", return_value=api
+        ):
+            result = await user_can_edit(
+                ImpersonationConfig(username="u", groups=["g"]),
+                "default",
+                {"agents": ["get", "list", "create"]},
+            )
+        self.assertTrue(result)
+        access.assert_not_called()
+
+    async def test_list_only_rules_fall_back_to_access_reviews(self):
+        # list-only rules can't answer create, so the create access reviews run.
+        result = await self._run_with_rules(
+            {"agents": ["list"]},
+            _access_review(allowed_resources={"models"}, verb="create"),
+        )
+        self.assertTrue(result)
+
+    async def _run_with_rules(self, rules, access):
+        api, cm = _mock_helper(access=access)
+        with patch(
+            "ark_api.api.v1.client_utils.get_impersonating_api_client", return_value=cm
+        ), patch(
+            "ark_api.core.permissions.client.AuthorizationV1Api", return_value=api
+        ):
+            return await user_can_edit(
+                ImpersonationConfig(username="u", groups=["g"]), "default", rules
+            )
 
 
 if __name__ == "__main__":

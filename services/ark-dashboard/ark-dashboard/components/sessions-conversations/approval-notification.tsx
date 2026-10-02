@@ -60,7 +60,7 @@ function ApprovalToolCard({
   }
 
   let cardClassName =
-    'bg-card border-border rounded-lg border p-3 text-sm shadow-sm';
+    'bg-surface-bg-secondary rounded-lg p-3 text-sm';
   if (decision === 'rejected') {
     cardClassName =
       'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 rounded-lg border p-3 text-sm shadow-sm';
@@ -119,12 +119,8 @@ function ApprovalToolCard({
       </div>
 
       {showButtons && !isSubmitting && (
-        <div className="border-border mt-3 flex items-center gap-2 border-t pt-3">
-          <Button
-            onClick={onApprove}
-            disabled={isSubmitting}
-            size="sm"
-            className="bg-green-600 text-white hover:bg-green-700">
+        <div className="border-stroke-divider mt-3 flex items-center gap-2 border-t pt-3">
+          <Button onClick={onApprove} disabled={isSubmitting} size="sm">
             <CheckCircle className="mr-1.5 size-3.5" />
             Approve
           </Button>
@@ -132,7 +128,7 @@ function ApprovalToolCard({
             onClick={onReject}
             disabled={isSubmitting}
             size="sm"
-            variant="destructive">
+            variant="outline">
             <XCircle className="mr-1.5 size-3.5" />
             Reject
           </Button>

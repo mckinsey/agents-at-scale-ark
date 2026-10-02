@@ -38,14 +38,14 @@ var _ = Describe("ExecutionEngine Controller", func() {
 		secretList := &corev1.SecretList{}
 		_ = k8sClient.List(ctx, secretList)
 		for i := range secretList.Items {
-			if secretList.Items[i].Namespace == "default" {
+			if secretList.Items[i].Namespace == testNamespace {
 				_ = k8sClient.Delete(ctx, &secretList.Items[i])
 			}
 		}
 		configMapList := &corev1.ConfigMapList{}
 		_ = k8sClient.List(ctx, configMapList)
 		for i := range configMapList.Items {
-			if configMapList.Items[i].Namespace == "default" {
+			if configMapList.Items[i].Namespace == testNamespace {
 				_ = k8sClient.Delete(ctx, &configMapList.Items[i])
 			}
 		}
@@ -55,7 +55,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 		It("reaches ready", func() {
 			name := "ee-direct"
 			engine := &arkv1prealpha1.ExecutionEngine{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
 				Spec: arkv1prealpha1.ExecutionEngineSpec{
 					Address: arkv1prealpha1.ValueSource{Value: "http://engine:8080"},
 				},
@@ -63,7 +63,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
 
 			r := newReconciler()
-			nn := types.NamespacedName{Name: name, Namespace: "default"}
+			nn := types.NamespacedName{Name: name, Namespace: testNamespace}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 			Expect(err).NotTo(HaveOccurred())
@@ -84,7 +84,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 			secretName := "ee-selfheal-secret"
 
 			engine := &arkv1prealpha1.ExecutionEngine{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
 				Spec: arkv1prealpha1.ExecutionEngineSpec{
 					Address: arkv1prealpha1.ValueSource{
 						ValueFrom: &arkv1prealpha1.ValueFromSource{
@@ -99,7 +99,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
 
 			r := newReconciler()
-			nn := types.NamespacedName{Name: name, Namespace: "default"}
+			nn := types.NamespacedName{Name: name, Namespace: testNamespace}
 
 			By("First reconcile initializes phase to running")
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
@@ -118,7 +118,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 
 			By("Creating the Secret so resolution now succeeds")
 			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: testNamespace},
 				Data:       map[string][]byte{"addr": []byte("http://healed-engine:8080")},
 			}
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
@@ -136,7 +136,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 		It("stays terminal in the ready phase without reprocessing", func() {
 			name := "ee-ready-terminal"
 			engine := &arkv1prealpha1.ExecutionEngine{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
 				Spec: arkv1prealpha1.ExecutionEngineSpec{
 					Address: arkv1prealpha1.ValueSource{Value: "http://ready:8080"},
 				},
@@ -146,7 +146,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 			Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
 
 			r := newReconciler()
-			nn := types.NamespacedName{Name: name, Namespace: "default"}
+			nn := types.NamespacedName{Name: name, Namespace: testNamespace}
 			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(BeZero())
@@ -170,7 +170,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 		It("maps a changed ConfigMap to the ExecutionEngines that reference it", func() {
 			configMapName := "ee-mapped-configmap"
 			referencing := &arkv1prealpha1.ExecutionEngine{
-				ObjectMeta: metav1.ObjectMeta{Name: "ee-ref-cm", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ee-ref-cm", Namespace: testNamespace},
 				Spec: arkv1prealpha1.ExecutionEngineSpec{
 					Address: arkv1prealpha1.ValueSource{
 						ValueFrom: &arkv1prealpha1.ValueFromSource{
@@ -185,17 +185,17 @@ var _ = Describe("ExecutionEngine Controller", func() {
 			Expect(k8sClient.Create(ctx, referencing)).To(Succeed())
 
 			r := newReconciler()
-			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: "default"}}
+			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: testNamespace}}
 			requests := r.mapConfigMapToExecutionEngines(ctx, cm)
 			Expect(requests).To(ConsistOf(reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: "ee-ref-cm", Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: "ee-ref-cm", Namespace: testNamespace},
 			}))
 		})
 
 		It("maps a changed Secret to the ExecutionEngines that reference it", func() {
 			secretName := "ee-mapped-secret"
 			referencing := &arkv1prealpha1.ExecutionEngine{
-				ObjectMeta: metav1.ObjectMeta{Name: "ee-ref-secret", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ee-ref-secret", Namespace: testNamespace},
 				Spec: arkv1prealpha1.ExecutionEngineSpec{
 					Address: arkv1prealpha1.ValueSource{
 						ValueFrom: &arkv1prealpha1.ValueFromSource{
@@ -208,7 +208,7 @@ var _ = Describe("ExecutionEngine Controller", func() {
 				},
 			}
 			unrelated := &arkv1prealpha1.ExecutionEngine{
-				ObjectMeta: metav1.ObjectMeta{Name: "ee-direct-map", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ee-direct-map", Namespace: testNamespace},
 				Spec: arkv1prealpha1.ExecutionEngineSpec{
 					Address: arkv1prealpha1.ValueSource{Value: "http://direct:8080"},
 				},
@@ -218,11 +218,11 @@ var _ = Describe("ExecutionEngine Controller", func() {
 
 			r := newReconciler()
 			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: testNamespace},
 			}
 			requests := r.mapSecretToExecutionEngines(ctx, secret)
 			Expect(requests).To(ConsistOf(reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: "ee-ref-secret", Namespace: "default"},
+				NamespacedName: types.NamespacedName{Name: "ee-ref-secret", Namespace: testNamespace},
 			}))
 		})
 	})

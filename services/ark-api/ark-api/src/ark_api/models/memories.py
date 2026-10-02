@@ -3,6 +3,8 @@
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel
 
+from .common import PaginatedListResponse
+
 
 class MemoryResponse(BaseModel):
     """Response model for memory list items."""
@@ -21,7 +23,7 @@ class MemoryDetailResponse(BaseModel):
     status: Optional[Dict[str, Any]] = None
 
 
-class MemoryListResponse(BaseModel):
+class MemoryListResponse(PaginatedListResponse):
     """Response model for memory list."""
     items: List[MemoryResponse]
 

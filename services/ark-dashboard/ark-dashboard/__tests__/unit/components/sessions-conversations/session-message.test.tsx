@@ -29,7 +29,8 @@ describe('SessionMessage', () => {
       const messageContainer = container.querySelector('.items-end');
       expect(messageContainer).toBeInTheDocument();
 
-      const messageBox = container.querySelector('.bg-secondary');
+      // User messages use QBDS surface background color
+      const messageBox = container.querySelector('.bg-surface-bg-tertiary');
       expect(messageBox).toBeInTheDocument();
     });
 
@@ -105,7 +106,7 @@ describe('SessionMessage', () => {
     });
 
     it('should not show timestamp when not provided', () => {
-      const { container } = render(
+      render(
         <SessionMessage
           role="assistant"
           content="Hello"
@@ -113,8 +114,11 @@ describe('SessionMessage', () => {
         />
       );
 
-      const senderLine = container.querySelector('.text-xs.font-medium');
-      expect(senderLine?.textContent).toBe('test-agent');
+      // Sender should be present
+      expect(screen.getByText('test-agent')).toBeInTheDocument();
+
+      // Timestamp should not be present (no time string rendered)
+      expect(screen.queryByText(/\d{2}:\d{2}:\d{2}/)).not.toBeInTheDocument();
     });
 
     it('should show tool calls when showToolCalls is true', () => {
@@ -203,12 +207,15 @@ describe('SessionMessage', () => {
         <SessionMessage
           role="assistant"
           content=""
+          sender="test-agent"  // Need sender to avoid system message path
           toolCalls={[mockToolCall]}
           showToolCalls={true}
         />
       );
 
+      // Tool name should be visible
       expect(screen.getByText('search')).toBeInTheDocument();
+      // Should not render as system message
       expect(screen.queryByText('System')).not.toBeInTheDocument();
     });
 
@@ -266,7 +273,7 @@ describe('SessionMessage', () => {
         <SessionMessage
           role="assistant"
           content="Line 1\n\nLine 2"
-          sender="test-agent"
+          // No sender = system message, which uses <pre> tag
         />
       );
 
@@ -347,7 +354,8 @@ describe('SessionMessage', () => {
       );
 
       expect(screen.getByText('search')).toBeInTheDocument();
-      expect(container.querySelector('.flex-col.gap-3')).toBeInTheDocument();
+      // Tool calls container uses gap-2 in the new design
+      expect(container.querySelector('.flex-col.gap-2')).toBeInTheDocument();
     });
   });
 

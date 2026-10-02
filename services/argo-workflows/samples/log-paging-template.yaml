@@ -1,0 +1,97 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: log-paging-template
+  annotations:
+    workflows.argoproj.io/title: "Log Paging"
+    workflows.argoproj.io/description: |
+      Produces node logs that are longer and wider than one page, to exercise
+      the incremental log viewer: scroll up to load older pages, horizontal
+      scrolling for long lines, and the "Start of log" marker.
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  arguments:
+    parameters:
+    - name: bulk-lines
+      value: "5000"
+    - name: wide-lines
+      value: "400"
+    - name: wide-width
+      value: "1200"
+
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: bulk-output
+        template: emit-lines
+        arguments:
+          parameters:
+          - name: count
+            value: "{{workflow.parameters.bulk-lines}}"
+      - name: wide-output
+        template: emit-wide-lines
+        arguments:
+          parameters:
+          - name: count
+            value: "{{workflow.parameters.wide-lines}}"
+          - name: width
+            value: "{{workflow.parameters.wide-width}}"
+      - name: short-output
+        template: emit-short
+
+  - name: emit-lines
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Many narrow lines, several pages deep"
+    inputs:
+      parameters:
+      - name: count
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        set -euo pipefail
+        count="{{inputs.parameters.count}}"
+        echo "emitting ${count} lines"
+        for i in $(seq 1 "${count}"); do
+          printf 'line %06d of %s  phase=bulk  payload=%s\n' "${i}" "${count}" "$(printf '%06d' $((i * 7)))"
+        done
+        echo "done, emitted ${count} lines"
+
+  - name: emit-wide-lines
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Lines far wider than the viewport"
+    inputs:
+      parameters:
+      - name: count
+      - name: width
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        set -euo pipefail
+        count="{{inputs.parameters.count}}"
+        width="{{inputs.parameters.width}}"
+        pad="$(printf '%*s' "${width}" '' | tr ' ' '.')"
+        echo "emitting ${count} lines of ${width} characters"
+        for i in $(seq 1 "${count}"); do
+          printf 'wide %04d [%s] end-of-line-%04d\n' "${i}" "${pad}" "${i}"
+        done
+        echo "done"
+
+  - name: emit-short
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Fewer lines than one page"
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        set -euo pipefail
+        for i in $(seq 1 12); do
+          echo "short output line ${i}"
+        done

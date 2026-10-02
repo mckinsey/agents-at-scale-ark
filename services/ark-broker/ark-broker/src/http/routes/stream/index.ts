@@ -17,7 +17,10 @@ import {
 } from './schemas.js';
 import {handleQueryStream, processNDJSONData} from './handlers.js';
 
-export function createStreamRouter(chunks: CompletionChunkBroker): Router {
+export function createStreamRouter(
+  chunks: CompletionChunkBroker,
+  idleTimeoutMs: number
+): Router {
   const router = Router();
 
   /**
@@ -102,11 +105,6 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    *           default: false
    *         description: Replay all chunks from the beginning
    *       - in: query
-   *         name: wait-for-query
-   *         schema:
-   *           type: integer
-   *         description: Wait timeout in seconds for query to start (e.g., 30, 300)
-   *       - in: query
    *         name: max-chunk-size
    *         schema:
    *           type: integer
@@ -138,8 +136,8 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
           chunks,
           query_name,
           streamQuery['from-beginning'] ?? false,
-          streamQuery['wait-for-query'],
-          streamQuery['max-chunk-size'] ?? 50
+          streamQuery['max-chunk-size'] ?? 50,
+          idleTimeoutMs
         );
       } catch (error) {
         req.log.error({err: error}, 'failed to handle stream request');
@@ -317,17 +315,11 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
 
       req.log.info({queryId: query_id}, 'marking query as complete');
 
-      if (!(await chunks.hasQuery(query_id))) {
-        res.status(404).json({
-          error: {
-            code: 'NOT_FOUND',
-            message: 'Stream not found',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
-        return;
-      }
-
+      // Complete even when no chunks ever landed (e.g. every chunk write failed
+      // mid-query). completeQuery appends the terminal [DONE], creating the
+      // stream if needed, so a consumer that connected before any chunk is still
+      // terminated and isComplete latches — otherwise the reader hangs and a
+      // later from-beginning reconnect replays and hangs too.
       if (await chunks.isComplete(query_id)) {
         res.json({
           status: 'already_completed',
@@ -344,41 +336,6 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to complete query stream');
-      sendInternalError(res, req.id);
-    }
-  });
-
-  /**
-   * @swagger
-   * /stream:
-   *   delete:
-   *     summary: Purge all stream data
-   *     description: Clears all stored streaming chunks and completion states
-   *     tags:
-   *       - Streaming
-   *     responses:
-   *       200:
-   *         description: Streams purged successfully
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 status:
-   *                   type: string
-   *                   example: success
-   *                 message:
-   *                   type: string
-   *                   example: Stream data purged
-   *       500:
-   *         description: Failed to purge streams
-   */
-  router.delete('/', async (req, res) => {
-    try {
-      await chunks.delete();
-      res.json({status: 'success', message: 'Stream data purged'});
-    } catch (error) {
-      req.log.error({err: error}, 'stream purge failed');
       sendInternalError(res, req.id);
     }
   });

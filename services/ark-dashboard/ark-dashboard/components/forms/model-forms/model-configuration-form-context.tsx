@@ -5,6 +5,7 @@ import type { UseFormReturn } from 'react-hook-form';
 
 import type { KeysOfUnion } from '@/lib/types/utils';
 
+import type { BaseUrlFieldState } from './utils';
 import type { FormValues } from './schema';
 
 export type DisabledFields = Partial<Record<KeysOfUnion<FormValues>, boolean>>;
@@ -18,6 +19,7 @@ interface ModelConfigurationFormContext {
   disabledFields?: DisabledFields;
   initialAzureAuthMethod?: 'apiKey' | 'managedIdentity' | 'workloadIdentity';
   initialBedrockAuthMethod?: 'apiKey' | 'iam';
+  baseUrlState?: BaseUrlFieldState;
 }
 
 const ModelConfigurationFormContext = createContext<

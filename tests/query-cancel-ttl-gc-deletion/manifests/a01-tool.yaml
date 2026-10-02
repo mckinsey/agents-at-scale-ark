@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: run-command
+spec:
+  type: http
+  inputSchema:
+    type: object
+    properties:
+      command:
+        type: string
+        description: Shell command to execute on the host
+    required: ["command"]
+  description: "Runs a shell command on the host and returns its output"
+  http:
+    # Never actually fetched: the approval gate holds the call before execution, and
+    # the query is canceled while it's still waiting there.
+    url: http://command-runner-mock/run?cmd={command}

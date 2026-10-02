@@ -13,6 +13,15 @@ import { storedIsChatStreamingEnabledAtom } from '@/atoms/experimental-features'
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { useChatSession } from '@/lib/hooks/use-chat-session';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
 }));
@@ -26,8 +35,11 @@ const mockStartStreamChatResponse = vi.fn();
 const mockStreamQueryStatus = vi.fn();
 const mockSubmitChatQuery = vi.fn();
 const mockGetQueryResult = vi.fn();
+const mockGetQuery = vi.fn();
 const mockCancelQuery = vi.fn();
 const mockGetByName = vi.fn();
+const mockTeamGetByName = vi.fn();
+const mockResolveMemoryNotice = vi.fn();
 
 vi.mock('@/lib/services', () => ({
   chatService: {
@@ -37,10 +49,16 @@ vi.mock('@/lib/services', () => ({
     streamQueryStatus: (...args: unknown[]) => mockStreamQueryStatus(...args),
     submitChatQuery: (...args: unknown[]) => mockSubmitChatQuery(...args),
     getQueryResult: (...args: unknown[]) => mockGetQueryResult(...args),
+    getQuery: (...args: unknown[]) => mockGetQuery(...args),
     cancelQuery: (...args: unknown[]) => mockCancelQuery(...args),
+    resolveMemoryNotice: (...args: unknown[]) =>
+      mockResolveMemoryNotice(...args),
   },
   agentsService: {
     getByName: (...args: unknown[]) => mockGetByName(...args),
+  },
+  teamsService: {
+    getByName: (...args: unknown[]) => mockTeamGetByName(...args),
   },
 }));
 
@@ -92,6 +110,10 @@ function createStopChunk() {
   };
 }
 
+function createA2AStatusChunk(message: string) {
+  return { type: 'a2a_status', taskId: 'task-1', state: 'working', message };
+}
+
 async function* asyncIterableFrom<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) {
     yield item;
@@ -112,6 +134,7 @@ describe('useChatSession', () => {
     store.set(lastConversationIdAtom, null);
     mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });
     mockGetByName.mockResolvedValue({ parameters: [] });
+    mockTeamGetByName.mockResolvedValue({ members: [] });
     sessionStorage.clear();
 
     mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
@@ -119,6 +142,8 @@ describe('useChatSession', () => {
       return Promise.resolve({ queryName: 'test-query', chunks });
     });
     mockStreamQueryStatus.mockResolvedValue(() => {});
+    mockResolveMemoryNotice.mockResolvedValue({settled: true, notice: null});
+    mockGetQuery.mockResolvedValue({ status: { phase: 'done' } });
   });
 
   afterEach(() => {
@@ -714,7 +739,7 @@ describe('useChatSession', () => {
             m => m.content === 'Conversation stopped by user',
           ),
         ).toBe(true);
-        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+        expect(mockCancelQuery).toHaveBeenCalledWith('default', 'test-query');
       });
     });
 
@@ -761,7 +786,7 @@ describe('useChatSession', () => {
             m => m.content === 'Conversation stopped by user',
           ),
         ).toBe(true);
-        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+        expect(mockCancelQuery).toHaveBeenCalledWith('default', 'test-query');
       });
     });
 
@@ -797,7 +822,7 @@ describe('useChatSession', () => {
             m => m.content === 'Conversation stopped by user',
           ),
         ).toBe(true);
-        expect(mockCancelQuery).toHaveBeenCalledWith('test-query');
+        expect(mockCancelQuery).toHaveBeenCalledWith('default', 'test-query');
       });
     });
 
@@ -825,6 +850,406 @@ describe('useChatSession', () => {
     });
   });
 
+  describe('memory notice', () => {
+    const unavailable = {
+      type: 'MemoryUnavailable' as const,
+      message:
+        'conversationId was set but no Memory backend was reachable; conversation history was disabled for this query',
+    };
+    const settled = (notice: typeof unavailable | null) => ({
+      settled: true,
+      notice,
+    });
+    const unsettled = {settled: false, notice: null};
+
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>(r => {
+        resolve = r;
+      });
+      return {promise, resolve};
+    }
+
+    // The streaming path cannot read the verdict off the stream: the executor
+    // closes it before the controller writes the terminal status. It polls,
+    // unawaited, so the lookup outlives the turn.
+    function streamedTurn() {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createContentChunk('Hello'),
+          createStopChunk(),
+          createArkFinalChunk({}),
+        ]),
+      );
+    }
+
+    // The polling path already holds a terminal response, so it reads the
+    // verdict straight off it.
+    function polledTurn(lookup?: {
+      settled: boolean;
+      notice: typeof unavailable | null;
+    }) {
+      store.set(storedIsChatStreamingEnabledAtom, false);
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Hi',
+        ...(lookup ? {memoryLookup: lookup} : {}),
+      });
+    }
+
+    function renderChat(name = 'test-agent') {
+      return renderHook(
+        ({ name: n }: { name: string }) => useChatSession({ name: n, type: 'agent' }),
+        { wrapper, initialProps: { name } },
+      );
+    }
+
+    it('starts with no notice', () => {
+      const { result } = renderChat();
+
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    it('surfaces the notice after a streamed turn', async () => {
+      streamedTurn();
+      mockResolveMemoryNotice.mockResolvedValue(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+      expect(mockResolveMemoryNotice).toHaveBeenCalledWith('default', 'test-query');
+    });
+
+    // ark-api resolves the chunk stream's broker from the Memory resource, so
+    // the faults this notice reports are the same ones that 503 the stream.
+    // Looking the notice up only on the success path meant it never appeared
+    // in the default configuration.
+    it('still surfaces the notice when the chat stream itself fails', async () => {
+      // The query is created first and only then does the chunk fetch 503, so
+      // lastQueryName is set and there is a finished query to read back.
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new Error('Failed to connect to stream: Service Unavailable');
+      });
+      mockResolveMemoryNotice.mockResolvedValue(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+      expect(mockResolveMemoryNotice).toHaveBeenCalledWith(
+        expect.any(String),
+        'test-query',
+      );
+    });
+
+    // The turn pauses waiting on the user, so the query has not dispatched and
+    // the poll would spend its whole budget finding nothing.
+    it('does not look the notice up on a turn that paused for tool approval', async () => {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          {
+            type: 'tool_approval_request',
+            taskId: 'task-1',
+            toolCalls: [
+              {
+                id: 'call-1',
+                type: 'function',
+                function: { name: 'test-tool', arguments: '{}' },
+              },
+            ],
+          },
+        ]),
+      );
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockResolveMemoryNotice).not.toHaveBeenCalled();
+    });
+
+    it('does not look the notice up when the user aborted the turn', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        throw err;
+      });
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockResolveMemoryNotice).not.toHaveBeenCalled();
+    });
+
+    it('leaves the notice null when a streamed turn reports no problem', async () => {
+      streamedTurn();
+      mockResolveMemoryNotice.mockResolvedValue(settled(null));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(mockResolveMemoryNotice).toHaveBeenCalled();
+      });
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    it('takes the notice off the polled response, without a second lookup', async () => {
+      polledTurn(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+      expect(mockResolveMemoryNotice).not.toHaveBeenCalled();
+    });
+
+    it('drops the notice once a later turn is healthy again', async () => {
+      polledTurn(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+
+      polledTurn(settled(null));
+
+      await act(async () => {
+        await result.current.sendMessage('Hello again');
+      });
+
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toBeNull();
+      });
+    });
+
+    // A lookup that timed out, or a query that ended without the controller's
+    // verdict on it, says nothing about memory. Treating either as healthy made
+    // the banner flap off between turns of a chat that was still broken.
+    it('keeps a standing notice when the next turn carries no verdict', async () => {
+      polledTurn(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+
+      polledTurn();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello again');
+      });
+
+      await waitFor(() => {
+        expect(mockGetQueryResult).toHaveBeenCalledTimes(2);
+      });
+      expect(result.current.memoryNotice).toEqual(unavailable);
+    });
+
+    it('keeps a standing notice when a streamed lookup cannot settle', async () => {
+      streamedTurn();
+      mockResolveMemoryNotice
+        .mockResolvedValueOnce(settled(unavailable))
+        .mockResolvedValue(unsettled);
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+
+      streamedTurn();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello again');
+      });
+
+      await waitFor(() => {
+        expect(mockResolveMemoryNotice).toHaveBeenCalledTimes(2);
+      });
+      expect(result.current.memoryNotice).toEqual(unavailable);
+    });
+
+    // The lookup is fired unawaited and isProcessing goes false immediately, so
+    // the switcher and New chat are live while it is still running.
+    it('does not write a pending notice into the next target', async () => {
+      streamedTurn();
+      const pending = deferred<ReturnType<typeof settled>>();
+      mockResolveMemoryNotice.mockReturnValue(pending.promise);
+
+      const { result, rerender } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      rerender({ name: 'other-agent' });
+
+      await act(async () => {
+        pending.resolve(settled(unavailable));
+        await pending.promise;
+      });
+
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    // The turn's epoch is snapshotted when the turn starts, not when the lookup
+    // is fired, so a switch part-way through the turn is caught too.
+    it('does not write a notice for a turn the user switched away from mid-flight', async () => {
+      const pendingStream = deferred<void>();
+      mockStreamChatResponse.mockImplementation(async function* () {
+        yield createContentChunk('Hello');
+        yield createStopChunk();
+        await pendingStream.promise;
+        yield createArkFinalChunk({});
+      });
+      mockResolveMemoryNotice.mockResolvedValue(settled(unavailable));
+
+      const { result, rerender } = renderChat();
+
+      let turn: Promise<void>;
+      await act(async () => {
+        turn = result.current.sendMessage('Hello');
+        await Promise.resolve();
+      });
+
+      rerender({ name: 'other-agent' });
+
+      await act(async () => {
+        pendingStream.resolve();
+        await turn!;
+      });
+
+      await waitFor(() => {
+        expect(mockResolveMemoryNotice).toHaveBeenCalled();
+      });
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    it('does not write a pending notice back after the chat is cleared', async () => {
+      streamedTurn();
+      const pending = deferred<ReturnType<typeof settled>>();
+      mockResolveMemoryNotice.mockReturnValue(pending.promise);
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      act(() => {
+        result.current.clearChat();
+      });
+
+      await act(async () => {
+        pending.resolve(settled(unavailable));
+        await pending.promise;
+      });
+
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    // Two turns in flight at once: the older lookup must not overwrite what the
+    // newer one already decided.
+    it('ignores a lookup for a query that is no longer the current turn', async () => {
+      streamedTurn();
+      mockSubmitChatQuery
+        .mockResolvedValueOnce({ name: 'query-1' })
+        .mockResolvedValueOnce({ name: 'query-2' });
+      mockStartStreamChatResponse
+        .mockImplementationOnce((...args: unknown[]) =>
+          Promise.resolve({
+            queryName: 'query-1',
+            chunks: mockStreamChatResponse(...args),
+          }),
+        )
+        .mockImplementationOnce((...args: unknown[]) =>
+          Promise.resolve({
+            queryName: 'query-2',
+            chunks: mockStreamChatResponse(...args),
+          }),
+        );
+      const first = deferred<ReturnType<typeof settled>>();
+      mockResolveMemoryNotice
+        .mockReturnValueOnce(first.promise)
+        .mockResolvedValue(settled(null));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      streamedTurn();
+      await act(async () => {
+        await result.current.sendMessage('Hello again');
+      });
+
+      await act(async () => {
+        first.resolve(settled(unavailable));
+        await first.promise;
+      });
+
+      expect(mockResolveMemoryNotice).toHaveBeenCalledWith('default', 'query-1');
+      expect(mockResolveMemoryNotice).toHaveBeenCalledWith('default', 'query-2');
+      expect(result.current.memoryNotice).toBeNull();
+    });
+
+    it('clears the notice when the chat is cleared', async () => {
+      polledTurn(settled(unavailable));
+
+      const { result } = renderChat();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+      await waitFor(() => {
+        expect(result.current.memoryNotice).toEqual(unavailable);
+      });
+
+      act(() => {
+        result.current.clearChat();
+      });
+
+      expect(result.current.memoryNotice).toBeNull();
+    });
+  });
+
   describe('query parameters', () => {
     const agentWithQueryParam = {
       parameters: [
@@ -835,7 +1260,7 @@ describe('useChatSession', () => {
       ],
     };
 
-    it('blocks sending and sets an error when a required parameter is missing', async () => {
+    it('blocks sending without setting an error when a required parameter is missing', async () => {
       mockGetByName.mockResolvedValue(agentWithQueryParam);
 
       const { result } = renderHook(
@@ -844,14 +1269,14 @@ describe('useChatSession', () => {
       );
 
       await waitFor(() => {
-        expect(result.current.requiredParameters).toEqual(['muting']);
+        expect(result.current.availableParameters).toEqual(['muting']);
       });
 
       await act(async () => {
         await result.current.sendMessage('Hello');
       });
 
-      expect(result.current.error).toMatch(/muting/);
+      expect(result.current.error).toBeNull();
       expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
       expect(mockSubmitChatQuery).not.toHaveBeenCalled();
     });
@@ -872,11 +1297,18 @@ describe('useChatSession', () => {
       );
 
       await waitFor(() => {
-        expect(result.current.requiredParameters).toEqual(['muting']);
+        expect(result.current.availableParameters).toEqual(['muting']);
       });
 
       act(() => {
-        result.current.setParameterValue('muting', 'BANANAPHONE');
+        result.current.addParameterRow();
+      });
+      const rowId = result.current.parameterRows[0].id;
+      act(() => {
+        result.current.setParameterRowName(rowId, 'muting');
+      });
+      act(() => {
+        result.current.setParameterRowValue(rowId, 'BANANAPHONE');
       });
 
       await act(async () => {
@@ -887,6 +1319,107 @@ describe('useChatSession', () => {
       expect(lastCall?.at(-1)).toEqual([
         { name: 'muting', value: 'BANANAPHONE' },
       ]);
+    });
+  });
+
+  describe('A2A status and multi-artifact rendering', () => {
+    it('does not treat intermediate a2a_status as reply content', async () => {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createA2AStatusChunk('Working on it'),
+          createContentChunk('Here is the answer', 'a2a-agent'),
+          createStopChunk(),
+        ]),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'a2a-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('question');
+      });
+
+      await waitFor(() => {
+        const assistantMessages = result.current.messages.filter(
+          m => m.role === 'assistant',
+        );
+        const last = assistantMessages[assistantMessages.length - 1];
+        expect(last.content).toBe('Here is the answer');
+      });
+
+      const combined = result.current.messages
+        .filter(m => m.role === 'assistant')
+        .map(m => m.content)
+        .join('');
+      expect(combined).not.toContain('Working on it');
+      expect(result.current.statusText).toBeUndefined();
+    });
+
+    it('exposes a2a_status text transiently while streaming', async () => {
+      let releaseGate: (() => void) | undefined;
+      const gate = new Promise<void>(resolve => {
+        releaseGate = resolve;
+      });
+
+      async function* gatedChunks() {
+        yield createA2AStatusChunk('Analyzing your request');
+        await gate;
+        yield createContentChunk('The final answer', 'a2a-agent');
+        yield createStopChunk();
+      }
+      mockStreamChatResponse.mockReturnValue(gatedChunks());
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'a2a-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      let sendPromise: Promise<void> | undefined;
+      act(() => {
+        sendPromise = result.current.sendMessage('question');
+      });
+
+      await waitFor(() => {
+        expect(result.current.statusText).toBe('Analyzing your request');
+      });
+
+      await act(async () => {
+        releaseGate?.();
+        await sendPromise;
+      });
+
+      expect(result.current.statusText).toBeUndefined();
+    });
+
+    it('renders multiple text artifacts as separate assistant messages', async () => {
+      const raw = JSON.stringify([
+        { role: 'assistant', content: 'First artifact' },
+        { role: 'assistant', content: 'Second artifact' },
+      ]);
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([createArkFinalChunk({ raw })]),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'a2a-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('question');
+      });
+
+      await waitFor(() => {
+        const assistantMessages = result.current.messages.filter(
+          m => m.role === 'assistant',
+        );
+        expect(assistantMessages.map(m => m.content)).toEqual([
+          'First artifact',
+          'Second artifact',
+        ]);
+      });
     });
   });
 });

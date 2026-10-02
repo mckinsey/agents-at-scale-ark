@@ -16,7 +16,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -24,6 +23,7 @@ import (
 	completions "mckinsey.com/ark/executors/completions"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
+	"mckinsey.com/ark/internal/telemetry/routing"
 )
 
 var (
@@ -80,13 +80,14 @@ func main() {
 	log.Info("starting ark completions engine", "version", Version, "commit", GitCommit)
 
 	restConfig := ctrl.GetConfigOrDie()
-	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+
+	ctx := context.Background()
+	k8sClient, err := completions.NewModelCachingClient(ctx, restConfig, scheme, routing.DiscoveryNamespace())
 	if err != nil {
 		log.Error(err, "failed to create kubernetes client")
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
 	telemetryProvider := telemetryconfig.NewProvider(ctx, k8sClient)
 	eventingProvider := eventingconfig.NewProviderWithClient(ctx, k8sClient)
 

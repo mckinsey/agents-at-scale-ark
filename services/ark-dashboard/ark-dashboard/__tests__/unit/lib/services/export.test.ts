@@ -47,7 +47,7 @@ describe('exportService', () => {
         { metadata: { name: 'workflow-1' } },
       ] as any);
 
-      const result = await exportService.fetchAllResources();
+      const result = await exportService.fetchAllResources('test-namespace');
 
       expect(result.agents).toHaveLength(2);
       expect(result.teams).toHaveLength(1);
@@ -80,7 +80,7 @@ describe('exportService', () => {
       vi.spyOn(document, 'createElement').mockReturnValue(mockLink);
       vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink);
 
-      await exportService.exportResources(selectedItems);
+      await exportService.exportResources('test-namespace', selectedItems);
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/v1/export/resources'),
@@ -91,12 +91,35 @@ describe('exportService', () => {
               agents: ['agent-1'],
               teams: ['team-1'],
             },
+            namespace: 'test-namespace',
           }),
         })
       );
 
       expect(clickSpy).toHaveBeenCalled();
       expect(removeSpy).toHaveBeenCalled();
+    });
+
+    it('should send the current namespace when exporting all resources', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['test data'])),
+      });
+
+      const mockLink = document.createElement('a');
+      vi.spyOn(mockLink, 'click').mockImplementation(() => {});
+      vi.spyOn(mockLink, 'remove').mockImplementation(() => {});
+      vi.spyOn(document, 'createElement').mockReturnValue(mockLink);
+      vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink);
+
+      await exportService.exportAll('test-namespace');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/export/resources'),
+        expect.objectContaining({
+          body: JSON.stringify({ namespace: 'test-namespace' }),
+        })
+      );
     });
 
     it('should handle export errors gracefully', async () => {
@@ -109,7 +132,7 @@ describe('exportService', () => {
         statusText: 'Internal Server Error',
       });
 
-      await expect(exportService.exportResources(selectedItems)).rejects.toThrow(
+      await expect(exportService.exportResources('test-namespace', selectedItems)).rejects.toThrow(
         'Export failed: Internal Server Error'
       );
     });
@@ -119,7 +142,7 @@ describe('exportService', () => {
         agents: [{ id: 'agent-1', name: 'agent-1', type: 'agent', selected: false }],
       };
 
-      await expect(exportService.exportResources(selectedItems)).rejects.toThrow(
+      await expect(exportService.exportResources('test-namespace', selectedItems)).rejects.toThrow(
         'No resources selected for export'
       );
     });
@@ -132,6 +155,9 @@ describe('exportService', () => {
 
       const result = await exportService.getLastExportTime();
       expect(result).toBe('2024-01-15T12:00:00Z');
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/v1/export/last-export-time',
+      );
     });
   });
 });

@@ -1,33 +1,28 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
-
-import { PageHeader } from '@/components/common/page-header';
-import { SessionsSection } from '@/components/sections/sessions-section';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
-import { mapArgoWorkflowsToSessions } from '@/lib/services/workflow-mapper';
-import { useWorkflows } from '@/lib/services/workflows-hooks';
+import { Earthquake } from '@/components/icons';
+import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
 export default function SessionsPage() {
-  const searchParams = useSearchParams();
-  const namespace = searchParams.get('namespace') || 'default';
-  const { workflows } = useWorkflows(namespace);
-
-  const allSessions = mapArgoWorkflowsToSessions(workflows);
-
-  const pageTitle = allSessions
-    ? `Workflow Runs (${allSessions.length})`
-    : 'Workflow Runs';
+  const { push } = useNamespacedNavigation();
 
   return (
-    <>
-      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Workflow Runs" />
-      <div className="flex flex-1 flex-col">
-        <div>
-          <h1 className="text-xl">{pageTitle}</h1>
+    <div className="flex h-full w-full content-shell flex-col gap-5">
+      <div className="flex flex-col gap-1" data-testid="page-header">
+        <div className="flex items-center gap-1">
+          <Earthquake className="size-5" />
+          <h1 className="text-2xl font-normal text-fg-primary">Sessions</h1>
         </div>
-        <SessionsSection />
+        <p className="text-sm text-fg-secondary">
+          Monitor all sessions across agents, teams and tools
+        </p>
       </div>
-    </>
+
+      <SessionsTable
+        onSelectSession={(sessionId) => push(`/sessions/${sessionId}`)}
+        selectedSessionId={null}
+      />
+    </div>
   );
 }

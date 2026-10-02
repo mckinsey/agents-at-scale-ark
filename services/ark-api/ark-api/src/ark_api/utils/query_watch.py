@@ -2,13 +2,15 @@
 
 import logging
 import time
+from typing import Optional
 from fastapi import HTTPException
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
 from kubernetes_asyncio import client, watch
-from ark_sdk.k8s import create_api_client
+from ark_sdk.impersonation import ImpersonationConfig
 
+from ark_api.api.v1.client_utils import get_impersonating_api_client
 from ark_api.core.constants import GROUP
 
 logger = logging.getLogger(__name__)
@@ -58,7 +60,9 @@ def _get_error_detail(status: dict) -> dict:
     error_message = status.get("message", "")
     response = status.get("response", {})
 
-    logger.info(f"_get_error_detail - error_message: {error_message}, response: {response}")
+    # The response dict carries model output content; keep it verbose-only (see logging contract).
+    logger.info(f"_get_error_detail - error_message: {error_message}")
+    logger.debug(f"_get_error_detail - response: {response}")
 
     # Get error from response content if available
     response_content = response.get("content", "") if response else ""
@@ -76,15 +80,14 @@ def _get_error_detail(status: dict) -> dict:
     }
 
 
-async def watch_query_completion(ark_client, query_name: str, model: str, messages: list, timeout_seconds: int) -> ChatCompletion:
+async def watch_query_completion(ark_client, query_name: str, model: str, messages: list, timeout_seconds: int, *, impersonation: Optional[ImpersonationConfig]) -> ChatCompletion:
     """Watch for query completion using Kubernetes watch API and return chat completion response."""
     namespace = ark_client.namespace
 
-    api_client = create_api_client()
-    custom_api = client.CustomObjectsApi(api_client)
-    w = watch.Watch()
+    async with get_impersonating_api_client(impersonation) as api_client:
+        custom_api = client.CustomObjectsApi(api_client)
+        w = watch.Watch()
 
-    try:
         async for event in w.stream(
             custom_api.list_namespaced_custom_object,
             group=GROUP,
@@ -115,6 +118,3 @@ async def watch_query_completion(ark_client, query_name: str, model: str, messag
                 raise HTTPException(status_code=500, detail=error_detail)
 
         raise HTTPException(status_code=504, detail=f"Query {query_name} timed out after {timeout_seconds} seconds")
-
-    finally:
-        await api_client.close()

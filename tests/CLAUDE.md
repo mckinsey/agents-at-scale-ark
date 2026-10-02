@@ -570,7 +570,10 @@ spec:
     try:
     - script:
         content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          # requireBroker=false: an ephemeral test namespace has no broker, and
+          # the chart's preflight refuses to install without one.
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait \
+            --set memory.requireBroker=false
     - apply:
         file: manifests/*.yaml
     - wait:
@@ -659,275 +662,6 @@ Separate query completion waiting from validation steps to ensure proper timing:
           (response != null): true
 ```
 
-## HTTP API Testing with Hurl
-
-### Overview
-Hurl is used for HTTP API testing of services within chainsaw tests. It provides comprehensive HTTP client functionality with JSON path validation and test assertions.
-
-### Hurl Test File Structure
-```
-services/{service-name}/test/
-├── test.hurl              # HTTP test definitions
-├── chainsaw-test.yaml     # Chainsaw integration
-└── manifests/
-    ├── pod-{service}-test.yaml   # Test pod with hurl image
-    └── configmap.yaml            # ConfigMap mounting hurl files
-```
-
-### Basic Hurl Test Patterns
-
-#### Health Check Testing
-```hurl
-# Test service health endpoint
-GET http://service-name/health
-HTTP 200
-[Asserts]
-body == "OK"
-```
-
-#### JSON API Testing
-```hurl
-# Test JSON endpoint with validation
-GET http://service-name/api/endpoint
-HTTP 200
-[Asserts]
-jsonpath "$.status" == "ready"
-jsonpath "$.data" exists
-jsonpath "$.data.items" count >= 1
-```
-
-#### POST Request with JSON Body
-```hurl
-# Send JSON data to API
-PUT http://service-name/api/resource/session-id
-Content-Type: application/json
-{
-  "data": {
-    "field": "value",
-    "items": ["item1", "item2"]
-  }
-}
-HTTP 200
-[Asserts]
-jsonpath "$.success" == true
-```
-
-#### Complex JSON Structure Testing
-```hurl
-# Test complex nested JSON responses
-GET http://service-name/api/complex
-HTTP 200
-[Asserts]
-jsonpath "$.messages" count == 3
-jsonpath "$.messages[0].role" == "user"
-jsonpath "$.messages[0].content" == "Expected content"
-jsonpath "$.messages[0].tool_calls" exists
-jsonpath "$.messages[0].tool_calls[0].id" == "call_123"
-jsonpath "$.messages[0].tool_calls[0].function.name" == "function_name"
-```
-
-#### Error Handling Testing
-```hurl
-# Test error responses
-GET http://service-name/api/nonexistent
-HTTP 404
-
-POST http://service-name/api/endpoint
-Content-Type: application/json
-{
-  "invalid": "request"
-}
-HTTP 400
-[Asserts]
-jsonpath "$.error.code" == -32600
-jsonpath "$.error.message" exists
-```
-
-### Chainsaw Integration Pattern
-
-#### ConfigMap for Hurl Files
-```yaml
-# Mount hurl test files into test pod
-- script:
-    skipLogOutput: true
-    content: cat test.hurl
-    outputs:
-    - name: test_script
-      value: ($stdout)
-- apply:
-    resource:
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: hurl-test-files
-      data:
-        test.hurl: ($test_script)
-```
-
-#### Test Pod Setup
-```yaml
-# Pod with hurl Docker image
-- apply:
-    resource:
-      apiVersion: v1
-      kind: Pod
-      metadata:
-        name: service-test
-      spec:
-        containers:
-        - name: test-client
-          image: ghcr.io/orange-opensource/hurl:6.1.1
-          command: ["sleep", "300"]
-          volumeMounts:
-          - name: test-files
-            mountPath: /tests
-        volumes:
-        - name: test-files
-          configMap:
-            name: hurl-test-files
-        restartPolicy: Never
-        terminationGracePeriodSeconds: 0
-```
-
-#### Test Execution
-```yaml
-# Execute hurl tests inside pod
-- name: run-hurl-tests
-  try:
-  - script:
-      content: |
-        kubectl exec service-test -n $NAMESPACE -- hurl --test /tests/test.hurl
-      env:
-      - name: NAMESPACE
-        value: ($namespace)
-      timeout: 120s
-```
-
-### Service-Specific Examples
-
-#### PostgreSQL Memory Service Pattern
-Based on `services/postgres-memory/test/test.hurl`:
-
-```hurl
-# Test message storage and retrieval
-PUT http://postgres-memory/message/test-session
-Content-Type: application/json
-{
-  "message": {
-    "role": "user",
-    "content": "Test message"
-  }
-}
-HTTP 200
-
-# Verify message retrieval
-GET http://postgres-memory/message/test-session
-HTTP 200
-[Asserts]
-jsonpath "$.messages" count == 1
-jsonpath "$.messages[0].role" == "user"
-jsonpath "$.messages[0].content" == "Test message"
-
-# Test session isolation
-GET http://postgres-memory/message/other-session
-HTTP 200
-[Asserts]
-jsonpath "$.messages" == null
-```
-
-#### A2A Gateway Service Pattern
-Based on `services/a2agw/test/test.hurl`:
-
-```hurl
-# Test agent discovery
-GET http://a2agw:8080/agents
-HTTP 200
-[Asserts]
-jsonpath "$" count >= 1
-jsonpath "$[*]" contains "agent-name"
-
-# Test agent capabilities
-GET http://a2agw:8080/agent/agent-name/.well-known/agent.json
-HTTP 200
-[Asserts]
-jsonpath "$.name" == "agent-name"
-jsonpath "$.skills" count >= 1
-jsonpath "$.skills[0].id" exists
-
-# Test JSON-RPC messaging
-POST http://a2agw:8080/agent/agent-name/jsonrpc
-Content-Type: application/json
-{
-  "jsonrpc": "2.0",
-  "method": "message/send",
-  "params": {
-    "message": {
-      "kind": "message",
-      "messageId": "test-1",
-      "role": "user",
-      "parts": [{"text": "Test message"}]
-    }
-  },
-  "id": 1
-}
-HTTP 200
-[Asserts]
-jsonpath "$.jsonrpc" == "2.0"
-jsonpath "$.id" == 1
-jsonpath "$.result.messageId" exists
-```
-
-### Best Practices
-
-#### Test Organization
-- Group related tests logically in single .hurl file
-- Use descriptive comments for each test section
-- Test happy path first, then error conditions
-- Include session isolation tests for stateful services
-
-#### Assertion Strategies
-- Test response structure with `jsonpath` exists/count
-- Validate specific values with exact matches
-- Use `contains` for flexible array content validation
-- Test null values explicitly where expected
-
-#### Service URLs
-- Use service names for internal Kubernetes DNS resolution
-- Include port numbers when services don't use standard ports
-- Test both primary endpoints and health checks
-
-#### Error Testing
-- Test invalid endpoints (404 responses)
-- Test malformed requests (400 responses)
-- Validate error response structure and codes
-- Test authentication/authorization failures where applicable
-
-### Integration with ARK Testing
-
-#### Combined HTTP and ARK Testing
-```yaml
-# First test HTTP endpoints directly
-- name: run-hurl-tests
-  try:
-  - script:
-      content: kubectl exec test-pod -- hurl --test /tests/test.hurl
-
-# Then test ARK integration
-- name: wait-for-query-completion
-  try:
-  - wait:
-      apiVersion: ark.mckinsey.com/v1alpha1
-      kind: Query
-      name: test-query
-      timeout: 4m
-      for:
-        condition:
-          name: Completed
-          value: 'True'
-```
-
-This pattern validates both the service's HTTP API functionality and its integration with the ARK platform.
-
 ## Test Execution
 
 ### Local Testing
@@ -1001,9 +735,9 @@ If options are still detaching after this, the likely cause is a parent componen
 
 ## PostgreSQL Broker Tests
 
-Tests labeled `postgresql: "true"` run in the `storage-backend: postgresql` CI matrix, where the broker uses Postgres for both messages and events (`backends.message=postgres`, `backends.event=postgres`). This means broker messages and events are persisted in the `messages` and `events` tables of the `ark-storage-dev` Postgres instance in `ark-system`.
+Tests labeled `postgresql: "true"` run in the `storage-backend: postgresql` CI matrix, where the broker uses Postgres for messages, events, and sessions (`backends.message=postgres`, `backends.event=postgres`, `backends.sessions=postgres`). This means broker messages, events, and sessions are persisted in the `messages`, `events`, `sessions`, and `session_queries` tables of the `ark-storage-dev` Postgres instance in `ark-system`.
 
-Use this label when a test needs to verify broker message/event persistence, `expires_at`, or other Postgres-specific behavior.
+Use this label when a test needs to verify broker message/event/session persistence, `expires_at`, or other Postgres-specific behavior.
 
 ### Querying Postgres from a chainsaw test
 
@@ -1026,3 +760,24 @@ Use the shared `psql-query.sh` script to run SQL against `ark-storage-dev`:
 ```
 
 The script reads the password from the `ark-storage-dev-password` secret in `ark-system` and execs psql on the `ark-storage-dev` deployment.
+
+### Polling for async writes: use `psql-poll.sh`, not a shell retry loop
+
+Broker writes land asynchronously, so verify steps must poll until the rows appear. Do not loop over `psql-query.sh`: each call is three `kubectl` round-trips (namespace lookup, secret decode, exec), so an N-iteration loop pays that N times and, under CI Postgres contention, exceeds the step timeout and is killed. `signal: killed` in a chainsaw script means the step timeout was hit, not that an assertion failed.
+
+Use `psql-poll.sh`, which resolves the connection once and runs the whole retry loop inside a single `kubectl exec` against local psql. It polls `<sql>` until the trimmed result equals `<expected>`, then prints it; non-zero exit if it never matched:
+
+```yaml
+- script:
+    timeout: 60s
+    content: |
+      COUNT=$(bash ../shared/psql-poll.sh \
+        "SELECT count(*) FROM session_queries WHERE session_id='${SESSION_ID}' AND phase='done';" \
+        "2" 80 0.5) || { echo "expected 2, got '${COUNT}'"; exit 1; }
+```
+
+Arguments are `"<sql>" "<expected>" [attempts] [sleep_seconds]` (defaults 80 and 0.5, a 40s budget). Use `psql-query.sh` only for single reads once the poll has confirmed the data is present.
+
+### Derive per-run identifiers from `($namespace)`
+
+Hardcoded `sessionId`s (and similar identifiers) accumulate rows across runs on a persistent Postgres. CI is fresh each run, but local re-runs and any shared DB are not, so a fixed id breaks exact-count assertions on the second run. Set the id from `($namespace)` (unique per run) in the query manifests and reference the same value in verify steps, then delete the run's own rows in a `cleanup` step.

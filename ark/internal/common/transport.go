@@ -4,6 +4,7 @@ package common
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 const (
 	QueryMessagesEndpointFmt = "/queries/%s/messages"
 	QueryEventsEndpointFmt   = "/events/%s"
+	QuerySessionsEndpointFmt = "/sessions/queries/%s"
 )
 
 // LoggingTransport wraps an http.RoundTripper to provide optional HTTP request/response logging.
@@ -85,6 +87,50 @@ func NewSharedTransport() *http.Transport {
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
 	}
+}
+
+// BackstopTransport bounds requests that carry no deadline of their own. It is
+// deliberately not an http.Client.Timeout: that bounds every exchange regardless
+// of context, so it would cap a caller that asked for longer via its own context
+// deadline instead of backstopping one that asked for nothing. A non-positive
+// Backstop disables the bound, matching http.Client.Timeout's zero value.
+type BackstopTransport struct {
+	Base     http.RoundTripper
+	Backstop time.Duration
+}
+
+func (t *BackstopTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	base := t.Base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+
+	if _, hasDeadline := req.Context().Deadline(); hasDeadline || t.Backstop <= 0 {
+		return base.RoundTrip(req)
+	}
+
+	ctx, cancel := context.WithTimeout(req.Context(), t.Backstop)
+	resp, err := base.RoundTrip(req.WithContext(ctx))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	// The deadline must outlive RoundTrip to cover the body read, so ownership
+	// of cancel transfers to the body.
+	resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
+}
+
+type cancelOnCloseBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *cancelOnCloseBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
 }
 
 // NewHTTPClientWithoutTracing creates an HTTP client without OpenTelemetry instrumentation.

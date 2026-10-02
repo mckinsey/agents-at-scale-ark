@@ -6,6 +6,7 @@ import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 import {createRedis} from '../src/redis/redis.js';
 import {useRedisContainer} from '../src/redis/__tests__/testHelpers/redis-testcontainer.js';
 
@@ -60,7 +61,7 @@ function consumeSSE(
 }
 
 describeIntegration('redis chunk backend — HTTP parity', () => {
-  const {client, connectionUrl} = useRedisContainer();
+  const {connectionUrl, onStop} = useRedisContainer();
   let app: Express;
 
   beforeAll(() => {
@@ -69,13 +70,19 @@ describeIntegration('redis chunk backend — HTTP parity', () => {
       REDIS_URL: connectionUrl(),
     });
     const redis = createRedis(config, logger);
+    const chunks = createChunkStream(config, logger, redis);
+    onStop(async () => {
+      chunks.close?.();
+      await redis.quit();
+    });
     app = buildApp({
       config,
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
-      chunkStream: createChunkStream(config, logger, redis),
+      chunkStream: chunks,
       eventStream: createEventStream(config, logger),
+      sessionsStorage: createSessionsStorage(config, logger),
       redis,
     }).app;
   });
@@ -118,22 +125,18 @@ describeIntegration('redis chunk backend — HTTP parity', () => {
     expect(JSON.parse(chunks[0]).choices[0].delta.content).toBe('hello');
   });
 
-  it('DELETE /stream purges all chunk data', async () => {
-    const q = 'redis-parity-q3';
-    await request(app)
-      .post(`/stream/${q}`)
-      .set('Content-Type', 'application/x-ndjson')
-      .send(ndjson(textChunk))
-      .expect(200);
+  it('POST /stream/:id/complete stores [DONE] for a query with no chunks', async () => {
+    // A completion for a query that never streamed a chunk must still terminate
+    // the stream so a connected consumer does not hang.
+    const q = 'redis-parity-complete-no-chunks';
+    await request(app).post(`/stream/${q}/complete`).expect(200);
 
-    await request(app).delete('/stream').expect(200);
-
-    const allKeys = await client().keys('ark-broker:chunks:*');
-    expect(allKeys).toHaveLength(0);
-  });
-
-  it('POST /stream/:id/complete returns 404 for unknown query', async () => {
-    await request(app).post('/stream/no-such-query/complete').expect(404);
+    const events = await consumeSSE(
+      app,
+      `/stream/${q}?from-beginning=true`,
+      5000
+    );
+    expect(events).toContain('[DONE]');
   });
 
   it('GET /stream paginate returns correct items after cursor', async () => {

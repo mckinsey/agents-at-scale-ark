@@ -21,8 +21,8 @@
 export interface PaginatedList<T> {
   /** The items in this page of results */
   items: T[];
-  /** Total number of items matching the query (across all pages) */
-  total: number;
+  /** Total number of items matching the query (across all pages), when known */
+  total?: number;
   /** Whether more items exist beyond this page */
   hasMore: boolean;
   /** Cursor for fetching the next page, or for starting a watch stream */

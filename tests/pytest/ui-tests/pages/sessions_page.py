@@ -11,77 +11,35 @@ logger = logging.getLogger(__name__)
 
 class SessionsPage(BasePage):
 
-    NEW_SESSION_BUTTON = "button:has-text('New session')"
-    SESSION_DIALOG = "[role='dialog']:has-text('Create new session')"
-    DIALOG_SEARCH_INPUT = "[role='dialog'] input[placeholder*='Search']"
-    DIALOG_CREATE_BUTTON = "[role='dialog'] button:has-text('Create')"
-    DIALOG_CANCEL_BUTTON = "[role='dialog'] button:has-text('Cancel')"
     BACK_TO_SESSIONS_BUTTON = "button:has-text('Back to all sessions')"
     HISTORY_TAB = "[role='tab']:has-text('History')"
-    CONVERSATION_SIDEBAR = "div.space-y-3.overflow-y-auto"
-    CONVERSATION_SIDEBAR_ITEM = "div.space-y-3.overflow-y-auto button"
-    CHAT_TEXTAREA = "textarea[placeholder*='Message']"
-    USER_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-end"
-    ASSISTANT_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-start"
+    CONVERSATION_SIDEBAR = "[data-testid='conversation-sidebar']"
+    CONVERSATION_SIDEBAR_ITEM = "[data-testid='conversation-item']"
+    USER_MESSAGE = "div.space-y-4 div.flex.flex-col.items-end"
+    ASSISTANT_MESSAGE = "div.space-y-4 > div.flex.flex-col:not(.items-end)"
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border.bg-muted"
-    SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-medium"
-    NEW_CONVERSATION_DIALOG = "[role='dialog']:has-text('Start New Conversation')"
+    SESSION_STATS_TOTAL = "div.flex.items-center.gap-1:has(span:has-text('Sessions')) span.font-semibold"
 
     def navigate_to_session_history(self) -> None:
         dashboard = DashboardPage(self.page)
-        dashboard.navigate_to_section("session-history")
+        dashboard.navigate_to_section("sessions")
         self.wait_for_load_state("domcontentloaded")
         self.wait_for_navigation_complete()
 
-    def open_new_session_dialog(self) -> None:
-        btn = self.wait_for_element(self.NEW_SESSION_BUTTON, timeout=10000)
-        btn.click()
-        self.wait_for_modal_open()
+    def open_session(self, session_id: str) -> None:
+        """Go straight to a session's detail page.
 
-    def select_participant_in_dialog(self, participant_name: str, participant_tab: str = "All") -> None:
-        try:
-            self.page.wait_for_selector(
-                "[role='dialog'] div:has-text('Loading participants...')",
-                state="hidden",
-                timeout=10000,
-            )
-        except PlaywrightTimeoutError:
-            pass
-
-        if participant_tab != "All":
-            try:
-                tab = self.page.locator(f"[role='dialog'] [role='tab']:has-text('{participant_tab}')").first
-                if tab.is_visible(timeout=2000):
-                    tab.click()
-                    tab.wait_for(state="attached")
-            except PlaywrightTimeoutError:
-                logger.info("Could not click tab %s, using default", participant_tab)
-
-        try:
-            search = self.page.locator(self.DIALOG_SEARCH_INPUT).first
-            if search.is_visible(timeout=2000):
-                search.fill(participant_name)
-        except PlaywrightTimeoutError:
-            logger.info("Could not fill search input")
-
-        participant_item = self.page.locator(
-            f"[role='dialog'] label:has-text('{participant_name}'), "
-            f"[role='dialog'] div.font-medium:has-text('{participant_name}')"
-        ).first
-        participant_item.wait_for(state="visible", timeout=10000)
-        participant_item.click()
-
-    def confirm_create_session(self) -> str:
-        create_btn = self.page.locator(self.DIALOG_CREATE_BUTTON).first
-        create_btn.wait_for(state="visible", timeout=5000)
-        create_btn.click()
-        try:
-            self.page.wait_for_url("**/sessions/**", timeout=10000)
-        except PlaywrightTimeoutError:
-            raise AssertionError(
-                f"Session creation failed — URL did not change to /sessions/*. Current: {self.page.url}"
-            )
-        return self.get_session_id_from_url()
+        The Sessions view no longer creates anything, so tests seed a session
+        through the API and open it by id.
+        """
+        dashboard = DashboardPage(self.page)
+        self.page.goto(
+            f"{dashboard.base_url}/sessions/{session_id}",
+            wait_until="domcontentloaded",
+        )
+        self.wait_for_load_state("domcontentloaded")
+        self.wait_for_namespace_in_url()
+        self.wait_for_session_detail_page()
 
     def get_session_id_from_url(self) -> str:
         match = re.search(r"/sessions/([^/?#]+)", self.page.url)
@@ -94,7 +52,7 @@ class SessionsPage(BasePage):
     def get_conversation_count_from_header(self) -> int:
         try:
             section = self.page.locator(
-                "div.flex.items-center.gap-1:has(span:has-text('Conversations'))"
+                "div.flex.items-center.gap-1:has(div:has-text('Conversations'))"
             ).first
             if section.is_visible(timeout=3000):
                 text = section.inner_text()
@@ -105,10 +63,22 @@ class SessionsPage(BasePage):
             logger.warning("Could not get conversation count: %s", e)
         return 0
 
+    def wait_for_conversation_count_in_header(
+        self, min_count: int = 1, timeout_s: int = 30
+    ) -> int:
+        start = time.time()
+        count = 0
+        while time.time() - start < timeout_s:
+            count = self.get_conversation_count_from_header()
+            if count >= min_count:
+                return count
+            self.page.wait_for_timeout(1000)
+        return count
+
     def get_participants_count_from_header(self) -> int:
         try:
             section = self.page.locator(
-                "div.flex.items-center.gap-1:has(span:has-text('Participants'))"
+                "div.flex.items-center.gap-1:has(div:has-text('Targets'))"
             ).first
             if section.is_visible(timeout=3000):
                 text = section.inner_text()
@@ -121,25 +91,12 @@ class SessionsPage(BasePage):
 
     def is_participant_shown_in_header(self, participant_name: str) -> bool:
         try:
-            badge = self.page.locator(
-                f"div.rounded-lg.bg-card span:has-text('{participant_name}')"
+            tag = self.page.locator(
+                f"[data-slot='tag']:has-text('{participant_name}')"
             ).first
-            return badge.is_visible(timeout=5000)
+            return tag.is_visible(timeout=5000)
         except Exception:
             return False
-
-    def send_message_in_conversation(self, message: str) -> None:
-        initial_count = self.get_user_message_count()
-        textarea = self.page.locator(self.CHAT_TEXTAREA).first
-        textarea.wait_for(state="visible", timeout=10000)
-        textarea.click()
-        textarea.fill(message)
-        textarea.press("Enter")
-        start = time.time()
-        while time.time() - start < 10:
-            if self.get_user_message_count() > initial_count:
-                return
-            self.page.wait_for_timeout(200)
 
     def wait_for_assistant_response(self, initial_count: int = 0, timeout_s: int = 90) -> bool:
         start = time.time()
@@ -147,6 +104,7 @@ class SessionsPage(BasePage):
             try:
                 count = self.page.locator(self.ASSISTANT_MESSAGE).count()
                 if count > initial_count:
+                    # The transcript polls every 2s; let the reply settle.
                     self.page.wait_for_timeout(500)
                     return True
             except Exception:
@@ -172,7 +130,7 @@ class SessionsPage(BasePage):
     def is_participant_in_conversation_sidebar(self, participant_name: str) -> bool:
         try:
             item = self.page.locator(
-                f"div.space-y-3 button span.font-medium:has-text('{participant_name}')"
+                f"[data-testid='conversation-item'] [data-testid='conversation-participant-name']:has-text('{participant_name}')"
             ).first
             return item.is_visible(timeout=5000)
         except Exception:
@@ -220,11 +178,6 @@ class SessionsPage(BasePage):
                 self.page.wait_for_timeout(1500)
         return 0
 
-    def create_new_session(self, participant_name: str, participant_tab: str = "All") -> str:
-        self.open_new_session_dialog()
-        self.select_participant_in_dialog(participant_name, participant_tab)
-        return self.confirm_create_session()
-
     def click_conversations_tab(self) -> None:
         try:
             history_tab = self.page.locator(self.HISTORY_TAB).first
@@ -245,7 +198,7 @@ class SessionsPage(BasePage):
 
     def set_status_filter(self, status: str) -> None:
         trigger = self.page.locator(
-            "div.flex.flex-col.gap-1\\.5:has(span:has-text('Status')) button[role='combobox']"
+            "div.flex.flex-col.gap-2:has(span:has-text('Status')) button[role='combobox']"
         ).first
         trigger.wait_for(state="visible", timeout=5000)
         trigger.click()
@@ -259,19 +212,19 @@ class SessionsPage(BasePage):
         try:
             try:
                 self.page.wait_for_selector(
-                    "div.rounded-lg button[aria-pressed], div.py-12.text-center:has-text('No sessions found')",
+                    "button[aria-pressed], div.py-12.text-center:has-text('No sessions found')",
                     timeout=10000,
                 )
             except Exception:
                 pass
             rows = self.page.locator(
-                "div.rounded-lg button[type='button'][aria-pressed]"
+                "button[type='button'][aria-pressed]"
             )
             count = rows.count()
             if count > 0:
                 return count
             rows = self.page.locator(
-                "div.rounded-lg > button[type='button']"
+                "button[type='button'].grid"
             )
             return rows.count()
         except Exception as e:
@@ -319,9 +272,9 @@ class SessionsPage(BasePage):
                 f"button[type='button']:has-text('{session_id}')"
             ).first
             if row.is_visible(timeout=5000):
-                active_dot = row.locator("span.bg-blue-500")
-                idle_dot = row.locator("span.bg-gray-400")
-                error_dot = row.locator("span.bg-red-500")
+                active_dot = row.locator("span.bg-status-information")
+                idle_dot = row.locator("span.bg-fg-tertiary")
+                error_dot = row.locator("span.bg-status-error")
                 if active_dot.count() > 0:
                     return "active"
                 if idle_dot.count() > 0:
@@ -352,41 +305,6 @@ class SessionsPage(BasePage):
                 self.page.reload()
                 self.wait_for_navigation_complete()
         return 0
-
-    def cancel_session_dialog(self) -> None:
-        cancel = self.page.locator("[role='dialog'] button:has-text('Cancel')").first
-        cancel.wait_for(state="visible", timeout=5000)
-        cancel.click()
-        self.wait_for_modal_close()
-
-    def is_create_button_disabled(self) -> bool:
-        try:
-            btn = self.page.locator(self.DIALOG_CREATE_BUTTON).first
-            btn.wait_for(state="visible", timeout=5000)
-            return btn.is_disabled()
-        except PlaywrightTimeoutError:
-            return True
-
-    def click_new_conversation_button(self) -> None:
-        btn = self.page.locator(
-            "button:has(svg.lucide-plus), button[class*='size-6']:has(svg)"
-        ).first
-        btn.wait_for(state="visible", timeout=8000)
-        btn.click()
-        self.wait_for_modal_open()
-
-    def confirm_new_conversation(self) -> None:
-        if not self.is_visible(self.NEW_CONVERSATION_DIALOG, timeout=2000):
-            return
-        btn = self.page.locator(
-            f"{self.NEW_CONVERSATION_DIALOG} button[type='submit'], "
-            f"{self.NEW_CONVERSATION_DIALOG} button:not(:has-text('Cancel'))"
-        ).first
-        try:
-            btn.wait_for(state="visible", timeout=5000)
-            btn.click(force=True)
-        except PlaywrightTimeoutError:
-            logger.warning("Could not find confirm button in new conversation dialog")
 
     def click_sort_header(self, field: str) -> None:
         try:

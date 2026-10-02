@@ -41,7 +41,7 @@ spec:
   #     options:
   #       # L4 & L5 FIX: Enforce TLS 1.2 and 1.3 only with strong cipher suites
   #       nginx.org/ssl-protocols: "TLSv1.2 TLSv1.3"
-  #       nginx.org/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
+  #       nginx.org/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305"
   #       nginx.org/ssl-prefer-server-ciphers: "on"
   #   allowedRoutes:
   #     namespaces:
@@ -57,7 +57,7 @@ spec:
   #     options:
   #       # L4 & L5 FIX: Enforce TLS 1.2 and 1.3 only with strong cipher suites
   #       nginx.org/ssl-protocols: "TLSv1.2 TLSv1.3"
-  #       nginx.org/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
+  #       nginx.org/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305"
   #       nginx.org/ssl-prefer-server-ciphers: "on"
   #   allowedRoutes:
   #     namespaces:

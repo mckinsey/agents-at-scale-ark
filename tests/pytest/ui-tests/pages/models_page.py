@@ -1,7 +1,7 @@
 import logging
 import random
 from datetime import datetime
-from playwright.sync_api import Page
+from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -18,7 +18,7 @@ class ModelsPage(BasePage):
     MODEL_TYPE_SELECT = "select, [role='combobox']"
     MODEL_INPUT = "input[name='model'], input[placeholder*='model' i]"
     API_KEY_SELECT = "button:has-text('Select a secret'), [role='combobox']:has-text('Select')"
-    BASE_URL_INPUT = "input[name='baseUrl'], input[placeholder*='url' i], input[type='url']"
+    BASE_URL_FIELDSET = "xpath=//*[contains(text(),'Base URL')]/parent::*"
     SAVE_BUTTON = "button:has-text('Add Model'), button:has-text('Create'), button:has-text('Save')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
@@ -70,6 +70,21 @@ class ModelsPage(BasePage):
         self.page.locator(f"[role='option']:has-text('{option_text}')").first.click()
         self.wait_for_element_hidden("[role='listbox'], [data-slot='select-content']", timeout=3000)
 
+    def _set_base_url_via_configuration(self, model_name: str, base_url: str) -> None:
+        base_url_fieldset = self.page.locator(self.BASE_URL_FIELDSET).first
+        add_button = base_url_fieldset.locator(
+            "button:has-text('Add New'), button:has-text('Move to configuration')"
+        ).first
+        add_button.wait_for(state="visible", timeout=3000)
+        add_button.click()
+
+        dialog = self.page.locator("[role='dialog']")
+        dialog.wait_for(state="visible", timeout=5000)
+        dialog.get_by_label("Name").fill(f"{model_name}-base-url")
+        dialog.get_by_label("Value").fill(base_url)
+        dialog.get_by_role("button", name="Create").click()
+        self.wait_for_element_hidden("[role='dialog']", timeout=5000)
+
     def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str = None) -> dict:
         logger.info(f"Creating {model_type} model: {model_name}")
         
@@ -91,9 +106,7 @@ class ModelsPage(BasePage):
         
         if base_url:
             try:
-                base_url_input = self.page.locator(self.BASE_URL_INPUT).first
-                base_url_input.wait_for(state="visible", timeout=3000)
-                base_url_input.fill(base_url)
+                self._set_base_url_via_configuration(model_name, base_url)
             except TimeoutError as e:
                 logger.info(f"No base URL field visible for {model_type}, skipping: {e}")
             except Exception as e:
@@ -138,10 +151,11 @@ class ModelsPage(BasePage):
             name_element = self.page.get_by_text(model_name, exact=True).first
             name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete model'] or .//button[.//*[contains(@class,'lucide-trash')]]  ][1]")
-            delete_btn = card.locator("button[aria-label='Delete model'], button:has(svg.lucide-trash-2)").first
+            row = self.page.get_by_role("row").filter(has_text=model_name).first
+            delete_btn = row.get_by_role("button", name="Delete model")
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click(force=True)
+            expect(delete_btn).to_be_enabled(timeout=15000)
+            delete_btn.click()
         except Exception as e:
             logger.warning("Delete button not accessible for model '%s': %s", model_name, e)
             return self._delete_not_available(model_name)

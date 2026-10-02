@@ -16,9 +16,31 @@ vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
 }));
 
-describe('mcpServersService auth methods', () => {
+describe('mcpServersService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('getAll', () => {
+    it('maps list items to include id without a per-item detail fetch', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        items: [
+          { name: 'mcp1', available: 'True' },
+          { name: 'mcp2', available: 'False' },
+        ],
+      });
+
+      const result = await mcpServersService.getAll('team-a');
+
+      expect(apiClient.get).toHaveBeenCalledTimes(1);
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/mcp-servers', {
+        params: { limit: 100, namespace: 'team-a' },
+      });
+      expect(result).toEqual([
+        { name: 'mcp1', available: 'True', id: 'mcp1' },
+        { name: 'mcp2', available: 'False', id: 'mcp2' },
+      ]);
+    });
   });
 
   describe('startAuth', () => {

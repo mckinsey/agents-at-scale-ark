@@ -85,15 +85,21 @@ export function createEventsRouter(
       const {ttl_seconds: ttlSeconds, ...event}: PostEventBody = parse.data;
 
       try {
-        await events.addEvent(event as unknown as EventData, ttlSeconds);
+        const persisted = await events.addEvent(
+          event as unknown as EventData,
+          ttlSeconds
+        );
         await events.save();
 
-        sessions.applyEvent({
-          ...event.data,
-          _reason: (event as Record<string, unknown>)['reason'] as
-            | string
-            | undefined,
-        });
+        await sessions.applyEvent(
+          {
+            ...event.data,
+            _reason: (event as Record<string, unknown>)['reason'] as
+              | string
+              | undefined,
+          },
+          persisted.sequenceNumber
+        );
 
         res.status(201).json({status: 'success'});
       } catch (error) {
@@ -102,16 +108,6 @@ export function createEventsRouter(
       }
     }
   );
-
-  router.delete('/', async (req, res) => {
-    try {
-      await events.delete();
-      res.json({status: 'success', message: 'Event data purged'});
-    } catch (error) {
-      req.log.error({err: error}, 'event purge failed');
-      sendInternalError(res, req.id);
-    }
-  });
 
   router.delete<{query_id: string}>('/:query_id', async (req, res) => {
     const {query_id: queryId} = req.params;

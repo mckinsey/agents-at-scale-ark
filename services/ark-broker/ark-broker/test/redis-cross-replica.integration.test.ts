@@ -6,6 +6,7 @@ import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 import {createRedis} from '../src/redis/redis.js';
 import {useRedisContainer} from '../src/redis/__tests__/testHelpers/redis-testcontainer.js';
 
@@ -60,7 +61,7 @@ function consumeSSE(
 }
 
 describeIntegration('redis chunk backend — cross-replica', () => {
-  const {connectionUrl} = useRedisContainer();
+  const {connectionUrl, onStop} = useRedisContainer();
   let appA: Express;
   let appB: Express;
 
@@ -70,14 +71,23 @@ describeIntegration('redis chunk backend — cross-replica', () => {
 
     const redisA = createRedis(config, logger);
     const redisB = createRedis(config, logger);
+    const chunksA = createChunkStream(config, logger, redisA);
+    const chunksB = createChunkStream(config, logger, redisB);
+    onStop(async () => {
+      chunksA.close?.();
+      chunksB.close?.();
+      await redisA.quit();
+      await redisB.quit();
+    });
 
     appA = buildApp({
       config,
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
-      chunkStream: createChunkStream(config, logger, redisA),
+      chunkStream: chunksA,
       eventStream: createEventStream(config, logger),
+      sessionsStorage: createSessionsStorage(config, logger),
       redis: redisA,
     }).app;
 
@@ -86,8 +96,9 @@ describeIntegration('redis chunk backend — cross-replica', () => {
       logger,
       version: 'test',
       messageStream: createMessageStream(config, logger),
-      chunkStream: createChunkStream(config, logger, redisB),
+      chunkStream: chunksB,
       eventStream: createEventStream(config, logger),
+      sessionsStorage: createSessionsStorage(config, logger),
       redis: redisB,
     }).app;
   });

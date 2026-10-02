@@ -18,13 +18,12 @@ from ...models.mcp_servers import (
     MCPServerUpdateRequest,
     MCPServerDetailResponse,
     MCPServerAuthorization,
+    MCPServerAddressSource,
 )
 from ...models.common import AvailabilityStatus, extract_availability_from_conditions
-from ...services.mcp_auth_persistence import (
-    ANNOTATION_AUTHORIZED_AT,
-    ANNOTATION_AUTHORIZED_BY,
-)
 from .exceptions import handle_k8s_errors
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
+from .pagination import PaginationParams
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +35,9 @@ VERSION = "v1alpha1"
 
 
 def _build_authorization(
-    status: dict, annotations: Optional[dict]
+    status: dict, spec: dict
 ) -> Optional[MCPServerAuthorization]:
-    """Build the authorization block from status.authorization and annotations.
+    """Build the authorization block from status.authorization.
 
     Returns None when status.authorization is absent. Never includes token or
     Secret material.
@@ -46,13 +45,12 @@ def _build_authorization(
     authorization = status.get("authorization")
     if not authorization:
         return None
-    annotations = annotations or {}
+    spec_authorization = (spec or {}).get("authorization") or {}
     return MCPServerAuthorization(
         state=authorization.get("state"),
         resourceName=authorization.get("resourceName"),
         expiresAt=authorization.get("expiresAt"),
-        authorizedBy=annotations.get(ANNOTATION_AUTHORIZED_BY),
-        authorizedAt=annotations.get(ANNOTATION_AUTHORIZED_AT),
+        machineManaged=bool(spec_authorization.get("clientCredentials")),
     )
 
 def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
@@ -80,7 +78,7 @@ def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
         transport=spec.get("transport"),
         available=availability,
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status, metadata.get("annotations")),
+        authorization=_build_authorization(status, spec),
     )
 
 
@@ -92,6 +90,7 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
     conditions = status.get("conditions", [])
     availability = extract_availability_from_conditions(conditions, "Available")
     headers = spec.get("headers", [])
+    address_spec = spec.get("address")
     logger.info(f"Spec: {status}")
     return MCPServerDetailResponse(
         name=metadata.get("name", ""),
@@ -103,40 +102,46 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
         available=availability,
         status=status,
         address=status.get("resolvedAddress"),
+        address_source=MCPServerAddressSource(**address_spec) if address_spec else None,
         transport=spec.get("transport"),
         tool_count=status.get("toolCount"),
-        authorization=_build_authorization(status, metadata.get("annotations")),
+        authorization=_build_authorization(status, spec),
     )
 
 
 @router.get("", response_model=MCPServerListResponse)
 @handle_k8s_errors(operation="list", resource_type="mcp server")
-async def list_mcp_servers(request: Request, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerListResponse:
+async def list_mcp_servers(request: Request, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), pagination: PaginationParams = Depends(PaginationParams), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerListResponse:
     """
-    List all MCPServer CRs in a namespace.
-    
+    List a page of MCPServer CRs in a namespace.
+
     Args:
         namespace: The namespace to list MCP servers from
-        
+        pagination: limit and continue token for server-side pagination
+
     Returns:
-        MCPServerListResponse: List of all MCP servers in the namespace
+        MCPServerListResponse: One page of MCP servers plus the continuation token
     """
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-        mcp_servers = await ark_client.mcpservers.a_list()
-        
-        mcp_server_list = []
-        for mcp_server in mcp_servers:
-            mcp_server_list.append(mcp_server_to_response(mcp_server.to_dict()))
-        
+        page = await ark_client.mcpservers.a_list_page(
+            limit=pagination.limit, continue_token=pagination.continue_token
+        )
+
+        mcp_server_list = [
+            mcp_server_to_response(mcp_server.to_dict()) for mcp_server in page.items
+        ]
+
         return MCPServerListResponse(
             items=mcp_server_list,
-            total=len(mcp_server_list)
+            count=len(mcp_server_list),
+            continue_token=page.continue_token,
+            remaining_item_count=page.remaining_item_count,
         )
 
 
 @router.post("", response_model=MCPServerDetailResponse, include_in_schema=True)
 @handle_k8s_errors(operation="create", resource_type="mcp server")
-async def create_mcp_server(request: Request, body: MCPServerCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerDetailResponse:
+async def create_mcp_server(request: Request, body: MCPServerCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerDetailResponse:
     """
     Create a new MCPServer CR.
     
@@ -167,7 +172,7 @@ async def create_mcp_server(request: Request, body: MCPServerCreateRequest, name
 
 @router.get("/{mcp_server_name}", response_model=MCPServerDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="mcp server")
-async def get_mcp_server(request: Request, mcp_server_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerDetailResponse:
+async def get_mcp_server(request: Request, mcp_server_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerDetailResponse:
     """
     Get a specific MCPServer CR by name.
     
@@ -186,7 +191,7 @@ async def get_mcp_server(request: Request, mcp_server_name: str, namespace: Opti
 
 @router.put("/{mcp_server_name}", response_model=MCPServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="mcp server")
-async def update_mcp_server(request: Request, mcp_server_name: str, body: MCPServerUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerDetailResponse:
+async def update_mcp_server(request: Request, mcp_server_name: str, body: MCPServerUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerDetailResponse:
     """
     Update a MCPServer CR by name.
     
@@ -223,7 +228,7 @@ async def update_mcp_server(request: Request, mcp_server_name: str, body: MCPSer
 
 @router.delete("/{mcp_server_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="mcp server")
-async def delete_mcp_server(request: Request, mcp_server_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
+async def delete_mcp_server(request: Request, mcp_server_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> None:
     """
     Delete a MCPServer CR by name.
     

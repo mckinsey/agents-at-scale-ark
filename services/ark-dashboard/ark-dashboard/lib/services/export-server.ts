@@ -4,13 +4,14 @@
  */
 
 import { serverApiClient } from '@/lib/api/server-client';
+import { fetchAllPages } from '@/lib/api/pagination';
 import type {
-  AgentListResponse,
-  ModelListResponse,
-  TeamListResponse,
+  AgentResponse,
+  ModelResponse,
+  TeamResponse,
+  MCPServerResponse,
   QueryListResponse,
-  MCPServerListResponse,
-  A2AServerListResponse,
+  A2AServerResponse,
   ResourceExportData,
 } from '@/lib/services/export';
 import {
@@ -26,12 +27,22 @@ export const exportServiceServer = {
     console.log(`Server-side export service: fetching resources directly from backend at ${backendUrl}`);
 
     const results = await Promise.allSettled([
-      serverApiClient.get<AgentListResponse>('/v1/agents'),
-      serverApiClient.get<TeamListResponse>('/v1/teams'),
-      serverApiClient.get<ModelListResponse>('/v1/models'),
+      fetchAllPages<AgentResponse>('/v1/agents', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
+      fetchAllPages<TeamResponse>('/v1/teams', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
+      fetchAllPages<ModelResponse>('/v1/models', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
       serverApiClient.get<QueryListResponse>('/v1/queries'),
-      serverApiClient.get<A2AServerListResponse>('/v1/a2a-servers'),
-      serverApiClient.get<MCPServerListResponse>('/v1/mcp-servers'),
+      fetchAllPages<A2AServerResponse>('/v1/a2a-servers', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
+      fetchAllPages<MCPServerResponse>('/v1/mcp-servers', {}, serverApiClient).then(
+        items => ({ items }),
+      ),
       null, // Placeholder for workflow templates to match the array structure
     ]);
 

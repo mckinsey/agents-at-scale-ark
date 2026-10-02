@@ -22,6 +22,28 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
 
 The `serviceMonitorSelectorNilUsesHelmValues=false` setting allows Prometheus to discover ServiceMonitors in all namespaces.
 
+## Install order
+
+The Ark chart ships with `prometheus.enable: true`, but the ServiceMonitor is only rendered when the Prometheus Operator CRDs (`monitoring.coreos.com/v1`) already exist in the cluster. Helm evaluates this capability at install/upgrade time, so the ServiceMonitor is created only if Prometheus was installed **before** Ark. This keeps `helm install` working on clusters that do not run Prometheus, where the ServiceMonitor is simply skipped.
+
+If you install Ark first and Prometheus second, the controller still serves metrics on its HTTPS endpoint, but nothing scrapes them and no ServiceMonitor exists yet:
+
+```bash
+kubectl get servicemonitor -n ark-system
+# No resources found in ark-system namespace.
+```
+
+Re-run the Ark chart upgrade after the Prometheus Operator is present. The capability check then passes and the ServiceMonitor is created — no value changes are needed, since `--reuse-values` re-renders the chart against the cluster's updated capabilities:
+
+```bash
+# Release name and chart path match your original install.
+helm upgrade ark-controller ./ark/dist/chart --reuse-values
+
+kubectl get servicemonitor -n ark-system
+# NAME                                      AGE
+# ark-controller-manager-metrics-monitor    3s
+```
+
 ## Verify metrics collection
 
 Check that the ARK ServiceMonitor exists:

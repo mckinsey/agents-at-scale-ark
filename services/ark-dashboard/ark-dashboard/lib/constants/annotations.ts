@@ -18,9 +18,6 @@ export const ARK_ANNOTATIONS = {
   SERVICE: `${ARK_PREFIX}service`,
   RESOURCES: `${ARK_PREFIX}resources`,
 
-  // Streaming annotations
-  STREAMING_ENABLED: `${ARK_PREFIX}streaming-enabled`,
-
   // Origin annotations
   ORIGIN: `${ARK_PREFIX}origin`,
 } as const;

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -12,6 +13,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -24,6 +26,65 @@ Read the following conversation, then use the select-next-speaker tool to select
 Read the above conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.`
 
 const defaultTerminatePrompt = `If the most recent user message has been given an adequate response, do not return a role. Instead call the terminate tool.`
+
+const engineTerminateToken = "TERMINATE"
+
+const engineTerminateFallbackToken = "TERMINATE_TEAM"
+
+func engineTerminateTokenFor(candidateNames []string) string {
+	for _, name := range candidateNames {
+		if strings.EqualFold(name, engineTerminateToken) {
+			return engineTerminateFallbackToken
+		}
+	}
+	return engineTerminateToken
+}
+
+func parseEngineTerminate(reply, token string) (string, bool) {
+	trimmed := strings.TrimSpace(reply)
+	if len(trimmed) < len(token) || !strings.EqualFold(trimmed[:len(token)], token) {
+		return "", false
+	}
+
+	rest := trimmed[len(token):]
+	if rest == "" {
+		return "", true
+	}
+	if rest[0] != ':' && !isASCIISpace(rest[0]) {
+		return "", false
+	}
+
+	return strings.TrimSpace(strings.TrimLeft(rest, ": \t\n\r")), true
+}
+
+func isASCIISpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+func isNameChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-'
+}
+
+func containsWholeName(haystack, needle string) bool {
+	if needle == "" {
+		return false
+	}
+	for offset := 0; offset <= len(haystack)-len(needle); {
+		idx := strings.Index(haystack[offset:], needle)
+		if idx < 0 {
+			return false
+		}
+		start := offset + idx
+		end := start + len(needle)
+		startsClean := start == 0 || !isNameChar(haystack[start-1])
+		endsClean := end == len(haystack) || !isNameChar(haystack[end])
+		if startsClean && endsClean {
+			return true
+		}
+		offset = start + 1
+	}
+	return false
+}
 
 type SelectorTemplateData struct {
 	Roles        string
@@ -72,6 +133,23 @@ func buildRoles(members []TeamMember) string {
 	return strings.Join(roles, ", ")
 }
 
+const defaultEngineTerminatePrompt = `If the most recent user message has been given an adequate response, do not return a role.`
+
+func (t *Team) terminatePromptFor(engineBacked bool, terminateToken string) string {
+	prompt := defaultTerminatePrompt
+	if engineBacked {
+		prompt = defaultEngineTerminatePrompt
+	}
+	if t.Selector != nil && t.Selector.TerminatePrompt != "" {
+		prompt = t.Selector.TerminatePrompt
+	}
+
+	if !engineBacked {
+		return prompt
+	}
+	return fmt.Sprintf("%s\n\nYou have no tools available. To stop, reply with %s instead of a name, optionally followed by a colon and a closing response to the user.", prompt, terminateToken)
+}
+
 func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {
 	// Return cached selector agent if already loaded (test mock or production cache)
 	if t.selectorAgent != nil {
@@ -88,6 +166,10 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 	key := types.NamespacedName{Name: agentName, Namespace: t.Namespace}
 	if err := t.Client.Get(ctx, key, &agentCRD); err != nil {
 		return nil, fmt.Errorf("failed to get selector agent %s in namespace %s: %w", agentName, t.Namespace, err)
+	}
+
+	if arka2a.IsNamedEngine(agentCRD.Spec.ExecutionEngine) && len(agentCRD.Spec.Tools) > 0 {
+		return nil, fmt.Errorf("selector agent %s in namespace %s has %d tools and runs on execution engine %s: an engine resolves an agent's tools from the cluster, so selection cannot withhold them - remove the tools or select with an agent that has no execution engine", agentName, t.Namespace, len(agentCRD.Spec.Tools), agentCRD.Spec.ExecutionEngine.Name)
 	}
 
 	agent, err := MakeAgent(ctx, t.Client, &agentCRD, t.telemetry, t.eventing)
@@ -120,20 +202,18 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, err
 	}
 
-	selectorMessage := buf.String()
-	selectorMessage += "\n\nUse the select-next-speaker tool to express your next speaker selection."
-
-	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
-		terminatePrompt := defaultTerminatePrompt
-		if t.Selector.TerminatePrompt != "" {
-			terminatePrompt = t.Selector.TerminatePrompt
-		}
-		selectorMessage = selectorMessage + "\n\n" + terminatePrompt
-	}
-
 	selectorAgent, err := t.loadSelectorAgent(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	engineBacked := arka2a.IsNamedEngine(selectorAgent.GetExecutionEngine())
+
+	selectorMessage := buf.String()
+	if engineBacked {
+		selectorMessage += fmt.Sprintf("\n\nIgnore any instruction above to use a tool: no tools are available to you. Reply with only the name of the next speaker, exactly as written in %s, and nothing else.", participantsList)
+	} else {
+		selectorMessage += "\n\nUse the select-next-speaker tool to express your next speaker selection."
 	}
 
 	membersToSearch := t.Members
@@ -148,18 +228,38 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	if len(candidateNames) == 0 {
 		return nil, NewTerminateTeamWithReason("no candidates available for selection")
 	}
-	if err := t.registerSelectNextSpeakerTool(ctx, selectorAgent, candidateNames); err != nil {
-		return nil, err
+
+	terminateToken := engineTerminateTokenFor(candidateNames)
+
+	terminateEnabled := t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool
+	if terminateEnabled {
+		selectorMessage = selectorMessage + "\n\n" + t.terminatePromptFor(engineBacked, terminateToken)
 	}
 
 	userPrompt := "Select the next speaker to respond using the select-next-speaker tool."
-	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
-		userPrompt = "Select the next speaker to respond using the select-next-speaker tool, or use the terminate tool if you think the user's original question has been answered."
+	opts := ExecuteOptions{ToolChoice: ToolChoiceRequired}
+	if engineBacked {
+		userPrompt = "Reply with only the name of the next speaker to respond."
+		if terminateEnabled {
+			userPrompt = fmt.Sprintf("Reply with only the name of the next speaker to respond, or %s (optionally followed by a colon and a closing response) if the original question has been answered.", terminateToken)
+		}
+		opts = ExecuteOptions{}
+	} else {
+		if err := t.registerSelectNextSpeakerTool(ctx, selectorAgent, candidateNames); err != nil {
+			return nil, err
+		}
+		if terminateEnabled {
+			userPrompt = "Select the next speaker to respond using the select-next-speaker tool, or use the terminate tool if you think the user's original question has been answered."
+		}
 	}
 
-	result, err := selectorAgent.Execute(ctx, NewUserMessage(userPrompt), []Message{NewSystemMessage(selectorMessage)}, nil, nil, ExecuteOptions{ToolChoice: ToolChoiceRequired})
+	result, err := selectorAgent.Execute(ctx, NewUserMessage(userPrompt), []Message{NewSystemMessage(selectorMessage)}, nil, nil, opts)
 	if err != nil {
 		return nil, fmt.Errorf("selector agent call failed: %w", err)
+	}
+
+	if engineBacked && result.Signal == nil {
+		return t.resolveEngineSelection(ctx, result, terminateEnabled, terminateToken, candidateNames, membersToSearch)
 	}
 
 	if result.Signal == nil {
@@ -178,6 +278,66 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	}
 
 	return nil, fmt.Errorf("selector agent returned unexpected signal: %s", result.Signal.SignalType())
+}
+
+func matchSelectedName(response string, candidates []string) (string, error) {
+	selected := strings.TrimSpace(response)
+
+	if slices.Contains(candidates, selected) {
+		return selected, nil
+	}
+
+	for _, candidate := range candidates {
+		if strings.EqualFold(candidate, selected) {
+			return candidate, nil
+		}
+	}
+
+	lowered := strings.ToLower(selected)
+	var mentioned []string
+	for _, candidate := range candidates {
+		if containsWholeName(lowered, strings.ToLower(candidate)) {
+			mentioned = append(mentioned, candidate)
+		}
+	}
+
+	var longest []string
+	for _, candidate := range mentioned {
+		contained := slices.ContainsFunc(mentioned, func(other string) bool {
+			return other != candidate && strings.Contains(strings.ToLower(other), strings.ToLower(candidate))
+		})
+		if !contained {
+			longest = append(longest, candidate)
+		}
+	}
+
+	if len(longest) == 1 {
+		return longest[0], nil
+	}
+
+	return "", &InvalidAgentError{SelectedName: selected}
+}
+
+func (t *Team) resolveEngineSelection(ctx context.Context, result *ExecutionResult, terminateEnabled bool, terminateToken string, candidateNames []string, membersToSearch []TeamMember) (TeamMember, error) {
+	reply := ExtractLastAssistantMessageContent(result.Messages)
+
+	if terminateEnabled {
+		if response, terminated := parseEngineTerminate(reply, terminateToken); terminated {
+			if response != "" {
+				return nil, &TerminateTeamWithResponse{
+					Response: response,
+					Messages: []Message{NewAssistantMessage(response)},
+				}
+			}
+			return nil, NewTerminateTeamWithReason("selector agent terminated")
+		}
+	}
+
+	selectedName, err := matchSelectedName(reply, candidateNames)
+	if err != nil {
+		return nil, err
+	}
+	return t.resolveSelectedMember(ctx, selectedName, membersToSearch)
 }
 
 func (t *Team) resolveSelectedMember(ctx context.Context, selectedName string, members []TeamMember) (TeamMember, error) {
@@ -377,9 +537,13 @@ func (t *Team) checkAndHandleMaxTurns(turn int, newMessages *[]Message) bool {
 	return false
 }
 
+func selectorTranscript(history []Message, userInput Message, accumulated []Message) []Message {
+	transcript := append(slices.Clone(history), userInput)
+	return append(transcript, accumulated[len(history):]...)
+}
+
 func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	messages := append([]Message{}, history...)
-	messages = append(messages, userInput)
+	messages := slices.Clone(history)
 	var newMessages []Message
 
 	tmpl, err := t.setupSelectorTemplate()
@@ -391,7 +555,7 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 	previousMember := ""
 
 	for turn := 0; ; turn++ {
-		nextMember, err := t.determineNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
+		nextMember, err := t.determineNextMember(ctx, selectorTranscript(history, userInput, messages), tmpl, previousMember, legalTransitions)
 		if err != nil {
 			shouldTerminate, returnErr := t.handleMemberSelectionError(ctx, err, &newMessages)
 			if shouldTerminate {

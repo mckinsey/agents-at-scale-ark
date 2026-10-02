@@ -36,16 +36,24 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 interface UseMcpAuthCompletionArgs {
   servers?: MCPServer[];
+  // Called once the flow reaches a terminal state, for consumers that reload
+  // their own data instead of relying on react-query invalidation.
+  onCompleted?: () => void;
 }
 
 // Confirms a dashboard-initiated MCP auth flow on return from the IdP, reading
 // the callback redirect params and polling auth/status to a terminal state.
-export function useMcpAuthCompletion({ servers }: UseMcpAuthCompletionArgs = {}) {
+export function useMcpAuthCompletion({
+  servers,
+  onCompleted,
+}: UseMcpAuthCompletionArgs = {}) {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const processedRef = useRef(false);
   const serversRef = useRef<MCPServer[] | undefined>(servers);
   serversRef.current = servers;
+  const onCompletedRef = useRef(onCompleted);
+  onCompletedRef.current = onCompleted;
 
   useEffect(() => {
     if (processedRef.current) {
@@ -132,6 +140,7 @@ export function useMcpAuthCompletion({ servers }: UseMcpAuthCompletionArgs = {})
       }
       if (!cancelled) {
         stripAuthParams();
+        onCompletedRef.current?.();
       }
     };
 

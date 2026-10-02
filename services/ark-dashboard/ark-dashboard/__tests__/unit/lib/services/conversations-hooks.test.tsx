@@ -11,6 +11,15 @@ import {
 } from '@/lib/services/conversations-hooks';
 import type { Conversation, ConversationMessage } from '@/lib/services/conversations';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/conversations', () => ({
   conversationsService: {
     getConversations: vi.fn(),
@@ -73,20 +82,6 @@ describe('conversations hooks', () => {
       const { result } = renderHook(() => useListConversations(null), {
         wrapper: createWrapper(),
       });
-
-      expect(result.current.isFetching).toBe(false);
-      expect(conversationsService.getConversations).not.toHaveBeenCalled();
-    });
-
-    it('should respect enabled option', async () => {
-      vi.mocked(conversationsService.getConversations).mockResolvedValue([]);
-
-      const { result } = renderHook(
-        () => useListConversations('session-1', { enabled: false }),
-        {
-          wrapper: createWrapper(),
-        }
-      );
 
       expect(result.current.isFetching).toBe(false);
       expect(conversationsService.getConversations).not.toHaveBeenCalled();
@@ -159,7 +154,7 @@ describe('conversations hooks', () => {
         },
       ];
 
-      vi.mocked(conversationsService.getMessages).mockResolvedValue(mockMessages);
+      vi.mocked(conversationsService.getMessages).mockResolvedValue({ messages: mockMessages });
 
       const { result } = renderHook(
         () => useGetMessages('session-1', 'conv-1'),
@@ -175,25 +170,11 @@ describe('conversations hooks', () => {
     });
 
     it('should not fetch when conversationId is null', async () => {
-      vi.mocked(conversationsService.getMessages).mockResolvedValue([]);
+      vi.mocked(conversationsService.getMessages).mockResolvedValue({ messages: [] });
 
       const { result } = renderHook(() => useGetMessages('session-1', null), {
         wrapper: createWrapper(),
       });
-
-      expect(result.current.isFetching).toBe(false);
-      expect(conversationsService.getMessages).not.toHaveBeenCalled();
-    });
-
-    it('should respect enabled option', async () => {
-      vi.mocked(conversationsService.getMessages).mockResolvedValue([]);
-
-      const { result } = renderHook(
-        () => useGetMessages('session-1', 'conv-1', { enabled: false }),
-        {
-          wrapper: createWrapper(),
-        }
-      );
 
       expect(result.current.isFetching).toBe(false);
       expect(conversationsService.getMessages).not.toHaveBeenCalled();
@@ -223,7 +204,7 @@ describe('conversations hooks', () => {
         },
       ];
 
-      vi.mocked(conversationsService.getMessages).mockResolvedValue(initialMessages);
+      vi.mocked(conversationsService.getMessages).mockResolvedValue({ messages: initialMessages });
 
       const { result, rerender } = renderHook(
         () => useGetMessages('session-1', 'conv-1'),
@@ -239,105 +220,6 @@ describe('conversations hooks', () => {
       rerender();
 
       expect(result.current.data).toEqual(initialMessages);
-    });
-  });
-
-  describe('useSendMessage', () => {
-    it('should send a message and invalidate queries', async () => {
-      vi.mocked(conversationsService.sendMessage).mockResolvedValue(undefined);
-
-      const queryClient = new QueryClient({
-        defaultOptions: {
-          queries: {
-            retry: false,
-          },
-        },
-      });
-
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-      );
-
-      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-      const { result } = renderHook(() => useSendMessage(), { wrapper });
-
-      await act(async () => {
-        result.current.mutate({
-          conversationId: 'conv-1',
-          message: 'Hello',
-          sessionId: 'session-1',
-          agentName: 'test-agent',
-          participantType: 'agent',
-        });
-      });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(conversationsService.sendMessage).toHaveBeenCalled();
-      const [[firstArg]] = vi.mocked(conversationsService.sendMessage).mock.calls;
-      expect(firstArg).toEqual({
-        conversationId: 'conv-1',
-        message: 'Hello',
-        sessionId: 'session-1',
-        agentName: 'test-agent',
-        participantType: 'agent',
-      });
-
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: ['messages', 'session-1', 'conv-1'],
-      });
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: ['conversations', 'session-1'],
-      });
-    });
-
-    it('should handle errors', async () => {
-      const error = new Error('Failed to send message');
-      vi.mocked(conversationsService.sendMessage).mockRejectedValue(error);
-
-      const { result } = renderHook(() => useSendMessage(), {
-        wrapper: createWrapper(),
-      });
-
-      await act(async () => {
-        result.current.mutate({
-          conversationId: 'conv-1',
-          message: 'Hello',
-          sessionId: 'session-1',
-          agentName: 'test-agent',
-        });
-      });
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect(result.current.error).toBe(error);
-    });
-
-    it('should use mutation function correctly', async () => {
-      vi.mocked(conversationsService.sendMessage).mockResolvedValue(undefined);
-
-      const { result } = renderHook(() => useSendMessage(), {
-        wrapper: createWrapper(),
-      });
-
-      const params = {
-        conversationId: 'conv-1',
-        message: 'Test message',
-        sessionId: 'session-1',
-        agentName: 'test-agent',
-        participantType: 'team' as const,
-      };
-
-      await act(async () => {
-        result.current.mutate(params);
-      });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(conversationsService.sendMessage).toHaveBeenCalled();
-      const [[firstArg]] = vi.mocked(conversationsService.sendMessage).mock.calls;
-      expect(firstArg).toEqual(params);
     });
   });
 });

@@ -32,14 +32,7 @@ export function handleStreamingMessages(
     cursor === undefined
       ? undefined
       : async (): Promise<MessageItem[]> => {
-          let items = (await memory.all()).filter(
-            (item) => item.sequenceNumber > cursor
-          );
-          if (conversationId) {
-            items = items.filter(
-              (item) => item.data.conversationId === conversationId
-            );
-          }
+          const items = await memory.messagesAfter(cursor, conversationId);
           return items.map((item) => ({
             timestamp: item.timestamp.toISOString(),
             conversation_id: item.data.conversationId,

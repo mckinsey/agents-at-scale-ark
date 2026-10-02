@@ -1,0 +1,294 @@
+'use client';
+
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
+import { NamespacedLink } from '@/components/namespaced-link';
+import {
+  LearnMoreButton,
+  ResourceEmptyState,
+  ResourceErrorState,
+  ResourceNoResults,
+  ResourceSearchInput,
+} from '@/components/sections/resource-list-states';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectItemText,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
+import { useDelayedLoading } from '@/lib/hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
+
+type StatusFilter = 'All' | 'True' | 'False';
+
+const STATUS_ITEMS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
+  { value: 'All', label: 'All' },
+  { value: 'True', label: 'Active' },
+  { value: 'False', label: 'Error' },
+];
+
+export interface ResourceListItem {
+  id: string;
+  name: string;
+  description?: string | null;
+  available?: string | null;
+}
+
+export interface ResourceListFilter<T extends ResourceListItem> {
+  readonly label: string;
+  readonly getValue: (item: T) => string;
+}
+
+interface ResourceListSectionProps<T extends ResourceListItem> {
+  /** Raw icon element (e.g. <Group />); wrapped in IconShell internally. */
+  readonly icon: ReactNode;
+  readonly title: string;
+  readonly showCount?: boolean;
+  readonly subtitle: string;
+  readonly createHref: string;
+  readonly createLabel: string;
+  readonly learnMoreUrl: string;
+  /** Capitalised singular for toasts, e.g. "Team" or "Agent". */
+  readonly entityLabel: string;
+  /** Lowercase plural for filter messages, e.g. "agents" or "MCP servers". */
+  readonly entityPluralLabel?: string;
+  readonly emptyTitle: string;
+  readonly emptyDescription: ReactNode;
+  readonly headerActions?: ReactNode;
+  readonly originFilter?: ResourceListFilter<T>;
+  // Data is owned by the caller via React Query (fetching + caching).
+  readonly items: T[];
+  readonly loading: boolean;
+  readonly error?: unknown;
+  // React Query's dataUpdatedAt: 0 until the first successful load, so it
+  // distinguishes an initial load failure from a failed refresh.
+  readonly dataUpdatedAt?: number;
+  readonly onDelete: (id: string) => void;
+  readonly onReload: () => void;
+  readonly renderTable: (
+    items: T[],
+    onDelete: (id: string) => void,
+    reload: () => void,
+  ) => ReactNode;
+}
+
+export function ResourceListSection<T extends ResourceListItem>({
+  icon,
+  title,
+  showCount,
+  subtitle,
+  createHref,
+  createLabel,
+  learnMoreUrl,
+  entityLabel,
+  entityPluralLabel,
+  emptyTitle,
+  emptyDescription,
+  headerActions,
+  originFilter,
+  items,
+  loading,
+  error,
+  dataUpdatedAt,
+  onDelete,
+  onReload,
+  renderTable,
+}: ResourceListSectionProps<T>) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+  const [originFilterValue, setOriginFilterValue] = useState('All');
+  const { readOnlyMode } = useNamespace();
+
+  const showLoading = useDelayedLoading(loading);
+
+  const pluralLabel = entityPluralLabel ?? `${entityLabel.toLowerCase()}s`;
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(`Failed to Load ${pluralLabel}`, {
+      description:
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+    });
+  }, [error, pluralLabel]);
+
+  const originFilterOptions = useMemo(() => {
+    if (!originFilter) return [];
+    const values = new Set<string>();
+    for (const item of items) {
+      values.add(originFilter.getValue(item));
+    }
+    return ['All', ...Array.from(values).sort((a, b) => a.localeCompare(b))];
+  }, [originFilter, items]);
+
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return items.filter(item => {
+      const matchesSearch =
+        !q ||
+        item.name.toLowerCase().includes(q) ||
+        (item.description?.toLowerCase().includes(q) ?? false);
+      const matchesStatus =
+        statusFilter === 'All' ||
+        (item.available ?? 'Unknown') === statusFilter;
+      const matchesOrigin =
+        !originFilter ||
+        originFilterValue === 'All' ||
+        originFilter.getValue(item) === originFilterValue;
+      return matchesSearch && matchesStatus && matchesOrigin;
+    });
+  }, [items, searchQuery, statusFilter, originFilter, originFilterValue]);
+
+  // loadFailed: the first load never succeeded, so there is nothing to show —
+  // the error replaces the list. refreshFailed: a later reload failed but we
+  // still hold the previously loaded items — keep showing them under a banner
+  // rather than discarding valid data. This mirrors the a2a-servers/events
+  // sections and prevents a transient error from rendering the empty state.
+  const hasError = Boolean(error);
+  const hasLoadedOnce = (dataUpdatedAt ?? 0) > 0;
+  const loadFailed = hasError && !hasLoadedOnce;
+  const refreshFailed = hasError && hasLoadedOnce;
+  const isEmpty = !loading && !hasError && items.length === 0;
+  const errorMessage =
+    error instanceof Error ? error.message : 'An unexpected error occurred';
+
+  const statusLabel = STATUS_ITEMS.find(s => s.value === statusFilter)?.label;
+  const noResultsMessage =
+    statusFilter === 'All'
+      ? `No ${pluralLabel} match your search.`
+      : `There are no ${statusLabel} ${pluralLabel} at the moment.`;
+
+  return (
+    <div className="content-shell flex h-full w-full flex-col">
+      <ResourcePageHeader
+        icon={icon}
+        title={
+          showCount && items.length > 0 ? `${title} (${items.length})` : title
+        }
+        description={subtitle}
+        actions={
+          !isEmpty && (
+            <>
+              {headerActions}
+              {readOnlyMode ? (
+                <Button disabled>{createLabel}</Button>
+              ) : (
+                <NamespacedLink href={createHref}>
+                  <Button>{createLabel}</Button>
+                </NamespacedLink>
+              )}
+            </>
+          )
+        }
+      />
+
+      {showLoading && (
+        <div className="mt-5 flex flex-1 items-center justify-center">
+          <div className="py-8 text-center">Loading...</div>
+        </div>
+      )}
+      {!showLoading && loadFailed && (
+        <ResourceErrorState
+          className="mt-5"
+          title={`Couldn't load ${pluralLabel}`}
+          description={errorMessage}
+          onRetry={onReload}
+        />
+      )}
+      {!showLoading && !loadFailed && isEmpty && (
+        <ResourceEmptyState
+          icon={icon}
+          title={emptyTitle}
+          description={emptyDescription}
+          actions={
+            <>
+              {readOnlyMode ? (
+                <Button disabled>{createLabel}</Button>
+              ) : (
+                <NamespacedLink href={createHref}>
+                  <Button>{createLabel}</Button>
+                </NamespacedLink>
+              )}
+              <LearnMoreButton href={learnMoreUrl} />
+            </>
+          }
+        />
+      )}
+      {!showLoading && !loadFailed && !isEmpty && (
+        <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+          {refreshFailed && (
+            <ResourceErrorState
+              title={`Couldn't refresh ${pluralLabel}`}
+              description="Showing the last loaded version."
+              onRetry={onReload}
+            />
+          )}
+          <div className="flex flex-none items-end gap-3">
+            <ResourceSearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+            />
+            {originFilter && (
+              <div className="flex w-48 flex-col gap-2">
+                <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
+                  {originFilter.label}
+                </span>
+                <Select
+                  items={originFilterOptions.map(value => ({
+                    value,
+                    label: value,
+                  }))}
+                  value={originFilterValue}
+                  onValueChange={value => setOriginFilterValue(String(value))}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {originFilterOptions.map(value => (
+                      <SelectItem key={value} value={value}>
+                        <SelectItemText>{value}</SelectItemText>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="flex w-48 flex-col gap-2">
+              <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
+                Status
+              </span>
+              <Select
+                items={STATUS_ITEMS}
+                value={statusFilter}
+                onValueChange={v => setStatusFilter(v as StatusFilter)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_ITEMS.map(item => (
+                    <SelectItem key={item.value} value={item.value}>
+                      <SelectItemText>{item.label}</SelectItemText>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {filteredItems.length === 0 ? (
+            <ResourceNoResults icon={icon} message={noResultsMessage} />
+          ) : (
+            <ScrollArea className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+              {renderTable(filteredItems, onDelete, onReload)}
+            </ScrollArea>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

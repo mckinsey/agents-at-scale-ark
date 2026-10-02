@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from helpers import k8s
+from shared import k8s
 
 
 class ModelsHelper:

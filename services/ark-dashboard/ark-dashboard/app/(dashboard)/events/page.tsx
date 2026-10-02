@@ -2,9 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 
-import { PageHeader } from '@/components/common/page-header';
 import { EventsSection } from '@/components/sections/events-section';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useGetEventsCount } from '@/lib/services/events-hooks';
 
 const defaultPage = 1;
@@ -26,18 +24,5 @@ export default function EventsPage() {
     name: searchParams.get('name') || undefined,
   };
 
-  const pageTitle =
-    eventsCount !== undefined ? `Events (${eventsCount})` : 'Events';
-
-  return (
-    <>
-      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Events" />
-      <div className="flex flex-1 flex-col">
-        <div>
-          <h1 className="text-xl">{pageTitle}</h1>
-        </div>
-        <EventsSection {...parsedFilters} />
-      </div>
-    </>
-  );
+  return <EventsSection {...parsedFilters} totalCount={eventsCount} />;
 }

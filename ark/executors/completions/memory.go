@@ -24,6 +24,8 @@ const (
 	MaxRetries            = 3
 	RetryDelay            = 100 * time.Millisecond
 	UserAgent             = "ark-memory-client/1.0"
+	MessagesPageLimit     = 1000
+	MessagesMaxPages      = 1000
 )
 
 // getMemoryTimeout reads ARK_MEMORY_HTTP_TIMEOUT_SECONDS env var or returns default
@@ -72,7 +74,7 @@ type MessagesResponse struct {
 	Items      []MessageRecord `json:"items"`
 	Total      int             `json:"total"`
 	HasMore    bool            `json:"hasMore"`
-	NextCursor *string         `json:"nextCursor,omitempty"`
+	NextCursor *int64          `json:"nextCursor,omitempty"`
 }
 
 func DefaultConfig() Config {

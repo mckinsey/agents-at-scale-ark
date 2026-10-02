@@ -1,6 +1,8 @@
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
+from .common import PaginatedListResponse
+
 
 class A2AServerResponse(BaseModel):
     name: str
@@ -14,9 +16,8 @@ class A2AServerResponse(BaseModel):
     status_message: Optional[str] = None
 
 
-class A2AServerListResponse(BaseModel):
+class A2AServerListResponse(PaginatedListResponse):
     items: List[A2AServerResponse]
-    total: int
 
 
 class A2AServerDetailResponse(BaseModel):

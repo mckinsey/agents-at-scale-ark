@@ -3,9 +3,11 @@ package completions
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/openai/openai-go"
@@ -415,6 +417,184 @@ func TestHTTPMemoryGetMessagesWithHeaders(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newPagedMessageTestMemory(t *testing.T, serverURL string, httpClient *http.Client) *HTTPMemory {
+	t.Helper()
+
+	resolvedAddress := serverURL
+	mem := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-memory", Namespace: "default"},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{Value: serverURL},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	return &HTTPMemory{
+		client:           setupMemoryTestClient([]client.Object{mem}),
+		httpClient:       httpClient,
+		baseURL:          serverURL,
+		conversationId:   "conv-1",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          map[string]string{},
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+}
+
+func messageRecordsPage(t *testing.T, from, count int) []MessageRecord {
+	t.Helper()
+
+	records := make([]MessageRecord, 0, count)
+	for i := 0; i < count; i++ {
+		sequence := int64(from + i)
+		records = append(records, MessageRecord{
+			ConversationID: "conv-1",
+			Message:        json.RawMessage(fmt.Sprintf(`{"role": "user", "content": "msg-%d"}`, sequence)),
+			Sequence:       sequence,
+		})
+	}
+	return records
+}
+
+func TestMessagesResponseDecodesNumericNextCursor(t *testing.T) {
+	var response MessagesResponse
+	err := json.Unmarshal([]byte(`{"items":[],"total":4598,"hasMore":true,"nextCursor":4598}`), &response)
+
+	require.NoError(t, err, "broker emits nextCursor as a sequence number, not a string")
+	require.NotNil(t, response.NextCursor)
+	require.Equal(t, int64(4598), *response.NextCursor)
+}
+
+func TestHTTPMemoryGetMessagesFollowsPagination(t *testing.T) {
+	var requestedCursors []string
+	var requestedLimits []string
+	var requestedConversations []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != MessagesEndpoint || r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		cursor := r.URL.Query().Get("cursor")
+		requestedCursors = append(requestedCursors, cursor)
+		requestedLimits = append(requestedLimits, r.URL.Query().Get("limit"))
+		requestedConversations = append(requestedConversations, r.URL.Query().Get("conversation_id"))
+
+		response := MessagesResponse{Total: 250}
+		switch cursor {
+		case "":
+			nextCursor := int64(100)
+			response.Items = messageRecordsPage(t, 1, 100)
+			response.HasMore = true
+			response.NextCursor = &nextCursor
+		case "100":
+			nextCursor := int64(200)
+			response.Items = messageRecordsPage(t, 101, 100)
+			response.HasMore = true
+			response.NextCursor = &nextCursor
+		case "200":
+			response.Items = messageRecordsPage(t, 201, 50)
+			response.HasMore = false
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", ContentTypeJSON)
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	httpMemory := newPagedMessageTestMemory(t, server.URL, server.Client())
+
+	messages, err := httpMemory.GetMessages(context.Background())
+	require.NoError(t, err)
+	require.Len(t, messages, 250, "all pages should be accumulated")
+	require.Equal(t, []string{"", "100", "200"}, requestedCursors)
+
+	for _, limit := range requestedLimits {
+		require.Equal(t, strconv.Itoa(MessagesPageLimit), limit)
+	}
+	for _, conversationID := range requestedConversations {
+		require.Equal(t, "conv-1", conversationID)
+	}
+
+	first := openai.ChatCompletionMessageParamUnion(messages[0])
+	require.NotNil(t, first.OfUser)
+	require.Equal(t, "msg-1", first.OfUser.Content.OfString.Value)
+
+	last := openai.ChatCompletionMessageParamUnion(messages[249])
+	require.NotNil(t, last.OfUser)
+	require.Equal(t, "msg-250", last.OfUser.Content.OfString.Value)
+}
+
+func TestHTTPMemoryGetMessagesPaginationErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		secondPage    func() MessagesResponse
+		expectedError string
+	}{
+		{
+			name: "hasMore without a cursor",
+			secondPage: func() MessagesResponse {
+				return MessagesResponse{Items: messageRecordsPage(t, 101, 1), HasMore: true}
+			},
+			expectedError: "returned no nextCursor",
+		},
+		{
+			name: "cursor does not advance",
+			secondPage: func() MessagesResponse {
+				stuck := int64(100)
+				return MessagesResponse{Items: messageRecordsPage(t, 101, 1), HasMore: true, NextCursor: &stuck}
+			},
+			expectedError: "non-advancing nextCursor",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				response := tt.secondPage()
+				if r.URL.Query().Get("cursor") == "" {
+					nextCursor := int64(100)
+					response = MessagesResponse{Items: messageRecordsPage(t, 1, 100), HasMore: true, NextCursor: &nextCursor}
+				}
+				w.Header().Set("Content-Type", ContentTypeJSON)
+				_ = json.NewEncoder(w).Encode(response)
+			}))
+			defer server.Close()
+
+			httpMemory := newPagedMessageTestMemory(t, server.URL, server.Client())
+
+			messages, err := httpMemory.GetMessages(context.Background())
+			require.Error(t, err, "a broker that cannot be paginated must not look like an empty conversation")
+			require.Contains(t, err.Error(), tt.expectedError)
+			require.Nil(t, messages)
+		})
+	}
+}
+
+func TestHTTPMemoryGetMessagesSinglePageBackend(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", ContentTypeJSON)
+		_ = json.NewEncoder(w).Encode(MessagesResponse{
+			Items: messageRecordsPage(t, 1, 3),
+			Total: 3,
+		})
+	}))
+	defer server.Close()
+
+	httpMemory := newPagedMessageTestMemory(t, server.URL, server.Client())
+
+	messages, err := httpMemory.GetMessages(context.Background())
+	require.NoError(t, err, "backends that ignore limit/cursor must keep working")
+	require.Len(t, messages, 3)
 }
 
 func TestHTTPMemoryHeadersLoadedFromStatus(t *testing.T) {

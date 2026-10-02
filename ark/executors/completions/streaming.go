@@ -24,6 +24,8 @@ import (
 	"mckinsey.com/ark/internal/common"
 )
 
+const finishReasonStop = "stop"
+
 // StreamMetadata contains ARK-specific metadata for streaming chunks
 type StreamMetadata struct {
 	Query          string             `json:"query,omitempty"`
@@ -264,6 +266,44 @@ func StreamApprovalResponse(
 	}
 }
 
+type A2AStatusEvent struct {
+	Type      string `json:"type"`
+	TaskID    string `json:"taskId,omitempty"`
+	State     string `json:"state,omitempty"`
+	Message   string `json:"message,omitempty"`
+	AgentName string `json:"agentName,omitempty"`
+}
+
+func StreamA2AStatus(ctx context.Context, eventStream EventStreamInterface, taskID, state, message, agentName string) {
+	if eventStream == nil {
+		return
+	}
+
+	statusEvent := A2AStatusEvent{
+		Type:      "a2a_status",
+		TaskID:    taskID,
+		State:     state,
+		Message:   message,
+		AgentName: agentName,
+	}
+
+	if err := eventStream.StreamChunk(ctx, statusEvent); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to stream a2a status event")
+	}
+}
+
+func StreamContentBoundary(ctx context.Context, eventStream EventStreamInterface, completionID, modelID string) {
+	if eventStream == nil {
+		return
+	}
+	chunk := NewContentChunk(completionID, modelID, "")
+	chunk.Choices[0].FinishReason = finishReasonStop
+	chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
+	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to send A2A content boundary chunk")
+	}
+}
+
 // WrapChunkWithMetadata adds ARK metadata to a streaming chunk
 // If query is provided, includes complete query object in metadata (for final chunk only)
 func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string, query *arkv1alpha1.Query) interface{} {
@@ -392,12 +432,22 @@ type HTTPEventStream struct {
 	// For persistent streaming connection
 	streamWriter io.WriteCloser
 	streamMutex  sync.Mutex
+	// Latched on the first chunk-write failure for this query (a broken/closed
+	// ndjson pipe). Once abandoned, further chunk writes are no-ops so a failing
+	// broker is not hammered with reopen attempts for the rest of the query. The
+	// completion signal is still sent (see NotifyCompletion), so the consumer's
+	// stream is always terminated.
+	streamAbandoned bool
 }
 
 // StreamChunk sends a chunk to the event stream
 func (h *HTTPEventStream) StreamChunk(ctx context.Context, chunk interface{}) error {
 	h.streamMutex.Lock()
 	defer h.streamMutex.Unlock()
+
+	if h.streamAbandoned {
+		return nil
+	}
 
 	// If we don't have an active stream, start one
 	if h.streamWriter == nil {
@@ -414,9 +464,12 @@ func (h *HTTPEventStream) StreamChunk(ctx context.Context, chunk interface{}) er
 
 	// Write with newline delimiter for streaming
 	if _, err := h.streamWriter.Write(append(data, '\n')); err != nil {
-		// Stream broken, clear it
+		// Abandon streaming for the rest of this query: close the writer and latch
+		// so later chunk writes skip the broker. The completion signal is still
+		// sent afterward (a separate request), so the consumer stream terminates.
 		_ = h.streamWriter.Close() // Ignore error - we're already in error state
 		h.streamWriter = nil
+		h.streamAbandoned = true
 		return fmt.Errorf("failed to write chunk to stream: %w", err)
 	}
 
@@ -484,6 +537,13 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 	h.streamMutex.Lock()
 	defer h.streamMutex.Unlock()
 
+	// Always send the completion signal, even if the chunk stream was abandoned.
+	// The completion POST below is a separate short request, not a write over the
+	// (possibly broken) ndjson pipe, and it is the only signal that terminates
+	// the broker's SSE stream — skipping it leaves any consumer that received a
+	// chunk hanging until it disconnects. When abandoned, streamWriter is already
+	// nil, so the close block is simply skipped.
+
 	// Close the streaming connection if open
 	if h.streamWriter != nil {
 		if err := h.streamWriter.Close(); err != nil {
@@ -528,6 +588,8 @@ func (h *HTTPEventStream) Close() error {
 	h.streamMutex.Lock()
 	defer h.streamMutex.Unlock()
 
+	// An abandoned stream has already closed and nil'd streamWriter, so the nil
+	// check below covers that case too.
 	if h.streamWriter != nil {
 		err := h.streamWriter.Close()
 		h.streamWriter = nil

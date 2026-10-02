@@ -142,6 +142,18 @@ Warning  ModelProbeFailed  64s (x9 over 10m)  model-controller  The security tok
 
 The full details of the error can be stored in the logs instead.
 
+#### Unhandled error shapes
+
+Errors the controller does not recognize are still surfaced, not replaced with a generic message. `extractStableError` in `ark/internal/controller/model_probe.go` matches the known shapes first (context deadline, `*openai.Error`, `*smithyhttp.ResponseError`, context cancellation), then falls back to `stabilizeProbeError`, which returns the error text with the unstable parts removed:
+
+- Labelled identifiers and their values - `Trace ID`, `Correlation ID`, `Request ID`, `Activity ID`
+- Bare UUIDs and hex tokens of 16 characters or more
+- `Timestamp` values
+
+The result is collapsed to a single line and capped at 256 characters. Two attempts that differ only in these tokens produce the same message, so the condition converges after one status write.
+
+Extend `volatileTokenPatterns` when a provider introduces a new per-attempt identifier. Without it, a message that changes on every probe writes status, re-triggers reconciliation, and re-probes the provider.
+
 ## Log Verbosity Configuration
 
 The ARK controller supports configurable log verbosity levels (0-3, default 0):

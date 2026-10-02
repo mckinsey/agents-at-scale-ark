@@ -46,11 +46,6 @@ function Wrapper({
 }
 
 describe('StrategySection', () => {
-  it('should render strategy heading', () => {
-    render(<Wrapper />);
-    expect(screen.getByText('Strategy Configuration')).toBeInTheDocument();
-  });
-
   it('should render strategy select', () => {
     render(<Wrapper />);
     expect(screen.getByRole('combobox')).toBeInTheDocument();
@@ -99,9 +94,7 @@ describe('StrategySection', () => {
 
   it('should show required indicator on max turns for selector strategy', () => {
     render(<Wrapper defaultStrategy="selector" />);
-    expect(
-      screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Max Turns').textContent).toContain('*');
   });
 
   it('should show required indicator on max turns for sequential strategy with loops enabled', async () => {
@@ -111,9 +104,7 @@ describe('StrategySection', () => {
     await user.click(screen.getByRole('checkbox'));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Max Turns').textContent).toContain('*');
     });
   });
 
@@ -122,7 +113,7 @@ describe('StrategySection', () => {
     render(<Wrapper />);
 
     await user.click(screen.getByRole('combobox'));
-    await user.click(screen.getByRole('option', { name: 'Sequential' }));
+    await user.click(await screen.findByRole('option', { name: 'Sequential' }));
 
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toHaveTextContent('Sequential');
@@ -134,7 +125,7 @@ describe('StrategySection', () => {
     render(<Wrapper />);
 
     await user.click(screen.getByRole('combobox'));
-    await user.click(screen.getByRole('option', { name: 'Selector' }));
+    await user.click(await screen.findByRole('option', { name: 'Selector' }));
 
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toHaveTextContent('Selector');

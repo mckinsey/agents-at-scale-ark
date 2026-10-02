@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: a2a-writer
+spec:
+  description: Local member whose reply must reach the a2a member
+  prompt: You are the A2A Transcript Writer. Reply with your marker.
+  modelRef:
+    name: test-model-mock

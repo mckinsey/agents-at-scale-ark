@@ -64,7 +64,18 @@ class BrokerClient:
         self.agent_name = agent_name
         self.message_ttl_seconds = message_ttl_seconds
 
-    def _build_chunk(self, content: str, finish_reason: Optional[str] = None) -> bytes:
+    def _build_chunk(
+        self,
+        content: str,
+        finish_reason: Optional[str] = None,
+        tool_calls: Optional[list[dict]] = None,
+    ) -> bytes:
+        delta: dict = {
+            "role": "assistant",
+            "content": content,
+        }
+        if tool_calls:
+            delta["tool_calls"] = tool_calls
         chunk = {
             "id": self.query_name,
             "object": "chat.completion.chunk",
@@ -72,10 +83,7 @@ class BrokerClient:
             "model": f"agent/{self.agent_name}" if self.agent_name else "unknown",
             "choices": [{
                 "index": 0,
-                "delta": {
-                    "role": "assistant",
-                    "content": content,
-                },
+                "delta": delta,
                 "finish_reason": finish_reason,
             }],
             "ark": {
@@ -86,13 +94,18 @@ class BrokerClient:
         }
         return (json.dumps(chunk) + "\n").encode()
 
-    async def send_chunk(self, content: str, finish_reason: Optional[str] = None) -> None:
+    async def send_chunk(
+        self,
+        content: str,
+        finish_reason: Optional[str] = None,
+        tool_calls: Optional[list[dict]] = None,
+    ) -> None:
         url = f"{self.base_url}/stream/{quote(self.query_name)}"
         try:
             async with httpx.AsyncClient(timeout=_STREAM_TIMEOUT) as http:
                 resp = await http.post(
                     url,
-                    content=self._build_chunk(content, finish_reason),
+                    content=self._build_chunk(content, finish_reason, tool_calls),
                     headers={"Content-Type": "application/x-ndjson"},
                 )
                 if resp.status_code not in (200, 202):

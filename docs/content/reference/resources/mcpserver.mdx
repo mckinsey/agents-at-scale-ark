@@ -28,7 +28,8 @@ spec:
   # --- Common optional fields --------------------------------------------
   transport: http                             # http | sse (default 'http')
   description: "GitHub repository operations via MCP protocol"
-  timeout: 30s                                # max duration for tool calls (default '30s')
+  timeout: 30s                                # max duration to connect to the server (default '30s')
+  toolCallTimeout: 5m                         # max duration for each tool call (default: unbounded)
   pollInterval: 1m                            # tool re-discovery interval (default '1m')
   headers:                                    # extra HTTP headers sent to the server
     - name: X-Api-Key
@@ -51,10 +52,11 @@ spec:
 | `spec.address` | `ValueSource` | yes | Where the MCP server is reachable. Supports a direct `value`, or `valueFrom` with `serviceRef` (in-cluster service), `secretKeyRef`, `configMapKeyRef`, or `queryParameterRef`. Resolved value is published to `status.resolvedAddress`. |
 | `spec.transport` | enum (`http`, `sse`) | yes | Transport protocol. Defaults to `http`. |
 | `spec.description` | string | no | Human-readable description of the server. |
-| `spec.timeout` | duration | no | Maximum duration for MCP tool calls to this server (`30s`, `5m`, `10m`). Defaults to `30s`. Raise it for long-running operations. |
+| `spec.timeout` | duration | no | Maximum duration to establish a connection to this server, including the connection retry window. Defaults to `30s`. This does **not** bound tool calls — use `spec.toolCallTimeout` for that. |
+| `spec.toolCallTimeout` | duration | no | Maximum duration for each individual tool call to this server (`30s`, `5m`, `10m`), including any [transient error retries](#transient-error-retry). Raise it for long-running operations. When unset, a tool call is bounded only by the execution budget of the query that triggered it (`spec.timeout` on the Query). |
 | `spec.pollInterval` | duration | no | How often the controller re-discovers tools from the server. Defaults to `1m`. |
 | `spec.headers[]` | list | no | HTTP headers added to requests to the server. Each entry has a `name` and a `value` (either a literal `value` or `valueFrom` — `secretKeyRef`, `configMapKeyRef`, `queryParameterRef`). |
-| `spec.authorization` | object | no | OAuth configuration for servers protected per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728). When unset, the controller does not attempt to inject `Authorization` headers. |
+| `spec.authorization` | object | no | OAuth configuration for servers protected per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728). When set, the resolved access token is injected as `Authorization: Bearer` on both tool discovery and tool calls — see [Header precedence](#header-precedence). When unset, Ark does not inject `Authorization` headers. |
 | `spec.authorization.tokenSecretRef` | object | yes (within `authorization`) | References the Secret holding OAuth tokens and client credentials. The Secret **must** exist in the same namespace as the MCPServer. |
 | `spec.authorization.tokenSecretRef.name` | string | yes | Name of the Secret. |
 | `spec.authorization.tokenSecretRef.accessTokenKey` | string | no | Secret key holding the access token. Defaults to `access_token`. |
@@ -110,11 +112,27 @@ spec:
 
 The controller discovers tools from the server every `spec.pollInterval` and publishes the count to `status.toolCount`. See [Tools](/reference/resources/tools) for creating Tool resources that connect to MCP servers.
 
+## Transient error retry
+
+Tool calls that fail with a transient error — HTTP 429, 500, 502, 503, 504, or a connection-level failure where the request never reached the server — are retried with exponential backoff and jitter. A `Retry-After` header from the server sets the minimum delay for the next attempt, capped at the maximum backoff. Every other failure (auth failures, validation errors, application-level tool errors, statuses that terminate the MCP session) fails immediately with the original error.
+
+Retries are bounded by attempt count and wall-clock budget, whichever hits first. Both are configured on the completions executor chart:
+
+```yaml
+env:
+  ARK_MCP_TOOL_CALL_MAX_ATTEMPTS: "3"
+  ARK_MCP_TOOL_CALL_RETRY_BUDGET_SECONDS: "30"
+```
+
+`spec.toolCallTimeout` bounds the whole call — every attempt plus the backoff between them — so it composes with the retry budget: whichever expires first ends the call.
+
+Retry activity is counted in the `ark_mcp_tool_call_retries_total{result, server}` metric on the completions executor's `/metrics` endpoint: `transient_error` for each scheduled retry, then one terminal `success`, `permanent_error`, or `exhausted` per call that needed retries.
+
 ## OAuth-protected servers
 
 Remote MCP servers that require OAuth (e.g. `https://mcp.notion.com/mcp`, GitHub Copilot MCP) respond to unauthenticated requests with `HTTP 401` and a `WWW-Authenticate: Bearer` challenge per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) and the [MCP 2025-06-18 authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
 
-When Ark detects this, it performs OAuth metadata discovery and populates `status.authorization`:
+When Ark detects this, it fetches the RFC 9728 protected resource metadata, then the authorization server metadata using the well-known locations from the MCP authorization spec (RFC 8414 with path insertion, then OpenID Connect discovery), and populates `status.authorization`:
 
 ```bash
 kubectl get mcpserver notion -o yaml
@@ -151,7 +169,21 @@ shell    True        1
 | _(empty)_ | Server does not require OAuth. |
 | `Required` | Server returned 401 and metadata discovery succeeded. Ready for an authorize flow. A 401 from an authorized server (expiry, revocation, refresh failure) also collapses back to `Required` and emits a `TokenRejected` event. |
 | `Authorized` | The controller successfully listed tools using a Bearer token resolved from `spec.authorization.tokenSecretRef`. |
-| `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found. The CLI cannot drive an OAuth flow against this server. |
+| `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found, or the authorization server advertised no `authorization_endpoint` and `token_endpoint`. Neither the CLI nor the dashboard can drive an OAuth flow against this server. Servers using `spec.authorization.clientCredentials` are exempt from the endpoint check. |
+
+### Header precedence
+
+The access token from `spec.authorization.tokenSecretRef` authorizes both paths: the controller's tool discovery, and the tool calls an agent makes at query time. `status.authorization.state: Authorized` therefore means agents can call the server's tools, not just list them.
+
+Headers merge with this precedence (last wins):
+
+```
+spec.headers  <  spec.authorization  <  Agent.spec.overrides  <  Query.spec.overrides
+```
+
+So the resolved bearer replaces an `Authorization` entry in `spec.headers`, and an Agent or Query [override](/user-guide/overrides) replaces the bearer for that run. See [User authorised MCP servers](/tutorials/user-authorised-mcp-servers) for the per-user pattern.
+
+Both the Secret named by `tokenSecretRef` and any Secret or ConfigMap referenced from `spec.headers` are read from the **MCPServer's** namespace, not the caller's.
 
 ### Prerequisites
 
@@ -168,16 +200,9 @@ spec:
 
 The interactive authorize flow (dynamic client registration, PKCE, token exchange, Secret write) is orchestrated by ark-api. The [`ark mcp auth login`](/developer-guide/cli-tools#ark-mcp-auth) CLI is a thin client that POSTs to ark-api's `/api/v1/mcp-servers/{name}/auth/start` and polls `auth/status` — it never touches the Kubernetes Secret directly. The CLI is the only client today; a dashboard authorize flow is not yet available. See [MCP OAuth Callback](/operations-guide/mcp-oauth-callback) for the operator-side callback URL configuration.
 
-A successful flow leaves two annotations on the MCPServer:
+A successful flow writes the token material to the referenced Secret and the controller reconciles `status.authorization.state` to `Authorized`. ark-api does not record the identity of the caller who triggered the flow.
 
-```yaml
-metadata:
-  annotations:
-    ark.mckinsey.com/mcp-auth-authorized-by: cli       # cli (dashboard not yet supported)
-    ark.mckinsey.com/mcp-auth-authorized-at: 2026-05-19T14:32:11Z
-```
-
-`authorized-by` is `cli` for this phase. A future per-user-tokens capability will surface the OIDC subject of the authenticated user here so multi-user clusters can distinguish whose credentials wrote the Secret. Until that ships, MCPServer tokens are effectively a per-server singleton — only one user can hold an authorized session at a time.
+MCPServer tokens are a per-server singleton, only one user can hold an authorized session at a time. A future per-user-tokens capability will lift this limitation.
 
 ## Status
 
@@ -222,7 +247,7 @@ status:
 | `status.authorization.registrationEndpoint` | RFC 7591 dynamic client registration endpoint, when supported. |
 | `status.authorization.authorizationEndpoint` | OAuth 2.1 authorization endpoint (RFC 8414 `authorization_endpoint`). |
 | `status.authorization.tokenEndpoint` | OAuth 2.1 token endpoint (RFC 8414 `token_endpoint`). |
-| `status.authorization.lastDiscovered` | Timestamp of the most recent successful discovery probe. |
+| `status.authorization.lastDiscovered` | Time the authorization block was last recomputed and persisted. Polls that leave the block unchanged do not advance it. |
 | `status.authorization.expiresAt` | Absolute expiry time of the current access token, published for consumers that can `get` mcpservers but not secrets. |
 | `status.conditions[]` | Standard Kubernetes conditions. `Available` reflects readiness; `Discovering` reflects tool-discovery progress. |
 

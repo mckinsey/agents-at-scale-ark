@@ -1,6 +1,5 @@
 'use client';
 
-import { GripVertical, Pencil, Trash2 } from 'lucide-react';
 import {
   type ReactNode,
   type Ref,
@@ -19,7 +18,9 @@ import {
   SectionFormDialog,
   type SectionFormValues,
 } from '@/components/dialogs/section-form-dialog';
+import { DragIndicator, Edit, Trash } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   UNGROUPED_KEY,
   applyLayout,
@@ -178,8 +179,10 @@ function SortableRow<T>({
       onClick={e => e.stopPropagation()}
       onKeyDown={handleKeyDown}
       aria-label={`Reorder ${itemKey}. Use Arrow Up and Arrow Down to move.`}
-      className="text-muted-foreground focus-visible:ring-ring hover:text-foreground flex h-8 w-8 flex-shrink-0 cursor-grab items-center justify-center rounded-md focus:outline-none focus-visible:ring-2 active:cursor-grabbing">
-      <GripVertical className="h-4 w-4" />
+      className="text-fg-tertiary hover:text-fg-primary focus-visible:ring-stroke-status-focus flex h-8 w-8 flex-shrink-0 cursor-grab items-center justify-center focus:outline-none focus-visible:ring-2 active:cursor-grabbing">
+      <IconShell size="sm" variant="secondary">
+        <DragIndicator />
+      </IconShell>
     </button>
   );
 
@@ -231,10 +234,10 @@ function TrailingDropZone({
       <div
         ref={ref}
         data-testid={`drop-zone-${groupKey}`}
-        className={`rounded-md border-2 border-dashed p-6 text-center text-sm transition-colors ${
+        className={`border-2 border-dashed p-6 text-center text-sm transition-colors ${
           isOver
-            ? 'border-primary bg-primary/5 text-foreground'
-            : 'border-border text-muted-foreground'
+            ? 'border-stroke-active bg-stateslayer-overlay-hover text-fg-primary'
+            : 'border-stroke-tertiary text-fg-secondary'
         }`}>
         {`Drop ${pluralNoun} here`}
       </div>
@@ -244,8 +247,10 @@ function TrailingDropZone({
     <div
       ref={ref}
       data-testid={`drop-zone-${groupKey}`}
-      className={`h-8 rounded-md transition-colors ${
-        isOver ? 'bg-primary/10 border-primary border-2 border-dashed' : ''
+      className={`h-8 transition-colors ${
+        isOver
+          ? 'border-stroke-active bg-stateslayer-overlay-hover border-2 border-dashed'
+          : ''
       }`}
     />
   );
@@ -327,40 +332,46 @@ function SectionCard<T>({
   return (
     <div
       ref={cardRef}
-      className={`bg-card rounded-lg border ${isDragging ? 'opacity-40' : ''}`}
+      className={`border-stroke-tertiary bg-surface-secondary border ${isDragging ? 'opacity-40' : ''}`}
       data-testid={`section-card-${section.id}`}>
-      <div className="flex items-center gap-2 border-b px-4 py-3">
+      <div className="border-stroke-tertiary flex items-center gap-2 border-b px-4 py-3">
         <button
           ref={setSectionHandleRef}
           type="button"
           onKeyDown={handleHeaderKeyDown}
           aria-label={`Reorder group ${section.name}. Use Arrow Up and Arrow Down to move.`}
-          className="text-muted-foreground focus-visible:ring-ring hover:text-foreground flex h-8 w-8 flex-shrink-0 cursor-grab items-center justify-center rounded-md focus:outline-none focus-visible:ring-2 active:cursor-grabbing">
-          <GripVertical className="h-4 w-4" />
+          className="text-fg-tertiary hover:text-fg-primary focus-visible:ring-stroke-status-focus flex h-8 w-8 flex-shrink-0 cursor-grab items-center justify-center focus:outline-none focus-visible:ring-2 active:cursor-grabbing">
+          <IconShell size="sm" variant="secondary">
+            <DragIndicator />
+          </IconShell>
         </button>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-semibold">{section.name}</h2>
+          <h2 className="text-fg-primary truncate text-base font-semibold leading-6">
+            {section.name}
+          </h2>
           {section.description && (
-            <p className="text-muted-foreground text-sm break-words">
+            <p className="text-fg-secondary text-sm leading-5 break-words">
               {section.description}
             </p>
           )}
         </div>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0"
+          size="icon-sm"
           onClick={() => onEditSection(section)}
           aria-label={`Edit group ${section.name}`}>
-          <Pencil className="h-4 w-4" />
+          <IconShell size="sm" variant="secondary">
+            <Edit />
+          </IconShell>
         </Button>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 hover:text-red-500"
+          size="icon-sm"
           onClick={() => onDeleteSection(section)}
           aria-label={`Delete group ${section.name}`}>
-          <Trash2 className="h-4 w-4" />
+          <IconShell size="sm" variant="secondary">
+            <Trash />
+          </IconShell>
         </Button>
       </div>
       <div className="flex flex-col gap-3 p-4">
@@ -411,7 +422,7 @@ function UngroupedArea<T>({
   return (
     <div className="flex flex-col gap-3">
       {labelled && (
-        <h2 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        <h2 className="text-fg-tertiary text-xs font-semibold tracking-wide uppercase">
           Ungrouped
         </h2>
       )}

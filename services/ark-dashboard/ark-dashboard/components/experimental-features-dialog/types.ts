@@ -8,15 +8,14 @@ export type BooleanSetting = {
   atom: ReturnType<typeof atomWithStorage<boolean>>;
 };
 
-export type SelectSetting = {
-  type: 'select';
+export type NumberSetting = {
+  type: 'number';
   feature: string;
   description?: ReactNode;
   atom: ReturnType<typeof atomWithStorage<string>>;
-  options: Array<{ value: string; label: string }>;
 };
 
-export type ExperimentalFeature = BooleanSetting | SelectSetting;
+export type ExperimentalFeature = BooleanSetting | NumberSetting;
 
 export type ExperimentalFeatureGroup = {
   groupKey: string;

@@ -5,6 +5,47 @@ import type {
   ArgoWorkflowList,
 } from '@/lib/types/argo-workflow';
 
+async function gunzipBase64(encoded: string): Promise<string> {
+  const binary = atob(encoded);
+  const bytes = Uint8Array.from(
+    binary,
+    character => character.codePointAt(0) ?? 0,
+  );
+
+  const decompressed = new ReadableStream<BufferSource>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  }).pipeThrough(new DecompressionStream('gzip'));
+
+  return new Response(decompressed).text();
+}
+
+export async function expandCompressedNodes(
+  workflow: ArgoWorkflow,
+): Promise<ArgoWorkflow> {
+  const status = workflow.status;
+
+  if (!status?.compressedNodes || status.nodes) {
+    return workflow;
+  }
+
+  try {
+    const nodes = JSON.parse(
+      await gunzipBase64(status.compressedNodes),
+    ) as Record<string, ArgoNodeStatus>;
+
+    return { ...workflow, status: { ...status, nodes } };
+  } catch (error) {
+    console.error(
+      `Failed to decompress node status for workflow ${workflow.metadata.name}`,
+      error,
+    );
+    return workflow;
+  }
+}
+
 export interface WorkflowFilters {
   workflowName?: string;
   workflowTemplateName?: string;
@@ -13,7 +54,7 @@ export interface WorkflowFilters {
 
 export const workflowsService = {
   async list(
-    namespace: string = 'default',
+    namespace: string,
     filters?: WorkflowFilters,
   ): Promise<ArgoWorkflow[]> {
     const params = new URLSearchParams({ namespace });
@@ -31,20 +72,17 @@ export const workflowsService = {
     const response = await apiClient.get<ArgoWorkflowList>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?${params.toString()}`,
     );
-    return response.items;
+    return Promise.all(response.items.map(expandCompressedNodes));
   },
 
-  async get(
-    name: string,
-    namespace: string = 'default',
-  ): Promise<ArgoWorkflow> {
+  async get(namespace: string, name: string): Promise<ArgoWorkflow> {
     const response = await apiClient.get<ArgoWorkflow>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/${name}?namespace=${namespace}`,
     );
-    return response;
+    return expandCompressedNodes(response);
   },
 
-  async getYaml(name: string, namespace: string = 'default'): Promise<string> {
+  async getYaml(namespace: string, name: string): Promise<string> {
     const response = await apiClient.get<string>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/${name}?namespace=${namespace}`,
       {
@@ -57,8 +95,8 @@ export const workflowsService = {
   },
 
   async getPodLogs(
+    namespace: string,
     podName: string,
-    namespace: string = 'default',
     container?: string,
   ): Promise<string> {
     const containerParam = container ? `&container=${container}` : '';
@@ -74,9 +112,9 @@ export const workflowsService = {
   },
 
   async getWorkflowLogs(
+    namespace: string,
     workflowName: string,
     nodeId: string,
-    namespace: string = 'default',
   ): Promise<string> {
     const response = await apiClient.get<string>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/namespaces/${namespace}/workflows/${workflowName}/${nodeId}/log`,
@@ -119,7 +157,7 @@ export function getAllNodesFlat(
 }
 
 export function getRootNodeId(workflow: ArgoWorkflow): string | null {
-  if (!workflow.status.nodes) return null;
+  if (!workflow.status?.nodes) return null;
   return workflow.metadata.name;
 }
 

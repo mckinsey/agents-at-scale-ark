@@ -20,6 +20,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 )
 
@@ -103,10 +104,14 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 	}
 
 	// Check the status of the agent's model. Some agents (such as A2A agents) have a 'nil' model, and their status is not associated with model availability.
-	if agent.Spec.ModelRef != nil {
+	switch {
+	case !agentRequiresModel(agent):
+	case agent.Spec.ModelRef != nil:
 		if ok, msg := r.checkModelDependency(ctx, agent); !ok {
 			return false, "ModelNotFound", msg
 		}
+	default:
+		return false, "ModelNotConfigured", "Agent has no model configured; the default executor requires a model"
 	}
 
 	// Check execution engine dependency
@@ -123,6 +128,15 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 
 	// All dependencies resolved
 	return true, "Available", "All dependencies are available"
+}
+
+// agentRequiresModel reports whether the agent needs a model to run. A2A agents
+// (model is external) and agents delegating to an ExecutionEngine are exempt.
+func agentRequiresModel(agent *arkv1alpha1.Agent) bool {
+	if _, isA2A := agent.Annotations[annotations.A2AServerName]; isA2A {
+		return false
+	}
+	return agent.Spec.ExecutionEngine == nil
 }
 
 // checkModelDependency validates model dependency
@@ -186,14 +200,14 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 
 // checkExecutionEngineDependency validates execution engine dependency
 func (r *AgentReconciler) checkExecutionEngineDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string, string) {
-	engineName := agent.Spec.ExecutionEngine.Name
-
 	// The "a2a" engine is built into the controller, not a deployed
 	// ExecutionEngine resource, so there is no CR to look up. Availability for
 	// A2A agents is governed by the owning A2AServer (checkA2AServerDependency).
-	if engineName == arka2a.ExecutionEngineA2A {
+	if !arka2a.IsNamedEngine(agent.Spec.ExecutionEngine) {
 		return true, "", ""
 	}
+
+	engineName := agent.Spec.ExecutionEngine.Name
 
 	engineNamespace := agent.Namespace
 
@@ -277,18 +291,7 @@ func (r *AgentReconciler) setCondition(agent *arkv1alpha1.Agent, conditionType s
 
 // updateStatus updates the Agent status
 func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.Agent) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	err := r.Status().Update(ctx, agent)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		logf.FromContext(ctx).Error(err, "failed to update agent status")
-	}
-	return err
+	return updateStatusIgnoringDeleted(ctx, r.Client, agent, "agent")
 }
 
 // agentModelRefIndexer returns the model reference name for field-based Agent lookups.
@@ -370,10 +373,11 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(ctx, &agentList,
+	if r.List(
+		ctx, &agentList,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.tools.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)
@@ -381,10 +385,11 @@ func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Obje
 
 func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(ctx, &agentList,
+	if r.List(
+		ctx, &agentList,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.modelRef.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)
@@ -392,10 +397,11 @@ func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Obj
 
 func (r *AgentReconciler) findAgentsForExecutionEngine(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if err := r.List(ctx, &agentList,
+	if r.List(
+		ctx, &agentList,
 		client.InNamespace(obj.GetNamespace()),
 		client.MatchingFields{".spec.executionEngine.name": obj.GetName()},
-	); err != nil {
+	) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)

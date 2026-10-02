@@ -22,6 +22,10 @@ export default {
     title: 'Add tools and MCP servers',
     href: '/user-guide/tools'
   },
+  configurations: {
+    title: 'Parametrize resources per environment',
+    href: '/user-guide/configurations'
+  },
   'ark-cli': {
     title: 'Use the Ark CLI',
     href: '/user-guide/ark-cli'
@@ -75,6 +79,10 @@ export default {
   deploying: {
     title: 'Deploy ARK',
     href: '/operations-guide/deploying-ark'
+  },
+  authentication: {
+    title: 'Configure authentication and SSO',
+    href: '/developer-guide/authentication'
   },
   'multi-tenant-dashboard': {
     title: 'Host the dashboard for multiple namespaces',

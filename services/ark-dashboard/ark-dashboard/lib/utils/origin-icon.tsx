@@ -1,3 +1,22 @@
+const ORIGIN_TYPE_LABELS: Record<string, string> = {
+  github: 'GitHub',
+  marketplace: 'Marketplace',
+};
+
+export function getOriginLabel(origin?: string | null): string {
+  if (!origin) return 'ARK';
+
+  try {
+    const type = JSON.parse(origin)?.type as string | undefined;
+    if (!type) return 'ARK';
+    return (
+      ORIGIN_TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1)
+    );
+  } catch {
+    return 'ARK';
+  }
+}
+
 /**
  * Returns the appropriate Lucide icon component for a participant type.
  *

@@ -50,12 +50,29 @@ spec:
     Use markdown format for better readability and structure.
     Provide confirmation of successful document creation with file location.
   tools:
+    # Reaching the internet carries data out, so it is gated alongside the writes: a
+    # hidden instruction cannot turn a search into an exfiltration channel on its own.
     - type: http
       name: web-search
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
+    # Tools that change the filesystem pause for human approval, so a hidden
+    # instruction in a file the agent reads cannot write on its own. Reads stay
+    # automatic.
     - type: mcp
       name: file-gateway-write-file
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
     - type: mcp
       name: file-gateway-create-directory
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
     - type: mcp
       name: file-gateway-list-directory
     - type: mcp

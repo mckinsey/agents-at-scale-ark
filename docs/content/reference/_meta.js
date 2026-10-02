@@ -27,6 +27,10 @@ export default {
     title: 'Data flow and encryption',
     href: '/operations-guide/data-flow-and-encryption'
   },
+  'logging-contract': {
+    title: 'Logging contract',
+    href: '/operations-guide/logging-contract'
+  },
 
   '---project': { type: 'separator', title: 'Project' },
   contributors: 'Contributors',

@@ -87,7 +87,7 @@ async def test_get_headers_populates_from_values_and_secrets(monkeypatch):
     await get_headers(resource_spec, output, namespace="ns")
 
     assert output == {"X-Plain": "plain", "X-Secret": "secret"}
-    get_secret_mock.assert_awaited_once_with("sec", "token", "ns")
+    get_secret_mock.assert_awaited_once_with("sec", "token", "ns", None)
 
 
 @pytest.mark.asyncio
@@ -95,7 +95,7 @@ async def test_get_secret_decodes_opaque_secret(monkeypatch):
     client_mock = AsyncMock()
     encoded = base64.b64encode(b"value").decode()
     client_mock.get_secret_value = AsyncMock(return_value={"type": SecretType.OPAQUE, "value": encoded})
-    monkeypatch.setattr("ark_api.utils.ark_services.SecretClient", lambda namespace=None: client_mock)
+    monkeypatch.setattr("ark_api.utils.ark_services.SecretClient", lambda namespace=None, impersonation=None: client_mock)
 
     result = await get_secret("sec", "key", namespace="ns")
 
@@ -107,7 +107,7 @@ async def test_get_secret_decodes_opaque_secret(monkeypatch):
 async def test_get_secret_returns_empty_for_non_opaque(monkeypatch):
   client_mock = AsyncMock()
   client_mock.get_secret_value = AsyncMock(return_value={"type": "kubernetes.io/tls", "value": "ignored"})
-  monkeypatch.setattr("ark_api.utils.ark_services.SecretClient", lambda namespace=None: client_mock)  
+  monkeypatch.setattr("ark_api.utils.ark_services.SecretClient", lambda namespace=None, impersonation=None: client_mock)  
   
   result = await get_secret("sec", "key") 
   

@@ -4,6 +4,7 @@ import { agentParametersChanged } from '@/components/forms/agent-form/utils';
 import type { Parameter } from '@/components/ui/parameter-editor';
 
 const queryParam = (overrides: Partial<Parameter> = {}): Parameter => ({
+  id: 'query-param',
   name: 'queryWord',
   source: 'queryParameter',
   value: '',

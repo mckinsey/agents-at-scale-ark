@@ -8,12 +8,12 @@ description: Ark's dual-track release process (RC and stable), published artifac
 This page documents Ark's release process, published artifacts, and configuration item (CI) management. It serves as both an operator reference and a citable statement of practice for audits.
 
 Ark uses a dual-track release process:
-- **RC releases** — Continuous pre-release versions published from `main`, tested in non-production environments
-- **Stable releases** — Promoted RC versions with full publishing to registries (npm, PyPI, GitHub Pages)
+- **RC releases** — Continuous pre-release versions published from `main` by Release Please, tested in non-production environments
+- **Stable releases** — A specific tested RC promoted to stable via a reviewed `release: vX.Y.Z` PR, with full publishing to registries (npm, PyPI, GitHub Pages)
 
 ## Release Process Overview
 
-Ark uses [Release Please](https://github.com/googleapis/release-please) with dual configurations to support both release tracks. The process is fully automated through GitHub Actions, requiring only merge approval at key decision points.
+Ark uses [Release Please](https://github.com/googleapis/release-please) to drive the RC cycle. Stable releases use a custom promotion flow (`prepare-release.yaml` + `release-on-merge.yaml`) that promotes a **specific tested RC commit** rather than whatever is on `main` HEAD, so post-RC commits never leak into a stable release. The process is fully automated through GitHub Actions, requiring only merge approval at key decision points.
 
 ### Key Concepts
 
@@ -22,12 +22,14 @@ Ark uses [Release Please](https://github.com/googleapis/release-please) with dua
 - Creates release PRs with updated changelogs and synchronized versions across all artifacts
 - Tags releases and triggers downstream deployment jobs
 
-**Dual configuration** enables two parallel release tracks:
+**RC configuration** drives the pre-release track:
 - `.github/release-please-config-rc.json` — Generates pre-release versions (e.g., `v0.1.61-rc`, `v0.1.61-rc.1`)
-- `.github/release-please-config.json` — Generates stable versions (e.g., `v0.1.61`) when promoted
+- `.github/release-please-config.json` — Stable config, retained for the fallback promotion path (see [Fallback: Release Please promotion](#fallback-release-please-promotion))
 
-**Version synchronization** ensures consistency across all artifacts. Release Please updates versions in:
-- Root `version.txt` and `ark/version.txt`
+**Stable promotion** does not use Release Please. `scripts/stamp-version.sh` strips the `-rc` suffix across every version file, and a reviewed `release: vX.Y.Z` PR carries that change plus a `.releasing` file recording the exact RC commit to build from.
+
+**Version synchronization** ensures consistency across all artifacts. During the RC cycle, Release Please updates versions in:
+- Root `version.txt`
 - Python packages: 3 `pyproject.toml` files (ark-sdk, ark-api, overlay)
 - Helm charts: 8 `Chart.yaml` files with both `version` and `appVersion` fields
 - Node.js packages: `package.json` for ark-cli, ark-broker, docs site
@@ -117,114 +119,92 @@ sequenceDiagram
 
 ## Stable Release Cycle
 
-The stable release cycle promotes a tested RC version to a stable release with full publishing to all registries.
+The stable release cycle promotes a **specific tested RC commit** to a stable release with full publishing to all registries. It does not use Release Please: promotion is a reviewed `release: vX.Y.Z` PR, and the shipped artifacts are rebuilt from the RC commit stamped with the stable version. This means:
+
+- **No post-RC drift ships** — artifacts are built from the exact RC commit that was tested, not from `main` HEAD.
+- **Works with branch protection, no PAT required** — every git ref (branch, tag) is created at `main` HEAD, so the default `GITHUB_TOKEN` can push.
 
 ```mermaid
 sequenceDiagram
     participant Ops as Operator
-    participant GHA as GitHub Actions
+    participant Prep as prepare-release.yaml
     participant Main as main branch
-    participant CI as CI/CD Pipeline
-    participant RP as Release Please
+    participant Merge as release-on-merge.yaml
     participant Deploy as Deploy Workflow
     participant Reg as Registries (npm/PyPI/Pages)
 
-    Ops->>GHA: Run "Promote to Stable" workflow
-    GHA->>GHA: Read current RC version from manifest
-    GHA->>GHA: Remove -rc suffix → stable version
-    GHA->>Main: Create promotion PR (promote/X.X.X branch)
+    Ops->>Prep: Run "Prepare Release" workflow (optional rc_tag, dry_run)
+    Prep->>Prep: Resolve RC tag → stable version (strip -rc)
+    Prep->>Prep: Stamp stable version (scripts/stamp-version.sh)
+    Prep->>Main: Open "release: vX.Y.Z" PR (release-prep/X.Y.Z branch)
 
-    Note over Main: PR updates manifest: 0.1.61-rc → 0.1.61<br/>Adds release-as to stable config
+    Note over Main: PR strips -rc across all version files,<br/>bumps manifest, records RC commit in .releasing
 
-    Ops->>Main: Review and merge promotion PR
-    Main->>CI: Trigger cicd.yaml workflow
-    CI->>RP: check-release detects promotion scenario
+    Ops->>Main: Review and merge the release PR
+    Main->>Merge: pull_request closed (title starts with "release:")
+    Merge->>Main: Tag vX.Y.Z at main HEAD + GitHub Release (consolidated notes)
+    Merge->>Merge: Build wheels, charts, ark-cli, fark FROM the RC commit (stamped stable)
+    Merge->>Reg: Attach stable artifacts to the release
+    Merge->>Deploy: Trigger deploy.yml (source_ref = RC commit, publish as stable)
+    Deploy->>Reg: Build containers from RC commit; publish containers/charts/npm/PyPI/pages
+    Deploy->>Reg: Run installation verification against the published release
 
-    Note over RP: Conditions:<br/>1. Manifest is stable (no -rc)<br/>2. RC tags exist (v0.1.61-rc*)<br/>3. Stable tag doesn't exist yet
-
-    RP->>Main: Create stable release PR
-
-    Note over Main: PR title: "chore(main): release X.X.X"<br/>Contains: final CHANGELOG.md + version bumps
-
-    Ops->>Main: Review and merge stable release PR
-    Main->>CI: Trigger cicd.yaml workflow
-    CI->>CI: Run all checks
-    CI->>RP: check-release job (stable config)
-    RP->>CI: Create stable GitHub release (v0.1.61)
-    CI->>Deploy: Trigger deploy.yml workflow
-    Deploy->>Reg: Publish multi-arch containers (amd64/arm64)
-    Deploy->>Reg: Publish Helm charts to OCI registry
-    Deploy->>Reg: Publish ark-cli to npm (with OIDC)
-    Deploy->>Reg: Publish Python packages to PyPI
-    Deploy->>Reg: Deploy docs to GitHub Pages
-    Deploy->>Main: Create bootstrap PR (bootstrap/X.X.X branch)
-
-    Note over Main: Bootstrap PR removes release-as<br/>from both config files
-
-    Ops->>Main: Merge bootstrap PR
-
-    Note over Main: Ready for next RC cycle<br/>(v0.1.62-rc)
+    Note over Main: Manifest already at stable + vX.Y.Z tag exists<br/>Next push cuts the next RC line (vX.Y.(Z+1)-rc)
 ```
 
 ### Stable Release Steps
 
-1. **Promotion Trigger** (Manual workflow dispatch)
-   - Operator runs the "Promote to Stable" workflow (`.github/workflows/promote-to-stable.yaml`)
-   - Workflow reads current version from `.github/release-please-manifest.json`
-   - Validates current version is RC (contains `-rc` suffix)
-   - Extracts stable version by removing `-rc.*` suffix (e.g., `0.1.61-rc.2` → `0.1.61`)
+1. **Prepare Release** (Manual workflow dispatch — `.github/workflows/prepare-release.yaml`)
+   - Operator runs the "Prepare Release" workflow with optional inputs:
+     - `rc_tag` — the RC tag to promote (blank = latest RC for the current manifest line)
+     - `dry_run` — stamp and show the diff without pushing a branch or opening a PR
+   - Resolves the RC tag and derives the stable version by stripping `-rc` (e.g., `v0.1.61-rc.2` → `0.1.61`)
+   - Fails fast if the stable tag `v0.1.61` already exists, or if no matching RC tag is found
+   - Branches `release-prep/{stable}` from `main` HEAD and runs `scripts/stamp-version.sh {stable}` to strip `-rc` across every version file and bump `.github/release-please-manifest.json`
+   - Writes the promoted RC (`rc_tag`, `rc_sha`) to a `.releasing` file — the hand-off to the merge workflow
+   - Commits `release: v{stable} (promote v0.1.61-rc.2)` and opens a PR titled `release: v{stable}` against `main`
 
-2. **Promotion PR Creation** (Automatic)
-   - Creates branch `promote/{stable_version}`
-   - Updates `.github/release-please-manifest.json`: RC version → stable version
-   - Adds `release-as: X.X.X` to `.github/release-please-config.json` (required for manifest mode)
-   - Commits: `chore: promote v0.1.61-rc to v0.1.61`
-   - Opens PR against `main` with detailed description
+2. **Release PR Review and Merge** (Manual approval required)
+   - Team reviews the stamped diff and confirms RC testing is complete
+   - Merge the `release: vX.Y.Z` PR (requires CODEOWNERS approval)
 
-3. **Promotion PR Review and Merge** (Manual approval required)
-   - Team reviews the promotion (confirms RC testing is complete)
-   - Merge the promotion PR (requires CODEOWNERS approval)
+3. **Tag and Release** (Automatic on merge — `.github/workflows/release-on-merge.yaml`)
+   - Fires on `pull_request` closed when the PR was merged into `main` and its title starts with `release:`
+   - Reads `.releasing` and `version.txt`, then tags `v{stable}` at `main` HEAD and creates the GitHub Release with consolidated notes (generated since the previous stable tag)
 
-4. **Stable Release PR Creation** (Automatic on promotion merge)
-   - CI/CD pipeline runs on the merge commit
-   - `check-release` job detects promotion scenario:
-     - Manifest version is stable (no `-rc` suffix)
-     - RC tags exist for this version (e.g., `v0.1.61-rc*`)
-     - Stable tag does not exist yet (no `v0.1.61`)
-   - Release Please uses stable config (`.github/release-please-config.json`)
-   - Creates stable release PR titled `chore(main): release X.X.X`
-   - PR contains final changelog and version synchronization
+4. **Stable Artifact Publishing** (Automatic — built from the RC commit)
+   - Each artifact job checks out the **RC commit**, fetches `scripts/stamp-version.sh` from `main`, stamps the stable version, builds, and attaches to the release:
+     - **Python wheels** — job `release-libs`
+     - **Helm charts** — 10 packaged charts, job `release-charts`
+     - **ark-cli** — npm tarball, job `release-ark-cli`
+     - **fark binaries** — Linux/macOS/Windows builds with checksums via GoReleaser, job `release-fark`
 
-5. **Stable Release PR Review and Merge** (Manual approval required)
-   - Team reviews the stable release PR
-   - Merge the stable release PR (requires CODEOWNERS approval)
-
-6. **Stable Artifact Publishing** (Automatic on merge)
-   - CI/CD pipeline runs on the merge commit
-   - `check-release` job creates GitHub release with stable tag (e.g., `v0.1.61`)
-   - Attaches all artifacts to GitHub release (same as RC)
-   - Triggers `run-deploy-workflow` job, which invokes `.github/workflows/deploy.yml`
-
-7. **Full Deployment** (Automatic via deploy.yml)
+5. **Full Deployment** (Automatic via `deploy.yml`)
+   - The `trigger-deploy` job runs `deploy.yml` with `ark_version=v{stable}` and `source_ref={rc_sha}`, so images are built from the RC commit but published at the stable version
    - **Multi-arch containers** — Builds and pushes to configured registry (default: GHCR) for amd64 and arm64
      - Images: `ark-controller`, `ark-completions`, `ark-api`, `ark-dashboard`, `ark-mcp`, `ark-broker`, `ark-cli`, `ark-tools`
    - **Helm charts** — Pushes to OCI registry under `/charts` path
      - Charts: `ark-controller`, `ark-apiserver`, `ark-completions`, `ark-api`, `ark-dashboard`, `ark-mcp`, `ark-broker`, `localhost-gateway`, `ark-tenant`, `argo-workflows`
    - **ark-cli** — Publishes to npm registry (uses OIDC trusted publishing)
-   - **Python packages** — Publishes 8 packages to PyPI
+   - **Python packages** — Publishes to PyPI
    - **Documentation** — Deploys to GitHub Pages
+   - Runs installation verification against the published release
 
-8. **Bootstrap PR Creation** (Automatic after stable release)
-   - The `run-deploy-workflow` job creates a cleanup/bootstrap PR
-   - Creates branch `bootstrap/{next_version}` (e.g., `bootstrap/0.1.62`)
-   - Removes `release-as` from both `.github/release-please-config.json` and `.github/release-please-config-rc.json`
-   - Commits: `chore: bootstrap v0.1.62 RC cycle after v0.1.61 stable release`
-   - Opens PR with description of the next development cycle
+6. **Next RC Cycle** (Automatic — no bootstrap PR)
+   - The release PR already bumped the manifest to the stable version, and the `v{stable}` tag now exists
+   - The next push to `main` makes Release Please cut the next RC line (e.g., `v0.1.62-rc`) — no bootstrap or cleanup PR is required in this flow
+   - `cicd.yaml` explicitly skips `release:` merge commits so Release Please does not race the custom flow
 
-9. **Bootstrap PR Merge** (Manual approval required)
-   - Team reviews the bootstrap PR
-   - Merge the bootstrap PR (requires CODEOWNERS approval)
-   - **Next RC cycle begins** — Release Please will now create `v0.1.62-rc` from conventional commits
+> **Design trade-off**: Stable artifacts are **rebuilt** from the RC commit (not digest-copied from the RC images), so version strings are correct everywhere. They come from the same source commit that was tested, but are not byte-identical to the tested RC images.
+
+### Fallback: Release Please promotion
+
+The previous stable-release path is retained as a break-glass fallback and is unchanged:
+- `.github/workflows/promote-to-stable.yaml` — opens a `promote/{version}` PR that bumps the manifest to stable and adds `release-as` to the stable config
+- Release Please's promotion detection (manifest is stable, RC tags exist, stable tag absent) then cuts a `chore(main): release X.X.X` PR
+- After the stable release, a `bootstrap/{next}` PR removes `release-as` from both configs to start the next RC cycle
+
+Use the fallback only if the custom flow is unavailable. It is expected to be removed in a follow-up once the custom flow is validated.
 
 ### RC Version Sequences
 
@@ -337,11 +317,14 @@ Ark's software and configuration items (CIs) are version-controlled in Git and t
 
 ### Version Tracking
 
-All version strings are synchronized atomically by Release Please on every release:
+During the RC cycle, all version strings are synchronized atomically by Release Please on every release. During stable promotion, `scripts/stamp-version.sh` performs the equivalent stamping — it replaces the current RC version with the target stable version across every tracked file, stamps the `current:` marker in `docs/content/operations-guide/build-pipelines.mdx`, and writes the authoritative `.github/release-please-manifest.json`. It intentionally leaves `ark/version.txt` untouched, matching Release Please.
+
+The tracked locations are:
 
 **Root versions**:
 - `version.txt` (root)
-- `ark/version.txt` (controller)
+
+> **Note**: `ark/version.txt` (controller) is listed in `.github/release-please-config.json` but is updated by neither path — Release Please leaves it untouched (no `x-release-please-version` annotation) and `scripts/stamp-version.sh` skips it to match. It currently trails the root version.
 
 **Python packages** (3 locations):
 - `lib/ark-sdk/pyproject.toml`
@@ -379,7 +362,7 @@ The component set is discovered from code rather than a central manifest:
 
 **Container images**: Defined in `.github/workflows/cicd.yaml` build-containers matrix and `.github/workflows/deploy.yml` deploy matrix.
 
-**Helm charts**: Defined in `.github/workflows/cicd.yaml` build-charts matrix and release-charts matrix.
+**Helm charts**: Defined in `.github/workflows/cicd.yaml` build-charts matrix, the RC `release-charts` matrix, and the stable `release-charts` matrix in `.github/workflows/release-on-merge.yaml`.
 
 **Python packages**: Listed in `extra-files` of release-please configs; built via Makefile targets in each service directory.
 
@@ -469,8 +452,9 @@ Certain workflows require manual dispatch with write permissions:
 
 | Workflow | Trigger | Required Permission | Purpose |
 |----------|---------|---------------------|---------|
-| Promote to Stable | `workflow_dispatch` | write on `main` | Initiate stable release promotion |
+| Prepare Release | `workflow_dispatch` | write on `main` | Open the `release: vX.Y.Z` PR promoting a tested RC to stable |
 | Deploy | `workflow_dispatch` | write on `main` | Manual deployment to registries/environments |
+| Promote to Stable | `workflow_dispatch` | write on `main` | Fallback stable-release promotion (see [Fallback: Release Please promotion](#fallback-release-please-promotion)) |
 
 Only repository maintainers with write permissions can trigger these workflows.
 
@@ -480,7 +464,7 @@ Only repository maintainers with write permissions can trigger these workflows.
 |------|------------------|
 | Contributors | Write conventional commits; ensure local `make lint` and `make test` pass before pushing |
 | Reviewers / CODEOWNERS | Review release PRs; verify changelog accuracy; approve merge |
-| Maintainers | Trigger "Promote to Stable" workflow; merge bootstrap PRs; monitor deployment status |
+| Maintainers | Trigger "Prepare Release" workflow; merge `release:` PRs; monitor deployment status |
 | CI/CD | Automated creation of release PRs, tagging, artifact publishing, deployment |
 
 ## Troubleshooting
@@ -499,9 +483,39 @@ Only repository maintainers with write permissions can trigger these workflows.
 - Check CI/CD workflow run logs for failures in jobs that `check-release` depends on
 - Use `feat:` or `fix:` commit types to trigger version bumps
 
-### Stable Release Not Detected
+### Prepare Release Fails
 
-**Symptom**: After merging promotion PR, Release Please still uses RC config instead of stable config.
+**Symptom**: The "Prepare Release" workflow fails before opening the `release:` PR.
+
+**Causes**:
+- No RC tag found for the current manifest line (e.g., no `v0.1.61-rc*` exists)
+- The stable tag already exists (`v0.1.61` was already released)
+- A `release: vX.Y.Z` PR or an orphaned `release-prep/{version}` branch already exists
+
+**Resolution**:
+- Verify RC tags exist: `git tag --list "v{version}-rc*"`
+- Verify the stable tag does not exist: `git tag --list "v{version}"`
+- Pass an explicit `rc_tag` input if the manifest line does not match the RC you intend to promote
+- Close any stale `release:` PR; the workflow deletes an orphaned `release-prep/{version}` branch automatically
+- Run with `dry_run=true` first to inspect the stamped diff without pushing
+
+### Stable Release Not Published After Merging the `release:` PR
+
+**Symptom**: The `release: vX.Y.Z` PR merged but no tag, release, or deploy followed.
+
+**Causes**:
+- `release-on-merge.yaml` skipped the run — the PR title must start with `release:` and the base must be `main`
+- `.releasing` was missing or malformed on `main` (it carries `rc_tag`/`rc_sha`)
+- The `v{stable}` tag already existed
+
+**Resolution**:
+- Confirm the merged PR title starts with `release:`
+- Check the `release-on-merge` workflow run logs for the `tag-and-release` job
+- Verify `.releasing` is present on `main` and contains `rc_tag=` and `rc_sha=` lines
+
+### Stable Release Not Detected (fallback flow)
+
+**Symptom**: When using the fallback "Promote to Stable" path, Release Please still uses RC config instead of stable config after merging the promotion PR.
 
 **Causes**:
 - RC tags do not exist for the base version (e.g., missing `v0.1.61-rc` or `v0.1.61-rc.*`)
@@ -529,7 +543,9 @@ Only repository maintainers with write permissions can trigger these workflows.
 - For PyPI: Verify `PYPI_API_TOKEN` secret is valid and has publish permissions
 - Check deploy workflow logs for specific authentication or build errors
 
-### Bootstrap PR Not Created
+### Bootstrap PR Not Created (fallback flow)
+
+> The custom stable flow does not create a bootstrap PR — the `release:` PR already bumps the manifest and the `v{stable}` tag is created, so the next push cuts the next RC. This section applies only to the fallback "Promote to Stable" path.
 
 **Symptom**: After stable release, no bootstrap PR appears to clean up `release-as`.
 

@@ -77,7 +77,7 @@ describe('FilesPage', () => {
       screen.getByText(/File Gateway Service Not Configured/i),
     ).toBeInTheDocument();
 
-    const link = screen.getByRole('link', { name: /File Gateway Service/i });
+    const link = screen.getByRole('link', { name: /Learn more/i });
     expect(link).toHaveAttribute(
       'href',
       'https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/',

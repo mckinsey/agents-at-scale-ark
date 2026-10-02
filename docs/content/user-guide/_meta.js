@@ -10,11 +10,13 @@ export default {
   teams: 'Creating and Managing Teams',
   queries: 'Run queries / chat with agents and teams',
   tools: 'Creating Tools and MCP Servers',
+  configurations: 'Configurations',
   files: 'Managing Files',
   'ark-cli': 'The Ark CLI',
 
   '---patterns': { type: 'separator', title: 'Patterns and guidance' },
   'tips-on-building-agentic-use-cases': 'Tips on Building Agentic Use Cases',
+  'untrusted-content': 'Untrusted File Content',
   samples: 'Samples',
 
   '---advanced': { type: 'separator', title: 'Advanced' },

@@ -3,13 +3,19 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"maps"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -22,6 +28,63 @@ func getPollInterval(interval *metav1.Duration) time.Duration {
 		return time.Minute
 	}
 	return interval.Duration
+}
+
+// dataChangedPredicate drops ConfigMap and Secret updates that leave the
+// payload untouched. Reconciling a dependent resource is expensive - an
+// MCPServer reconnects and re-runs ListTools - so an edit that only touches a
+// description, alias or label must not enqueue every resource referencing the
+// object. Creates, deletes and generic events always pass, as does any other
+// object type, so the predicate never hides an event it does not understand.
+func dataChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			switch old := e.ObjectOld.(type) {
+			case *corev1.ConfigMap:
+				updated, ok := e.ObjectNew.(*corev1.ConfigMap)
+				if !ok {
+					return true
+				}
+				return !maps.Equal(old.Data, updated.Data) ||
+					!maps.EqualFunc(old.BinaryData, updated.BinaryData, bytes.Equal)
+			case *corev1.Secret:
+				updated, ok := e.ObjectNew.(*corev1.Secret)
+				if !ok {
+					return true
+				}
+				return !maps.EqualFunc(old.Data, updated.Data, bytes.Equal)
+			default:
+				return true
+			}
+		},
+	}
+}
+
+// updateStatusIgnoringDeleted writes obj's status, treating a mid-reconcile
+// deletion as success. The apiserver reports the lost object as NotFound, or as
+// a Conflict when the stale object still carries a UID precondition; in the
+// Conflict case a follow-up Get separates a genuine deletion (ignored) from an
+// optimistic-concurrency clash (returned, so the caller requeues). A cancelled
+// context is a no-op.
+func updateStatusIgnoringDeleted(ctx context.Context, c client.Client, obj client.Object, kind string) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	err := c.Status().Update(ctx, obj)
+	if err == nil {
+		return nil
+	}
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	if errors.IsConflict(err) {
+		probe := obj.DeepCopyObject().(client.Object)
+		if getErr := c.Get(ctx, client.ObjectKeyFromObject(obj), probe); errors.IsNotFound(getErr) {
+			return nil
+		}
+	}
+	logf.FromContext(ctx).Error(err, "failed to update "+kind+" status")
+	return err
 }
 
 // mapDependencyRequests lists resources in the changed object's namespace and

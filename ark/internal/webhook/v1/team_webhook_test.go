@@ -20,7 +20,7 @@ var _ = Describe("Team Webhook", func() {
 	var (
 		obj       *arkv1alpha1.Team
 		oldObj    *arkv1alpha1.Team
-		validator *validation.WebhookValidator
+		validator *validation.WebhookValidator[*arkv1alpha1.Team]
 		ctx       context.Context
 	)
 
@@ -84,7 +84,7 @@ var _ = Describe("Team Webhook", func() {
 		// Create fake client with all agents
 		fakeClient := fake.NewClientBuilder().WithScheme(s).WithObjects(objects...).Build()
 
-		validator = &validation.WebhookValidator{
+		validator = &validation.WebhookValidator[*arkv1alpha1.Team]{
 			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
 		}
 
@@ -243,10 +243,10 @@ var _ = Describe("Team Webhook", func() {
 	})
 
 	Context("Round-robin migration via defaulter", func() {
-		var defaulter *validation.WebhookDefaulter
+		var defaulter *validation.WebhookDefaulter[*arkv1alpha1.Team]
 
 		BeforeEach(func() {
-			defaulter = &validation.WebhookDefaulter{}
+			defaulter = &validation.WebhookDefaulter[*arkv1alpha1.Team]{}
 		})
 
 		It("Should migrate round-robin with maxTurns to sequential with loops", func() {
@@ -324,10 +324,10 @@ var _ = Describe("Team Webhook", func() {
 	})
 
 	Context("Selector prompt migration warning", func() {
-		var selectorDefaulter *validation.WebhookDefaulter
+		var selectorDefaulter *validation.WebhookDefaulter[*arkv1alpha1.Team]
 
 		BeforeEach(func() {
-			selectorDefaulter = &validation.WebhookDefaulter{}
+			selectorDefaulter = &validation.WebhookDefaulter[*arkv1alpha1.Team]{}
 		})
 
 		It("Should warn when custom selectorPrompt does not reference select-next-speaker", func() {

@@ -119,6 +119,23 @@ class BasePage:
     
     def wait_for_timeout(self, milliseconds: int) -> None:
         self.page.wait_for_timeout(milliseconds)
+
+    def wait_for_namespace_in_url(self, timeout: int = 15000) -> bool:
+        """Wait for the dashboard to write the resolved namespace into the URL.
+
+        The dashboard resolves the namespace from /v1/context and then adds it
+        to the URL, so a freshly loaded page briefly has no ?namespace=. Until
+        it lands, the URL and every in-app link on the page are still changing.
+        Non-fatal: a page that never resolves one is left as-is.
+        """
+        try:
+            self.page.wait_for_url(
+                lambda url: "namespace=" in urlsplit(url).query, timeout=timeout
+            )
+            return True
+        except TimeoutError:
+            logger.debug("Namespace was not added to the URL: %s", self.page.url)
+            return False
     
     def get_url(self) -> str:
         return self.page.url

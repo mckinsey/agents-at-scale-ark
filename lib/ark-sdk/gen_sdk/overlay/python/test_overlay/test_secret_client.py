@@ -1,10 +1,40 @@
 """Tests for SecretClient Kubernetes secret management - adapted from ark-api tests."""
 import unittest
 import base64
+import json
 from unittest.mock import Mock, AsyncMock, MagicMock, patch, call
 from kubernetes_asyncio.client.rest import ApiException
 
 from ark_sdk.k8s import SecretClient
+
+_LEAKED_PASSWORD = "sup3rs3cret"
+_LEAKED_TOKEN_B64 = base64.b64encode(b"sk-FAKE-token").decode()
+
+# An annotation set mirroring a secret that has passed through `kubectl apply`:
+# last-applied-configuration carries the whole manifest, values included, next
+# to a Helm ownership annotation and an Ark-owned one. Only the last should
+# survive SecretClient's response.
+NON_ARK_ANNOTATIONS = {
+    "kubectl.kubernetes.io/last-applied-configuration": json.dumps({
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": "test-secret"},
+        "stringData": {"password": _LEAKED_PASSWORD},
+        "data": {"token": _LEAKED_TOKEN_B64},
+        "type": "Opaque",
+    }),
+    "meta.helm.sh/release-name": "my-release",
+    "ark.mckinsey.com/dashboard-icon": "icons/gemini.png",
+}
+
+
+def _assert_no_leaked_annotations(test_case, result):
+    test_case.assertEqual(result["annotations"], {"ark.mckinsey.com/dashboard-icon": "icons/gemini.png"})
+    serialized = json.dumps(result)
+    test_case.assertNotIn(_LEAKED_PASSWORD, serialized)
+    test_case.assertNotIn(_LEAKED_TOKEN_B64, serialized)
+    test_case.assertNotIn("kubectl.kubernetes.io/last-applied-configuration", serialized)
+    test_case.assertNotIn("meta.helm.sh/release-name", serialized)
 
 
 class TestSecretClient(unittest.IsolatedAsyncioTestCase):
@@ -30,11 +60,13 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret1.metadata.name = "my-secret"
         mock_secret1.metadata.uid = "uuid-1234-5678"
         mock_secret1.metadata.annotations = {}
-        
+        mock_secret1.metadata.labels = {}
+
         mock_secret2 = Mock()
         mock_secret2.metadata.name = "app-config"
         mock_secret2.metadata.uid = "uuid-abcd-efgh"
         mock_secret2.metadata.annotations = {}
+        mock_secret2.metadata.labels = {}
         
         # Mock the API response
         mock_api_instance = mock_v1_api.return_value
@@ -62,6 +94,28 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
             namespace="test-namespace",
             label_selector=None
         )
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_list_secrets_filters_non_ark_annotations(self, mock_v1_api, mock_api_client):
+        """A secret carrying last-applied-configuration must not expose its values."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.metadata.name = "test-secret"
+        mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
+        mock_secret.metadata.labels = {}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_response = Mock()
+        mock_response.items = [mock_secret]
+        mock_api_instance.list_namespaced_secret = AsyncMock(return_value=mock_response)
+
+        result = await self.client.list_secrets()
+
+        _assert_no_leaked_annotations(self, result["items"][0])
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
@@ -135,6 +189,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = {}
+        mock_secret.metadata.labels = {}
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": secret_value}  # base64 encoded "test-token"
         
@@ -152,6 +207,28 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_get_secret_filters_non_ark_annotations(self, mock_v1_api, mock_api_client):
+        """A secret carrying last-applied-configuration must not expose its values."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.metadata.name = "test-secret"
+        mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
+        mock_secret.metadata.labels = {}
+        mock_secret.type = "Opaque"
+        mock_secret.data = {"token": "placeholder"}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.client.get_secret("test-secret")
+
+        _assert_no_leaked_annotations(self, result)
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
     async def test_create_secret_success(self, mock_v1_api, mock_api_client):
         """Test successful secret creation with token - adapted from ark-api test."""
         # Setup async context manager mock
@@ -163,24 +240,51 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = {"ark.mckinsey.com/dashboard-icon": "icons/gemini.png"}
+        mock_secret.metadata.labels = {}
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "dGVzdC10b2tlbg=="}  # base64 encoded "test-token"
-        
+
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
-        
+
         # Test the method
         result = await self.client.create_secret(
             name="test-secret",
             string_data={"token": "test-token"}
         )
-        
+
         # Assert response
         self.assertEqual(result["name"], "test-secret")
         self.assertEqual(result["id"], "uuid-12345")
         self.assertEqual(result["type"], "Opaque")
-        self.assertEqual(result["secret_length"], 10)  # length of "test-token"
+        # base64 length, consistent with get_secret/update_secret
+        self.assertEqual(result["secret_length"], len("dGVzdC10b2tlbg=="))
         self.assertEqual(result["annotations"], {"ark.mckinsey.com/dashboard-icon": "icons/gemini.png"})
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_create_secret_filters_non_ark_annotations(self, mock_v1_api, mock_api_client):
+        """A secret carrying last-applied-configuration must not expose its values."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.metadata.name = "test-secret"
+        mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
+        mock_secret.metadata.labels = {}
+        mock_secret.type = "Opaque"
+        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.client.create_secret(
+            name="test-secret",
+            string_data={"token": "test-token"}
+        )
+
+        _assert_no_leaked_annotations(self, result)
 
     def test_create_secret_invalid_fields(self):
         """Test creating secret with invalid fields - adapted from ark-api test."""
@@ -200,9 +304,64 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         # Test validation directly
         with self.assertRaises(ValueError) as context:
             self.client.validate_and_encode_token({})
-        
+
         # Assert response
         self.assertEqual(str(context.exception), "Secret data cannot be empty")
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_create_secret_rejects_invalid_label(self, mock_v1_api, mock_api_client):
+        """A direct SDK caller (bypassing the FastAPI model) still gets a clear error."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        with self.assertRaises(ValueError):
+            await self.client.create_secret(
+                name="test-secret",
+                string_data={"token": "test-token"},
+                labels=["has space"],
+            )
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_create_secret_writes_description_alias_and_labels(self, mock_v1_api, mock_api_client):
+        """Create stamps description/alias annotations and tag labels, no ownership marker."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.metadata.name = "test-secret"
+        mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.metadata.annotations = {
+            "ark.mckinsey.com/description": "API token",
+            "ark.mckinsey.com/alias": "my-token",
+        }
+        mock_secret.metadata.labels = {"ark.mckinsey.com/label.prod": "true"}
+        mock_secret.type = "Opaque"
+        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.client.create_secret(
+            name="test-secret",
+            string_data={"token": "test-token"},
+            description="API token",
+            alias="my-token",
+            labels=["prod"],
+        )
+
+        body = mock_api_instance.create_namespaced_secret.call_args.kwargs["body"]
+        self.assertEqual(body.metadata.annotations, {
+            "ark.mckinsey.com/description": "API token",
+            "ark.mckinsey.com/alias": "my-token",
+        })
+        self.assertEqual(body.metadata.labels, {"ark.mckinsey.com/label.prod": "true"})
+        self.assertNotIn("ark.mckinsey.com/resource-type", body.metadata.annotations)
+
+        self.assertEqual(result["description"], "API token")
+        self.assertEqual(result["alias"], "my-token")
+        self.assertEqual(result["labels"], ["prod"])
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
@@ -236,6 +395,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = {}
+        mock_secret.metadata.labels = {}
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "bmV3LXRva2Vu"}  # base64 encoded "new-token"
         
@@ -253,7 +413,107 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["name"], "test-secret")
         self.assertEqual(result["id"], "uuid-12345")
         self.assertEqual(result["type"], "Opaque")
-        self.assertEqual(result["secret_length"], 9)  # length of "new-token"
+        self.assertEqual(result["secret_length"], len("bmV3LXRva2Vu"))  # length of base64-encoded "new-token"
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_secret_filters_non_ark_annotations(self, mock_v1_api, mock_api_client):
+        """A secret carrying last-applied-configuration must not expose its values."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.metadata.name = "test-secret"
+        mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
+        mock_secret.metadata.labels = {}
+        mock_secret.type = "Opaque"
+        mock_secret.data = {"token": "bmV3LXRva2Vu"}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+        mock_api_instance.replace_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.client.update_secret(
+            name="test-secret",
+            string_data={"token": "new-token"}
+        )
+
+        _assert_no_leaked_annotations(self, result)
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_secret_without_string_data_leaves_value_unchanged(self, mock_v1_api, mock_api_client):
+        """Omitting string_data on update patches only metadata, not the secret value."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        existing_secret = Mock()
+        existing_secret.metadata.name = "test-secret"
+        existing_secret.metadata.uid = "uuid-12345"
+        existing_secret.metadata.labels = {}
+        existing_secret.metadata.annotations = {}
+        existing_secret.type = "Opaque"
+        existing_secret.data = {"token": "b2xkLXRva2Vu"}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=existing_secret)
+        mock_api_instance.replace_namespaced_secret = AsyncMock(return_value=existing_secret)
+
+        with patch.object(self.client, "validate_and_encode_token") as mock_validate:
+            result = await self.client.update_secret(
+                name="test-secret",
+                description="updated description",
+            )
+            mock_validate.assert_not_called()
+
+        body = mock_api_instance.replace_namespaced_secret.call_args.kwargs["body"]
+        self.assertEqual(body.metadata.annotations, {"ark.mckinsey.com/description": "updated description"})
+        self.assertEqual(result["description"], "updated description")
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_secret_keeps_legacy_label(self, mock_v1_api, mock_api_client):
+        """A label pre-dating the alphanumeric-only rule stays updatable if sent back unchanged."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        existing_secret = Mock()
+        existing_secret.metadata.name = "test-secret"
+        existing_secret.metadata.uid = "uuid-12345"
+        existing_secret.metadata.labels = {"ark.mckinsey.com/label.my-key": "true"}
+        existing_secret.metadata.annotations = {}
+        existing_secret.type = "Opaque"
+        existing_secret.data = {"token": "b2xkLXRva2Vu"}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=existing_secret)
+        mock_api_instance.replace_namespaced_secret = AsyncMock(return_value=existing_secret)
+
+        result = await self.client.update_secret(name="test-secret", labels=["my-key"])
+
+        self.assertEqual(result["labels"], ["my-key"])
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_update_secret_rejects_new_non_alphanumeric_label(self, mock_v1_api, mock_api_client):
+        """A brand-new label must still satisfy the alphanumeric-only rule."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        existing_secret = Mock()
+        existing_secret.metadata.name = "test-secret"
+        existing_secret.metadata.uid = "uuid-12345"
+        existing_secret.metadata.labels = {}
+        existing_secret.metadata.annotations = {}
+        existing_secret.type = "Opaque"
+        existing_secret.data = {"token": "b2xkLXRva2Vu"}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=existing_secret)
+
+        with self.assertRaises(ValueError):
+            await self.client.update_secret(name="test-secret", labels=["my-key"])
 
     def test_update_secret_invalid_fields(self):
         """Test updating secret with invalid fields - adapted from ark-api test."""
@@ -469,6 +729,28 @@ class TestInitK8sCalledBeforeApiClient(unittest.IsolatedAsyncioTestCase):
 
     async def test_delete_secret_calls_init_k8s_first(self):
         await self._assert_init_k8s_called_first(lambda: self.client.delete_secret('s'))
+
+
+class TestSecretClientDefaultHeaders(unittest.TestCase):
+    """SecretClient must apply default_headers so versioned-client secret access impersonates."""
+
+    def test_default_headers_applied_to_api_client(self):
+        secret_client = SecretClient(
+            namespace="ns",
+            default_headers={
+                "Impersonate-User": "user@example.com",
+                "Impersonate-Group": "team-a,team-b",
+            },
+        )
+        api = Mock()
+        secret_client._get_api_client(api)
+        api.set_default_header.assert_any_call("Impersonate-User", "user@example.com")
+        api.set_default_header.assert_any_call("Impersonate-Group", "team-a,team-b")
+
+    def test_no_headers_is_noop(self):
+        api = Mock()
+        SecretClient(namespace="ns")._get_api_client(api)
+        api.set_default_header.assert_not_called()
 
 
 if __name__ == '__main__':

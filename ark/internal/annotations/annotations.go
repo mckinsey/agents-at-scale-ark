@@ -39,6 +39,10 @@ const (
 	QueryGeneration      = ARKPrefix + "query-generation"
 	QueryPhase           = ARKPrefix + "query-phase"
 	ApprovalCascadeCount = ARKPrefix + "approval-cascade-count"
+	// RoundAnchor stamps the start of the current pre-execution round used by
+	// remainingBudget. Re-stamped on HITL resumption so each round is bounded
+	// by a fresh spec.timeout.
+	RoundAnchor = ARKPrefix + "round-anchor"
 )
 
 // General annotations
@@ -55,7 +59,6 @@ const (
 
 // Streaming annotations
 const (
-	StreamingEnabled   = ARKPrefix + "streaming-enabled"
 	StreamingURL       = ARKPrefix + "streaming-url"
 	StreamingSupported = ARKPrefix + "streaming-supported"
 )

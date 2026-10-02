@@ -6,7 +6,7 @@ We welcome any and all contributions to ARK, at whatever level you can manage. H
 
 There are quite a few ways to contribute, such as:
 
-* **Report bugs and security vulnerabilities**: We use [GitHub issues](https://github.com/mckinsey/agents-at-scale-ark/issues) to keep track of known bugs and security vulnerabilities. We keep a close eye on them and update them when we have an internal fix in progress. Before you report a new issue, do your best to ensure your problem hasn't already been reported. If it has, just leave a comment on the existing issue, rather than create a new one.
+* **Report bugs**: We use [GitHub issues](https://github.com/mckinsey/agents-at-scale-ark/issues) to keep track of known bugs. We keep a close eye on them and update them when we have an internal fix in progress. Before you report a new issue, do your best to ensure your problem hasn't already been reported. If it has, just leave a comment on the existing issue, rather than create a new one. For undisclosed security vulnerabilities, do **not** open a public issue — report them privately via [GitHub Private Vulnerability Reporting](https://github.com/mckinsey/agents-at-scale-ark/security/advisories/new) (see [SECURITY.md](SECURITY.md)).
 * **Propose a new feature**: If you have new ideas for functionality then please open a [GitHub issue](https://github.com/mckinsey/agents-at-scale-ark/issues) and describe the feature you would like to see, why you need it, and how it should work.
 * **Review pull requests**: See the [repo](https://github.com/mckinsey/agents-at-scale-ark) to find open pull requests and contribute a review!
 * **Contribute a fix or feature**: If you're interested in contributing fixes to code or documentation, first read our guidelines for contributing developers below for an explanation of how to get set up and the process you'll follow. Once you are ready to contribute, feel free to pick one of the issues and create a PR.
@@ -27,7 +27,6 @@ The ARK team pledges to foster and maintain a friendly community. We enforce a [
 For non-trivial changes:
 - Propose design in ticket and gather team feedback
 - Use RFC pull requests or spikes to share ideas
-- For architectural implications, discuss with TSC (meets weekly)
 - Final implementation decisions rest with technical lead
 
 **Principle 3: Spec and Test Driven Development**
@@ -102,6 +101,36 @@ You can run the same hooks across the repository at any time:
 ```bash
 pre-commit run --all-files
 ```
+
+## Developer Certificate of Origin
+
+We require that all contributions comply with the [Developer Certificate of Origin (DCO)](https://developercertificate.org/). This certifies that the contributor wrote or otherwise has the right to submit their contribution.
+
+All commits must be signed off by including a `Signed-off-by` line in the commit message:
+
+```
+This is my commit message
+
+Signed-off-by: Random J Developer <random@developer.example.org>
+```
+
+The sign-off can be added automatically to your commit message using the `-s` option:
+
+```bash
+git commit -s -m "This is my commit message"
+```
+
+The name and email in the `Signed-off-by` line must match the commit author, or the DCO check fails. Set them with `git config user.name` and `git config user.email`.
+
+To avoid needing to remember the `-s` flag on every commit, you might like to set up a [git alias](https://git-scm.com/book/en/v2/Git-Basics-Git-Aliases) for `git commit -s`. Alternatively, run `make sign-off` to set up a `commit-msg` [Git hook](https://git-scm.com/docs/githooks#_commit_msg). The hook signs off all commits created in the Ark repository, including merge commits.
+
+If only the latest unpushed commit is missing a sign-off, amend it:
+
+```bash
+git commit --amend --signoff --no-edit
+```
+
+For pushed or multiple unsigned commits, follow the "Rebase the branch" instructions on the DCO GitHub Check. Rebasing rewrites commit history, so coordinate with collaborators before updating a shared branch and only sign off commits that you have the right to submit.
 
 ## Guidelines for contributing developers
 

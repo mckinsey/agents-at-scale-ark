@@ -34,7 +34,6 @@ FLOW_VERIFIER_KEY = "_flow_verifier"
 FLOW_STATUS_KEY = "_flow_status"
 FLOW_MESSAGE_KEY = "_flow_message"
 FLOW_EXPIRES_AT_KEY = "_flow_expires_at"
-FLOW_CALLER_IDENTITY_KEY = "_flow_caller_identity"
 FLOW_TOKEN_EXPIRES_AT_KEY = "_flow_token_expires_at"
 FLOW_SERVER_NAME_KEY = "_flow_server_name"
 FLOW_NAMESPACE_KEY = "_flow_namespace"
@@ -47,7 +46,6 @@ FLOW_KEYS = [
     FLOW_STATUS_KEY,
     FLOW_MESSAGE_KEY,
     FLOW_EXPIRES_AT_KEY,
-    FLOW_CALLER_IDENTITY_KEY,
     FLOW_TOKEN_EXPIRES_AT_KEY,
     FLOW_SERVER_NAME_KEY,
     FLOW_NAMESPACE_KEY,
@@ -115,7 +113,6 @@ class FlowState:
     status: str
     message: str
     expires_at: str
-    caller_identity: str
     token_expires_at: str
     server_name: str
     namespace: str
@@ -177,7 +174,6 @@ async def write_flow_state(
     state_param: str,
     verifier: str,
     expires_at: str,
-    caller_identity: str,
     server_name: str,
     client_id: str,
     client_secret: str,
@@ -191,7 +187,6 @@ async def write_flow_state(
         FLOW_STATUS_KEY: "pending",
         FLOW_MESSAGE_KEY: "",
         FLOW_EXPIRES_AT_KEY: expires_at,
-        FLOW_CALLER_IDENTITY_KEY: caller_identity,
         FLOW_TOKEN_EXPIRES_AT_KEY: "",
         FLOW_SERVER_NAME_KEY: server_name,
         FLOW_NAMESPACE_KEY: namespace,
@@ -287,7 +282,6 @@ def _extract_flow_state(secret) -> Optional[FlowState]:
         status=_decode_b64_or_empty(data.get(FLOW_STATUS_KEY)) or "pending",
         message=_decode_b64_or_empty(data.get(FLOW_MESSAGE_KEY)),
         expires_at=_decode_b64_or_empty(data.get(FLOW_EXPIRES_AT_KEY)),
-        caller_identity=_decode_b64_or_empty(data.get(FLOW_CALLER_IDENTITY_KEY)),
         token_expires_at=_decode_b64_or_empty(data.get(FLOW_TOKEN_EXPIRES_AT_KEY)),
         server_name=_decode_b64_or_empty(data.get(FLOW_SERVER_NAME_KEY)),
         namespace=_decode_b64_or_empty(data.get(FLOW_NAMESPACE_KEY)),
@@ -478,21 +472,6 @@ async def _update_mcpserver_with_retry(ark_client, name: str, mutate) -> None:
             last_conflict = e
     if last_conflict is not None:
         raise last_conflict
-
-
-async def annotate_mcpserver_authorized(
-    ark_client, name: str, authorized_by: str
-) -> None:
-    def mutate(obj: dict) -> bool:
-        metadata = obj.setdefault("metadata", {})
-        annotations = dict(metadata.get("annotations") or {})
-        annotations[ANNOTATION_AUTHORIZED_BY] = authorized_by
-        annotations[ANNOTATION_AUTHORIZED_AT] = now_rfc3339()
-        metadata["annotations"] = annotations
-        obj["metadata"] = metadata
-        return True
-
-    await _update_mcpserver_with_retry(ark_client, name, mutate)
 
 
 async def ensure_mcpserver_token_secret_ref(ark_client, name: str) -> str:

@@ -1,12 +1,18 @@
-import type {Express} from 'express';
+import {EventEmitter} from 'node:events';
+import type {Express, Request, Response} from 'express';
 import request from 'supertest';
 import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
-import {createDb} from '../src/db/db.js';
+import {createDb, type Db} from '../src/db/db.js';
+import {MemoryBroker} from '../src/brokers/memory-broker.js';
+import type {SessionsBroker} from '../src/brokers/sessions-broker.js';
+import {handleStreamingMessages} from '../src/http/routes/memory/handlers.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
 import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
+import type {PostgresSessionsStorage} from '../src/brokers/sessions/postgres-sessions-storage.js';
 import {usePgContainer} from '../src/db/__tests__/testHelpers/pg-testcontainer.js';
 
 jest.setTimeout(120_000);
@@ -16,9 +22,41 @@ const logger = createLogger({level: 'silent', pretty: false});
 const describeIntegration =
   process.env.SKIP_INTEGRATION === 'true' ? describe.skip : describe;
 
+/**
+ * Drives an SSE handler with an in-process fake req/res (an EventEmitter and
+ * a write-capturing stub) instead of a real socket, so the reconnect replay
+ * path can be asserted without the surrounding HTTP transport.
+ */
+async function captureReplay(
+  run: (req: Request, res: Response) => void
+): Promise<Record<string, unknown>[]> {
+  const writes: string[] = [];
+  const reqEmitter = new EventEmitter();
+  const fakeReq = Object.assign(reqEmitter, {
+    log: logger,
+  }) as unknown as Request;
+  const fakeRes = {
+    setHeader: (): void => {},
+    write: (chunk: string): boolean => {
+      writes.push(chunk);
+      return true;
+    },
+  } as unknown as Response;
+
+  run(fakeReq, fakeRes);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  reqEmitter.emit('close');
+
+  return writes
+    .filter((chunk) => chunk.startsWith('data: '))
+    .map((chunk) => JSON.parse(chunk.slice(6, -2)));
+}
+
 describeIntegration('postgres backend — HTTP integration', () => {
   const {db, connectionUrl} = usePgContainer();
   let app: Express;
+  let memory: MemoryBroker;
+  let sessions: SessionsBroker;
 
   beforeAll(() => {
     const config = loadConfig({
@@ -26,15 +64,26 @@ describeIntegration('postgres backend — HTTP integration', () => {
       DATABASE_URL: connectionUrl(),
     });
     const stream = createMessageStream(config, logger, db());
-    ({app} = buildApp({
+    memory = new MemoryBroker(stream);
+    ({
+      app,
+      brokers: {sessions},
+    } = buildApp({
       config,
       logger,
       version: 'test',
       messageStream: stream,
       chunkStream: createChunkStream(config, logger),
       eventStream: createEventStream(config, logger),
+      sessionsStorage: createSessionsStorage(config, logger),
       db: db(),
     }));
+  });
+
+  // The per-test truncate does not reach the sessions store: this app holds it
+  // in the heap, so it is cleared here instead.
+  afterEach(async () => {
+    await sessions.delete();
   });
 
   it('POST /messages stores and GET /messages retrieves from Postgres', async () => {
@@ -51,6 +100,24 @@ describeIntegration('postgres backend — HTTP integration', () => {
 
     expect(res.body.items).toHaveLength(1);
     expect(res.body.items[0].message).toEqual(message);
+  });
+
+  it('POST /messages with multiple messages stores and returns them in the same order', async () => {
+    const messages = ['first', 'second', 'third', 'fourth', 'fifth'];
+
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'conv-batch', query_id: 'q-batch', messages})
+      .expect(200);
+
+    const res = await request(app)
+      .get('/messages?conversation_id=conv-batch')
+      .expect(200);
+
+    expect(res.body.items).toHaveLength(messages.length);
+    expect(
+      res.body.items.map((item: {message: string}) => item.message)
+    ).toEqual(messages);
   });
 
   it('messages survive a stream instance restart against the same database', async () => {
@@ -76,6 +143,7 @@ describeIntegration('postgres backend — HTTP integration', () => {
       messageStream: freshStream,
       chunkStream: createChunkStream(config, logger),
       eventStream: createEventStream(config, logger),
+      sessionsStorage: createSessionsStorage(config, logger),
       db: freshDb,
     });
 
@@ -93,6 +161,152 @@ describeIntegration('postgres backend — HTTP integration', () => {
 
   it('GET /readyz returns 200 when the database is reachable', async () => {
     await request(app).get('/readyz').expect(200);
+  });
+
+  it('GET /messages?conversation_id= returns only that conversation when multiple conversations exist', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'conv-scope-a',
+        query_id: 'q-scope-a',
+        messages: ['a1', 'a2'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'conv-scope-b',
+        query_id: 'q-scope-b',
+        messages: ['b1'],
+      })
+      .expect(200);
+
+    const res = await request(app)
+      .get('/messages?conversation_id=conv-scope-a')
+      .expect(200);
+
+    expect(res.body.items).toHaveLength(2);
+    for (const item of res.body.items as {conversation_id: string}[]) {
+      expect(item.conversation_id).toBe('conv-scope-a');
+    }
+  });
+
+  it('watch-mode reconnect with a cursor replays only items after the cursor, scoped to conversation_id', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'conv-replay',
+        query_id: 'q-replay',
+        messages: ['first', 'second'],
+      })
+      .expect(200); // sequence 1, 2
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'conv-other',
+        query_id: 'q-other',
+        messages: ['other'],
+      })
+      .expect(200); // sequence 3, higher than the cursor but a different conversation
+
+    const events = await captureReplay((req, res) =>
+      handleStreamingMessages(req, res, memory, 'conv-replay', 1)
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      conversation_id: 'conv-replay',
+      message: 'second',
+    });
+  });
+
+  it('a scoped read on conversation_id uses a conversation_id-leading index, not a sequential scan', async () => {
+    for (let i = 0; i < 5; i++) {
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'conv-explain',
+          query_id: `q-explain-${i}`,
+          messages: ['m'],
+        })
+        .expect(200);
+    }
+
+    const plan = await db().begin(async (sql) => {
+      await sql`SET LOCAL enable_seqscan = off`;
+      const rows = await sql.unsafe(`
+        EXPLAIN ANALYZE
+        SELECT sequence_number, conversation_id, query_id, message, created_at
+        FROM messages
+        WHERE expires_at > now() AND conversation_id = 'conv-explain'
+        ORDER BY sequence_number ASC
+        LIMIT 101
+      `);
+      return (rows as unknown as {'QUERY PLAN': string}[])
+        .map((row) => row['QUERY PLAN'])
+        .join('\n');
+    });
+
+    // messages_conversation_query_idx (added for conversationStats) also
+    // starts with conversation_id, so the planner may pick either index
+    // over a sequential scan.
+    expect(plan).toMatch(/messages_conversation_(idx|query_idx)/);
+  });
+
+  it('the conversationStats aggregate uses messages_conversation_query_idx once the planner has fresh stats', async () => {
+    // A handful of rows isn't representative: the planner needs a
+    // realistically sized table (and fresh stats, mirroring what autovacuum
+    // provides in production) before it prefers this index over a full
+    // expires_at scan + explicit sort.
+    const pgDb = db();
+    const conversationCount = 40;
+    const messagesPerConversation = 150;
+    const rows: {
+      conversation_id: string;
+      query_id: string;
+      message: string;
+      expires_at: Date;
+    }[] = [];
+    const expiresAt = new Date(Date.now() + 3600 * 1000);
+    for (let c = 0; c < conversationCount; c++) {
+      for (let m = 0; m < messagesPerConversation; m++) {
+        rows.push({
+          conversation_id: `conv-stats-explain-${c}`,
+          query_id: `q-stats-explain-${c}-${m % 10}`,
+          message: JSON.stringify({role: 'user', content: `m${m}`}),
+          expires_at: expiresAt,
+        });
+      }
+    }
+    const batchSize = 1000;
+    for (let i = 0; i < rows.length; i += batchSize) {
+      await pgDb`
+        INSERT INTO messages ${pgDb(
+          rows.slice(i, i + batchSize),
+          'conversation_id',
+          'query_id',
+          'message',
+          'expires_at'
+        )}
+      `;
+    }
+    await pgDb.unsafe('ANALYZE messages');
+
+    const rowsExplain = await pgDb.unsafe(`
+      EXPLAIN ANALYZE
+      SELECT
+        conversation_id,
+        count(*)::int AS message_count,
+        count(DISTINCT query_id)::int AS query_count
+      FROM messages
+      WHERE expires_at > now()
+      GROUP BY conversation_id
+    `);
+    const plan = (rowsExplain as unknown as {'QUERY PLAN': string}[])
+      .map((row) => row['QUERY PLAN'])
+      .join('\n');
+
+    expect(plan).toContain('messages_conversation_query_idx');
   });
 
   it('DELETE /queries/:queryId/messages removes only that query rows', async () => {
@@ -120,6 +334,277 @@ describeIntegration('postgres backend — HTTP integration', () => {
     expect(res.body.items[0].query_id).toBe('keep-q');
   });
 
+  it('DELETE /conversations/:conversationId/queries/:queryId/messages removes only rows in that conversation', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'scoped-conv-1',
+        query_id: 'scoped-q',
+        messages: ['a'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'scoped-conv-1',
+        query_id: 'other-q',
+        messages: ['b'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'scoped-conv-2',
+        query_id: 'scoped-q',
+        messages: ['c'],
+      })
+      .expect(200);
+
+    await request(app)
+      .delete('/conversations/scoped-conv-1/queries/scoped-q/messages')
+      .expect(200);
+
+    const res = await request(app).get('/messages').expect(200);
+    expect(
+      res.body.items.map(
+        (item: {conversation_id: string; query_id: string}) =>
+          `${item.conversation_id}/${item.query_id}`
+      )
+    ).toEqual(['scoped-conv-1/other-q', 'scoped-conv-2/scoped-q']);
+  });
+
+  it('GET /conversations lists each conversation once across several messages', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'list-conv-1',
+        query_id: 'q1',
+        messages: ['a', 'b'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'list-conv-1', query_id: 'q2', messages: ['c']})
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'list-conv-2', query_id: 'q3', messages: ['d']})
+      .expect(200);
+
+    const res = await request(app).get('/conversations').expect(200);
+
+    expect([...res.body.conversations].sort()).toEqual([
+      'list-conv-1',
+      'list-conv-2',
+    ]);
+  });
+
+  it('GET /conversations/:conversationId returns only that conversation, in sequence order', async () => {
+    const first = {role: 'user', content: 'first'};
+    const second = {role: 'assistant', content: 'second'};
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'detail-conv',
+        query_id: 'q1',
+        messages: [first, second],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'other-conv',
+        query_id: 'q2',
+        messages: [{role: 'user', content: 'other'}],
+      })
+      .expect(200);
+
+    const res = await request(app)
+      .get('/conversations/detail-conv')
+      .expect(200);
+
+    expect(res.body.conversation_id).toBe('detail-conv');
+    expect(
+      res.body.messages.map((item: {message: unknown}) => item.message)
+    ).toEqual([first, second]);
+    expect(
+      res.body.messages.map((item: {sequence: number}) => item.sequence)
+    ).toEqual([1, 2]);
+
+    await request(app).get('/conversations/missing-conv').expect(404);
+  });
+
+  it('DELETE /conversations/:conversationId removes only that conversation', async () => {
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'drop-conv', query_id: 'q1', messages: ['a']})
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'keep-conv', query_id: 'q2', messages: ['b']})
+      .expect(200);
+
+    await request(app).delete('/conversations/drop-conv').expect(200);
+
+    const res = await request(app).get('/messages').expect(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].conversation_id).toBe('keep-conv');
+
+    await request(app).get('/conversations/drop-conv').expect(404);
+  });
+
+  it('DELETE /conversations purges every conversation', async () => {
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'wipe-conv-1', query_id: 'q1', messages: ['a']})
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'wipe-conv-2', query_id: 'q2', messages: ['b']})
+      .expect(200);
+
+    const deleteRes = await request(app).delete('/conversations').expect(200);
+    expect(deleteRes.body.message).toBe('All conversations deleted');
+
+    const listRes = await request(app).get('/conversations').expect(200);
+    expect(listRes.body.conversations).toEqual([]);
+
+    const messagesRes = await request(app).get('/messages').expect(200);
+    expect(messagesRes.body.items).toEqual([]);
+
+    await request(app)
+      .post('/messages')
+      .send({conversation_id: 'wipe-conv-3', query_id: 'q3', messages: ['c']})
+      .expect(200);
+
+    const afterRes = await request(app).get('/messages').expect(200);
+    expect(afterRes.body.items).toHaveLength(1);
+    expect(afterRes.body.items[0].sequence).toBe(3);
+  });
+
+  // The dashboard's "Reset memory". The sessions it leaves behind read like
+  // orphans and are not: a conversation summary folds over the session's own
+  // query rows - messageCount counts queries, and messages carry no session id
+  // - so it stays correct once the messages are gone. Cascading the purge into
+  // sessions would instead destroy state nothing can rebuild, because the fold
+  // is incremental and no path replays the event stream into a session. A
+  // session goes when its queries do, via DELETE /sessions/queries/{queryId}.
+  it('DELETE /conversations leaves the sessions read model standing', async () => {
+    await request(app)
+      .post('/sessions')
+      .send({
+        sessionId: 'pin-session',
+        queryName: 'pin-query-1',
+        conversationId: 'pin-conv-1',
+        agent: 'weather-agent',
+        _reason: 'QueryExecutionComplete',
+      })
+      .expect(201);
+    // No conversationId on this event: the message below is what joins the
+    // query to its conversation, which is the link a purge looks most entitled
+    // to undo.
+    await request(app)
+      .post('/sessions')
+      .send({
+        sessionId: 'pin-session',
+        queryName: 'pin-query-2',
+        agent: 'forecast-agent',
+      })
+      .expect(201);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'pin-conv-1',
+        query_id: 'pin-query-1',
+        messages: ['a'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'pin-conv-2',
+        query_id: 'pin-query-2',
+        messages: ['b'],
+      })
+      .expect(200);
+
+    const before = await request(app).get('/sessions').expect(200);
+
+    await request(app).delete('/conversations').expect(200);
+
+    const messagesRes = await request(app).get('/messages').expect(200);
+    expect(messagesRes.body.items).toEqual([]);
+    const conversationsRes = await request(app)
+      .get('/conversations')
+      .expect(200);
+    expect(conversationsRes.body.conversations).toEqual([]);
+
+    const after = await request(app).get('/sessions').expect(200);
+    expect(Object.keys(after.body.sessions)).toEqual(['pin-session']);
+    const session = after.body.sessions['pin-session'];
+    expect(Object.keys(session.queries)).toEqual([
+      'pin-query-1',
+      'pin-query-2',
+    ]);
+    expect(
+      session.conversations.map(
+        (conversation: {conversationId: string; messageCount: number}) => [
+          conversation.conversationId,
+          conversation.messageCount,
+        ]
+      )
+    ).toEqual([
+      ['pin-conv-1', 1],
+      ['pin-conv-2', 1],
+    ]);
+    expect(
+      session.participants.map(
+        (participant: {name: string}) => participant.name
+      )
+    ).toEqual(['weather-agent', 'forecast-agent']);
+    expect(after.body).toEqual(before.body);
+  });
+
+  it('GET /memory-status aggregates per-conversation counts via a single query', async () => {
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'status-conv-1',
+        query_id: 'status-q1',
+        messages: ['one', 'two'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'status-conv-1',
+        query_id: 'status-q2',
+        messages: ['three'],
+      })
+      .expect(200);
+    await request(app)
+      .post('/messages')
+      .send({
+        conversation_id: 'status-conv-2',
+        query_id: 'status-q3',
+        messages: ['four'],
+      })
+      .expect(200);
+
+    const res = await request(app).get('/memory-status').expect(200);
+
+    expect(res.body.total_conversations).toBe(2);
+    expect(res.body.total_messages).toBe(4);
+    expect(res.body.conversations['status-conv-1']).toEqual({
+      message_count: 3,
+      query_count: 2,
+    });
+    expect(res.body.conversations['status-conv-2']).toEqual({
+      message_count: 1,
+      query_count: 1,
+    });
+  });
+
   it('expired messages are not returned by GET /messages', async () => {
     await request(app)
       .post('/messages')
@@ -142,5 +627,161 @@ describeIntegration('postgres backend — HTTP integration', () => {
       .get('/messages?conversation_id=conv-3')
       .expect(200);
     expect(after.body.items).toHaveLength(0);
+  });
+
+  // The same purge with the read model in Postgres, where the rows outlive the
+  // process that wrote them. The route is backend-agnostic, so what this adds
+  // is the SQL layer underneath it: a cascade written as a DELETE against
+  // session_queries, or a purge that stranded the per-query message
+  // watermarks, would show up here and nowhere else. Sessions are seeded from
+  // real events here, so the purge is also held to leaving the events the
+  // session groups.
+  describeIntegration('with sessions materialized in Postgres', () => {
+    const sessionId = 'pg-pin-session';
+    let pgApp: Express;
+    let pgDb: Db;
+
+    beforeAll(async () => {
+      const config = loadConfig({
+        MESSAGE_BACKEND: 'postgres',
+        EVENT_BACKEND: 'postgres',
+        SESSIONS_BACKEND: 'postgres',
+        DATABASE_URL: connectionUrl(),
+      });
+      pgDb = createDb(config, logger);
+      const sessionsStorage = createSessionsStorage(
+        config,
+        logger,
+        pgDb
+      ) as PostgresSessionsStorage;
+      ({app: pgApp} = buildApp({
+        config,
+        logger,
+        version: 'test',
+        messageStream: createMessageStream(config, logger, pgDb),
+        chunkStream: createChunkStream(config, logger),
+        eventStream: createEventStream(config, logger, pgDb),
+        sessionsStorage,
+        db: pgDb,
+      }));
+      await sessionsStorage.whenListening();
+    });
+
+    afterAll(async () => {
+      await pgDb.end({timeout: 5});
+    });
+
+    function postSessionEvent(fields: {
+      queryName: string;
+      conversationId?: string;
+      agent?: string;
+    }): request.Test {
+      return request(pgApp)
+        .post('/events')
+        .send({
+          timestamp: new Date().toISOString(),
+          eventType: 'AgentExecutionStart',
+          reason: 'AgentExecutionStart',
+          message: 'test event',
+          data: {
+            queryId: fields.queryName,
+            queryName: fields.queryName,
+            queryNamespace: 'default',
+            sessionId,
+            conversationId: fields.conversationId,
+            agent: fields.agent,
+          },
+        });
+    }
+
+    async function messageWatermarks(): Promise<Record<string, number>> {
+      const rows = await db()<
+        {query_id: string; last_applied_message_sequence: string}[]
+      >`
+        SELECT query_id, last_applied_message_sequence FROM session_queries
+        WHERE session_id = ${sessionId}
+        ORDER BY query_id
+      `;
+      return Object.fromEntries(
+        rows.map((row) => [
+          row.query_id,
+          Number(row.last_applied_message_sequence),
+        ])
+      );
+    }
+
+    it('DELETE /conversations leaves the session rows, their events and their watermarks intact', async () => {
+      await postSessionEvent({
+        queryName: 'pg-pin-query-1',
+        conversationId: 'pg-pin-conv-1',
+        agent: 'weather-agent',
+      }).expect(201);
+      await postSessionEvent({
+        queryName: 'pg-pin-query-2',
+        agent: 'forecast-agent',
+      }).expect(201);
+      await request(pgApp)
+        .post('/messages')
+        .send({
+          conversation_id: 'pg-pin-conv-1',
+          query_id: 'pg-pin-query-1',
+          messages: ['a'],
+        })
+        .expect(200);
+      await request(pgApp)
+        .post('/messages')
+        .send({
+          conversation_id: 'pg-pin-conv-2',
+          query_id: 'pg-pin-query-2',
+          messages: ['b'],
+        })
+        .expect(200);
+
+      expect(await messageWatermarks()).toEqual({
+        'pg-pin-query-1': 1,
+        'pg-pin-query-2': 2,
+      });
+      const before = await request(pgApp)
+        .get(`/sessions/${sessionId}`)
+        .expect(200);
+      const eventsBefore = await request(pgApp)
+        .get(`/events?session_id=${sessionId}`)
+        .expect(200);
+      expect(eventsBefore.body.items).toHaveLength(2);
+
+      await request(pgApp).delete('/conversations').expect(200);
+
+      const messagesRes = await request(pgApp).get('/messages').expect(200);
+      expect(messagesRes.body.items).toEqual([]);
+      const after = await request(pgApp)
+        .get(`/sessions/${sessionId}`)
+        .expect(200);
+      expect(after.body).toEqual(before.body);
+      expect(await messageWatermarks()).toEqual({
+        'pg-pin-query-1': 1,
+        'pg-pin-query-2': 2,
+      });
+      const eventsAfter = await request(pgApp)
+        .get(`/events?session_id=${sessionId}`)
+        .expect(200);
+      expect(eventsAfter.body.items).toEqual(eventsBefore.body.items);
+
+      // Postgres message sequences do not rewind with the purge, so a message
+      // written after one is still ahead of the watermark left behind and lands
+      // in the read model instead of being dropped as a replay.
+      await request(pgApp)
+        .post('/messages')
+        .send({
+          conversation_id: 'pg-pin-conv-1',
+          query_id: 'pg-pin-query-1',
+          messages: ['c'],
+        })
+        .expect(200);
+
+      expect(await messageWatermarks()).toEqual({
+        'pg-pin-query-1': 3,
+        'pg-pin-query-2': 2,
+      });
+    });
   });
 });
