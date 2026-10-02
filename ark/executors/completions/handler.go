@@ -619,7 +619,12 @@ func (h *Handler) executeTool(
 		return nil, fmt.Errorf("tool execution failed: %w", err)
 	}
 
-	return []Message{NewAssistantMessage(result.Content)}, nil
+	content := result.Content
+	if result.Error != "" {
+		content = result.Error
+	}
+
+	return []Message{NewAssistantMessage(content)}, nil
 }
 
 func buildResponseMeta(state *executionState, execResult *ExecutionResult, responseMessages []Message, tokenSummary arkv1alpha1.TokenUsage) map[string]any {
