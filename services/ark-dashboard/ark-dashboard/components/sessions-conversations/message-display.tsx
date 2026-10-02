@@ -260,9 +260,7 @@ export function MessageDisplay({
     error,
     refetch,
   } = useGetMessages(sessionId, conversationId);
-  const handleRetry = useCallback(() => {
-    void refetch();
-  }, [refetch]);
+  const handleRetry = useCallback(() => refetch(), [refetch]);
   const {
     scrollContainerRef,
     messagesEndRef,
