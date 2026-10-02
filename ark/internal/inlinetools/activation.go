@@ -43,7 +43,7 @@ func ResolveActivation(enabled bool, tool *arkv1alpha1.Tool, routeUID types.UID,
 	if _, err := runner.Interpreter(tool.Spec.Inline.Language); err != nil {
 		return "", err
 	}
-	if deployment == nil || service == nil || !ownedRunner(deployment, tool) || !ownedRunner(service, tool) {
+	if deployment == nil || service == nil || !OwnsRunner(deployment, tool) || !OwnsRunner(service, tool) {
 		return "", fmt.Errorf("runner Deployment or Service is missing, deleting, or not owned by the current Tool")
 	}
 	wanted := RunnerLabels(tool)
@@ -51,25 +51,11 @@ func ResolveActivation(enabled bool, tool *arkv1alpha1.Tool, routeUID types.UID,
 		!labels.SelectorFromSet(wanted).Matches(labels.Set(deployment.Spec.Template.Labels)) {
 		return "", fmt.Errorf("runner Deployment does not select the current Tool identity")
 	}
-	hash := runner.SourceHash(tool.Spec.Inline.Source)
-	if deployment.Spec.Template.Annotations[SourceHashAnnotation] != hash || len(deployment.Spec.Template.Spec.Containers) != 1 {
-		return "", fmt.Errorf("runner Deployment does not carry the current source revision")
-	}
-	wantedEnv := map[string]string{runner.EnvToolName: tool.Name, runner.EnvLanguage: tool.Spec.Inline.Language, runner.EnvSourceHash: hash}
-	seen := map[string]bool{}
-	for _, env := range deployment.Spec.Template.Spec.Containers[0].Env {
-		if value, required := wantedEnv[env.Name]; required {
-			if seen[env.Name] || env.ValueFrom != nil || env.Value != value {
-				return "", fmt.Errorf("runner Deployment has stale or ambiguous execution identity")
-			}
-			seen[env.Name] = true
-		}
-	}
-	if len(seen) != len(wantedEnv) {
-		return "", fmt.Errorf("runner Deployment is missing execution identity")
+	if err := CheckRunnerRevision(&deployment.Spec.Template, tool); err != nil {
+		return "", err
 	}
 	if service.Spec.Type != corev1.ServiceTypeClusterIP || service.Spec.ClusterIP == "" || service.Spec.ClusterIP == corev1.ClusterIPNone ||
-		len(service.Spec.ExternalIPs) != 0 || !maps.Equal(service.Spec.Selector, wanted) || len(service.Spec.Ports) != 1 {
+		len(service.Spec.ExternalIPs) != 0 || service.Spec.PublishNotReadyAddresses || !maps.Equal(service.Spec.Selector, wanted) || len(service.Spec.Ports) != 1 {
 		return "", fmt.Errorf("runner Service is not the private backend for the current Tool")
 	}
 	port := service.Spec.Ports[0]
@@ -79,10 +65,34 @@ func ResolveActivation(enabled bool, tool *arkv1alpha1.Tool, routeUID types.UID,
 	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d%s", service.Name, tool.Namespace, runner.Port, runner.MCPPath), nil
 }
 
-func ownedRunner(object metav1.Object, tool *arkv1alpha1.Tool) bool {
+// OwnsRunner requires the current Tool's controller ownership and identity.
+func OwnsRunner(object metav1.Object, tool *arkv1alpha1.Tool) bool {
 	owner := metav1.GetControllerOf(object)
-	return object.GetUID() != "" && object.GetDeletionTimestamp().IsZero() &&
+	return tool.Spec.Type == arkv1alpha1.ToolTypeInline && tool.Spec.Inline != nil && tool.UID != "" &&
+		object.GetUID() != "" && object.GetDeletionTimestamp().IsZero() &&
 		object.GetNamespace() == tool.Namespace && object.GetName() == NamesFor(tool.Name).Runner &&
 		owner != nil && owner.APIVersion == arkv1alpha1.GroupVersion.String() && owner.Kind == "Tool" && owner.Name == tool.Name && owner.UID == tool.UID &&
 		labels.SelectorFromSet(RunnerLabels(tool)).Matches(labels.Set(object.GetLabels()))
+}
+
+// CheckRunnerRevision is shared by template admission and live endpoint checks.
+func CheckRunnerRevision(template *corev1.PodTemplateSpec, tool *arkv1alpha1.Tool) error {
+	hash := runner.SourceHash(tool.Spec.Inline.Source)
+	if template.Annotations[SourceHashAnnotation] != hash || len(template.Spec.Containers) != 1 {
+		return fmt.Errorf("runner does not carry the current source revision")
+	}
+	wantedEnv := map[string]string{runner.EnvToolName: tool.Name, runner.EnvLanguage: tool.Spec.Inline.Language, runner.EnvSourceHash: hash}
+	seen := map[string]bool{}
+	for _, env := range template.Spec.Containers[0].Env {
+		if value, required := wantedEnv[env.Name]; required {
+			if seen[env.Name] || env.ValueFrom != nil || env.Value != value {
+				return fmt.Errorf("runner has stale or ambiguous execution identity")
+			}
+			seen[env.Name] = true
+		}
+	}
+	if len(seen) != len(wantedEnv) {
+		return fmt.Errorf("runner is missing execution identity")
+	}
+	return nil
 }
