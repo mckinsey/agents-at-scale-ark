@@ -44,7 +44,7 @@ export default function SessionDetailPage() {
     );
   }
 
-  if (!session) {
+  if (isNotFound || !session) {
     return (
       <div className="flex h-full flex-col space-y-6 py-8">
         <button

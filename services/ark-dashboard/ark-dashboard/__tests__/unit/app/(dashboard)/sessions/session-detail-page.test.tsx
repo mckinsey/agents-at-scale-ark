@@ -191,6 +191,38 @@ describe('SessionDetailPage', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('should show not found when the session disappears after loading', () => {
+    vi.mocked(useGetSession).mockReturnValue({
+      data: mockSession,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Session not found', 404),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(screen.getByText('Session not found')).toBeInTheDocument();
+    expect(screen.queryByTestId('conversations-tab')).not.toBeInTheDocument();
+  });
+
+  it('should keep showing the session when a later poll fails for another reason', () => {
+    vi.mocked(useGetSession).mockReturnValue({
+      data: mockSession,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Internal Server Error', 500),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(screen.getByTestId('conversations-tab')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Failed to load session details'),
+    ).not.toBeInTheDocument();
+  });
+
   it('should offer a retry when loading fails for a reason other than not found', async () => {
     const user = userEvent.setup();
     const refetch = vi.fn();

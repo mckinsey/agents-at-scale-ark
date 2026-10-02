@@ -1,6 +1,7 @@
 import { type UseQueryOptions, useQuery } from '@tanstack/react-query';
 
 import { APIError } from '@/lib/api/client';
+import { createRetryQueryHandler } from '@/lib/utils/query-retry';
 
 import {
   type BrokerSession,
@@ -9,24 +10,11 @@ import {
 } from './broker-sessions';
 
 const SESSIONS_POLL_MS = 5000;
-const MAX_TRANSIENT_RETRIES = 1;
 
 const isNotFoundError = (error: unknown): boolean =>
   error instanceof APIError && error.status === 404;
 
-const retryTransientErrors = (
-  failureCount: number,
-  error: unknown,
-): boolean => {
-  if (
-    error instanceof APIError &&
-    error.status !== undefined &&
-    error.status < 500
-  ) {
-    return false;
-  }
-  return failureCount < MAX_TRANSIENT_RETRIES;
-};
+const retryTransientErrors = createRetryQueryHandler(1);
 
 export const useListSessions = (params?: SessionsListParams) => {
   return useQuery({
