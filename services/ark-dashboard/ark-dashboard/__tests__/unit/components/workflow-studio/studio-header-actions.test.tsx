@@ -241,6 +241,13 @@ describe('StudioHeaderActions', () => {
     expect(screen.queryByTestId('studio-delete')).not.toBeInTheDocument();
   });
 
+  it('hides the delete action when the readOnly prop is set', () => {
+    render(
+      <StudioHeaderActions workflowName="existing-workflow" persisted readOnly />,
+    );
+    expect(screen.queryByTestId('studio-delete')).not.toBeInTheDocument();
+  });
+
   it('no longer renders the download trigger in the header actions', () => {
     render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
     expect(screen.queryByTestId('studio-download')).not.toBeInTheDocument();

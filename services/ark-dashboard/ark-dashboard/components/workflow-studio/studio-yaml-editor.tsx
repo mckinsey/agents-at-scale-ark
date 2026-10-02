@@ -20,6 +20,7 @@ interface StudioYamlEditorProps {
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
+  building?: boolean;
   error?: StudioYamlEditorError;
 }
 
@@ -35,6 +36,7 @@ export function StudioYamlEditor({
   value,
   onChange,
   readOnly,
+  building,
   error,
 }: Readonly<StudioYamlEditorProps>) {
   const highlightRef = useRef<HTMLDivElement>(null);
@@ -152,7 +154,7 @@ export function StudioYamlEditor({
             ))}
           </div>
         </div>
-        {readOnly && (
+        {building && (
           <div
             data-testid="studio-build-lock"
             className="bg-background/70 text-fg-secondary absolute inset-0 flex items-center justify-center gap-2 text-sm backdrop-blur-[1px]">
