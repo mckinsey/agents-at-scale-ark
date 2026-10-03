@@ -1,8 +1,22 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
 
-import { type WorkflowFilters, workflowsService } from './workflows';
+import {
+  type WorkflowFilters,
+  type WorkflowLifecycleAction,
+  workflowsService,
+} from './workflows';
+
+const SHUTDOWN_POLL_INTERVAL_MS = 2000;
+const TERMINAL_PHASES = new Set(['Succeeded', 'Failed', 'Error']);
+
+function isShuttingDown(workflow: ArgoWorkflow): boolean {
+  return (
+    Boolean(workflow.spec?.shutdown) &&
+    !TERMINAL_PHASES.has(workflow.status?.phase ?? '')
+  );
+}
 
 export function useWorkflows(namespace: string, filters?: WorkflowFilters) {
   const [workflows, setWorkflows] = useState<ArgoWorkflow[]>([]);
@@ -33,7 +47,97 @@ export function useWorkflows(namespace: string, filters?: WorkflowFilters) {
     fetchWorkflows();
   }, [fetchWorkflows]);
 
-  return { workflows, loading, error, refetch: fetchWorkflows };
+  const upsertWorkflow = useCallback((updated: ArgoWorkflow) => {
+    setWorkflows(current => {
+      const exists = current.some(
+        workflow => workflow.metadata.name === updated.metadata.name,
+      );
+      if (!exists) {
+        return [updated, ...current];
+      }
+      return current.map(workflow =>
+        workflow.metadata.name === updated.metadata.name ? updated : workflow,
+      );
+    });
+  }, []);
+
+  const shuttingDownNames = workflows
+    .filter(isShuttingDown)
+    .map(workflow => workflow.metadata.name)
+    .join(',');
+
+  useEffect(() => {
+    if (!namespace || !shuttingDownNames) {
+      return;
+    }
+
+    const names = shuttingDownNames.split(',');
+    const intervalId = setInterval(() => {
+      for (const name of names) {
+        workflowsService
+          .get(namespace, name)
+          .then(upsertWorkflow)
+          .catch(refreshError => {
+            console.error(`Failed to refresh workflow ${name}`, refreshError);
+          });
+      }
+    }, SHUTDOWN_POLL_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [namespace, shuttingDownNames, upsertWorkflow]);
+
+  return {
+    workflows,
+    loading,
+    error,
+    refetch: fetchWorkflows,
+    upsertWorkflow,
+  };
+}
+
+export function useWorkflowLifecycleActions(
+  namespace: string,
+  onWorkflowUpdated: (workflow: ArgoWorkflow) => void,
+) {
+  const [pendingNames, setPendingNames] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const inFlightRef = useRef(new Set<string>());
+
+  const runAction = useCallback(
+    async (
+      name: string,
+      action: WorkflowLifecycleAction,
+    ): Promise<ArgoWorkflow | undefined> => {
+      if (inFlightRef.current.has(name)) {
+        return undefined;
+      }
+
+      inFlightRef.current.add(name);
+      setPendingNames(new Set(inFlightRef.current));
+
+      try {
+        const updated = await workflowsService.runLifecycleAction(
+          namespace,
+          name,
+          action,
+        );
+        onWorkflowUpdated(updated);
+        return updated;
+      } finally {
+        inFlightRef.current.delete(name);
+        setPendingNames(new Set(inFlightRef.current));
+      }
+    },
+    [namespace, onWorkflowUpdated],
+  );
+
+  const isPending = useCallback(
+    (name: string) => pendingNames.has(name),
+    [pendingNames],
+  );
+
+  return { runAction, isPending };
 }
 
 export function useWorkflow(

@@ -58,6 +58,8 @@ export interface MappedWorkflowSession {
   steps: MappedWorkflowStep[];
   namespace?: string;
   uid?: string;
+  suspended: boolean;
+  shutdownRequested: boolean;
 }
 
 function mapArgoPhaseToStatus(phase: string): MappedStepStatus {
@@ -568,6 +570,8 @@ export function mapArgoWorkflowToSession(
     steps,
     namespace: workflow.metadata.namespace,
     uid: workflow.metadata.uid,
+    suspended: workflow.spec?.suspend === true,
+    shutdownRequested: Boolean(workflow.spec?.shutdown),
   };
 }
 
