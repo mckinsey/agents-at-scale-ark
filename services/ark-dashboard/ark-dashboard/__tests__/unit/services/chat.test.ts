@@ -418,7 +418,22 @@ describe('chatService', () => {
       });
     });
 
-    it('should return canceled status as terminal', async () => {
+    it('should return cancelled status as terminal', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        name: 'query-123',
+        status: { phase: 'cancelled' },
+      });
+
+      const result = await chatService.getQueryResult('default', 'query-123');
+
+      expect(result).toEqual({
+        status: 'cancelled',
+        terminal: true,
+        response: 'No response',
+      });
+    });
+
+    it('should return legacy canceled status as terminal', async () => {
       vi.mocked(apiClient.get).mockResolvedValue({
         name: 'query-123',
         status: { phase: 'canceled' },

@@ -117,7 +117,12 @@ export class ChatClient {
       };
 
       const phase = query.status?.phase;
-      if (phase === 'done' || phase === 'error' || phase === 'canceled') {
+      if (
+        phase === 'done' ||
+        phase === 'error' ||
+        phase === 'cancelled' ||
+        phase === 'canceled'
+      ) {
         const content = query.status?.response?.content || '';
 
         let toolCalls: ToolCall[] | undefined;
@@ -265,7 +270,11 @@ export class ChatClient {
         | {status?: QueryStatus}
         | undefined;
       const phase = query?.status?.phase;
-      if (phase === 'error' || phase === 'canceled') {
+      if (
+        phase === 'error' ||
+        phase === 'cancelled' ||
+        phase === 'canceled'
+      ) {
         throw new Error(extractQueryError(query?.status));
       }
     }
