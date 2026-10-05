@@ -191,6 +191,38 @@ describe('fetchNodeLogWindow', () => {
     expect(nodeOptions?.params).toMatchObject({ container: 'sidecar' });
   });
 
+  it('defaults the container to main when the target carries none', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce(window);
+
+    await fetchNodeLogWindow({
+      namespace: 'test-namespace',
+      workflowName: 'wf-1',
+      nodeId: 'node-1',
+      podName: 'pod-1',
+    });
+
+    const [url, options] = vi.mocked(apiClient.get).mock.calls[0];
+    expect(url).toContain('/pods/pod-1/');
+    expect(options?.params).toMatchObject({ container: 'main' });
+  });
+
+  it('propagates a 400 from the pod endpoint without retrying the node endpoint', async () => {
+    vi.mocked(apiClient.get).mockRejectedValueOnce(
+      new APIError('a container name must be specified', 400),
+    );
+
+    await expect(
+      fetchNodeLogWindow({
+        namespace: 'test-namespace',
+        workflowName: 'wf-1',
+        nodeId: 'node-1',
+        podName: 'pod-1',
+      }),
+    ).rejects.toThrow('a container name must be specified');
+
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+  });
+
   it('lets an explicit container param override the target container', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce(window);
 

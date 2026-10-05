@@ -33,7 +33,10 @@ import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { timestampValue, useValueSort } from '@/lib/hooks/use-value-sort';
 import { queriesService } from '@/lib/services/queries';
-import type { useListQueries } from '@/lib/services/queries-hooks';
+import {
+  useInvalidateQueriesList,
+  type useListQueries,
+} from '@/lib/services/queries-hooks';
 import { formatAge } from '@/lib/utils/time';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -244,6 +247,7 @@ export function QueriesSection({
   queryResult,
 }: Readonly<QueriesSectionProps>) {
   const { namespace } = useNamespace();
+  const invalidateQueriesList = useInvalidateQueriesList();
 
   const { data, isLoading, isError, error, refetch } = queryResult;
 
@@ -273,7 +277,7 @@ export function QueriesSection({
       toast.success('Query Deleted', {
         description: 'Successfully deleted query',
       });
-      refetch();
+      invalidateQueriesList();
     } catch (err) {
       toast.error('Failed to Delete Query', {
         description:
@@ -288,7 +292,7 @@ export function QueriesSection({
       toast.success('Query Canceled', {
         description: 'Successfully canceled query',
       });
-      refetch();
+      invalidateQueriesList();
     } catch (err) {
       toast.error('Failed to Cancel Query', {
         description:
