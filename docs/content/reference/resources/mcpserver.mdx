@@ -132,7 +132,7 @@ Retry activity is counted in the `ark_mcp_tool_call_retries_total{result, server
 
 Remote MCP servers that require OAuth (e.g. `https://mcp.notion.com/mcp`, GitHub Copilot MCP) respond to unauthenticated requests with `HTTP 401` and a `WWW-Authenticate: Bearer` challenge per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) and the [MCP 2025-06-18 authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
 
-When Ark detects this, it performs OAuth metadata discovery and populates `status.authorization`:
+When Ark detects this, it fetches the RFC 9728 protected resource metadata, then the authorization server metadata using the well-known locations from the MCP authorization spec (RFC 8414 with path insertion, then OpenID Connect discovery), and populates `status.authorization`:
 
 ```bash
 kubectl get mcpserver notion -o yaml
@@ -169,7 +169,7 @@ shell    True        1
 | _(empty)_ | Server does not require OAuth. |
 | `Required` | Server returned 401 and metadata discovery succeeded. Ready for an authorize flow. A 401 from an authorized server (expiry, revocation, refresh failure) also collapses back to `Required` and emits a `TokenRejected` event. |
 | `Authorized` | The controller successfully listed tools using a Bearer token resolved from `spec.authorization.tokenSecretRef`. |
-| `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found. The CLI cannot drive an OAuth flow against this server. |
+| `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found, or the authorization server advertised no `authorization_endpoint` and `token_endpoint`. Neither the CLI nor the dashboard can drive an OAuth flow against this server. Servers using `spec.authorization.clientCredentials` are exempt from the endpoint check. |
 
 ### Header precedence
 
@@ -200,16 +200,9 @@ spec:
 
 The interactive authorize flow (dynamic client registration, PKCE, token exchange, Secret write) is orchestrated by ark-api. The [`ark mcp auth login`](/developer-guide/cli-tools#ark-mcp-auth) CLI is a thin client that POSTs to ark-api's `/api/v1/mcp-servers/{name}/auth/start` and polls `auth/status` — it never touches the Kubernetes Secret directly. The CLI is the only client today; a dashboard authorize flow is not yet available. See [MCP OAuth Callback](/operations-guide/mcp-oauth-callback) for the operator-side callback URL configuration.
 
-A successful flow leaves two annotations on the MCPServer:
+A successful flow writes the token material to the referenced Secret and the controller reconciles `status.authorization.state` to `Authorized`. ark-api does not record the identity of the caller who triggered the flow.
 
-```yaml
-metadata:
-  annotations:
-    ark.mckinsey.com/mcp-auth-authorized-by: cli       # cli (dashboard not yet supported)
-    ark.mckinsey.com/mcp-auth-authorized-at: 2026-05-19T14:32:11Z
-```
-
-`authorized-by` is `cli` for this phase. A future per-user-tokens capability will surface the OIDC subject of the authenticated user here so multi-user clusters can distinguish whose credentials wrote the Secret. Until that ships, MCPServer tokens are effectively a per-server singleton — only one user can hold an authorized session at a time.
+MCPServer tokens are a per-server singleton, only one user can hold an authorized session at a time. A future per-user-tokens capability will lift this limitation.
 
 ## Status
 
@@ -254,7 +247,7 @@ status:
 | `status.authorization.registrationEndpoint` | RFC 7591 dynamic client registration endpoint, when supported. |
 | `status.authorization.authorizationEndpoint` | OAuth 2.1 authorization endpoint (RFC 8414 `authorization_endpoint`). |
 | `status.authorization.tokenEndpoint` | OAuth 2.1 token endpoint (RFC 8414 `token_endpoint`). |
-| `status.authorization.lastDiscovered` | Timestamp of the most recent successful discovery probe. |
+| `status.authorization.lastDiscovered` | Time the authorization block was last recomputed and persisted. Polls that leave the block unchanged do not advance it. |
 | `status.authorization.expiresAt` | Absolute expiry time of the current access token, published for consumers that can `get` mcpservers but not secrets. |
 | `status.conditions[]` | Standard Kubernetes conditions. `Available` reflects readiness; `Discovering` reflects tool-discovery progress. |
 

@@ -3,14 +3,15 @@ import type {EventData, EventFilter, EventStream} from '../event-broker.js';
 import type {PaginatedList, PaginationParams} from '../pagination.js';
 import type {BrokerItem} from './broker-item.js';
 import {InMemoryQueryDeletableStream} from './in-memory-query-deletable-stream.js';
+import type {InMemoryStreamOptions} from './in-memory-stream.js';
 import {hasScopingField, type Predicate} from './stream.js';
 
 export class InMemoryEventStream
   extends InMemoryQueryDeletableStream<EventData>
   implements EventStream
 {
-  constructor(logger: Logger, name: string, path?: string, maxItems?: number) {
-    super(logger, name, (data) => data.data.queryId, path, maxItems);
+  constructor(logger: Logger, name: string, opts?: InMemoryStreamOptions) {
+    super(logger, name, (data) => data.data.queryId, opts);
   }
 
   private predicateFor(filter: EventFilter): Predicate<EventData> {

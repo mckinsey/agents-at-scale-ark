@@ -3,6 +3,8 @@ import {envSchema} from './schema.js';
 
 export function loadConfig(env: Record<string, string | undefined>): AppConfig {
   const parsed = envSchema.parse(env);
+  const chunkTtlSeconds =
+    parsed.CHUNK_TTL_SECONDS ?? parsed.REDIS_STREAM_TTL_SECONDS;
   return Object.freeze({
     nodeEnv: parsed.NODE_ENV,
     logLevel: parsed.LOG_LEVEL,
@@ -10,12 +12,15 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       port: parsed.PORT,
       host: parsed.HOST,
       requestTimeoutMs: parsed.REQUEST_TIMEOUT_MS,
+      shutdownDrainTimeoutMs: parsed.SHUTDOWN_DRAIN_TIMEOUT_MS,
+      streamIdleTimeoutMs: parsed.STREAM_IDLE_TIMEOUT_MS,
     }),
     limits: Object.freeze({
-      maxMessages: parsed.MAX_MESSAGES,
-      maxChunks: parsed.MAX_CHUNKS,
-      maxSpans: parsed.MAX_SPANS,
-      maxEvents: parsed.MAX_EVENTS,
+      messageMaxBytes: parsed.MESSAGE_MAX_BYTES,
+      eventMaxBytes: parsed.EVENT_MAX_BYTES,
+      chunkMaxBytes: parsed.CHUNK_MAX_BYTES,
+      traceMaxBytes: parsed.TRACE_MAX_BYTES,
+      chunkTtlSeconds,
     }),
     persistence: Object.freeze({
       memoryFilePath: parsed.MEMORY_FILE_PATH,
@@ -40,6 +45,8 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       statementTimeoutMs: parsed.DATABASE_STATEMENT_TIMEOUT_MS,
       debugQueries: parsed.DATABASE_DEBUG_QUERIES,
       sslRootCertPath: parsed.DATABASE_SSL_ROOT_CERT_PATH,
+      reapIntervalSeconds: parsed.ROW_REAP_INTERVAL_SECONDS,
+      reapBatchSize: parsed.ROW_REAP_BATCH_SIZE,
     }),
     redis: Object.freeze({
       url: parsed.REDIS_URL,
@@ -47,7 +54,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       password: parsed.REDIS_PASSWORD,
       tlsCaCertPath: parsed.REDIS_TLS_CA_CERT_PATH,
       keyPrefix: parsed.REDIS_KEY_PREFIX,
-      streamTtlSeconds: parsed.REDIS_STREAM_TTL_SECONDS,
+      streamTtlSeconds: chunkTtlSeconds,
       connectTimeoutMs: parsed.REDIS_CONNECT_TIMEOUT_MS,
       debugCommands: parsed.REDIS_DEBUG_COMMANDS,
     }),

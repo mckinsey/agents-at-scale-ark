@@ -58,10 +58,14 @@ When Ark dispatches a query to your engine:
 
 1. The A2A message carries only a `QueryRef` (name + namespace) via the query extension — no agent config, credentials, or tool definitions cross the wire
 2. The SDK extracts the QueryRef and the A2A `contextId` (conversation threading)
-3. Within your executor pod, the SDK fetches the Query CRD and resolves agent config, model (including API keys), and MCP servers from the cluster using the pod's service account
+3. Within your executor pod, the SDK fetches the Query CRD and resolves agent config, model (including API keys), and MCP servers from the cluster
 4. Your `execute_agent()` receives a fully populated `ExecutionEngineRequest` with `conversationId`
 
 Secrets never leave the cluster over A2A — they are resolved locally within your executor pod. You never interact with the extension or Kubernetes APIs directly.
+
+Resource resolution runs as the Query's `spec.serviceAccount` when it declares one, and as your executor pod's service account otherwise. Queries that declare one need your executor's service account to hold `impersonate` on `serviceaccounts`; without it the query fails rather than silently resolving with the pod identity.
+
+Scope that grant with `resourceNames` to the accounts queries may name. Granting it unscoped lets anything holding your executor's token act as any service account in the namespace.
 
 ## Extension Spec
 

@@ -791,10 +791,16 @@ func (h *Handler) handleApprovalRequired(
 		contextJSON = []byte("{}")
 	}
 
+	// Timeout is optional, so an Agent stored before it had a default can leave it nil.
+	timeoutStr := ""
+	if approvalErr.Config.Timeout != nil {
+		timeoutStr = approvalErr.Config.Timeout.Duration.String()
+	}
+
 	// Build task metadata with approval details (all values as strings or primitive types)
 	metadata := map[string]interface{}{
 		"toolCalls": string(toolCallsJSON),
-		"timeout":   approvalErr.Config.Timeout.Duration.String(),
+		"timeout":   timeoutStr,
 		"onTimeout": approvalErr.Config.OnTimeout,
 		"context":   string(contextJSON),
 	}
@@ -865,6 +871,15 @@ func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query)
 	}
 
 	log.Info("A2ATask status", "taskId", taskID, "phase", a2aTask.Status.Phase)
+
+	// Only HITL approval tasks are resumable. External A2A agent tasks (blocking or
+	// streaming) also reach PhaseCompleted and record their TaskID in query status, but
+	// they carry no approval metadata; resuming them fails with "no toolCalls in
+	// protocolMetadata". Distinguish by A2AServerRef, which approval tasks never set.
+	if !arka2a.IsHITLApprovalTask(&a2aTask) {
+		log.Info("A2ATask is an external A2A agent task, not a HITL resumption", "taskId", taskID)
+		return false, nil
+	}
 
 	// Check if task is completed (approval) or denied in a way the agent can react to
 	if a2aTask.Status.Phase == arka2a.PhaseCompleted {

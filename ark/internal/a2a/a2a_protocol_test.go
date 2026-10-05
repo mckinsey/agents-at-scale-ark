@@ -1009,6 +1009,26 @@ func TestIsUserRejection(t *testing.T) {
 	})
 }
 
+func TestIsHITLApprovalTask(t *testing.T) {
+	t.Run("returns true when A2AServerRef is nil", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{}
+		if !IsHITLApprovalTask(task) {
+			t.Error("expected true when A2AServerRef is nil")
+		}
+	})
+
+	t.Run("returns false when A2AServerRef is set", func(t *testing.T) {
+		task := &arkv1alpha1.A2ATask{
+			Spec: arkv1alpha1.A2ATaskSpec{
+				A2AServerRef: &arkv1alpha1.A2AServerRef{Name: "server"},
+			},
+		}
+		if IsHITLApprovalTask(task) {
+			t.Error("expected false when A2AServerRef references an A2AServer")
+		}
+	})
+}
+
 func TestIsResumableDenial(t *testing.T) {
 	completedType := string(arkv1alpha1.A2ATaskCompleted)
 

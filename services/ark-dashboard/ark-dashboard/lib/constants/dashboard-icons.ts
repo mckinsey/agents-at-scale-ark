@@ -38,7 +38,7 @@ export interface DashboardSection {
   enablerFeature?: string;
 }
 
-export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
+export const DASHBOARD_SECTIONS = {
   // Configurations - order: Agents, Teams, Models, Secrets
   agents: {
     key: 'agents',
@@ -78,14 +78,14 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
   },
 
   // Monitoring - order: Sessions, Workflow runs, Query Logs, Broker, Events
-  'session-history': {
-    key: 'session-history',
+  sessions: {
+    key: 'sessions',
     title: 'Sessions',
     icon: MessageSquare,
     group: 'monitoring',
   },
-  sessions: {
-    key: 'sessions',
+  'workflow-runs': {
+    key: 'workflow-runs',
     title: 'Workflow runs',
     icon: Play,
     group: 'monitoring',

@@ -71,11 +71,10 @@ export function buildApp(deps: {
 
   const memory = new MemoryBroker(messageStream);
   const chunks = new CompletionChunkBroker(chunkStream);
-  const traces = new TraceBroker(
-    logger.child({broker: 'traces'}),
-    config.persistence.traceFilePath,
-    config.limits.maxSpans
-  );
+  const traces = new TraceBroker(logger.child({broker: 'traces'}), {
+    path: config.persistence.traceFilePath,
+    maxBytes: config.limits.traceMaxBytes,
+  });
   const events = new EventBroker(eventStream);
   const sessions = new SessionsBroker(sessionsStorage);
 
@@ -114,7 +113,10 @@ export function buildApp(deps: {
 
   app.use('/metrics', createMetricsRouter(metricsRegistry));
   app.use('/', createMemoryRouter(memory, sessions));
-  app.use('/stream', createStreamRouter(chunks));
+  app.use(
+    '/stream',
+    createStreamRouter(chunks, config.server.streamIdleTimeoutMs)
+  );
   app.use('/traces', createTracesRouter(traces));
   app.use('/events', createEventsRouter(events, sessions));
   app.use('/sessions', createSessionsRouter(sessions));

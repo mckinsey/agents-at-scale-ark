@@ -1,0 +1,8 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: ArkConfig
+metadata:
+  name: default
+spec:
+  queryTTL: 3h
+  defaultMemory:
+    name: default

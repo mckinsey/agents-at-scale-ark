@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api/client';
 import { fetchAllPages } from '@/lib/api/pagination';
-import {
-  modelsService,
-  type ModelDetailResponse,
-} from '@/lib/services/models';
+import { type ModelDetailResponse, modelsService } from '@/lib/services/models';
 
 vi.mock('@/lib/api/client');
 vi.mock('@/lib/api/pagination', () => ({
@@ -34,20 +31,46 @@ describe('modelsService', () => {
     vi.clearAllMocks();
   });
 
-  describe('getAll', () => {
-    it('scopes the paginated list to the namespace and hydrates each item', async () => {
-      vi.mocked(fetchAllPages).mockResolvedValue([{ name: 'gpt-4' }]);
-      vi.spyOn(apiClient, 'get').mockResolvedValue(DETAIL);
+  describe('listWithSecrets', () => {
+    it('requests the with-secrets view in a single call', async () => {
+      vi.mocked(fetchAllPages).mockResolvedValue([
+        { name: 'gpt-4', provider: 'openai', secret_refs: ['openai-key'] },
+      ]);
 
-      const result = await modelsService.getAll(NAMESPACE);
+      const result = await modelsService.listWithSecrets(NAMESPACE);
 
       expect(fetchAllPages).toHaveBeenCalledWith('/api/v1/models', {
         namespace: NAMESPACE,
+        view: 'with-secrets',
       });
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/models/gpt-4', {
-        params: { namespace: NAMESPACE },
+      expect(apiClient.get).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        {
+          name: 'gpt-4',
+          provider: 'openai',
+          secret_refs: ['openai-key'],
+          id: 'gpt-4',
+        },
+      ]);
+    });
+  });
+
+  describe('list', () => {
+    it('scopes the paginated list to the namespace without hydrating each item', async () => {
+      vi.mocked(fetchAllPages).mockResolvedValue([
+        { name: 'gpt-4', provider: 'openai' },
+      ]);
+
+      const result = await modelsService.list(NAMESPACE);
+
+      expect(fetchAllPages).toHaveBeenCalledWith('/api/v1/models', {
+        namespace: NAMESPACE,
+        view: 'summary',
       });
-      expect(result).toEqual([{ ...DETAIL, id: 'gpt-4' }]);
+      expect(apiClient.get).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        { name: 'gpt-4', provider: 'openai', id: 'gpt-4' },
+      ]);
     });
   });
 
@@ -74,9 +97,9 @@ describe('modelsService', () => {
     it('rethrows any other failure', async () => {
       vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Boom'));
 
-      await expect(
-        modelsService.getByName(NAMESPACE, 'gpt-4'),
-      ).rejects.toThrow('Boom');
+      await expect(modelsService.getByName(NAMESPACE, 'gpt-4')).rejects.toThrow(
+        'Boom',
+      );
     });
   });
 

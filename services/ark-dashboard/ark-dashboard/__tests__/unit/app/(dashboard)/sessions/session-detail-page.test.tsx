@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SessionDetailPage from '@/app/(dashboard)/sessions/[session_id]/page';
+import { APIError } from '@/lib/api/client';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 
@@ -21,13 +22,8 @@ vi.mock('next/navigation', () => ({
 
 // Mock child components
 vi.mock('@/components/sessions-conversations/conversations-tab', () => ({
-  ConversationsTab: ({ sessionId, onMessageSent }: any) => (
-    <div data-testid="conversations-tab">
-      {sessionId}
-      <button data-testid="trigger-message-sent" onClick={() => onMessageSent?.()}>
-        send
-      </button>
-    </div>
+  ConversationsTab: ({ sessionId }: any) => (
+    <div data-testid="conversations-tab">{sessionId}</div>
   ),
 }));
 vi.mock('@/components/sessions-conversations/logs-tab', () => ({
@@ -162,42 +158,6 @@ describe('SessionDetailPage', () => {
     });
   });
 
-  it('strips new-session query params after the first message is sent', async () => {
-    const user = userEvent.setup();
-    mockUseSearchParams.mockReturnValue(
-      new URLSearchParams('participant=test-agent&type=agent&conversationId=conv-1'),
-    );
-
-    render(<SessionDetailPage />);
-
-    await user.click(screen.getByTestId('trigger-message-sent'));
-
-    expect(mockReplace).toHaveBeenCalledWith('/sessions/session-123');
-  });
-
-  it('preserves unrelated query params when cleaning up after first message', async () => {
-    const user = userEvent.setup();
-    mockUseSearchParams.mockReturnValue(
-      new URLSearchParams('participant=test-agent&type=agent&namespace=demo'),
-    );
-
-    render(<SessionDetailPage />);
-
-    await user.click(screen.getByTestId('trigger-message-sent'));
-
-    expect(mockReplace).toHaveBeenCalledWith('/sessions/session-123?namespace=demo');
-  });
-
-  it('does not modify the URL when there are no new-session params', async () => {
-    const user = userEvent.setup();
-
-    render(<SessionDetailPage />);
-
-    await user.click(screen.getByTestId('trigger-message-sent'));
-
-    expect(mockReplace).not.toHaveBeenCalled();
-  });
-
   it('navigates back to the sessions list, stripping new-session params', async () => {
     const user = userEvent.setup();
     mockUseSearchParams.mockReturnValue(
@@ -208,6 +168,78 @@ describe('SessionDetailPage', () => {
 
     await user.click(screen.getByText('Back to all sessions'));
 
-    expect(mockPush).toHaveBeenCalledWith('/session-history?namespace=demo');
+    expect(mockPush).toHaveBeenCalledWith('/sessions?namespace=demo');
+  });
+
+  it('should show not found when the session does not exist', () => {
+    vi.mocked(useGetSession).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Session not found', 404),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(screen.getByText('Session not found')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Failed to load session details'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Retry' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('should show not found when the session disappears after loading', () => {
+    vi.mocked(useGetSession).mockReturnValue({
+      data: mockSession,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Session not found', 404),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(screen.getByText('Session not found')).toBeInTheDocument();
+    expect(screen.queryByTestId('conversations-tab')).not.toBeInTheDocument();
+  });
+
+  it('should keep showing the session when a later poll fails for another reason', () => {
+    vi.mocked(useGetSession).mockReturnValue({
+      data: mockSession,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Internal Server Error', 500),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(screen.getByTestId('conversations-tab')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Failed to load session details'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('should offer a retry when loading fails for a reason other than not found', async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    vi.mocked(useGetSession).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Internal Server Error', 500),
+      refetch,
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(
+      screen.getByText('Failed to load session details'),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalled();
   });
 });

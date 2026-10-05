@@ -127,7 +127,7 @@ spec:
               kind: ConfigMap
               metadata:
                 name: mcp-address
-                labels:
+                annotations:
                   ark.mckinsey.com/resource-type: configuration
               data:
                 value: "https://example.test/mcp/"
@@ -139,7 +139,7 @@ spec:
               kind: ConfigMap
               metadata:
                 name: mcp-address
-                labels:
+                annotations:
                   ark.mckinsey.com/resource-type: configuration
               data:
                 value: "https://other.test/mcp/"
@@ -164,7 +164,7 @@ spec:
         - script:
             content: |
               set -eu
-              if OUTPUT=$(kubectl label configmap someone-elses \
+              if OUTPUT=$(kubectl annotate configmap someone-elses \
                 ark.mckinsey.com/resource-type=configuration \
                 --namespace "$NAMESPACE" \
                 --as "system:serviceaccount:$NAMESPACE:ark-api-sa" 2>&1); then

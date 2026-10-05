@@ -108,10 +108,15 @@ class TestContextEndpoint(unittest.TestCase):
     @patch("ark_api.api.v1.namespaces.get_current_context")
     @patch("ark_api.api.v1.namespaces.create_api_client")
     @patch("ark_api.api.v1.namespaces.client.CoreV1Api")
-    def test_get_context_with_valid_namespace(
+    def test_get_context_demo_label_does_not_force_read_only(
         self, mock_v1_api, mock_api_client, mock_get_current_context
     ):
-        """Test context with valid namespace parameter."""
+        """A namespace label must NOT make the context read-only.
+
+        The `ark.mckinsey.com/demo` (now `landing-page`) label only affects
+        landing-page visibility; editability is governed by RBAC. read_only_mode
+        reflects the deployment-wide READ_ONLY_MODE env only (default false).
+        """
         mock_get_current_context.return_value = {
             "namespace": "default",
             "cluster": "test-cluster",
@@ -133,7 +138,8 @@ class TestContextEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["namespace"], "kyc-demo")
-        self.assertEqual(data["read_only_mode"], True)  # Demo namespace has read_only
+        # Label present, but read_only_mode stays False (no env READ_ONLY_MODE).
+        self.assertEqual(data["read_only_mode"], False)
 
     @patch("ark_api.api.v1.namespaces.get_current_context")
     @patch("ark_api.api.v1.namespaces.create_api_client")
@@ -167,6 +173,61 @@ class TestContextEndpoint(unittest.TestCase):
         self.assertIn("detail", data)
         self.assertEqual(data["detail"]["message"], "Namespace 'invalid-ns' not found")
         self.assertEqual(data["detail"]["default_namespace"], "kyc-demo")
+
+    @patch("ark_api.api.v1.namespaces.user_can_edit")
+    @patch("ark_api.api.v1.namespaces.get_ark_permissions")
+    @patch("ark_api.api.v1.namespaces.get_current_context")
+    @patch("ark_api.api.v1.namespaces.create_api_client")
+    @patch("ark_api.api.v1.namespaces.client.CoreV1Api")
+    def test_get_context_impersonated_user_without_edit_is_read_only(
+        self,
+        mock_v1_api,
+        mock_api_client,
+        mock_get_current_context,
+        mock_get_ark_permissions,
+        mock_user_can_edit,
+    ):
+        """Per-user path: an impersonated identity that cannot edit is read-only.
+
+        With READ_ONLY_MODE off and an impersonated user, /v1/context reflects
+        RBAC — a user who cannot write the namespace gets read_only_mode=True.
+        """
+        from ark_api.auth.dependencies import get_impersonation_config
+        from ark_api.main import app
+        from ark_api.models.context import PermissionsResponse
+        from ark_sdk.impersonation import ImpersonationConfig
+
+        mock_get_current_context.return_value = {
+            "namespace": "default",
+            "cluster": "test-cluster",
+        }
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespace = AsyncMock(return_value=Mock())
+
+        mock_get_ark_permissions.return_value = PermissionsResponse(
+            status="ok", rules={"agents": ["get", "list"]}
+        )
+        mock_user_can_edit.return_value = False
+
+        app.dependency_overrides[get_impersonation_config] = lambda: ImpersonationConfig(
+            username="viewer@example.com", groups=["viewers"]
+        )
+        try:
+            response = self.client.get("/v1/context?namespace=default")
+        finally:
+            app.dependency_overrides.pop(get_impersonation_config, None)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["read_only_mode"])
+        # The per-user check received the rules already fetched for permissions.
+        mock_user_can_edit.assert_awaited_once()
+        self.assertEqual(
+            mock_user_can_edit.await_args.args[2], {"agents": ["get", "list"]}
+        )
 
 
 class TestDeleteEndpoints(unittest.TestCase):
@@ -984,12 +1045,101 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["description"], "Test agent")
         self.assertEqual(data["items"][0]["model_ref"], "gpt-4")
         self.assertEqual(data["items"][0]["available"], "True")
+        # Full view (default) keeps the prompt
+        self.assertEqual(
+            data["items"][0]["prompt"], "You are a helpful assistant"
+        )
 
         # Check second agent
         self.assertEqual(data["items"][1]["name"], "another-agent")
         self.assertEqual(data["items"][1]["description"], "Another test agent")
         self.assertIsNone(data["items"][1]["model_ref"])
         self.assertEqual(data["items"][1]["available"], "False")
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_list_agents_summary_view(self, mock_ark_client):
+        """Summary view omits prompt and keeps only the origin annotation."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "test-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/origin": "dashboard",
+                    "ark.mckinsey.com/a2a-server-skills": '[{"heavy": "payload"}]',
+                },
+            },
+            "spec": {
+                "description": "Test agent",
+                "prompt": "You are a helpful assistant",
+                "modelRef": {"name": "gpt-4"},
+            },
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([mock_agent]))
+
+        response = self.client.get("/v1/agents?namespace=default&view=summary")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        item = data["items"][0]
+        # Fields the list UI renders survive
+        self.assertEqual(item["name"], "test-agent")
+        self.assertEqual(item["description"], "Test agent")
+        self.assertEqual(item["model_ref"], "gpt-4")
+        self.assertEqual(item["available"], "True")
+        # Heavy fields are stripped
+        self.assertIsNone(item["prompt"])
+        self.assertEqual(
+            item["annotations"], {"ark.mckinsey.com/origin": "dashboard"}
+        )
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_list_agents_with_tools_view(self, mock_ark_client):
+        """With-tools view trims heavy fields but carries the referenced tool names."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "test-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/origin": "dashboard",
+                    "ark.mckinsey.com/a2a-server-skills": '[{"heavy": "payload"}]',
+                },
+            },
+            "spec": {
+                "description": "Test agent",
+                "prompt": "You are a helpful assistant",
+                "tools": [
+                    {"type": "custom", "name": "search"},
+                    {"type": "custom", "name": "terminate"},
+                    {"type": "custom"},
+                ],
+            },
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([mock_agent]))
+
+        response = self.client.get("/v1/agents?namespace=default&view=with-tools")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        item = data["items"][0]
+        # Trimmed like summary
+        self.assertIsNone(item["prompt"])
+        self.assertEqual(
+            item["annotations"], {"ark.mckinsey.com/origin": "dashboard"}
+        )
+        # Tool names carried; entries without a name are skipped
+        self.assertEqual(item["tool_names"], ["search", "terminate"])
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_list_agents_empty(self, mock_ark_client):
@@ -1380,6 +1530,42 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][1]["type"], "completions")
         self.assertEqual(data["items"][1]["model"], "anthropic.claude-v2")
         self.assertEqual(data["items"][1]["available"], "False")
+        # Default (summary) view does not carry secret refs
+        self.assertIsNone(data["items"][0]["secret_refs"])
+
+    @patch("ark_api.api.v1.models.with_ark_client")
+    def test_list_models_with_secrets_view(self, mock_ark_client):
+        """With-secrets view carries the names of secrets referenced by the config."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_model = Mock()
+        mock_model.to_dict.return_value = {
+            "metadata": {"name": "gpt-4-model", "namespace": "default"},
+            "spec": {
+                "provider": "openai",
+                "model": {"value": "gpt-4"},
+                "config": {
+                    "openai": {
+                        "apiKey": {
+                            "valueFrom": {
+                                "secretKeyRef": {"name": "openai-key", "key": "token"}
+                            }
+                        },
+                        "baseUrl": {"value": "https://api.openai.com"},
+                    }
+                },
+            },
+            "status": {"conditions": [{"type": "ModelAvailable", "status": "True"}]},
+        }
+
+        mock_client.models.a_list_page = AsyncMock(return_value=_page([mock_model]))
+
+        response = self.client.get("/v1/models?namespace=default&view=with-secrets")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["items"][0]["secret_refs"], ["openai-key"])
 
     @patch("ark_api.api.v1.models.with_ark_client")
     def test_list_models_empty(self, mock_ark_client):
@@ -2164,7 +2350,10 @@ class TestTeamsEndpoint(unittest.TestCase):
                     {"name": "backend-dev", "type": "agent"},
                 ],
             },
-            "status": {"phase": "Ready"},
+            "status": {
+                "phase": "Ready",
+                "conditions": [{"type": "Available", "status": "True"}],
+            },
         }
 
         mock_team2 = Mock()
@@ -2174,7 +2363,10 @@ class TestTeamsEndpoint(unittest.TestCase):
                 "strategy": "selector",
                 "members": [{"name": "researcher", "type": "agent"}],
             },
-            "status": {"phase": "pending"},
+            "status": {
+                "phase": "pending",
+                "conditions": [{"type": "Available", "status": "False"}],
+            },
         }
 
         # Mock the API response
@@ -2195,12 +2387,14 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["strategy"], "sequential")
         self.assertEqual(data["items"][0]["members_count"], 2)
         self.assertEqual(data["items"][0]["status"], "Ready")
+        self.assertEqual(data["items"][0]["available"], "True")
 
         # Check second team
         self.assertEqual(data["items"][1]["name"], "research-team")
         self.assertEqual(data["items"][1]["strategy"], "selector")
         self.assertEqual(data["items"][1]["members_count"], 1)
         self.assertEqual(data["items"][1]["status"], "pending")
+        self.assertEqual(data["items"][1]["available"], "False")
 
     @patch("ark_api.api.v1.teams.with_ark_client")
     def test_list_teams_empty(self, mock_ark_client):

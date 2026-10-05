@@ -1,11 +1,8 @@
+import { useId } from 'react';
 import { type UseFormReturn, useWatch } from 'react-hook-form';
 
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  FieldError,
-  FieldSet,
-  FieldTitle,
-} from '@/components/ui/field';
+import { FieldError, FieldSet, FieldTitle } from '@/components/ui/field';
 import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Agent, TeamMember } from '@/lib/services';
+import type { AgentListItem, TeamMember } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
 import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
@@ -31,7 +28,7 @@ const strategyItems = [
 
 interface StrategySectionProps {
   form: UseFormReturn<TeamFormValues>;
-  agents: Agent[];
+  agents: AgentListItem[];
   selectedMembers: TeamMember[];
   disabled?: boolean;
 }
@@ -48,7 +45,11 @@ export function StrategySection({
   selectedMembers,
   disabled,
 }: Readonly<StrategySectionProps>) {
-  const selectedStrategy = useWatch({ control: form.control, name: 'strategy' });
+  const loopsId = useId();
+  const selectedStrategy = useWatch({
+    control: form.control,
+    name: 'strategy',
+  });
   const loopsChecked = useWatch({ control: form.control, name: 'loops' });
   const enableTerminateTool = useWatch({
     control: form.control,
@@ -105,6 +106,7 @@ export function StrategySection({
           render={({ field }) => (
             <div className="flex flex-row items-center gap-2">
               <Checkbox
+                id={loopsId}
                 checked={field.value}
                 onCheckedChange={checked => {
                   field.onChange(checked);
@@ -114,7 +116,13 @@ export function StrategySection({
                 }}
                 disabled={disabled}
               />
-              <Label className="text-sm font-normal">
+              <Label
+                htmlFor={loopsId}
+                disabled={disabled}
+                className={cn(
+                  'text-sm font-normal',
+                  !disabled && 'cursor-pointer',
+                )}>
                 Enable loops (cycle through members repeatedly)
               </Label>
             </div>

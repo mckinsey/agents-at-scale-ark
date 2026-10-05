@@ -28,6 +28,28 @@ const (
 	QueryTypeUser = "user"
 )
 
+// Query status phases, mirroring the status.phase enum.
+const (
+	QueryPhasePending       = "pending"
+	QueryPhaseProvisioning  = "provisioning"
+	QueryPhaseRunning       = "running"
+	QueryPhaseQueued        = "queued"
+	QueryPhaseInputRequired = "input-required"
+	QueryPhaseDone          = "done"
+	QueryPhaseError         = "error"
+	QueryPhaseCanceled      = "canceled"
+)
+
+// IsTerminalPhase reports whether a Query phase is terminal: the reconcile has
+// finished and no further status write is expected.
+func IsTerminalPhase(phase string) bool {
+	switch phase {
+	case QueryPhaseDone, QueryPhaseError, QueryPhaseCanceled:
+		return true
+	}
+	return false
+}
+
 type QueryTarget struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=agent;team;model;tool
@@ -82,13 +104,17 @@ type QuerySpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// ConversationId is sent as A2A ContextID when dispatching to execution engines.
 	// Engines use it for conversation threading (e.g., memory lookup, session management).
+	// Deliberately unconstrained beyond MinLength: status.conversationId accepts
+	// arbitrary engine-generated IDs and those are reused here for follow-up queries,
+	// so any character-set or length rule added here breaks that round-trip.
+	// Engines that map it to a filesystem path must validate it at the path join.
 	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Time to retain Query after completion.
 	// Default is resolved by the mutating webhook from ArkConfig/default
 	// (spec.queryTTL), falling back to 720h when ArkConfig is absent.
 	TTL *metav1.Duration `json:"ttl,omitempty"`
-	// +kubebuilder:default="5m"
+	// +kubebuilder:default="30m"
 	// Timeout for query execution (e.g., "30s", "5m", "1h")
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 	// +kubebuilder:validation:Optional
@@ -193,8 +219,4 @@ func (q *QuerySpec) SetInputString(input string) error {
 	}
 	q.Input.Raw = inputBytes
 	return nil
-}
-
-func init() {
-	SchemeBuilder.Register(&Query{}, &QueryList{})
 }

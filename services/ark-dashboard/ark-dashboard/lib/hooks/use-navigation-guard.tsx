@@ -17,7 +17,7 @@ type NavigationPredicate = () => boolean;
 interface NavigationGuardContextValue {
   requestNavigation: (navigate: () => void) => boolean;
   setPredicate: (predicate: NavigationPredicate | null) => void;
-  navigateHref: (href: string) => void;
+  navigateHref: (href: string, replace?: boolean) => void;
 }
 
 const defaultContextValue: NavigationGuardContextValue = {
@@ -44,7 +44,11 @@ export function NavigationGuardProvider({
   }, []);
 
   const navigateHref = useCallback(
-    (href: string) => {
+    (href: string, replace?: boolean) => {
+      if (replace) {
+        router.replace(href);
+        return;
+      }
       router.push(href);
     },
     [router],

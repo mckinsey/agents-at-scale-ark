@@ -44,10 +44,12 @@ Environment variables:
 | `HOST` | Bind address | `0.0.0.0` | — |
 | `LOG_LEVEL` | Log level (`fatal`…`trace`, `silent`) | `info` | — |
 | `REQUEST_TIMEOUT_MS` | Request timeout, 0 to disable | `0` | `server.requestTimeout` |
-| `MAX_MESSAGES` | Max messages held per store, 0 for unlimited | `0` | `limits.maxMessages` (50000) |
-| `MAX_CHUNKS` | Max completion chunks, 0 for unlimited | `0` | `limits.maxChunks` (200000) |
-| `MAX_SPANS` | Max OTEL spans, 0 for unlimited | `0` | `limits.maxSpans` (100000) |
-| `MAX_EVENTS` | Max operation events, 0 for unlimited | `0` | `limits.maxEvents` (200000) |
+| `SHUTDOWN_DRAIN_TIMEOUT_MS` | On SIGTERM, how long to let in-flight requests (including open `/stream` responses) finish before connections are cut and the brokers are closed | `10000` | — |
+| `MESSAGE_MAX_BYTES` | Byte budget for the in-memory message store | `104857600` (100 MiB) | `limits.messageMaxBytes` |
+| `EVENT_MAX_BYTES` | Byte budget for the in-memory event store | `104857600` (100 MiB) | `limits.eventMaxBytes` |
+| `CHUNK_MAX_BYTES` | Byte budget for the in-memory chunk store | `33554432` (32 MiB) | `limits.chunkMaxBytes` |
+| `TRACE_MAX_BYTES` | Byte budget for the in-memory trace store | `33554432` (32 MiB) | `limits.traceMaxBytes` |
+| `CHUNK_TTL_SECONDS` | Retention window for streaming chunks, in seconds | `3600` | `limits.chunkTtlSeconds` |
 | `MEMORY_FILE_PATH` | Path to persist messages | Not set (no persistence) | — |
 | `STREAM_FILE_PATH` | Path to persist chunks | Not set (no persistence) | — |
 | `TRACE_FILE_PATH` | Path to persist spans | Not set (no persistence) | — |
@@ -57,6 +59,10 @@ Environment variables:
 Backend selection (`MESSAGE_BACKEND`, `EVENT_BACKEND`, `CHUNK_BACKEND`) and its Postgres and Redis settings are documented in the backend sections below. The request body limit is fixed at 10MB and is not configurable.
 
 The Helm chart can optionally configure a persistent volume for data storage by setting `persistence.enabled=true`.
+
+File persistence stores each stream as a single append-only file on a `ReadWriteOnce` volume, written by exactly one broker. Run **one broker replica per store**: two brokers writing the same volume duplicate or silently lose events. With persistence enabled the chart sets the Deployment strategy to `Recreate` so a rollout never briefly runs two brokers against the same volume. This is a limit **per store, not per cluster** — a broker per namespace is safe, since each has its own volume, file, and sequence space. For high availability with shared state, use the Postgres (messages, events, sessions) and Redis (chunks) backends instead of file persistence.
+
+- **Optional NetworkPolicy.** `networkPolicy.enabled=true` renders a policy that restricts ingress to the broker's pod port, from pods in the broker's own namespace plus every pod in any namespace listed in `networkPolicy.allowNamespaces` (`ark-system` in practice, since the controller and the completions executor write from there). Off by default, and enforcement depends on your CNI — see [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
 
 ## Heap sizing
 
@@ -75,7 +81,7 @@ Set `app.nodeOptions` to override the computed value. If `app.resources.limits.m
   `app.nodeOptions` **replaces** the computed value rather than adding to it. Setting it for an unrelated flag drops the heap cap and returns V8 to its host-derived default — the failure this section exists to prevent. Include the flag yourself whenever you set it, as in `nodeOptions: "--max-old-space-size=870 --enable-source-maps"`.
 </Callout>
 
-Heap pressure scales with the in-memory stores, so `limits.maxMessages`, `limits.maxChunks`, `limits.maxSpans` and `limits.maxEvents` are the other lever. Moving messages or sessions to Postgres, or chunks to Redis, takes those stores off the heap; traces stay in memory regardless. On the default in-memory backend the sessions index has no size limit — it grows with the queries it has seen until `DELETE /sessions` purges it, which is the one heap consumer with no cap.
+Heap pressure scales with the in-memory stores, so the per-store byte budgets `limits.messageMaxBytes`, `limits.eventMaxBytes`, `limits.chunkMaxBytes` and `limits.traceMaxBytes` are the other lever. Moving messages or sessions to Postgres, or chunks to Redis, takes those stores off the heap; traces stay in memory regardless. On the default in-memory backend the sessions index has no size limit — it grows with the queries it has seen, and `DELETE /sessions/queries/{queryId}` drops one query at a time, so nothing clears it wholesale. Restarting the pod does, unless file persistence is enabled (`persistence.enabled`), in which case the index is reloaded from `SESSIONS_FILE_PATH` on boot and the restart costs nothing. It is the one heap consumer with no cap; move sessions to Postgres if that growth matters.
 
 ## Metrics
 
@@ -137,10 +143,12 @@ Key environment variables:
 | `DATABASE_CONNECT_TIMEOUT_MS` | `10000` | Connection timeout |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement timeout |
 | `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
+| `ROW_REAP_INTERVAL_SECONDS` | `3600` | Interval between expired-row reaper runs. `0` disables the reaper. Max `2147483` (~24 days). |
+| `ROW_REAP_BATCH_SIZE` | `10000` | Rows deleted per `DELETE` statement while the reaper drains a backlog |
 | `DATABASE_DEBUG_QUERIES` | `false` | Log SQL at debug level (SQL text + parameter count, never values) |
 | `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate. When set, the broker reads the file and passes it to the Postgres driver for server certificate verification (`sslmode=verify-full`). Set automatically by the Helm chart when `database.tls.enabled=true`. |
 
-Messages carry a TTL-based expiry: each message is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `MESSAGE_VISIBILITY_TTL_SECONDS` when no per-message TTL is supplied.
+Messages carry a TTL-based expiry: each message is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `MESSAGE_VISIBILITY_TTL_SECONDS` when no per-message TTL is supplied. Expired rows are also physically deleted: a background reaper runs every `ROW_REAP_INTERVAL_SECONDS` (hourly by default) and deletes rows past `expires_at` in batches of `ROW_REAP_BATCH_SIZE`, so the tables don't grow unbounded. The reaper runs independently in every broker replica: `FOR UPDATE SKIP LOCKED` makes concurrent reapers skip each other's rows instead of blocking, so the only cost of N replicas is N times the scan per interval.
 
 Messages are also removed when their originating `Query` is deleted: the controller issues `DELETE /queries/{queryId}/messages`, which hard-deletes every message for that query across all conversations. On the Postgres backend this is a single indexed delete. This complements the TTL above — TTL is time-based, this is triggered by the Query's removal. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
@@ -245,7 +253,7 @@ Key environment variables:
 
 The other `DATABASE_*` variables (`DATABASE_POOL_MAX`, `DATABASE_CONNECT_TIMEOUT_MS`, `DATABASE_STATEMENT_TIMEOUT_MS`, `DATABASE_DEBUG_QUERIES`, `DATABASE_SSL_ROOT_CERT_PATH`) are shared with the message backend — see the table above. Securing the connection (TLS, `migrateUrl`, hiding the URL in a Secret) works identically; see [Securing the Postgres connection](#securing-the-postgres-connection).
 
-Events carry a TTL-based expiry: each event is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `EVENT_VISIBILITY_TTL_SECONDS` when no per-query TTL is supplied.
+Events carry a TTL-based expiry: each event is written with an `expires_at` snapshot and filtered out once it elapses. The expiry aligns with the originating query's TTL (`spec.ttl`, defaulting to `ArkConfig.spec.queryTTL` with a 720h fallback), and falls back to `EVENT_VISIBILITY_TTL_SECONDS` when no per-query TTL is supplied. The expired-row reaper covers the `events` table as well (see the message backend above).
 
 Events are also removed when their originating `Query` is deleted, through a path separate from messages: events aren't part of the [Memory API](/reference/resources/memory#memory-http-api), so the controller calls `DELETE /events/{queryId}` directly on the broker endpoint discovered via the `ark-config-broker` ConfigMap, rather than going through a `Memory` resource. Events are keyed by the Query's UID rather than its name, so `{queryId}` here is the UID. See [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup).
 
@@ -283,9 +291,9 @@ Key environment variables:
 
 The other `DATABASE_*` variables are shared with the message and event backends — see the [Message backend](#message-backend-postgres) table. Securing the connection (TLS, `migrateUrl`, hiding the URL in a Secret) works identically; see [Securing the Postgres connection](#securing-the-postgres-connection).
 
-Session expiry is a **sliding** window rather than the write-time snapshot used for messages and events: every event or message on a session pushes `expires_at` out by `SESSIONS_VISIBILITY_TTL_SECONDS`, so a session stays visible for as long as it is in use, and the value does not track the originating query's `spec.ttl`. The minimum enforced at startup exists because a session is the index into its own messages and events — hiding it earlier than they expire would strand data that is still retained. Expiry hides a session from reads; it does not delete the row, and a later event or message on an expired session makes it visible again.
+Session expiry is a **sliding** window rather than the write-time snapshot used for messages and events: every event or message on a session pushes `expires_at` out by `SESSIONS_VISIBILITY_TTL_SECONDS`, so a session stays visible for as long as it is in use, and the value does not track the originating query's `spec.ttl`. The minimum enforced at startup exists because a session is the index into its own messages and events — hiding it earlier than they expire would strand data that is still retained. Expiry hides a session from reads, and a later event or message on a still-present expired session makes it visible again. The expired-row reaper covers the `sessions` table too (see the [message backend](#message-backend-postgres)), so a session that stays expired is eventually deleted, taking its `session_queries` rows with it via `ON DELETE CASCADE` — after that there is no row left to revive.
 
-Deleting a `Query` does **not** remove it from the sessions read model. Messages and events have per-query cleanup paths (see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup)); sessions do not, so the query's row stays in `session_queries` and its session keeps listing it. `DELETE /sessions` purges every session and its queries.
+Deleting a `Query` removes it from the sessions read model. The controller's finalizer calls `DELETE /sessions/queries/{queryId}` alongside the message and event cleanup paths (see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup)): the `session_queries` row goes, the session header's aggregates are recomputed, and a session left with no queries is deleted with it.
 
 ### Cross-replica session updates
 
@@ -323,7 +331,7 @@ Key environment variables:
 | `REDIS_PASSWORD` | — | Redis password (optional) |
 | `REDIS_TLS_CA_CERT_PATH` | — | Path to a CA certificate for TLS connections with self-signed certs. Set automatically by the Helm chart when `redis.tls.enabled=true`. |
 | `REDIS_KEY_PREFIX` | `ark-broker` | Prefix for all Redis keys |
-| `REDIS_STREAM_TTL_SECONDS` | `3600` | TTL applied to per-query chunk streams |
+| `REDIS_STREAM_TTL_SECONDS` | `3600` | Deprecated alias for `CHUNK_TTL_SECONDS`; honored if set, but prefer `CHUNK_TTL_SECONDS` |
 | `REDIS_CONNECT_TIMEOUT_MS` | `10000` | Redis connection timeout |
 | `REDIS_DEBUG_COMMANDS` | `false` | Log Redis connection lifecycle events at debug level (never logs payloads) |
 
@@ -383,6 +391,8 @@ The `/sessions` endpoint provides a live, event-sourced index of active sessions
 | GET | `/sessions` | Returns the full sessions store |
 | GET | `/sessions?watch=true` | SSE stream of session updates |
 | GET | `/sessions?watch=true&session_id=X` | SSE stream filtered to one session |
-| DELETE | `/sessions` | Purge all session data |
+| DELETE | `/sessions/queries/{queryId}` | Remove one query from every session holding it |
+
+Clearing memory does not touch this index. `DELETE /conversations` — the dashboard's **Reset memory** — empties the message store and leaves every session, query and conversation summary standing, because a session's aggregates are folded from its own query rows rather than from messages. Removing a query from the index is what `DELETE /sessions/queries/{queryId}` above does, and the controller's finalizer calls it when a `Query` is deleted.
 
 Set `SESSIONS_FILE_PATH` to enable persistence to disk, or enable the [Sessions backend (Postgres)](#sessions-backend-postgres) to persist sessions in Postgres and share them across broker replicas.

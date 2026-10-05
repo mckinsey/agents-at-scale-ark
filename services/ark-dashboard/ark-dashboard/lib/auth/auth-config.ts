@@ -12,10 +12,29 @@ import {
 } from '@/lib/constants/auth';
 
 import { createOIDCProvider } from './create-oidc-provider';
-import { TokenManager } from './token-manager';
+import { refreshAccessToken } from './refresh-coordinator';
+import { TokenRefreshError } from './token-manager';
 
 // Extract the jwt callback type from NextAuthConfig
 type JwtCallback = NonNullable<NonNullable<NextAuthConfig['callbacks']>['jwt']>;
+
+type MutableJwt = Parameters<JwtCallback>['0']['token'];
+
+async function refreshOrFlag(token: MutableJwt): Promise<MutableJwt> {
+  try {
+    const refreshed = await refreshAccessToken(token);
+    delete refreshed.error;
+    return refreshed;
+  } catch (error) {
+    const code =
+      error instanceof TokenRefreshError ? error.code : 'refresh_failed';
+    console.error(
+      `[auth] access token refresh failed (${code})`,
+      error instanceof Error ? (error.cause ?? error.message) : error,
+    );
+    return { ...token, error: code };
+  }
+}
 
 async function jwtCallback({
   token,
@@ -39,7 +58,7 @@ async function jwtCallback({
   }
 
   if (trigger === 'update' && session?.shouldRefreshToken) {
-    return await TokenManager.getNewAccessToken(token as Parameters<typeof TokenManager.getNewAccessToken>[0]);
+    return await refreshOrFlag(token);
   }
 
   return token;
@@ -58,6 +77,9 @@ function sessionCallback({
   const userId = token?.id ?? token?.sub;
   if (session?.user && userId) {
     session.user.id = String(userId);
+  }
+  if (session && token?.error) {
+    session.error = String(token.error);
   }
   return session;
 }
@@ -80,7 +102,7 @@ const OIDCProvider = createOIDCProvider({
   clientSecret: process.env.OIDC_CLIENT_SECRET,
 });
 
-function getSessionMaxAge() {
+export function getSessionMaxAge() {
   const maxAgeFromEnv = parseInt(process.env.SESSION_MAX_AGE || ''); //An empty string will result in NaN
   //If SESSION_MAX_AGE is not set or is not a valid value we default to DEFAULT_SESSION_MAX_AGE (30mins)
   return isNaN(maxAgeFromEnv) ? DEFAULT_SESSION_MAX_AGE : maxAgeFromEnv;

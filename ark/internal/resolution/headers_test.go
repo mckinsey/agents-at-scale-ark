@@ -2,6 +2,7 @@ package resolution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -483,4 +484,46 @@ func TestResolveHeaderValueV1PreAlpha1(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestResolveFromSecretReturnsCtxErrorWhenCanceled(t *testing.T) {
+	fakeClient := setupTestClient([]client.Object{
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-secret", Namespace: "default"},
+			Data:       map[string][]byte{"token": []byte("value")},
+		},
+	})
+	secretRef := &corev1.SecretKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+		Key:                  "token",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := ResolveFromSecret(ctx, fakeClient, secretRef, "default")
+	require.Error(t, err)
+	require.True(t, errors.Is(err, context.Canceled), "expected ctx.Canceled, got: %v", err)
+	require.NotContains(t, err.Error(), "failed to get secret", "should not wrap with k8s-flavored prefix when ctx is canceled")
+}
+
+func TestResolveFromConfigMapReturnsCtxErrorWhenCanceled(t *testing.T) {
+	fakeClient := setupTestClient([]client.Object{
+		&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-cm", Namespace: "default"},
+			Data:       map[string]string{"k": "v"},
+		},
+	})
+	cmRef := &corev1.ConfigMapKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: "my-cm"},
+		Key:                  "k",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := ResolveFromConfigMap(ctx, fakeClient, cmRef, "default")
+	require.Error(t, err)
+	require.True(t, errors.Is(err, context.Canceled), "expected ctx.Canceled, got: %v", err)
+	require.NotContains(t, err.Error(), "failed to get configMap", "should not wrap with k8s-flavored prefix when ctx is canceled")
 }

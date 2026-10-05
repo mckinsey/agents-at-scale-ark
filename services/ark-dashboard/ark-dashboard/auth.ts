@@ -10,6 +10,7 @@ declare module 'next-auth' {
     user?: {
       id: string;
     } & DefaultSession['user'];
+    error?: string;
   }
 }
 
@@ -20,6 +21,7 @@ declare module '@auth/core/jwt' {
     access_token?: string;
     refresh_token?: string;
     expires_at: number;
+    error?: string;
   }
 }
 

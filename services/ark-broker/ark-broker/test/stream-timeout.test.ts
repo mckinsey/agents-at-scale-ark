@@ -7,7 +7,7 @@ import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
 import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
 import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 
-const config = loadConfig({});
+const config = loadConfig({STREAM_IDLE_TIMEOUT_MS: '1000'});
 const logger = createLogger({level: 'silent', pretty: false});
 const {app} = buildApp({
   config,
@@ -22,19 +22,18 @@ const {app} = buildApp({
 describe('Stream Timeout', () => {
   test('should send SSE error event with [DONE] on timeout', async () => {
     const response = await request(app)
-      .get('/stream/nonexistent-query?wait-for-query=1') // 1 second timeout
+      .get('/stream/nonexistent-query') // idle timeout armed at 1s via config
       .set('Accept', 'text/event-stream');
 
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toContain('text/event-stream');
 
-    // Should contain error event with streaming timeout message
+    // Should contain the idle-timeout error event, tagged with a distinct code
+    // so consumers can tell it from a real query failure.
     expect(response.text).toContain('data: {"error":{');
-    expect(response.text).toContain(
-      'Request timeout waiting for streaming query response'
-    );
+    expect(response.text).toContain('inactivity');
     expect(response.text).toContain('"type":"timeout_error"');
-    expect(response.text).toContain('"code":"timeout"');
+    expect(response.text).toContain('"code":"stream_idle_timeout"');
 
     // Must end with [DONE] marker
     expect(response.text).toContain('data: [DONE]');

@@ -29,12 +29,12 @@ vi.mock('@/components/ui/sonner', () => ({
 
 vi.mock('@/lib/services/models', () => ({
   modelsService: {
-    getAll: vi.fn(),
+    list: vi.fn(),
     create: vi.fn(),
   },
 }));
 
-type Model = Awaited<ReturnType<typeof modelsService.getAll>>[number];
+type Model = Awaited<ReturnType<typeof modelsService.list>>[number];
 
 const model = (name: string) => ({ id: name, name }) as Model;
 
@@ -60,7 +60,7 @@ describe('namespace-scoped data', () => {
   });
 
   it('shows the second namespace’s resources and never the first’s after a switch', async () => {
-    vi.mocked(modelsService.getAll).mockImplementation(async namespace =>
+    vi.mocked(modelsService.list).mockImplementation(async namespace =>
       namespace === 'team-a' ? [model('a-only')] : [model('b-only')],
     );
 
@@ -78,11 +78,11 @@ describe('namespace-scoped data', () => {
     // for team-b — not even for one render before the refetch lands.
     await waitFor(() => expect(result.current.data).toEqual([model('b-only')]));
     expect(result.current.data).not.toContainEqual(model('a-only'));
-    expect(modelsService.getAll).toHaveBeenCalledWith('team-b');
+    expect(modelsService.list).toHaveBeenCalledWith('team-b');
   });
 
   it('shows an empty result for a namespace with no resources of that type', async () => {
-    vi.mocked(modelsService.getAll).mockImplementation(async namespace =>
+    vi.mocked(modelsService.list).mockImplementation(async namespace =>
       namespace === 'team-a' ? [model('a-only')] : [],
     );
 
@@ -99,7 +99,7 @@ describe('namespace-scoped data', () => {
   });
 
   it('returns to the first namespace’s own resources on the way back', async () => {
-    vi.mocked(modelsService.getAll).mockImplementation(async namespace =>
+    vi.mocked(modelsService.list).mockImplementation(async namespace =>
       namespace === 'team-a' ? [model('a-only')] : [model('b-only')],
     );
 
@@ -119,21 +119,21 @@ describe('namespace-scoped data', () => {
 
   it('issues no request until the active namespace is resolved', async () => {
     activeNamespace = '';
-    vi.mocked(modelsService.getAll).mockResolvedValue([model('a-only')]);
+    vi.mocked(modelsService.list).mockResolvedValue([model('a-only')]);
 
     const { result, rerender } = renderHook(() => useGetAllModels(), {
       wrapper: createWrapper(newQueryClient()),
     });
 
     // Unresolved is the absence of a value, so the gate holds without a flag.
-    expect(modelsService.getAll).not.toHaveBeenCalled();
+    expect(modelsService.list).not.toHaveBeenCalled();
     expect(result.current.fetchStatus).toBe('idle');
 
     activeNamespace = 'team-a';
     rerender();
 
-    await waitFor(() => expect(modelsService.getAll).toHaveBeenCalledWith('team-a'));
-    expect(modelsService.getAll).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(modelsService.list).toHaveBeenCalledWith('team-a'));
+    expect(modelsService.list).toHaveBeenCalledTimes(1);
   });
 
   it('does not attribute an in-flight response to the namespace that replaced it', async () => {
@@ -142,7 +142,7 @@ describe('namespace-scoped data', () => {
       releaseTeamA = resolve;
     });
 
-    vi.mocked(modelsService.getAll).mockImplementation(namespace =>
+    vi.mocked(modelsService.list).mockImplementation(namespace =>
       namespace === 'team-a' ? teamAInFlight : Promise.resolve([model('b-only')]),
     );
 
@@ -160,7 +160,7 @@ describe('namespace-scoped data', () => {
   });
 
   it('refreshes the acting namespace’s list after a create', async () => {
-    vi.mocked(modelsService.getAll)
+    vi.mocked(modelsService.list)
       .mockResolvedValueOnce([model('a-only')])
       .mockResolvedValueOnce([model('a-only'), model('created')]);
     vi.mocked(modelsService.create).mockResolvedValue(model('created'));

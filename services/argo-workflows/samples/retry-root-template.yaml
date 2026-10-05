@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: retry-root-template
+  annotations:
+    workflows.argoproj.io/title: "Retry Root"
+    workflows.argoproj.io/description: |
+      Minimal workflow template whose entrypoint template carries a
+      retryStrategy, so the root node of every run is a Retry node.
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  templates:
+  - name: main
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Fails twice, then succeeds on the third attempt"
+    retryStrategy:
+      limit: "3"
+      retryPolicy: Always
+      backoff:
+        duration: "5s"
+        factor: "2"
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        attempt="{{retries}}"
+        echo "attempt ${attempt}"
+        if [ "${attempt}" -lt 2 ]; then
+          echo "failing on purpose" >&2
+          exit 1
+        fi
+        echo "succeeded on attempt ${attempt}" > /tmp/result.txt
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result.txt

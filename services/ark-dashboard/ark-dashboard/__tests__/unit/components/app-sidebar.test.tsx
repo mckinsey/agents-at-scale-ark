@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import userEvent from '@testing-library/user-event';
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
@@ -77,10 +78,6 @@ vi.mock('@/lib/services/namespaces-hooks', () => ({
   })),
 }));
 
-vi.mock('@/components/editors', () => ({
-  NamespaceEditor: vi.fn(() => <div data-testid="namespace-editor" />),
-}));
-
 vi.mock('@/components/user', () => ({
   UserDetails: vi.fn(() => <div data-testid="user-details" />),
 }));
@@ -104,15 +101,15 @@ describe('AppSidebar - Navigation', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     const { useSearchParams } = await import('next/navigation');
-    vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams() as never,
-    );
+    vi.mocked(useSearchParams).mockReturnValue(new URLSearchParams() as never);
   });
 
   it('should preserve the namespace and drop page-local params when navigating', async () => {
     const mockPush = vi.fn();
     const { useRouter, useSearchParams } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<
+      typeof useRouter
+    >);
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams('namespace=test-ns&foo=bar') as never,
     );
@@ -130,7 +127,9 @@ describe('AppSidebar - Navigation', () => {
   it('should navigate without query string when no params exist', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<
+      typeof useRouter
+    >);
 
     const user = userEvent.setup();
 
@@ -187,7 +186,9 @@ describe('AppSidebar - Files Section', () => {
   it('should navigate to /secrets when Secrets is clicked', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<
+      typeof useRouter
+    >);
 
     const user = userEvent.setup();
 
@@ -196,7 +197,9 @@ describe('AppSidebar - Files Section', () => {
     const otherButton = await screen.findByRole('button', { name: /other/i });
     await user.click(otherButton);
 
-    const secretsButton = await screen.findByRole('button', { name: /secrets/i });
+    const secretsButton = await screen.findByRole('button', {
+      name: /secrets/i,
+    });
     await user.click(secretsButton);
 
     expect(mockPush).toHaveBeenCalledWith('/secrets');
@@ -217,7 +220,9 @@ describe('AppSidebar - Files Section', () => {
   it('should navigate to /api-keys when API keys is clicked', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<
+      typeof useRouter
+    >);
 
     const user = userEvent.setup();
 
@@ -226,7 +231,9 @@ describe('AppSidebar - Files Section', () => {
     const otherButton = await screen.findByRole('button', { name: /other/i });
     await user.click(otherButton);
 
-    const apiKeysButton = await screen.findByRole('button', { name: /api keys/i });
+    const apiKeysButton = await screen.findByRole('button', {
+      name: /api keys/i,
+    });
     await user.click(apiKeysButton);
 
     expect(mockPush).toHaveBeenCalledWith('/api-keys');
@@ -263,7 +270,9 @@ describe('AppSidebar - General Group', () => {
   it('should navigate to /memory when Memory is clicked', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<
+      typeof useRouter
+    >);
 
     const user = userEvent.setup();
 
@@ -278,20 +287,26 @@ describe('AppSidebar - General Group', () => {
   it('should show Marketplace in General group', async () => {
     renderSidebar();
 
-    const marketplaceButton = await screen.findByRole('button', { name: /marketplace/i });
+    const marketplaceButton = await screen.findByRole('button', {
+      name: /marketplace/i,
+    });
     expect(marketplaceButton).toBeInTheDocument();
   });
 
   it('should navigate to /marketplace when Marketplace is clicked', async () => {
     const mockPush = vi.fn();
     const { useRouter } = await import('next/navigation');
-    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<typeof useRouter>);
+    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<
+      typeof useRouter
+    >);
 
     const user = userEvent.setup();
 
     renderSidebar();
 
-    const marketplaceButton = await screen.findByRole('button', { name: /marketplace/i });
+    const marketplaceButton = await screen.findByRole('button', {
+      name: /marketplace/i,
+    });
     await user.click(marketplaceButton);
 
     expect(mockPush).toHaveBeenCalledWith('/marketplace');

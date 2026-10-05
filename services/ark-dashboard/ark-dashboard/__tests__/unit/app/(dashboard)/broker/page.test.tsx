@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -259,7 +259,6 @@ describe('BrokerPage', () => {
       await screen.findByRole('tab', { name: 'OTEL Traces' }),
     ).toBeInTheDocument();
     expect(screen.getByText('Waiting for data...')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Purge' })).toBeInTheDocument();
     expect(screen.getByRole('switch')).toBeChecked();
   });
 
@@ -307,26 +306,5 @@ describe('BrokerPage', () => {
     // Tab label plus the panel title now both read "Messages".
     expect(screen.getAllByText('Messages')).toHaveLength(2);
     expect(screen.getAllByText('OTEL Traces')).toHaveLength(1);
-  });
-
-  it('purges a stream and re-probes for records', async () => {
-    const user = userEvent.setup();
-    const fetchMock = mockFetch(url =>
-      url.includes('/broker/events') ? [{ id: 'e1' }] : [],
-    );
-    renderPage();
-    await screen.findByRole('tab', { name: 'OTEL Traces' });
-
-    await user.click(screen.getByRole('button', { name: 'Purge' }));
-    const dialog = await screen.findByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: 'Purge' }));
-
-    await waitFor(() => {
-      const deleteCall = fetchMock.mock.calls.find(
-        call => (call[1] as RequestInit | undefined)?.method === 'DELETE',
-      );
-      expect(deleteCall).toBeDefined();
-      expect(String(deleteCall?.[0])).toContain('/broker/traces');
-    });
   });
 });

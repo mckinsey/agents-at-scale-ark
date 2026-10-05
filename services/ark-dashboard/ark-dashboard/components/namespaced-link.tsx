@@ -20,7 +20,7 @@ function isModifiedEvent(event: MouseEvent<HTMLAnchorElement>): boolean {
 }
 
 const NamespacedLink = forwardRef<HTMLAnchorElement, NamespacedLinkProps>(
-  function NamespacedLink({ href, onClick, target, ...props }, ref) {
+  function NamespacedLink({ href, onClick, target, replace, ...props }, ref) {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const guard = useNavigationGuardContext();
@@ -36,6 +36,7 @@ const NamespacedLink = forwardRef<HTMLAnchorElement, NamespacedLinkProps>(
           href={href}
           onClick={onClick}
           target={target}
+          replace={replace}
           {...props}
         />
       );
@@ -52,7 +53,9 @@ const NamespacedLink = forwardRef<HTMLAnchorElement, NamespacedLinkProps>(
       ) {
         return;
       }
-      if (guard.requestNavigation(() => guard.navigateHref(fullHref))) {
+      if (
+        guard.requestNavigation(() => guard.navigateHref(fullHref, replace))
+      ) {
         event.preventDefault();
       }
     };
@@ -63,6 +66,7 @@ const NamespacedLink = forwardRef<HTMLAnchorElement, NamespacedLinkProps>(
         href={fullHref}
         onClick={handleClick}
         target={target}
+        replace={replace}
         {...props}
       />
     );

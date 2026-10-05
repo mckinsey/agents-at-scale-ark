@@ -11,10 +11,17 @@ export const envSchema = z
     PORT: z.coerce.number().int().nonnegative().default(8080),
     HOST: z.string().default('0.0.0.0'),
     REQUEST_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(0),
-    MAX_MESSAGES: z.coerce.number().int().nonnegative().default(0),
-    MAX_CHUNKS: z.coerce.number().int().nonnegative().default(0),
-    MAX_SPANS: z.coerce.number().int().nonnegative().default(0),
-    MAX_EVENTS: z.coerce.number().int().nonnegative().default(0),
+    SHUTDOWN_DRAIN_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(10000),
+    STREAM_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
+    MESSAGE_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
+    EVENT_MAX_BYTES: z.coerce.number().int().positive().default(104857600),
+    CHUNK_MAX_BYTES: z.coerce.number().int().positive().default(33554432),
+    TRACE_MAX_BYTES: z.coerce.number().int().positive().default(33554432),
+    CHUNK_TTL_SECONDS: z.coerce.number().int().positive().optional(),
     MEMORY_FILE_PATH: z.string().min(1).optional(),
     STREAM_FILE_PATH: z.string().min(1).optional(),
     TRACE_FILE_PATH: z.string().min(1).optional(),
@@ -50,6 +57,13 @@ export const envSchema = z
       .int()
       .positive()
       .default(2592000),
+    ROW_REAP_INTERVAL_SECONDS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .max(2_147_483)
+      .default(3600),
+    ROW_REAP_BATCH_SIZE: z.coerce.number().int().positive().default(10000),
     DATABASE_DEBUG_QUERIES: z
       .string()
       .default('false')

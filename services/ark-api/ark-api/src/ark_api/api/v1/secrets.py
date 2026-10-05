@@ -33,7 +33,10 @@ async def create_secret(body: SecretCreateRequest, namespace: Optional[str] = Qu
     result = await client.create_secret(
         name=body.name,
         string_data=body.string_data,
-        secret_type=body.type
+        secret_type=body.type,
+        description=body.description,
+        alias=body.alias,
+        labels=body.labels
     )
     return SecretDetailResponse(**result)
 
@@ -50,7 +53,13 @@ async def get_secret(secret_name: str, namespace: Optional[str] = Query(None, de
 async def update_secret(secret_name: str, body: SecretUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> SecretDetailResponse:
     """Update a secret using ark-sdk."""
     client = SecretClient(namespace=namespace, impersonation=impersonation)
-    result = await client.update_secret(secret_name, body.string_data)
+    result = await client.update_secret(
+        secret_name,
+        string_data=body.string_data,
+        description=body.description,
+        alias=body.alias,
+        labels=body.labels
+    )
     return SecretDetailResponse(**result)
 
 @router.delete("/{secret_name}")

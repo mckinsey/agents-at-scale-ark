@@ -6,8 +6,8 @@ import { useForm, useWatch } from 'react-hook-form';
 
 import { toast } from '@/components/ui/sonner';
 import {
-  type Agent,
-  type Team,
+  type AgentListItem,
+  type TeamListItem,
   agentsService,
   teamsService,
   toolsService,
@@ -56,8 +56,8 @@ export function useToolForm({
   const [loading, setLoading] = useState(isViewing);
   const [saving, setSaving] = useState(false);
   const [tool, setTool] = useState<ToolDetail | null>(null);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
+  const [teams, setTeams] = useState<TeamListItem[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [teamsLoading, setTeamsLoading] = useState(false);
 
@@ -109,7 +109,7 @@ export function useToolForm({
     const loadAgents = async () => {
       setAgentsLoading(true);
       try {
-        const data = await agentsService.getAll(namespace);
+        const data = await agentsService.list(namespace);
         if (!cancelled) setAgents(data);
       } catch (error) {
         console.error('Failed to load agents:', error);
@@ -129,7 +129,7 @@ export function useToolForm({
     const loadTeams = async () => {
       setTeamsLoading(true);
       try {
-        const data = await teamsService.getAll(namespace);
+        const data = await teamsService.list(namespace);
         if (!cancelled) setTeams(data);
       } catch (error) {
         console.error('Failed to load teams:', error);

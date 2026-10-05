@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -19,6 +20,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/record"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,6 +37,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/apiserver"
+	"mckinsey.com/ark/internal/cachetransform"
 	"mckinsey.com/ark/internal/controller"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/storage/postgresql"
@@ -74,6 +77,7 @@ type config struct {
 	role                                             string
 	maxConcurrentQueries                             int
 	maxConcurrentReconciles                          int
+	defaultMemoryAutoProvision                       bool
 }
 
 const (
@@ -126,7 +130,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := envBool("ARK_DEFAULT_MEMORY_AUTO_PROVISION", &result.defaultMemoryAutoProvision); err != nil {
+		setupLog.Error(err, "invalid ARK_DEFAULT_MEMORY_AUTO_PROVISION")
+		os.Exit(1)
+	}
+
 	setupLog.Info("starting ark controller", "version", Version, "commit", GitCommit, "role", result.role)
+
+	if limit, err := memlimit.Set(); err != nil {
+		if errors.Is(err, memlimit.ErrCgroupsNotSupported) || errors.Is(err, memlimit.ErrNoCgroup) {
+			setupLog.Info("GOMEMLIMIT not configured: no cgroup memory limit available", "reason", err.Error())
+		} else {
+			setupLog.Error(err, "failed to configure GOMEMLIMIT from cgroup memory limit")
+		}
+	} else {
+		setupLog.Info("configured GOMEMLIMIT", "bytes", limit)
+	}
 
 	if result.role == RolePostgresCleanup {
 		runPostgresCleanup()
@@ -198,6 +217,10 @@ func parseFlags() struct {
 		"Maximum number of Query reconciles running in parallel. The workqueue dedupes per-key, "+
 			"so this only enables concurrency across different Query objects. Set to 0 to use "+
 			"the controller-runtime default (1).")
+	// No CLI flag: this is toggled via the ARK_DEFAULT_MEMORY_AUTO_PROVISION
+	// env var (read once the logger is up, see main()) so an operator can
+	// flip it without touching chart args, matching ENABLE_WEBHOOKS.
+	cfg.defaultMemoryAutoProvision = true
 
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
@@ -228,14 +251,28 @@ func setupManager(cfg config) (ctrl.Manager, *certwatcher.CertWatcher, *certwatc
 		}),
 	}
 
+	cacheOptions := cache.Options{
+		DefaultTransform: cachetransform.StripManagedFields,
+	}
+	// Only the controller role reconciles Query via the cache; apiserver
+	// serves it straight off Postgres (mgr.GetAPIReader()). Registering this
+	// ByObject there deadlocks startup: resolving Query's RESTMapping routes
+	// through the aggregated APIService this same process implements, which
+	// isn't up yet.
+	if cfg.role == RoleController {
+		cacheOptions.ByObject = map[client.Object]cache.ByObject{
+			&arkv1alpha1.Query{}: {Transform: cachetransform.StripQuery},
+		}
+	}
 	if ns := watchNamespaces(); len(ns) > 0 {
 		defaults := make(map[string]cache.Config, len(ns))
 		for _, n := range ns {
 			defaults[n] = cache.Config{}
 		}
-		managerOptions.Cache = cache.Options{DefaultNamespaces: defaults}
+		cacheOptions.DefaultNamespaces = defaults
 		setupLog.Info("controller cache scoped to namespaces", "namespaces", ns)
 	}
+	managerOptions.Cache = cacheOptions
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
 	if err != nil {
@@ -332,6 +369,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 		}},
 		{"Query", &controller.QueryReconciler{
 			Client:                  mgr.GetClient(),
+			APIReader:               mgr.GetAPIReader(),
 			Scheme:                  mgr.GetScheme(),
 			Telemetry:               telemetryProvider,
 			Eventing:                eventingProvider,
@@ -340,7 +378,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			MaxConcurrentReconciles: cfg.maxConcurrentReconciles,
 		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
-		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},
+		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Eventing: eventingProvider}},
 		{"A2AServer", &controller.A2AServerReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),
@@ -359,6 +397,11 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Eventing:  eventingProvider,
 		}},
 		{"Memory", &controller.MemoryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"DefaultMemory", &controller.DefaultMemoryReconciler{
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			AutoProvision: cfg.defaultMemoryAutoProvision,
+		}},
 		{"ExecutionEngine", &controller.ExecutionEngineReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),

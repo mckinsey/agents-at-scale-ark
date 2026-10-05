@@ -33,6 +33,8 @@ The example below creates an OpenAI `gpt-4o-mini` model called `default`. You ca
 
 ![Add Model form filled in for the default OpenAI model](/models/add-form.png)
 
+**Base URL** is picked from an existing [Configuration](/user-guide/configurations), or created inline with **Add New**. Editing a model whose base URL is still a literal value (created via YAML, or before this picker existed) shows a **Move to configuration** button instead, which opens the same "create configuration" dialog pre-filled with that URL — useful for turning a one-off endpoint into something shared and swappable per environment. You can also leave that literal value as-is and edit unrelated fields; it's only rewritten if you actually pick or create a configuration.
+
 The form changes per provider:
 
 - **Azure OpenAI** adds an **Authentication** dropdown (API Key / Managed Identity / Workload Identity) and an **API Version** field.

@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { storedQueryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { QueriesSettings } from '@/components/settings/queries-settings';
 import { arkConfigService } from '@/lib/services/arkconfig';
 
@@ -17,6 +19,7 @@ vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
     error: vi.fn(),
+    info: vi.fn(),
   },
 }));
 
@@ -31,9 +34,23 @@ const renderWithClient = () => {
   );
 };
 
+const renderWithStore = (store: ReturnType<typeof createStore>) => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <Provider store={store}>
+        <QueriesSettings />
+      </Provider>
+    </QueryClientProvider>,
+  );
+};
+
 describe('QueriesSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    globalThis.localStorage.clear();
   });
 
   it('renders current queryTTL from the API', async () => {
@@ -47,6 +64,33 @@ describe('QueriesSettings', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/query ttl/i)).toHaveValue('720h');
     });
+  });
+
+  it('reset clears only queryTTL, leaving other ArkConfig defaults alone', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: '720h',
+      defaultMemory: { name: 'broker-memory' },
+      exists: true,
+    });
+    vi.mocked(arkConfigService.update).mockResolvedValue({
+      queryTTL: null,
+      defaultMemory: { name: 'broker-memory' },
+      exists: true,
+    });
+
+    renderWithClient();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query ttl/i)).toHaveValue('720h');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /reset to default/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    await waitFor(() => {
+      expect(arkConfigService.update).toHaveBeenCalledWith({ queryTTL: null });
+    });
+    expect(arkConfigService.clear).not.toHaveBeenCalled();
   });
 
   it('validates bad duration input before calling the API', async () => {
@@ -110,5 +154,179 @@ describe('QueriesSettings', () => {
       name: /reset to default/i,
     });
     expect(resetButton).toBeDisabled();
+  });
+
+  it('saves the query timeout to the stored atom', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: null,
+      exists: false,
+    });
+    vi.mocked(arkConfigService.update).mockResolvedValue({
+      queryTTL: null,
+      exists: true,
+    });
+
+    const store = createStore();
+    renderWithStore(store);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query timeout/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText(/query timeout/i), {
+      target: { value: '7' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(store.get(storedQueryTimeoutSettingAtom)).toBe('7m');
+    });
+  });
+
+  it('rejects a non-positive query timeout before saving', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: null,
+      exists: false,
+    });
+
+    const store = createStore();
+    renderWithStore(store);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query timeout/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText(/query timeout/i), {
+      target: { value: '0' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/greater than zero/i);
+    expect(arkConfigService.update).not.toHaveBeenCalled();
+    expect(store.get(storedQueryTimeoutSettingAtom)).not.toBe('0m');
+  });
+
+  it('keeps the query timeout saved when the TTL update fails', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: '720h',
+      exists: true,
+    });
+    vi.mocked(arkConfigService.update).mockRejectedValue(
+      new Error('forbidden'),
+    );
+
+    const store = createStore();
+    renderWithStore(store);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query timeout/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText(/query timeout/i), {
+      target: { value: '7' },
+    });
+    fireEvent.change(screen.getByLabelText(/query ttl/i), {
+      target: { value: '30m' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(arkConfigService.update).toHaveBeenCalledWith({
+        queryTTL: '30m',
+      });
+    });
+    expect(store.get(storedQueryTimeoutSettingAtom)).toBe('7m');
+  });
+
+  it('leaves the stored timeout untouched when the field is cleared', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: '720h',
+      exists: true,
+    });
+    vi.mocked(arkConfigService.update).mockResolvedValue({
+      queryTTL: '30m',
+      exists: true,
+    });
+
+    const store = createStore();
+    store.set(storedQueryTimeoutSettingAtom, '9m');
+    renderWithStore(store);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query timeout/i)).toHaveValue(9);
+    });
+
+    fireEvent.change(screen.getByLabelText(/query timeout/i), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText(/query ttl/i), {
+      target: { value: '30m' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(arkConfigService.update).toHaveBeenCalledWith({
+        queryTTL: '30m',
+      });
+    });
+    expect(store.get(storedQueryTimeoutSettingAtom)).toBe('9m');
+    expect(screen.getByLabelText(/query timeout/i)).toHaveValue(9);
+  });
+
+  it('asks for confirmation before resetting', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: '720h',
+      exists: true,
+    });
+    vi.mocked(arkConfigService.update).mockResolvedValue({
+      queryTTL: null,
+      exists: true,
+    });
+
+    const store = createStore();
+    store.set(storedQueryTimeoutSettingAtom, '9m');
+    renderWithStore(store);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query ttl/i)).toHaveValue('720h');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /reset to default/i }));
+
+    expect(arkConfigService.update).not.toHaveBeenCalled();
+    expect(store.get(storedQueryTimeoutSettingAtom)).toBe('9m');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    await waitFor(() => {
+      expect(arkConfigService.update).toHaveBeenCalledWith({ queryTTL: null });
+    });
+    expect(store.get(storedQueryTimeoutSettingAtom)).toBe('5m');
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query ttl/i)).toHaveValue('');
+    });
+  });
+
+  it('keeps the TTL field populated when the reset write fails', async () => {
+    vi.mocked(arkConfigService.get).mockResolvedValue({
+      queryTTL: '720h',
+      exists: true,
+    });
+    vi.mocked(arkConfigService.update).mockRejectedValue(new Error('forbidden'));
+
+    const store = createStore();
+    renderWithStore(store);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/query ttl/i)).toHaveValue('720h');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /reset to default/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    await waitFor(() => {
+      expect(arkConfigService.update).toHaveBeenCalledWith({ queryTTL: null });
+    });
+    expect(screen.getByLabelText(/query ttl/i)).toHaveValue('720h');
   });
 });

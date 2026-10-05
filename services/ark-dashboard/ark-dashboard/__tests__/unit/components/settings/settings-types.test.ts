@@ -38,10 +38,10 @@ describe('settingsSections', () => {
     expect(manageMarketplace!.experimental).toBe(true);
   });
 
-  it('should have icons for all items', () => {
+  it('should have a label for all items', () => {
     for (const section of settingsSections) {
       for (const item of section.items) {
-        expect(item.icon).toBeDefined();
+        expect(item.label).toBeTruthy();
       }
     }
   });

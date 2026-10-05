@@ -321,4 +321,31 @@ describe('SessionsTable', () => {
       order: 'desc',
     });
   });
+
+  it('should show an error state instead of the empty state when the list fails to load', async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    vi.mocked(useListSessions).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('Internal Server Error'),
+      refetch,
+    } as unknown as ReturnType<typeof useListSessions>);
+
+    render(
+      <SessionsTable
+        onSelectSession={mockOnSelectSession}
+        selectedSessionId={null}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Failed to load sessions',
+    );
+    expect(screen.queryByText('No sessions found')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalled();
+  });
 });
