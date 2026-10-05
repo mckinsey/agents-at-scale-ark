@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.70-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70-rc.1...v0.1.70-rc.2) (2026-10-05)
+
+
+### Bug Fixes
+
+* **dashboard:** keep cached queries list fresh after writes and while queries run ([#3693](https://github.com/mckinsey/agents-at-scale-ark/issues/3693)) ([bf5436e](https://github.com/mckinsey/agents-at-scale-ark/commit/bf5436e18aeff10aca939bad2408ed9e77520904))
+* **dashboard:** refresh teams list after creating or updating a team ([#3690](https://github.com/mckinsey/agents-at-scale-ark/issues/3690)) ([611b1c6](https://github.com/mckinsey/agents-at-scale-ark/commit/611b1c6ed0bfb3d025b2831303c02e025070a77a))
+* **dashboard:** show error and not-found states on sessions pages ([#3689](https://github.com/mckinsey/agents-at-scale-ark/issues/3689)) ([4b624ea](https://github.com/mckinsey/agents-at-scale-ark/commit/4b624eafc9ad7efdf6c14a789585a5eb85ffef92))
+* **deps:** bump @modelcontextprotocol/sdk to 1.32.0 ([#3696](https://github.com/mckinsey/agents-at-scale-ark/issues/3696)) ([889e1d8](https://github.com/mckinsey/agents-at-scale-ark/commit/889e1d8107f8c9bfde9564e80887216db203561d))
+
 ## [0.1.70-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70-rc...v0.1.70-rc.1) (2026-10-02)
 
 
