@@ -18,9 +18,14 @@ import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
+import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 
 const mockUseNamespace = vi.fn();
+
+vi.mock('@/lib/services/workflow-templates-hooks', () => ({
+  useGetAllWorkflowTemplates: vi.fn(),
+}));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => mockUseNamespace(),
@@ -315,6 +320,14 @@ describe('SessionsSection', () => {
       loading: false,
       error: null,
     } as any);
+
+    vi.mocked(useGetAllWorkflowTemplates).mockReturnValue({
+      data: [
+        { metadata: { name: 'data-processing-template' } },
+        { metadata: { name: 'ml-training-template' } },
+      ],
+      isPending: false,
+    } as any);
   });
 
   describe('Namespace', () => {
@@ -541,7 +554,7 @@ describe('SessionsSection', () => {
       });
     });
 
-    it('should pass template name filter to API', async () => {
+    it('should not pass a template filter for free text that was never selected', async () => {
       const user = userEvent.setup();
       const mockUseWorkflows = vi.mocked(useWorkflows);
 
@@ -553,11 +566,7 @@ describe('SessionsSection', () => {
       await waitFor(() => {
         const lastCall =
           mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
-        expect(lastCall[1]).toEqual(
-          expect.objectContaining({
-            workflowTemplateName: 'ml-training',
-          }),
-        );
+        expect(lastCall[1]).toHaveProperty('workflowTemplateName', undefined);
       });
     });
 
@@ -830,11 +839,9 @@ describe('SessionsSection', () => {
     });
 
     it('should show message when no templates available', () => {
-      vi.mocked(useWorkflows).mockReturnValue({
-        workflows: [],
-        loading: false,
-        error: null,
-        refetch: vi.fn(),
+      vi.mocked(useGetAllWorkflowTemplates).mockReturnValue({
+        data: [],
+        isPending: false,
       } as any);
 
       render(<SessionsSection />);

@@ -56,6 +56,7 @@ import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
+import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -1001,8 +1002,16 @@ export function SessionsSection({
   const [workflowNameInput, setWorkflowNameInput] = useState(
     searchParams.get('workflowName') || '',
   );
+  const initialWorkflowTemplateName = searchParams.get('workflowTemplateName') || '';
+  // workflowTemplateNameInput is the raw text shown in the input and used to
+  // filter dropdown suggestions. selectedTemplateName is the committed filter
+  // actually sent to the API - it is only set by picking a dropdown option, since
+  // the backend applies this as an exact-match label selector (see PR #3679 review).
   const [workflowTemplateNameInput, setWorkflowTemplateNameInput] = useState(
-    searchParams.get('workflowTemplateName') || '',
+    initialWorkflowTemplateName,
+  );
+  const [selectedTemplateName, setSelectedTemplateName] = useState(
+    initialWorkflowTemplateName,
   );
   const [statusFilter, setStatusFilter] = useState(
     normalizeStatus(searchParams.get('status') || 'all'),
@@ -1011,18 +1020,14 @@ export function SessionsSection({
   const templateInputRef = useRef<HTMLDivElement>(null);
 
   const debouncedWorkflowName = useDebounce(workflowNameInput, 500);
-  const debouncedWorkflowTemplateName = useDebounce(
-    workflowTemplateNameInput,
-    500,
-  );
 
   const filters = useMemo(
     () => ({
       workflowName: debouncedWorkflowName || undefined,
-      workflowTemplateName: debouncedWorkflowTemplateName || undefined,
+      workflowTemplateName: selectedTemplateName || undefined,
       status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
     }),
-    [debouncedWorkflowName, debouncedWorkflowTemplateName, statusFilter],
+    [debouncedWorkflowName, selectedTemplateName, statusFilter],
   );
 
   // Update URL when filters change
@@ -1038,8 +1043,8 @@ export function SessionsSection({
     if (debouncedWorkflowName) {
       params.set('workflowName', debouncedWorkflowName);
     }
-    if (debouncedWorkflowTemplateName) {
-      params.set('workflowTemplateName', debouncedWorkflowTemplateName);
+    if (selectedTemplateName) {
+      params.set('workflowTemplateName', selectedTemplateName);
     }
     if (statusFilter && statusFilter !== 'all') {
       params.set('status', statusFilter.toLowerCase());
@@ -1051,13 +1056,7 @@ export function SessionsSection({
     }
     const newUrl = queryString ? `?${queryString}` : window.location.pathname;
     router.replace(newUrl, { scroll: false });
-  }, [
-    searchParams,
-    debouncedWorkflowName,
-    debouncedWorkflowTemplateName,
-    statusFilter,
-    router,
-  ]);
+  }, [searchParams, debouncedWorkflowName, selectedTemplateName, statusFilter, router]);
 
   const handleWorkflowsPageError = useCallback((err: Error) => {
     toast.error('Failed to load page', { description: err.message });
@@ -1076,16 +1075,20 @@ export function SessionsSection({
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
+  // Suggestions come from the full set of workflow templates, not the current
+  // page of workflow runs - a page can easily miss templates that still need
+  // to be selectable (see PR #3679 review).
+  const { data: workflowTemplates } = useGetAllWorkflowTemplates();
+
   const uniqueWorkflowTemplateNames = useMemo(() => {
     const templateNames = new Set<string>();
-    workflows.forEach(workflow => {
-      const templateName = workflow.spec.workflowTemplateRef?.name;
-      if (templateName) {
-        templateNames.add(templateName);
+    workflowTemplates?.forEach(template => {
+      if (template.metadata.name) {
+        templateNames.add(template.metadata.name);
       }
     });
     return Array.from(templateNames).sort();
-  }, [workflows]);
+  }, [workflowTemplates]);
 
   const filteredTemplateNames = useMemo(() => {
     if (!workflowTemplateNameInput) return uniqueWorkflowTemplateNames;
@@ -1179,6 +1182,7 @@ export function SessionsSection({
   const hasActiveFilters =
     workflowNameInput ||
     workflowTemplateNameInput ||
+    selectedTemplateName ||
     (statusFilter && statusFilter !== 'all');
 
   const isLoading = loading || !isNamespaceResolved;
@@ -1186,6 +1190,7 @@ export function SessionsSection({
   const clearFilters = () => {
     setWorkflowNameInput('');
     setWorkflowTemplateNameInput('');
+    setSelectedTemplateName('');
     setStatusFilter('all');
   };
 
@@ -1216,7 +1221,13 @@ export function SessionsSection({
                 placeholder="All templates"
                 value={workflowTemplateNameInput}
                 onChange={e => {
-                  setWorkflowTemplateNameInput(e.target.value);
+                  const value = e.target.value;
+                  setWorkflowTemplateNameInput(value);
+                  // Only an exact dropdown pick becomes the committed filter -
+                  // free text here never reaches the API (see PR #3679 review).
+                  if (value !== selectedTemplateName) {
+                    setSelectedTemplateName('');
+                  }
                   if (!templateDropdownOpen) {
                     setTemplateDropdownOpen(true);
                   }
@@ -1233,6 +1244,7 @@ export function SessionsSection({
                     query={workflowTemplateNameInput}
                     onSelect={templateName => {
                       setWorkflowTemplateNameInput(templateName);
+                      setSelectedTemplateName(templateName);
                       setTemplateDropdownOpen(false);
                     }}
                   />
