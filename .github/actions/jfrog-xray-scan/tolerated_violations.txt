@@ -37,3 +37,11 @@ XRAY-1092096 - CVE-2026-93753 (deepmerge@4.3.1)
 - No fix available: 4.3.1 is the latest published release.
 - Not runtime-exploitable in Ark: deepmerge is pulled in transitively via jest-config (test-runner configuration merging), a dev/test-only dependency. It isn't present in ark-dashboard's dependency tree at all; in ark-broker and ark-landing-page it's a devDependency-only path, and ark-broker's Dockerfile runs `npm ci --only=production` for its runtime image, excluding it from the deployed container.
 - Remove this entry once jest-config depends on a patched deepmerge release, or deepmerge itself validates merge keys.
+
+XRAY-1100109 - CVE-2023-54404 (zod@4.4.3)
+- Uncontrolled resource consumption in Zod's $ZodArray: validating a large array against a schema with no length limit collects every element's validation issue with no cap, exhausting memory. Affects zod through 4.6.5.
+- No fix available: 4.6.5 is the latest published release and is itself affected.
+- Not exploitable in ark-broker, the only deployed service that validates external input with Zod: its single array schema is `messages: z.array(z.unknown())` (src/http/routes/memory/schemas.ts). z.unknown() accepts every element, so no validation issues are ever collected, and request bodies are capped at 10mb (express.json limit in src/server.ts).
+- Verified against zod@4.4.3: parsing a 5,000,000-element array with the broker's schema succeeds with 0 issues and about 43MB heap growth; the control (z.array(z.string()) with failing elements) collects 2,500,000 issues and about 1.8GB heap growth.
+- ark-dashboard uses Zod only for client-side form validation and a marketplace install route; ark-cli and docs pull Zod transitively (MCP SDK, nextra) and do not validate attacker-controlled arrays.
+- Remove this entry once a patched Zod is released, or if any ark-broker schema gains an array with a validated element type.
