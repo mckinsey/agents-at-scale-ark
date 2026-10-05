@@ -223,9 +223,14 @@ func runInlineActivator(ctx context.Context) error {
 func serveInlineActivator(ctx context.Context, listener net.Listener, a *activator.Activator) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", a)
-	for _, path := range []string{"/healthz", "/readyz"} {
-		mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	}
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		if !a.Healthy() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	defer func() { _ = server.Close() }()
 	runCtx, stopRun := context.WithCancel(ctx)

@@ -3,9 +3,6 @@
 {{- fail "inlineTools.enabled requires inlineTools.activator.enabled=true; keep the activator installed when disabling invocation" -}}
 {{- end -}}
 {{- if .Values.inlineTools.activator.enabled -}}
-{{- if .Values.networkPolicy.enable -}}
-{{- fail "inlineTools.activator.enabled conflicts with networkPolicy.enable: ark-system-baseline permits unselected callers; replace its protections with appropriately scoped policies before disabling it and installing the activator" -}}
-{{- end -}}
 {{- if not .Values.controllerManager.watchNamespaces -}}
 {{- fail "inlineTools.activator.enabled requires non-empty controllerManager.watchNamespaces; cluster-wide activator bindings are not supported" -}}
 {{- end -}}

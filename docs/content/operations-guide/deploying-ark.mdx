@@ -229,7 +229,7 @@ A dedicated ClusterRole is bound only through a RoleBinding in each watched name
 
 The Service is internal-only. A mandatory ingress NetworkPolicy admits TCP 8080 from the release namespace's `control-plane: ark-controller` and `app: ark-completions` pods by default. To allow other executor workloads, replace `inlineTools.activator.allowedCallers` with entries containing `namespace` and non-empty `podLabels`; an empty namespace means the release namespace. Replacing that list replaces the defaults, so retain every required caller. Administrators must prevent additive policies from widening this boundary and protect these labels; it is not per-user authentication.
 
-The chart rejects installing the activator with `networkPolicy.enable=true`, even with invocation disabled: its `ark-system-baseline` policy allows every same-namespace pod to reach the activator. Before disabling that option, replace the baseline, webhook, metrics and ingress protections it installs with appropriately scoped policies that do not widen activator ingress. The guard catches this known chart conflict only, not other administrator policies, and does not verify CNI enforcement.
+`networkPolicy.enable=true` installs alongside the activator without a chart-level conflict: `ark-system-baseline`'s same-namespace allow-all ingress rule excludes `app.kubernetes.io/name: ark-inline-activator` by selector, so it never widens the activator's dedicated policy. This exclusion covers only that known chart conflict, not other administrator-authored policies that may also select the activator pod, and it does not verify CNI enforcement.
 
 #### Runner infrastructure
 

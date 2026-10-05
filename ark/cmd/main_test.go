@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
@@ -310,8 +311,6 @@ func TestInlineActivatorChartRejectsUnsafeInstallation(t *testing.T) {
 		message string
 	}{
 		{[]string{"--set", "inlineTools.enabled=true"}, "inlineTools.activator.enabled=true"},
-		{[]string{"--set", "inlineTools.activator.enabled=true", "--set", "networkPolicy.enable=true"}, "conflicts with networkPolicy.enable"},
-		{[]string{"--set", "inlineTools.activator.enabled=true", "--set", "inlineTools.enabled=true", "--set", "networkPolicy.enable=true"}, "conflicts with networkPolicy.enable"},
 		{[]string{"--set", "inlineTools.activator.enabled=true", "--set", "inlineTools.enabled=true", "--set", "webhook.enable=false"}, "requires webhook.enable=true"},
 		{[]string{"--set", "inlineTools.activator.enabled=true"}, "non-empty controllerManager.watchNamespaces"},
 		{[]string{"--set", "inlineTools.activator.enabled=true", "--set-json", `controllerManager.watchNamespaces=["tenant"]`}, "include the release namespace"},
@@ -324,6 +323,25 @@ func TestInlineActivatorChartRejectsUnsafeInstallation(t *testing.T) {
 		_, err := renderInlineActivator(t, tc.args...)
 		require.ErrorContains(t, err, tc.message)
 	}
+}
+
+func TestInlineActivatorChartCoexistsWithNetworkPolicyBaseline(t *testing.T) {
+	objects, err := renderInlineActivator(t, "--set", "inlineTools.activator.enabled=true", "--set-json", `controllerManager.watchNamespaces=["ark-system"]`, "--set", "networkPolicy.enable=true")
+	require.NoError(t, err)
+	found := false
+	for _, object := range objects {
+		if object.GetKind() != "NetworkPolicy" || object.GetName() != "ark-system-baseline" {
+			continue
+		}
+		found = true
+		var policy networkingv1.NetworkPolicy
+		require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &policy))
+		require.NotNil(t, policy.Spec.PodSelector.MatchExpressions)
+		assert.Contains(t, policy.Spec.PodSelector.MatchExpressions, metav1.LabelSelectorRequirement{
+			Key: "app.kubernetes.io/name", Operator: metav1.LabelSelectorOpNotIn, Values: []string{inlinetools.ActivatorName},
+		})
+	}
+	assert.True(t, found, "expected ark-system-baseline NetworkPolicy to render")
 }
 
 func TestInlineActivatorScopedControllerRetainsAdmissionReviewPermissionWithoutMetrics(t *testing.T) {

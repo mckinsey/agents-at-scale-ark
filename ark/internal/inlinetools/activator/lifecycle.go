@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -29,6 +30,8 @@ import (
 const (
 	activationTimeout = 60 * time.Second
 	idleTimeout       = 60 * time.Second
+	tickInterval      = time.Second
+	healthyStaleAfter = 5 * tickInterval
 )
 
 type activity struct {
@@ -52,6 +55,7 @@ type Activator struct {
 	pollInterval      time.Duration
 	mu                sync.Mutex
 	activity          map[types.UID]*activity
+	lastTick          atomic.Int64 // UnixNano of the last Run loop tick; zero until Run starts.
 }
 
 func New(ctx context.Context, kube client.Client, namespace string, namespaces []string) (*Activator, error) {
@@ -71,6 +75,7 @@ func New(ctx context.Context, kube client.Client, namespace string, namespaces [
 	if err := a.recover(ctx); err != nil {
 		return nil, err
 	}
+	a.lastTick.Store(time.Now().UnixNano())
 	return a, nil
 }
 
@@ -175,18 +180,26 @@ func (a *Activator) recover(ctx context.Context) error {
 }
 
 func (a *Activator) Run(ctx context.Context) error {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case now := <-ticker.C:
+			a.lastTick.Store(now.UnixNano())
 			if err := a.sweep(ctx, now); err != nil {
 				log.FromContext(ctx).Error(err, "inline idle scale-down failed")
 			}
 		}
 	}
+}
+
+// Healthy reports whether the Run loop is still ticking. A liveness probe
+// backed by this, rather than an unconditional 200, catches a Run goroutine
+// that died (panic, deadlock) without the process exiting.
+func (a *Activator) Healthy() bool {
+	return time.Since(time.Unix(0, a.lastTick.Load())) < healthyStaleAfter
 }
 
 func (a *Activator) sweep(ctx context.Context, now time.Time) error {

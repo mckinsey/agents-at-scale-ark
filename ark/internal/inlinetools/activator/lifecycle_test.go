@@ -423,6 +423,28 @@ func TestActivatorRunSweepsAndStopsWithItsContext(t *testing.T) {
 	assert.Zero(t, storedReplicas(t, a, fixture))
 }
 
+func TestActivatorHealthyReflectsRunLoopLiveness(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	assert.True(t, a.Healthy(), "a freshly constructed activator has not gone stale yet")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- a.Run(ctx) }()
+	require.Eventually(t, func() bool { return a.lastTick.Load() > 0 }, time.Second, 10*time.Millisecond)
+	assert.True(t, a.Healthy(), "Run is ticking")
+	cancel()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("run loop did not stop")
+	}
+
+	a.lastTick.Store(time.Now().Add(-healthyStaleAfter - time.Second).UnixNano())
+	assert.False(t, a.Healthy(), "a stopped Run loop must eventually report unhealthy")
+}
+
 func TestActivatorRetriesIdleAfterOwnershipLabelsAreRepaired(t *testing.T) {
 	fixture := lifeFixture("echo", 1)
 	a, scales := lifeActivator(t, fixture)
