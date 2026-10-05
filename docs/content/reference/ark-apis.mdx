@@ -300,7 +300,7 @@ curl http://ark-api:8000/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
 curl http://ark-api:8000/v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent/my-agent
 ```
 
-There are also log endpoints for pods and Argo workflow nodes: `GET /v1/resources/api/v1/namespaces/{namespace}/pods/{pod_name}/log`, `GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/{node_id}/log`, and their `/log/window` variants.
+There are also log endpoints for pods and Argo workflow nodes: `GET /v1/resources/api/v1/namespaces/{namespace}/pods/{pod_name}/log`, `GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/{node_id}/log`, and their `/log/window` variants. They only serve pods that an Argo workflow created, identified by the `workflows.argoproj.io/workflow` label, and return `404` for any other pod. The node endpoints look for the node only among the pods of the workflow named in the path.
 
 ### Parameters
 
@@ -324,4 +324,4 @@ curl -H "Accept: application/yaml" \
 
 ### RBAC
 
-The endpoint uses the service account configured for the Ark API pod. Ensure that service account has RBAC permissions for the resources you want to access.
+The endpoint uses the service account configured for the Ark API pod. Ensure that service account has RBAC permissions for the resources you want to access. Reading logs needs `get` on `pods` as well as on `pods/log`.
