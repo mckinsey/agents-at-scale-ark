@@ -4,12 +4,20 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
+from kubernetes_asyncio.client import V1ObjectMeta, V1Pod
 from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 
 os.environ["AUTH_MODE"] = "open"
 
 from ark_api.api.v1.pagination import MAX_PAGE_LIMIT
+
+WORKFLOW_POD_LABEL = "workflows.argoproj.io/workflow"
+
+
+def workflow_pod(name, workflow):
+    """A pod as the Argo controller creates it for a step of the given workflow."""
+    return V1Pod(metadata=V1ObjectMeta(name=name, labels={WORKFLOW_POD_LABEL: workflow}))
 
 
 def make_awaitable(return_value):
@@ -932,6 +940,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value="Log line 1\nLog line 2\n")
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -949,6 +958,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value="Recent logs\n")
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -975,6 +985,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(side_effect=Exception("Pod not found"))
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -991,6 +1002,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("node-id-123", "test-workflow"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value="Workflow log output\n")
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -1000,7 +1012,10 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.text, "Workflow log output\n")
-        mock_core_v1.read_namespaced_pod_log.assert_called_once()
+        mock_core_v1.read_namespaced_pod_log.assert_called_once_with(
+            name="node-id-123", namespace="default", container="main", tail_lines=1000
+        )
+        mock_core_v1.list_namespaced_pod.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
@@ -1010,17 +1025,13 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
-        mock_core_v1.read_namespaced_pod_log = AsyncMock(
-            side_effect=[
-                Exception("Direct lookup failed"),
-                "Fallback log output\n"
-            ]
-        )
+        mock_core_v1.read_namespaced_pod = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
+        mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value="Fallback log output\n")
 
         mock_pod_list = Mock()
         mock_pod_list.items = [
-            Mock(metadata=Mock(name="test-workflow-step-abc")),
-            Mock(metadata=Mock(name="test-workflow-other-xyz"))
+            workflow_pod("test-workflow-step-abc", "test-workflow"),
+            workflow_pod("test-workflow-other-xyz", "test-workflow"),
         ]
         mock_core_v1.list_namespaced_pod = AsyncMock(return_value=mock_pod_list)
         mock_core_v1_cls.return_value = mock_core_v1
@@ -1031,8 +1042,12 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.text, "Fallback log output\n")
-        self.assertEqual(mock_core_v1.read_namespaced_pod_log.call_count, 2)
-        mock_core_v1.list_namespaced_pod.assert_called_once()
+        mock_core_v1.read_namespaced_pod_log.assert_called_once_with(
+            name="test-workflow-step-abc", namespace="default", container="main", tail_lines=1000
+        )
+        mock_core_v1.list_namespaced_pod.assert_called_once_with(
+            namespace="default", label_selector=f"{WORKFLOW_POD_LABEL}=test-workflow"
+        )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
@@ -1042,6 +1057,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("node-id", "test-workflow"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value=None)
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -1706,6 +1722,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
     def _mock_core_v1(self, mock_core_v1_cls, total_lines, line_bytes=0, texts=None):
         streams = []
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("node", "wf"))
         mock_core_v1.read_namespaced_pod_log = make_log_stream_reader(total_lines, streams, line_bytes, texts)
         mock_core_v1_cls.return_value = mock_core_v1
         return mock_core_v1, streams
@@ -1798,6 +1815,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
             for index in range(4)
         ]
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = make_chunked_log_stream_reader(lines, [])
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -1968,6 +1986,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         streams = []
         lines = build_recent_log_lines(total_lines, datetime.now(timezone.utc))
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = make_recent_log_stream_reader(lines, streams)
         mock_core_v1_cls.return_value = mock_core_v1
         return lines, streams
@@ -2061,10 +2080,8 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         mock_core_v1.read_namespaced_pod = AsyncMock(
             side_effect=ApiException(status=404, reason="Not Found")
         )
-        pod = Mock()
-        pod.metadata.name = "test-workflow-step-abc123"
         pod_list = Mock()
-        pod_list.items = [pod]
+        pod_list.items = [workflow_pod("test-workflow-step-abc123", "test-workflow")]
         mock_core_v1.list_namespaced_pod = AsyncMock(return_value=pod_list)
 
         response = self.client.get(
@@ -2216,7 +2233,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         """A denied log read keeps its own status instead of becoming archive guidance."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
         mock_core_v1 = AsyncMock()
-        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=Mock())
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("node", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(
             side_effect=ApiException(status=403, reason="Forbidden")
         )
@@ -2408,6 +2425,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
         stream = FakeLogStream(b"container sidecar is not valid", status=400)
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value=stream)
         mock_core_v1_cls.return_value = mock_core_v1
 
