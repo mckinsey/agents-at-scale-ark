@@ -5,16 +5,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkmcp "mckinsey.com/ark/internal/mcp"
 )
 
-func inlineTool(name, address string, uid types.UID) *arkv1alpha1.Tool {
+func inlineTool(address string) *arkv1alpha1.Tool {
 	return &arkv1alpha1.Tool{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: uid, Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: testToolGreet, Namespace: "default", UID: "uid-1", Generation: 1},
 		Spec: arkv1alpha1.ToolSpec{
 			Type:   arkv1alpha1.ToolTypeInline,
 			Inline: &arkv1alpha1.InlineSpec{Source: "echo hi", Language: arkv1alpha1.InlineLanguageBash},
@@ -41,7 +40,7 @@ func testPool(t *testing.T) *arkmcp.MCPClientPool {
 }
 
 func TestCreateToolExecutorInlineUsesMCPExecutor(t *testing.T) {
-	tool := inlineTool(testToolGreet, newTestMCPServer(t), "uid-1")
+	tool := inlineTool(newTestMCPServer(t))
 
 	executor, err := CreateToolExecutor(t.Context(), setupTestClientForTools([]client.Object{tool}), tool, "default",
 		ToolExecutorDeps{MCPPool: testPool(t)})
@@ -61,7 +60,7 @@ func TestCreateToolExecutorInlineDoesNotReuseMCPServerClient(t *testing.T) {
 	serverEndpoint := newTestMCPServer(t)
 	require.NotEqual(t, inlineEndpoint, serverEndpoint)
 
-	tool := inlineTool(testToolGreet, inlineEndpoint, "uid-1")
+	tool := inlineTool(inlineEndpoint)
 	mcpServer := &arkv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: testToolGreet, Namespace: "default"},
 		Spec: arkv1alpha1.MCPServerSpec{
@@ -115,7 +114,7 @@ func TestCreateToolExecutorInlineRejectsUnusableStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tool := inlineTool(testToolGreet, newTestMCPServer(t), "uid-1")
+			tool := inlineTool(newTestMCPServer(t))
 			tt.mutate(tool)
 
 			executor, err := CreateToolExecutor(t.Context(), setupTestClientForTools(nil), tool, "default",
@@ -128,7 +127,7 @@ func TestCreateToolExecutorInlineRejectsUnusableStatus(t *testing.T) {
 }
 
 func TestRegisterInlineToolPreservesAttachmentAliasAndApproval(t *testing.T) {
-	tool := inlineTool(testToolGreet, newTestMCPServer(t), "uid-1")
+	tool := inlineTool(newTestMCPServer(t))
 	tool.Spec.Approval = &arkv1alpha1.ToolApprovalConfig{Required: true}
 
 	registry := NewToolRegistry(nil, nil, nil)
