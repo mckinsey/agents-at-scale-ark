@@ -49,6 +49,61 @@ def create_sync_api_client() -> sync_client.ApiClient:
     return api
 
 
+def _call(target) -> None:
+    if target is None:
+        return
+    try:
+        target()
+    except Exception:
+        pass
+
+
+def _detach_pools(pool_manager) -> list:
+    """Remove and return every connection pool held by a urllib3 PoolManager.
+
+    PoolManager.clear() only drops its references to the pools: urllib3 2.x
+    builds its pool container without a dispose_func, so despite the docstring
+    the pools are not closed and their sockets stay open until a garbage
+    collection pass finalises them. Taking the pools out ourselves lets us close
+    them directly. Falls back to clear() if urllib3's internals ever move.
+    """
+    pools = getattr(pool_manager, "pools", None)
+    container = getattr(pools, "_container", None)
+    if container is None:
+        _call(getattr(pool_manager, "clear", None))
+        return []
+    try:
+        lock = getattr(pools, "lock", None)
+        if lock is None:
+            detached = list(container.values())
+            container.clear()
+            return detached
+        with lock:
+            detached = list(container.values())
+            container.clear()
+        return detached
+    except Exception:
+        _call(getattr(pool_manager, "clear", None))
+        return []
+
+
+def release_api_client(api_client) -> None:
+    """Release a Kubernetes ApiClient's thread pool and its open sockets.
+
+    ApiClient.close() only shuts down the ThreadPool behind its `pool` property,
+    which is created lazily and only for async_req=True calls. Ark never uses
+    async_req, so on its paths close() releases nothing at all. The sockets live
+    in connection pools under rest_client.pool_manager (urllib3) and have to be
+    closed separately.
+    """
+    if api_client is None:
+        return
+    _call(getattr(api_client, "close", None))
+    pool_manager = getattr(getattr(api_client, "rest_client", None), "pool_manager", None)
+    for pool in _detach_pools(pool_manager):
+        _call(getattr(pool, "close", None))
+
+
 def create_api_client() -> ApiClient:
     """Create an async Kubernetes ApiClient with the Ark user-agent."""
     api = ApiClient()

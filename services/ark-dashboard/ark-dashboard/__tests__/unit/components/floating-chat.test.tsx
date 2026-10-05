@@ -12,6 +12,12 @@ import FloatingChat from '@/components/floating-chat';
 import type { QueryDetailResponse } from '@/lib/services';
 import { chatService } from '@/lib/services';
 
+const mockInvalidateQueriesList = vi.fn();
+
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useInvalidateQueriesList: () => mockInvalidateQueriesList,
+}));
+
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
     namespace: 'default',

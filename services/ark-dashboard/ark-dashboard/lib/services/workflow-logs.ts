@@ -1,6 +1,7 @@
 import { APIError, apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 import {
+  DEFAULT_LOG_CONTAINER,
   WORKFLOW_LOG_MAX_BYTES,
   WORKFLOW_LOG_PAGE_LINES,
 } from '@/lib/constants/workflow-logs';
@@ -79,7 +80,7 @@ export async function fetchNodeLogWindow(
 ): Promise<LogWindow> {
   const withContainer = {
     ...params,
-    container: params.container ?? target.container,
+    container: params.container ?? target.container ?? DEFAULT_LOG_CONTAINER,
   };
 
   if (target.podName) {
