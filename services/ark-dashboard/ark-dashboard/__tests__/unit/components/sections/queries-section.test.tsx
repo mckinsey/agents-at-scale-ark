@@ -70,14 +70,29 @@ type QueryResultStub = {
   refetch: () => void;
 };
 
+const PAGE_1_KEY = ['list-all-queries', { page: 1, pageSize: 25 }, 'default'];
+const PAGE_2_KEY = ['list-all-queries', { page: 2, pageSize: 25 }, 'default'];
+
+function createSeededQueryClient() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  queryClient.setQueryData(PAGE_1_KEY, { items: [] });
+  queryClient.setQueryData(PAGE_2_KEY, { items: [] });
+  return queryClient;
+}
+
 function renderSection(props: {
   searchTerm?: string;
   onClearSearch?: () => void;
   queryResult: QueryResultStub;
+  queryClient?: QueryClient;
 }) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const queryClient =
+    props.queryClient ??
+    new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
   return render(
     <QueryClientProvider client={queryClient}>
       <QueriesSection
@@ -196,10 +211,11 @@ describe('QueriesSection', () => {
     expect(screen.getByText('Queued')).toBeInTheDocument();
   });
 
-  it('cancels a running query when its Cancel action is clicked', async () => {
-    const refetch = vi.fn();
+  it('cancels a running query and invalidates every cached queries page', async () => {
+    const queryClient = createSeededQueryClient();
     vi.mocked(queriesService.cancel).mockResolvedValueOnce({} as never);
     renderSection({
+      queryClient,
       queryResult: {
         data: {
           items: [
@@ -218,7 +234,7 @@ describe('QueriesSection', () => {
         },
         isLoading: false,
         isError: false,
-        refetch,
+        refetch: vi.fn(),
       },
     });
 
@@ -229,7 +245,8 @@ describe('QueriesSection', () => {
         'default',
         'q-running',
       );
-      expect(refetch).toHaveBeenCalled();
+      expect(queryClient.getQueryState(PAGE_1_KEY)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(PAGE_2_KEY)?.isInvalidated).toBe(true);
     });
   });
 
@@ -255,10 +272,11 @@ describe('QueriesSection', () => {
     );
   });
 
-  it('calls queriesService.delete and refetches when delete is clicked', async () => {
-    const refetch = vi.fn();
+  it('deletes a query and invalidates every cached queries page', async () => {
+    const queryClient = createSeededQueryClient();
     vi.mocked(queriesService.delete).mockResolvedValueOnce(undefined);
     renderSection({
+      queryClient,
       queryResult: {
         data: {
           items: [twoQueries.items[0]],
@@ -269,7 +287,7 @@ describe('QueriesSection', () => {
         },
         isLoading: false,
         isError: false,
-        refetch,
+        refetch: vi.fn(),
       },
     });
 
@@ -278,7 +296,8 @@ describe('QueriesSection', () => {
     );
 
     expect(queriesService.delete).toHaveBeenCalledWith('default', 'q-1');
-    expect(refetch).toHaveBeenCalled();
+    expect(queryClient.getQueryState(PAGE_1_KEY)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(PAGE_2_KEY)?.isInvalidated).toBe(true);
   });
 
   it('shows an error state instead of the table when the load fails', () => {

@@ -4,7 +4,10 @@ import { useEffect, useMemo } from 'react';
 import { toast } from '@/components/ui/sonner';
 
 import { BarChart, SwapVert } from '@/components/icons';
-import { ResourceSearchInput } from '@/components/sections/resource-list-states';
+import {
+  ResourceErrorState,
+  ResourceSearchInput,
+} from '@/components/sections/resource-list-states';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Pagination } from '@/components/ui/pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -91,7 +94,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
     return undefined;
   }, [filters.date]);
 
-  const { data, isLoading, isError, error } = useListSessions({
+  const { data, isLoading, isError, error, refetch } = useListSessions({
     limit: PAGE_SIZE,
     cursor: (filters.page - 1) * PAGE_SIZE,
     status: filters.status === 'all' ? undefined : filters.status,
@@ -246,7 +249,16 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
             />
           ))}
 
-          {sessions.length === 0 && !isLoading && (
+          {sessions.length === 0 && !isLoading && isError && (
+            <ResourceErrorState
+              className="my-6"
+              title="Failed to load sessions"
+              description={error instanceof Error ? error.message : undefined}
+              onRetry={() => refetch()}
+            />
+          )}
+
+          {sessions.length === 0 && !isLoading && !isError && (
             <div className="py-12 text-center text-muted-foreground">
               No sessions found
             </div>

@@ -130,4 +130,26 @@ describe('ConversationsTab', () => {
 
     expect(screen.getByTestId('show-tool-calls')).toHaveTextContent('false');
   });
+
+  it('should show an error state instead of the empty state when conversations fail to load', async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    vi.mocked(useListConversations).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('Internal Server Error'),
+      refetch,
+    } as unknown as ReturnType<typeof useListConversations>);
+
+    render(<ConversationsTab sessionId="session-1" />);
+
+    expect(
+      screen.getByText('Failed to load conversations'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No conversations yet')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalled();
+  });
 });

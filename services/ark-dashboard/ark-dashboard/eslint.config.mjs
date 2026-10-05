@@ -15,7 +15,7 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
-  globalIgnores(['**/generated/']),
+  globalIgnores(['**/generated/', '.next/']),
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
   {
     plugins: {

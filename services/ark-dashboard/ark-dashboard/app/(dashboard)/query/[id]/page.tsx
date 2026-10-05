@@ -45,6 +45,7 @@ import {
 import type { Agent } from '@/lib/services/agents';
 import { useArkConfig } from '@/lib/services/arkconfig-hooks';
 import { queriesService } from '@/lib/services/queries';
+import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
 import type { ToolDetail } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
 import {
@@ -380,6 +381,7 @@ function QueryDetailContent() {
   const { push } = useNamespacedNavigation();
   const { namespace } = useNamespace();
   const queriesReturnHref = useListReturnHref('/queries');
+  const invalidateQueriesList = useInvalidateQueriesList();
   const queryId = params.id as string;
   const targetTool = searchParams.get('target_tool');
   const isNew = queryId === 'new';
@@ -523,6 +525,7 @@ function QueryDetailContent() {
       };
 
       const savedQuery = await queriesService.create(namespace, queryData);
+      invalidateQueriesList();
 
       toast('Query Executed', {
         description: `Query "${savedQuery.name}" has been created and is now executing.`,
