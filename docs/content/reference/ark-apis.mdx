@@ -322,6 +322,13 @@ curl -H "Accept: application/yaml" \
   http://ark-api:8000/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/my-workflow
 ```
 
-### RBAC
+### Identity and RBAC
 
-The endpoint uses the service account configured for the Ark API pod. Ensure that service account has RBAC permissions for the resources you want to access. Reading logs needs `get` on `pods` as well as on `pods/log`.
+The identity that reaches Kubernetes depends on how the request is authenticated:
+
+- Requests in `open` mode and requests authenticated with an API key run as the Ark API service account.
+- Signed-in users, in `sso` mode or with a JWT in `hybrid` mode, run as themselves when [user impersonation](/developer-guide/authentication#user-impersonation) is enabled, and as the service account when it is not.
+
+Writes are stricter. Creating, updating, or deleting through this endpoint can make Argo run containers, so a signed-in user's write always runs as that user. It returns `403` when impersonation is disabled, and it is never retried as the service account, even when impersonation fallback is enabled. Reads keep the behavior above. With impersonation disabled, signed-in users can still view workflow templates and runs in the dashboard, but cannot author or run templates or delete execution engines.
+
+The service account needs RBAC permissions for the resources it serves. Reading logs needs `get` on `pods` as well as on `pods/log`.
