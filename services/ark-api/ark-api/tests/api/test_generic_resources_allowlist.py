@@ -3,7 +3,9 @@ import os
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
+from fastapi import HTTPException
 from fastapi.routing import APIRoute
+from starlette.requests import Request
 from fastapi.testclient import TestClient
 
 os.environ["AUTH_MODE"] = "open"
@@ -56,6 +58,10 @@ def _kind_routes() -> list[APIRoute]:
         for route in app.routes
         if isinstance(route, APIRoute) and route.path.startswith("/v1/resources/") and "{kind}" in route.path
     ]
+
+
+def _request_with_path_params(path_params: dict) -> Request:
+    return Request({"type": "http", "method": "GET", "path": "/", "query_string": b"", "headers": [], "path_params": path_params})
 
 
 def _guards(route: APIRoute) -> list[GenericResourceGuard]:
@@ -194,6 +200,28 @@ class TestGenericResourcesAllowlistCoverage(unittest.TestCase):
                     guards = _guards(route)
                     self.assertEqual(len(guards), 1, "generic route without GenericResourceGuard")
                     self.assertEqual(guards[0].verb, _expected_verb(method, route.path))
+
+    def test_only_core_routes_declare_the_core_group(self):
+        for route in _kind_routes():
+            with self.subTest(path=route.path):
+                self.assertEqual(_guards(route)[0].core, route.path.startswith("/v1/resources/api/"))
+
+    def test_guard_denies_when_group_is_missing_and_route_is_not_core(self):
+        with self.assertRaises(HTTPException) as denied:
+            GenericResourceGuard("list")(_request_with_path_params({"version": "v1", "kind": "Service"}))
+        self.assertEqual(denied.exception.status_code, 403)
+
+    def test_guard_denies_when_version_or_kind_is_missing(self):
+        for params in ({"group": "argoproj.io", "kind": "Workflow"}, {"group": "argoproj.io", "version": "v1alpha1"}):
+            with self.subTest(params=params), self.assertRaises(HTTPException) as denied:
+                GenericResourceGuard("list")(_request_with_path_params(params))
+            self.assertEqual(denied.exception.status_code, 403)
+
+    def test_core_guard_ignores_a_group_path_param(self):
+        guard = GenericResourceGuard("list", core=True)
+        guard(_request_with_path_params({"version": "v1", "kind": "Service"}))
+        with self.assertRaises(HTTPException):
+            guard(_request_with_path_params({"group": "argoproj.io", "version": "v1alpha1", "kind": "Workflow"}))
 
     def test_core_path_only_serves_list(self):
         core_routes = {
