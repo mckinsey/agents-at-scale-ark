@@ -561,13 +561,17 @@ def _inline_mcp_server(tool_crd: Any, tool_name: str, namespace: str) -> Optiona
     """Adapt a resolved inline Tool to an MCP connection.
 
     Returns None when the Tool has no usable published endpoint, so a stale or
-    unavailable runtime is skipped rather than connected to.
+    unavailable runtime is skipped rather than connected to. Mirrors the Go
+    executor's PublishedEndpoint checks (deletion, Reason, State, not just the
+    Available condition's status) so both sides agree on what is connectable.
     """
     metadata = getattr(tool_crd, "metadata", None)
     uid = _get_attr_or_key(metadata, "uid")
     generation = _get_attr_or_key(metadata, "generation")
+    deletion_timestamp = _get_attr_or_key(metadata, "deletion_timestamp", "deletionTimestamp")
     status = getattr(tool_crd, "status", None)
     address = _get_attr_or_key(status, "resolved_address", "resolvedAddress")
+    state = _get_attr_or_key(status, "state")
     conditions = _get_attr_or_key(status, "conditions") or []
 
     available = next(
@@ -577,8 +581,11 @@ def _inline_mcp_server(tool_crd: Any, tool_name: str, namespace: str) -> Optiona
         not uid
         or not address
         or not generation
+        or deletion_timestamp
+        or state != "Ready"
         or available is None
         or _get_attr_or_key(available, "status") != "True"
+        or _get_attr_or_key(available, "reason") != "Available"
         or _get_attr_or_key(available, "observed_generation", "observedGeneration") != generation
     ):
         logger.warning(
@@ -588,7 +595,9 @@ def _inline_mcp_server(tool_crd: Any, tool_name: str, namespace: str) -> Optiona
         return None
 
     return MCPServerConfig(
-        name=f"inline-{namespace}-{tool_name}-{uid}",
+        # Matches the Go executor's inlinetools.ConnectionName: no namespace
+        # segment, since the Tool's own namespace is already the Query's.
+        name=f"inline-{tool_name}-{uid}",
         url=address,
         transport=INLINE_TRANSPORT,
         timeout=INLINE_TIMEOUT,

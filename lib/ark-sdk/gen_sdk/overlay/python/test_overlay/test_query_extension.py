@@ -847,20 +847,28 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         uid: str | None = "uid-1",
         generation: int | None = 2,
         condition_status: str = "True",
+        condition_reason: str = "Available",
         observed_generation: int | None = 2,
         address: str | None = "http://ark-inline-tool-activator.ark-system:8080/inline/default/csv-summarise/uid-1",
+        state: str = "Ready",
+        deletion_timestamp: str | None = None,
     ):
         tool_crd = MagicMock()
         tool_crd.spec.type = "inline"
         tool_crd.spec.mcp = None
-        tool_crd.metadata = {"uid": uid, "generation": generation}
+        tool_crd.metadata = {
+            "uid": uid,
+            "generation": generation,
+            "deletionTimestamp": deletion_timestamp,
+        }
         tool_crd.status = SimpleNamespace(
             resolved_address=address,
+            state=state,
             conditions=[
                 SimpleNamespace(
                     type="Available",
                     status=condition_status,
-                    reason="Available",
+                    reason=condition_reason,
                     observed_generation=observed_generation,
                 )
             ],
@@ -1254,7 +1262,7 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(servers), 1)
         server = servers[0]
-        self.assertEqual(server.name, "inline-default-csv-summarise-uid-1")
+        self.assertEqual(server.name, "inline-csv-summarise-uid-1")
         self.assertEqual(
             server.url,
             "http://ark-inline-tool-activator.ark-system:8080/inline/default/csv-summarise/uid-1",
@@ -1275,7 +1283,7 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [s.name for s in servers],
-            ["inline-default-csv-summarise-uid-1", "inline-default-other-uid-2"],
+            ["inline-csv-summarise-uid-1", "inline-other-uid-2"],
         )
         self.assertEqual([s.tools for s in servers], [["csv-summarise"], ["other"]])
 
@@ -1296,7 +1304,7 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [s.name for s in servers],
-            ["inline-default-csv-summarise-uid-1", "github-mcp"],
+            ["inline-csv-summarise-uid-1", "github-mcp"],
         )
         self.assertEqual(servers[1].tools, ["search_repos"])
         message = "\n".join(log.output)
@@ -1319,7 +1327,7 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(servers), 2)
         self.assertEqual(
             {s.name for s in servers},
-            {"inline-default-csv-summarise-uid-1", "csv-summarise"},
+            {"inline-csv-summarise-uid-1", "csv-summarise"},
         )
 
     async def test_stale_or_unavailable_inline_tools_are_skipped_with_a_warning(self):
@@ -1328,6 +1336,9 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
             "not available": self._make_inline_tool_crd(condition_status="False"),
             "no endpoint": self._make_inline_tool_crd(address=None),
             "no uid": self._make_inline_tool_crd(uid=None),
+            "not ready": self._make_inline_tool_crd(state="Pending"),
+            "deleting": self._make_inline_tool_crd(deletion_timestamp="2026-10-05T00:00:00Z"),
+            "wrong reason": self._make_inline_tool_crd(condition_reason="ActivatorUnavailable"),
         }
         for label, tool_crd in cases.items():
             with self.subTest(label):
