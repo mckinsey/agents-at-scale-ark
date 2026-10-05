@@ -36,6 +36,10 @@ type ToolExecutorDeps struct {
 	MCPSettings       map[string]arkmcp.MCPSettings
 	TelemetryProvider telemetry.Provider
 	EventingProvider  eventing.Provider
+	// ActivatorBaseURL is the inline activator's own address (see
+	// inlinetools.ActivatorBaseURL). createInlineExecutor validates an inline
+	// Tool's published endpoint against it before connecting.
+	ActivatorBaseURL string
 }
 
 func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, deps ToolExecutorDeps) (ToolExecutor, error) {
@@ -51,7 +55,7 @@ func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 	case ToolTypeBuiltin:
 		return createBuiltinExecutor(tool)
 	case ToolTypeInline:
-		return createInlineExecutor(ctx, tool, namespace, deps.MCPPool, deps.MCPSettings)
+		return createInlineExecutor(ctx, tool, namespace, deps.MCPPool, deps.MCPSettings, deps.ActivatorBaseURL)
 	default:
 		return nil, fmt.Errorf("unsupported tool type %s for tool %s", tool.Spec.Type, tool.Name)
 	}
@@ -113,8 +117,9 @@ func createBuiltinExecutor(tool *arkv1alpha1.Tool) (ToolExecutor, error) {
 // createInlineExecutor connects to the activator endpoint the controller
 // published for this Tool and reuses the ordinary MCP executor. The stored Tool
 // is not rewritten and no runner is addressed directly.
-func createInlineExecutor(ctx context.Context, tool *arkv1alpha1.Tool, namespace string, mcpPool *arkmcp.MCPClientPool, mcpSettings map[string]arkmcp.MCPSettings) (ToolExecutor, error) {
-	endpoint, err := inlinetools.PublishedEndpoint(tool)
+func createInlineExecutor(ctx context.Context, tool *arkv1alpha1.Tool, namespace string, mcpPool *arkmcp.MCPClientPool, mcpSettings map[string]arkmcp.MCPSettings, activatorBaseURL string) (ToolExecutor, error) {
+	expected := inlinetools.ResolvedAddress(activatorBaseURL, tool)
+	endpoint, err := inlinetools.PublishedEndpoint(expected, tool)
 	if err != nil {
 		return nil, fmt.Errorf("inline tool %s is not usable: %w", tool.Name, err)
 	}
@@ -247,6 +252,7 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 		MCPSettings:       r.mcpSettings,
 		TelemetryProvider: telemetryProvider,
 		EventingProvider:  eventingProvider,
+		ActivatorBaseURL:  r.activatorBaseURL,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create executor for tool %s: %w", toolDef.Name, err)

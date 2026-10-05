@@ -28,12 +28,8 @@ func ResolveActivation(enabled bool, tool *arkv1alpha1.Tool, routeUID types.UID,
 	if err := validateToolIdentity(tool, routeUID, calledName); err != nil {
 		return "", err
 	}
-	endpoint, err := PublishedEndpoint(tool)
-	if err != nil {
+	if _, err := PublishedEndpoint(ResolvedAddress(ActivatorBaseURL(activatorNamespace), tool), tool); err != nil {
 		return "", err
-	}
-	if activatorNamespace == "" || endpoint != ResolvedAddress(activatorNamespace, tool) {
-		return "", fmt.Errorf("inline Tool has no matching published activator endpoint")
 	}
 	if _, err := runner.SourceFilename(tool.Spec.Inline.Language); err != nil {
 		return "", err

@@ -8,19 +8,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/inlinetools"
 	arkmcp "mckinsey.com/ark/internal/mcp"
 )
 
-func inlineTool(address string) *arkv1alpha1.Tool {
-	return &arkv1alpha1.Tool{
+// inlineTool's ResolvedAddress is the canonical endpoint for activatorBaseURL,
+// matching what createInlineExecutor validates against; tests that want a
+// mismatch mutate it afterward.
+func inlineTool(activatorBaseURL string) *arkv1alpha1.Tool {
+	tool := &arkv1alpha1.Tool{
 		ObjectMeta: metav1.ObjectMeta{Name: testToolGreet, Namespace: "default", UID: "uid-1", Generation: 1},
 		Spec: arkv1alpha1.ToolSpec{
 			Type:   arkv1alpha1.ToolTypeInline,
 			Inline: &arkv1alpha1.InlineSpec{Source: "echo hi", Language: arkv1alpha1.InlineLanguageBash},
 		},
 		Status: arkv1alpha1.ToolStatus{
-			State:           arkv1alpha1.ToolStateReady,
-			ResolvedAddress: address,
+			State: arkv1alpha1.ToolStateReady,
 			Conditions: []metav1.Condition{{
 				Type:               arkv1alpha1.ToolConditionAvailable,
 				Status:             metav1.ConditionTrue,
@@ -30,6 +33,8 @@ func inlineTool(address string) *arkv1alpha1.Tool {
 			}},
 		},
 	}
+	tool.Status.ResolvedAddress = inlinetools.ResolvedAddress(activatorBaseURL, tool)
+	return tool
 }
 
 func testPool(t *testing.T) *arkmcp.MCPClientPool {
@@ -40,10 +45,11 @@ func testPool(t *testing.T) *arkmcp.MCPClientPool {
 }
 
 func TestCreateToolExecutorInlineUsesMCPExecutor(t *testing.T) {
-	tool := inlineTool(newTestMCPServer(t))
+	activatorBaseURL := newTestMCPServer(t)
+	tool := inlineTool(activatorBaseURL)
 
 	executor, err := CreateToolExecutor(t.Context(), setupTestClientForTools([]client.Object{tool}), tool, "default",
-		ToolExecutorDeps{MCPPool: testPool(t)})
+		ToolExecutorDeps{MCPPool: testPool(t), ActivatorBaseURL: activatorBaseURL})
 	require.NoError(t, err)
 
 	mcpExecutor, ok := executor.(*MCPExecutor)
@@ -56,11 +62,11 @@ func TestCreateToolExecutorInlineUsesMCPExecutor(t *testing.T) {
 }
 
 func TestCreateToolExecutorInlineDoesNotReuseMCPServerClient(t *testing.T) {
-	inlineEndpoint := newTestMCPServer(t)
+	activatorBaseURL := newTestMCPServer(t)
 	serverEndpoint := newTestMCPServer(t)
-	require.NotEqual(t, inlineEndpoint, serverEndpoint)
+	require.NotEqual(t, activatorBaseURL, serverEndpoint)
 
-	tool := inlineTool(inlineEndpoint)
+	tool := inlineTool(activatorBaseURL)
 	mcpServer := &arkv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: testToolGreet, Namespace: "default"},
 		Spec: arkv1alpha1.MCPServerSpec{
@@ -82,7 +88,7 @@ func TestCreateToolExecutorInlineDoesNotReuseMCPServerClient(t *testing.T) {
 
 	k8sClient := setupTestClientForTools([]client.Object{tool, mcpServer, mcpTool})
 	pool := testPool(t)
-	deps := ToolExecutorDeps{MCPPool: pool}
+	deps := ToolExecutorDeps{MCPPool: pool, ActivatorBaseURL: activatorBaseURL}
 
 	hosted, err := CreateToolExecutor(t.Context(), k8sClient, mcpTool, "default", deps)
 	require.NoError(t, err)
@@ -110,15 +116,19 @@ func TestCreateToolExecutorInlineRejectsUnusableStatus(t *testing.T) {
 			now := metav1.Now()
 			tool.DeletionTimestamp = &now
 		}},
+		{"resolved address does not match the canonical activator endpoint", func(tool *arkv1alpha1.Tool) {
+			tool.Status.ResolvedAddress = "http://attacker.example.com/mcp/default/greet/uid-1"
+		}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tool := inlineTool(newTestMCPServer(t))
+			activatorBaseURL := newTestMCPServer(t)
+			tool := inlineTool(activatorBaseURL)
 			tt.mutate(tool)
 
 			executor, err := CreateToolExecutor(t.Context(), setupTestClientForTools(nil), tool, "default",
-				ToolExecutorDeps{MCPPool: testPool(t)})
+				ToolExecutorDeps{MCPPool: testPool(t), ActivatorBaseURL: activatorBaseURL})
 
 			require.ErrorContains(t, err, "is not usable")
 			require.Nil(t, executor)
@@ -127,10 +137,12 @@ func TestCreateToolExecutorInlineRejectsUnusableStatus(t *testing.T) {
 }
 
 func TestRegisterInlineToolPreservesAttachmentAliasAndApproval(t *testing.T) {
-	tool := inlineTool(newTestMCPServer(t))
+	activatorBaseURL := newTestMCPServer(t)
+	tool := inlineTool(activatorBaseURL)
 	tool.Spec.Approval = &arkv1alpha1.ToolApprovalConfig{Required: true}
 
 	registry := NewToolRegistry(nil, nil, nil)
+	registry.activatorBaseURL = activatorBaseURL
 	t.Cleanup(func() { _ = registry.mcpPool.Close() })
 
 	agentTool := arkv1alpha1.AgentTool{
