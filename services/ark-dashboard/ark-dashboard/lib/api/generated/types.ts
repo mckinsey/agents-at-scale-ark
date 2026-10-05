@@ -1615,6 +1615,10 @@ export interface paths {
          *     Runs under the impersonated identity, so the result reflects the user's RBAC.
          *     When impersonation is disabled it runs as the service account.
          *
+         *     A write the generic resource routes would refuse for this caller, because it
+         *     has to run as the signed-in user and cannot, returns allowed false with the
+         *     reason, without asking Kubernetes.
+         *
          *     Args:
          *         body: group, resource, and verb to review
          *         namespace: The namespace (defaults to current context)
@@ -2581,6 +2585,11 @@ export interface components {
         AccessReviewResponse: {
             /** Allowed */
             allowed: boolean;
+            /**
+             * Reason
+             * @description Set when ark-api refuses the operation for this caller before asking Kubernetes
+             */
+            reason?: string | null;
         };
         /**
          * AgentConfigMapKeyRef

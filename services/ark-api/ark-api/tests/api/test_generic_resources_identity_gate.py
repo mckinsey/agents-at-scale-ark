@@ -17,10 +17,13 @@ from starlette.requests import Request
 
 from ark_api.api.v1.resources import router as resources_router
 from ark_api.auth.generic_resources import (
+    ALLOWED_GENERIC_RESOURCES,
+    GENERIC_WRITE_RESOURCES,
     IMPERSONATION_DISABLED_DETAIL,
     NO_USER_IDENTITY_DETAIL,
     GenericResourceGuard,
     generic_write_identity_denial,
+    is_write_verb,
     require_generic_write_identity,
 )
 from ark_api.auth.middleware import AuthMiddleware
@@ -66,6 +69,23 @@ READS = [
     ("GET", EE),
 ]
 
+GATED_REVIEWS = [
+    {"group": "argoproj.io", "resource": "workflowtemplates", "verb": "create"},
+    {"group": "argoproj.io", "resource": "workflowtemplates", "verb": "update"},
+    {"group": "argoproj.io", "resource": "workflowtemplates", "verb": "patch"},
+    {"group": "argoproj.io", "resource": "workflowtemplates", "verb": "delete"},
+    {"group": "argoproj.io", "resource": "workflows", "verb": "create"},
+    {"group": "ark.mckinsey.com", "resource": "executionengines", "verb": "delete"},
+]
+
+UNGATED_REVIEWS = [
+    {"group": "argoproj.io", "resource": "workflowtemplates", "verb": "get"},
+    {"group": "argoproj.io", "resource": "workflows", "verb": "list"},
+    {"group": "ark.mckinsey.com", "resource": "agents", "verb": "create"},
+    {"group": "", "resource": "secrets", "verb": "delete"},
+]
+
+
 def bearer(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
@@ -91,6 +111,11 @@ class KubernetesSpy:
         self.dynamic_client = AsyncMock()
         self.dynamic_client.resources.get = AsyncMock(return_value=self.api_resource)
         self.dynamic_client_cls = MagicMock(side_effect=self._construct)
+        self.access_review = Mock()
+        self.access_review.create_self_subject_access_review = AsyncMock(
+            return_value=Mock(status=Mock(allowed=True))
+        )
+        self.access_review_cls = MagicMock(return_value=self.access_review)
 
     async def _construct(self, *_args, **_kwargs):
         return self.dynamic_client
@@ -110,6 +135,7 @@ class IdentityGateTestCase(unittest.TestCase):
         for target, value in (
             ("ark_api.api.v1.resources.get_impersonating_api_client", self.k8s.client),
             ("ark_api.api.v1.resources.DynamicClient", self.k8s.dynamic_client_cls),
+            ("ark_api.api.v1.resources.client.AuthorizationV1Api", self.k8s.access_review_cls),
             ("ark_api.api.v1.resources.get_context", Mock(return_value={"namespace": "default"})),
         ):
             patcher = patch(target, value)
@@ -276,6 +302,49 @@ class TestWritesNeverFallBackToTheServiceAccount(IdentityGateTestCase):
         self.assertEqual(self.k8s.usernames(), ["alice@example.com", None])
 
 
+class TestAccessReviewReportsTheGate(IdentityGateTestCase):
+    def test_gated_writes_are_reported_unavailable_without_asking_kubernetes(self):
+        for body in GATED_REVIEWS:
+            with self.subTest(**body):
+                self.setUp()
+                client = self.client_for(SSO_WITHOUT_IMPERSONATION)
+
+                response = client.post("/v1/resources/access-review", json=body, headers=bearer("alice"))
+
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json(), {"allowed": False, "reason": IMPERSONATION_DISABLED_DETAIL})
+                self.k8s.access_review_cls.assert_not_called()
+
+    def test_other_reviews_still_ask_kubernetes(self):
+        for body in UNGATED_REVIEWS:
+            with self.subTest(**body):
+                self.setUp()
+                client = self.client_for(SSO_WITHOUT_IMPERSONATION)
+
+                response = client.post("/v1/resources/access-review", json=body, headers=bearer("alice"))
+
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json(), {"allowed": True})
+                self.k8s.access_review.create_self_subject_access_review.assert_awaited_once()
+
+    def test_callers_the_gate_lets_through_get_the_kubernetes_answer(self):
+        cases = (
+            ("open", OPEN, {}, [None]),
+            ("api key", HYBRID_WITH_IMPERSONATION, basic_key(), [None]),
+            ("impersonated user", SSO_WITH_IMPERSONATION, bearer("alice"), ["alice@example.com"]),
+        )
+        for label, env, headers, usernames in cases:
+            with self.subTest(caller=label):
+                self.setUp()
+                client = self.client_for(env)
+
+                response = client.post("/v1/resources/access-review", json=GATED_REVIEWS[0], headers=headers)
+
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json(), {"allowed": True})
+                self.assertEqual(self.k8s.usernames(), usernames)
+
+
 def _request_with_state(state: dict) -> Request:
     return Request({"type": "http", "method": "POST", "path": "/", "query_string": b"", "headers": [], "state": state})
 
@@ -316,6 +385,13 @@ class TestIdentityRuleCoverage(unittest.TestCase):
             with self.subTest(path=route.path, methods=sorted(route.methods)):
                 self.assertEqual(require_generic_write_identity in calls, guard.verb in WRITE_VERBS)
 
+    def test_access_review_knows_every_kind_the_generic_routes_can_write(self):
+        writable = {
+            (group, kind.lower() + "s")
+            for (group, _version, kind), verbs in ALLOWED_GENERIC_RESOURCES.items()
+            if any(is_write_verb(verb) for verb in verbs)
+        }
+        self.assertEqual(writable, set(GENERIC_WRITE_RESOURCES))
 
 
 if __name__ == "__main__":

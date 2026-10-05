@@ -34,6 +34,14 @@ ALLOWED_GENERIC_RESOURCES: dict[tuple[str, str, str], frozenset[str]] = {
     (CORE_GROUP, "v1", "Service"): frozenset({"list"}),
 }
 
+GENERIC_WRITE_RESOURCES: frozenset[tuple[str, str]] = frozenset({
+    ("argoproj.io", "workflowtemplates"),
+    ("argoproj.io", "workflows"),
+    ("ark.mckinsey.com", "executionengines"),
+})
+
+READ_VERBS = frozenset({"get", "list", "watch"})
+
 DENIED_DETAIL = "This resource type and operation are not exposed through the generic resources API"
 
 IMPERSONATION_DISABLED_DETAIL = (
@@ -47,6 +55,10 @@ NO_USER_IDENTITY_DETAIL = (
 
 def is_generic_resource_allowed(group: str, version: str, kind: str, verb: str) -> bool:
     return verb in ALLOWED_GENERIC_RESOURCES.get((group, version, kind), frozenset())
+
+
+def is_write_verb(verb: str) -> bool:
+    return verb not in READ_VERBS
 
 
 def generic_write_identity_denial(request: Request) -> Optional[str]:
