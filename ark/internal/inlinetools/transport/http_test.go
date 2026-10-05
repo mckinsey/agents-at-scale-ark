@@ -47,6 +47,7 @@ func TestCallRetainsSDKValuesAndReleasesDerivedContext(t *testing.T) {
 	var retained context.Context
 	next := requestCancellation(func(ctx context.Context, _ string, _ mcp.Request) (mcp.Result, error) {
 		assert.Equal(t, "sdk-value", ctx.Value(sdkKey{}))
+		// nolint:fatcontext
 		retained = ctx
 		return nil, nil
 	})

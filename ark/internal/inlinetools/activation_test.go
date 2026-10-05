@@ -18,6 +18,12 @@ import (
 	"mckinsey.com/ark/internal/inlinetools/runner"
 )
 
+const (
+	wrongIdentity  = "other"
+	wrongUID       = "old-uid"
+	otherNamespace = "elsewhere"
+)
+
 func activationObjects(name, language string) (*arkv1alpha1.Tool, *appsv1.Deployment, *corev1.Service) {
 	source := map[string]string{
 		"bash": "printf '1'", "python": "print(1)", "node": "console.log(1)", "ts": "const n: number = 1; console.log(n)",
@@ -112,21 +118,21 @@ func TestResolveActivationRejectsUnsafeState(t *testing.T) {
 		{"arbitrary endpoint", func(t *arkv1alpha1.Tool, _ *appsv1.Deployment, _ *corev1.Service) {
 			t.Status.ResolvedAddress = "http://attacker/"
 		}},
-		{"wrong deployment name", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Name = "other" }},
-		{"cross-namespace deployment", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Namespace = "elsewhere" }},
+		{"wrong deployment name", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Name = wrongIdentity }},
+		{"cross-namespace deployment", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Namespace = otherNamespace }},
 		{"missing deployment UID", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.UID = "" }},
 		{"deleting deployment", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) {
 			d.DeletionTimestamp = ptr.To(metav1.Now())
 		}},
 		{"unowned deployment", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.OwnerReferences = nil }},
 		{"previous Tool owner", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) {
-			d.OwnerReferences[0].UID = "old-uid"
+			d.OwnerReferences[0].UID = wrongUID
 		}},
 		{"wrong owner kind", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) {
 			d.OwnerReferences[0].Kind = "MCPServer"
 		}},
 		{"wrong owner name", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) {
-			d.OwnerReferences[0].Name = "other"
+			d.OwnerReferences[0].Name = wrongIdentity
 		}},
 		{"wrong owner API", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) {
 			d.OwnerReferences[0].APIVersion = "other/v1"
@@ -134,10 +140,10 @@ func TestResolveActivationRejectsUnsafeState(t *testing.T) {
 		{"non-controller owner", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) {
 			d.OwnerReferences[0].Controller = ptr.To(false)
 		}},
-		{"wrong deployment labels", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Labels[LabelToolUID] = "old-uid" }},
+		{"wrong deployment labels", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Labels[LabelToolUID] = wrongUID }},
 		{"wrong deployment selector", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Spec.Selector = nil }},
 		{"wrong pod identity", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) {
-			d.Spec.Template.Labels[LabelToolUID] = "old-uid"
+			d.Spec.Template.Labels[LabelToolUID] = wrongUID
 		}},
 		{"stale source", func(t *arkv1alpha1.Tool, _ *appsv1.Deployment, _ *corev1.Service) { t.Spec.Inline.Source = "print(2)" }},
 		{"missing hash", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) { d.Spec.Template.Annotations = nil }},
@@ -157,8 +163,8 @@ func TestResolveActivationRejectsUnsafeState(t *testing.T) {
 		{"duplicate env", func(_ *arkv1alpha1.Tool, d *appsv1.Deployment, _ *corev1.Service) {
 			d.Spec.Template.Spec.Containers[0].Env = append(d.Spec.Template.Spec.Containers[0].Env, d.Spec.Template.Spec.Containers[0].Env[0])
 		}},
-		{"wrong service name", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) { s.Name = "other" }},
-		{"cross-namespace service", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) { s.Namespace = "elsewhere" }},
+		{"wrong service name", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) { s.Name = wrongIdentity }},
+		{"cross-namespace service", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) { s.Namespace = otherNamespace }},
 		{"unowned service", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) { s.OwnerReferences = nil }},
 		{"deleting service", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) {
 			s.DeletionTimestamp = ptr.To(metav1.Now())
@@ -178,7 +184,7 @@ func TestResolveActivationRejectsUnsafeState(t *testing.T) {
 		}},
 		{"unallocated service", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) { s.Spec.ClusterIP = "" }},
 		{"arbitrary selector", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) {
-			s.Spec.Selector = map[string]string{"app": "other"}
+			s.Spec.Selector = map[string]string{"app": wrongIdentity}
 		}},
 		{"missing port", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) { s.Spec.Ports = nil }},
 		{"wrong service port", func(_ *arkv1alpha1.Tool, _ *appsv1.Deployment, s *corev1.Service) { s.Spec.Ports[0].Port = 80 }},
@@ -217,7 +223,7 @@ func TestResolveActivationRejectsDisabledStaleUnknownOrMissingTargets(t *testing
 			return ResolveActivation(true, tool, "deleted-tool-uid", tool.Name, "ark-system", deployment, service)
 		}},
 		{"unknown MCP name", func() (string, error) {
-			return ResolveActivation(true, tool, tool.UID, "other", "ark-system", deployment, service)
+			return ResolveActivation(true, tool, tool.UID, wrongIdentity, "ark-system", deployment, service)
 		}},
 		{"missing activator namespace", func() (string, error) {
 			return ResolveActivation(true, tool, tool.UID, tool.Name, "", deployment, service)

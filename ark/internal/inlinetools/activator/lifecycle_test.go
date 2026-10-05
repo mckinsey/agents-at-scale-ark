@@ -37,6 +37,11 @@ import (
 	inlinetransport "mckinsey.com/ark/internal/inlinetools/transport"
 )
 
+const (
+	staleValue   = "old"
+	foreignValue = "other"
+)
+
 type runnerFixture struct {
 	tool       *arkv1alpha1.Tool
 	deployment *appsv1.Deployment
@@ -305,7 +310,7 @@ func TestActivatorWaitsForCurrentEndpointsAndReleasesAbandonedWork(t *testing.T)
 
 func TestActivatorHTTPAbandonmentCannotExecuteAfterReadinessArrives(t *testing.T) {
 	fixture := lifeFixture("echo", 0)
-	fixture.pod.Annotations[inlinetools.SourceHashAnnotation] = "old"
+	fixture.pod.Annotations[inlinetools.SourceHashAnnotation] = staleValue
 	a, scales := lifeActivator(t, fixture)
 	var executions atomic.Int32
 	requests := backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -531,7 +536,7 @@ func TestActivatorPreservesToolErrorsAndNeverRetriesUncertainResponses(t *testin
 
 func TestActivatorCancellationDoesNotAbandonAnotherPendingCaller(t *testing.T) {
 	fixture := lifeFixture("echo", 0)
-	fixture.pod.Annotations[inlinetools.SourceHashAnnotation] = "old"
+	fixture.pod.Annotations[inlinetools.SourceHashAnnotation] = staleValue
 	a, scales := lifeActivator(t, fixture)
 	var executions atomic.Int32
 	backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -669,6 +674,16 @@ func TestActivatorDoesNotFollowBackendRedirects(t *testing.T) {
 	assert.Zero(t, leaked.Load())
 }
 
+func changeToolSource(ctx context.Context, a *Activator, original *arkv1alpha1.Tool) error {
+	tool := &arkv1alpha1.Tool{}
+	if err := a.client.Get(ctx, client.ObjectKeyFromObject(original), tool); err != nil {
+		return err
+	}
+	tool.Spec.Inline.Source = "changed"
+	tool.Generation++
+	return a.client.Update(ctx, tool)
+}
+
 func TestActivatorFailsClosedOnReadErrorsAndSourceChangesDuringHandshake(t *testing.T) {
 	for _, sourceChange := range []bool{false, true} {
 		t.Run(fmt.Sprint(sourceChange), func(t *testing.T) {
@@ -685,14 +700,8 @@ func TestActivatorFailsClosedOnReadErrorsAndSourceChangesDuringHandshake(t *test
 				a.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					response, err := transport.RoundTrip(r)
 					if changed.CompareAndSwap(false, true) {
-						tool := &arkv1alpha1.Tool{}
-						if getErr := a.client.Get(r.Context(), client.ObjectKeyFromObject(fixture.tool), tool); getErr != nil {
-							return nil, getErr
-						}
-						tool.Spec.Inline.Source = "changed"
-						tool.Generation++
-						if updateErr := a.client.Update(r.Context(), tool); updateErr != nil {
-							return nil, updateErr
+						if mutateErr := changeToolSource(r.Context(), a, fixture.tool); mutateErr != nil {
+							return nil, mutateErr
 						}
 					}
 					return response, err
@@ -729,20 +738,20 @@ func TestActivatorRejectsStaleOrUnownedEndpoints(t *testing.T) {
 		"mixed terminating readiness": func(f *runnerFixture) {
 			f.endpoints.Endpoints = append(f.endpoints.Endpoints, discoveryv1.Endpoint{Conditions: discoveryv1.EndpointConditions{Ready: ptr.To(true), Terminating: ptr.To(true)}})
 		},
-		"wrong service owner":      func(f *runnerFixture) { f.endpoints.OwnerReferences[0].UID = "other" },
+		"wrong service owner":      func(f *runnerFixture) { f.endpoints.OwnerReferences[0].UID = foreignValue },
 		"wrong port":               func(f *runnerFixture) { f.endpoints.Ports[0].Port = ptr.To(int32(80)) },
 		"endpoint unready":         func(f *runnerFixture) { f.endpoints.Endpoints[0].Conditions.Ready = ptr.To(false) },
 		"terminating endpoint":     func(f *runnerFixture) { f.endpoints.Endpoints[0].Conditions.Terminating = ptr.To(true) },
 		"unreferenced endpoint":    func(f *runnerFixture) { f.endpoints.Endpoints[0].TargetRef = nil },
 		"cross-namespace endpoint": func(f *runnerFixture) { f.endpoints.Endpoints[0].TargetRef.Namespace = "elsewhere" },
 		"foreign address":          func(f *runnerFixture) { f.endpoints.Endpoints[0].Addresses = []string{"192.0.2.1"} },
-		"stale pod UID":            func(f *runnerFixture) { f.endpoints.Endpoints[0].TargetRef.UID = "old" },
-		"old source":               func(f *runnerFixture) { f.pod.Annotations[inlinetools.SourceHashAnnotation] = "old" },
+		"stale pod UID":            func(f *runnerFixture) { f.endpoints.Endpoints[0].TargetRef.UID = staleValue },
+		"old source":               func(f *runnerFixture) { f.pod.Annotations[inlinetools.SourceHashAnnotation] = staleValue },
 		"old language":             func(f *runnerFixture) { f.pod.Spec.Containers[0].Env[1].Value = "bash" },
 		"unready pod":              func(f *runnerFixture) { f.pod.Status.Conditions = nil },
-		"foreign pod labels":       func(f *runnerFixture) { f.pod.Labels[inlinetools.LabelToolUID] = "other" },
+		"foreign pod labels":       func(f *runnerFixture) { f.pod.Labels[inlinetools.LabelToolUID] = foreignValue },
 		"unowned pod":              func(f *runnerFixture) { f.pod.OwnerReferences = nil },
-		"foreign RS":               func(f *runnerFixture) { f.rs.OwnerReferences[0].UID = "other" },
+		"foreign RS":               func(f *runnerFixture) { f.rs.OwnerReferences[0].UID = foreignValue },
 	}
 	for name, change := range changes {
 		t.Run(name, func(t *testing.T) {

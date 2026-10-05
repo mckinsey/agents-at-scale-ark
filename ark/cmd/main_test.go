@@ -34,6 +34,11 @@ import (
 	"mckinsey.com/ark/internal/inlinetools/activator"
 )
 
+const (
+	kindDeployment    = "Deployment"
+	kindNetworkPolicy = "NetworkPolicy"
+)
+
 func TestValidateRole(t *testing.T) {
 	cases := []struct {
 		role    string
@@ -96,14 +101,15 @@ func TestInlineActivatorWaitsForInflightHTTPDuringShutdown(t *testing.T) {
 	go func() { done <- serveInlineActivator(ctx, listener, a) }()
 	address := "http://" + listener.Addr().String()
 	for _, path := range []string{"/readyz", "/healthz"} {
-		response, err := http.Get(address + path)
+		response, err := httpGet(t.Context(), address+path)
 		require.NoError(t, err)
 		require.NoError(t, response.Body.Close())
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 	}
 	callDone := make(chan error, 1)
 	go func() {
-		response, err := http.Get(address + "/call")
+		// Independent of ctx: this call must outlive the server's shutdown signal below.
+		response, err := httpGet(context.Background(), address+"/call")
 		if err == nil {
 			_ = response.Body.Close()
 		}
@@ -143,6 +149,14 @@ func TestInlineActivatorWaitsForInflightHTTPDuringShutdown(t *testing.T) {
 	}
 }
 
+func httpGet(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return http.DefaultClient.Do(req)
+}
+
 func TestInlineActivatorReturnsListenerFailure(t *testing.T) {
 	t.Setenv(inlinetools.EnabledEnvVar, "false")
 	a, err := activator.New(context.Background(), fake.NewClientBuilder().WithScheme(scheme).Build(), "ark-system", []string{"ark-system"})
@@ -178,6 +192,7 @@ func renderInlineActivator(t *testing.T, values ...string) ([]unstructured.Unstr
 	return objects, nil
 }
 
+//nolint:gocognit // one rendered chart asserted per object kind in a single pass; splitting it loses the "everything about ark-inline-activator" view
 func TestInlineActivatorChartIsScopedRestrictedAndIndependentOfControllerReplicas(t *testing.T) {
 	for _, backend := range []string{"etcd", "postgresql"} {
 		for _, enabled := range []string{"true", "false"} {
@@ -195,7 +210,7 @@ func TestInlineActivatorChartIsScopedRestrictedAndIndependentOfControllerReplica
 								assert.NotEqual(t, inlinetools.ActivatorName, subject.Name)
 							}
 						}
-						if object.GetKind() == "Deployment" && object.GetName() == "ark-controller" {
+						if object.GetKind() == kindDeployment && object.GetName() == "ark-controller" {
 							var deployment appsv1.Deployment
 							require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &deployment))
 							assert.Equal(t, replicas, fmt.Sprint(*deployment.Spec.Replicas))
@@ -207,7 +222,7 @@ func TestInlineActivatorChartIsScopedRestrictedAndIndependentOfControllerReplica
 						}
 						counts[object.GetKind()]++
 						switch object.GetKind() {
-						case "Deployment":
+						case kindDeployment:
 							var deployment appsv1.Deployment
 							require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &deployment))
 							require.NotNil(t, deployment.Spec.Replicas)
@@ -251,7 +266,7 @@ func TestInlineActivatorChartIsScopedRestrictedAndIndependentOfControllerReplica
 							require.Len(t, service.Spec.Ports, 1)
 							assert.EqualValues(t, inlinetools.ActivatorPort, service.Spec.Ports[0].Port)
 							assert.Zero(t, service.Spec.Ports[0].NodePort)
-						case "NetworkPolicy":
+						case kindNetworkPolicy:
 							var policy networkingv1.NetworkPolicy
 							require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &policy))
 							require.Len(t, policy.Spec.Ingress, 1)
@@ -288,7 +303,7 @@ func TestInlineActivatorChartIsScopedRestrictedAndIndependentOfControllerReplica
 							assert.Equal(t, []rbacv1.Subject{{Kind: "ServiceAccount", Name: inlinetools.ActivatorName, Namespace: "ark-system"}}, binding.Subjects)
 						}
 					}
-					assert.Equal(t, map[string]int{"ServiceAccount": 1, "Deployment": 1, "Service": 1, "NetworkPolicy": 1, "ClusterRole": 1, "RoleBinding": 2}, counts)
+					assert.Equal(t, map[string]int{"ServiceAccount": 1, kindDeployment: 1, "Service": 1, kindNetworkPolicy: 1, "ClusterRole": 1, "RoleBinding": 2}, counts)
 				})
 			}
 		}
@@ -300,7 +315,7 @@ func TestInlineActivatorChartRejectsUnsafeInstallation(t *testing.T) {
 	require.NoError(t, err)
 	for _, object := range objects {
 		assert.NotEqual(t, inlinetools.ActivatorName, object.GetName())
-		if object.GetKind() == "Deployment" && object.GetName() == "ark-controller" {
+		if object.GetKind() == kindDeployment && object.GetName() == "ark-controller" {
 			var deployment appsv1.Deployment
 			require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &deployment))
 			assert.Contains(t, deployment.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: inlinetools.EnabledEnvVar, Value: "false"})
@@ -330,7 +345,7 @@ func TestInlineActivatorChartCoexistsWithNetworkPolicyBaseline(t *testing.T) {
 	require.NoError(t, err)
 	found := false
 	for _, object := range objects {
-		if object.GetKind() != "NetworkPolicy" || object.GetName() != "ark-system-baseline" {
+		if object.GetKind() != kindNetworkPolicy || object.GetName() != "ark-system-baseline" {
 			continue
 		}
 		found = true
@@ -383,7 +398,7 @@ func TestInlineActivatorCustomReleaseAndCallerNamespaces(t *testing.T) {
 			var binding rbacv1.RoleBinding
 			require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &binding))
 			assert.Equal(t, "control", binding.Subjects[0].Namespace)
-		case "NetworkPolicy":
+		case kindNetworkPolicy:
 			var policy networkingv1.NetworkPolicy
 			require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &policy))
 			require.Len(t, policy.Spec.Ingress[0].From, 1)
