@@ -57,7 +57,7 @@ def _create_resource_response(data: dict, request: Request) -> Response:
     return JSONResponse(content=data)
 
 
-@router.get("/api/{version}/{kind}", dependencies=[Depends(GenericResourceGuard("list"))])
+@router.get("/api/{version}/{kind}", dependencies=[Depends(GenericResourceGuard("list", core=True))])
 @handle_k8s_errors(operation="list", resource_type="resource")
 async def list_core_resources(
     request: Request,

@@ -31,15 +31,21 @@ def is_generic_resource_allowed(group: str, version: str, kind: str, verb: str) 
 
 
 class GenericResourceGuard:
-    def __init__(self, verb: str):
+    def __init__(self, verb: str, core: bool = False):
         self.verb = verb
+        self.core = core
 
     def __call__(self, request: Request) -> None:
         params = request.path_params
-        group = params.get("group", CORE_GROUP)
-        version = params.get("version", "")
-        kind = params.get("kind", "")
-        if is_generic_resource_allowed(group, version, kind, self.verb):
+        group = CORE_GROUP if self.core else params.get("group")
+        version = params.get("version")
+        kind = params.get("kind")
+        if (
+            group is not None
+            and version is not None
+            and kind is not None
+            and is_generic_resource_allowed(group, version, kind, self.verb)
+        ):
             return
         logger.warning(
             "Denied generic resource request: verb=%r group=%r version=%r kind=%r namespace=%r",
