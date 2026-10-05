@@ -38,6 +38,15 @@ interface Draft {
 
 type Drafts = Readonly<Record<string, Draft>>;
 
+interface UpdatesByTiming {
+  readonly immediate: Record<string, unknown>;
+  readonly deferred: Record<string, unknown>;
+}
+
+interface TimerRef {
+  current: ReturnType<typeof setTimeout> | null;
+}
+
 const DEFAULT_PAGE_KEY = 'page';
 const NO_DRAFTS: Drafts = {};
 
@@ -154,6 +163,42 @@ function retainLiveDrafts(drafts: Drafts, params: URLSearchParams): Drafts {
   return dropped ? live : drafts;
 }
 
+function draftValues(drafts: Drafts): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const key of Object.keys(drafts)) {
+    values[key] = drafts[key].value;
+  }
+  return values;
+}
+
+function groupUpdatesByTiming(
+  spec: UrlStateSpec,
+  updates: Record<string, unknown>,
+  flush: boolean,
+): UpdatesByTiming {
+  const immediate: Record<string, unknown> = {};
+  const deferred: Record<string, unknown> = {};
+  for (const key of Object.keys(updates)) {
+    const paramSpec = spec[key];
+    if (!paramSpec) {
+      continue;
+    }
+    if (!flush && paramSpec.debounceMs) {
+      deferred[key] = updates[key];
+    } else {
+      immediate[key] = updates[key];
+    }
+  }
+  return { immediate, deferred };
+}
+
+function clearTimer(timerRef: TimerRef): void {
+  if (timerRef.current) {
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
+}
+
 /**
  * Binds a screen's filters, sorting and pagination to the query string.
  *
@@ -220,14 +265,7 @@ export function useUrlState<TSpec extends UrlStateSpec>(
   }, [pathname]);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    },
-    [],
-  );
+  useEffect(() => () => clearTimer(timerRef), []);
 
   const specSignature = useMemo(
     () =>
@@ -251,15 +289,13 @@ export function useUrlState<TSpec extends UrlStateSpec>(
   }, [searchParams, specSignature]);
 
   const values = useMemo(() => {
-    const keys = Object.keys(liveDrafts);
-    if (keys.length === 0) {
+    if (Object.keys(liveDrafts).length === 0) {
       return committedValues;
     }
-    const merged: Record<string, unknown> = { ...committedValues };
-    for (const key of keys) {
-      merged[key] = liveDrafts[key].value;
-    }
-    return merged as UrlStateValues<TSpec>;
+    return {
+      ...committedValues,
+      ...draftValues(liveDrafts),
+    } as UrlStateValues<TSpec>;
   }, [committedValues, liveDrafts]);
 
   const commit = useCallback(
@@ -305,16 +341,10 @@ export function useUrlState<TSpec extends UrlStateSpec>(
       draftsRef.current,
       searchParamsRef.current,
     );
-    const keys = Object.keys(pending);
-    if (keys.length === 0) {
+    if (Object.keys(pending).length === 0) {
       return;
     }
-
-    const updates: Record<string, unknown> = {};
-    for (const key of keys) {
-      updates[key] = pending[key].value;
-    }
-    commit(updates);
+    commit(draftValues(pending));
   }, [commit]);
 
   const flushDraftsRef = useRef(flushDrafts);
@@ -326,63 +356,42 @@ export function useUrlState<TSpec extends UrlStateSpec>(
       setOptions?: UrlStateSetOptions,
     ) => {
       const current = specRef.current;
-      const immediate: Record<string, unknown> = {};
-      const deferred: Record<string, unknown> = {};
-      let hasImmediate = false;
-      let hasDeferred = false;
+      const { immediate, deferred } = groupUpdatesByTiming(
+        current,
+        updates,
+        setOptions?.flush === true,
+      );
 
-      for (const key of Object.keys(updates)) {
-        const paramSpec = current[key];
-        if (!paramSpec) {
-          continue;
-        }
-        if (!setOptions?.flush && paramSpec.debounceMs) {
-          deferred[key] = updates[key];
-          hasDeferred = true;
-        } else {
-          immediate[key] = updates[key];
-          hasImmediate = true;
-        }
-      }
-
-      if (hasImmediate) {
+      if (Object.keys(immediate).length > 0) {
         // An immediate write carries any draft still in flight, so the URL
         // never contradicts what the screen is already showing.
-        if (timerRef.current) {
-          clearTimeout(timerRef.current);
-          timerRef.current = null;
-        }
+        clearTimer(timerRef);
         const pending = draftsRef.current;
-        const merged: Record<string, unknown> = {};
-        for (const key of Object.keys(pending)) {
-          merged[key] = pending[key].value;
-        }
-        Object.assign(merged, immediate);
         if (Object.keys(pending).length > 0) {
           draftsRef.current = NO_DRAFTS;
           setDrafts(NO_DRAFTS);
         }
-        commit(merged);
+        commit({ ...draftValues(pending), ...immediate });
       }
 
-      if (hasDeferred) {
+      const deferredKeys = Object.keys(deferred);
+      if (deferredKeys.length > 0) {
         const base = new URLSearchParams(
           readPendingParams(pathname, searchParamsRef.current.toString()),
         );
-        const keys = Object.keys(deferred);
         const next: Record<string, Draft> = { ...draftsRef.current };
-        for (const key of keys) {
+        for (const key of deferredKeys) {
           next[key] = { value: deferred[key], baseRaw: base.get(key) };
         }
         draftsRef.current = next;
         setDrafts(next);
 
         const delay = Math.max(
-          ...keys.map(key => current[key].debounceMs ?? SEARCH_DEBOUNCE_MS),
+          ...deferredKeys.map(
+            key => current[key].debounceMs ?? SEARCH_DEBOUNCE_MS,
+          ),
         );
-        if (timerRef.current) {
-          clearTimeout(timerRef.current);
-        }
+        clearTimer(timerRef);
         timerRef.current = setTimeout(() => flushDraftsRef.current(), delay);
       }
     },
