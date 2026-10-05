@@ -62,6 +62,12 @@ vi.mock('@/lib/services', () => ({
   },
 }));
 
+const mockInvalidateQueriesList = vi.fn();
+
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useInvalidateQueriesList: () => mockInvalidateQueriesList,
+}));
+
 function createArkFinalChunk(opts: {
   arkTokenUsage?: {
     promptTokens: number;
@@ -1420,6 +1426,62 @@ describe('useChatSession', () => {
           'Second artifact',
         ]);
       });
+    });
+  });
+
+  describe('queries list cache', () => {
+    it('invalidates the queries list once a streamed query is created', async () => {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([createContentChunk('Hello'), createStopChunk()]),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hi');
+      });
+
+      expect(mockStartStreamChatResponse).toHaveBeenCalled();
+      expect(mockInvalidateQueriesList).toHaveBeenCalledTimes(1);
+    });
+
+    it('invalidates the queries list once a polled query is created', async () => {
+      store.set(storedIsChatStreamingEnabledAtom, false);
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Hi',
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hi');
+      });
+
+      expect(mockSubmitChatQuery).toHaveBeenCalled();
+      expect(mockInvalidateQueriesList).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not invalidate the queries list when the query is not created', async () => {
+      mockStartStreamChatResponse.mockRejectedValueOnce(new Error('boom'));
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hi');
+      });
+
+      expect(mockInvalidateQueriesList).not.toHaveBeenCalled();
     });
   });
 });

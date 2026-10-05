@@ -13,8 +13,9 @@ vi.mock('@/lib/services/conversations-hooks');
 vi.mock('@/lib/services/queries-hooks', () => ({
   useGetQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
+const mockListQueries = vi.fn(async () => ({ items: [] }));
 vi.mock('@/lib/services/queries', () => ({
-  queriesService: { list: vi.fn(async () => ({ items: [] })) },
+  queriesService: { list: () => mockListQueries() },
 }));
 vi.mock('@/lib/services/a2a-tasks-hooks', () => ({
   useA2ATask: vi.fn(() => ({ data: undefined, isLoading: false })),
@@ -164,6 +165,34 @@ describe('MessageDisplay', () => {
     expect(screen.getByText(/Workflow sessions/i)).toBeInTheDocument();
   });
 
+  it('should not refetch the recent queries lookup when the queries list is invalidated', async () => {
+    vi.mocked(useGetMessages).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useGetMessages>);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MessageDisplay
+          conversationId="conv-1"
+          sessionId="session-1"
+          conversation={mockConversation}
+          showToolCalls={true}
+          onShowToolCallsChange={mockOnShowToolCallsChange}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(mockListQueries).toHaveBeenCalledTimes(1));
+
+    await queryClient.invalidateQueries({ queryKey: ['list-all-queries'] });
+
+    expect(mockListQueries).toHaveBeenCalledTimes(1);
+  });
+
   describe('tool approval', () => {
     const approvalA2ATask = {
       name: 'a2a-task-task-123',
@@ -255,5 +284,61 @@ describe('MessageDisplay', () => {
         expect(mutateAsync).toHaveBeenCalledWith('rejected'),
       );
     });
+  });
+
+  it('should show an error state instead of the empty state when messages fail to load', () => {
+    const refetch = vi.fn();
+    vi.mocked(useGetMessages).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('Internal Server Error'),
+      refetch,
+    } as unknown as ReturnType<typeof useGetMessages>);
+
+    render(
+      <MessageDisplay
+        conversationId="conv-1"
+        sessionId="session-1"
+        conversation={mockConversation}
+        showToolCalls={true}
+        onShowToolCallsChange={mockOnShowToolCallsChange}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    expect(screen.getByText('Failed to load messages')).toBeInTheDocument();
+    expect(screen.getByText('Internal Server Error')).toBeInTheDocument();
+    expect(
+      screen.queryByText('No conversation messages available'),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('should keep showing loaded messages when a later poll fails', () => {
+    vi.mocked(useGetMessages).mockReturnValue({
+      data: mockMessages,
+      isLoading: false,
+      isError: true,
+      error: new Error('Internal Server Error'),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetMessages>);
+
+    render(
+      <MessageDisplay
+        conversationId="conv-1"
+        sessionId="session-1"
+        conversation={mockConversation}
+        showToolCalls={true}
+        onShowToolCallsChange={mockOnShowToolCallsChange}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    expect(
+      screen.queryByText('Failed to load messages'),
+    ).not.toBeInTheDocument();
   });
 });
