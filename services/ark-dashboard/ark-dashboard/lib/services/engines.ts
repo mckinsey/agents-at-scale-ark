@@ -3,6 +3,7 @@
 // and the generic resource API.
 
 import { apiClient } from '@/lib/api/client';
+import { accessReviewService } from '@/lib/services/access-review';
 
 interface ExecutionEngineK8sResource {
   metadata: {
@@ -72,14 +73,17 @@ export const executionEnginesService = {
     }
   },
 
-  async delete(namespace: string, name: string): Promise<boolean> {
-    try {
-      await apiClient.delete(`${RESOURCE_PATH}/${name}`, {
-        params: { namespace },
-      });
-      return true;
-    } catch {
-      return false;
-    }
+  async delete(namespace: string, name: string): Promise<void> {
+    await apiClient.delete(`${RESOURCE_PATH}/${name}`, {
+      params: { namespace },
+    });
+  },
+
+  async canDelete(namespace: string): Promise<boolean> {
+    return accessReviewService.check(namespace, {
+      group: 'ark.mckinsey.com',
+      resource: 'executionengines',
+      verb: 'delete',
+    });
   },
 };
