@@ -1865,6 +1865,10 @@ export interface paths {
          *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
          *     are served; everything else returns 403.
          *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
+         *
          *     Returns:
          *         Response: The created Kubernetes resource as JSON
          *
@@ -1928,6 +1932,10 @@ export interface paths {
          *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
          *     are served; everything else returns 403.
          *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
+         *
          *     Returns:
          *         Response: The updated Kubernetes resource as JSON
          *
@@ -1949,6 +1957,10 @@ export interface paths {
          *
          *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
          *     are served; everything else returns 403.
+         *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
          *
          *     Returns:
          *         Response: HTTP 204 No Content on success

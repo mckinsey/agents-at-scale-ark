@@ -19,7 +19,7 @@ from ark_sdk.k8s import get_context
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
-from ...auth.generic_resources import GenericResourceGuard
+from ...auth.generic_resources import GenericResourceGuard, require_generic_write_identity
 from ...constants.query_param_descriptions import (
     NAMESPACE_DESCRIPTION,
     LABEL_SELECTOR_DESCRIPTION,
@@ -258,8 +258,11 @@ async def list_grouped_resources(
         return _create_resource_response(resources_dict, request)
 
 
-@router.post("/apis/{group}/{version}/{kind}", dependencies=[Depends(GenericResourceGuard("create"))])
-@handle_k8s_errors(operation="create", resource_type="resource")
+@router.post(
+    "/apis/{group}/{version}/{kind}",
+    dependencies=[Depends(GenericResourceGuard("create")), Depends(require_generic_write_identity)],
+)
+@handle_k8s_errors(operation="create", resource_type="resource", impersonation_fallback=False)
 async def create_grouped_resource(
     request: Request,
     group: str,
@@ -281,6 +284,10 @@ async def create_grouped_resource(
 
     Only (group, version, Kind, verb) tuples on the generic resources allowlist
     are served; everything else returns 403.
+
+    With authentication enabled, a signed-in user's write runs as that user and
+    needs impersonation; it is never retried as the service account. API key
+    and open-mode requests run as the service account.
 
     Returns:
         Response: The created Kubernetes resource as JSON
@@ -308,8 +315,11 @@ async def create_grouped_resource(
         return _create_resource_response(resource.to_dict(), request)
 
 
-@router.put("/apis/{group}/{version}/{kind}/{resource_name}", dependencies=[Depends(GenericResourceGuard("update"))])
-@handle_k8s_errors(operation="update", resource_type="resource")
+@router.put(
+    "/apis/{group}/{version}/{kind}/{resource_name}",
+    dependencies=[Depends(GenericResourceGuard("update")), Depends(require_generic_write_identity)],
+)
+@handle_k8s_errors(operation="update", resource_type="resource", impersonation_fallback=False)
 async def update_grouped_resource(
     request: Request,
     group: str,
@@ -338,6 +348,10 @@ async def update_grouped_resource(
 
     Only (group, version, Kind, verb) tuples on the generic resources allowlist
     are served; everything else returns 403.
+
+    With authentication enabled, a signed-in user's write runs as that user and
+    needs impersonation; it is never retried as the service account. API key
+    and open-mode requests run as the service account.
 
     Returns:
         Response: The updated Kubernetes resource as JSON
@@ -412,8 +426,11 @@ async def create_access_review(
         return AccessReviewResponse(allowed=allowed)
 
 
-@router.delete("/apis/{group}/{version}/{kind}/{resource_name}", dependencies=[Depends(GenericResourceGuard("delete"))])
-@handle_k8s_errors(operation="delete", resource_type="resource")
+@router.delete(
+    "/apis/{group}/{version}/{kind}/{resource_name}",
+    dependencies=[Depends(GenericResourceGuard("delete")), Depends(require_generic_write_identity)],
+)
+@handle_k8s_errors(operation="delete", resource_type="resource", impersonation_fallback=False)
 async def delete_grouped_resource(
     group: str,
     version: str,
@@ -434,6 +451,10 @@ async def delete_grouped_resource(
 
     Only (group, version, Kind, verb) tuples on the generic resources allowlist
     are served; everything else returns 403.
+
+    With authentication enabled, a signed-in user's write runs as that user and
+    needs impersonation; it is never retried as the service account. API key
+    and open-mode requests run as the service account.
 
     Returns:
         Response: HTTP 204 No Content on success
