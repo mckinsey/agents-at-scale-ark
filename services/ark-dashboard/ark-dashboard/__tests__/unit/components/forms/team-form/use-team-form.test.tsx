@@ -1,10 +1,14 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TeamFormMode } from '@/components/forms/team-form/types';
 import { useTeamForm } from '@/components/forms/team-form/use-team-form';
 import { toast } from '@/components/ui/sonner';
+import type { Team } from '@/lib/services';
 import { agentsService, teamsService } from '@/lib/services';
+import { GET_ALL_TEAMS_QUERY_KEY } from '@/lib/services/teams-hooks';
 
 vi.mock('@/lib/services', () => ({
   teamsService: {
@@ -38,6 +42,26 @@ const mockTeamsService = vi.mocked(teamsService);
 const mockAgentsService = vi.mocked(agentsService);
 const mockToast = vi.mocked(toast);
 
+const TEAMS_LIST_KEY = [GET_ALL_TEAMS_QUERY_KEY, mockNamespace];
+
+const createQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+const renderUseTeamForm = (
+  options: Parameters<typeof useTeamForm>[0],
+  client: QueryClient = createQueryClient(),
+) => {
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  return renderHook(() => useTeamForm(options), { wrapper: Wrapper });
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockAgentsService.listWithTools.mockResolvedValue([]);
@@ -45,9 +69,7 @@ beforeEach(() => {
 
 describe('useTeamForm', () => {
   it('should default loops to false and strategy to sequential in CREATE mode', async () => {
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.CREATE }),
-    );
+    const { result } = renderUseTeamForm({ mode: TeamFormMode.CREATE });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -70,9 +92,10 @@ describe('useTeamForm', () => {
       { name: 'agent1' },
     ] as any);
 
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.EDIT, teamName: 'test-team' }),
-    );
+    const { result } = renderUseTeamForm({
+      mode: TeamFormMode.EDIT,
+      teamName: 'test-team',
+    });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -85,9 +108,7 @@ describe('useTeamForm', () => {
   it('should include loops=false in CREATE submit', async () => {
     mockTeamsService.create.mockResolvedValue({} as any);
 
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.CREATE }),
-    );
+    const { result } = renderUseTeamForm({ mode: TeamFormMode.CREATE });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -108,9 +129,7 @@ describe('useTeamForm', () => {
   it('should include loops=true with maxTurns in CREATE submit', async () => {
     mockTeamsService.create.mockResolvedValue({} as any);
 
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.CREATE }),
-    );
+    const { result } = renderUseTeamForm({ mode: TeamFormMode.CREATE });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -146,9 +165,10 @@ describe('useTeamForm', () => {
       { name: 'agent1' },
     ] as any);
 
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.VIEW, teamName: 'edit-team' }),
-    );
+    const { result } = renderUseTeamForm({
+      mode: TeamFormMode.VIEW,
+      teamName: 'edit-team',
+    });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -166,9 +186,7 @@ describe('useTeamForm', () => {
   });
 
   it('should require maxTurns when strategy is sequential and loops is enabled', async () => {
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.CREATE }),
-    );
+    const { result } = renderUseTeamForm({ mode: TeamFormMode.CREATE });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -200,9 +218,7 @@ describe('useTeamForm', () => {
   });
 
   it('should require maxTurns when strategy is graph', async () => {
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.CREATE }),
-    );
+    const { result } = renderUseTeamForm({ mode: TeamFormMode.CREATE });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -231,9 +247,7 @@ describe('useTeamForm', () => {
   });
 
   it('should not require maxTurns when strategy is sequential and loops is disabled', async () => {
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.CREATE }),
-    );
+    const { result } = renderUseTeamForm({ mode: TeamFormMode.CREATE });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -275,9 +289,10 @@ describe('useTeamForm', () => {
       { name: 'agent1' },
     ] as any);
 
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.VIEW, teamName: 'edit-team' }),
-    );
+    const { result } = renderUseTeamForm({
+      mode: TeamFormMode.VIEW,
+      teamName: 'edit-team',
+    });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -295,9 +310,7 @@ describe('useTeamForm', () => {
   it('should show toast error when service throws', async () => {
     mockTeamsService.create.mockRejectedValue(new Error('Network error'));
 
-    const { result } = renderHook(() =>
-      useTeamForm({ mode: TeamFormMode.CREATE }),
-    );
+    const { result } = renderUseTeamForm({ mode: TeamFormMode.CREATE });
 
     await waitFor(() => {
       expect(result.current.state.loading).toBe(false);
@@ -313,5 +326,87 @@ describe('useTeamForm', () => {
       'Failed to create team',
       expect.objectContaining({ description: 'Network error' }),
     );
+  });
+
+  describe('teams list cache', () => {
+    const existingTeam: Team = {
+      id: 'existing',
+      name: 'existing',
+      namespace: mockNamespace,
+      strategy: 'sequential',
+      loops: false,
+      members: [],
+    };
+
+    const createSeededClient = () => {
+      const client = createQueryClient();
+      client.setQueryData(TEAMS_LIST_KEY, [existingTeam]);
+      return client;
+    };
+
+    it('should invalidate the cached teams list after creating a team', async () => {
+      mockTeamsService.create.mockResolvedValue(existingTeam);
+      const client = createSeededClient();
+
+      const { result } = renderUseTeamForm(
+        { mode: TeamFormMode.CREATE },
+        client,
+      );
+
+      await waitFor(() => {
+        expect(result.current.state.loading).toBe(false);
+      });
+
+      await act(async () => {
+        result.current.form.setValue('name', 'new-team');
+        await result.current.actions.onSubmit(result.current.form.getValues());
+      });
+
+      expect(mockTeamsService.create).toHaveBeenCalled();
+      expect(client.getQueryState(TEAMS_LIST_KEY)?.isInvalidated).toBe(true);
+    });
+
+    it('should invalidate the cached teams list after updating a team', async () => {
+      mockTeamsService.getByName.mockResolvedValue(existingTeam);
+      mockTeamsService.updateById.mockResolvedValue(existingTeam);
+      const client = createSeededClient();
+
+      const { result } = renderUseTeamForm(
+        { mode: TeamFormMode.VIEW, teamName: 'existing' },
+        client,
+      );
+
+      await waitFor(() => {
+        expect(result.current.state.loading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.actions.onSubmit(result.current.form.getValues());
+      });
+
+      expect(mockTeamsService.updateById).toHaveBeenCalled();
+      expect(client.getQueryState(TEAMS_LIST_KEY)?.isInvalidated).toBe(true);
+    });
+
+    it('should not invalidate the cached teams list when creation fails', async () => {
+      mockTeamsService.create.mockRejectedValue(new Error('Network error'));
+      const client = createSeededClient();
+
+      const { result } = renderUseTeamForm(
+        { mode: TeamFormMode.CREATE },
+        client,
+      );
+
+      await waitFor(() => {
+        expect(result.current.state.loading).toBe(false);
+      });
+
+      await act(async () => {
+        result.current.form.setValue('name', 'fail-team');
+        await result.current.actions.onSubmit(result.current.form.getValues());
+      });
+
+      expect(client.getQueryState(TEAMS_LIST_KEY)?.isInvalidated).toBe(false);
+    });
   });
 });

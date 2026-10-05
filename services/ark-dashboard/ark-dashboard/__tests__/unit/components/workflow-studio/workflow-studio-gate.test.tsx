@@ -12,6 +12,12 @@ const replaceMock = vi.fn();
 
 let currentNamespace = 'default';
 
+const mockInvalidateQueriesList = vi.fn();
+
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useInvalidateQueriesList: () => mockInvalidateQueriesList,
+}));
+
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({ namespace: currentNamespace }),
 }));
