@@ -54,12 +54,17 @@ function isSameTarget(a: Target, b: Target): boolean {
   return a.type === b.type && a.name === b.name;
 }
 
+function getTriggerLabel(selected: Target | null, loading: boolean): string {
+  if (loading) return 'Loading...';
+  return selected ? toTargetKey(selected) : 'Select target';
+}
+
 export function QueryTargetField({
   value,
   onChange,
   availableTargets,
   loading = false,
-}: QueryTargetFieldProps) {
+}: Readonly<QueryTargetFieldProps>) {
   const groupedTargets = useMemo(() => {
     const groups = new Map<string, AvailableTarget[]>();
     for (const target of availableTargets) {
@@ -92,11 +97,7 @@ export function QueryTargetField({
                   'min-w-0 truncate',
                   !selected && 'text-fg-tertiary',
                 )}>
-                {loading
-                  ? 'Loading...'
-                  : selected
-                    ? toTargetKey(selected)
-                    : 'Select target'}
+                {getTriggerLabel(selected, loading)}
               </span>
             )}
           </ComboboxValue>
