@@ -100,9 +100,11 @@ class TestHandleK8sErrorsAdmissionDenial(unittest.IsolatedAsyncioTestCase):
             raise _make_api_exception(403, body=ADMISSION_DENIAL_BODY)
 
         config = ImpersonationConfig(username="bob@acme.com", groups=["editors"])
-        with patch.dict("os.environ", {"IMPERSONATION_FALLBACK": "false"}):
-            with pytest.raises(HTTPException) as exc_info:
-                await handler(namespace="default", team_name="t", impersonation=config)
+        with (
+            patch.dict("os.environ", {"IMPERSONATION_FALLBACK": "false"}),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await handler(namespace="default", team_name="t", impersonation=config)
 
         self.assertEqual(exc_info.value.status_code, 403)
         self.assertEqual(
@@ -121,9 +123,11 @@ class TestHandleK8sErrorsAdmissionDenial(unittest.IsolatedAsyncioTestCase):
             raise _make_api_exception(403, body=ADMISSION_DENIAL_BODY)
 
         config = ImpersonationConfig(username="bob@acme.com", groups=["editors"])
-        with patch.dict("os.environ", {"IMPERSONATION_FALLBACK": "true"}):
-            with pytest.raises(HTTPException) as exc_info:
-                await handler(namespace="default", team_name="t", impersonation=config)
+        with (
+            patch.dict("os.environ", {"IMPERSONATION_FALLBACK": "true"}),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await handler(namespace="default", team_name="t", impersonation=config)
 
         self.assertEqual(call_count, 1)
         self.assertIn("maxTurns can only be set", exc_info.value.detail)

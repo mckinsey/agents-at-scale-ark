@@ -150,7 +150,9 @@ describe('StrategySection', () => {
       <Wrapper
         defaultStrategy="selector"
         defaultMaxTurns="5"
-        onForm={f => (form = f)}
+        onForm={f => {
+          form = f;
+        }}
       />,
     );
 
@@ -170,7 +172,9 @@ describe('StrategySection', () => {
       <Wrapper
         defaultStrategy="selector"
         defaultMaxTurns="5"
-        onForm={f => (form = f)}
+        onForm={f => {
+          form = f;
+        }}
       />,
     );
 
@@ -192,7 +196,9 @@ describe('StrategySection', () => {
         defaultStrategy="sequential"
         defaultLoops
         defaultMaxTurns="7"
-        onForm={f => (form = f)}
+        onForm={f => {
+          form = f;
+        }}
       />,
     );
 
