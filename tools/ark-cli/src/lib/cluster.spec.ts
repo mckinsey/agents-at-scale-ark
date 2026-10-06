@@ -379,6 +379,65 @@ describe('cluster', () => {
       });
     });
 
+    describe('when node lookup is forbidden', () => {
+      const forbidden = new Error('nodes is forbidden');
+
+      const tenantConfig = (context: string) => ({
+        'current-context': context,
+        contexts: [{name: context, context: {namespace: 'tenant-a'}}],
+      });
+
+      it('keeps namespace for kind cluster', async () => {
+        mockExeca
+          .mockResolvedValueOnce({
+            stdout: JSON.stringify(tenantConfig('kind-tenant')),
+          })
+          .mockResolvedValueOnce({stdout: 'kind-tenant'})
+          .mockRejectedValueOnce(forbidden);
+
+        const result = await getClusterInfo();
+
+        expect(result).toEqual({
+          type: 'kind',
+          context: 'kind-tenant',
+          namespace: 'tenant-a',
+          ip: undefined,
+        });
+      });
+
+      it('keeps namespace for minikube when all IP lookups fail', async () => {
+        mockExeca
+          .mockResolvedValueOnce({
+            stdout: JSON.stringify(tenantConfig('minikube')),
+          })
+          .mockResolvedValueOnce({stdout: 'minikube'})
+          .mockRejectedValueOnce(new Error('minikube not found'))
+          .mockRejectedValueOnce(forbidden);
+
+        const result = await getClusterInfo();
+
+        expect(result.type).toBe('minikube');
+        expect(result.namespace).toBe('tenant-a');
+        expect(result.ip).toBeUndefined();
+      });
+
+      it('keeps namespace for cloud cluster when all IP lookups fail', async () => {
+        mockExeca
+          .mockResolvedValueOnce({
+            stdout: JSON.stringify(tenantConfig('gke_project_zone_cluster')),
+          })
+          .mockResolvedValueOnce({stdout: 'gke_project_zone_cluster'})
+          .mockRejectedValueOnce(forbidden)
+          .mockRejectedValueOnce(forbidden);
+
+        const result = await getClusterInfo();
+
+        expect(result.type).toBe('cloud');
+        expect(result.namespace).toBe('tenant-a');
+        expect(result.ip).toBeUndefined();
+      });
+    });
+
     it('handles missing context in config', async () => {
       const emptyConfig = {
         contexts: [],

@@ -45,6 +45,7 @@ function enrichServiceDetails(service: ServiceStatus): {
     warning: {icon: '⚠', text: 'warning', color: 'yellow'},
     'not ready': {icon: '○', text: 'not ready', color: 'yellow'},
     'not installed': {icon: '?', text: 'not installed', color: 'yellow'},
+    'no access': {icon: '⊘', text: 'no access', color: 'yellow'},
   };
   const statusInfo = statusMap[service.status] || {
     icon: '?',
