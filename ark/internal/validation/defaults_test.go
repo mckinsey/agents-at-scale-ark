@@ -3,6 +3,8 @@ package validation
 
 import (
 	"context"
+	"reflect"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -184,8 +186,35 @@ func TestDefaultTeam(t *testing.T) {
 			t.Fatal("expected maxTurns to be nil")
 		}
 		key := annotations.MigrationWarningPrefix + "graph"
-		if team.Annotations[key] == "" {
+		warning := team.Annotations[key]
+		if warning == "" {
 			t.Fatal("expected migration warning annotation")
+		}
+		if !strings.Contains(warning, "'graph' strategy value will be removed") || !strings.Contains(warning, "spec.graph field is retained for 'selector'") {
+			t.Fatalf("expected warning to scope removal to the strategy value and retain spec.graph, got %q", warning)
+		}
+	})
+
+	t.Run("keeps graph on selector teams", func(t *testing.T) {
+		maxTurns := 10
+		edges := []arkv1alpha1.TeamGraphEdge{{From: "a", To: "b"}}
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "selector",
+				MaxTurns: &maxTurns,
+				Graph:    &arkv1alpha1.TeamGraphSpec{Edges: edges},
+			},
+		}
+		DefaultTeam(team)
+		if team.Spec.Strategy != "selector" {
+			t.Fatalf("expected strategy 'selector', got '%s'", team.Spec.Strategy)
+		}
+		if team.Spec.Graph == nil || !reflect.DeepEqual(team.Spec.Graph.Edges, edges) {
+			t.Fatalf("expected graph edges to be retained, got %+v", team.Spec.Graph)
+		}
+		if _, ok := team.Annotations[annotations.MigrationWarningPrefix+"graph"]; ok {
+			t.Fatal("expected no graph migration warning for selector teams")
 		}
 	})
 }
