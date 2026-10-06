@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FlowRow } from '@/components/rows/flow-row';
 import {
   WorkflowTemplatesSection,
   type WorkflowTemplatesSectionHandle,
@@ -418,6 +419,40 @@ describe('WorkflowTemplatesSection', () => {
       await waitFor(() => {
         const stageTexts = screen.getAllByText(/0 stages/);
         expect(stageTexts).toHaveLength(3);
+      });
+    });
+  });
+
+  describe('Access', () => {
+    it('lets rows run and delete by default', async () => {
+      vi.mocked(workflowTemplatesService.list).mockResolvedValue([
+        mockTemplates[0],
+      ]);
+
+      render(<WorkflowTemplatesSection />);
+
+      await waitFor(() =>
+        expect(screen.getByTestId('flow-row')).toBeInTheDocument(),
+      );
+      expect(vi.mocked(FlowRow).mock.lastCall?.[0]).toMatchObject({
+        canRun: true,
+        canDelete: true,
+      });
+    });
+
+    it('passes run and delete access to each row', async () => {
+      vi.mocked(workflowTemplatesService.list).mockResolvedValue([
+        mockTemplates[0],
+      ]);
+
+      render(<WorkflowTemplatesSection canRun={false} canDelete={false} />);
+
+      await waitFor(() =>
+        expect(screen.getByTestId('flow-row')).toBeInTheDocument(),
+      );
+      expect(vi.mocked(FlowRow).mock.lastCall?.[0]).toMatchObject({
+        canRun: false,
+        canDelete: false,
       });
     });
   });

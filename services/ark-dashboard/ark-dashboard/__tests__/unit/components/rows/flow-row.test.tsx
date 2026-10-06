@@ -32,12 +32,14 @@ vi.mock('@/components/ui/button', () => ({
     children,
     onClick,
     asChild,
+    disabled,
   }: {
     children: React.ReactNode;
     onClick?: () => void;
     asChild?: boolean;
+    disabled?: boolean;
   }) => (
-    <button onClick={onClick} data-as-child={asChild}>
+    <button onClick={onClick} data-as-child={asChild} disabled={disabled}>
       {children}
     </button>
   ),
@@ -55,7 +57,9 @@ vi.mock('@/components/dialogs/delete-workflow-template-dialog', () => ({
 }));
 
 vi.mock('@/components/dialogs/run-workflow-dialog', () => ({
-  RunWorkflowDialog: ({ trigger }: { trigger: React.ReactNode }) => <>{trigger}</>,
+  RunWorkflowDialog: ({ trigger }: { trigger: React.ReactNode }) => (
+    <div data-testid="run-dialog">{trigger}</div>
+  ),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
@@ -179,6 +183,52 @@ describe('FlowRow', () => {
       render(<FlowRow flow={baseFlow} />);
 
       expect(screen.queryByTestId('trash-icon')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Access', () => {
+    const runButton = () => screen.getByTestId('play-icon').closest('button');
+    const deleteButton = () =>
+      screen.getByTestId('trash-icon').closest('button');
+
+    it('enables run and delete by default', () => {
+      render(<FlowRow flow={baseFlow} onRun={vi.fn()} onDelete={vi.fn()} />);
+
+      expect(runButton()).toBeEnabled();
+      expect(deleteButton()).toBeEnabled();
+      expect(screen.getByTestId('run-dialog')).toBeInTheDocument();
+      expect(screen.getByText('Run workflow')).toBeInTheDocument();
+      expect(screen.getByText('Delete template')).toBeInTheDocument();
+    });
+
+    it('disables run without opening the dialog when running is not allowed', () => {
+      render(<FlowRow flow={baseFlow} onRun={vi.fn()} canRun={false} />);
+
+      expect(runButton()).toBeDisabled();
+      expect(screen.queryByTestId('run-dialog')).not.toBeInTheDocument();
+      expect(
+        screen.getByText('You do not have permission to run workflows'),
+      ).toBeInTheDocument();
+    });
+
+    it('disables delete when deleting is not allowed', () => {
+      render(<FlowRow flow={baseFlow} onDelete={vi.fn()} canDelete={false} />);
+
+      expect(deleteButton()).toBeDisabled();
+      expect(
+        screen.getByText(
+          'You do not have permission to delete workflow templates',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('keeps the demo-mode message for delete in read-only mode', () => {
+      render(<FlowRow flow={baseFlow} onDelete={vi.fn()} readOnly />);
+
+      expect(deleteButton()).toBeDisabled();
+      expect(
+        screen.getByText('Delete disabled in demo mode'),
+      ).toBeInTheDocument();
     });
   });
 
