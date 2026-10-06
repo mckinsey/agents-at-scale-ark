@@ -1,0 +1,272 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workflow-pagination-performance
+  labels:
+    requires-images: "true"
+spec:
+  description: >
+    #3605: the workflow runs page must paginate server-side at the Kubernetes
+    API rather than ark-api loading every Workflow and slicing a page out of
+    memory. This test deploys a real ark-api (built from this PR's image),
+    creates 250 real Workflow resources, and hits the live
+    /v1/resources/apis/argoproj.io/v1alpha1/Workflow endpoint to prove two
+    things with real numbers from the cluster: (1) a small-limit page is
+    dramatically smaller than a full unpaginated fetch of the same
+    collection, and (2) walking the "continue" cursor end to end returns
+    every item exactly once.
+  timeouts:
+    apply: 120s
+    assert: 120s
+    exec: 180s
+
+  steps:
+  - name: install-argo-crds
+    try:
+    - script:
+        timeout: 300s
+        # Only need the Workflow CRD registered so real Workflow objects can be
+        # created and listed - the controller and server are disabled
+        # (replicas=0 / enabled=false) so none of these workflows ever actually
+        # run, keeping this step fast and side-effect free.
+        #
+        # `helm template | kubectl apply` rather than `helm install`: CRDs are
+        # cluster-scoped, so a plain `helm install` fails with "invalid
+        # ownership metadata" the moment any other release (e.g. a real
+        # argo-workflows install, or another instance of this same test
+        # running in parallel) has already created them under a different
+        # release name. kubectl apply has no such ownership check and is
+        # idempotent against an identical, already-applied CRD.
+        content: |
+          helm dependency update ../../services/argo-workflows/chart >/dev/null
+          helm template argo-workflows ../../services/argo-workflows/chart \
+            --namespace "$NAMESPACE" \
+            --set argo-workflows.singleNamespace=true \
+            --set argo-workflows.controller.replicas=0 \
+            --set argo-workflows.server.enabled=false \
+            --set minio.enabled=false \
+            --set httpRoute.argo.enabled=false \
+            | kubectl apply -f -
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: workflows.argoproj.io
+          status:
+            (conditions[?type == 'Established']):
+              - status: "True"
+    # No cleanup: the CRD is cluster-scoped and intentionally left in place
+    # (matching upstream's own crds.keep=true default) since other namespaces
+    # or concurrently running tests may still depend on it. Every other
+    # resource applied here is namespace-scoped and goes away with the
+    # ephemeral test namespace.
+
+  - name: install-ark-api
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-api ../../services/ark-api/chart \
+            --namespace "$NAMESPACE" \
+            ${ARK_API_IMAGE:+--set app.image.repository=${ARK_API_IMAGE}} \
+            ${ARK_API_IMAGE_TAG:+--set app.image.tag=${ARK_API_IMAGE_TAG}} \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          echo "=== Pods ==="
+          kubectl -n $NAMESPACE get pods -o wide
+          echo "=== Logs ark-api ==="
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-api --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: create-workflows
+    try:
+    - script:
+        timeout: 90s
+        # One kubectl apply for all 250 Workflow objects, rather than 250
+        # separate invocations, so the step stays fast.
+        content: |
+          set -eu
+          {
+            for i in $(seq 1 250); do
+              name=$(printf 'pagination-perf-%04d' "$i")
+              cat <<EOF
+          apiVersion: argoproj.io/v1alpha1
+          kind: Workflow
+          metadata:
+            name: $name
+            namespace: $NAMESPACE
+          spec:
+            entrypoint: main
+            templates:
+            - name: main
+              container:
+                image: busybox
+                command: ["echo", "hi"]
+          ---
+          EOF
+            done
+          } | kubectl apply -f -
+
+          count=$(kubectl -n "$NAMESPACE" get workflows.argoproj.io --no-headers | wc -l)
+          echo "created $count workflows"
+          [ "$count" -eq 250 ] || { echo "FAIL: expected 250 workflows, got $count"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: probe-pod
+    try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: pagination-curl
+          spec:
+            containers:
+              - name: curl
+                image: curlimages/curl:8.11.1
+                command: ["sleep", "300"]
+            restartPolicy: Never
+            terminationGracePeriodSeconds: 0
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: pagination-curl
+        timeout: 120s
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+
+  - name: small-page-vs-full-load
+    try:
+    - script:
+        timeout: 60s
+        # Compares a realistic dashboard page (limit=20) against the
+        # old behaviour this PR replaces (limit high enough to fetch the
+        # whole collection in one shot) using real bytes-on-the-wire and
+        # real latency measured against the live ark-api + Kubernetes API.
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/resources/apis/argoproj.io/v1alpha1/Workflow"
+
+          NL=$(printf '\n')
+
+          fetch() {
+            # $1 = limit; response is "<json-body>\n###<size_bytes> <time_seconds>".
+            kubectl exec pagination-curl -n "$NAMESPACE" -- \
+              curl -s -G "$BASE_URL" \
+                --data-urlencode "namespace=$NAMESPACE" \
+                --data-urlencode "limit=$1" \
+                -w '\n###%{size_download} %{time_total}'
+          }
+
+          SMALL_RAW=$(fetch 20)
+          SMALL_BODY="${SMALL_RAW%${NL}###*}"
+          SMALL_META="${SMALL_RAW##*${NL}###}"
+          SMALL_SIZE=$(printf '%s' "$SMALL_META" | awk '{print $1}')
+          SMALL_TIME=$(printf '%s' "$SMALL_META" | awk '{print $2}')
+          SMALL_COUNT=$(printf '%s' "$SMALL_BODY" | jq '.items | length')
+          SMALL_CONTINUE=$(printf '%s' "$SMALL_BODY" | jq -r '.metadata.continue // empty')
+
+          LARGE_RAW=$(fetch 1000)
+          LARGE_BODY="${LARGE_RAW%${NL}###*}"
+          LARGE_META="${LARGE_RAW##*${NL}###}"
+          LARGE_SIZE=$(printf '%s' "$LARGE_META" | awk '{print $1}')
+          LARGE_TIME=$(printf '%s' "$LARGE_META" | awk '{print $2}')
+          LARGE_COUNT=$(printf '%s' "$LARGE_BODY" | jq '.items | length')
+
+          echo "=== Real pagination gain (250 Workflow objects in $NAMESPACE) ==="
+          echo "limit=20   -> items=$SMALL_COUNT bytes=$SMALL_SIZE time=${SMALL_TIME}s continue=${SMALL_CONTINUE:+present}"
+          echo "limit=1000 -> items=$LARGE_COUNT bytes=$LARGE_SIZE time=${LARGE_TIME}s"
+          echo "payload reduction: $((LARGE_SIZE / SMALL_SIZE))x smaller"
+
+          [ "$SMALL_COUNT" -eq 20 ] || { echo "FAIL: expected 20 items, got $SMALL_COUNT"; exit 1; }
+          [ -n "$SMALL_CONTINUE" ] || { echo "FAIL: expected a continue token when more items remain"; exit 1; }
+          [ "$LARGE_COUNT" -eq 250 ] || { echo "FAIL: expected all 250 items, got $LARGE_COUNT"; exit 1; }
+          # 20/250 of the items should be well under half the bytes; guards
+          # against a regression that silently drops back to loading everything
+          # (which would make this ratio collapse to ~1).
+          [ "$LARGE_SIZE" -gt $((SMALL_SIZE * 5)) ] || { echo "FAIL: paginated response was not meaningfully smaller (small=$SMALL_SIZE large=$LARGE_SIZE)"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs pagination-curl || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: walk-full-pagination
+    try:
+    - script:
+        timeout: 90s
+        # Walks every page with the continue cursor and proves the union of
+        # pages is exactly the 250 workflows created earlier - no duplicates,
+        # nothing missing.
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/resources/apis/argoproj.io/v1alpha1/Workflow"
+          NAMES_FILE=$(mktemp)
+          CONT=""
+          PAGE=0
+
+          while true; do
+            PAGE=$((PAGE + 1))
+            if [ -n "$CONT" ]; then
+              BODY=$(kubectl exec pagination-curl -n "$NAMESPACE" -- \
+                curl -s -G "$BASE_URL" \
+                  --data-urlencode "namespace=$NAMESPACE" \
+                  --data-urlencode "limit=20" \
+                  --data-urlencode "continue=$CONT")
+            else
+              BODY=$(kubectl exec pagination-curl -n "$NAMESPACE" -- \
+                curl -s -G "$BASE_URL" \
+                  --data-urlencode "namespace=$NAMESPACE" \
+                  --data-urlencode "limit=20")
+            fi
+
+            printf '%s' "$BODY" | jq -r '.items[].metadata.name' >> "$NAMES_FILE"
+            CONT=$(printf '%s' "$BODY" | jq -r '.metadata.continue // empty')
+
+            [ -n "$CONT" ] || break
+            [ "$PAGE" -lt 50 ] || { echo "FAIL: did not terminate after 50 pages - possible cursor loop"; exit 1; }
+          done
+
+          TOTAL=$(wc -l < "$NAMES_FILE" | tr -d ' ')
+          UNIQUE=$(sort -u "$NAMES_FILE" | wc -l | tr -d ' ')
+          echo "walked $PAGE pages, fetched $TOTAL names ($UNIQUE unique)"
+
+          [ "$TOTAL" -eq 250 ] || { echo "FAIL: expected 250 names across all pages, got $TOTAL"; exit 1; }
+          [ "$UNIQUE" -eq 250 ] || { echo "FAIL: expected 250 unique names, got $UNIQUE (duplicates across pages)"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs pagination-curl || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
