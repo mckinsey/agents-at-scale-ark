@@ -13,7 +13,8 @@ export class APIError extends Error {
   }
 }
 
-const ADMISSION_WEBHOOK_PREFIX = /^admission webhook "[^"]+" denied the request:\s*/;
+const ADMISSION_WEBHOOK_PREFIX =
+  /^admission webhook "[^"]+" denied the request:\s*/;
 
 function stripAdmissionWebhookPrefix(message: string): string {
   return message.replace(ADMISSION_WEBHOOK_PREFIX, '');
@@ -79,7 +80,7 @@ class APIClient {
   private extractErrorMessage(errorData: unknown): string {
     if (typeof errorData === 'object' && errorData !== null) {
       if ('detail' in errorData && errorData.detail) {
-        return String(errorData.detail);
+        return stripAdmissionWebhookPrefix(String(errorData.detail));
       }
       if ('message' in errorData && errorData.message) {
         return String(errorData.message);
@@ -104,10 +105,8 @@ class APIClient {
       ? await response.json()
       : await response.text();
 
-    const errorMessage = stripAdmissionWebhookPrefix(
-      this.extractErrorMessage(errorData) ||
-        `HTTP error! status: ${response.status}`,
-    );
+    const errorMessage = this.extractErrorMessage(errorData) ||
+      `HTTP error! status: ${response.status}`;
 
     const apiError = new APIError(errorMessage, response.status, errorData);
 
