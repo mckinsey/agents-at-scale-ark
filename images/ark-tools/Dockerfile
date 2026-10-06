@@ -41,9 +41,12 @@ RUN apk add --no-cache curl ca-certificates bash openssl && \
 # Install helm
 RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-# Install argo CLI
-RUN ARGO_VERSION=$(curl -s https://api.github.com/repos/argoproj/argo-workflows/releases/latest | grep '"tag_name"' | cut -d '"' -f 4) && \
-    curl -sLO "https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-linux-amd64.gz" && \
+# Install argo CLI. Pinned to the Argo Workflows version this repo deploys
+# (services/argo-workflows/chart/values.yaml executor image tag) so the CLI
+# matches the server and the build does not hit the anonymous GitHub API, which
+# is rate-limited on shared CI runners.
+ARG ARGO_VERSION=v3.7.2
+RUN curl -fsSLO "https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-linux-amd64.gz" && \
     gunzip argo-linux-amd64.gz && \
     chmod +x argo-linux-amd64 && \
     mv argo-linux-amd64 /usr/local/bin/argo

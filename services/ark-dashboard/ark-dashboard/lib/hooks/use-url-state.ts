@@ -38,6 +38,15 @@ interface Draft {
 
 type Drafts = Readonly<Record<string, Draft>>;
 
+interface UpdatesByTiming {
+  readonly immediate: Record<string, unknown>;
+  readonly deferred: Record<string, unknown>;
+}
+
+interface TimerRef {
+  current: ReturnType<typeof setTimeout> | null;
+}
+
 const DEFAULT_PAGE_KEY = 'page';
 const NO_DRAFTS: Drafts = {};
 
@@ -59,7 +68,10 @@ const pendingParamsByPath = new Map<string, PendingParams>();
 const instanceCountByPath = new Map<string, number>();
 
 function retainPath(pathname: string): void {
-  instanceCountByPath.set(pathname, (instanceCountByPath.get(pathname) ?? 0) + 1);
+  instanceCountByPath.set(
+    pathname,
+    (instanceCountByPath.get(pathname) ?? 0) + 1,
+  );
 }
 
 function releasePath(pathname: string): void {
@@ -77,7 +89,7 @@ function releasePath(pathname: string): void {
 /** Rebases on the landed URL once per change, however many instances render. */
 function syncPendingParams(pathname: string, landed: string): void {
   const entry = pendingParamsByPath.get(pathname);
-  if (!entry || entry.landed !== landed) {
+  if (entry?.landed !== landed) {
     pendingParamsByPath.set(pathname, { landed, pending: landed });
   }
 }
@@ -130,7 +142,19 @@ function writeParam(
     params.delete(key);
     return;
   }
-  params.set(key, String(value));
+  params.set(key, typeof value === 'string' ? value : JSON.stringify(value));
+}
+
+function isDefaultParam(spec: UrlParamSpec, raw: string | null): boolean {
+  return raw !== null && readParam(spec, raw) === spec.default;
+}
+
+function dropDefaultParams(params: URLSearchParams, spec: UrlStateSpec): void {
+  for (const key of Object.keys(spec)) {
+    if (isDefaultParam(spec[key], params.get(key))) {
+      params.delete(key);
+    }
+  }
 }
 
 function retainLiveDrafts(drafts: Drafts, params: URLSearchParams): Drafts {
@@ -149,6 +173,42 @@ function retainLiveDrafts(drafts: Drafts, params: URLSearchParams): Drafts {
     }
   }
   return dropped ? live : drafts;
+}
+
+function draftValues(drafts: Drafts): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const key of Object.keys(drafts)) {
+    values[key] = drafts[key].value;
+  }
+  return values;
+}
+
+function groupUpdatesByTiming(
+  spec: UrlStateSpec,
+  updates: Record<string, unknown>,
+  flush: boolean,
+): UpdatesByTiming {
+  const immediate: Record<string, unknown> = {};
+  const deferred: Record<string, unknown> = {};
+  for (const key of Object.keys(updates)) {
+    const paramSpec = spec[key];
+    if (!paramSpec) {
+      continue;
+    }
+    if (!flush && paramSpec.debounceMs) {
+      deferred[key] = updates[key];
+    } else {
+      immediate[key] = updates[key];
+    }
+  }
+  return { immediate, deferred };
+}
+
+function clearTimer(timerRef: TimerRef): void {
+  if (timerRef.current) {
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
 }
 
 /**
@@ -170,7 +230,8 @@ function retainLiveDrafts(drafts: Drafts, params: URLSearchParams): Drafts {
  *   across instances on the same screen, so they compose into a single
  *   navigation instead of overwriting each other. A write that moves any key
  *   other than the page key resets the page, even when that key is a draft
- *   carried along by an explicit page change.
+ *   carried along by an explicit page change, and even from an instance whose
+ *   spec does not declare the page key.
  * - `committedValues` — the URL only, never a draft. Use this to key a server
  *   query so it refetches once per pause rather than once per keystroke.
  */
@@ -198,7 +259,9 @@ export function useUrlState<TSpec extends UrlStateSpec>(
   // The query string as it will be once every write issued so far has landed.
   // `searchParams` lags a write by a render, so reading it per call would make
   // two writes in one commit build on the same stale base and lose the first.
-  syncPendingParams(pathname, searchParams.toString());
+  if (globalThis.window !== undefined) {
+    syncPendingParams(pathname, searchParams.toString());
+  }
 
   const [drafts, setDrafts] = useState<Drafts>(NO_DRAFTS);
   const liveDrafts = retainLiveDrafts(drafts, searchParams);
@@ -217,14 +280,7 @@ export function useUrlState<TSpec extends UrlStateSpec>(
   }, [pathname]);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    },
-    [],
-  );
+  useEffect(() => () => clearTimer(timerRef), []);
 
   const specSignature = useMemo(
     () =>
@@ -248,15 +304,13 @@ export function useUrlState<TSpec extends UrlStateSpec>(
   }, [searchParams, specSignature]);
 
   const values = useMemo(() => {
-    const keys = Object.keys(liveDrafts);
-    if (keys.length === 0) {
+    if (Object.keys(liveDrafts).length === 0) {
       return committedValues;
     }
-    const merged: Record<string, unknown> = { ...committedValues };
-    for (const key of keys) {
-      merged[key] = liveDrafts[key].value;
-    }
-    return merged as UrlStateValues<TSpec>;
+    return {
+      ...committedValues,
+      ...draftValues(liveDrafts),
+    } as UrlStateValues<TSpec>;
   }, [committedValues, liveDrafts]);
 
   const commit = useCallback(
@@ -268,9 +322,7 @@ export function useUrlState<TSpec extends UrlStateSpec>(
       );
       const params = new URLSearchParams(base);
       const keys = Object.keys(updates).filter(key => current[key]);
-      if (keys.length === 0) {
-        return;
-      }
+      dropDefaultParams(params, current);
 
       for (const key of keys) {
         writeParam(params, key, current[key], updates[key]);
@@ -278,9 +330,11 @@ export function useUrlState<TSpec extends UrlStateSpec>(
 
       // Any key but the page moving resets the page, including one carried in
       // from a draft, so a filter cannot land while the page stays behind.
-      const resetsPage = current[pageKey] && keys.some(key => key !== pageKey);
-      if (resetsPage) {
+      const resetsPage = keys.some(key => key !== pageKey);
+      if (resetsPage && current[pageKey]) {
         writeParam(params, pageKey, current[pageKey], current[pageKey].default);
+      } else if (resetsPage) {
+        params.delete(pageKey);
       }
 
       const queryString = params.toString();
@@ -296,22 +350,26 @@ export function useUrlState<TSpec extends UrlStateSpec>(
     [pageKey, pathname, router],
   );
 
+  useEffect(() => {
+    const current = specRef.current;
+    const hasDefaultParam = Object.keys(current).some(key =>
+      isDefaultParam(current[key], searchParams.get(key)),
+    );
+    if (hasDefaultParam) {
+      commit({});
+    }
+  }, [searchParams, commit]);
+
   const flushDrafts = useCallback(() => {
     timerRef.current = null;
     const pending = retainLiveDrafts(
       draftsRef.current,
       searchParamsRef.current,
     );
-    const keys = Object.keys(pending);
-    if (keys.length === 0) {
+    if (Object.keys(pending).length === 0) {
       return;
     }
-
-    const updates: Record<string, unknown> = {};
-    for (const key of keys) {
-      updates[key] = pending[key].value;
-    }
-    commit(updates);
+    commit(draftValues(pending));
   }, [commit]);
 
   const flushDraftsRef = useRef(flushDrafts);
@@ -323,63 +381,42 @@ export function useUrlState<TSpec extends UrlStateSpec>(
       setOptions?: UrlStateSetOptions,
     ) => {
       const current = specRef.current;
-      const immediate: Record<string, unknown> = {};
-      const deferred: Record<string, unknown> = {};
-      let hasImmediate = false;
-      let hasDeferred = false;
+      const { immediate, deferred } = groupUpdatesByTiming(
+        current,
+        updates,
+        setOptions?.flush === true,
+      );
 
-      for (const key of Object.keys(updates)) {
-        const paramSpec = current[key];
-        if (!paramSpec) {
-          continue;
-        }
-        if (!setOptions?.flush && paramSpec.debounceMs) {
-          deferred[key] = updates[key];
-          hasDeferred = true;
-        } else {
-          immediate[key] = updates[key];
-          hasImmediate = true;
-        }
-      }
-
-      if (hasImmediate) {
+      if (Object.keys(immediate).length > 0) {
         // An immediate write carries any draft still in flight, so the URL
         // never contradicts what the screen is already showing.
-        if (timerRef.current) {
-          clearTimeout(timerRef.current);
-          timerRef.current = null;
-        }
+        clearTimer(timerRef);
         const pending = draftsRef.current;
-        const merged: Record<string, unknown> = {};
-        for (const key of Object.keys(pending)) {
-          merged[key] = pending[key].value;
-        }
-        Object.assign(merged, immediate);
         if (Object.keys(pending).length > 0) {
           draftsRef.current = NO_DRAFTS;
           setDrafts(NO_DRAFTS);
         }
-        commit(merged);
+        commit({ ...draftValues(pending), ...immediate });
       }
 
-      if (hasDeferred) {
+      const deferredKeys = Object.keys(deferred);
+      if (deferredKeys.length > 0) {
         const base = new URLSearchParams(
           readPendingParams(pathname, searchParamsRef.current.toString()),
         );
-        const keys = Object.keys(deferred);
         const next: Record<string, Draft> = { ...draftsRef.current };
-        for (const key of keys) {
+        for (const key of deferredKeys) {
           next[key] = { value: deferred[key], baseRaw: base.get(key) };
         }
         draftsRef.current = next;
         setDrafts(next);
 
         const delay = Math.max(
-          ...keys.map(key => current[key].debounceMs ?? SEARCH_DEBOUNCE_MS),
+          ...deferredKeys.map(
+            key => current[key].debounceMs ?? SEARCH_DEBOUNCE_MS,
+          ),
         );
-        if (timerRef.current) {
-          clearTimeout(timerRef.current);
-        }
+        clearTimer(timerRef);
         timerRef.current = setTimeout(() => flushDraftsRef.current(), delay);
       }
     },

@@ -1,13 +1,11 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback } from 'react';
+import { useParams } from 'next/navigation';
 import { ChevronLeft } from '@/components/icons';
+import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  buildUrlWithoutNewSessionParams,
-  hasNewSessionParams,
-} from '@/lib/utils/session-params';
+import { APIError } from '@/lib/api/client';
 import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
@@ -15,8 +13,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ConversationsTab } from '@/components/sessions-conversations/conversations-tab';
 import { LogsTab } from '@/components/sessions-conversations/logs-tab';
 import { SessionConversationHeader } from '@/components/sessions-conversations/session-conversation-header';
-import type { BrokerSession } from '@/lib/services/broker-sessions';
-import { generateUUID } from '@/lib/utils/uuid';
 
 const HISTORY_TAB = 'history';
 const LOGS_TAB = 'logs';
@@ -24,26 +20,7 @@ const LOGS_TAB = 'logs';
 export default function SessionDetailPage() {
   const params = useParams();
   const session_id = params.session_id as string;
-  const router = useRouter();
   const { push } = useNamespacedNavigation();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const initialParticipant = searchParams.get('participant');
-  const initialType = searchParams.get('type') as 'agent' | 'team' | 'tool' | null;
-  const initialConversationId = searchParams.get('conversationId');
-
-  const [hasSentMessage, setHasSentMessage] = useState(() => !initialParticipant);
-  const isNewSession = !hasSentMessage;
-
-  const handleMessageSent = useCallback(() => {
-    setHasSentMessage(true);
-
-    if (!hasNewSessionParams(searchParams)) {
-      return;
-    }
-    router.replace(buildUrlWithoutNewSessionParams(searchParams, pathname));
-  }, [searchParams, router, pathname]);
 
   const sessionsReturnHref = useListReturnHref('/sessions');
 
@@ -51,62 +28,14 @@ export default function SessionDetailPage() {
     push(sessionsReturnHref);
   }, [push, sessionsReturnHref]);
 
-  // Skip API call for new sessions (avoid 404 errors)
-  const { data: backendSession, isLoading, isError } = useGetSession(session_id, {
-    enabled: !isNewSession,
-  });
-
-  // Create temporary session from query params for new sessions
-  const [temporarySession] = useState<BrokerSession | null>(() => {
-    if (!initialParticipant || !initialType) {
-      return null;
-    }
-
-    return {
-      sessionId: session_id,
-      name: session_id,
-      status: 'active',
-      errorCount: 0,
-      participants: [{
-        id: generateUUID(),
-        name: initialParticipant,
-        type: initialType,
-      }],
-      conversationCount: 0,
-      createdAt: new Date().toISOString(),
-      lastActivity: new Date().toISOString(),
-    };
-  });
-
-  const session = useMemo(() => {
-    if (!backendSession) {
-      return temporarySession;
-    }
-
-    // If backend has no participants but temporary session does, use temporary participants
-    if (backendSession.participants.length === 0 && temporarySession?.participants.length) {
-      return {
-        ...backendSession,
-        participants: temporarySession.participants,
-      };
-    }
-
-    return backendSession;
-  }, [backendSession, temporarySession]);
-
-  const memoizedInitialParticipant = useMemo(() => {
-    if (isNewSession && initialParticipant) {
-      return {
-        name: initialParticipant,
-        type: initialType || 'agent' as const
-      };
-    }
-    return undefined;
-  }, [isNewSession, initialParticipant, initialType]);
-
-  const memoizedInitialConversationId = useMemo(() => {
-    return isNewSession ? initialConversationId || undefined : undefined;
-  }, [isNewSession, initialConversationId]);
+  const {
+    data: session,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useGetSession(session_id);
+  const isNotFound = error instanceof APIError && error.status === 404;
 
   if (isLoading && !session) {
     return (
@@ -118,7 +47,7 @@ export default function SessionDetailPage() {
     );
   }
 
-  if (!session) {
+  if (isNotFound || !session) {
     return (
       <div className="flex h-full flex-col space-y-6 py-8">
         <button
@@ -128,9 +57,17 @@ export default function SessionDetailPage() {
           <ChevronLeft className="size-4" />
           Back to all sessions
         </button>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
-          {isError ? 'Failed to load session details' : 'Session not found'}
-        </div>
+        {isError && !isNotFound ? (
+          <ResourceErrorState
+            title="Failed to load session details"
+            description={error instanceof Error ? error.message : undefined}
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <div className="text-muted-foreground flex flex-1 items-center justify-center">
+            Session not found
+          </div>
+        )}
       </div>
     );
   }
@@ -180,13 +117,7 @@ export default function SessionDetailPage() {
           value={HISTORY_TAB}
           className="flex min-h-0 flex-col h-[calc(100vh-104px)]"
         >
-          <ConversationsTab
-            sessionId={session_id}
-            initialParticipant={memoizedInitialParticipant}
-            initialConversationId={memoizedInitialConversationId}
-            hasSentMessage={hasSentMessage}
-            onMessageSent={handleMessageSent}
-          />
+          <ConversationsTab sessionId={session_id} />
         </TabsContent>
 
         <TabsContent

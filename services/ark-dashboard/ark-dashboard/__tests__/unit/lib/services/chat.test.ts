@@ -568,7 +568,7 @@ describe('chatService', () => {
                 value: new TextEncoder().encode(mockSSEData),
               })
               .mockResolvedValueOnce({ done: true }),
-            releaseLock: vi.fn(),
+            cancel: vi.fn().mockResolvedValue(undefined),
           }),
         },
       });
@@ -669,7 +669,7 @@ describe('chatService', () => {
         body: {
           getReader: () => ({
             read: vi.fn().mockResolvedValueOnce({ done: true }),
-            releaseLock: vi.fn(),
+            cancel: vi.fn().mockResolvedValue(undefined),
           }),
         },
       });

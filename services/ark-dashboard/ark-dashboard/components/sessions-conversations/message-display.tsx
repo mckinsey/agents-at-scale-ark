@@ -1,8 +1,26 @@
 'use client';
 
-import { type RefObject, memo, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  type RefObject,
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from 'react';
 
+import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Build } from '@/components/icons';
+import { cn } from '@/lib/utils';
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { buildApprovalDetails } from '@/lib/services/a2a-task-approvals';
 import { useSubmitApproval } from '@/lib/services/a2a-task-approvals-hooks';
@@ -12,7 +30,8 @@ import type {
   ConversationMessage,
 } from '@/lib/services/conversations';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
-import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
+import { queriesService } from '@/lib/services/queries';
+import { useGetQuery } from '@/lib/services/queries-hooks';
 import type { ChatMessage } from '@/lib/types/chat-message';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -26,6 +45,10 @@ import { SessionMessage } from './session-message';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
+const RECENT_QUERIES_QUERY_KEY = 'recent-queries';
+const RECENT_QUERIES_PARAMS = { page: 1, pageSize: 50 };
+const RECENT_QUERIES_POLL_MS = 5000;
+const RECENT_QUERIES_MAX_POLLS = 24;
 
 type ToolCall = NonNullable<ChatMessage['tool_calls']>[number];
 type EnhancedToolCall = ToolCall & { result?: string };
@@ -46,14 +69,8 @@ interface Props {
   readonly conversationId: string;
   readonly sessionId: string;
   readonly conversation: Conversation | null;
-  readonly pendingMessages: Array<{
-    role: 'user';
-    content: string;
-    timestamp: string;
-  }>;
-  readonly onClearPending: () => void;
-  readonly isProcessing: boolean;
   readonly showToolCalls: boolean;
+  readonly onShowToolCallsChange: (show: boolean) => void;
 }
 
 function enhanceMessagesWithToolResults(
@@ -118,15 +135,7 @@ interface ApprovalData {
 }
 
 interface MessageContentProps {
-  readonly isTemporary: boolean;
   readonly messages: ConversationMessage[] | undefined;
-  readonly pendingMessages: Array<{
-    role: 'user';
-    content: string;
-    timestamp: string;
-  }>;
-  readonly participantName: string;
-  readonly isProcessing: boolean;
   readonly showToolCalls: boolean;
   readonly queryName?: string;
   readonly queryNamespace?: string;
@@ -136,14 +145,12 @@ interface MessageContentProps {
   readonly onApprove?: () => Promise<void>;
   readonly onReject?: () => Promise<void>;
   readonly endRef: RefObject<HTMLDivElement | null>;
+  readonly loadError: Error | null;
+  readonly onRetry: () => void;
 }
 
 const MessageContent = memo(function MessageContent({
-  isTemporary,
   messages,
-  pendingMessages,
-  participantName,
-  isProcessing,
   showToolCalls,
   queryName,
   queryNamespace,
@@ -153,6 +160,8 @@ const MessageContent = memo(function MessageContent({
   onApprove,
   onReject,
   endRef,
+  loadError,
+  onRetry,
 }: MessageContentProps) {
   const processedMessages =
     messages && messages.length > 0
@@ -161,40 +170,10 @@ const MessageContent = memo(function MessageContent({
 
   const hasBackendMessages = processedMessages.length > 0;
 
-  const backendUserMessages = hasBackendMessages
-    ? new Set(
-        processedMessages
-          .filter(msg => msg.message.role === 'user')
-          .map(msg => msg.message.content?.trim()),
-      )
-    : new Set();
-
-  const uniquePendingMessages = pendingMessages.filter(
-    pending => !backendUserMessages.has(pending.content.trim()),
-  );
-
-  const hasPendingMessages = uniquePendingMessages.length > 0;
-
-  if (isTemporary && !hasBackendMessages && !hasPendingMessages) {
-    return (
-      <div className="text-muted-foreground flex h-full items-center justify-center text-center">
-        <div>
-          <p className="mb-2 text-sm">
-            Conversation started with {participantName}
-          </p>
-          <p className="text-xs">
-            Send a message below to begin the conversation
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (hasBackendMessages || hasPendingMessages) {
+  if (hasBackendMessages) {
     return (
       <>
-        {hasBackendMessages &&
-          processedMessages.map(msg => (
+        {processedMessages.map(msg => (
             <SessionMessage
               key={`${msg.query_id}-${msg.sequence}`}
               role={msg.message.role}
@@ -241,31 +220,18 @@ const MessageContent = memo(function MessageContent({
             </div>
           </div>
         )}
-        {hasPendingMessages &&
-          uniquePendingMessages.map((msg, idx) => (
-            <SessionMessage
-              key={`pending-${msg.timestamp}-${idx}`}
-              role="user"
-              content={msg.content}
-            />
-          ))}
-        {isProcessing && (
-          <div className="flex justify-start">
-            <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
-              <div className="flex space-x-1">
-                <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
-                <div
-                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
-                  style={{ animationDelay: '0.1s' }}></div>
-                <div
-                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
-                  style={{ animationDelay: '0.2s' }}></div>
-              </div>
-            </div>
-          </div>
-        )}
         <div ref={endRef} />
       </>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <ResourceErrorState
+        title="Failed to load messages"
+        description={loadError.message}
+        onRetry={onRetry}
+      />
     );
   }
 
@@ -286,15 +252,16 @@ export function MessageDisplay({
   conversationId,
   sessionId,
   conversation,
-  pendingMessages,
-  onClearPending,
-  isProcessing,
   showToolCalls,
+  onShowToolCallsChange,
 }: Props) {
-  const { data: messages, isLoading } = useGetMessages(
-    sessionId,
-    conversationId,
-  );
+  const {
+    data: messages,
+    isLoading,
+    error,
+    refetch,
+  } = useGetMessages(sessionId, conversationId);
+  const handleRetry = useCallback(() => refetch(), [refetch]);
   const {
     scrollContainerRef,
     messagesEndRef,
@@ -303,6 +270,7 @@ export function MessageDisplay({
     resumeAutoScroll,
   } = useStickyScroll();
   const { namespace } = useNamespace();
+  const toolCallCountId = useId();
   const [isWaitingForNextMessage, setIsWaitingForNextMessage] = useState(false);
   const [messageCountWhenWaitingStarted, setMessageCountWhenWaitingStarted] =
     useState<number | null>(null);
@@ -310,7 +278,7 @@ export function MessageDisplay({
   const participantName = conversation?.name || FALLBACK_PARTICIPANT_NAME;
   const participantType =
     conversation?.participantType || FALLBACK_PARTICIPANT_TYPE;
-  const isTemporary = conversation?.isTemporary || false;
+  const toolCallCount = conversation?.toolCallCount || 0;
 
   // Get the latest query ID from messages
   const latestQueryId = useMemo(() => {
@@ -318,22 +286,33 @@ export function MessageDisplay({
     return messages[messages.length - 1]?.query_id || null;
   }, [messages]);
 
-  // When processing and no query ID from messages, poll for recent queries for this session
-  // This handles the case where approval is needed before messages are stored in broker
-  const shouldFetchQueries = !latestQueryId && isProcessing;
-  const { data: recentQueries } = useListQueries(
-    shouldFetchQueries ? { page: 1, pageSize: 50 } : undefined,
-    shouldFetchQueries,
-  );
+  // A conversation with no messages yet still has to surface a pending approval,
+  // so poll the session's queries until one of them supplies a query id. Stop
+  // once this conversation's query is found - useGetQuery polls it from there -
+  // and give up after a bounded number of attempts, because a conversation whose
+  // query never produced a message would otherwise poll for as long as it is open.
+  const { data: recentQueries } = useQuery({
+    queryKey: [RECENT_QUERIES_QUERY_KEY, RECENT_QUERIES_PARAMS, namespace],
+    queryFn: () => queriesService.list(namespace, RECENT_QUERIES_PARAMS),
+    enabled: !latestQueryId && Boolean(namespace),
+    refetchInterval: query => {
+      if (query.state.dataUpdateCount >= RECENT_QUERIES_MAX_POLLS) return false;
+      const found = query.state.data?.items?.some(
+        q => q.sessionId === sessionId && q.conversationId === conversationId,
+      );
+      return found ? false : RECENT_QUERIES_POLL_MS;
+    },
+  });
 
-  // Find the most recent query for this session that's awaiting approval
-  const pendingApprovalQuery = useMemo(() => {
-    if (latestQueryId || !isProcessing || !recentQueries?.items) return null;
+  // Find the most recent query for this conversation. Matching on sessionId
+  // alone would let a sibling conversation's input-required query render here
+  // as this conversation's approval.
+  const conversationQuery = useMemo(() => {
+    if (latestQueryId || !recentQueries?.items) return null;
 
-    // Filter to this session and input-required phase
-    const sessionQueries = recentQueries.items
+    const conversationQueries = recentQueries.items
       .filter(
-        q => q.sessionId === sessionId && q.status?.phase === 'input-required',
+        q => q.sessionId === sessionId && q.conversationId === conversationId,
       )
       .sort((a, b) => {
         // Sort by creation time descending
@@ -346,10 +325,10 @@ export function MessageDisplay({
         return timeB - timeA;
       });
 
-    return sessionQueries[0] || null;
-  }, [recentQueries, sessionId, latestQueryId, isProcessing]);
+    return conversationQueries[0] || null;
+  }, [recentQueries, sessionId, conversationId, latestQueryId]);
 
-  const effectiveQueryId = latestQueryId || pendingApprovalQuery?.name || null;
+  const effectiveQueryId = latestQueryId || conversationQuery?.name || null;
 
   // Fetch query details to check if approval is needed and to find the linked A2ATask
   const { data: queryDetails } = useGetQuery(
@@ -437,44 +416,6 @@ export function MessageDisplay({
     await submitApproval('rejected');
   };
 
-  useEffect(() => {
-    // Clear processing only when agent response appears after pending user message
-    if (
-      !isProcessing ||
-      !messages ||
-      messages.length === 0 ||
-      pendingMessages.length === 0
-    ) {
-      return;
-    }
-
-    // Find the user message in backend that matches the last pending message
-    const lastPendingContent = pendingMessages.at(-1)?.content.trim();
-    if (!lastPendingContent) {
-      return;
-    }
-
-    // Find the backend user message with matching content
-    const userMessageInBackend = messages
-      .filter(msg => msg.message.role === 'user')
-      .find(msg => msg.message.content?.trim() === lastPendingContent);
-
-    if (!userMessageInBackend) {
-      return;
-    }
-
-    // Check if there's an assistant message with a higher sequence number
-    const assistantMessages = messages.filter(msg => {
-      const isAssistant = msg.message.role === 'assistant';
-      const isAfterUser = msg.sequence > userMessageInBackend.sequence;
-      return isAssistant && isAfterUser;
-    });
-
-    if (assistantMessages.length > 0) {
-      onClearPending();
-    }
-  }, [messages, pendingMessages, isProcessing, onClearPending]);
-
   // Clear waiting state when messages change (new message arrives) or when approval is no longer needed
   useEffect(() => {
     if (!isWaitingForNextMessage || messageCountWhenWaitingStarted === null) {
@@ -482,12 +423,6 @@ export function MessageDisplay({
     }
 
     const currentMessageCount = messages?.length || 0;
-    console.log('[HITL Debug] Checking waiting state:', {
-      currentMessageCount,
-      messageCountWhenWaitingStarted,
-      needsApproval,
-      isWaitingForNextMessage,
-    });
 
     // Clear waiting state if:
     // 1. A new message arrived (count increased)
@@ -496,7 +431,6 @@ export function MessageDisplay({
       currentMessageCount > messageCountWhenWaitingStarted ||
       !needsApproval
     ) {
-      console.log('[HITL Debug] Clearing waiting state');
       setIsWaitingForNextMessage(false);
       setMessageCountWhenWaitingStarted(null);
     }
@@ -509,25 +443,19 @@ export function MessageDisplay({
 
   useEffect(() => {
     scrollToBottom();
-  }, [
-    messages,
-    pendingMessages,
-    isProcessing,
-    isWaitingForNextMessage,
-    scrollToBottom,
-  ]);
+  }, [messages, isWaitingForNextMessage, scrollToBottom]);
 
   useEffect(() => {
     resumeAutoScroll();
   }, [conversationId, resumeAutoScroll]);
 
-  if (isLoading && pendingMessages.length === 0) {
+  if (isLoading) {
     return <Skeleton className="flex-1" />;
   }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b border-stroke-tertiary bg-surface-bg-secondary px-5 py-4">
+      <div className="flex items-center justify-between gap-3 border-b border-stroke-tertiary bg-surface-bg-secondary px-5 py-4">
         <div className="flex min-w-0 items-center gap-2">
           <IconShell size="sm" className="opacity-100">
             {getParticipantIcon(participantType, { size: '4' })}
@@ -539,6 +467,46 @@ export function MessageDisplay({
           </TruncatedTooltip>
           <span className="shrink-0 text-sm font-normal leading-5 text-fg-secondary capitalize">{participantType}</span>
         </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {toolCallCount > 0 && (
+            <span
+              id={toolCallCountId}
+              className="text-fg-tertiary mr-1 font-mono text-xs">
+              {toolCallCount.toLocaleString()} tool{' '}
+              {toolCallCount === 1 ? 'call' : 'calls'}
+            </span>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-pressed={showToolCalls}
+                aria-label={
+                  showToolCalls ? 'Hide tool calls' : 'Show tool calls'
+                }
+                aria-describedby={
+                  toolCallCount > 0 ? toolCallCountId : undefined
+                }
+                onClick={() => onShowToolCallsChange(!showToolCalls)}
+                className="relative">
+                <IconShell size="sm" variant="secondary">
+                  <Build />
+                </IconShell>
+                <span
+                  className={cn(
+                    'absolute -right-0.5 -top-0.5 size-2 rounded-full',
+                    showToolCalls ? 'bg-status-success' : 'bg-fg-disabled',
+                  )}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {showToolCalls ? 'Hide tool calls' : 'Show tool calls'}
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
       <ScrollArea
         viewportRef={scrollContainerRef}
@@ -546,11 +514,7 @@ export function MessageDisplay({
         className="flex-1 h-0 border-r border-stroke-divider">
         <div className="space-y-4 p-4">
           <MessageContent
-            isTemporary={isTemporary}
             messages={messages}
-            pendingMessages={pendingMessages}
-            participantName={participantName}
-            isProcessing={isProcessing}
             showToolCalls={showToolCalls}
             queryName={effectiveQueryId || undefined}
             queryNamespace={namespace}
@@ -562,6 +526,8 @@ export function MessageDisplay({
             onApprove={handleApprove}
             onReject={handleReject}
             endRef={messagesEndRef}
+            loadError={error}
+            onRetry={handleRetry}
           />
         </div>
       </ScrollArea>

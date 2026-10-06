@@ -185,6 +185,16 @@ class APIClient {
       throw error;
     }
 
+    // Preserve an aborted fetch's AbortError name instead of wrapping it.
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      error.name === 'AbortError'
+    ) {
+      throw error;
+    }
+
     const message =
       error instanceof Error ? error.message : 'An unknown error occurred';
 

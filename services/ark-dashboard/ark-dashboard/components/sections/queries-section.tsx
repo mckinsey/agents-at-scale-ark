@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { SortableColumnHeader } from '@/components/common/sortable-column-header';
 import { DatabaseSearch, Info, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
+import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -32,7 +33,10 @@ import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { timestampValue, useValueSort } from '@/lib/hooks/use-value-sort';
 import { queriesService } from '@/lib/services/queries';
-import type { useListQueries } from '@/lib/services/queries-hooks';
+import {
+  useInvalidateQueriesList,
+  type useListQueries,
+} from '@/lib/services/queries-hooks';
 import { formatAge } from '@/lib/utils/time';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -243,6 +247,7 @@ export function QueriesSection({
   queryResult,
 }: Readonly<QueriesSectionProps>) {
   const { namespace } = useNamespace();
+  const invalidateQueriesList = useInvalidateQueriesList();
 
   const { data, isLoading, isError, error, refetch } = queryResult;
 
@@ -272,7 +277,7 @@ export function QueriesSection({
       toast.success('Query Deleted', {
         description: 'Successfully deleted query',
       });
-      refetch();
+      invalidateQueriesList();
     } catch (err) {
       toast.error('Failed to Delete Query', {
         description:
@@ -287,7 +292,7 @@ export function QueriesSection({
       toast.success('Query Canceled', {
         description: 'Successfully canceled query',
       });
-      refetch();
+      invalidateQueriesList();
     } catch (err) {
       toast.error('Failed to Cancel Query', {
         description:
@@ -296,11 +301,25 @@ export function QueriesSection({
     }
   };
 
+  const loadFailed = isError && queries.length === 0;
+  const refreshFailed = isError && queries.length > 0;
+
   if (isLoading) {
     return (
       <div className="flex h-full flex-1 items-center justify-center">
         <div className="text-fg-secondary">Loading...</div>
       </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <ResourceErrorState
+        className="m-5"
+        title="Couldn't load queries"
+        description={error instanceof Error ? error.message : undefined}
+        onRetry={() => refetch()}
+      />
     );
   }
 
@@ -324,6 +343,14 @@ export function QueriesSection({
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
+      {refreshFailed && (
+        <ResourceErrorState
+          className="m-5 mb-0"
+          title="Couldn't refresh queries"
+          description="Showing the last loaded version."
+          onRetry={() => refetch()}
+        />
+      )}
       <Table className="min-w-[1272px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
         <TableHeader>
           <TableRow>

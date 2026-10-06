@@ -35,6 +35,8 @@ type A2aRecorder interface {
 	AgentCreationFailed(ctx context.Context, obj runtime.Object, reason string)
 	AgentDeletionFailed(ctx context.Context, obj runtime.Object, reason string)
 	AgentDiscoveryFailed(ctx context.Context, obj runtime.Object, reason string)
+	EndpointOverrideRejected(ctx context.Context, obj runtime.Object, reason string)
+	UnsupportedTransport(ctx context.Context, obj runtime.Object, reason string)
 	TaskPollingFailed(ctx context.Context, obj runtime.Object, reason string)
 	A2AMessageFailed(ctx context.Context, reason string)
 	A2AConnectionFailed(ctx context.Context, reason string)
@@ -67,6 +69,8 @@ type MCPServerRecorder interface {
 type TeamRecorder interface {
 	OperationTracker
 	TokenCollector
+	Created(ctx context.Context, obj runtime.Object)
+	StatusChanged(ctx context.Context, obj runtime.Object, message string)
 }
 
 type QueryRecorder interface {

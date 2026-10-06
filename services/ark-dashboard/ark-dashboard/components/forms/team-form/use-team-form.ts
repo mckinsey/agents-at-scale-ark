@@ -1,14 +1,16 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
 import { toast } from '@/components/ui/sonner';
 import type { components } from '@/lib/api/generated/types';
-import type { Agent, Team, TeamMember } from '@/lib/services';
+import type { AgentListItem, Team, TeamMember } from '@/lib/services';
 import { agentsService, teamsService } from '@/lib/services';
+import { GET_ALL_TEAMS_QUERY_KEY } from '@/lib/services/teams-hooks';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -74,6 +76,7 @@ interface UseTeamFormOptions {
 
 export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
   const { namespace } = useNamespace();
+  const queryClient = useQueryClient();
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
@@ -82,7 +85,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
   );
   const [saving, setSaving] = useState(false);
   const [team, setTeam] = useState<Team | null>(null);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<TeamMember[]>([]);
   const [initialMembers, setInitialMembers] = useState<TeamMember[]>([]);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
@@ -115,7 +118,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
         ) {
           const [teamData, agentsData] = await Promise.all([
             teamsService.getByName(namespace, teamName),
-            agentsService.getAll(namespace),
+            agentsService.listWithTools(namespace),
           ]);
 
           if (!teamData) {
@@ -146,12 +149,13 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             selectorPrompt:
               teamData.selector?.selectorPrompt ||
               (teamData.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
-            enableTerminateTool: teamData.selector?.enableTerminateTool ?? false,
+            enableTerminateTool:
+              teamData.selector?.enableTerminateTool ?? false,
             terminatePrompt:
               teamData.selector?.terminatePrompt || DEFAULT_TERMINATE_PROMPT,
           });
         } else {
-          const agentsData = await agentsService.getAll(namespace);
+          const agentsData = await agentsService.listWithTools(namespace);
           setAgents(agentsData);
         }
       } catch (error) {
@@ -185,27 +189,34 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
       setSaving(true);
       try {
         if (mode === TeamFormMode.VIEW && team) {
-          const updatedTeam = await teamsService.updateById(namespace, team.id, {
-            description: values.description || undefined,
-            members: selectedMembers.length > 0 ? selectedMembers : undefined,
-            strategy: values.strategy || undefined,
-            loops: values.loops,
-            maxTurns: values.maxTurns ? parseInt(values.maxTurns) : null,
-            selector:
-              values.selectorAgent ||
-              values.selectorPrompt ||
-              values.enableTerminateTool !== undefined ||
-              values.terminatePrompt
-                ? {
-                    agent: values.selectorAgent || undefined,
-                    selectorPrompt: values.selectorPrompt || undefined,
-                    enableTerminateTool: values.enableTerminateTool,
-                    terminatePrompt: values.terminatePrompt || undefined,
-                  }
-                : null,
-            graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
-          });
+          const updatedTeam = await teamsService.updateById(
+            namespace,
+            team.id,
+            {
+              description: values.description || undefined,
+              members: selectedMembers.length > 0 ? selectedMembers : undefined,
+              strategy: values.strategy || undefined,
+              loops: values.loops,
+              maxTurns: values.maxTurns ? parseInt(values.maxTurns) : null,
+              selector:
+                values.selectorAgent ||
+                values.selectorPrompt ||
+                values.enableTerminateTool !== undefined ||
+                values.terminatePrompt
+                  ? {
+                      agent: values.selectorAgent || undefined,
+                      selectorPrompt: values.selectorPrompt || undefined,
+                      enableTerminateTool: values.enableTerminateTool,
+                      terminatePrompt: values.terminatePrompt || undefined,
+                    }
+                  : null,
+              graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
+            },
+          );
 
+          queryClient.invalidateQueries({
+            queryKey: [GET_ALL_TEAMS_QUERY_KEY],
+          });
           setTeam(updatedTeam);
           setInitialMembers(selectedMembers);
           setInitialGraphEdges(graphEdges);
@@ -233,6 +244,9 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
           });
+          queryClient.invalidateQueries({
+            queryKey: [GET_ALL_TEAMS_QUERY_KEY],
+          });
           onSuccessRef.current?.();
         }
       } catch (error) {
@@ -251,7 +265,16 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
         setSaving(false);
       }
     },
-    [mode, team, teamName, selectedMembers, graphEdges, form, namespace],
+    [
+      mode,
+      team,
+      teamName,
+      selectedMembers,
+      graphEdges,
+      form,
+      namespace,
+      queryClient,
+    ],
   );
 
   return {
