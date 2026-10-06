@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
 import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
 import { LogsTab } from '@/components/sessions-conversations/logs-tab';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
@@ -8,6 +10,16 @@ import { useGetEvents } from '@/lib/services/logs-hooks';
 import { logsService } from '@/lib/services/logs';
 import type { PaginatedSessions } from '@/lib/services/broker-sessions';
 import type { LogsResponse } from '@/lib/services/logs';
+
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock('/sessions');
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
 
 vi.mock('@/lib/services/broker-sessions-hooks');
 vi.mock('@/lib/services/logs-hooks');
