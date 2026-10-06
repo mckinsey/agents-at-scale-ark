@@ -162,6 +162,110 @@ class TestRetryWorkflow(unittest.TestCase):
         self.assertNotIn("retry-test-abc-onexit", new_wf["status"]["nodes"])
         self.assertIn("retry-test-abc-onexit", pods)
 
+    def test_onexit_subtree_is_dropped_with_its_pods(self):
+        wf = _failed_workflow()
+        nodes = wf["status"]["nodes"]
+        nodes["retry-test-abc-onexit"] = {
+            "id": "retry-test-abc-onexit",
+            "name": "retry-test-abc.onExit",
+            "type": "Steps",
+            "phase": "Succeeded",
+            "children": ["retry-test-abc-exit-group"],
+        }
+        nodes["retry-test-abc-exit-group"] = {
+            "id": "retry-test-abc-exit-group",
+            "type": "StepGroup",
+            "phase": "Succeeded",
+            "children": ["retry-test-abc-exit-pod", "retry-test-abc-exit-pod"],
+        }
+        nodes["retry-test-abc-exit-pod"] = {
+            "id": "retry-test-abc-exit-pod",
+            "type": "Pod",
+            "phase": "Succeeded",
+        }
+        new_wf, pods = formulate_retry_workflow(wf)
+        new_nodes = new_wf["status"]["nodes"]
+        for node_id in ("retry-test-abc-onexit", "retry-test-abc-exit-group", "retry-test-abc-exit-pod"):
+            self.assertNotIn(node_id, new_nodes)
+        self.assertEqual(pods.count("retry-test-abc-exit-pod"), 1)
+        self.assertNotIn("retry-test-abc-onexit", pods)
+
+    def test_failed_node_with_deeper_succeeded_descendant_is_kept(self):
+        wf = _failed_workflow()
+        nodes = wf["status"]["nodes"]
+        nodes["retry-test-abc-111"]["type"] = "Container"
+        nodes["retry-test-abc-111"]["children"] = [
+            "retry-test-abc-dead",
+            "retry-test-abc-dead",
+            "missing-node",
+            "retry-test-abc-mid",
+        ]
+        nodes["retry-test-abc-dead"] = {"id": "retry-test-abc-dead", "type": "Pod", "phase": "Failed"}
+        nodes["retry-test-abc-mid"] = {
+            "id": "retry-test-abc-mid",
+            "type": "Container",
+            "phase": "Failed",
+            "children": ["retry-test-abc-leaf"],
+        }
+        nodes["retry-test-abc-leaf"] = {"id": "retry-test-abc-leaf", "type": "Pod", "phase": "Succeeded"}
+        new_wf, pods = formulate_retry_workflow(wf)
+        self.assertIn("retry-test-abc-111", new_wf["status"]["nodes"])
+        self.assertNotIn("retry-test-abc-111", pods)
+
+    def test_failed_node_without_succeeded_descendant_is_dropped(self):
+        wf = _failed_workflow()
+        nodes = wf["status"]["nodes"]
+        nodes["retry-test-abc-111"]["type"] = "Container"
+        nodes["retry-test-abc-111"]["children"] = ["retry-test-abc-mid"]
+        nodes["retry-test-abc-mid"] = {"id": "retry-test-abc-mid", "type": "Pod", "phase": "Failed"}
+        new_wf, pods = formulate_retry_workflow(wf)
+        self.assertNotIn("retry-test-abc-111", new_wf["status"]["nodes"])
+        self.assertEqual(pods, ["retry-test-abc-mid"])
+
+    def test_retry_node_is_dropped_even_with_succeeded_child(self):
+        wf = _failed_workflow()
+        nodes = wf["status"]["nodes"]
+        nodes["retry-test-abc-111"]["type"] = "Retry"
+        nodes["retry-test-abc-111"]["children"] = ["retry-test-abc-attempt"]
+        nodes["retry-test-abc-attempt"] = {"id": "retry-test-abc-attempt", "type": "Pod", "phase": "Succeeded"}
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertNotIn("retry-test-abc-111", new_wf["status"]["nodes"])
+
+    def test_existing_completed_condition_is_flipped_not_duplicated(self):
+        wf = _failed_workflow()
+        wf["status"]["conditions"] = [
+            {"type": "PodRunning", "status": "False"},
+            {"type": "Completed", "status": "True"},
+        ]
+        new_wf, _ = formulate_retry_workflow(wf)
+        conditions = new_wf["status"]["conditions"]
+        completed = [c for c in conditions if c["type"] == "Completed"]
+        self.assertEqual(completed, [{"type": "Completed", "status": "False"}])
+        self.assertIn({"type": "PodRunning", "status": "False"}, conditions)
+
+    def test_clears_zero_active_deadline(self):
+        wf = _failed_workflow()
+        wf["spec"]["activeDeadlineSeconds"] = 0
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertIsNone(new_wf["spec"]["activeDeadlineSeconds"])
+
+    def test_keeps_non_zero_active_deadline(self):
+        wf = _failed_workflow()
+        wf["spec"]["activeDeadlineSeconds"] = 300
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertEqual(new_wf["spec"]["activeDeadlineSeconds"], 300)
+
+    def test_clears_shutdown_in_stored_workflow_spec(self):
+        wf = _failed_workflow()
+        wf["status"]["storedWorkflowSpec"] = {"entrypoint": "main", "shutdown": "Stop"}
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertEqual(new_wf["status"]["storedWorkflowSpec"], {"entrypoint": "main"})
+
+    def test_does_not_mutate_input(self):
+        wf = _failed_workflow()
+        formulate_retry_workflow(wf)
+        self.assertEqual(wf, _failed_workflow())
+
 
 class TestResumeWorkflow(unittest.TestCase):
     def test_clears_spec_suspend(self):
@@ -218,6 +322,38 @@ class TestResumeWorkflow(unittest.TestCase):
         with self.assertRaises(LifecyclePreconditionError):
             formulate_resume_workflow(wf)
 
+    def test_leaves_non_suspend_and_finished_suspend_nodes_untouched(self):
+        wf = {
+            "spec": {"suspend": True},
+            "status": {
+                "nodes": {
+                    "pod": {"id": "pod", "type": "Pod", "phase": "Running"},
+                    "done-gate": {"id": "done-gate", "type": "Suspend", "phase": "Succeeded"},
+                }
+            },
+        }
+        new_wf = formulate_resume_workflow(wf)
+        self.assertEqual(new_wf["status"]["nodes"], wf["status"]["nodes"])
+
+    def test_keeps_suspend_output_with_supplied_value(self):
+        wf = {
+            "spec": {},
+            "status": {
+                "nodes": {
+                    "gate": {
+                        "id": "gate",
+                        "type": "Suspend",
+                        "phase": "Running",
+                        "outputs": {"parameters": [{"name": "approve", "value": "no", "valueFrom": {}}]},
+                    }
+                }
+            },
+        }
+        new_wf = formulate_resume_workflow(wf)
+        gate = new_wf["status"]["nodes"]["gate"]
+        self.assertEqual(gate["phase"], "Succeeded")
+        self.assertEqual(gate["outputs"]["parameters"][0]["value"], "no")
+
 
 class TestResubmitWorkflow(unittest.TestCase):
     def test_builds_fresh_object(self):
@@ -243,6 +379,30 @@ class TestResubmitWorkflow(unittest.TestCase):
     def test_clears_shutdown_in_spec(self):
         new_wf = formulate_resubmit_workflow(_failed_workflow())
         self.assertNotIn("shutdown", new_wf["spec"])
+
+    def test_copies_annotations_and_owner_references(self):
+        wf = _failed_workflow()
+        wf["metadata"]["annotations"] = {"note": "keep"}
+        wf["metadata"]["ownerReferences"] = [{"kind": "CronWorkflow", "name": "nightly"}]
+        new_wf = formulate_resubmit_workflow(wf)
+        self.assertEqual(new_wf["metadata"]["annotations"], {"note": "keep"})
+        self.assertEqual(new_wf["metadata"]["ownerReferences"], [{"kind": "CronWorkflow", "name": "nightly"}])
+        new_wf["metadata"]["annotations"]["note"] = "changed"
+        self.assertEqual(wf["metadata"]["annotations"]["note"], "keep")
+
+    def test_clears_zero_active_deadline(self):
+        wf = _failed_workflow()
+        wf["spec"]["activeDeadlineSeconds"] = 0
+        new_wf = formulate_resubmit_workflow(wf)
+        self.assertIsNone(new_wf["spec"]["activeDeadlineSeconds"])
+
+    def test_defaults_api_version_and_kind(self):
+        wf = _failed_workflow()
+        del wf["apiVersion"]
+        del wf["kind"]
+        new_wf = formulate_resubmit_workflow(wf)
+        self.assertEqual(new_wf["apiVersion"], "argoproj.io/v1alpha1")
+        self.assertEqual(new_wf["kind"], "Workflow")
 
 
 class TestValidators(unittest.TestCase):

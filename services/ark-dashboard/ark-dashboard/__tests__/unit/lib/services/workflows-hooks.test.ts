@@ -313,6 +313,65 @@ describe('useWorkflows', () => {
       { limit: 25, continueToken: undefined, signal: expect.any(AbortSignal) },
     );
   });
+
+  it('returns an empty list without fetching when there is no namespace', async () => {
+    const { result } = renderHook(() => useWorkflows(''));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.workflows).toEqual([]);
+    expect(result.current.error).toBeNull();
+    expect(workflowsService.list).not.toHaveBeenCalled();
+  });
+
+  it('exposes the error when the initial load fails', async () => {
+    vi.mocked(workflowsService.list).mockRejectedValue(new Error('boom'));
+
+    const { result } = renderHook(() => useWorkflows('default'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toEqual(new Error('boom'));
+  });
+
+  it('ignores a request rejected because it was aborted', async () => {
+    const abortError = new Error('aborted');
+    abortError.name = 'AbortError';
+    vi.mocked(workflowsService.list).mockRejectedValue(abortError);
+
+    const { result } = renderHook(() => useWorkflows('default'));
+
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalled());
+
+    expect(result.current.error).toBeNull();
+  });
+
+  it('refetch reloads the current page with its cached token', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
+      .mockResolvedValue(makePage([]));
+
+    const { result } = renderHook(() => useWorkflows('default'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.goToNextPage();
+    });
+    await waitFor(() => expect(result.current.page).toBe(1));
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    expect(workflowsService.list).toHaveBeenCalledTimes(3);
+    expect(workflowsService.list).toHaveBeenLastCalledWith(
+      'default',
+      undefined,
+      { limit: 25, continueToken: 'token-1', signal: expect.any(AbortSignal) },
+    );
+    expect(result.current.page).toBe(1);
+  });
 });
 
 function runningWorkflow(
@@ -403,6 +462,51 @@ describe('useWorkflows lifecycle updates', () => {
       await vi.advanceTimersByTimeAsync(4000);
     });
     expect(workflowsService.get).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('should not insert a workflow that is not on the current page when patching in place', async () => {
+    vi.mocked(workflowsService.list).mockResolvedValue(
+      makePage([runningWorkflow('wf-1')]),
+    );
+    const { result } = renderHook(() => useWorkflows('default'));
+    await waitFor(() => expect(result.current.workflows).toHaveLength(1));
+
+    act(() => {
+      result.current.updateWorkflowItem(runningWorkflow('wf-other'));
+    });
+
+    expect(result.current.workflows.map(w => w.metadata.name)).toEqual([
+      'wf-1',
+    ]);
+  });
+
+  it('should log and keep the list when refreshing a shutting-down workflow fails', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const shuttingDown = runningWorkflow('wf-1', {
+      spec: { shutdown: 'Stop' },
+    });
+    vi.mocked(workflowsService.list).mockResolvedValue(
+      makePage([shuttingDown]),
+    );
+    const refreshError = new Error('unavailable');
+    vi.mocked(workflowsService.get).mockRejectedValue(refreshError);
+    const { result } = renderHook(() => useWorkflows('default'));
+    await waitFor(() => expect(result.current.workflows).toHaveLength(1));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to refresh workflow wf-1',
+      refreshError,
+    );
+    expect(result.current.workflows).toEqual([shuttingDown]);
+    consoleError.mockRestore();
     vi.useRealTimers();
   });
 

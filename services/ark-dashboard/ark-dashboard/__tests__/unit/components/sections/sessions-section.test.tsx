@@ -26,6 +26,7 @@ import {
   useWorkflowLifecycleActions,
   useWorkflows,
 } from '@/lib/services/workflows-hooks';
+import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
 
 const mockUseNamespace = vi.fn();
 
@@ -246,6 +247,7 @@ describe('SessionsSection', () => {
   const allWorkflows = [mockWorkflow, mockFailedWorkflow, mockRunningWorkflow];
   const mockRunAction = vi.fn();
   const mockUpsertWorkflow = vi.fn();
+  const mockUpdateWorkflowItem = vi.fn();
 
   const getCard = (name: RegExp) =>
     within(screen.getByRole('button', { name }).parentElement!);
@@ -267,6 +269,7 @@ describe('SessionsSection', () => {
       error: null,
       refetch: vi.fn(),
       upsertWorkflow: mockUpsertWorkflow,
+      updateWorkflowItem: mockUpdateWorkflowItem,
     } as any);
     render(<SessionsSection />);
   };
@@ -354,6 +357,7 @@ describe('SessionsSection', () => {
       error: null,
       refetch: vi.fn(),
       upsertWorkflow: mockUpsertWorkflow,
+      updateWorkflowItem: mockUpdateWorkflowItem,
     } as any);
     vi.mocked(useWorkflow).mockReturnValue({
       workflow: null,
@@ -638,6 +642,56 @@ describe('SessionsSection', () => {
       }
     });
 
+    it('should show a generic error toast when a run action rejects with a non-Error', async () => {
+      const user = userEvent.setup();
+      mockRunAction.mockRejectedValue('boom');
+      render(<SessionsSection />);
+
+      await user.click(getRunningCard().getByRole('button', { name: 'Stop' }));
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith('Failed to stop workflow', {
+          description: 'An unexpected error occurred',
+        });
+      });
+    });
+
+    it('should show an error toast when a page fails to load', () => {
+      render(<SessionsSection />);
+      const onPageError = vi.mocked(useWorkflows).mock.calls[0][3]!;
+
+      act(() => {
+        onPageError(new Error('List changed'));
+      });
+
+      expect(toast.error).toHaveBeenCalledWith('Failed to load page', {
+        description: 'List changed',
+      });
+    });
+
+    it('should patch the list item when the selected run reaches a terminal phase', () => {
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: mockRunningWorkflow as unknown as ArgoWorkflow,
+        loading: false,
+        error: null,
+      });
+      const { rerender } = render(<SessionsSection />);
+      expect(mockUpdateWorkflowItem).not.toHaveBeenCalled();
+
+      const finished = {
+        ...mockRunningWorkflow,
+        status: { ...mockRunningWorkflow.status, phase: 'Succeeded' },
+      };
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: finished as unknown as ArgoWorkflow,
+        loading: false,
+        error: null,
+      });
+      rerender(<SessionsSection />);
+
+      expect(mockUpdateWorkflowItem).toHaveBeenCalledWith(finished);
+    });
+
     it('should show an error toast when a run action fails', async () => {
       const user = userEvent.setup();
       mockRunAction.mockRejectedValue(
@@ -704,6 +758,7 @@ describe('SessionsSection', () => {
         error: null,
         refetch: vi.fn(),
         upsertWorkflow: mockUpsertWorkflow,
+        updateWorkflowItem: mockUpdateWorkflowItem,
       } as any);
       mockRunAction.mockResolvedValue(resubmitted);
       render(<SessionsSection />);
