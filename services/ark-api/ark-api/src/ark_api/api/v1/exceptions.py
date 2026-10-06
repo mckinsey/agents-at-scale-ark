@@ -39,12 +39,13 @@ def _is_admission_denial(exception: ApiException | SyncApiException) -> bool:
     return detail.startswith("admission webhook ") and "denied the request" in detail
 
 
-def _impersonation_for_forbidden(
-    exception: ApiException | SyncApiException, kwargs: dict[str, Any]
+def _rbac_impersonation(
+    exception: ApiException | SyncApiException,
+    impersonation: Optional[ImpersonationConfig],
 ) -> Optional[ImpersonationConfig]:
     if _is_admission_denial(exception):
         return None
-    return kwargs.get("impersonation")
+    return impersonation
 
 
 def handle_k8s_errors(
@@ -114,7 +115,7 @@ def handle_k8s_errors(
                     raise HTTPException(status_code=422, detail=_extract_error_detail(e))
                 
                 elif e.status == 403:
-                    impersonation = _impersonation_for_forbidden(e, kwargs)
+                    impersonation = _rbac_impersonation(e, kwargs.get("impersonation"))
                     if impersonation is not None:
                         settings = ImpersonationSettings.from_env()
                         if settings.fallback:
