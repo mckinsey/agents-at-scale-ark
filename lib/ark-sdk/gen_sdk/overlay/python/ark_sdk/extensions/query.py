@@ -5,6 +5,7 @@ Extension spec: ark/api/extensions/query/v1/
 
 import base64
 import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -556,6 +557,30 @@ async def _resolve_mcp_server(
 INLINE_TRANSPORT = "http"
 INLINE_TIMEOUT = "90s"
 
+# Mirrors ark/internal/inlinetools/address.go: the activator is a singleton
+# alongside the operator, reached at a fixed name/port/route, in whichever
+# namespace the main Ark chart (inlineTools.enabled=true) was installed into.
+ENV_ACTIVATOR_NAMESPACE = "ARK_INLINE_ACTIVATOR_NAMESPACE"
+_DEFAULT_ACTIVATOR_NAMESPACE = "ark-system"
+_ACTIVATOR_NAME = "ark-inline-activator"
+_ACTIVATOR_PORT = 8080
+_ACTIVATOR_ROUTE_PREFIX = "/mcp"
+
+
+def _expected_resolved_address(tool_namespace: str, tool_name: str, uid: str) -> str:
+    """Canonical activator address for a Tool.
+
+    Computed the same way as the Go controller's
+    ResolvedAddress(ActivatorBaseURL(activatorNamespace), tool), so a Tool's
+    stored status.resolvedAddress can be compared against a value this SDK
+    computed itself rather than trusted outright.
+    """
+    activator_namespace = os.getenv(ENV_ACTIVATOR_NAMESPACE) or _DEFAULT_ACTIVATOR_NAMESPACE
+    return (
+        f"http://{_ACTIVATOR_NAME}.{activator_namespace}.svc.cluster.local:{_ACTIVATOR_PORT}"
+        f"{_ACTIVATOR_ROUTE_PREFIX}/{tool_namespace}/{tool_name}/{uid}"
+    )
+
 
 def _inline_mcp_server(tool_crd: Any, tool_name: str, namespace: str) -> Optional[MCPServerConfig]:
     """Adapt a resolved inline Tool to an MCP connection.
@@ -594,6 +619,13 @@ def _inline_mcp_server(tool_crd: Any, tool_name: str, namespace: str) -> Optiona
         )
         return None
 
+    if address != _expected_resolved_address(namespace, tool_name, uid):
+        logger.warning(
+            f"Inline tool '{tool_name}' published endpoint does not match the "
+            f"canonical activator address and was skipped"
+        )
+        return None
+
     return MCPServerConfig(
         # Matches the Go executor's inlinetools.ConnectionName: no namespace
         # segment, since the Tool's own namespace is already the Query's.
@@ -618,10 +650,12 @@ async def _build_mcp_servers(
     server_tools: dict[str, list[str]] = {}
     inline_servers: list[MCPServerConfig] = []
     dropped: list[str] = []
+    seen_tool_names: set[str] = set()
     for agent_tool in agent.spec.tools:
         tool_name = getattr(agent_tool, "name", None)
-        if not tool_name:
+        if not tool_name or tool_name in seen_tool_names:
             continue
+        seen_tool_names.add(tool_name)
 
         try:
             tool_crd = await ark.tools.a_get(tool_name, namespace)
