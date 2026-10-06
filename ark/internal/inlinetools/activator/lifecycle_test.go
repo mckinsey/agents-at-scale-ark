@@ -450,6 +450,53 @@ func TestActivatorHealthyReflectsRunLoopLiveness(t *testing.T) {
 	assert.False(t, a.Healthy(), "a stopped Run loop must eventually report unhealthy")
 }
 
+func TestActivatorHealthySurvivesAStalledSweep(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	a.activity[fixture.tool.UID].lastCompletion = time.Now().Add(-idleTimeout)
+
+	release := make(chan struct{})
+	stalled := make(chan struct{}, 1)
+	a.client = interceptor.NewClient(a.client.(client.WithWatch), interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*arkv1alpha1.Tool); ok {
+				select {
+				case stalled <- struct{}{}:
+				default:
+				}
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			return c.Get(ctx, key, obj, opts...)
+		},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- a.Run(ctx) }()
+
+	select {
+	case <-stalled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("sweep never reached the stalled Get")
+	}
+	time.Sleep(healthyStaleAfter + 500*time.Millisecond)
+	assert.True(t, a.Healthy(), "the heartbeat must keep ticking while a single sweep is stalled on a slow API call")
+
+	close(release)
+	cancel()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("run loop did not stop")
+	}
+}
+
 func TestActivatorRetriesIdleAfterOwnershipLabelsAreRepaired(t *testing.T) {
 	fixture := lifeFixture("echo", 1)
 	a, scales := lifeActivator(t, fixture)

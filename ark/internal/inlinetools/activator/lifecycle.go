@@ -179,25 +179,39 @@ func (a *Activator) recover(ctx context.Context) error {
 	return nil
 }
 
+// Run ticks the heartbeat every tickInterval regardless of how long a sweep
+// takes, so a slow Kubernetes API call cannot starve the liveness probe. A
+// sweep still runs on its own tick, but runs in the background: a sweep that
+// outlives its tick is left to finish rather than overlapped or awaited, and
+// the next tick's heartbeat is recorded either way.
 func (a *Activator) Run(ctx context.Context) error {
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
+	var sweeping atomic.Bool
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case now := <-ticker.C:
 			a.lastTick.Store(now.UnixNano())
-			if err := a.sweep(ctx, now); err != nil {
-				log.FromContext(ctx).Error(err, "inline idle scale-down failed")
+			if !sweeping.CompareAndSwap(false, true) {
+				continue
 			}
+			go func() {
+				defer sweeping.Store(false)
+				if err := a.sweep(ctx, now); err != nil {
+					log.FromContext(ctx).Error(err, "inline idle scale-down failed")
+				}
+			}()
 		}
 	}
 }
 
 // Healthy reports whether the Run loop is still ticking. A liveness probe
 // backed by this, rather than an unconditional 200, catches a Run goroutine
-// that died (panic, deadlock) without the process exiting.
+// that died (panic, deadlock) without the process exiting. The heartbeat
+// above is independent of sweep's duration, so a stalled Kubernetes call
+// inside sweep does not itself make this unhealthy.
 func (a *Activator) Healthy() bool {
 	return time.Since(time.Unix(0, a.lastTick.Load())) < healthyStaleAfter
 }
