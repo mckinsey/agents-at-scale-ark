@@ -26,16 +26,11 @@ func ResolveActivation(enabled bool, tool *arkv1alpha1.Tool, routeUID types.UID,
 	if !enabled {
 		return "", fmt.Errorf("inline tools are disabled")
 	}
-	if tool == nil || tool.Spec.Type != arkv1alpha1.ToolTypeInline || tool.Spec.Inline == nil || !tool.DeletionTimestamp.IsZero() {
-		return "", fmt.Errorf("inline Tool is missing or deleting")
+	if err := validateToolIdentity(tool, routeUID, calledName); err != nil {
+		return "", err
 	}
-	if tool.UID == "" || routeUID != tool.UID || calledName != tool.Name {
-		return "", fmt.Errorf("inline Tool name or UID does not match the call")
-	}
-	condition := meta.FindStatusCondition(tool.Status.Conditions, arkv1alpha1.ToolConditionAvailable)
-	if condition == nil || condition.Status != metav1.ConditionTrue || condition.Reason != arkv1alpha1.ToolReasonAvailable ||
-		tool.Generation < 1 || condition.ObservedGeneration != tool.Generation || tool.Status.State != arkv1alpha1.ToolStateReady {
-		return "", fmt.Errorf("inline Tool is not available for its current generation")
+	if err := validateToolAvailable(tool); err != nil {
+		return "", err
 	}
 	if activatorNamespace == "" || tool.Status.ResolvedAddress != ResolvedAddress(activatorNamespace, tool) {
 		return "", fmt.Errorf("inline Tool has no matching published activator endpoint")
@@ -46,23 +41,54 @@ func ResolveActivation(enabled bool, tool *arkv1alpha1.Tool, routeUID types.UID,
 	if deployment == nil || service == nil || !OwnsRunner(deployment, tool) || !OwnsRunner(service, tool) {
 		return "", fmt.Errorf("runner Deployment or Service is missing, deleting, or not owned by the current Tool")
 	}
-	wanted := RunnerLabels(tool)
-	if !equality.Semantic.DeepEqual(deployment.Spec.Selector, &metav1.LabelSelector{MatchLabels: wanted}) ||
-		!labels.SelectorFromSet(wanted).Matches(labels.Set(deployment.Spec.Template.Labels)) {
-		return "", fmt.Errorf("runner Deployment does not select the current Tool identity")
-	}
-	if err := CheckRunnerRevision(&deployment.Spec.Template, tool); err != nil {
+	if err := validateRunnerDeployment(deployment, tool); err != nil {
 		return "", err
 	}
-	if service.Spec.Type != corev1.ServiceTypeClusterIP || service.Spec.ClusterIP == "" || service.Spec.ClusterIP == corev1.ClusterIPNone ||
-		len(service.Spec.ExternalIPs) != 0 || service.Spec.PublishNotReadyAddresses || !maps.Equal(service.Spec.Selector, wanted) || len(service.Spec.Ports) != 1 {
-		return "", fmt.Errorf("runner Service is not the private backend for the current Tool")
+	if err := validateRunnerService(service, tool); err != nil {
+		return "", err
 	}
 	port := service.Spec.Ports[0]
 	if port.Port != runner.Port || port.Protocol != corev1.ProtocolTCP || port.TargetPort != intstr.FromInt32(runner.Port) {
 		return "", fmt.Errorf("runner Service does not target the runner MCP port")
 	}
 	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d%s", service.Name, tool.Namespace, runner.Port, runner.MCPPath), nil
+}
+
+func validateToolIdentity(tool *arkv1alpha1.Tool, routeUID types.UID, calledName string) error {
+	if tool == nil || tool.Spec.Type != arkv1alpha1.ToolTypeInline || tool.Spec.Inline == nil || !tool.DeletionTimestamp.IsZero() {
+		return fmt.Errorf("inline Tool is missing or deleting")
+	}
+	if tool.UID == "" || routeUID != tool.UID || calledName != tool.Name {
+		return fmt.Errorf("inline Tool name or UID does not match the call")
+	}
+	return nil
+}
+
+func validateToolAvailable(tool *arkv1alpha1.Tool) error {
+	condition := meta.FindStatusCondition(tool.Status.Conditions, arkv1alpha1.ToolConditionAvailable)
+	if condition == nil || condition.Status != metav1.ConditionTrue || condition.Reason != arkv1alpha1.ToolReasonAvailable ||
+		tool.Generation < 1 || condition.ObservedGeneration != tool.Generation || tool.Status.State != arkv1alpha1.ToolStateReady {
+		return fmt.Errorf("inline Tool is not available for its current generation")
+	}
+	return nil
+}
+
+func validateRunnerDeployment(deployment *appsv1.Deployment, tool *arkv1alpha1.Tool) error {
+	wanted := RunnerLabels(tool)
+	if !equality.Semantic.DeepEqual(deployment.Spec.Selector, &metav1.LabelSelector{MatchLabels: wanted}) ||
+		!labels.SelectorFromSet(wanted).Matches(labels.Set(deployment.Spec.Template.Labels)) {
+		return fmt.Errorf("runner Deployment does not select the current Tool identity")
+	}
+	return CheckRunnerRevision(&deployment.Spec.Template, tool)
+}
+
+func validateRunnerService(service *corev1.Service, tool *arkv1alpha1.Tool) error {
+	wanted := RunnerLabels(tool)
+	if service.Spec.Type != corev1.ServiceTypeClusterIP || service.Spec.ClusterIP == "" || service.Spec.ClusterIP == corev1.ClusterIPNone ||
+		len(service.Spec.ExternalIPs) != 0 || service.Spec.PublishNotReadyAddresses || !maps.Equal(service.Spec.Selector, wanted) || len(service.Spec.Ports) != 1 {
+		return fmt.Errorf("runner Service is not the private backend for the current Tool")
+	}
+	return nil
 }
 
 // OwnsRunner requires the current Tool's controller ownership and identity.
