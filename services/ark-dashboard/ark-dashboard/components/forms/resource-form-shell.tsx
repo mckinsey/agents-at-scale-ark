@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 
 export const RequiredMarker = () => (
   <span aria-hidden="true" className="text-fg-secondary">
@@ -53,6 +54,8 @@ export function ResourceFormShell<TFieldValues extends FieldValues>({
   skeletonFields,
   children,
 }: Readonly<ResourceFormShellProps<TFieldValues>>) {
+  const returnHref = useListReturnHref(backHref);
+
   if (loading) {
     return (
       <div
@@ -80,7 +83,7 @@ export function ResourceFormShell<TFieldValues extends FieldValues>({
             current={breadcrumbCurrent ?? heading}
           />
           <div className="flex items-center gap-2">
-            <NamespacedLink href={backHref}>
+            <NamespacedLink href={returnHref}>
               <Button variant="outline">Cancel</Button>
             </NamespacedLink>
             <Button onClick={submit} disabled={saving || submitDisabled}>
