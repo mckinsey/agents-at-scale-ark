@@ -145,6 +145,18 @@ function writeParam(
   params.set(key, typeof value === 'string' ? value : JSON.stringify(value));
 }
 
+function isDefaultParam(spec: UrlParamSpec, raw: string | null): boolean {
+  return raw !== null && readParam(spec, raw) === spec.default;
+}
+
+function dropDefaultParams(params: URLSearchParams, spec: UrlStateSpec): void {
+  for (const key of Object.keys(spec)) {
+    if (isDefaultParam(spec[key], params.get(key))) {
+      params.delete(key);
+    }
+  }
+}
+
 function retainLiveDrafts(drafts: Drafts, params: URLSearchParams): Drafts {
   const keys = Object.keys(drafts);
   if (keys.length === 0) {
@@ -218,7 +230,8 @@ function clearTimer(timerRef: TimerRef): void {
  *   across instances on the same screen, so they compose into a single
  *   navigation instead of overwriting each other. A write that moves any key
  *   other than the page key resets the page, even when that key is a draft
- *   carried along by an explicit page change.
+ *   carried along by an explicit page change, and even from an instance whose
+ *   spec does not declare the page key.
  * - `committedValues` — the URL only, never a draft. Use this to key a server
  *   query so it refetches once per pause rather than once per keystroke.
  */
@@ -246,7 +259,9 @@ export function useUrlState<TSpec extends UrlStateSpec>(
   // The query string as it will be once every write issued so far has landed.
   // `searchParams` lags a write by a render, so reading it per call would make
   // two writes in one commit build on the same stale base and lose the first.
-  syncPendingParams(pathname, searchParams.toString());
+  if (typeof window !== 'undefined') {
+    syncPendingParams(pathname, searchParams.toString());
+  }
 
   const [drafts, setDrafts] = useState<Drafts>(NO_DRAFTS);
   const liveDrafts = retainLiveDrafts(drafts, searchParams);
@@ -307,9 +322,7 @@ export function useUrlState<TSpec extends UrlStateSpec>(
       );
       const params = new URLSearchParams(base);
       const keys = Object.keys(updates).filter(key => current[key]);
-      if (keys.length === 0) {
-        return;
-      }
+      dropDefaultParams(params, current);
 
       for (const key of keys) {
         writeParam(params, key, current[key], updates[key]);
@@ -317,9 +330,11 @@ export function useUrlState<TSpec extends UrlStateSpec>(
 
       // Any key but the page moving resets the page, including one carried in
       // from a draft, so a filter cannot land while the page stays behind.
-      const resetsPage = current[pageKey] && keys.some(key => key !== pageKey);
-      if (resetsPage) {
+      const resetsPage = keys.some(key => key !== pageKey);
+      if (resetsPage && current[pageKey]) {
         writeParam(params, pageKey, current[pageKey], current[pageKey].default);
+      } else if (resetsPage) {
+        params.delete(pageKey);
       }
 
       const queryString = params.toString();
@@ -334,6 +349,16 @@ export function useUrlState<TSpec extends UrlStateSpec>(
     },
     [pageKey, pathname, router],
   );
+
+  useEffect(() => {
+    const current = specRef.current;
+    const hasDefaultParam = Object.keys(current).some(key =>
+      isDefaultParam(current[key], searchParams.get(key)),
+    );
+    if (hasDefaultParam) {
+      commit({});
+    }
+  }, [searchParams, commit]);
 
   const flushDrafts = useCallback(() => {
     timerRef.current = null;
