@@ -7,7 +7,11 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
 spec:
-  podSelector: {}
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: NotIn
+        values: [ark-inline-activator]
   policyTypes:
   - Ingress
   - Egress
