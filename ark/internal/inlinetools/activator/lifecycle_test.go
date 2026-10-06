@@ -37,6 +37,11 @@ import (
 	inlinetransport "mckinsey.com/ark/internal/inlinetools/transport"
 )
 
+const (
+	staleValue   = "old"
+	foreignValue = "other"
+)
+
 type runnerFixture struct {
 	tool       *arkv1alpha1.Tool
 	deployment *appsv1.Deployment
@@ -305,7 +310,7 @@ func TestActivatorWaitsForCurrentEndpointsAndReleasesAbandonedWork(t *testing.T)
 
 func TestActivatorHTTPAbandonmentCannotExecuteAfterReadinessArrives(t *testing.T) {
 	fixture := lifeFixture("echo", 0)
-	fixture.pod.Annotations[inlinetools.SourceHashAnnotation] = "old"
+	fixture.pod.Annotations[inlinetools.SourceHashAnnotation] = staleValue
 	a, scales := lifeActivator(t, fixture)
 	var executions atomic.Int32
 	requests := backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -423,6 +428,75 @@ func TestActivatorRunSweepsAndStopsWithItsContext(t *testing.T) {
 	assert.Zero(t, storedReplicas(t, a, fixture))
 }
 
+func TestActivatorHealthyReflectsRunLoopLiveness(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	assert.True(t, a.Healthy(), "a freshly constructed activator has not gone stale yet")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- a.Run(ctx) }()
+	require.Eventually(t, func() bool { return a.lastTick.Load() > 0 }, time.Second, 10*time.Millisecond)
+	assert.True(t, a.Healthy(), "Run is ticking")
+	cancel()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("run loop did not stop")
+	}
+
+	a.lastTick.Store(time.Now().Add(-healthyStaleAfter - time.Second).UnixNano())
+	assert.False(t, a.Healthy(), "a stopped Run loop must eventually report unhealthy")
+}
+
+func TestActivatorHealthySurvivesAStalledSweep(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	a.activity[fixture.tool.UID].lastCompletion = time.Now().Add(-idleTimeout)
+
+	release := make(chan struct{})
+	stalled := make(chan struct{}, 1)
+	a.client = interceptor.NewClient(a.client.(client.WithWatch), interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*arkv1alpha1.Tool); ok {
+				select {
+				case stalled <- struct{}{}:
+				default:
+				}
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			return c.Get(ctx, key, obj, opts...)
+		},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- a.Run(ctx) }()
+
+	select {
+	case <-stalled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("sweep never reached the stalled Get")
+	}
+	time.Sleep(healthyStaleAfter + 500*time.Millisecond)
+	assert.True(t, a.Healthy(), "the heartbeat must keep ticking while a single sweep is stalled on a slow API call")
+
+	close(release)
+	cancel()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("run loop did not stop")
+	}
+}
+
 func TestActivatorRetriesIdleAfterOwnershipLabelsAreRepaired(t *testing.T) {
 	fixture := lifeFixture("echo", 1)
 	a, scales := lifeActivator(t, fixture)
@@ -509,7 +583,7 @@ func TestActivatorPreservesToolErrorsAndNeverRetriesUncertainResponses(t *testin
 
 func TestActivatorCancellationDoesNotAbandonAnotherPendingCaller(t *testing.T) {
 	fixture := lifeFixture("echo", 0)
-	fixture.pod.Annotations[inlinetools.SourceHashAnnotation] = "old"
+	fixture.pod.Annotations[inlinetools.SourceHashAnnotation] = staleValue
 	a, scales := lifeActivator(t, fixture)
 	var executions atomic.Int32
 	backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -647,6 +721,16 @@ func TestActivatorDoesNotFollowBackendRedirects(t *testing.T) {
 	assert.Zero(t, leaked.Load())
 }
 
+func changeToolSource(ctx context.Context, a *Activator, original *arkv1alpha1.Tool) error {
+	tool := &arkv1alpha1.Tool{}
+	if err := a.client.Get(ctx, client.ObjectKeyFromObject(original), tool); err != nil {
+		return err
+	}
+	tool.Spec.Inline.Source = "changed"
+	tool.Generation++
+	return a.client.Update(ctx, tool)
+}
+
 func TestActivatorFailsClosedOnReadErrorsAndSourceChangesDuringHandshake(t *testing.T) {
 	for _, sourceChange := range []bool{false, true} {
 		t.Run(fmt.Sprint(sourceChange), func(t *testing.T) {
@@ -663,14 +747,8 @@ func TestActivatorFailsClosedOnReadErrorsAndSourceChangesDuringHandshake(t *test
 				a.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					response, err := transport.RoundTrip(r)
 					if changed.CompareAndSwap(false, true) {
-						tool := &arkv1alpha1.Tool{}
-						if getErr := a.client.Get(r.Context(), client.ObjectKeyFromObject(fixture.tool), tool); getErr != nil {
-							return nil, getErr
-						}
-						tool.Spec.Inline.Source = "changed"
-						tool.Generation++
-						if updateErr := a.client.Update(r.Context(), tool); updateErr != nil {
-							return nil, updateErr
+						if mutateErr := changeToolSource(r.Context(), a, fixture.tool); mutateErr != nil {
+							return nil, mutateErr
 						}
 					}
 					return response, err
@@ -707,20 +785,20 @@ func TestActivatorRejectsStaleOrUnownedEndpoints(t *testing.T) {
 		"mixed terminating readiness": func(f *runnerFixture) {
 			f.endpoints.Endpoints = append(f.endpoints.Endpoints, discoveryv1.Endpoint{Conditions: discoveryv1.EndpointConditions{Ready: ptr.To(true), Terminating: ptr.To(true)}})
 		},
-		"wrong service owner":      func(f *runnerFixture) { f.endpoints.OwnerReferences[0].UID = "other" },
+		"wrong service owner":      func(f *runnerFixture) { f.endpoints.OwnerReferences[0].UID = foreignValue },
 		"wrong port":               func(f *runnerFixture) { f.endpoints.Ports[0].Port = ptr.To(int32(80)) },
 		"endpoint unready":         func(f *runnerFixture) { f.endpoints.Endpoints[0].Conditions.Ready = ptr.To(false) },
 		"terminating endpoint":     func(f *runnerFixture) { f.endpoints.Endpoints[0].Conditions.Terminating = ptr.To(true) },
 		"unreferenced endpoint":    func(f *runnerFixture) { f.endpoints.Endpoints[0].TargetRef = nil },
 		"cross-namespace endpoint": func(f *runnerFixture) { f.endpoints.Endpoints[0].TargetRef.Namespace = "elsewhere" },
 		"foreign address":          func(f *runnerFixture) { f.endpoints.Endpoints[0].Addresses = []string{"192.0.2.1"} },
-		"stale pod UID":            func(f *runnerFixture) { f.endpoints.Endpoints[0].TargetRef.UID = "old" },
-		"old source":               func(f *runnerFixture) { f.pod.Annotations[inlinetools.SourceHashAnnotation] = "old" },
+		"stale pod UID":            func(f *runnerFixture) { f.endpoints.Endpoints[0].TargetRef.UID = staleValue },
+		"old source":               func(f *runnerFixture) { f.pod.Annotations[inlinetools.SourceHashAnnotation] = staleValue },
 		"old language":             func(f *runnerFixture) { f.pod.Spec.Containers[0].Env[1].Value = "bash" },
 		"unready pod":              func(f *runnerFixture) { f.pod.Status.Conditions = nil },
-		"foreign pod labels":       func(f *runnerFixture) { f.pod.Labels[inlinetools.LabelToolUID] = "other" },
+		"foreign pod labels":       func(f *runnerFixture) { f.pod.Labels[inlinetools.LabelToolUID] = foreignValue },
 		"unowned pod":              func(f *runnerFixture) { f.pod.OwnerReferences = nil },
-		"foreign RS":               func(f *runnerFixture) { f.rs.OwnerReferences[0].UID = "other" },
+		"foreign RS":               func(f *runnerFixture) { f.rs.OwnerReferences[0].UID = foreignValue },
 	}
 	for name, change := range changes {
 		t.Run(name, func(t *testing.T) {

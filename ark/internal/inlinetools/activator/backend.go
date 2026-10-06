@@ -140,21 +140,16 @@ func (a *Activator) scaleIdle(ctx context.Context, state *activity) error {
 }
 
 func (a *Activator) ready(ctx context.Context, t *target) (bool, error) {
-	d := t.deployment
-	if d.Spec.Replicas == nil || *d.Spec.Replicas != 1 || d.Status.ObservedGeneration != d.Generation ||
-		d.Status.Replicas != 1 || d.Status.UpdatedReplicas != 1 || d.Status.ReadyReplicas != 1 || d.Status.AvailableReplicas != 1 {
+	if !deploymentReady(t.deployment) {
 		return false, nil
 	}
-	slices := &discoveryv1.EndpointSliceList{}
-	if err := a.client.List(ctx, slices, client.InNamespace(t.tool.Namespace), client.MatchingLabels{discoveryv1.LabelServiceName: t.service.Name}); err != nil {
+	endpointSlices := &discoveryv1.EndpointSliceList{}
+	if err := a.client.List(ctx, endpointSlices, client.InNamespace(t.tool.Namespace), client.MatchingLabels{discoveryv1.LabelServiceName: t.service.Name}); err != nil {
 		return false, err
 	}
 	found := false
-	for _, slice := range slices.Items {
-		owner := metav1.GetControllerOf(&slice)
-		if owner == nil || owner.Kind != "Service" || owner.APIVersion != "v1" || owner.Name != t.service.Name || owner.UID != t.service.UID ||
-			slice.AddressType == discoveryv1.AddressTypeFQDN || len(slice.Ports) != 1 || slice.Ports[0].Port == nil || *slice.Ports[0].Port != t.service.Spec.Ports[0].Port ||
-			slice.Ports[0].Protocol == nil || *slice.Ports[0].Protocol != corev1.ProtocolTCP {
+	for _, slice := range endpointSlices.Items {
+		if !sliceMatchesService(&slice, t.service) {
 			return false, nil
 		}
 		for _, endpoint := range slice.Endpoints {
@@ -175,6 +170,18 @@ func (a *Activator) ready(ctx context.Context, t *target) (bool, error) {
 	return found, nil
 }
 
+func deploymentReady(d *appsv1.Deployment) bool {
+	return d.Spec.Replicas != nil && *d.Spec.Replicas == 1 && d.Status.ObservedGeneration == d.Generation &&
+		d.Status.Replicas == 1 && d.Status.UpdatedReplicas == 1 && d.Status.ReadyReplicas == 1 && d.Status.AvailableReplicas == 1
+}
+
+func sliceMatchesService(slice *discoveryv1.EndpointSlice, service *corev1.Service) bool {
+	owner := metav1.GetControllerOf(slice)
+	return owner != nil && owner.Kind == "Service" && owner.APIVersion == "v1" && owner.Name == service.Name && owner.UID == service.UID &&
+		slice.AddressType != discoveryv1.AddressTypeFQDN && len(slice.Ports) == 1 && slice.Ports[0].Port != nil && *slice.Ports[0].Port == service.Spec.Ports[0].Port &&
+		slice.Ports[0].Protocol != nil && *slice.Ports[0].Protocol == corev1.ProtocolTCP
+}
+
 func (a *Activator) endpointCurrent(ctx context.Context, t *target, endpoint discoveryv1.Endpoint) (bool, error) {
 	ref := endpoint.TargetRef
 	if ref == nil || ref.Kind != "Pod" || ref.UID == "" || (ref.Namespace != "" && ref.Namespace != t.tool.Namespace) || len(endpoint.Addresses) == 0 {
@@ -184,37 +191,49 @@ func (a *Activator) endpointCurrent(ctx context.Context, t *target, endpoint dis
 	if err := a.client.Get(ctx, types.NamespacedName{Namespace: t.tool.Namespace, Name: ref.Name}, pod); err != nil {
 		return false, client.IgnoreNotFound(err)
 	}
-	if pod.UID != ref.UID || !pod.DeletionTimestamp.IsZero() || !labels.SelectorFromSet(inlinetools.RunnerLabels(t.tool)).Matches(labels.Set(pod.Labels)) ||
-		inlinetools.CheckRunnerRevision(&corev1.PodTemplateSpec{ObjectMeta: pod.ObjectMeta, Spec: pod.Spec}, t.tool) != nil {
+	if !podMatchesRunner(pod, ref.UID, t.tool) || !podReady(pod) || !addressesMatchPod(endpoint.Addresses, pod) {
 		return false, nil
 	}
-	ready := false
+	return a.podOwnedByDeployment(ctx, t.tool.Namespace, pod, t.deployment)
+}
+
+func podMatchesRunner(pod *corev1.Pod, uid types.UID, tool *arkv1alpha1.Tool) bool {
+	return pod.UID == uid && pod.DeletionTimestamp.IsZero() && labels.SelectorFromSet(inlinetools.RunnerLabels(tool)).Matches(labels.Set(pod.Labels)) &&
+		inlinetools.CheckRunnerRevision(&corev1.PodTemplateSpec{ObjectMeta: pod.ObjectMeta, Spec: pod.Spec}, tool) == nil
+}
+
+func podReady(pod *corev1.Pod) bool {
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-			ready = true
+			return true
 		}
 	}
-	if !ready {
-		return false, nil
-	}
-	for _, address := range endpoint.Addresses {
+	return false
+}
+
+func addressesMatchPod(addresses []string, pod *corev1.Pod) bool {
+	for _, address := range addresses {
 		matches := address == pod.Status.PodIP
 		for _, ip := range pod.Status.PodIPs {
 			matches = matches || address == ip.IP
 		}
 		if !matches {
-			return false, nil
+			return false
 		}
 	}
+	return true
+}
+
+func (a *Activator) podOwnedByDeployment(ctx context.Context, namespace string, pod *corev1.Pod, deployment *appsv1.Deployment) (bool, error) {
 	owner := metav1.GetControllerOf(pod)
 	if owner == nil || owner.Kind != "ReplicaSet" || owner.APIVersion != appsv1.SchemeGroupVersion.String() {
 		return false, nil
 	}
 	rs := &appsv1.ReplicaSet{}
-	if err := a.client.Get(ctx, types.NamespacedName{Namespace: t.tool.Namespace, Name: owner.Name}, rs); err != nil {
+	if err := a.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: owner.Name}, rs); err != nil {
 		return false, client.IgnoreNotFound(err)
 	}
 	parent := metav1.GetControllerOf(rs)
 	return rs.UID == owner.UID && rs.DeletionTimestamp.IsZero() && parent != nil && parent.APIVersion == appsv1.SchemeGroupVersion.String() &&
-		parent.Kind == "Deployment" && parent.Name == t.deployment.Name && parent.UID == t.deployment.UID, nil
+		parent.Kind == "Deployment" && parent.Name == deployment.Name && parent.UID == deployment.UID, nil
 }

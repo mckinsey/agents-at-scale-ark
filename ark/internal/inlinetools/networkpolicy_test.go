@@ -43,7 +43,7 @@ func TestCheckRunnerNetworkPolicy(t *testing.T) {
 		{name: "owned runner boundary"},
 		{name: "deny all", change: func(p *networkingv1.NetworkPolicy) { p.Spec.Ingress = nil }},
 		{name: "other namespace", change: func(p *networkingv1.NetworkPolicy) {
-			p.Namespace = "elsewhere"
+			p.Namespace = otherNamespace
 			p.Spec.Egress = []networkingv1.NetworkPolicyEgressRule{{}}
 		}},
 		{name: "nonselecting allow all", change: func(p *networkingv1.NetworkPolicy) {
@@ -92,7 +92,7 @@ func TestCheckRunnerNetworkPolicy(t *testing.T) {
 			p.Spec.Ingress[0].Ports[0].Port = ptr.To(intstr.FromString(runner.PortName))
 		}},
 		{name: "unknown named port", conflict: true, change: func(p *networkingv1.NetworkPolicy) {
-			p.Spec.Ingress[0].Ports[0].Port = ptr.To(intstr.FromString("other"))
+			p.Spec.Ingress[0].Ports[0].Port = ptr.To(intstr.FromString(wrongIdentity))
 		}},
 		{name: "namespace alone", conflict: true, change: func(p *networkingv1.NetworkPolicy) { p.Spec.Ingress[0].From[0].PodSelector = nil }},
 		{name: "all pods in activator namespace", conflict: true, change: func(p *networkingv1.NetworkPolicy) { p.Spec.Ingress[0].From[0].PodSelector = &metav1.LabelSelector{} }},
@@ -101,10 +101,10 @@ func TestCheckRunnerNetworkPolicy(t *testing.T) {
 			p.Spec.Ingress[0].From[0].NamespaceSelector = &metav1.LabelSelector{}
 		}},
 		{name: "wrong namespace", conflict: true, change: func(p *networkingv1.NetworkPolicy) {
-			p.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels[corev1.LabelMetadataName] = "elsewhere"
+			p.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels[corev1.LabelMetadataName] = otherNamespace
 		}},
 		{name: "wrong app", conflict: true, change: func(p *networkingv1.NetworkPolicy) {
-			p.Spec.Ingress[0].From[0].PodSelector.MatchLabels["app"] = "other"
+			p.Spec.Ingress[0].From[0].PodSelector.MatchLabels["app"] = wrongIdentity
 		}},
 		{name: "IPBlock", conflict: true, change: func(p *networkingv1.NetworkPolicy) {
 			p.Spec.Ingress[0].From = []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "10.0.0.0/24"}}}
@@ -128,7 +128,7 @@ func TestCheckRunnerNetworkPolicy(t *testing.T) {
 			p.Spec.Ingress[0].From[0].PodSelector = &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "app", Operator: metav1.LabelSelectorOpIn, Values: []string{ActivatorName}}}}
 		}},
 		{name: "multiple In identities", conflict: true, change: func(p *networkingv1.NetworkPolicy) {
-			p.Spec.Ingress[0].From[0].PodSelector = &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "app", Operator: metav1.LabelSelectorOpIn, Values: []string{ActivatorName, "other"}}}}
+			p.Spec.Ingress[0].From[0].PodSelector = &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "app", Operator: metav1.LabelSelectorOpIn, Values: []string{ActivatorName, wrongIdentity}}}}
 		}},
 		{name: "Exists is not identity", conflict: true, change: func(p *networkingv1.NetworkPolicy) {
 			p.Spec.Ingress[0].From[0].PodSelector = &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "app", Operator: metav1.LabelSelectorOpExists}}}
