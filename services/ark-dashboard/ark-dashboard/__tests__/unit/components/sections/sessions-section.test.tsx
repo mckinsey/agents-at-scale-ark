@@ -600,7 +600,6 @@ describe('SessionsSection', () => {
         expect(clearButton).not.toBeDisabled();
       });
     });
-
   });
 
   describe('Step Details and Expansion', () => {
@@ -924,10 +923,13 @@ describe('SessionsSection', () => {
 
   describe('Session Detail View', () => {
     it('deep-links to a run via ?run= even when it is not on the loaded page', async () => {
-      currentSearch = 'run=brand-new-workflow-xyz123';
+      resetAppRouterMock('run=brand-new-workflow-xyz123');
       const deepLinkedWorkflow = {
         ...mockWorkflow,
-        metadata: { ...mockWorkflow.metadata, name: 'brand-new-workflow-xyz123' },
+        metadata: {
+          ...mockWorkflow.metadata,
+          name: 'brand-new-workflow-xyz123',
+        },
       };
       vi.mocked(useWorkflow).mockReturnValue({
         workflow: deepLinkedWorkflow,
@@ -946,6 +948,16 @@ describe('SessionsSection', () => {
         'default',
         'brand-new-workflow-xyz123',
       );
+      await waitFor(() => {
+        expect(mockRouter.replace).toHaveBeenCalledWith(
+          '/workflow-runs',
+          expect.any(Object),
+        );
+      });
+      expect(vi.mocked(useWorkflow).mock.lastCall).toEqual([
+        'default',
+        'brand-new-workflow-xyz123',
+      ]);
     });
 
     it('should display selected session name in list and detail view', async () => {
