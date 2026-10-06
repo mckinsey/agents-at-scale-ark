@@ -32,6 +32,11 @@ def _extract_error_detail(exception: ApiException | SyncApiException) -> str:
     return error_detail
 
 
+def _is_admission_denial(exception: ApiException | SyncApiException) -> bool:
+    detail = _extract_error_detail(exception) or ""
+    return detail.startswith("admission webhook ") and "denied the request" in detail
+
+
 def handle_k8s_errors(
     operation: str = "operation",
     resource_type: str = "resource"
@@ -100,7 +105,7 @@ def handle_k8s_errors(
                 
                 elif e.status == 403:
                     impersonation = kwargs.get("impersonation")
-                    if impersonation is not None:
+                    if impersonation is not None and not _is_admission_denial(e):
                         settings = ImpersonationSettings.from_env()
                         if settings.fallback:
                             logger.warning(

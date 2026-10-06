@@ -82,5 +82,73 @@ class TestHandleK8sErrorsFallback(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.headers["X-Ark-Impersonation-Fallback"], "true")
 
 
+ADMISSION_DENIAL_BODY = json.dumps({
+    "kind": "Status",
+    "status": "Failure",
+    "reason": "Forbidden",
+    "code": 403,
+    "message": 'admission webhook "vteam-v1.kb.io" denied the request: '
+               "maxTurns can only be set when loops is enabled",
+})
+
+
+class TestHandleK8sErrorsAdmissionDenial(unittest.IsolatedAsyncioTestCase):
+
+    async def test_admission_denial_with_impersonation_keeps_webhook_message(self):
+        @handle_k8s_errors(operation="update", resource_type="team")
+        async def handler(namespace="default", team_name="t", impersonation=None):
+            raise _make_api_exception(403, body=ADMISSION_DENIAL_BODY)
+
+        config = ImpersonationConfig(username="bob@acme.com", groups=["editors"])
+        with patch.dict("os.environ", {"IMPERSONATION_FALLBACK": "false"}):
+            with pytest.raises(HTTPException) as exc_info:
+                await handler(namespace="default", team_name="t", impersonation=config)
+
+        self.assertEqual(exc_info.value.status_code, 403)
+        self.assertEqual(
+            exc_info.value.detail,
+            'admission webhook "vteam-v1.kb.io" denied the request: '
+            "maxTurns can only be set when loops is enabled",
+        )
+
+    async def test_admission_denial_does_not_trigger_fallback_retry(self):
+        call_count = 0
+
+        @handle_k8s_errors(operation="update", resource_type="team")
+        async def handler(namespace="default", team_name="t", impersonation=None):
+            nonlocal call_count
+            call_count += 1
+            raise _make_api_exception(403, body=ADMISSION_DENIAL_BODY)
+
+        config = ImpersonationConfig(username="bob@acme.com", groups=["editors"])
+        with patch.dict("os.environ", {"IMPERSONATION_FALLBACK": "true"}):
+            with pytest.raises(HTTPException) as exc_info:
+                await handler(namespace="default", team_name="t", impersonation=config)
+
+        self.assertEqual(call_count, 1)
+        self.assertIn("maxTurns can only be set", exc_info.value.detail)
+
+    async def test_rbac_forbidden_with_impersonation_still_returns_structured_403(self):
+        rbac_body = json.dumps({
+            "kind": "Status",
+            "status": "Failure",
+            "reason": "Forbidden",
+            "code": 403,
+            "message": 'teams.ark.mckinsey.com "t" is forbidden: User "bob@acme.com" '
+                       'cannot update resource "teams"',
+        })
+
+        @handle_k8s_errors(operation="update", resource_type="team")
+        async def handler(namespace="default", team_name="t", impersonation=None):
+            raise _make_api_exception(403, body=rbac_body)
+
+        config = ImpersonationConfig(username="bob@acme.com", groups=["viewers"])
+        with patch.dict("os.environ", {"IMPERSONATION_FALLBACK": "false"}):
+            response = await handler(namespace="default", team_name="t", impersonation=config)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(json.loads(response.body)["error"], "impersonation_forbidden")
+
+
 if __name__ == "__main__":
     unittest.main()

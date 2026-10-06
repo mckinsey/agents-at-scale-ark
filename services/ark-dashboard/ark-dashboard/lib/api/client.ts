@@ -13,6 +13,12 @@ export class APIError extends Error {
   }
 }
 
+const ADMISSION_WEBHOOK_PREFIX = /^admission webhook "[^"]+" denied the request:\s*/;
+
+function stripAdmissionWebhookPrefix(message: string): string {
+  return message.replace(ADMISSION_WEBHOOK_PREFIX, '');
+}
+
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;
 }
@@ -98,8 +104,10 @@ class APIClient {
       ? await response.json()
       : await response.text();
 
-    const errorMessage = this.extractErrorMessage(errorData) ||
-      `HTTP error! status: ${response.status}`;
+    const errorMessage = stripAdmissionWebhookPrefix(
+      this.extractErrorMessage(errorData) ||
+        `HTTP error! status: ${response.status}`,
+    );
 
     const apiError = new APIError(errorMessage, response.status, errorData);
 

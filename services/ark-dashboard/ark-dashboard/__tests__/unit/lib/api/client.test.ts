@@ -160,6 +160,44 @@ describe('APIClient', () => {
       }
     })
 
+    it('should strip the admission webhook prefix from error details', async () => {
+      const errorData = {
+        detail:
+          'admission webhook "vteam-v1.kb.io" denied the request: maxTurns can only be set when loops is enabled',
+      }
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => errorData,
+      })
+
+      try {
+        await client.put('/test', {})
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        expect(error).toBeInstanceOf(APIError)
+        expect((error as APIError).message).toBe(
+          'maxTurns can only be set when loops is enabled',
+        )
+        expect((error as APIError).status).toBe(403)
+        expect((error as APIError).data).toEqual(errorData)
+      }
+    })
+
+    it('should keep error details that only mention an admission webhook', async () => {
+      const detail =
+        'failed calling webhook "vteam-v1.kb.io": admission webhook unreachable'
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ detail }),
+      })
+
+      await expect(client.get('/test')).rejects.toThrow(detail)
+    })
+
     it('should handle API errors with text response', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
