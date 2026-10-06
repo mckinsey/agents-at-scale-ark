@@ -259,7 +259,7 @@ export function useUrlState<TSpec extends UrlStateSpec>(
   // The query string as it will be once every write issued so far has landed.
   // `searchParams` lags a write by a render, so reading it per call would make
   // two writes in one commit build on the same stale base and lose the first.
-  if (typeof window !== 'undefined') {
+  if (globalThis.window !== undefined) {
     syncPendingParams(pathname, searchParams.toString());
   }
 
