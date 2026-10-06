@@ -10,6 +10,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Optional
 
+WORKFLOW_API_VERSION = "argoproj.io/v1alpha1"
+WORKFLOW_KIND = "Workflow"
+
 LABEL_COMPLETED = "workflows.argoproj.io/completed"
 LABEL_ARCHIVING_STATUS = "workflows.argoproj.io/workflow-archiving-status"
 LABEL_PHASE = "workflows.argoproj.io/phase"
@@ -96,6 +99,85 @@ def _upsert_completed_condition(status: dict) -> None:
     status["conditions"] = conditions
 
 
+def _clear_shutdown(spec: dict) -> None:
+    spec.pop("shutdown", None)
+    if spec.get("activeDeadlineSeconds") == 0:
+        spec["activeDeadlineSeconds"] = None
+
+
+def _validate_retryable(status: dict) -> None:
+    phase = status.get("phase")
+    if phase not in RETRYABLE_PHASES:
+        raise LifecyclePreconditionError(f"Cannot retry a workflow in phase {phase or 'Unknown'}")
+    for node_id, node in (status.get("nodes") or {}).items():
+        node_phase = node.get("phase")
+        if node_phase not in KEEP_NODE_PHASES and node_phase not in RESET_NODE_PHASES:
+            raise LifecyclePreconditionError(
+                f"Workflow cannot be retried with node {node_id} in {node_phase or 'Unknown'} phase"
+            )
+
+
+def _reset_retry_labels(metadata: dict) -> None:
+    labels = metadata.get("labels") or {}
+    labels.pop(LABEL_COMPLETED, None)
+    labels.pop(LABEL_ARCHIVING_STATUS, None)
+    labels[LABEL_PHASE] = "Running"
+    metadata["labels"] = labels
+
+
+def _reset_retry_status(status: dict, now: str) -> None:
+    _upsert_completed_condition(status)
+    status["phase"] = "Running"
+    status["message"] = ""
+    status["startedAt"] = now
+    status["finishedAt"] = None
+    status["persistentVolumeClaims"] = []
+    if isinstance(status.get("storedWorkflowSpec"), dict):
+        status["storedWorkflowSpec"].pop("shutdown", None)
+
+
+def _retried_node(
+    node_id: str, node: dict, nodes: dict, onexit_name: str, now: str
+) -> tuple[Optional[dict], list[str]]:
+    node_type = node.get("type")
+    if node.get("phase") in KEEP_NODE_PHASES:
+        if node.get("name") == onexit_name:
+            return None, [node_id, *_descendant_node_ids(node_id, nodes)]
+        return deepcopy(node), []
+    if node_type in GROUP_NODE_TYPES:
+        return _reset_node(node, now), []
+    if node_type != "Retry" and _is_descendant_node_succeeded(node, nodes, set()):
+        return deepcopy(node), []
+    return None, [node_id]
+
+
+def _prune_deleted_references(nodes: dict, deleted: set[str]) -> None:
+    for node in nodes.values():
+        if node.get("children"):
+            node["children"] = [child for child in node["children"] if child not in deleted]
+        if node.get("outboundNodes"):
+            node["outboundNodes"] = [child for child in node["outboundNodes"] if child not in deleted]
+
+
+def _retry_nodes(old_nodes: dict, onexit_name: str, now: str) -> tuple[dict, list[str]]:
+    new_nodes: dict = {}
+    deleted: set[str] = set()
+    pods_to_delete: list[str] = []
+    for node_id, node in old_nodes.items():
+        kept, dropped_ids = _retried_node(node_id, node, old_nodes, onexit_name, now)
+        if kept is not None:
+            new_nodes[node_id] = kept
+        for dropped_id in dropped_ids:
+            deleted.add(dropped_id)
+            if (old_nodes.get(dropped_id) or {}).get("type") == "Pod":
+                pods_to_delete.append(dropped_id)
+
+    for node_id in deleted:
+        new_nodes.pop(node_id, None)
+    _prune_deleted_references(new_nodes, deleted)
+    return new_nodes, pods_to_delete
+
+
 def formulate_retry_workflow(workflow: dict) -> tuple[dict, list[str]]:
     """Reset a Failed/Error workflow to re-run from the point of failure.
 
@@ -105,89 +187,19 @@ def formulate_retry_workflow(workflow: dict) -> tuple[dict, list[str]]:
     dropped, failed group nodes are reset so the controller re-enters them.
     """
     status = workflow.get("status") or {}
-    phase = status.get("phase")
-    if phase not in RETRYABLE_PHASES:
-        raise LifecyclePreconditionError(f"Cannot retry a workflow in phase {phase or 'Unknown'}")
-
-    old_nodes = status.get("nodes") or {}
-    for node_id, node in old_nodes.items():
-        node_phase = node.get("phase")
-        if node_phase not in KEEP_NODE_PHASES and node_phase not in RESET_NODE_PHASES:
-            raise LifecyclePreconditionError(
-                f"Workflow cannot be retried with node {node_id} in {node_phase or 'Unknown'} phase"
-            )
+    _validate_retryable(status)
 
     new_workflow = deepcopy(workflow)
     metadata = new_workflow.setdefault("metadata", {})
-    labels = metadata.get("labels") or {}
-    labels.pop(LABEL_COMPLETED, None)
-    labels.pop(LABEL_ARCHIVING_STATUS, None)
-    labels[LABEL_PHASE] = "Running"
-    metadata["labels"] = labels
+    _reset_retry_labels(metadata)
 
     now = _now_rfc3339()
     new_status = new_workflow.setdefault("status", {})
-    _upsert_completed_condition(new_status)
-    new_status["phase"] = "Running"
-    new_status["message"] = ""
-    new_status["startedAt"] = now
-    new_status["finishedAt"] = None
-    new_status["persistentVolumeClaims"] = []
-
-    spec = new_workflow.setdefault("spec", {})
-    spec.pop("shutdown", None)
-    if isinstance(new_status.get("storedWorkflowSpec"), dict):
-        new_status["storedWorkflowSpec"].pop("shutdown", None)
-    if spec.get("activeDeadlineSeconds") == 0:
-        spec["activeDeadlineSeconds"] = None
+    _reset_retry_status(new_status, now)
+    _clear_shutdown(new_workflow.setdefault("spec", {}))
 
     onexit_name = f"{metadata.get('name', '')}.onExit"
-    new_nodes: dict = {}
-    deleted: set[str] = set()
-    pods_to_delete: list[str] = []
-
-    def _drop_subtree(root_id: str, root_node: dict) -> None:
-        deleted.add(root_id)
-        if root_node.get("type") == "Pod":
-            pods_to_delete.append(root_id)
-        for descendant_id in _descendant_node_ids(root_id, old_nodes):
-            deleted.add(descendant_id)
-            if (old_nodes.get(descendant_id) or {}).get("type") == "Pod":
-                pods_to_delete.append(descendant_id)
-
-    for node_id, node in old_nodes.items():
-        node_phase = node.get("phase")
-        node_type = node.get("type")
-
-        if node_phase in KEEP_NODE_PHASES:
-            if node.get("name") == onexit_name:
-                _drop_subtree(node_id, node)
-            else:
-                new_nodes[node_id] = deepcopy(node)
-            continue
-
-        if node_type in GROUP_NODE_TYPES:
-            new_nodes[node_id] = _reset_node(node, now)
-            continue
-
-        if node_type != "Retry" and _is_descendant_node_succeeded(node, old_nodes, set()):
-            new_nodes[node_id] = deepcopy(node)
-            continue
-
-        deleted.add(node_id)
-        if node_type == "Pod":
-            pods_to_delete.append(node_id)
-
-    for node_id in deleted:
-        new_nodes.pop(node_id, None)
-
-    for node in new_nodes.values():
-        if node.get("children"):
-            node["children"] = [child for child in node["children"] if child not in deleted]
-        if node.get("outboundNodes"):
-            node["outboundNodes"] = [child for child in node["outboundNodes"] if child not in deleted]
-
-    new_status["nodes"] = new_nodes
+    new_status["nodes"], pods_to_delete = _retry_nodes(status.get("nodes") or {}, onexit_name, now)
     return new_workflow, pods_to_delete
 
 
@@ -250,13 +262,11 @@ def formulate_resubmit_workflow(workflow: dict) -> dict:
         new_metadata["ownerReferences"] = deepcopy(metadata["ownerReferences"])
 
     spec = deepcopy(workflow.get("spec") or {})
-    spec.pop("shutdown", None)
-    if spec.get("activeDeadlineSeconds") == 0:
-        spec["activeDeadlineSeconds"] = None
+    _clear_shutdown(spec)
 
     return {
-        "apiVersion": workflow.get("apiVersion", "argoproj.io/v1alpha1"),
-        "kind": workflow.get("kind", "Workflow"),
+        "apiVersion": workflow.get("apiVersion", WORKFLOW_API_VERSION),
+        "kind": workflow.get("kind", WORKFLOW_KIND),
         "metadata": new_metadata,
         "spec": spec,
     }

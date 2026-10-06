@@ -909,11 +909,11 @@ function SessionListItem({
   onRunAction,
   isRunActionPending,
 }: {
-  session: Session;
-  isSelected: boolean;
-  onClick: () => void;
-  onRunAction: (action: WorkflowLifecycleAction) => void;
-  isRunActionPending: boolean;
+  readonly session: Session;
+  readonly isSelected: boolean;
+  readonly onClick: () => void;
+  readonly onRunAction: (action: WorkflowLifecycleAction) => void;
+  readonly isRunActionPending: boolean;
 }) {
   const showRunControls =
     session.type === 'workflow' && RUN_CONTROL_STATUSES.has(session.status);

@@ -28,6 +28,8 @@ from ...models.resources import AccessReviewRequest, AccessReviewResponse
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 from .workflow_lifecycle import (
+    WORKFLOW_API_VERSION,
+    WORKFLOW_KIND,
     LifecyclePreconditionError,
     formulate_resubmit_workflow,
     formulate_resume_workflow,
@@ -37,8 +39,7 @@ from .workflow_lifecycle import (
     workflow_pod_suffix,
 )
 
-WORKFLOW_API_VERSION = "argoproj.io/v1alpha1"
-WORKFLOW_KIND = "Workflow"
+MERGE_PATCH_CONTENT_TYPE = "application/merge-patch+json"
 
 logger = logging.getLogger(__name__)
 
@@ -733,8 +734,8 @@ async def get_workflow_logs(
             try:
                 dynamic_client = await DynamicClient(api)
                 workflow_resource = await dynamic_client.resources.get(
-                    api_version="argoproj.io/v1alpha1",
-                    kind="Workflow"
+                    api_version=WORKFLOW_API_VERSION,
+                    kind=WORKFLOW_KIND
                 )
                 workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
                 workflow_dict = workflow.to_dict()
@@ -1288,8 +1289,8 @@ async def _workflow_node_unavailable_detail(
     dynamic_client = await DynamicClient(api)
     try:
         workflow_resource = await dynamic_client.resources.get(
-            api_version="argoproj.io/v1alpha1",
-            kind="Workflow",
+            api_version=WORKFLOW_API_VERSION,
+            kind=WORKFLOW_KIND,
         )
     except ResourceNotFoundError:
         logger.warning("Workflow CRD is not installed; cannot explain missing logs for node %s", node_id)
@@ -1420,7 +1421,7 @@ async def _patch_workflow_spec(
             name=workflow_name,
             namespace=namespace,
             body={"spec": patch_spec},
-            content_type="application/merge-patch+json",
+            content_type=MERGE_PATCH_CONTENT_TYPE,
         )
         return _create_resource_response(patched.to_dict(), request)
 
@@ -1527,7 +1528,7 @@ async def suspend_workflow(
             name=workflow_name,
             namespace=namespace,
             body={"spec": {"suspend": True}},
-            content_type="application/merge-patch+json",
+            content_type=MERGE_PATCH_CONTENT_TYPE,
         )
         return _create_resource_response(patched.to_dict(), request)
 
@@ -1581,7 +1582,7 @@ async def stop_workflow(
             name=workflow_name,
             namespace=namespace,
             body={"spec": {"shutdown": "Stop"}},
-            content_type="application/merge-patch+json",
+            content_type=MERGE_PATCH_CONTENT_TYPE,
         )
         return _create_resource_response(patched.to_dict(), request)
 
@@ -1614,7 +1615,7 @@ async def terminate_workflow(
             name=workflow_name,
             namespace=namespace,
             body={"spec": {"shutdown": "Terminate"}},
-            content_type="application/merge-patch+json",
+            content_type=MERGE_PATCH_CONTENT_TYPE,
         )
         return _create_resource_response(patched.to_dict(), request)
 
