@@ -102,8 +102,9 @@ def _mount_gateway_with_agent(card):
 
 
 class TestAgentCardServing(unittest.TestCase):
-    """End-to-end (in-process) serving of .well-known/agent-card.json through
-    the ProxyApp, asserting the advertised URL honours X-Forwarded-Prefix."""
+    """End-to-end (in-process) serving of the agent-card through the ProxyApp,
+    asserting the advertised URL honours X-Forwarded-Prefix, at both the
+    current and the deprecated well-known path."""
 
     def setUp(self):
         # ARKAgentExecutor reads the pod namespace at construction; pin it so the
@@ -133,6 +134,16 @@ class TestAgentCardServing(unittest.TestCase):
         response = client.get("/a2a/agent/weather/.well-known/agent-card.json")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("/tenant-a/", response.json()["url"])
+
+    def test_deprecated_well_known_path_is_still_served(self):
+        """Peers that only know the pre-0.3 agent.json path (e.g. the Go
+        controller's AgentCardPathVersion2 fallback) must still find the card."""
+        client = TestClient(_mount_gateway_with_agent(_make_test_card()))
+        response = client.get("/a2a/agent/weather/.well-known/agent.json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["url"], "http://localhost:8000/a2a/agent/weather/"
+        )
 
 
 if __name__ == "__main__":

@@ -67,7 +67,7 @@ async def apply_forwarded_url(card: AgentCard) -> AgentCard:
     the shared card in place would race across those requests.
     """
     forwarded_base = forwarded_base_ctx.get()
-    if not forwarded_base:
+    if not forwarded_base or not card.supported_interfaces:
         return card
     updated = AgentCard()
     updated.CopyFrom(card)
