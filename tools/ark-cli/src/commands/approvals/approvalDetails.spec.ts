@@ -25,7 +25,11 @@ describe('buildApprovalDetails', () => {
           onTimeout: 'reject',
           context: JSON.stringify({AgentName: 'writer'}),
           toolCalls: JSON.stringify([
-            {id: 'c1', type: 'function', function: {name: 'write', arguments: '{}'}},
+            {
+              id: 'c1',
+              type: 'function',
+              function: {name: 'write', arguments: '{}'},
+            },
           ]),
         },
       },
@@ -66,5 +70,57 @@ describe('buildApprovalDetails', () => {
     // no startTime/timeout => not expired
     expect(details?.expired).toBe(false);
     expect(details?.expiresAt).toBeUndefined();
+  });
+
+  it('marks a task with a future expiry as not expired', () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const task: A2ATaskDetail = {
+      name: 't1',
+      namespace: 'default',
+      taskId: 'id1',
+      status: {
+        phase: 'input-required',
+        startTime: future,
+        protocolMetadata: {timeout: '5m'},
+      },
+    };
+
+    const details = buildApprovalDetails(task);
+    expect(details?.expiresAt).toBeInstanceOf(Date);
+    expect(details?.expired).toBe(false);
+  });
+
+  it('treats an unparseable timeout as no expiry', () => {
+    const task: A2ATaskDetail = {
+      name: 't1',
+      namespace: 'default',
+      taskId: 'id1',
+      status: {
+        phase: 'input-required',
+        startTime: '2000-01-01T00:00:00Z',
+        protocolMetadata: {timeout: 'not-a-duration'},
+      },
+    };
+
+    const details = buildApprovalDetails(task);
+    expect(details?.expiresAt).toBeUndefined();
+    expect(details?.expired).toBe(false);
+  });
+
+  it('treats an invalid startTime as no expiry', () => {
+    const task: A2ATaskDetail = {
+      name: 't1',
+      namespace: 'default',
+      taskId: 'id1',
+      status: {
+        phase: 'input-required',
+        startTime: 'not-a-date',
+        protocolMetadata: {timeout: '5m'},
+      },
+    };
+
+    const details = buildApprovalDetails(task);
+    expect(details?.expiresAt).toBeUndefined();
+    expect(details?.expired).toBe(false);
   });
 });

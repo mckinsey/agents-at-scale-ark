@@ -1,13 +1,10 @@
-import {Command} from 'commander';
+import {Command, type OptionValues} from 'commander';
 import type {ArkConfig} from '../../lib/config.js';
 import {loadConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 import {ExitCodes} from '../../lib/errors.js';
 import {ArkApiProxy} from '../../lib/arkApiProxy.js';
-import {
-  ArkApiClient,
-  ArkApiHttpError,
-} from '../../lib/arkApiClient.js';
+import {ArkApiClient, ArkApiHttpError} from '../../lib/arkApiClient.js';
 import {buildApprovalDetails, type ApprovalDetails} from './approvalDetails.js';
 
 const INPUT_REQUIRED_PHASE = 'input-required';
@@ -16,6 +13,20 @@ const OUTPUT_FORMAT_JSON = 'json';
 interface ApprovalsCommandOptions {
   namespace?: string;
   output?: string;
+}
+
+/**
+ * Read a subcommand's options merged with the parent's. Options declared on the
+ * parent `approvals` command (`--namespace`, `--output`) are captured as global
+ * options by commander, so a subcommand's local options alone would miss them.
+ */
+function resolveOptions(command: Command): ApprovalsCommandOptions {
+  const merged: OptionValues = command.optsWithGlobals();
+  return {
+    namespace:
+      typeof merged.namespace === 'string' ? merged.namespace : undefined,
+    output: typeof merged.output === 'string' ? merged.output : undefined,
+  };
 }
 
 type ApprovalsClient = Pick<ArkApiClient, 'listA2ATasks' | 'getA2ATask'>;
@@ -141,7 +152,10 @@ async function runDecision(
     output.success(`approval '${name}' ${decision}`);
   } catch (error) {
     const {message, exitCode} = mapApprovalError(error, name);
-    output.error(`${decision === 'approved' ? 'approving' : 'rejecting'}:`, message);
+    output.error(
+      `${decision === 'approved' ? 'approving' : 'rejecting'}:`,
+      message
+    );
     process.exit(exitCode);
   } finally {
     proxy.stop();
@@ -154,8 +168,8 @@ export function createApprovalsCommand(_: ArkConfig): Command {
     .description('List and respond to pending tool approvals')
     .option('-n, --namespace <namespace>', 'namespace')
     .option('-o, --output <format>', 'output format (json or text)', 'text')
-    .action(async (options: ApprovalsCommandOptions) => {
-      await runList(options);
+    .action(async (_options: ApprovalsCommandOptions, command: Command) => {
+      await runList(resolveOptions(command));
     });
 
   const listCommand = new Command('list');
@@ -164,8 +178,8 @@ export function createApprovalsCommand(_: ArkConfig): Command {
     .description('List pending tool approvals')
     .option('-n, --namespace <namespace>', 'namespace')
     .option('-o, --output <format>', 'output format (json or text)', 'text')
-    .action(async (options: ApprovalsCommandOptions) => {
-      await runList(options);
+    .action(async (_options: ApprovalsCommandOptions, command: Command) => {
+      await runList(resolveOptions(command));
     });
   approvalsCommand.addCommand(listCommand);
 
@@ -174,9 +188,15 @@ export function createApprovalsCommand(_: ArkConfig): Command {
     .description('Approve a pending tool call')
     .argument('<name>', 'A2ATask name')
     .option('-n, --namespace <namespace>', 'namespace')
-    .action(async (name: string, options: ApprovalsCommandOptions) => {
-      await runDecision(name, 'approved', options);
-    });
+    .action(
+      async (
+        name: string,
+        _options: ApprovalsCommandOptions,
+        command: Command
+      ) => {
+        await runDecision(name, 'approved', resolveOptions(command));
+      }
+    );
   approvalsCommand.addCommand(approveCommand);
 
   const rejectCommand = new Command('reject');
@@ -184,9 +204,15 @@ export function createApprovalsCommand(_: ArkConfig): Command {
     .description('Reject a pending tool call')
     .argument('<name>', 'A2ATask name')
     .option('-n, --namespace <namespace>', 'namespace')
-    .action(async (name: string, options: ApprovalsCommandOptions) => {
-      await runDecision(name, 'rejected', options);
-    });
+    .action(
+      async (
+        name: string,
+        _options: ApprovalsCommandOptions,
+        command: Command
+      ) => {
+        await runDecision(name, 'rejected', resolveOptions(command));
+      }
+    );
   approvalsCommand.addCommand(rejectCommand);
 
   return approvalsCommand;
