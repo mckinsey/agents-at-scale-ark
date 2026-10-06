@@ -2,11 +2,22 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
 import { agentsService, toolsService } from '@/lib/services';
 
 import { ToolsSection } from './tools-section';
 
 let currentNamespace = 'default';
+
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock('/tools');
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
