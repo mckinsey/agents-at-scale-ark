@@ -4,7 +4,8 @@ import logging
 import os
 from typing import Optional
 
-from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
+from a2a.utils.constants import TransportProtocol
 from ark_sdk.client import V1_ALPHA1, with_ark_client
 from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.k8s import get_namespace
@@ -54,7 +55,7 @@ def external_forwarded_base_from_headers(headers):
     host = headers.get("x-forwarded-host") or headers.get("host", "localhost")
     return f"{proto}://{host}{prefix}"
 
-def apply_forwarded_url(card: AgentCard) -> AgentCard:
+async def apply_forwarded_url(card: AgentCard) -> AgentCard:
     """Card modifier: advertise a URL built from the request's forwarding prefix
     when present, so path-based multi-tenant deployments serve a card whose URL
     carries the tenant prefix.
@@ -68,9 +69,10 @@ def apply_forwarded_url(card: AgentCard) -> AgentCard:
     forwarded_base = forwarded_base_ctx.get()
     if not forwarded_base:
         return card
-    return card.model_copy(
-        update={"url": f"{forwarded_base}{_agent_suffix(card.name)}"}
-    )
+    updated = AgentCard()
+    updated.CopyFrom(card)
+    updated.supported_interfaces[0].url = f"{forwarded_base}{_agent_suffix(card.name)}"
+    return updated
 
 def ark_to_agent_card(ark_agent) -> AgentCard:
     metadata = ark_agent.metadata
@@ -79,9 +81,7 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
     spec = ark_agent.spec
     
     # Create capabilities object
-    capabilities = AgentCapabilities(
-        streaming=True, push_notifications=False, state_transition_history=False
-    )
+    capabilities = AgentCapabilities(streaming=True, push_notifications=False)
     
     # Create skills from capabilities list or annotations
     skills_list = []
@@ -111,7 +111,12 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
         description=spec.description or "No description",
         capabilities=capabilities,
         skills=skills_list,
-        url=get_external(metadata['name']),
+        supported_interfaces=[
+            AgentInterface(
+                url=get_external(metadata['name']),
+                protocol_binding=TransportProtocol.JSONRPC,
+            ),
+        ],
         version="1.0.0",
         default_input_modes=["text"],
         default_output_modes=["text"],

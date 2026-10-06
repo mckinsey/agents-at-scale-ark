@@ -2,18 +2,27 @@ import asyncio
 import logging
 import os
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from a2a.server.agent_execution import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
-from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
-from a2a.utils import new_agent_text_message
+from a2a.types import Message, Part, Role, TaskState, TaskStatus, TaskStatusUpdateEvent
 
 from .query import post_query_and_wait
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = int(os.getenv('A2A_DEFAULT_TIMEOUT', '300'))
+
+
+def _new_agent_text_message(text: str, context_id: str | None = None, task_id: str | None = None) -> Message:
+    message = Message(role=Role.ROLE_AGENT, parts=[Part(text=text)], message_id=str(uuid4()))
+    if context_id:
+        message.context_id = context_id
+    if task_id:
+        message.task_id = task_id
+    return message
 
 class ARKAgentExecutor(AgentExecutor):
     def __init__(self, target_name, namespace, timeout=None):
@@ -37,26 +46,19 @@ class ARKAgentExecutor(AgentExecutor):
             return "No message"
 
         for part in message.parts:
-            # Check if it's a Part wrapper object
-            if hasattr(part, 'root'):
-                part_root = part.root
-                if hasattr(part_root, 'kind') and part_root.kind == 'text' and hasattr(part_root, 'text'):
-                    return part_root.text
-            # Or if it's directly a text part
-            elif hasattr(part, 'kind') and part.kind == 'text' and hasattr(part, 'text'):
+            if part.WhichOneof('content') == 'text':
                 return part.text
 
         return "No message"
 
     def _create_status_event(self, context_id: str, task_id: str, state: TaskState,
-                           final: bool = False, error_msg: str = None) -> TaskStatusUpdateEvent:
+                           error_msg: str = None) -> TaskStatusUpdateEvent:
         """Create a task status update event.
 
         Args:
             context_id: The context ID
             task_id: The task ID
             state: The task state
-            final: Whether this is the final status
             error_msg: Optional error message for failed states
 
         Returns:
@@ -64,21 +66,20 @@ class ARKAgentExecutor(AgentExecutor):
         """
         status = TaskStatus(
             state=state,
-            timestamp=datetime.now(UTC).isoformat()
+            timestamp=datetime.now(UTC)
         )
 
-        if error_msg and state == TaskState.failed:
-            status.message = new_agent_text_message(f"Task failed: {error_msg}")
+        if error_msg and state == TaskState.TASK_STATE_FAILED:
+            status.message.CopyFrom(_new_agent_text_message(f"Task failed: {error_msg}"))
 
         return TaskStatusUpdateEvent(
             context_id=context_id or "default",
             task_id=task_id or "unknown",
             status=status,
-            final=final
         )
 
     async def _send_task_update(self, event_queue: EventQueue, context_id: str,
-                               task_id: str, state: TaskState, final: bool = False):
+                               task_id: str, state: TaskState):
         """Send a task status update to the event queue.
 
         Args:
@@ -86,9 +87,8 @@ class ARKAgentExecutor(AgentExecutor):
             context_id: The context ID
             task_id: The task ID
             state: The task state
-            final: Whether this is the final status
         """
-        status_event = self._create_status_event(context_id, task_id, state, final)
+        status_event = self._create_status_event(context_id, task_id, state)
         await event_queue.enqueue_event(status_event)
 
     async def _process_query(self, user_message: str) -> str:
@@ -124,7 +124,7 @@ class ARKAgentExecutor(AgentExecutor):
             logger.info(f"Task {task_id} - Using timeout: {self.timeout} seconds")
 
             # Send starting status
-            await self._send_task_update(event_queue, context_id, task_id, TaskState.working, final=False)
+            await self._send_task_update(event_queue, context_id, task_id, TaskState.TASK_STATE_WORKING)
 
             try:
                 # Process the query with timeout
@@ -139,11 +139,11 @@ class ARKAgentExecutor(AgentExecutor):
                     result = await asyncio.wait_for(result_co, timeout=self.timeout)
 
                     # Send the result
-                    result_msg = new_agent_text_message(result, context_id=context_id, task_id=task_id)
+                    result_msg = _new_agent_text_message(result, context_id=context_id, task_id=task_id)
                     await event_queue.enqueue_event(result_msg)
 
                     # Send completion status
-                    await self._send_task_update(event_queue, context_id, task_id, TaskState.completed, final=True)
+                    await self._send_task_update(event_queue, context_id, task_id, TaskState.TASK_STATE_COMPLETED)
 
                     logger.info(f"Task {task_id} - Query completed successfully")
 
@@ -155,7 +155,7 @@ class ARKAgentExecutor(AgentExecutor):
                         result_co.cancel()
 
                     # Send timeout error
-                    timeout_msg = new_agent_text_message(
+                    timeout_msg = _new_agent_text_message(
                         f"Query timed out after {self.timeout} seconds",
                         context_id=context_id,
                         task_id=task_id
@@ -164,8 +164,8 @@ class ARKAgentExecutor(AgentExecutor):
 
                     # Send failure status
                     failure_event = self._create_status_event(
-                        context_id, task_id, TaskState.failed,
-                        final=True, error_msg=f"Query timeout after {self.timeout}s"
+                        context_id, task_id, TaskState.TASK_STATE_FAILED,
+                        error_msg=f"Query timeout after {self.timeout}s"
                     )
                     await event_queue.enqueue_event(failure_event)
 
@@ -190,15 +190,15 @@ class ARKAgentExecutor(AgentExecutor):
         logger.error(f"Task {task_id} - Error processing query: {str(error)}")
 
         # Send error message
-        error_message = new_agent_text_message(f"Error: {str(error)}",
+        error_message = _new_agent_text_message(f"Error: {str(error)}",
                                              context_id=context_id,
                                              task_id=task_id)
         await event_queue.enqueue_event(error_message)
 
         # Send failure status
         failure_event = self._create_status_event(
-            context_id, task_id, TaskState.failed,
-            final=True, error_msg=str(error)
+            context_id, task_id, TaskState.TASK_STATE_FAILED,
+            error_msg=str(error)
         )
         await event_queue.enqueue_event(failure_event)
 
@@ -231,6 +231,6 @@ class ARKAgentExecutor(AgentExecutor):
                 self.active_coroutines.pop(task_id, None)
 
             # Send cancellation status
-            await self._send_task_update(event_queue, context_id, task_id, TaskState.canceled, final=True)
+            await self._send_task_update(event_queue, context_id, task_id, TaskState.TASK_STATE_CANCELED)
         else:
             logger.warning(f"Cancellation requested for task {task_id}, but task is not active")
