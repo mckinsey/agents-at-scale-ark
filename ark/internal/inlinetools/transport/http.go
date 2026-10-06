@@ -37,7 +37,7 @@ func requestCancellation(next mcp.MethodHandler) mcp.MethodHandler {
 			return nil, fmt.Errorf("inline call is missing its HTTP request context")
 		}
 		callCtx, cancel := context.WithCancel(ctx)
-		stop := context.AfterFunc(httpCtx, cancel)
+		stop := context.AfterFunc(httpCtx, cancel) //nolint:contextcheck // httpCtx is the same request's context, carried as a value because the SDK detaches cancellation
 		defer func() { stop(); cancel() }()
 		// AfterFunc is asynchronous even when httpCtx was already canceled.
 		if err := httpCtx.Err(); err != nil {
