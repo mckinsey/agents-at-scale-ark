@@ -34,7 +34,8 @@ def _extract_error_detail(exception: ApiException | SyncApiException) -> str:
 
 def handle_k8s_errors(
     operation: str = "operation",
-    resource_type: str = "resource"
+    resource_type: str = "resource",
+    impersonation_fallback: bool = True,
 ) -> Callable:
     """
     Decorator to handle common Kubernetes API errors.
@@ -42,6 +43,8 @@ def handle_k8s_errors(
     Args:
         operation: Description of the operation being performed (e.g., "list", "get", "create")
         resource_type: Type of resource being operated on (e.g., "secret", "namespace")
+        impersonation_fallback: Whether IMPERSONATION_FALLBACK may retry a denied
+            impersonated call as the service account
         
     Returns:
         Decorated function with standardized error handling
@@ -102,7 +105,7 @@ def handle_k8s_errors(
                     impersonation = kwargs.get("impersonation")
                     if impersonation is not None:
                         settings = ImpersonationSettings.from_env()
-                        if settings.fallback:
+                        if settings.fallback and impersonation_fallback:
                             logger.warning(
                                 f"Impersonation fallback: user={impersonation.username} "
                                 f"action={operation} resource={resource_type} namespace={namespace}"
