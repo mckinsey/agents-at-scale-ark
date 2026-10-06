@@ -55,6 +55,8 @@ spec:
             value: "ark-completions"
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"
+          - name: ARK_INLINE_ACTIVATOR_NAMESPACE
+            value: {{ .Values.inlineTools.activatorNamespace | quote }}
           {{- range $key, $value := .Values.env }}
           - name: {{ $key }}
             value: {{ $value | quote }}
