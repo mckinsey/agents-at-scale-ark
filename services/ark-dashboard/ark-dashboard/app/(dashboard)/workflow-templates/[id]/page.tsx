@@ -10,7 +10,7 @@ import { useWorkflowTemplateAccess } from '@/lib/hooks/use-workflow-template-acc
 export default function WorkflowTemplatePage() {
   const params = useParams();
   const id = typeof params.id === 'string' ? params.id : '';
-  const { canUpdate, loading } = useWorkflowTemplateAccess();
+  const { canUpdate, canRun, canDelete, loading } = useWorkflowTemplateAccess();
 
   if (loading) {
     return (
@@ -38,7 +38,12 @@ export default function WorkflowTemplatePage() {
 
   return (
     <div className="-mx-12 -mt-10 -mb-5 flex min-h-0 flex-1 flex-col">
-      <WorkflowStudio mode="edit" initialName={id} />
+      <WorkflowStudio
+        mode="edit"
+        initialName={id}
+        canRun={canRun}
+        canDelete={canDelete}
+      />
     </div>
   );
 }

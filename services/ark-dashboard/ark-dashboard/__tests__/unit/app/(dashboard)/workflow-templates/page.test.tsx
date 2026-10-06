@@ -22,12 +22,17 @@ vi.mock('@/components/common/page-header', () => ({
   ),
 }));
 
+const sectionProps = vi.fn();
+
 vi.mock('@/components/sections/workflow-templates-section', () => ({
-  WorkflowTemplatesSection: () => (
-    <div data-testid="workflow-templates-section">
-      Workflow Templates Section
-    </div>
-  ),
+  WorkflowTemplatesSection: (props: Record<string, unknown>) => {
+    sectionProps(props);
+    return (
+      <div data-testid="workflow-templates-section">
+        Workflow Templates Section
+      </div>
+    );
+  },
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
@@ -43,6 +48,8 @@ vi.mock('@/lib/hooks/use-workflow-template-access', () => ({
   useWorkflowTemplateAccess: vi.fn(() => ({
     canCreate: false,
     canUpdate: false,
+    canDelete: false,
+    canRun: false,
     loading: false,
   })),
 }));
@@ -79,6 +86,8 @@ describe('WorkflowTemplatesPage', () => {
     accessMock.mockReturnValue({
       canCreate: false,
       canUpdate: false,
+      canDelete: false,
+      canRun: false,
       loading: false,
     });
   });
@@ -116,11 +125,29 @@ describe('WorkflowTemplatesPage', () => {
     expect(screen.getByTestId('workflow-add-group')).toBeInTheDocument();
   });
 
+  it('passes run and delete access to the templates section', () => {
+    accessMock.mockReturnValue({
+      canCreate: false,
+      canUpdate: false,
+      canDelete: false,
+      canRun: true,
+      loading: false,
+    });
+
+    renderPage();
+
+    expect(sectionProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ canRun: true, canDelete: false }),
+    );
+  });
+
   it('forwards name, title and description as query params', async () => {
     const user = userEvent.setup();
     accessMock.mockReturnValue({
       canCreate: true,
       canUpdate: false,
+      canDelete: false,
+      canRun: false,
       loading: false,
     });
 

@@ -285,6 +285,22 @@ export const workflowTemplatesService = {
     });
   },
 
+  async canDelete(namespace: string): Promise<boolean> {
+    return accessReviewService.check(namespace, {
+      group: 'argoproj.io',
+      resource: 'workflowtemplates',
+      verb: 'delete',
+    });
+  },
+
+  async canRun(namespace: string): Promise<boolean> {
+    return accessReviewService.check(namespace, {
+      group: 'argoproj.io',
+      resource: 'workflows',
+      verb: 'create',
+    });
+  },
+
   async delete(namespace: string, name: string): Promise<void> {
     await apiClient.delete(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/${name}`,

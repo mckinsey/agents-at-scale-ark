@@ -56,12 +56,17 @@ export interface WorkflowTemplatesSectionHandle {
 
 export interface WorkflowTemplatesSectionProps {
   onArgoInstalledChange?: (installed: boolean) => void;
+  canRun?: boolean;
+  canDelete?: boolean;
 }
 
 export const WorkflowTemplatesSection = forwardRef<
   WorkflowTemplatesSectionHandle,
   WorkflowTemplatesSectionProps
->(function WorkflowTemplatesSection({ onArgoInstalledChange }, ref) {
+>(function WorkflowTemplatesSection(
+  { onArgoInstalledChange, canRun = true, canDelete = true },
+  ref,
+) {
   const { namespace, readOnlyMode } = useNamespace();
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [argoInstalled, setArgoInstalled] = useState(true);
@@ -203,6 +208,8 @@ export const WorkflowTemplatesSection = forwardRef<
               flow={mapWorkflowTemplateToFlow(template)}
               parameters={template.spec?.arguments?.parameters}
               readOnly={readOnlyMode}
+              canRun={canRun}
+              canDelete={canDelete}
               onRun={handleRunWorkflow}
               onDelete={handleDeleteWorkflow}
               leading={dragHandle}

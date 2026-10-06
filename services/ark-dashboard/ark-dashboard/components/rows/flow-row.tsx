@@ -31,6 +31,8 @@ interface FlowRowProps {
   readonly flow: Flow;
   readonly parameters?: WorkflowParameter[];
   readonly readOnly?: boolean;
+  readonly canRun?: boolean;
+  readonly canDelete?: boolean;
   readonly onRun?: (
     flowId: string,
     parameters?: Record<string, string>,
@@ -40,10 +42,22 @@ interface FlowRowProps {
   readonly leading?: ReactNode;
 }
 
+function deleteTooltip(readOnly: boolean | undefined, canDelete: boolean) {
+  if (readOnly) {
+    return 'Delete disabled in demo mode';
+  }
+  if (!canDelete) {
+    return 'You do not have permission to delete workflow templates';
+  }
+  return 'Delete template';
+}
+
 export function FlowRow({
   flow,
   parameters,
   readOnly,
+  canRun = true,
+  canDelete = true,
   onRun,
   onDelete,
   leading,
@@ -138,13 +152,13 @@ export function FlowRow({
                   variant="ghost"
                   size="sm"
                   className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
-                  disabled={readOnly}
+                  disabled={readOnly || !canDelete}
                   onClick={handleDeleteClick}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {readOnly ? 'Delete disabled in demo mode' : 'Delete template'}
+                {deleteTooltip(readOnly, canDelete)}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -153,22 +167,38 @@ export function FlowRow({
         {onRun && (
           <TooltipProvider>
             <Tooltip>
-              <RunWorkflowDialog
-                templateName={flow.id}
-                parameters={parameters}
-                onRun={handleRunWorkflow}
-                trigger={
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="pointer-events-auto h-8 w-8 cursor-pointer p-0">
-                      <Play className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                }
-              />
-              <TooltipContent>Run workflow</TooltipContent>
+              {canRun ? (
+                <RunWorkflowDialog
+                  templateName={flow.id}
+                  parameters={parameters}
+                  onRun={handleRunWorkflow}
+                  trigger={
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="pointer-events-auto h-8 w-8 cursor-pointer p-0">
+                        <Play className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                  }
+                />
+              ) : (
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
+                    disabled>
+                    <Play className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+              )}
+              <TooltipContent>
+                {canRun
+                  ? 'Run workflow'
+                  : 'You do not have permission to run workflows'}
+              </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}

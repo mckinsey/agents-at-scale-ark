@@ -247,6 +247,18 @@ describe('StudioHeaderActions', () => {
     expect(screen.queryByTestId('studio-delete')).not.toBeInTheDocument();
   });
 
+  it('hides the delete action when deleting is not allowed', () => {
+    render(
+      <StudioHeaderActions
+        workflowName="existing-workflow"
+        persisted
+        canDelete={false}
+      />,
+    );
+    expect(screen.queryByTestId('studio-delete')).not.toBeInTheDocument();
+    expect(screen.getByTestId('studio-open-argo')).toBeInTheDocument();
+  });
+
   it('no longer renders the download trigger in the header actions', () => {
     render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
     expect(screen.queryByTestId('studio-download')).not.toBeInTheDocument();
@@ -279,6 +291,24 @@ describe('WorkflowStudio run button', () => {
       target: { value: validYaml + '\n  # edit' },
     });
 
+    expect(screen.getByTestId('studio-run')).toBeDisabled();
+  });
+
+  it('disables run on a loaded template when running is not allowed', async () => {
+    vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(validYaml);
+
+    render(
+      <WorkflowStudio
+        mode="edit"
+        initialName="existing-workflow"
+        canRun={false}
+      />,
+    );
+
+    expect(await screen.findByTestId('dag-viewer')).toHaveTextContent(
+      'existing-workflow',
+    );
+    expect(screen.queryByTestId('studio-dirty-badge')).not.toBeInTheDocument();
     expect(screen.getByTestId('studio-run')).toBeDisabled();
   });
 

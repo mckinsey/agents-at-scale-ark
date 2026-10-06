@@ -67,6 +67,8 @@ interface WorkflowStudioProps {
   initialName?: string;
   initialTitle?: string;
   initialDescription?: string;
+  canRun?: boolean;
+  canDelete?: boolean;
 }
 
 interface EditMetaDialogProps {
@@ -251,6 +253,8 @@ export function WorkflowStudio({
   initialName,
   initialTitle,
   initialDescription,
+  canRun = true,
+  canDelete = true,
 }: Readonly<WorkflowStudioProps>) {
   const studio = useWorkflowStudio({
     mode,
@@ -350,8 +354,8 @@ export function WorkflowStudio({
 
   const persisted =
     studio.mode === 'edit' || studio.lastSavedYaml.trim() !== '';
-  const canRun =
-    persisted && !studio.isDirty && !studio.building && !readOnlyMode;
+  const runEnabled =
+    persisted && !studio.isDirty && !studio.building && !readOnlyMode && canRun;
   const runParameters = useMemo(
     () => parseWorkflowParameters(studio.draftYaml),
     [studio.draftYaml],
@@ -423,7 +427,7 @@ export function WorkflowStudio({
                 trigger={
                   <Button
                     type="button"
-                    disabled={!canRun}
+                    disabled={!runEnabled}
                     data-testid="studio-run">
                     <PlayArrow className="mr-2 h-4 w-4" />
                     Run workflow
@@ -480,6 +484,7 @@ export function WorkflowStudio({
             <StudioHeaderActions
               workflowName={studio.workflowName}
               persisted={persisted}
+              canDelete={canDelete}
             />
           </div>
         </div>

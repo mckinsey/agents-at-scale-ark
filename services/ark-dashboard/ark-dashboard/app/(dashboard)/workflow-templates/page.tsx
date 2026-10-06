@@ -21,7 +21,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 export default function WorkflowTemplatesPage() {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode } = useNamespace();
-  const { canCreate } = useWorkflowTemplateAccess();
+  const { canCreate, canRun, canDelete } = useWorkflowTemplateAccess();
   const [showNameDialog, setShowNameDialog] = useState(false);
   const [argoInstalled, setArgoInstalled] = useState(true);
   const sectionRef = useRef<WorkflowTemplatesSectionHandle>(null);
@@ -78,6 +78,8 @@ export default function WorkflowTemplatesPage() {
         <WorkflowTemplatesSection
           ref={sectionRef}
           onArgoInstalledChange={setArgoInstalled}
+          canRun={canRun}
+          canDelete={canDelete}
         />
       </div>
       <NameWorkflowDialog

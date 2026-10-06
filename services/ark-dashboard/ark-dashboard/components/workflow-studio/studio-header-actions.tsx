@@ -35,6 +35,7 @@ const STATS_POLL_INTERVAL_MS = 30000;
 interface StudioHeaderActionsProps {
   workflowName: string;
   persisted: boolean;
+  canDelete?: boolean;
 }
 
 function errorMessage(error: unknown): string {
@@ -44,6 +45,7 @@ function errorMessage(error: unknown): string {
 export function StudioHeaderActions({
   workflowName,
   persisted,
+  canDelete = true,
 }: Readonly<StudioHeaderActionsProps>) {
   const { namespace, readOnlyMode } = useNamespace();
   const { push } = useNamespacedNavigation();
@@ -159,7 +161,7 @@ export function StudioHeaderActions({
           </TooltipContent>
         </Tooltip>
 
-        {!readOnlyMode && (
+        {!readOnlyMode && canDelete && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
