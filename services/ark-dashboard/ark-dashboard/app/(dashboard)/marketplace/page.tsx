@@ -7,9 +7,9 @@ import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import {
   AccountTree,
+  AutoReadPlay,
   CheckCircle,
   Dns,
-  PlayArrow,
   PlugConnect,
   SmartToy,
   Storefront,
@@ -75,26 +75,31 @@ const CATEGORY_TABS: readonly CategoryTab[] = [
     key: 'agents',
     label: 'Agents',
     icon: SmartToy,
-    iconClass: 'text-blue-500',
+    iconClass: 'text-tags-accent-primary-blue',
   },
   {
     key: 'workflows',
     label: 'Workflows',
     icon: AccountTree,
-    iconClass: 'text-pink-500',
+    iconClass: 'text-tags-accent-primary-pink',
   },
   {
     key: 'mcp',
     label: 'MCPs',
     icon: PlugConnect,
-    iconClass: 'text-violet-500',
+    iconClass: 'text-tags-accent-primary-violet',
   },
-  { key: 'services', label: 'Services', icon: Dns, iconClass: 'text-lime-500' },
+  {
+    key: 'services',
+    label: 'Services',
+    icon: Dns,
+    iconClass: 'text-tags-accent-primary-lime',
+  },
   {
     key: 'demo',
     label: 'Demos',
-    icon: PlayArrow,
-    iconClass: 'text-amber-500',
+    icon: AutoReadPlay,
+    iconClass: 'text-tags-accent-primary-amber',
   },
   { key: 'installed', label: 'Installed', icon: CheckCircle },
 ];

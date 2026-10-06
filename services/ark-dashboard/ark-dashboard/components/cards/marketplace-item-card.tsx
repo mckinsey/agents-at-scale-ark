@@ -7,10 +7,10 @@ import { toast } from 'sonner';
 import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
 import {
   AccountTree,
+  AutoReadPlay,
   Check,
   Dns,
   OpenInNew,
-  PlayArrow,
   PlugConnect,
   SmartToy,
 } from '@/components/icons';
@@ -52,7 +52,7 @@ function categoryBadge(item: MarketplaceItem): CategoryBadge {
     return { label: 'MCP', icon: PlugConnect };
   }
   if (item.type === 'demo') {
-    return { label: 'Demo', icon: PlayArrow };
+    return { label: 'Demo', icon: AutoReadPlay };
   }
   return { label: 'Service', icon: Dns };
 }
