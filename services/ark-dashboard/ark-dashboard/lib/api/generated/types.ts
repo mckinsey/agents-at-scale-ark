@@ -1707,112 +1707,24 @@ export interface paths {
          *
          *     Args:
          *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         kind: Kubernetes Kind (e.g., 'Service')
          *         namespace: The namespace (defaults to current context)
          *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: List of raw Kubernetes resources as JSON
          *
          *     Examples:
-         *         - GET /v1/resources/api/v1/Pod
          *         - GET /v1/resources/api/v1/Service
          *         - GET /v1/resources/api/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
          */
         get: operations["list_core_resources_v1_resources_api__version___kind__get"];
         put?: never;
-        /**
-         * Create Core Resource
-         * @description Create a core Kubernetes resource.
-         *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         body: The resource definition as JSON
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: The created Kubernetes resource as JSON
-         *
-         *     Examples:
-         *         - POST /v1/resources/api/v1/Pod
-         *         - POST /v1/resources/api/v1/Service
-         */
-        post: operations["create_core_resource_v1_resources_api__version___kind__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/resources/api/{version}/{kind}/{resource_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Core Resource
-         * @description Get a core Kubernetes resource by name.
-         *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         resource_name: The name of the resource
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: The raw Kubernetes resource as JSON
-         *
-         *     Examples:
-         *         - GET /v1/resources/api/v1/Pod/my-pod
-         *         - GET /v1/resources/api/v1/Service/my-service
-         */
-        get: operations["get_core_resource_v1_resources_api__version___kind___resource_name__get"];
-        /**
-         * Update Core Resource
-         * @description Update (replace) a core Kubernetes resource by name.
-         *
-         *     Honours a caller-supplied resourceVersion for optimistic concurrency; only
-         *     when the caller omits it do we inject the live object's resourceVersion so
-         *     the replace succeeds (last-write-wins convenience). The URL path name is
-         *     authoritative for the target resource.
-         *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         resource_name: The name of the resource
-         *         body: The resource definition as JSON
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: The updated Kubernetes resource as JSON
-         *
-         *     Examples:
-         *         - PUT /v1/resources/api/v1/ConfigMap/my-config
-         *         - PUT /v1/resources/api/v1/Service/my-service
-         */
-        put: operations["update_core_resource_v1_resources_api__version___kind___resource_name__put"];
         post?: never;
-        /**
-         * Delete Core Resource
-         * @description Delete a core Kubernetes resource by name.
-         *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         resource_name: The name of the resource
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: HTTP 204 No Content on success
-         *
-         *     Examples:
-         *         - DELETE /v1/resources/api/v1/Pod/my-pod
-         *         - DELETE /v1/resources/api/v1/Service/my-service
-         */
-        delete: operations["delete_core_resource_v1_resources_api__version___kind___resource_name__delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1890,9 +1802,9 @@ export interface paths {
          * @description List grouped Kubernetes resources with optional filtering and cursor pagination.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1alpha1', 'v1prealpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
          *         namespace: The namespace (defaults to current context)
          *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
          *         workflowName: Filter by workflow name (partial match, case insensitive). Applied only
@@ -1905,6 +1817,9 @@ export interface paths {
          *         limit: Maximum number of items returned by the underlying Kubernetes list call.
          *             Omit for the full, unpaginated list (used by non-paginated callers).
          *         continue_token: Opaque cursor from a previous page's response metadata
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: List of raw Kubernetes resources as JSON. When the Kubernetes API has more
@@ -1923,12 +1838,10 @@ export interface paths {
          *                -> next 25 items, with a new (or absent) "continue" token
          *
          *     Examples:
-         *         - GET /v1/resources/apis/apps/v1/Deployment
-         *         - GET /v1/resources/apis/batch/v1/Job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit=25
-         *         - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
+         *         - GET /v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine
          */
         get: operations["list_grouped_resources_v1_resources_apis__group___version___kind__get"];
         put?: never;
@@ -1937,19 +1850,21 @@ export interface paths {
          * @description Create a grouped Kubernetes resource.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'argoproj.io')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'Workflow')
+         *         group: API group (e.g., 'argoproj.io')
+         *         version: API version (e.g., 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Workflow', 'WorkflowTemplate')
          *         body: The resource definition as JSON
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: The created Kubernetes resource as JSON
          *
          *     Examples:
-         *         - POST /v1/resources/apis/apps/v1/Deployment
-         *         - POST /v1/resources/apis/batch/v1/Job
          *         - POST /v1/resources/apis/argoproj.io/v1alpha1/Workflow
+         *         - POST /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          */
         post: operations["create_grouped_resource_v1_resources_apis__group___version___kind__post"];
         delete?: never;
@@ -1970,19 +1885,21 @@ export interface paths {
          * @description Get a grouped Kubernetes resource by name.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'Agent')
          *         resource_name: The name of the resource
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: The raw Kubernetes resource as JSON
          *
          *     Examples:
-         *         - GET /v1/resources/apis/apps/v1/Deployment/my-deployment
-         *         - GET /v1/resources/apis/batch/v1/Job/my-job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         *         - GET /v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent/my-agent
          */
         get: operations["get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get"];
         /**
@@ -1995,18 +1912,20 @@ export interface paths {
          *     authoritative for the target resource.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'argoproj.io')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io')
+         *         version: API version (e.g., 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate')
          *         resource_name: The name of the resource
          *         body: The resource definition as JSON
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: The updated Kubernetes resource as JSON
          *
          *     Examples:
-         *         - PUT /v1/resources/apis/apps/v1/Deployment/my-deployment
          *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
          */
         put: operations["update_grouped_resource_v1_resources_apis__group___version___kind___resource_name__put"];
@@ -2016,19 +1935,21 @@ export interface paths {
          * @description Delete a grouped Kubernetes resource by name.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1alpha1', 'v1prealpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
          *         resource_name: The name of the resource
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: HTTP 204 No Content on success
          *
          *     Examples:
-         *         - DELETE /v1/resources/apis/apps/v1/Deployment/my-deployment
-         *         - DELETE /v1/resources/apis/batch/v1/Job/my-job
          *         - DELETE /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         *         - DELETE /v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine/my-engine
          */
         delete: operations["delete_grouped_resource_v1_resources_apis__group___version___kind___resource_name__delete"];
         options?: never;
@@ -8420,161 +8341,6 @@ export interface operations {
             path: {
                 version: string;
                 kind: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_core_resource_v1_resources_api__version___kind__post: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                version: string;
-                kind: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_core_resource_v1_resources_api__version___kind___resource_name__get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                version: string;
-                kind: string;
-                resource_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_core_resource_v1_resources_api__version___kind___resource_name__put: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                version: string;
-                kind: string;
-                resource_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_core_resource_v1_resources_api__version___kind___resource_name__delete: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                version: string;
-                kind: string;
-                resource_name: string;
             };
             cookie?: never;
         };

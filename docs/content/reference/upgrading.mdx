@@ -93,6 +93,25 @@ ark import ark-export.yaml --upsert
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
+## v0.1.71
+
+### Generic Resources API Limited to an Allowlist
+
+The generic resources API under `/v1/resources` now serves only the resources and verbs the dashboard uses. Any other combination of group, version, Kind and verb returns `403`.
+
+| Resource | Verbs |
+|----------|-------|
+| `argoproj.io/v1alpha1` `WorkflowTemplate` | `get`, `list`, `create`, `update`, `delete` |
+| `argoproj.io/v1alpha1` `Workflow` | `get`, `list`, `create` |
+| `ark.mckinsey.com/v1alpha1` `Agent`, `Team` | `get` |
+| `ark.mckinsey.com/v1prealpha1` `ExecutionEngine` | `get`, `list`, `delete` |
+| core `v1` `Service` | `list` |
+
+On the core path, `/v1/resources/api/{version}/{kind}`, the get, create, update and delete routes are removed and return `404` or `405`. Listing stays, for `Service` only. The dashboard, the Ark CLIs and the SDK are not affected. The [Generic Resources API](/reference/ark-apis#generic-resources-api) reference has the details.
+
+**Migration:**
+- Move scripts and integrations that call `/v1/resources` for anything else to the resource-specific `ark-api` routes, such as `/v1/agents`, or to the Kubernetes API with credentials of their own.
+
 ## v0.1.70
 
 ### Broker Purge Endpoints Removed
