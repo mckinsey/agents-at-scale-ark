@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { components } from '@/lib/api/generated/types';
 import { queriesService } from '@/lib/services/queries';
 import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
 
@@ -137,6 +138,80 @@ describe('useListQueries', () => {
     expect(queriesService.list).toHaveBeenCalledTimes(2);
     expect(queriesService.list).toHaveBeenNthCalledWith(1, 'default', { page: 1 });
     expect(queriesService.list).toHaveBeenNthCalledWith(2, 'default', { page: 2 });
+  });
+});
+
+const listPage = (
+  phases: (string | undefined)[],
+): components['schemas']['QueryListResponse'] => ({
+  items: phases.map((phase, index) => ({
+    name: `q-${index}`,
+    namespace: 'default',
+    input: 'hi',
+    type: 'user',
+    status: phase === undefined ? undefined : { phase },
+  })),
+  count: phases.length,
+  total: phases.length,
+  page: 1,
+  page_size: 25,
+});
+
+describe('useListQueries polling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('polls while a query is running and stops once every query is terminal', async () => {
+    vi.mocked(queriesService.list)
+      .mockResolvedValueOnce(listPage(['running', 'done']))
+      .mockResolvedValue(listPage(['done', 'done']));
+
+    const { result } = renderHook(() => useListQueries(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queriesService.list).toHaveBeenCalledTimes(1);
+
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    await waitFor(() => expect(queriesService.list).toHaveBeenCalledTimes(2));
+
+    await act(() => vi.advanceTimersByTimeAsync(15000));
+    expect(queriesService.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('polls while a query has no phase yet', async () => {
+    vi.mocked(queriesService.list).mockResolvedValue(listPage([undefined]));
+
+    const { result } = renderHook(() => useListQueries(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    await waitFor(() => expect(queriesService.list).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not poll when every query is terminal', async () => {
+    vi.mocked(queriesService.list).mockResolvedValue(
+      listPage(['done', 'error', 'canceled']),
+    );
+
+    const { result } = renderHook(() => useListQueries(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await act(() => vi.advanceTimersByTimeAsync(15000));
+    expect(queriesService.list).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { APIError } from '@/lib/api/client';
 import { brokerSessionsService } from '@/lib/services/broker-sessions';
 import { useListSessions, useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { BrokerSession, PaginatedSessions } from '@/lib/services/broker-sessions';
@@ -19,6 +20,7 @@ const createWrapper = () => {
     defaultOptions: {
       queries: {
         retry: false,
+        retryDelay: 0,
         refetchInterval: false,
       },
     },
@@ -259,6 +261,79 @@ describe('broker-sessions hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toBeNull();
+    });
+  });
+
+  describe('error handling', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should not retry the session list on a client error', async () => {
+      vi.mocked(brokerSessionsService.getSessions).mockRejectedValue(
+        new APIError('Forbidden', 403),
+      );
+
+      const { result } = renderHook(() => useListSessions(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(brokerSessionsService.getSessions).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retry the session list once on a server error', async () => {
+      vi.mocked(brokerSessionsService.getSessions).mockRejectedValue(
+        new APIError('Internal Server Error', 500),
+      );
+
+      const { result } = renderHook(() => useListSessions(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(brokerSessionsService.getSessions).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not retry a missing session', async () => {
+      vi.mocked(brokerSessionsService.getSession).mockRejectedValue(
+        new APIError('Session not found', 404),
+      );
+
+      const { result } = renderHook(() => useGetSession('missing'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(brokerSessionsService.getSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('should stop polling a missing session', async () => {
+      vi.useFakeTimers();
+      vi.mocked(brokerSessionsService.getSession).mockRejectedValue(
+        new APIError('Session not found', 404),
+      );
+
+      renderHook(() => useGetSession('missing'), { wrapper: createWrapper() });
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(brokerSessionsService.getSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('should keep polling a session after a server error', async () => {
+      vi.useFakeTimers();
+      vi.mocked(brokerSessionsService.getSession).mockRejectedValue(
+        new APIError('Internal Server Error', 500),
+      );
+
+      renderHook(() => useGetSession('session-1'), {
+        wrapper: createWrapper(),
+      });
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(
+        vi.mocked(brokerSessionsService.getSession).mock.calls.length,
+      ).toBeGreaterThan(2);
     });
   });
 });

@@ -18,9 +18,14 @@ import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
+import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 
 const mockUseNamespace = vi.fn();
+
+vi.mock('@/lib/services/workflow-templates-hooks', () => ({
+  useGetAllWorkflowTemplates: vi.fn(),
+}));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => mockUseNamespace(),
@@ -315,13 +320,26 @@ describe('SessionsSection', () => {
       loading: false,
       error: null,
     } as any);
+
+    vi.mocked(useGetAllWorkflowTemplates).mockReturnValue({
+      data: [
+        { metadata: { name: 'data-processing-template' } },
+        { metadata: { name: 'ml-training-template' } },
+      ],
+      isPending: false,
+    } as any);
   });
 
   describe('Namespace', () => {
     it('should use the namespace resolved by the provider', () => {
       render(<SessionsSection />);
 
-      expect(useWorkflows).toHaveBeenCalledWith('default', expect.any(Object));
+      expect(useWorkflows).toHaveBeenCalledWith(
+        'default',
+        expect.any(Object),
+        undefined,
+        expect.any(Function),
+      );
     });
 
     it('should not fall back to an assumed namespace before one resolves', () => {
@@ -334,10 +352,17 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      expect(useWorkflows).toHaveBeenCalledWith('', expect.any(Object));
+      expect(useWorkflows).toHaveBeenCalledWith(
+        '',
+        expect.any(Object),
+        undefined,
+        expect.any(Function),
+      );
       expect(useWorkflows).not.toHaveBeenCalledWith(
         'default',
         expect.any(Object),
+        undefined,
+        expect.any(Function),
       );
     });
   });
@@ -464,7 +489,7 @@ describe('SessionsSection', () => {
       expect(workflowBadges.length).toBeGreaterThanOrEqual(3);
     });
 
-    it('should select newest session by default', async () => {
+    it('should select the first session in the returned page by default', async () => {
       render(<SessionsSection />);
 
       await waitFor(() => {
@@ -478,7 +503,7 @@ describe('SessionsSection', () => {
                 btn.title === 'running-workflow-789'),
           );
 
-        expect(sessionList[0]).toHaveAttribute('title', 'running-workflow-789');
+        expect(sessionList[0]).toHaveAttribute('title', 'test-workflow-123');
       });
     });
   });
@@ -529,7 +554,7 @@ describe('SessionsSection', () => {
       });
     });
 
-    it('should pass template name filter to API', async () => {
+    it('should not pass a template filter for free text that was never selected', async () => {
       const user = userEvent.setup();
       const mockUseWorkflows = vi.mocked(useWorkflows);
 
@@ -541,11 +566,7 @@ describe('SessionsSection', () => {
       await waitFor(() => {
         const lastCall =
           mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
-        expect(lastCall[1]).toEqual(
-          expect.objectContaining({
-            workflowTemplateName: 'ml-training',
-          }),
-        );
+        expect(lastCall[1]).toHaveProperty('workflowTemplateName', undefined);
       });
     });
 
@@ -594,41 +615,6 @@ describe('SessionsSection', () => {
       });
     });
 
-    it('should sort sessions by newest first by default', () => {
-      render(<SessionsSection />);
-
-      const sessionButtons = screen
-        .getAllByRole('button')
-        .filter(
-          btn =>
-            btn.title === 'test-workflow-123' ||
-            btn.title === 'failed-workflow-456' ||
-            btn.title === 'running-workflow-789',
-        );
-
-      expect(sessionButtons[0]).toHaveAttribute(
-        'title',
-        'running-workflow-789',
-      );
-    });
-
-    it('should allow changing sort order to oldest first', async () => {
-      const user = userEvent.setup();
-      render(<SessionsSection />);
-
-      const sortSelect = screen.getByRole('combobox', { name: 'Sort' });
-      await user.click(sortSelect);
-
-      const oldestOption = await screen.findByRole('option', {
-        name: /oldest first/i,
-      });
-      expect(oldestOption).toBeInTheDocument();
-      await user.click(oldestOption);
-
-      await waitFor(() => {
-        expect(sortSelect).toHaveTextContent(/oldest first/i);
-      });
-    });
   });
 
   describe('Step Details and Expansion', () => {
@@ -853,11 +839,9 @@ describe('SessionsSection', () => {
     });
 
     it('should show message when no templates available', () => {
-      vi.mocked(useWorkflows).mockReturnValue({
-        workflows: [],
-        loading: false,
-        error: null,
-        refetch: vi.fn(),
+      vi.mocked(useGetAllWorkflowTemplates).mockReturnValue({
+        data: [],
+        isPending: false,
       } as any);
 
       render(<SessionsSection />);
@@ -909,26 +893,6 @@ describe('SessionsSection', () => {
       });
     });
 
-    it('should update URL when sort order changes', async () => {
-      const user = userEvent.setup();
-      render(<SessionsSection />);
-
-      const sortSelect = screen.getByRole('combobox', { name: 'Sort' });
-      await user.click(sortSelect);
-
-      const oldestOption = await screen.findByRole('option', {
-        name: /oldest first/i,
-      });
-      await user.click(oldestOption);
-
-      await waitFor(() => {
-        expect(mockRouter.replace).toHaveBeenCalledWith(
-          expect.stringContaining('sort=oldest'),
-          expect.any(Object),
-        );
-      });
-    });
-
     it('should clear URL params when filters are cleared', async () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
@@ -964,6 +928,31 @@ describe('SessionsSection', () => {
   });
 
   describe('Session Detail View', () => {
+    it('deep-links to a run via ?run= even when it is not on the loaded page', async () => {
+      currentSearch = 'run=brand-new-workflow-xyz123';
+      const deepLinkedWorkflow = {
+        ...mockWorkflow,
+        metadata: { ...mockWorkflow.metadata, name: 'brand-new-workflow-xyz123' },
+      };
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: deepLinkedWorkflow,
+        loading: false,
+        error: null,
+      } as any);
+
+      render(<SessionsSection />);
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByText('brand-new-workflow-xyz123').length,
+        ).toBeGreaterThanOrEqual(1);
+      });
+      expect(useWorkflow).toHaveBeenCalledWith(
+        'default',
+        'brand-new-workflow-xyz123',
+      );
+    });
+
     it('should display selected session name in list and detail view', async () => {
       vi.mocked(useWorkflow).mockReturnValue({
         workflow: mockWorkflow,
@@ -1440,6 +1429,83 @@ describe('SessionsSection', () => {
       await expandStepWithStatus('succeeded');
 
       expect(fetchNodeLogWindow).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Pagination', () => {
+    it('should disable Previous on the first page and enable Next when more pages exist', () => {
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: null,
+        page: 0,
+        hasNext: true,
+        hasPrevious: false,
+        goToNextPage: vi.fn(),
+        goToPreviousPage: vi.fn(),
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(
+        screen.getByRole('button', { name: /go to previous page/i }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole('button', { name: /go to next page/i }),
+      ).toBeEnabled();
+    });
+
+    it('should disable Next on the last page and enable Previous', () => {
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: null,
+        page: 1,
+        hasNext: false,
+        hasPrevious: true,
+        goToNextPage: vi.fn(),
+        goToPreviousPage: vi.fn(),
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(
+        screen.getByRole('button', { name: /go to previous page/i }),
+      ).toBeEnabled();
+      expect(
+        screen.getByRole('button', { name: /go to next page/i }),
+      ).toBeDisabled();
+    });
+
+    it('should call goToNextPage and goToPreviousPage when clicked', async () => {
+      const user = userEvent.setup();
+      const goToNextPage = vi.fn();
+      const goToPreviousPage = vi.fn();
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: null,
+        page: 1,
+        hasNext: true,
+        hasPrevious: true,
+        goToNextPage,
+        goToPreviousPage,
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      await user.click(
+        screen.getByRole('button', { name: /go to next page/i }),
+      );
+      expect(goToNextPage).toHaveBeenCalledTimes(1);
+
+      await user.click(
+        screen.getByRole('button', { name: /go to previous page/i }),
+      );
+      expect(goToPreviousPage).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -8,6 +8,12 @@ import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 const pushMock = vi.fn();
 const replaceMock = vi.fn();
 
+const mockInvalidateQueriesList = vi.fn();
+
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useInvalidateQueriesList: () => mockInvalidateQueriesList,
+}));
+
 vi.mock('@/lib/services/workflow-templates', () => ({
   WORKFLOW_TEMPLATE_ANNOTATIONS: {
     TITLE: 'workflows.argoproj.io/title',
