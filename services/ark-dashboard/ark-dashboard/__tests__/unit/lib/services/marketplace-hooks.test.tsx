@@ -7,12 +7,10 @@ import { toast } from 'sonner';
 import {
   useCreateMarketplaceSource,
   useDeleteMarketplaceSource,
-  useGetMarketplaceItemById,
   useGetMarketplaceItems,
   useInstallMarketplaceItem,
   useMarketplaceCanEdit,
   useMarketplaceSources,
-  useUninstallMarketplaceItem,
 } from '@/lib/services/marketplace-hooks';
 import { marketplaceService } from '@/lib/services/marketplace';
 
@@ -25,13 +23,11 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/services/marketplace', () => ({
   marketplaceService: {
     getMarketplaceItems: vi.fn(),
-    getMarketplaceItemById: vi.fn(),
     getMarketplaceSources: vi.fn(),
     getMarketplaceSourcePermissions: vi.fn(),
     createMarketplaceSource: vi.fn(),
     deleteMarketplaceSource: vi.fn(),
     installMarketplaceItem: vi.fn(),
-    uninstallMarketplaceItem: vi.fn(),
   },
 }));
 
@@ -58,15 +54,6 @@ describe('marketplace query hooks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(marketplaceService.getMarketplaceItems).toHaveBeenCalledWith('team-a', undefined);
     expect(result.current.data?.items).toHaveLength(1);
-  });
-
-  it('useGetMarketplaceItemById fetches by id when id is set', async () => {
-    vi.mocked(marketplaceService.getMarketplaceItemById).mockResolvedValueOnce({ id: 'phoenix' } as never);
-    const { result } = renderHook(() => useGetMarketplaceItemById('phoenix'), {
-      wrapper: createWrapper(),
-    });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(marketplaceService.getMarketplaceItemById).toHaveBeenCalledWith('phoenix', 'team-a');
   });
 
   it('useMarketplaceSources fetches the namespace source list', async () => {
@@ -144,43 +131,5 @@ describe('marketplace mutation hooks', () => {
     errResult.current.mutate('phoenix');
     await waitFor(() => expect(errResult.current.isError).toBe(true));
     expect(toast.error).toHaveBeenCalled();
-  });
-
-  describe('useUninstallMarketplaceItem', () => {
-    it('invalidates marketplace queries on success without a success toast', async () => {
-      vi.mocked(marketplaceService.uninstallMarketplaceItem).mockResolvedValue({
-        status: 'command',
-        helmCommand: 'helm uninstall phoenix',
-      });
-      const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
-
-      const { result } = renderHook(() => useUninstallMarketplaceItem(), {
-        wrapper: createWrapper(),
-      });
-      result.current.mutate('phoenix');
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['marketplace'] });
-      expect(toast.success).not.toHaveBeenCalled();
-    });
-
-    it('shows an error toast on failure', async () => {
-      vi.mocked(marketplaceService.uninstallMarketplaceItem).mockRejectedValue(
-        new Error('boom'),
-      );
-
-      const { result } = renderHook(() => useUninstallMarketplaceItem(), {
-        wrapper: createWrapper(),
-      });
-      result.current.mutate('phoenix');
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect(toast.error).toHaveBeenCalledWith(
-        'Failed to load uninstall command',
-        expect.objectContaining({ description: 'boom' }),
-      );
-    });
   });
 });

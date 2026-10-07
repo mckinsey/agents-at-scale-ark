@@ -66,6 +66,7 @@ describe('MarketplaceItemCard', () => {
 
     expect(screen.getByText('Test Item')).toBeInTheDocument();
     expect(screen.getByText('A test')).toBeInTheDocument();
+    expect(screen.getByText('Component')).toBeInTheDocument();
   });
 
   it('renders version', () => {
@@ -81,7 +82,7 @@ describe('MarketplaceItemCard', () => {
       <MarketplaceItemCard item={makeItem({ type: 'service' })} />,
     );
 
-    expect(screen.getByText('service')).toBeInTheDocument();
+    expect(screen.getByText('Service')).toBeInTheDocument();
   });
 
   it('renders Agent text for agents category', () => {
@@ -115,20 +116,17 @@ describe('MarketplaceItemCard', () => {
     spy.mockRestore();
   });
 
-  it('renders up to 4 tags', () => {
+  it('renders up to 3 tags', () => {
     renderWithProviders(
-      <MarketplaceItemCard
-        item={makeItem({ tags: ['a', 'b', 'c', 'd'] })}
-      />,
+      <MarketplaceItemCard item={makeItem({ tags: ['a', 'b', 'c'] })} />,
     );
 
     expect(screen.getByText('a')).toBeInTheDocument();
     expect(screen.getByText('b')).toBeInTheDocument();
     expect(screen.getByText('c')).toBeInTheDocument();
-    expect(screen.getByText('d')).toBeInTheDocument();
   });
 
-  it('shows overflow badge when more than 4 tags', () => {
+  it('shows overflow badge when more than 3 tags', () => {
     renderWithProviders(
       <MarketplaceItemCard
         item={makeItem({ tags: ['a', 'b', 'c', 'd', 'e', 'f'] })}
@@ -136,9 +134,9 @@ describe('MarketplaceItemCard', () => {
     );
 
     expect(screen.getByText('a')).toBeInTheDocument();
-    expect(screen.getByText('d')).toBeInTheDocument();
-    expect(screen.getByText('+2')).toBeInTheDocument();
-    expect(screen.queryByText('e')).not.toBeInTheDocument();
+    expect(screen.getByText('c')).toBeInTheDocument();
+    expect(screen.getByText('+3')).toBeInTheDocument();
+    expect(screen.queryByText('d')).not.toBeInTheDocument();
     expect(screen.queryByText('f')).not.toBeInTheDocument();
   });
 
