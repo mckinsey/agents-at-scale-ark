@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -58,6 +59,7 @@ export function ToolForm({
   onCancel,
 }: Readonly<ToolFormProps>) {
   const { readOnlyMode } = useNamespace();
+  const toolsReturnHref = useListReturnHref('/tools');
   const { form, state, actions } = useToolForm({ mode, toolName, onSuccess });
   const {
     loading,
@@ -104,7 +106,7 @@ export function ToolForm({
           backLabel="Tools"
           current={displayName}
         />
-        <NamespacedLink href="/tools">
+        <NamespacedLink href={toolsReturnHref}>
           <Button variant="outline">Back</Button>
         </NamespacedLink>
       </div>
