@@ -37,7 +37,9 @@ export function GlobalProviders({ children }: PropsWithChildren) {
           </QueryClientProvider>
         </AuthProvider>
         <SettingsKeyboardShortcut />
-        <NavigationTracker />
+        <Suspense fallback={null}>
+          <NavigationTracker />
+        </Suspense>
         <Toaster visibleToasts={5} position="top-right" />
       </ThemeProvider>
     </JotaiProvider>
