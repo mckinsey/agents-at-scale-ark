@@ -6,6 +6,7 @@ export { ArrowForward } from './arrow-forward';
 export { ArrowOutward } from './arrow-outward';
 export { ArrowUpwardAlt } from './arrow-upward-alt';
 export { AutoAwesome } from './auto-awesome';
+export { AutoReadPlay } from './auto-read-play';
 export { Autorenew } from './autorenew';
 export { Azure } from './azure';
 export { BarChart } from './bar-chart';
