@@ -35,7 +35,7 @@ func activationObjects(name, language string) (*arkv1alpha1.Tool, *appsv1.Deploy
 			Type: arkv1alpha1.ToolConditionAvailable, Status: metav1.ConditionTrue, Reason: arkv1alpha1.ToolReasonAvailable, ObservedGeneration: 1,
 		}}},
 	}
-	tool.Status.ResolvedAddress = ResolvedAddress("ark-system", tool)
+	tool.Status.ResolvedAddress = ResolvedAddress(ActivatorBaseURL("ark-system"), tool)
 	metadata := metav1.ObjectMeta{
 		Name: NamesFor(name).Runner, Namespace: tool.Namespace, UID: "child-uid", Labels: RunnerLabels(tool),
 		OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(tool, arkv1alpha1.GroupVersion.WithKind("Tool"))},

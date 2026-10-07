@@ -56,7 +56,7 @@ func lifeFixture(name string, replicas int32) *runnerFixture {
 	tool.Name, tool.UID, tool.Generation = name, types.UID(name+"-uid"), 1
 	tool.Status = arkv1alpha1.ToolStatus{
 		State:           arkv1alpha1.ToolStateReady,
-		ResolvedAddress: inlinetools.ResolvedAddress("ark-system", tool), Conditions: []metav1.Condition{{
+		ResolvedAddress: inlinetools.ResolvedAddress(inlinetools.ActivatorBaseURL("ark-system"), tool), Conditions: []metav1.Condition{{
 			Type: arkv1alpha1.ToolConditionAvailable, Status: metav1.ConditionTrue, Reason: arkv1alpha1.ToolReasonAvailable, ObservedGeneration: 1,
 		}},
 	}

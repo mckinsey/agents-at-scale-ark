@@ -56,6 +56,7 @@ const (
 	ToolTypeAgent   = "agent"
 	ToolTypeTeam    = "team"
 	ToolTypeBuiltin = "builtin"
+	ToolTypeInline  = "inline"
 )
 
 // Team member type constants
