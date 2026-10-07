@@ -1,7 +1,6 @@
 'use client';
 
-import { AlertCircle } from 'lucide-react';
-
+import { ErrorIcon } from '@/components/icons';
 import {
   Alert,
   AlertContent,
@@ -23,7 +22,7 @@ export function MarketplaceSourceErrors({
   return (
     <Alert layout="long">
       <AlertIcon className="text-status-error">
-        <AlertCircle className="text-[25px]" />
+        <ErrorIcon className="text-[25px]" />
       </AlertIcon>
       <AlertContent>
         <AlertTitle>Some marketplace sources could not be loaded</AlertTitle>
