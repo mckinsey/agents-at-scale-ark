@@ -2101,8 +2101,26 @@ func TestSetupExecutionFailures(t *testing.T) {
 }
 
 func TestExecuteToolReportsToolFailureText(t *testing.T) {
-	tool := inlineTool(testToolBoom, newTestMCPServer(t), "uid-1")
-	h := newTestHandler(tool)
+	serverEndpoint := newTestMCPServer(t)
+	mcpServer := &arkv1alpha1.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "boom-server", Namespace: "default"},
+		Spec: arkv1alpha1.MCPServerSpec{
+			Address:   arkv1alpha1.ValueSource{Value: serverEndpoint},
+			Transport: "http",
+			Timeout:   "5s",
+		},
+	}
+	tool := &arkv1alpha1.Tool{
+		ObjectMeta: metav1.ObjectMeta{Name: testToolBoom, Namespace: "default"},
+		Spec: arkv1alpha1.ToolSpec{
+			Type: ToolTypeMCP,
+			MCP: &arkv1alpha1.MCPToolRef{
+				MCPServerRef: arkv1alpha1.MCPServerRef{Name: "boom-server", Namespace: "default"},
+				ToolName:     testToolBoom,
+			},
+		},
+	}
+	h := newTestHandler(tool, mcpServer)
 	query := arkv1alpha1.Query{
 		ObjectMeta: metav1.ObjectMeta{Name: "boom-query", Namespace: "default"},
 		Spec:       arkv1alpha1.QuerySpec{Input: runtime.RawExtension{Raw: []byte(`"{\"name\":\"ark\"}"`)}},

@@ -62,10 +62,13 @@ func TestCreateToolExecutorInlineUsesMCPExecutor(t *testing.T) {
 }
 
 func TestInlineToolFailureUsesSharedMCPResultHandling(t *testing.T) {
-	tool := inlineTool(testToolBoom, newTestMCPServer(t), "uid-1")
+	activatorBaseURL := newTestMCPServer(t)
+	tool := inlineTool(activatorBaseURL)
+	tool.Name = testToolBoom
+	tool.Status.ResolvedAddress = inlinetools.ResolvedAddress(activatorBaseURL, tool)
 
 	executor, err := CreateToolExecutor(t.Context(), setupTestClientForTools([]client.Object{tool}), tool, "default",
-		ToolExecutorDeps{MCPPool: testPool(t)})
+		ToolExecutorDeps{MCPPool: testPool(t), ActivatorBaseURL: activatorBaseURL})
 	require.NoError(t, err)
 
 	result, err := executor.Execute(t.Context(), boomCall())
