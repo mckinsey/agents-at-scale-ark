@@ -9,6 +9,7 @@ import {
   GET_ALL_MODELS_QUERY_KEY,
   GET_MODEL_BY_ID_QUERY_KEY,
   useCreateModel,
+  useDeleteModel,
   useGetAllModels,
   useGetModelbyId,
   useUpdateModelById,
@@ -29,6 +30,7 @@ vi.mock('@/lib/services/models', () => ({
     getById: vi.fn(),
     create: vi.fn(),
     updateById: vi.fn(),
+    deleteById: vi.fn(),
   },
 }));
 
@@ -194,6 +196,43 @@ describe('models-hooks', () => {
         'Failed to update Model: gpt-4',
         { description: 'Rejected' },
       );
+    });
+  });
+
+  describe('useDeleteModel', () => {
+    it('deletes in the namespace and refreshes the list', async () => {
+      vi.mocked(modelsService.deleteById).mockResolvedValue(true);
+      const client = createQueryClient();
+      const invalidate = vi.spyOn(client, 'invalidateQueries');
+      const onSuccess = vi.fn();
+
+      const { result } = renderHook(() => useDeleteModel({ onSuccess }), {
+        wrapper: withClient(client),
+      });
+      result.current.mutate('gpt-4');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(modelsService.deleteById).toHaveBeenCalledWith(NAMESPACE, 'gpt-4');
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: [GET_ALL_MODELS_QUERY_KEY],
+      });
+      expect(toast.success).toHaveBeenCalledWith('Model deleted successfully');
+      expect(onSuccess).toHaveBeenCalled();
+    });
+
+    it('reports a delete failure', async () => {
+      vi.mocked(modelsService.deleteById).mockRejectedValue(new Error('Boom'));
+
+      const { result } = renderHook(() => useDeleteModel(), {
+        wrapper: withClient(createQueryClient()),
+      });
+      result.current.mutate('gpt-4');
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(toast.error).toHaveBeenCalledWith('Failed to delete Model', {
+        description: 'Boom',
+      });
     });
   });
 });

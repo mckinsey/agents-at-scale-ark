@@ -33,6 +33,7 @@ import { QueryParameterEditor } from '@/components/ui/query-parameter-editor';
 import { Textarea } from '@/components/ui/textarea';
 import type { components } from '@/lib/api/generated/types';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   agentsService,
@@ -44,6 +45,7 @@ import {
 import type { Agent } from '@/lib/services/agents';
 import { useArkConfig } from '@/lib/services/arkconfig-hooks';
 import { queriesService } from '@/lib/services/queries';
+import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
 import type { ToolDetail } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
 import {
@@ -378,6 +380,8 @@ function QueryDetailContent() {
   const searchParams = useSearchParams();
   const { push } = useNamespacedNavigation();
   const { namespace } = useNamespace();
+  const queriesReturnHref = useListReturnHref('/queries');
+  const invalidateQueriesList = useInvalidateQueriesList();
   const queryId = params.id as string;
   const targetTool = searchParams.get('target_tool');
   const isNew = queryId === 'new';
@@ -521,6 +525,7 @@ function QueryDetailContent() {
       };
 
       const savedQuery = await queriesService.create(namespace, queryData);
+      invalidateQueriesList();
 
       toast('Query Executed', {
         description: `Query "${savedQuery.name}" has been created and is now executing.`,
@@ -570,7 +575,7 @@ function QueryDetailContent() {
           const [agents, models, teams, tools, memories] = await Promise.all([
             agentsService.list(namespace),
             modelsService.list(namespace),
-            teamsService.getAll(namespace),
+            teamsService.list(namespace),
             toolsService.getAll(namespace),
             memoriesService.getAll(namespace),
           ]);
@@ -682,7 +687,7 @@ function QueryDetailContent() {
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
           <h1 className="mb-2 text-xl font-semibold">Query Not Found</h1>
-          <Button variant="outline" onClick={() => push('/queries')}>
+          <Button variant="outline" onClick={() => push(queriesReturnHref)}>
             ← Back to Queries
           </Button>
         </div>

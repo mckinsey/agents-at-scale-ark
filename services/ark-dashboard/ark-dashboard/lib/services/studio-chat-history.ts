@@ -41,7 +41,7 @@ export const studioChatHistoryService = {
       if (!latest) {
         return null;
       }
-      const messages = await conversationsService.getMessages(
+      const { messages } = await conversationsService.getMessages(
         latest.conversationId,
       );
       if (messages.length === 0) {

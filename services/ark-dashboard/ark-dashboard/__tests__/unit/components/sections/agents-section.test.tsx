@@ -7,8 +7,9 @@ import { AgentsSection } from '@/components/sections/agents-section';
 import { toast } from '@/components/ui/sonner';
 import type { AgentListItem } from '@/lib/services';
 
-const mockList = vi.fn();
-const mockDeleteById = vi.fn();
+const mockUseGetAllAgents = vi.fn();
+const mockMutate = vi.fn();
+const mockRefetch = vi.fn();
 const mockReadOnly = { value: false };
 
 vi.mock('next/navigation', async () => {
@@ -21,11 +22,19 @@ beforeEach(() => {
   resetAppRouterMock();
 });
 
-vi.mock('@/lib/services', () => ({
-  agentsService: {
-    list: (...args: unknown[]) => mockList(...args),
-    deleteById: (...args: unknown[]) => mockDeleteById(...args),
-  },
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock();
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
+
+vi.mock('@/lib/services/agents-hooks', () => ({
+  useGetAllAgents: () => mockUseGetAllAgents(),
+  useDeleteAgent: () => ({ mutate: mockMutate }),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
@@ -83,20 +92,34 @@ const sampleAgents: AgentListItem[] = [
   } as AgentListItem,
 ];
 
+const mockQueryResult = (
+  overrides: Partial<{
+    data: AgentListItem[];
+    isPending: boolean;
+    error: unknown;
+  }> = {},
+) => ({
+  data: overrides.data ?? [],
+  isPending: overrides.isPending ?? false,
+  error: overrides.error ?? null,
+  refetch: mockRefetch,
+});
+
 describe('AgentsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockReadOnly.value = false;
+    mockUseGetAllAgents.mockReturnValue(mockQueryResult());
   });
 
   it('shows Loading... while data is pending', () => {
-    mockList.mockReturnValue(new Promise(() => {}));
+    mockUseGetAllAgents.mockReturnValue(mockQueryResult({ isPending: true }));
     render(<AgentsSection />);
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
   it('shows the empty state when there are no agents', async () => {
-    mockList.mockResolvedValue([]);
+    mockUseGetAllAgents.mockReturnValue(mockQueryResult({ data: [] }));
     render(<AgentsSection />);
     expect(await screen.findByText('No agents yet')).toBeInTheDocument();
     const learnMore = screen.getByRole('link', { name: /learn more/i });
@@ -107,7 +130,9 @@ describe('AgentsSection', () => {
   });
 
   it('renders AgentsTable with returned agents', async () => {
-    mockList.mockResolvedValue(sampleAgents);
+    mockUseGetAllAgents.mockReturnValue(
+      mockQueryResult({ data: sampleAgents }),
+    );
     render(<AgentsSection />);
     expect(await screen.findByTestId('agents-table')).toBeInTheDocument();
     expect(screen.getByText('alpha')).toBeInTheDocument();
@@ -115,7 +140,9 @@ describe('AgentsSection', () => {
   });
 
   it('filters by search term (case-insensitive)', async () => {
-    mockList.mockResolvedValue(sampleAgents);
+    mockUseGetAllAgents.mockReturnValue(
+      mockQueryResult({ data: sampleAgents }),
+    );
     render(<AgentsSection />);
     await screen.findByTestId('agents-table');
     await userEvent.type(screen.getByPlaceholderText('Search'), 'ALP');
@@ -125,25 +152,33 @@ describe('AgentsSection', () => {
 
   it('disables Create Agent button in readOnly mode', async () => {
     mockReadOnly.value = true;
-    mockList.mockResolvedValue(sampleAgents);
+    mockUseGetAllAgents.mockReturnValue(
+      mockQueryResult({ data: sampleAgents }),
+    );
     render(<AgentsSection />);
     await screen.findByTestId('agents-table');
     expect(screen.getByRole('button', { name: 'Create agent' })).toBeDisabled();
   });
 
   it('renders Create Agent link when not readOnly', async () => {
-    mockList.mockResolvedValue(sampleAgents);
+    mockUseGetAllAgents.mockReturnValue(
+      mockQueryResult({ data: sampleAgents }),
+    );
     render(<AgentsSection />);
     await screen.findByTestId('agents-table');
     const link = screen.getByRole('link', { name: /create agent/i });
     expect(link).toHaveAttribute('href', '/agents/new');
   });
 
-  it('shows error toast when list fails', async () => {
-    mockList.mockRejectedValue(new Error('boom'));
+  it('surfaces a load error via toast instead of a silent empty state', async () => {
+    mockUseGetAllAgents.mockReturnValue(
+      mockQueryResult({ data: [], error: new Error('boom') }),
+    );
     render(<AgentsSection />);
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalledWith('Failed to Load agents', {
+        description: 'boom',
+      });
     });
   });
 });

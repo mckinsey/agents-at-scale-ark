@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
 import {
   AccountTree,
+  ArrowBack,
+  ArrowForward,
   AutoAwesome,
   Bolt,
   Build,
@@ -33,6 +35,7 @@ import {
   ResourceNoResults,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
+import { WorkflowNodeLogs } from '@/components/sections/workflow-node-logs';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
@@ -44,16 +47,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
-import {
-  ARGO_BASE_URL,
-  ARGO_WORKFLOWS_DOCS_URL,
-} from '@/lib/constants/workflows';
+import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
 import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
+import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -67,18 +69,12 @@ type WorkflowStepType =
   | 'container'
   | 'script'
   | 'suspend';
-type SortOrder = 'newest' | 'oldest';
 type TeamStepType =
   | 'orchestrator'
   | 'agent'
   | 'delegation'
   | 'tool-call'
   | 'response';
-
-const sortOrderItems = [
-  { label: 'Newest First', value: 'newest' },
-  { label: 'Oldest First', value: 'oldest' },
-];
 
 const statusFilterItems = [
   { label: 'All', value: 'all' },
@@ -87,15 +83,11 @@ const statusFilterItems = [
   { label: 'Failed', value: 'Failed' },
 ];
 
-function parseSortOrder(raw: string): SortOrder {
-  return raw === 'oldest' ? 'oldest' : 'newest';
-}
-
 const URL_STATE_SPEC = {
   workflowName: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
-  workflowTemplateName: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  workflowTemplateName: { default: '' },
   status: { default: 'all', parse: normalizeStatus },
-  sort: { default: 'newest', parse: parseSortOrder },
+  run: { default: '' },
 };
 
 interface WorkflowStepDetail {
@@ -397,85 +389,34 @@ function LogEntryRow({
 function WorkflowStepDetail({
   detail,
   message,
-}: {
+  status,
+}: Readonly<{
   detail: WorkflowStepDetail;
   message?: string;
-}) {
-  const [logs, setLogs] = useState<string>('');
-  const [loadingLogs, setLoadingLogs] = useState(false);
-  const [logsError, setLogsError] = useState<string | null>(null);
+  status: StepStatus;
+}>) {
+  const shouldFetchLogs = Boolean(
+    detail.workflowName && detail.nodeId && detail.namespace,
+  );
 
-  const shouldFetchLogs =
-    detail.workflowName && detail.nodeId && detail.namespace;
-
-  useEffect(() => {
-    if (!shouldFetchLogs) return;
-
-    let cancelled = false;
-
-    const fetchLogs = async () => {
-      setLoadingLogs(true);
-      setLogsError(null);
-      try {
-        const { workflowsService } = await import('@/lib/services/workflows');
-        let logData = '';
-
-        // Try to get logs from pod first (more reliable for recent workflows)
-        if (detail.podName) {
-          try {
-            logData = await workflowsService.getPodLogs(
-              detail.namespace!,
-              detail.podName,
-            );
-          } catch {
-            // If pod logs fail, try archived workflow logs
-            console.debug('Pod logs not available, trying archived logs');
+  const logTarget = useMemo(
+    () =>
+      shouldFetchLogs
+        ? {
+            namespace: detail.namespace!,
+            workflowName: detail.workflowName!,
+            nodeId: detail.nodeId!,
+            podName: detail.podName,
           }
-        }
-
-        // If pod logs didn't work or no podName, try archived workflow logs
-        if (!logData) {
-          logData = await workflowsService.getWorkflowLogs(
-            detail.namespace!,
-            detail.workflowName!,
-            detail.nodeId!,
-          );
-        }
-
-        if (!cancelled) {
-          setLogs(logData);
-        }
-      } catch (error: unknown) {
-        if (!cancelled) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          if (errorMessage.includes('404')) {
-            setLogsError(
-              'Logs not available (pod terminated and logs not archived)',
-            );
-          } else {
-            setLogsError('Failed to load logs');
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingLogs(false);
-        }
-      }
-    };
-
-    void fetchLogs();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    detail.workflowName,
-    detail.nodeId,
-    detail.namespace,
-    detail.podName,
-    shouldFetchLogs,
-  ]);
+        : null,
+    [
+      detail.namespace,
+      detail.workflowName,
+      detail.nodeId,
+      detail.podName,
+      shouldFetchLogs,
+    ],
+  );
 
   return (
     <div className="flex w-full min-w-0 flex-col pl-10">
@@ -521,41 +462,13 @@ function WorkflowStepDetail({
         </LogEntryBlock>
       )}
 
-      {shouldFetchLogs && (
+      {logTarget && (
         <LogEntryBlock icon={<Terminal2 />} label="Logs">
-          <div className="bg-fill-onsurface-ui-1 max-h-64 w-full overflow-auto p-2">
-            {loadingLogs && (
-              <div className="flex items-center gap-2">
-                <Spinner size="sm" className="text-fg-tertiary" />
-                <span className="paragraph-small-primary text-fg-tertiary">
-                  Loading logs...
-                </span>
-              </div>
-            )}
-            {logsError && (
-              <div className="flex flex-col items-start gap-2">
-                <p className="paragraph-small-primary text-fg-warning">
-                  {logsError}
-                </p>
-                <Button variant="ghost" size="xs" asChild>
-                  <a
-                    href={`${ARGO_BASE_URL}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
-                    target="_blank"
-                    rel="noopener noreferrer">
-                    View logs in Argo UI
-                    <IconShell size="sm">
-                      <OpenInNew />
-                    </IconShell>
-                  </a>
-                </Button>
-              </div>
-            )}
-            {!loadingLogs && !logsError && (
-              <pre className="paragraph-regular-primary text-fg-secondary break-words whitespace-pre-wrap">
-                {logs || 'No logs available'}
-              </pre>
-            )}
-          </div>
+          <WorkflowNodeLogs
+            target={logTarget}
+            isRunning={status === 'running' || status === 'pending'}
+            argoUrl={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+          />
         </LogEntryBlock>
       )}
 
@@ -747,7 +660,11 @@ function WorkflowStepNode({
           ))}
 
         {hasDetail && showDetail && (
-          <WorkflowStepDetail detail={step.detail!} message={step.message} />
+          <WorkflowStepDetail
+            detail={step.detail!}
+            message={step.message}
+            status={step.status}
+          />
         )}
       </div>
     </div>
@@ -970,6 +887,7 @@ function SessionsBody({
   selectedSession,
   isDetailLoading,
   hasActiveFilters,
+  hasNext,
   onClearFilters,
 }: {
   readonly error: Error | null;
@@ -980,6 +898,7 @@ function SessionsBody({
   readonly selectedSession?: Session;
   readonly isDetailLoading: boolean;
   readonly hasActiveFilters: boolean;
+  readonly hasNext: boolean;
   readonly onClearFilters: () => void;
 }) {
   if (error) {
@@ -1001,11 +920,16 @@ function SessionsBody({
   }
 
   if (sessions.length === 0 && hasActiveFilters) {
+    // Filters apply per-page, so an empty page with hasNext doesn't mean "no matches".
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <ResourceNoResults
           icon={<SearchIcon className="size-full" />}
-          message="No workflow runs found matching your filters"
+          message={
+            hasNext
+              ? 'No matches on this page — more runs exist further on. Try Next page.'
+              : 'No workflow runs found matching your filters'
+          }
         />
         <Button variant="outline" onClick={onClearFilters}>
           Clear filters
@@ -1067,56 +991,83 @@ export function SessionsSection({
   readonly onCountChange?: (count: number) => void;
 }) {
   const { namespace, isNamespaceResolved } = useNamespace();
+  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
 
   // Note: sourceFilter is currently unused but reserved for future support of Team sessions
   // Currently only workflow sessions are implemented
   const [sourceFilter] = useState<SessionSourceFilter>('all');
+  // A one-shot deep link (e.g. from the "View run" toast) to an exact,
+  // known workflow - shown directly regardless of filters/pagination.
+  const initialRunRef = useRef(urlState.run || null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
-    null,
+    () => initialRunRef.current,
   );
   const [useRealData] = useState(true);
 
-  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
-  const statusFilter = urlState.status;
-  const sortOrder = urlState.sort;
+  useEffect(() => {
+    if (!urlState.run) {
+      return;
+    }
+    initialRunRef.current = urlState.run;
+    setSelectedSessionId(urlState.run);
+    setUrlState({ run: '' });
+  }, [urlState.run, setUrlState]);
 
+  const statusFilter = urlState.status;
   const workflowNameInput = urlState.workflowName;
-  const workflowTemplateNameInput = urlState.workflowTemplateName;
+
+  // workflowTemplateNameInput is the raw text shown in the input and used to
+  // filter dropdown suggestions. selectedTemplateName is the committed filter
+  // actually sent to the API - it is only set by picking a dropdown option, since
+  // the backend applies this as an exact-match label selector (see PR #3679 review).
+  const selectedTemplateName = urlState.workflowTemplateName;
+  const [templateTextDraft, setTemplateTextDraft] = useState<string | null>(
+    null,
+  );
+  const workflowTemplateNameInput = templateTextDraft ?? selectedTemplateName;
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const templateInputRef = useRef<HTMLDivElement>(null);
 
   const filters = useMemo(
     () => ({
       workflowName: committedState.workflowName || undefined,
-      workflowTemplateName: committedState.workflowTemplateName || undefined,
+      workflowTemplateName: selectedTemplateName || undefined,
       status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
     }),
-    [
-      committedState.workflowName,
-      committedState.workflowTemplateName,
-      statusFilter,
-    ],
+    [committedState.workflowName, selectedTemplateName, statusFilter],
   );
+
+  const handleWorkflowsPageError = useCallback((err: Error) => {
+    toast.error('Failed to load page', { description: err.message });
+  }, []);
 
   const {
     workflows,
     loading,
     error,
-    refetch: refetchWorkflows,
-  } = useWorkflows(namespace, filters);
+    hasNext,
+    hasPrevious,
+    goToNextPage,
+    goToPreviousPage,
+    updateWorkflowItem,
+  } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
+  // Suggestions come from the full set of workflow templates, not the current
+  // page of workflow runs - a page can easily miss templates that still need
+  // to be selectable (see PR #3679 review).
+  const { data: workflowTemplates } = useGetAllWorkflowTemplates();
+
   const uniqueWorkflowTemplateNames = useMemo(() => {
     const templateNames = new Set<string>();
-    workflows.forEach(workflow => {
-      const templateName = workflow.spec.workflowTemplateRef?.name;
-      if (templateName) {
-        templateNames.add(templateName);
+    workflowTemplates?.forEach(template => {
+      if (template.metadata.name) {
+        templateNames.add(template.metadata.name);
       }
     });
     return Array.from(templateNames).sort();
-  }, [workflows]);
+  }, [workflowTemplates]);
 
   const filteredTemplateNames = useMemo(() => {
     if (!workflowTemplateNameInput) return uniqueWorkflowTemplateNames;
@@ -1126,43 +1077,39 @@ export function SessionsSection({
     );
   }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
 
-  const filteredAndSortedSessions = allSessions
-    .filter(session => {
-      if (sourceFilter === 'all') return true;
-      if (sourceFilter === 'workflows') return session.type === 'workflow';
-      return true;
-    })
-    .sort((a, b) => {
-      const timeA = new Date(a.startedAt).getTime();
-      const timeB = new Date(b.startedAt).getTime();
-      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
-    });
+  // Filters apply only within the current page, not the whole collection.
+  const filteredSessions = allSessions.filter(session => {
+    if (sourceFilter === 'all') return true;
+    if (sourceFilter === 'workflows') return session.type === 'workflow';
+    return true;
+  });
 
   useEffect(() => {
+    const isUnresolvedDeepLink =
+      initialRunRef.current && selectedSessionId === initialRunRef.current;
     if (
-      filteredAndSortedSessions.length > 0 &&
-      !filteredAndSortedSessions.find(s => s.id === selectedSessionId)
+      filteredSessions.length > 0 &&
+      !filteredSessions.find(s => s.id === selectedSessionId) &&
+      !isUnresolvedDeepLink
     ) {
-      setSelectedSessionId(filteredAndSortedSessions[0].id);
+      setSelectedSessionId(filteredSessions[0].id);
     }
-  }, [filteredAndSortedSessions, selectedSessionId]);
+  }, [filteredSessions, selectedSessionId]);
 
-  const sessionCount = filteredAndSortedSessions.length;
+  const sessionCount = filteredSessions.length;
 
   useEffect(() => {
     onCountChange?.(sessionCount);
   }, [onCountChange, sessionCount]);
 
-  const selectedSessionFromList = filteredAndSortedSessions.find(
+  const selectedSessionFromList = filteredSessions.find(
     s => s.id === selectedSessionId,
   );
 
   const { workflow: selectedWorkflowDetail, loading: loadingDetail } =
     useWorkflow(
       namespace,
-      useRealData && selectedSessionFromList?.type === 'workflow'
-        ? selectedSessionId || ''
-        : '',
+      useRealData && selectedSessionId ? selectedSessionId : '',
     );
 
   const selectedSession =
@@ -1186,12 +1133,12 @@ export function SessionsSection({
         previousStatus === 'Running' || previousStatus === 'Pending';
 
       if (isTerminalState && wasRunning) {
-        void refetchWorkflows();
+        updateWorkflowItem(selectedWorkflowDetail);
       }
 
       previousStatusRef.current = currentStatus;
     }
-  }, [selectedWorkflowDetail, useRealData, refetchWorkflows]);
+  }, [selectedWorkflowDetail, useRealData, updateWorkflowItem]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1214,18 +1161,18 @@ export function SessionsSection({
   const hasActiveFilters =
     workflowNameInput ||
     workflowTemplateNameInput ||
-    (statusFilter && statusFilter !== 'all') ||
-    sortOrder !== 'newest';
+    selectedTemplateName ||
+    (statusFilter && statusFilter !== 'all');
 
   const isLoading = loading || !isNamespaceResolved;
 
   const clearFilters = () => {
+    setTemplateTextDraft(null);
     setUrlState(
       {
         workflowName: '',
         workflowTemplateName: '',
         status: 'all',
-        sort: 'newest',
       },
       { flush: true },
     );
@@ -1258,7 +1205,11 @@ export function SessionsSection({
                 placeholder="All templates"
                 value={workflowTemplateNameInput}
                 onChange={e => {
-                  setUrlState({ workflowTemplateName: e.target.value });
+                  const value = e.target.value;
+                  setTemplateTextDraft(value);
+                  if (value !== selectedTemplateName) {
+                    setUrlState({ workflowTemplateName: '' });
+                  }
                   if (!templateDropdownOpen) {
                     setTemplateDropdownOpen(true);
                   }
@@ -1274,6 +1225,7 @@ export function SessionsSection({
                     filteredTemplateNames={filteredTemplateNames}
                     query={workflowTemplateNameInput}
                     onSelect={templateName => {
+                      setTemplateTextDraft(null);
                       setUrlState(
                         { workflowTemplateName: templateName },
                         { flush: true },
@@ -1352,14 +1304,44 @@ export function SessionsSection({
         <SessionsBody
           error={error}
           isLoading={isLoading}
-          sessions={filteredAndSortedSessions}
+          sessions={filteredSessions}
           selectedSessionId={selectedSessionId}
           onSelectSession={setSelectedSessionId}
           selectedSession={selectedSession}
           isDetailLoading={loadingDetail && useRealData}
           hasActiveFilters={Boolean(hasActiveFilters)}
+          hasNext={hasNext}
           onClearFilters={clearFilters}
         />
+
+        <nav
+          aria-label="Workflow runs pagination"
+          className="flex shrink-0 items-center justify-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={goToPreviousPage}
+            disabled={!hasPrevious || isLoading}
+            aria-label="Go to previous page"
+            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            <IconShell size="sm">
+              <ArrowBack />
+            </IconShell>
+            <span className="text-sm leading-5 tracking-[-0.028px]">
+              Previous
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={goToNextPage}
+            disabled={!hasNext || isLoading}
+            aria-label="Go to next page"
+            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            <span className="text-sm leading-5 tracking-[-0.028px]">Next</span>
+            <IconShell size="sm">
+              <ArrowForward />
+            </IconShell>
+          </button>
+        </nav>
       </div>
     </ErrorBoundary>
   );

@@ -70,14 +70,29 @@ type QueryResultStub = {
   refetch: () => void;
 };
 
+const PAGE_1_KEY = ['list-all-queries', { page: 1, pageSize: 25 }, 'default'];
+const PAGE_2_KEY = ['list-all-queries', { page: 2, pageSize: 25 }, 'default'];
+
+function createSeededQueryClient() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  queryClient.setQueryData(PAGE_1_KEY, { items: [] });
+  queryClient.setQueryData(PAGE_2_KEY, { items: [] });
+  return queryClient;
+}
+
 function renderSection(props: {
   searchTerm?: string;
   onClearSearch?: () => void;
   queryResult: QueryResultStub;
+  queryClient?: QueryClient;
 }) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const queryClient =
+    props.queryClient ??
+    new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
   return render(
     <QueryClientProvider client={queryClient}>
       <QueriesSection
@@ -146,7 +161,9 @@ describe('QueriesSection', () => {
     expect(screen.getByText(/No queries match/)).toBeInTheDocument();
     expect(screen.getByText(/missing/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /clear search/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /clear search/i }),
+    );
     expect(onClearSearch).toHaveBeenCalledTimes(1);
   });
 
@@ -194,10 +211,11 @@ describe('QueriesSection', () => {
     expect(screen.getByText('Queued')).toBeInTheDocument();
   });
 
-  it('cancels a running query when its Cancel action is clicked', async () => {
-    const refetch = vi.fn();
+  it('cancels a running query and invalidates every cached queries page', async () => {
+    const queryClient = createSeededQueryClient();
     vi.mocked(queriesService.cancel).mockResolvedValueOnce({} as never);
     renderSection({
+      queryClient,
       queryResult: {
         data: {
           items: [
@@ -216,15 +234,19 @@ describe('QueriesSection', () => {
         },
         isLoading: false,
         isError: false,
-        refetch,
+        refetch: vi.fn(),
       },
     });
 
     fireEvent.click(screen.getByText('Cancel'));
 
     await waitFor(() => {
-      expect(queriesService.cancel).toHaveBeenCalledWith('default', 'q-running');
-      expect(refetch).toHaveBeenCalled();
+      expect(queriesService.cancel).toHaveBeenCalledWith(
+        'default',
+        'q-running',
+      );
+      expect(queryClient.getQueryState(PAGE_1_KEY)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(PAGE_2_KEY)?.isInvalidated).toBe(true);
     });
   });
 
@@ -250,10 +272,11 @@ describe('QueriesSection', () => {
     );
   });
 
-  it('calls queriesService.delete and refetches when delete is clicked', async () => {
-    const refetch = vi.fn();
+  it('deletes a query and invalidates every cached queries page', async () => {
+    const queryClient = createSeededQueryClient();
     vi.mocked(queriesService.delete).mockResolvedValueOnce(undefined);
     renderSection({
+      queryClient,
       queryResult: {
         data: {
           items: [twoQueries.items[0]],
@@ -264,7 +287,7 @@ describe('QueriesSection', () => {
         },
         isLoading: false,
         isError: false,
-        refetch,
+        refetch: vi.fn(),
       },
     });
 
@@ -273,6 +296,58 @@ describe('QueriesSection', () => {
     );
 
     expect(queriesService.delete).toHaveBeenCalledWith('default', 'q-1');
+    expect(queryClient.getQueryState(PAGE_1_KEY)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(PAGE_2_KEY)?.isInvalidated).toBe(true);
+  });
+
+  it('shows an error state instead of the table when the load fails', () => {
+    renderSection({
+      queryResult: {
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        error: new Error('backend is down'),
+        refetch: vi.fn(),
+      },
+    });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/couldn't load queries/i);
+    expect(alert).toHaveTextContent(/backend is down/i);
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('refetches when the retry button is clicked after a failed load', async () => {
+    const refetch = vi.fn();
+    renderSection({
+      queryResult: {
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        error: new Error('backend is down'),
+        refetch,
+      },
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
     expect(refetch).toHaveBeenCalled();
+  });
+
+  it('keeps the table and shows a refresh banner when a refresh fails', () => {
+    renderSection({
+      queryResult: {
+        data: twoQueries,
+        isLoading: false,
+        isError: true,
+        error: new Error('refresh blew up'),
+        refetch: vi.fn(),
+      },
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /couldn't refresh queries/i,
+    );
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByText('q-1')).toBeInTheDocument();
   });
 });

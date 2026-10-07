@@ -16,9 +16,12 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
-import { type Model, modelsService } from '@/lib/services';
-import { useDeleteSecret, useGetAllSecrets } from '@/lib/services/secrets-hooks';
+import { type ModelListItem, modelsService } from '@/lib/services';
 import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
+import {
+  useDeleteSecret,
+  useGetAllSecrets,
+} from '@/lib/services/secrets-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 const URL_STATE_SPEC = {
@@ -27,7 +30,7 @@ const URL_STATE_SPEC = {
 
 export function SecretsSection() {
   const { readOnlyMode, namespace } = useNamespace();
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<ModelListItem[]>([]);
   const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
 
   const { data: secrets = [], isLoading: secretsLoading } = useGetAllSecrets();
@@ -37,7 +40,7 @@ export function SecretsSection() {
   useEffect(() => {
     const loadModels = async () => {
       try {
-        setModels(await modelsService.getAll(namespace));
+        setModels(await modelsService.listWithSecrets(namespace));
       } catch (error) {
         console.error('Failed to load models:', error);
       }
@@ -73,7 +76,7 @@ export function SecretsSection() {
   );
 
   return (
-    <div className="flex h-full w-full content-shell flex-col">
+    <div className="content-shell flex h-full w-full flex-col">
       <ResourcePageHeader
         icon={<Shield className="size-full" />}
         title="Secrets"

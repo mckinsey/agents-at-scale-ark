@@ -7,6 +7,7 @@ export type HeaderData = {
   name: string;
   type: 'direct' | 'secret';
   value: string;
+  secretKey?: string;
 };
 
 export type HeaderError = { nameError?: string; valueError?: string };

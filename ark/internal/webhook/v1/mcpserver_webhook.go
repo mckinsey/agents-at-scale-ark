@@ -11,8 +11,7 @@ import (
 
 func SetupMCPServerWebhookWithManager(mgr ctrl.Manager) error {
 	v := validation.NewValidator(&validation.WebhookLookup{Client: mgr.GetClient()})
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&arkv1alpha1.MCPServer{}).
-		WithValidator(&validation.WebhookValidator{V: v}).
+	return ctrl.NewWebhookManagedBy(mgr, &arkv1alpha1.MCPServer{}).
+		WithValidator(&validation.WebhookValidator[*arkv1alpha1.MCPServer]{V: v}).
 		Complete()
 }

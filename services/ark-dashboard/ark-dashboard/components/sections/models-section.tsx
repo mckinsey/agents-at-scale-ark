@@ -7,11 +7,18 @@ import {
   ResourceListSection,
 } from '@/components/sections/resource-list-section';
 import { DOCS_URLS } from '@/lib/constants/docs';
-import { modelsService } from '@/lib/services';
-import { useNamespace } from '@/providers/NamespaceProvider';
+import { useDeleteModel, useGetAllModels } from '@/lib/services/models-hooks';
 
 export function ModelsSection() {
-  const { namespace } = useNamespace();
+  const {
+    data: models = [],
+    isPending,
+    error,
+    refetch,
+    dataUpdatedAt,
+  } = useGetAllModels();
+  const deleteModel = useDeleteModel();
+
   return (
     <ResourceListSection
       icon={<Memory />}
@@ -30,10 +37,14 @@ export function ModelsSection() {
           <p>Get started by adding your first model.</p>
         </>
       }
-      loadItems={() => modelsService.list(namespace)}
-      deleteItem={id => modelsService.deleteById(namespace, id)}
-      renderTable={(models, onDelete) => (
-        <ModelsTable models={models} onDelete={onDelete} />
+      items={models}
+      loading={isPending}
+      error={error}
+      dataUpdatedAt={dataUpdatedAt}
+      onDelete={id => deleteModel.mutate(id)}
+      onReload={() => refetch()}
+      renderTable={(items, onDelete) => (
+        <ModelsTable models={items} onDelete={onDelete} />
       )}
     />
   );

@@ -55,7 +55,3 @@ type MemoryList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Memory `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&Memory{}, &MemoryList{})
-}

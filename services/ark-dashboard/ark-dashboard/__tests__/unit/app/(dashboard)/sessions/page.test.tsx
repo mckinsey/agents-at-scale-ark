@@ -27,11 +27,6 @@ vi.mock('@/components/sessions-conversations/sessions-table', () => ({
   ),
 }));
 
-vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
-  NewSessionDialog: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="new-session-dialog">Dialog</div> : null,
-}));
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -78,19 +73,5 @@ describe('SessionsPage', () => {
     );
 
     expect(screen.getByText('Sessions')).toBeInTheDocument();
-  });
-
-  it('should open the new session dialog when clicking New session', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <SessionsPage />
-      </QueryClientProvider>,
-    );
-
-    await user.click(screen.getByText('New session'));
-
-    expect(screen.getByTestId('new-session-dialog')).toBeInTheDocument();
   });
 });

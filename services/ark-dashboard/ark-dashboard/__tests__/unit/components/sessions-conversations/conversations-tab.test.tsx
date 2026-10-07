@@ -1,19 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConversationsTab } from '@/components/sessions-conversations/conversations-tab';
 import { useListConversations } from '@/lib/services/conversations-hooks';
-import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { Conversation } from '@/lib/services/conversations';
-import type { BrokerSession } from '@/lib/services/broker-sessions';
 
 vi.mock('@/lib/services/conversations-hooks');
-vi.mock('@/lib/services/broker-sessions-hooks');
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-// Mock child components
 vi.mock('@/components/sessions-conversations/conversation-sidebar', () => ({
   ConversationSidebar: ({ conversations, selectedId, onSelect }: any) => (
     <div data-testid="conversation-sidebar">
@@ -32,59 +28,21 @@ vi.mock('@/components/sessions-conversations/conversation-sidebar', () => ({
 }));
 
 vi.mock('@/components/sessions-conversations/message-display', () => ({
-  MessageDisplay: ({ conversationId, pendingMessages, isProcessing }: any) => (
+  MessageDisplay: ({ conversationId, showToolCalls, onShowToolCallsChange }: any) => (
     <div data-testid="message-display">
       <div data-testid="conversation-id">{conversationId}</div>
-      <div data-testid="pending-count">{pendingMessages.length}</div>
-      <div data-testid="processing">{isProcessing ? 'true' : 'false'}</div>
-    </div>
-  ),
-}));
-
-vi.mock('@/components/sessions-conversations/chat-input', () => ({
-  ChatInput: ({ conversationId, onAddPendingMessage, onSetProcessing, onEnableQueries }: any) => (
-    <div data-testid="chat-input">
+      <div data-testid="show-tool-calls">{showToolCalls ? 'true' : 'false'}</div>
       <button
-        data-testid="send-message"
-        onClick={() => {
-          onAddPendingMessage(conversationId, 'test message');
-          onSetProcessing(conversationId, true);
-        }}
+        data-testid="toggle-tool-calls"
+        onClick={() => onShowToolCallsChange(!showToolCalls)}
       >
-        Send
-      </button>
-      <button data-testid="enable-queries" onClick={onEnableQueries}>
-        Enable
+        toggle
       </button>
     </div>
   ),
-}));
-
-vi.mock('@/components/sessions-conversations/new-conversation-panel', () => ({
-  NewConversationPanel: ({ onSelectParticipant, onCancel }: any) => (
-    <div data-testid="new-conversation-panel">
-      <button
-        data-testid="select-participant"
-        onClick={() =>
-          onSelectParticipant({ id: 'p1', name: 'test-agent', type: 'agent' })
-        }
-      >
-        Select
-      </button>
-      <button data-testid="cancel-panel" onClick={onCancel}>
-        Cancel
-      </button>
-    </div>
-  ),
-}));
-
-vi.mock('@/lib/utils/uuid', () => ({
-  generateUUID: () => 'generated-uuid',
 }));
 
 describe('ConversationsTab', () => {
-  const mockOnMessageSent = vi.fn();
-
   const mockConversations: Conversation[] = [
     {
       conversationId: 'conv-1',
@@ -102,7 +60,7 @@ describe('ConversationsTab', () => {
       name: 'agent-2',
       participants: ['agent-2'],
       messageCount: 3,
-      toolCallCount: 1,
+      toolCallCount: 0,
       duration: '1m',
       startTime: '2024-01-01T00:05:00Z',
       participantType: 'agent',
@@ -110,345 +68,88 @@ describe('ConversationsTab', () => {
     },
   ];
 
-  const mockSession: BrokerSession = {
-    sessionId: 'session-1',
-    name: 'Session 1',
-    status: 'active',
-    errorCount: 0,
-    participants: [{ id: 'p1', name: 'test-agent', type: 'agent' }],
-    conversationCount: 2,
-    createdAt: '2024-01-01T00:00:00Z',
-    lastActivity: '2024-01-01T01:00:00Z',
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useListConversations).mockReturnValue({
       data: mockConversations,
       isLoading: false,
     } as any);
-    vi.mocked(useGetSession).mockReturnValue({
-      data: mockSession,
-      isLoading: false,
-    } as any);
   });
 
   it('should render conversations list from backend', () => {
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
+    render(<ConversationsTab sessionId="session-1" />);
 
     expect(screen.getByTestId('conv-conv-1')).toBeInTheDocument();
     expect(screen.getByTestId('conv-conv-2')).toBeInTheDocument();
   });
 
-  it('should show loading skeleton when loading', () => {
-    vi.mocked(useListConversations).mockReturnValue({
-      data: undefined,
-      isLoading: true,
-    } as any);
+  it('should auto-select the first conversation', () => {
+    render(<ConversationsTab sessionId="session-1" />);
 
-    const { container } = render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
-  });
-
-  it('should show empty state when no conversations', () => {
-    vi.mocked(useListConversations).mockReturnValue({
-      data: [],
-      isLoading: false,
-    } as any);
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    expect(screen.getByText('No conversations yet')).toBeInTheDocument();
-  });
-
-  it('should create temporary conversation from initialParticipant', () => {
-    vi.mocked(useListConversations).mockReturnValue({
-      data: [],
-      isLoading: false,
-    } as any);
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        initialParticipant={{ name: 'temp-agent', type: 'agent' }}
-        initialConversationId="temp-conv-id"
-        hasSentMessage={false}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    expect(screen.getByTestId('conv-temp-conv-id')).toBeInTheDocument();
-    expect(screen.getByText('temp-agent')).toBeInTheDocument();
-  });
-
-  it('should merge temporary and backend conversations', () => {
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        initialParticipant={{ name: 'temp-agent', type: 'agent' }}
-        initialConversationId="temp-conv"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    // Should show both temporary and backend conversations
-    expect(screen.getByTestId('conv-temp-conv')).toBeInTheDocument();
-    expect(screen.getByTestId('conv-conv-1')).toBeInTheDocument();
-    expect(screen.getByTestId('conv-conv-2')).toBeInTheDocument();
-  });
-
-  it('should filter duplicate conversations when merging', () => {
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        initialParticipant={{ name: 'agent-1', type: 'agent' }}
-        initialConversationId="conv-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    // Should only show conv-1 once (backend version wins)
-    const conv1Elements = screen.getAllByTestId('conv-conv-1');
-    expect(conv1Elements).toHaveLength(1);
+    expect(screen.getByTestId('conversation-id')).toHaveTextContent('conv-1');
   });
 
   it('should handle conversation selection', async () => {
     const user = userEvent.setup();
+    render(<ConversationsTab sessionId="session-1" />);
 
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
+    await user.click(screen.getByTestId('conv-conv-2'));
 
-    await user.click(screen.getByTestId('conv-conv-1'));
-
-    // Should show MessageDisplay with selected conversation
-    expect(screen.getByTestId('message-display')).toBeInTheDocument();
-    expect(screen.getByTestId('conversation-id')).toHaveTextContent('conv-1');
+    expect(screen.getByTestId('conversation-id')).toHaveTextContent('conv-2');
   });
 
-  it('should show empty state when no conversations exist', () => {
-    // Mock empty conversations array
-    vi.mocked(useListConversations).mockReturnValue({
-      data: [],
-      isLoading: false,
-    } as any);
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    // With no conversations, the Empty component shows
-    expect(screen.getByText('No conversations yet')).toBeInTheDocument();
-  });
-
-  it('should open new conversation panel', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    expect(screen.queryByTestId('new-conversation-panel')).not.toBeInTheDocument();
-
-    // Find and click the Plus button (in the sidebar header)
-    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
-    await user.click(plusButton);
-
-    expect(screen.getByTestId('new-conversation-panel')).toBeInTheDocument();
-  });
-
-  it('should create new conversation from panel', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    // Open panel
-    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
-    await user.click(plusButton);
-
-    // Select participant
-    await user.click(screen.getByTestId('select-participant'));
-
-    // Should create new conversation with generated UUID and return to list view
-    expect(screen.getByTestId('conv-generated-uuid')).toBeInTheDocument();
-    expect(screen.queryByTestId('new-conversation-panel')).not.toBeInTheDocument();
-  });
-
-  it('should handle pending messages state', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    // Select conversation
-    await user.click(screen.getByTestId('conv-conv-1'));
-
-    // Send message
-    await user.click(screen.getByTestId('send-message'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('pending-count')).toHaveTextContent('1');
-      expect(screen.getByTestId('processing')).toHaveTextContent('true');
-    });
-  });
-
-  it('should enable queries and call onMessageSent', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        initialParticipant={{ name: 'temp-agent', type: 'agent' }}
-        initialConversationId="temp-conv"
-        hasSentMessage={false}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    // Select the temporary conversation
-    await user.click(screen.getByTestId('conv-temp-conv'));
-
-    // Click enable queries button
-    await user.click(screen.getByTestId('enable-queries'));
-
-    expect(mockOnMessageSent).toHaveBeenCalled();
-  });
-
-  it('should skip API calls for new sessions', () => {
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        initialParticipant={{ name: 'temp-agent', type: 'agent' }}
-        initialConversationId="temp-conv"
-        hasSentMessage={false}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    // Should call hooks with enabled: false
-    expect(useListConversations).toHaveBeenCalledWith('session-1', {
-      enabled: false,
-    });
-    expect(useGetSession).toHaveBeenCalledWith('session-1', {
-      enabled: false,
-    });
-  });
-
-  it('should enable API calls after first message sent', () => {
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        initialParticipant={{ name: 'temp-agent', type: 'agent' }}
-        initialConversationId="temp-conv"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    // Should call hooks with enabled: true
-    expect(useListConversations).toHaveBeenCalledWith('session-1', {
-      enabled: true,
-    });
-  });
-
-  it('should keep temporary conversations when backend is empty', () => {
-    vi.mocked(useListConversations).mockReturnValue({
-      data: [],
-      isLoading: false,
-    } as any);
-
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        initialParticipant={{ name: 'temp-agent', type: 'agent' }}
-        initialConversationId="temp-conv"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
-
-    // Should still show temporary conversation even though backend is empty
-    expect(screen.getByTestId('conv-temp-conv')).toBeInTheDocument();
-  });
-
-  it('should keep temporary conversations while backend is loading', () => {
+  it('should show loading skeleton while conversations load', () => {
     vi.mocked(useListConversations).mockReturnValue({
       data: undefined,
       isLoading: true,
     } as any);
 
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        initialParticipant={{ name: 'temp-agent', type: 'agent' }}
-        initialConversationId="temp-conv"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
+    const { container } = render(<ConversationsTab sessionId="session-1" />);
 
-    // Should show temporary conversation while loading
-    expect(screen.getByTestId('conv-temp-conv')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
   });
 
-  it('should pass session participants to panel', async () => {
+  it('should show empty state when there are no conversations', () => {
+    vi.mocked(useListConversations).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as any);
+
+    render(<ConversationsTab sessionId="session-1" />);
+
+    expect(screen.getByText('No conversations yet')).toBeInTheDocument();
+  });
+
+  it('should own the tool-call visibility state', async () => {
     const user = userEvent.setup();
+    render(<ConversationsTab sessionId="session-1" />);
 
-    render(
-      <ConversationsTab
-        sessionId="session-1"
-        hasSentMessage={true}
-        onMessageSent={mockOnMessageSent}
-      />
-    );
+    expect(screen.getByTestId('show-tool-calls')).toHaveTextContent('true');
 
-    const plusButton = screen.getByRole('button', { name: 'Create new conversation' });
-    await user.click(plusButton);
+    await user.click(screen.getByTestId('toggle-tool-calls'));
 
-    expect(screen.getByTestId('new-conversation-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('show-tool-calls')).toHaveTextContent('false');
+  });
+
+  it('should show an error state instead of the empty state when conversations fail to load', async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    vi.mocked(useListConversations).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('Internal Server Error'),
+      refetch,
+    } as unknown as ReturnType<typeof useListConversations>);
+
+    render(<ConversationsTab sessionId="session-1" />);
+
+    expect(
+      screen.getByText('Failed to load conversations'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No conversations yet')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalled();
   });
 });

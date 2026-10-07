@@ -57,6 +57,8 @@ Parameters named by a navigation target SHALL be applied to the destination URL 
 
 The dashboard SHALL record the URL of each list screen the user visits since the page was loaded. A return control - a detail page's breadcrumb, a studio or form's back or cancel action, or closing Settings - SHALL restore that screen's own parameters - filters, sorting and pagination - so the user does not have to reapply them. The recorded URL SHALL NOT carry app-scoped parameters, so the namespace in use at the time of the return is the one applied.
 
+Workflow runs is the one exception for pagination: its pages are fetched with short-lived cursors, so it SHALL restore its filters but open on the first page.
+
 Sidebar entries are not return controls and SHALL open a screen with no parameters applied, so the sidebar remains a way to reach a screen in its default state. This is uniform across the sidebar: no entry restores, and none may special-case a single screen.
 
 #### Scenario: A breadcrumb returns to the list as it was left

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
 import { apiUrl } from '@/lib/api/config';
 import {
@@ -22,8 +21,6 @@ export interface UseSSEStreamOptions {
   pageSize?: number;
   /** Fetch every page on init before connecting to the live stream. */
   fetchAllPages?: boolean;
-  /** Invoked after a successful purge (e.g. analytics). */
-  onPurge?: () => void;
 }
 
 export function useSSEStream(
@@ -35,7 +32,6 @@ export function useSSEStream(
     agentName = '',
     pageSize = DEFAULT_PAGE_SIZE,
     fetchAllPages = false,
-    onPurge,
   } = options;
 
   const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
@@ -203,28 +199,6 @@ export function useSSEStream(
     setFetchedEntries([]);
   }, []);
 
-  const purge = useCallback(async () => {
-    if (!endpoint) return;
-    try {
-      const res = await fetch(
-        apiUrl(`/api${endpoint}?memory=${encodeURIComponent(memory)}`),
-        { method: 'DELETE' },
-      );
-      if (!res.ok) {
-        throw new Error(`${res.status} ${res.statusText}`);
-      }
-      setStreamedEntries([]);
-      setFetchedEntries([]);
-      nextCursorRef.current = undefined;
-      setHasMore(false);
-      onPurge?.();
-    } catch (e) {
-      toast.error('Failed to purge data', {
-        description: (e as Error).message,
-      });
-    }
-  }, [endpoint, memory, onPurge]);
-
   useEffect(() => {
     mountedRef.current = true;
 
@@ -274,5 +248,5 @@ export function useSSEStream(
 
   const entries = [...streamedEntries, ...fetchedEntries];
 
-  return { entries, isConnected, isLoading, hasMore, error, clear, purge, loadMore };
+  return { entries, isConnected, isLoading, hasMore, error, clear, loadMore };
 }

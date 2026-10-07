@@ -9,12 +9,19 @@ import {
 } from '@/components/sections/resource-list-section';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DOCS_URLS } from '@/lib/constants/docs';
-import { agentsService } from '@/lib/services';
+import { useDeleteAgent, useGetAllAgents } from '@/lib/services/agents-hooks';
 import { getOriginLabel } from '@/lib/utils/origin-icon';
-import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function AgentsSection() {
-  const { namespace } = useNamespace();
+  const {
+    data: agents = [],
+    isPending,
+    error,
+    refetch,
+    dataUpdatedAt,
+  } = useGetAllAgents();
+  const deleteAgent = useDeleteAgent();
+
   return (
     <ResourceListSection
       icon={<SmartToy />}
@@ -39,10 +46,14 @@ export function AgentsSection() {
         getValue: agent =>
           getOriginLabel(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]),
       }}
-      loadItems={() => agentsService.list(namespace)}
-      deleteItem={id => agentsService.deleteById(namespace, id)}
-      renderTable={(agents, onDelete) => (
-        <AgentsTable agents={agents} onDelete={onDelete} />
+      items={agents}
+      loading={isPending}
+      error={error}
+      dataUpdatedAt={dataUpdatedAt}
+      onDelete={id => deleteAgent.mutate(id)}
+      onReload={() => refetch()}
+      renderTable={(items, onDelete) => (
+        <AgentsTable agents={items} onDelete={onDelete} />
       )}
     />
   );

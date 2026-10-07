@@ -189,6 +189,19 @@ describe('APIClient', () => {
         expect((error as APIError).message).toBe('Network error')
       }
     })
+
+    it('rethrows an aborted fetch as-is, preserving AbortError', async () => {
+      const abortError = new DOMException('The operation was aborted.', 'AbortError')
+      mockFetch.mockRejectedValueOnce(abortError)
+
+      try {
+        await client.get('/test')
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        expect(error).not.toBeInstanceOf(APIError)
+        expect((error as Error).name).toBe('AbortError')
+      }
+    })
   })
 
   describe('HTTP methods', () => {

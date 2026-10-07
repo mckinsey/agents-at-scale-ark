@@ -33,10 +33,6 @@ vi.mock('@/components/sessions-conversations/session-table-row', () => ({
     <div data-testid={`session-row-${session.sessionId}`}>{session.name}</div>
   ),
 }));
-vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
-  NewSessionDialog: () => null,
-}));
-
 describe('Filter Combination Scenarios', () => {
   const mockOnSelectSession = vi.fn();
 

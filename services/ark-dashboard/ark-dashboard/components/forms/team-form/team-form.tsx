@@ -11,8 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import type { Team } from '@/lib/services';
+import type { TeamListItem } from '@/lib/services';
 import { teamsService } from '@/lib/services';
 import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -30,7 +31,8 @@ import { useTeamForm } from './use-team-form';
 export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { push } = useNamespacedNavigation();
   const { namespace, readOnlyMode } = useNamespace();
-  const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const teamsReturnHref = useListReturnHref('/teams');
+  const [allTeams, setAllTeams] = useState<TeamListItem[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
 
@@ -41,7 +43,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     if (isViewing) {
       setTeamsLoading(true);
       teamsService
-        .getAll(namespace)
+        .list(namespace)
         .then(teams => setAllTeams(teams))
         .catch(console.error)
         .finally(() => setTeamsLoading(false));
@@ -165,7 +167,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
               current="Create team"
             />
             <div className="flex items-center gap-2">
-              <NamespacedLink href="/teams">
+              <NamespacedLink href={teamsReturnHref}>
                 <Button variant="outline">Cancel</Button>
               </NamespacedLink>
               <Button onClick={form.handleSubmit(onSubmit)} disabled={saving}>

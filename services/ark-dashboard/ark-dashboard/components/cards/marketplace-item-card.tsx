@@ -6,12 +6,10 @@ import { toast } from 'sonner';
 
 import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
 import {
-  AccountTree,
+  AutoReadPlay,
   Check,
   Dns,
   OpenInNew,
-  PlayArrow,
-  PlugConnect,
   SmartToy,
 } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
@@ -36,25 +34,23 @@ interface MarketplaceItemCardProps {
   className?: string;
 }
 
-interface CategoryBadge {
+interface TypeBadge {
   readonly label: string;
-  readonly icon: ComponentType<SVGProps<SVGSVGElement>>;
+  readonly icon?: ComponentType<SVGProps<SVGSVGElement>>;
 }
 
-function categoryBadge(item: MarketplaceItem): CategoryBadge {
+function typeBadge(item: MarketplaceItem): TypeBadge {
   if (item.category === 'agents') {
     return { label: 'Agent', icon: SmartToy };
   }
-  if (item.category === 'workflows') {
-    return { label: 'Workflow', icon: AccountTree };
-  }
-  if (item.category === 'mcp-servers') {
-    return { label: 'MCP', icon: PlugConnect };
+  const label = item.type.charAt(0).toUpperCase() + item.type.slice(1);
+  if (item.type === 'service') {
+    return { label, icon: Dns };
   }
   if (item.type === 'demo') {
-    return { label: 'Demo', icon: PlayArrow };
+    return { label, icon: AutoReadPlay };
   }
-  return { label: 'Service', icon: Dns };
+  return { label };
 }
 
 export function MarketplaceItemCard({
@@ -145,7 +141,7 @@ export function MarketplaceItemCard({
   };
 
   const isInstalled = justInstalled || item.status === 'installed';
-  const { label: categoryLabel, icon: CategoryIcon } = categoryBadge(item);
+  const { label: typeLabel, icon: TypeIcon } = typeBadge(item);
   const hiddenTagCount = item.tags.length - VISIBLE_TAGS;
 
   return (
@@ -157,11 +153,17 @@ export function MarketplaceItemCard({
         )}>
         <div className="flex flex-col gap-6">
           <div className="flex items-center justify-between">
-            <Badge format="pill" size="sm" variant="alternative" withIcon>
-              <IconShell size="sm" variant="secondary">
-                <CategoryIcon />
-              </IconShell>
-              {categoryLabel}
+            <Badge
+              format="pill"
+              size="sm"
+              variant="alternative"
+              withIcon={Boolean(TypeIcon)}>
+              {TypeIcon && (
+                <IconShell size="sm" variant="secondary">
+                  <TypeIcon />
+                </IconShell>
+              )}
+              {typeLabel}
             </Badge>
           </div>
 
