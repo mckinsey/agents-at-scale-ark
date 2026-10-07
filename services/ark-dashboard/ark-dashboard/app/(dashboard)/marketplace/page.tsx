@@ -176,8 +176,7 @@ export default function MarketplacePage() {
             {CATEGORY_TABS.map(tab => {
               const Icon = tab.icon;
               const isActive = urlState.category === tab.key;
-              const iconVariant =
-                tab.iconClass || isActive ? 'primary' : 'secondary';
+              const iconVariant = isActive ? 'primary' : 'secondary';
               return (
                 <TagToggle
                   key={tab.key}

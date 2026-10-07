@@ -66,6 +66,7 @@ describe('MarketplaceItemCard', () => {
 
     expect(screen.getByText('Test Item')).toBeInTheDocument();
     expect(screen.getByText('A test')).toBeInTheDocument();
+    expect(screen.getByText('Component')).toBeInTheDocument();
   });
 
   it('renders version', () => {
