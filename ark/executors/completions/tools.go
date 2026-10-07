@@ -22,6 +22,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/inlinetools"
 	arkmcp "mckinsey.com/ark/internal/mcp"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -201,6 +202,7 @@ type ToolRegistry struct {
 	mcpSettings       map[string]arkmcp.MCPSettings
 	telemetryRecorder telemetry.ToolRecorder
 	eventingRecorder  eventing.ToolRecorder
+	activatorBaseURL  string
 }
 
 func NewToolRegistry(mcpSettings map[string]arkmcp.MCPSettings, telemetryRecorder telemetry.ToolRecorder, eventingRecorder eventing.ToolRecorder) *ToolRegistry {
@@ -212,6 +214,7 @@ func NewToolRegistry(mcpSettings map[string]arkmcp.MCPSettings, telemetryRecorde
 		mcpSettings:       mcpSettings,
 		telemetryRecorder: telemetryRecorder,
 		eventingRecorder:  eventingRecorder,
+		activatorBaseURL:  inlinetools.ActivatorBaseURL(inlinetools.ActivatorNamespaceFromEnv()),
 	}
 }
 

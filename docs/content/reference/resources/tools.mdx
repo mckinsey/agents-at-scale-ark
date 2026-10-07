@@ -307,7 +307,11 @@ A non-zero exit, a timeout, cancellation, or stdout that is not valid UTF-8 is r
 
 With the feature enabled, the controller provisions the tool's runner: a source ConfigMap, a ServiceAccount with no mounted token, a deny-egress NetworkPolicy, a ClusterIP Service and a Deployment that starts at **zero replicas**. `Available: True` means the endpoint and current configuration are usable — not that a pod is running.
 
-**Calls are not served yet.** The activator that fronts the runners is not part of this release, so an inline tool reports `Available: False` with reason `ActivatorUnavailable` once its runner exists, and `RuntimeNotInstalled` while `inlineTools.enabled` is false. Editing source updates the ConfigMap in place and rolls the pod template; a runner verifies the checksum of its mounted snapshot at startup and refuses to serve a revision other than the one it was created for.
+Calls reach the runner through the activator, which scales it up on the first call and back to zero when it goes idle. An inline tool reports `Available: False` with reason `RuntimeNotInstalled` while `inlineTools.enabled` is false, and `ActivatorUnavailable` while the activator Deployment is not ready. Editing source updates the ConfigMap in place and rolls the pod template; a runner verifies the checksum of its mounted snapshot at startup and refuses to serve a revision other than the one it was created for.
+
+### Invoking an inline tool
+
+Attach an inline tool with `type: inline` in an agent's `spec.tools`, like any other tool. The default execution engine resolves `status.resolvedAddress` and calls the tool over MCP Streamable HTTP under its own connection identity, so an inline tool never shares a session with an [MCPServer](/reference/resources/mcpserver) of the same name. A tool whose `Available` condition is not `True` for the current `metadata.generation` is treated as unavailable rather than called. Invocation needs no author grant: `inline-tool-author-role` governs writing source, not running it. Agents that run on an external execution engine cannot call inline tools yet.
 
 ### Runner process cleanup
 

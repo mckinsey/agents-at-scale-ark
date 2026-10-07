@@ -317,7 +317,7 @@ func TestInlineChildrenMatchActivationIdentity(t *testing.T) {
 		// The fake API does not allocate child UIDs or Service IPs.
 		deployment.UID, service.UID, service.Spec.ClusterIP = "deployment-uid", "service-uid", "10.43.0.1"
 		tool.Status = arkv1alpha1.ToolStatus{
-			State: arkv1alpha1.ToolStateReady, ResolvedAddress: inlinetools.ResolvedAddress("ark-system", tool),
+			State: arkv1alpha1.ToolStateReady, ResolvedAddress: inlinetools.ResolvedAddress(inlinetools.ActivatorBaseURL("ark-system"), tool),
 			Conditions: []metav1.Condition{{
 				Type: arkv1alpha1.ToolConditionAvailable, Status: metav1.ConditionTrue,
 				Reason: arkv1alpha1.ToolReasonAvailable, ObservedGeneration: tool.Generation,

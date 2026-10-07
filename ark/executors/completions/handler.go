@@ -618,6 +618,7 @@ func (h *Handler) executeTool(
 		MCPSettings:       mcpSettings,
 		TelemetryProvider: h.telemetry,
 		EventingProvider:  h.eventing,
+		ActivatorBaseURL:  toolRegistry.activatorBaseURL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tool executor: %w", err)
