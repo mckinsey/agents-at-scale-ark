@@ -438,6 +438,29 @@ describe('cluster', () => {
       });
     });
 
+    it('returns error with context and namespace when node lookup cannot reach the cluster', async () => {
+      mockExeca
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            'current-context': 'kind-down',
+            contexts: [{name: 'kind-down', context: {namespace: 'tenant-a'}}],
+          }),
+        })
+        .mockResolvedValueOnce({stdout: 'kind-down'})
+        .mockRejectedValueOnce(
+          new Error(
+            'The connection to the server 127.0.0.1:6443 was refused - did you specify the right host or port?'
+          )
+        );
+
+      const result = await getClusterInfo();
+
+      expect(result.type).toBe('unknown');
+      expect(result.context).toBe('kind-down');
+      expect(result.namespace).toBe('tenant-a');
+      expect(result.error).toContain('was refused');
+    });
+
     it('handles missing context in config', async () => {
       const emptyConfig = {
         contexts: [],

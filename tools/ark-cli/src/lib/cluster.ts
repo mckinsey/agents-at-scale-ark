@@ -1,4 +1,5 @@
 import {execa} from 'execa';
+import {classifyFailure} from './readinessChecks.js';
 
 export interface ClusterInfo {
   type: 'minikube' | 'kind' | 'k3s' | 'docker-desktop' | 'cloud' | 'unknown';
@@ -90,6 +91,15 @@ async function resolveClusterIp(
   }
 }
 
+function isForbiddenError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const stderr = (error as Error & {stderr?: unknown}).stderr;
+  const text = typeof stderr === 'string' && stderr ? stderr : error.message;
+  return classifyFailure(text) === 'forbidden';
+}
+
 export async function getClusterInfo(context?: string): Promise<ClusterInfo> {
   let resolvedContext: string | undefined;
   let resolvedNamespace: string | undefined;
@@ -134,7 +144,10 @@ export async function getClusterInfo(context?: string): Promise<ClusterInfo> {
     let ip: string | undefined;
     try {
       ip = await resolveClusterIp(clusterInfo.type);
-    } catch {
+    } catch (error) {
+      if (!isForbiddenError(error)) {
+        throw error;
+      }
       ip = undefined;
     }
 
