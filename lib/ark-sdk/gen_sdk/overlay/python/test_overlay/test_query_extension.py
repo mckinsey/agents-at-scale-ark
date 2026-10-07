@@ -2,6 +2,7 @@
 
 import base64
 import unittest
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
 
@@ -15,6 +16,8 @@ from ark_sdk.extensions.query import (
     resolve_query,
     _query_impersonation,
     _resolve_value_source,
+    _build_mcp_servers,
+    _expected_resolved_address,
     _parse_go_duration_to_seconds,
     _resolve_from_query,
 )
@@ -809,6 +812,9 @@ class TestHistoryFieldRemoved(unittest.TestCase):
         self.assertIn("conversationId", ExecutionEngineRequest.model_fields)
 
 
+_UNSET = object()
+
+
 class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
     def _make_tool_crd(self, tool_type, server_name=None, mcp_tool_name=None):
         tool_crd = MagicMock()
@@ -840,6 +846,48 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         else:
             server_crd.spec.headers = None
         return server_crd
+
+    def _make_inline_tool_crd(
+        self,
+        uid: str | None = "uid-1",
+        tool_name: str = "csv-summarise",
+        namespace: str = "default",
+        generation: int | None = 2,
+        condition_status: str = "True",
+        condition_reason: str = "Available",
+        observed_generation: int | None = 2,
+        address: Any = _UNSET,
+        state: str = "Ready",
+        deletion_timestamp: str | None = None,
+    ):
+        # Pin the real activator address format
+        # (http://ark-inline-activator.<ns>.svc.cluster.local:8080/mcp/<ns>/<name>/<uid>,
+        # per ark/internal/inlinetools/address.go) by default, so these fixtures catch
+        # a divergence between the SDK and the Go controller rather than only
+        # testing against a made-up shape.
+        if address is _UNSET:
+            address = _expected_resolved_address(namespace, tool_name, uid or "uid-1")
+        tool_crd = MagicMock()
+        tool_crd.spec.type = "inline"
+        tool_crd.spec.mcp = None
+        tool_crd.metadata = {
+            "uid": uid,
+            "generation": generation,
+            "deletionTimestamp": deletion_timestamp,
+        }
+        tool_crd.status = SimpleNamespace(
+            resolved_address=address,
+            state=state,
+            conditions=[
+                SimpleNamespace(
+                    type="Available",
+                    status=condition_status,
+                    reason=condition_reason,
+                    observed_generation=observed_generation,
+                )
+            ],
+        )
+        return tool_crd
 
     def _make_agent_tool(self, name):
         tool = MagicMock()
@@ -1167,6 +1215,61 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
 
     @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")
+    async def test_duplicate_mcp_tool_attachment_produces_a_single_config(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        # The same tool attached to the agent twice (e.g. a duplicate entry in
+        # spec.tools) must not resolve into two MCPServerConfig entries.
+        mock_agent.spec.tools = [
+            self._make_agent_tool("github-mcp-search"),
+            self._make_agent_tool("github-mcp-search"),
+        ]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
+
+        tool_crd = self._make_tool_crd("mcp", "github-mcp", "search")
+        server_crd = self._make_mcp_server_crd("http://github:8080/mcp")
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(return_value=tool_crd)
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=server_crd)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        request = await resolve_query(ref, "hi")
+
+        self.assertEqual(len(request.mcpServers), 1)
+        self.assertEqual(request.mcpServers[0].tools, ["search"])
+        mock_ark.tools.a_get.assert_awaited_once_with("github-mcp-search", "default")
+
+    async def test_duplicate_inline_tool_attachment_produces_a_single_config(self):
+        ark, servers = await self._inline_servers(
+            [self._make_inline_tool_crd()],
+            tool_names=("csv-summarise", "csv-summarise"),
+        )
+
+        self.assertEqual(len(servers), 1)
+        ark.tools.a_get.assert_awaited_once_with("csv-summarise", "default")
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
     async def test_server_with_unresolvable_address_skipped(self, mock_with_client, mock_init_k8s):
         mock_ark = AsyncMock()
 
@@ -1209,6 +1312,115 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(request.mcpServers), 0)
         self.assertTrue(any("no resolvable address" in msg for msg in log.output))
+
+    def _agent(self, tool_names):
+        agent = MagicMock()
+        agent.metadata = {"name": "a1", "labels": {}}
+        agent.spec.tools = [self._make_agent_tool(n) for n in tool_names]
+        return agent
+
+    async def _inline_servers(self, tool_crds, tool_names=("csv-summarise",)):
+        ark = AsyncMock()
+        ark.tools.a_get = AsyncMock(side_effect=list(tool_crds))
+        ark.mcpservers.a_get = AsyncMock(side_effect=AssertionError("unexpected MCPServer read"))
+        servers = await _build_mcp_servers(ark, self._agent(tool_names), "default")
+        return ark, servers
+
+    async def test_available_inline_tool_becomes_a_connection(self):
+        ark, servers = await self._inline_servers([self._make_inline_tool_crd()])
+
+        self.assertEqual(len(servers), 1)
+        server = servers[0]
+        self.assertEqual(server.name, "inline-csv-summarise-uid-1")
+        self.assertEqual(
+            server.url,
+            _expected_resolved_address("default", "csv-summarise", "uid-1"),
+        )
+        self.assertEqual(server.transport, "http")
+        self.assertEqual(server.timeout, "90s")
+        self.assertEqual(server.tools, ["csv-summarise"])
+        self.assertEqual(server.headers, {})
+        ark.tools.a_get.assert_awaited_once_with("csv-summarise", "default")
+        ark.mcpservers.a_get.assert_not_awaited()
+
+    async def test_each_inline_tool_gets_its_own_connection(self):
+        first = self._make_inline_tool_crd(uid="uid-1")
+        second = self._make_inline_tool_crd(uid="uid-2", tool_name="other")
+        _, servers = await self._inline_servers(
+            [first, second], tool_names=("csv-summarise", "other")
+        )
+
+        self.assertEqual(
+            [s.name for s in servers],
+            ["inline-csv-summarise-uid-1", "inline-other-uid-2"],
+        )
+        self.assertEqual([s.tools for s in servers], [["csv-summarise"], ["other"]])
+
+    async def test_inline_and_mcp_tools_resolve_side_by_side(self):
+        ark = AsyncMock()
+        ark.tools.a_get = AsyncMock(
+            side_effect=[
+                self._make_inline_tool_crd(),
+                self._make_tool_crd("mcp", "github-mcp", "search_repos"),
+                self._make_tool_crd("http"),
+            ]
+        )
+        ark.mcpservers.a_get = AsyncMock(return_value=self._make_mcp_server_crd())
+
+        agent = self._agent(["csv-summarise", "github-mcp-search-repos", "weather-api"])
+        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+            servers = await _build_mcp_servers(ark, agent, "default")
+
+        self.assertEqual(
+            [s.name for s in servers],
+            ["inline-csv-summarise-uid-1", "github-mcp"],
+        )
+        self.assertEqual(servers[1].tools, ["search_repos"])
+        message = "\n".join(log.output)
+        self.assertIn("weather-api (http)", message)
+        self.assertNotIn("csv-summarise", message)
+
+    async def test_inline_connection_does_not_replace_a_same_named_mcp_server(self):
+        ark = AsyncMock()
+        ark.tools.a_get = AsyncMock(
+            side_effect=[
+                self._make_inline_tool_crd(),
+                self._make_tool_crd("mcp", "csv-summarise", "summarise"),
+            ]
+        )
+        ark.mcpservers.a_get = AsyncMock(return_value=self._make_mcp_server_crd())
+
+        agent = self._agent(["csv-summarise", "mcp-attachment"])
+        servers = await _build_mcp_servers(ark, agent, "default")
+
+        self.assertEqual(len(servers), 2)
+        self.assertEqual(
+            {s.name for s in servers},
+            {"inline-csv-summarise-uid-1", "csv-summarise"},
+        )
+
+    async def test_stale_or_unavailable_inline_tools_are_skipped_with_a_warning(self):
+        cases = {
+            "stale generation": self._make_inline_tool_crd(observed_generation=1),
+            "not available": self._make_inline_tool_crd(condition_status="False"),
+            "no endpoint": self._make_inline_tool_crd(address=None),
+            "no uid": self._make_inline_tool_crd(uid=None),
+            "not ready": self._make_inline_tool_crd(state="Pending"),
+            "deleting": self._make_inline_tool_crd(deletion_timestamp="2026-10-05T00:00:00Z"),
+            "wrong reason": self._make_inline_tool_crd(condition_reason="ActivatorUnavailable"),
+            "wrong activator namespace": self._make_inline_tool_crd(
+                address="http://ark-inline-activator.other-namespace.svc.cluster.local:8080/mcp/default/csv-summarise/uid-1"
+            ),
+            "forged or stale address": self._make_inline_tool_crd(
+                address="http://attacker.example.com/mcp/default/csv-summarise/uid-1"
+            ),
+        }
+        for label, tool_crd in cases.items():
+            with self.subTest(label):
+                with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+                    _, servers = await self._inline_servers([tool_crd])
+                self.assertEqual(servers, [])
+                self.assertTrue(any("csv-summarise" in msg for msg in log.output))
 
 
 class TestExtensionConstants(unittest.TestCase):
