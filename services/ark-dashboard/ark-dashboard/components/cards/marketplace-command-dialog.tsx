@@ -1,9 +1,9 @@
 'use client';
 
 import copyToClipboard from 'copy-to-clipboard';
-import { Copy, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { ContentCopy, Info, Terminal } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -12,11 +12,40 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { IconShell } from '@/components/ui/icon-shell';
 
 export interface MarketplaceCommand {
   helmCommand?: string;
   arkCommand?: string;
   name?: string;
+}
+
+interface CommandBlockProps {
+  readonly label: string;
+  readonly command: string;
+  readonly onCopy: (command: string) => void;
+}
+
+function CommandBlock({ label, command, onCopy }: Readonly<CommandBlockProps>) {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-fg-primary label-regular-primary">{label}</p>
+      <div className="flex items-start gap-2">
+        <code className="bg-surface-bg-tertiary text-fg-primary paragraph-code-text flex-1 px-3 py-2 break-all">
+          {command}
+        </code>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={`Copy ${label} command`}
+          onClick={() => onCopy(command)}>
+          <IconShell size="sm" variant="secondary">
+            <ContentCopy />
+          </IconShell>
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function MarketplaceCommandDialog({
@@ -54,52 +83,37 @@ export function MarketplaceCommandDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5" />
+            <IconShell size="sm" variant="secondary">
+              <Terminal />
+            </IconShell>
             {verb} {command.name || itemName}
           </DialogTitle>
           <DialogDescription>{intro}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           {command.arkCommand && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Using Ark CLI (Recommended)
-              </label>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm">
-                  {command.arkCommand}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopy(command.arkCommand!)}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            <CommandBlock
+              label="Using Ark CLI (Recommended)"
+              command={command.arkCommand}
+              onCopy={handleCopy}
+            />
           )}
 
           {command.helmCommand && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Using Helm directly</label>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm break-all">
-                  {command.helmCommand}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopy(command.helmCommand!)}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            <CommandBlock
+              label="Using Helm directly"
+              command={command.helmCommand}
+              onCopy={handleCopy}
+            />
           )}
 
-          <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              💡 Make sure you have kubectl configured to the correct cluster
+          <div className="bg-surface-bg-secondary flex items-start gap-2 p-3">
+            <IconShell size="sm" variant="secondary">
+              <Info />
+            </IconShell>
+            <p className="text-fg-secondary paragraph-small-primary">
+              Make sure you have kubectl configured to the correct cluster
               before running these commands.
             </p>
           </div>
