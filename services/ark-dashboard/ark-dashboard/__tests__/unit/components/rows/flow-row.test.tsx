@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Flow } from '@/components/rows/flow-row';
 import { FlowRow } from '@/components/rows/flow-row';
+import { ArgoUrlProvider } from '@/providers/argo-url-provider';
 
 vi.mock('next/link', () => ({
   default: ({
@@ -86,10 +87,33 @@ describe('FlowRow', () => {
       expect(screen.getByTestId('workflow-icon')).toBeInTheDocument();
     });
 
-    it('should render external link button', () => {
-      render(<FlowRow flow={baseFlow} />);
+    it('should render Argo link with the configured URL', () => {
+      render(
+        <ArgoUrlProvider argoUrl="https://argo.example.com">
+          <FlowRow flow={baseFlow} />
+        </ArgoUrlProvider>,
+      );
 
       expect(screen.getByTestId('external-link-icon')).toBeInTheDocument();
+      const argoLink = screen
+        .getAllByRole('link')
+        .find(link =>
+          link.getAttribute('href')?.startsWith('https://argo.example.com'),
+        );
+      expect(argoLink).toHaveAttribute(
+        'href',
+        expect.stringMatching(
+          /^https:\/\/argo\.example\.com\/workflow-templates\/.+\/test-flow-123$/,
+        ),
+      );
+    });
+
+    it('should not render Argo link when no URL is configured', () => {
+      render(<FlowRow flow={baseFlow} />);
+
+      expect(
+        screen.queryByTestId('external-link-icon'),
+      ).not.toBeInTheDocument();
     });
 
     it('should create link to flow detail page', () => {

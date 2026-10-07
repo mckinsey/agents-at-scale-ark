@@ -479,6 +479,18 @@ describe('WorkflowNodeLogs', () => {
     ).toHaveAttribute('href', 'http://argo.test');
   });
 
+  it('omits the Argo UI link when no Argo URL is configured', async () => {
+    vi.mocked(fetchNodeLogWindow).mockRejectedValue(new Error('404'));
+
+    render(<WorkflowNodeLogs target={target} isRunning={false} />);
+    await act(async () => {});
+
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /View logs in Argo UI/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it('recovers on retry after a failed initial load without a remount', async () => {
     vi.mocked(fetchNodeLogWindow)
       .mockRejectedValueOnce(new Error('boom'))

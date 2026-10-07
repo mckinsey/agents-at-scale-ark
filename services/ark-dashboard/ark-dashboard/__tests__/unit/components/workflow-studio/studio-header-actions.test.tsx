@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StudioHeaderActions } from '@/components/workflow-studio/studio-header-actions';
 import { WorkflowStudio } from '@/components/workflow-studio/workflow-studio';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
+import { ArgoUrlProvider } from '@/providers/argo-url-provider';
 
 const pushMock = vi.fn();
 const replaceMock = vi.fn();
@@ -199,7 +200,11 @@ describe('StudioHeaderActions', () => {
   });
 
   it('disables activity when not persisted', () => {
-    render(<StudioHeaderActions workflowName="draft" persisted={false} />);
+    render(
+      <ArgoUrlProvider argoUrl="https://argo.example.com">
+        <StudioHeaderActions workflowName="draft" persisted={false} />
+      </ArgoUrlProvider>,
+    );
     expect(screen.getByTestId('studio-activity-trigger')).toBeDisabled();
     expect(screen.getByTestId('studio-open-argo')).toBeDisabled();
     expect(workflowTemplatesService.getStats).not.toHaveBeenCalled();
@@ -208,16 +213,26 @@ describe('StudioHeaderActions', () => {
   it('opens Argo with the correct URL', () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
 
-    render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
+    render(
+      <ArgoUrlProvider argoUrl="https://argo.example.com">
+        <StudioHeaderActions workflowName="existing-workflow" persisted />
+      </ArgoUrlProvider>,
+    );
 
     fireEvent.click(screen.getByTestId('studio-open-argo'));
 
     expect(openSpy).toHaveBeenCalledWith(
-      'http://localhost:2746/workflow-templates/default/existing-workflow',
+      'https://argo.example.com/workflow-templates/default/existing-workflow',
       '_blank',
       'noopener',
     );
     openSpy.mockRestore();
+  });
+
+  it('hides the Open in Argo button when no URL is configured', () => {
+    render(<StudioHeaderActions workflowName="existing-workflow" persisted />);
+
+    expect(screen.queryByTestId('studio-open-argo')).not.toBeInTheDocument();
   });
 
   it('deletes and navigates to the templates list on confirm', async () => {

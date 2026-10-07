@@ -15,9 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import type { WorkflowParameter } from '@/lib/services/workflow-templates';
 import { useNamespace } from '@/providers/NamespaceProvider';
-
-const ARGO_BASE_URL =
-  process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
+import { useArgoUrl } from '@/providers/argo-url-provider';
 
 export interface Flow {
   id: string;
@@ -49,6 +47,7 @@ export function FlowRow({
   leading,
 }: FlowRowProps) {
   const { namespace } = useNamespace();
+  const argoUrl = useArgoUrl();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const handleRunWorkflow = async (
@@ -110,25 +109,27 @@ export function FlowRow({
       </div>
 
       <div className="relative z-10 flex flex-shrink-0 items-center gap-1">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
-                asChild>
-                <a
-                  href={`${ARGO_BASE_URL}/workflow-templates/${namespace}/${flow.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Open in Argo</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        {argoUrl && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
+                  asChild>
+                  <a
+                    href={`${argoUrl}/workflow-templates/${namespace}/${flow.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open in Argo</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
         {onDelete && (
           <TooltipProvider>
