@@ -694,6 +694,50 @@ describe('useChatSession', () => {
       );
       expect(result.current.messages.at(-1)?.content).toBe('Second polled');
     });
+
+    it('retries streaming on the next turn after a 503 without a broker_unavailable code', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new BrokerUnavailableError(
+          'Failed to connect to stream: Service Unavailable',
+          503,
+          undefined,
+          undefined,
+          'test-query',
+        );
+      });
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled',
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      expect(result.current.messages.at(-1)?.content).toBe('Polled');
+
+      mockStartStreamChatResponse.mockClear();
+
+      await act(async () => {
+        await result.current.sendMessage('Again');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      expect(mockStartStreamChatResponse).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('streaming content accumulation', () => {

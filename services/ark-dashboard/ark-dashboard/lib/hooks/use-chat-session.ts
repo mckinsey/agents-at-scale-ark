@@ -468,19 +468,6 @@ export function useChatSession({
     return () => clearTimeout(id);
   }, [chatMessages, scrollToBottom]);
 
-  const buildChatMessages = useCallback(
-    (
-      messages: ExtendedChatMessage[],
-      currentMsg: string,
-    ): ExtendedChatMessage[] => {
-      return [
-        ...messages,
-        { role: 'user', content: currentMsg } as ExtendedChatMessage,
-      ];
-    },
-    [],
-  );
-
   const pendingApprovalQueryRef = useRef<{
     queryName: string;
     messageIndex: number;
@@ -490,7 +477,6 @@ export function useChatSession({
     async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
       chatStreamAbortControllerRef.current = new AbortController();
 
-      const messageArray = buildChatMessages(chatMessages, userMessage);
       const turnStartIndex = chatMessages.length + 1;
       let currentMessageIndex = turnStartIndex;
 
@@ -991,7 +977,6 @@ export function useChatSession({
       });
     },
     [
-      buildChatMessages,
       chatKey,
       chatMessages,
       conversationId,
@@ -1013,8 +998,6 @@ export function useChatSession({
       apiParameters?: ApiQueryParameter[],
       existingQueryName?: string,
     ) => {
-      const messageArray = buildChatMessages(chatMessages, userMessage);
-
       let queryName = existingQueryName;
       if (!queryName) {
         const query = await chatService.submitChatQuery(
@@ -1170,8 +1153,6 @@ export function useChatSession({
     },
     [
       applyMemoryLookup,
-      buildChatMessages,
-      chatMessages,
       conversationId,
       name,
       namespace,
@@ -1225,8 +1206,10 @@ export function useChatSession({
         console.error('Error sending message:', err);
 
         if (isBrokerUnavailableError(err)) {
-          brokerStreamingUnavailableRef.current = true;
-          brokerFallbackNotice.notify();
+          if (err.code === 'broker_unavailable') {
+            brokerStreamingUnavailableRef.current = true;
+            brokerFallbackNotice.notify();
+          }
           updateChatMessages(stripEmptyAssistantPlaceholder);
           try {
             await handlePollChatResponse(
