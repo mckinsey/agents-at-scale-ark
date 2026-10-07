@@ -96,6 +96,15 @@ env:
   ARK_MCP_TOOL_CALL_RETRY_BUDGET_SECONDS: "30"
   # ARK_ANTHROPIC_HTTP_BACKSTOP_SECONDS: "1800"
 
+# Namespace the inline-tools activator runs in — the namespace the main Ark chart
+# (ark/dist/chart) was installed into with inlineTools.enabled=true. Before dialing an
+# inline Tool, the executor validates its resolvedAddress against this namespace
+# (defense-in-depth), so a mismatch rejects every inline call rather than connecting
+# to the wrong place. Defaults to "ark-system" to match the binary's own default and
+# the central install; override when the main chart was installed elsewhere.
+inlineTools:
+  activatorNamespace: ark-system
+
 # Static replica count, exposed so per-tenant deployments can scale independently of the
 # central install. Ignored when autoscaling.enabled is true (the HPA owns the count).
 replicaCount: 1
