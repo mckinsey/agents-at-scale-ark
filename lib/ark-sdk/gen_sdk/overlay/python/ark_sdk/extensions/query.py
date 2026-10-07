@@ -5,6 +5,7 @@ Extension spec: ark/api/extensions/query/v1/
 
 import base64
 import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -553,6 +554,90 @@ async def _resolve_mcp_server(
     )
 
 
+INLINE_TRANSPORT = "http"
+INLINE_TIMEOUT = "90s"
+
+# Mirrors ark/internal/inlinetools/address.go: the activator is a singleton
+# alongside the operator, reached at a fixed name/port/route, in whichever
+# namespace the main Ark chart (inlineTools.enabled=true) was installed into.
+ENV_ACTIVATOR_NAMESPACE = "ARK_INLINE_ACTIVATOR_NAMESPACE"
+_DEFAULT_ACTIVATOR_NAMESPACE = "ark-system"
+_ACTIVATOR_NAME = "ark-inline-activator"
+_ACTIVATOR_PORT = 8080
+_ACTIVATOR_ROUTE_PREFIX = "/mcp"
+
+
+def _expected_resolved_address(tool_namespace: str, tool_name: str, uid: str) -> str:
+    """Canonical activator address for a Tool.
+
+    Computed the same way as the Go controller's
+    ResolvedAddress(ActivatorBaseURL(activatorNamespace), tool), so a Tool's
+    stored status.resolvedAddress can be compared against a value this SDK
+    computed itself rather than trusted outright.
+    """
+    activator_namespace = os.getenv(ENV_ACTIVATOR_NAMESPACE) or _DEFAULT_ACTIVATOR_NAMESPACE
+    return (
+        f"http://{_ACTIVATOR_NAME}.{activator_namespace}.svc.cluster.local:{_ACTIVATOR_PORT}"
+        f"{_ACTIVATOR_ROUTE_PREFIX}/{tool_namespace}/{tool_name}/{uid}"
+    )
+
+
+def _inline_mcp_server(tool_crd: Any, tool_name: str, namespace: str) -> Optional[MCPServerConfig]:
+    """Adapt a resolved inline Tool to an MCP connection.
+
+    Returns None when the Tool has no usable published endpoint, so a stale or
+    unavailable runtime is skipped rather than connected to. Mirrors the Go
+    executor's PublishedEndpoint checks (deletion, Reason, State, not just the
+    Available condition's status) so both sides agree on what is connectable.
+    """
+    metadata = getattr(tool_crd, "metadata", None)
+    uid = _get_attr_or_key(metadata, "uid")
+    generation = _get_attr_or_key(metadata, "generation")
+    deletion_timestamp = _get_attr_or_key(metadata, "deletion_timestamp", "deletionTimestamp")
+    status = getattr(tool_crd, "status", None)
+    address = _get_attr_or_key(status, "resolved_address", "resolvedAddress")
+    state = _get_attr_or_key(status, "state")
+    conditions = _get_attr_or_key(status, "conditions") or []
+
+    available = next(
+        (c for c in conditions if _get_attr_or_key(c, "type") == "Available"), None
+    )
+    if (
+        not uid
+        or not address
+        or not generation
+        or deletion_timestamp
+        or state != "Ready"
+        or available is None
+        or _get_attr_or_key(available, "status") != "True"
+        or _get_attr_or_key(available, "reason") != "Available"
+        or _get_attr_or_key(available, "observed_generation", "observedGeneration") != generation
+    ):
+        logger.warning(
+            f"Inline tool '{tool_name}' has no available endpoint for its current "
+            f"generation and was skipped"
+        )
+        return None
+
+    if address != _expected_resolved_address(namespace, tool_name, uid):
+        logger.warning(
+            f"Inline tool '{tool_name}' published endpoint does not match the "
+            f"canonical activator address and was skipped"
+        )
+        return None
+
+    return MCPServerConfig(
+        # Matches the Go executor's inlinetools.ConnectionName: no namespace
+        # segment, since the Tool's own namespace is already the Query's.
+        name=f"inline-{tool_name}-{uid}",
+        url=address,
+        transport=INLINE_TRANSPORT,
+        timeout=INLINE_TIMEOUT,
+        headers={},
+        tools=[tool_name],
+    )
+
+
 async def _build_mcp_servers(
     ark: Any,
     agent: Any,
@@ -563,17 +648,26 @@ async def _build_mcp_servers(
         return []
 
     server_tools: dict[str, list[str]] = {}
+    inline_servers: list[MCPServerConfig] = []
     dropped: list[str] = []
+    seen_tool_names: set[str] = set()
     for agent_tool in agent.spec.tools:
         tool_name = getattr(agent_tool, "name", None)
-        if not tool_name:
+        if not tool_name or tool_name in seen_tool_names:
             continue
+        seen_tool_names.add(tool_name)
 
         try:
             tool_crd = await ark.tools.a_get(tool_name, namespace)
             tool_spec = tool_crd.spec
 
             tool_type = getattr(tool_spec, "type", None)
+            if tool_type == "inline":
+                inline_server = _inline_mcp_server(tool_crd, tool_name, namespace)
+                if inline_server:
+                    inline_servers.append(inline_server)
+                continue
+
             if tool_type != "mcp":
                 if tool_type:
                     dropped.append(f"{tool_name} ({tool_type})")
@@ -604,7 +698,7 @@ async def _build_mcp_servers(
             f"tools were not available to the agent: {', '.join(dropped)}"
         )
 
-    servers: list[MCPServerConfig] = []
+    servers: list[MCPServerConfig] = list(inline_servers)
     for server_name, tool_names in server_tools.items():
         server_config = await _resolve_mcp_server(ark, server_name, namespace, impersonation)
         if server_config:
