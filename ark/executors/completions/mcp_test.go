@@ -16,6 +16,7 @@ import (
 	"mckinsey.com/ark/internal/eventing"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 	arkmcp "mckinsey.com/ark/internal/mcp"
+	"mckinsey.com/ark/internal/telemetry"
 	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
@@ -160,6 +161,25 @@ func TestExecuteToolReportsIsErrorAsAFailedToolCallEvent(t *testing.T) {
 	require.ErrorContains(t, events.err, testToolBoomText)
 }
 
+// TestExecuteToolRecordsIsErrorAsATelemetryFailure covers the other half of
+// shared result handling's observability: an isError result from an ordinary
+// (non-inline) MCP tool must also be recorded as a span failure, not just a
+// failed event.
+func TestExecuteToolRecordsIsErrorAsATelemetryFailure(t *testing.T) {
+	telemetryRecorder := &recordingToolTelemetry{ToolRecorder: noop.NewToolRecorder()}
+	registry := NewToolRegistry(nil, telemetryRecorder, eventnoop.NewProvider().ToolRecorder())
+	registry.RegisterTool(ToolDefinition{Name: testToolBoom},
+		&MCPExecutor{MCPClient: newTestMCPClient(t, testConnectTimeout), ToolName: testToolBoom})
+
+	result, err := registry.ExecuteTool(t.Context(), boomCall())
+
+	require.NoError(t, err)
+	require.Equal(t, testToolBoomText, result.Error)
+	require.True(t, telemetryRecorder.failed, "shared result handling must record a span error on the existing telemetry path")
+	require.False(t, telemetryRecorder.succeeded, "a failed call must not also record a success")
+	require.ErrorContains(t, telemetryRecorder.err, testToolBoomText)
+}
+
 type recordingToolEvents struct {
 	eventing.ToolRecorder
 	failed    bool
@@ -174,6 +194,22 @@ func (r *recordingToolEvents) Complete(ctx context.Context, operation, message s
 func (r *recordingToolEvents) Fail(ctx context.Context, operation, message string, err error, data map[string]string) {
 	r.failed = true
 	r.err = err
+}
+
+type recordingToolTelemetry struct {
+	telemetry.ToolRecorder
+	failed    bool
+	succeeded bool
+	err       error
+}
+
+func (r *recordingToolTelemetry) RecordError(span telemetry.Span, err error) {
+	r.failed = true
+	r.err = err
+}
+
+func (r *recordingToolTelemetry) RecordSuccess(span telemetry.Span) {
+	r.succeeded = true
 }
 
 func TestMCPExecutorBoundsToolCallByToolCallTimeout(t *testing.T) {
