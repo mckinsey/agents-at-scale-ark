@@ -1061,6 +1061,9 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		done:       make(chan struct{}),
 		seenRVs:    make(map[string]int64),
 		startRV:    startRV,
+
+		sendInitialEvents: opts.SendInitialEvents,
+		allowBookmarks:    opts.AllowWatchBookmarks,
 	}
 	w.lastSeenRV.Store(startRV)
 
@@ -1239,8 +1242,17 @@ type postgresWatcher struct {
 	startRV int64
 	// behind is set by the broadcaster when this watcher's inputCh is full and a row
 	// was dropped; run() then does a private catch-up relist to recover it.
-	behind          atomic.Bool
-	initialListDone bool
+	behind atomic.Bool
+	// sendInitialEvents and allowBookmarks mirror the request options. The
+	// initial-events-end bookmark belongs to the WatchList protocol only: on an
+	// ordinary watch k8s.io/apiserver >= 0.37 reacts to it by calling a nil
+	// watchListCompleteHook and the stream dies (#3720). initialSynced flips once
+	// a relist succeeded, so the terminal bookmark follows the actual initial
+	// state; initialListDone records that it went out.
+	sendInitialEvents bool
+	allowBookmarks    bool
+	initialSynced     bool
+	initialListDone   bool
 	// seenRVs maps a resource UID to the highest rv we've already emitted for it.
 	// Combined with the lookback window in relist(), this lets us re-fetch rows that
 	// might have been invisible during a prior relist (because their txn was still
@@ -1278,6 +1290,8 @@ func (w *postgresWatcher) run() {
 	// would start permanently empty until the first fanned-out change.
 	if err := w.relist(); err != nil {
 		w.behind.Store(true)
+	} else {
+		w.initialSynced = true
 	}
 	w.sendBookmark()
 
@@ -1316,7 +1330,9 @@ func (w *postgresWatcher) recoverIfBehind() {
 	if w.behind.Swap(false) {
 		if err := w.relist(); err != nil {
 			w.behind.Store(true)
+			return
 		}
+		w.initialSynced = true
 	}
 }
 
@@ -1349,6 +1365,9 @@ func (w *postgresWatcher) forwardRow(row *changeRow) bool {
 }
 
 func (w *postgresWatcher) sendBookmark() {
+	if !w.allowBookmarks {
+		return
+	}
 	rv := w.backend.cachedRV.Load()
 	if lastSeen := w.lastSeenRV.Load(); lastSeen > rv {
 		rv = lastSeen
@@ -1362,7 +1381,7 @@ func (w *postgresWatcher) sendBookmark() {
 	}
 	if accessor, aErr := meta.Accessor(obj); aErr == nil {
 		accessor.SetResourceVersion(fmt.Sprintf("%d", rv))
-		if !w.initialListDone {
+		if w.sendInitialEvents && w.initialSynced && !w.initialListDone {
 			accessor.SetAnnotations(map[string]string{"k8s.io/initial-events-end": "true"})
 			w.initialListDone = true
 		}
