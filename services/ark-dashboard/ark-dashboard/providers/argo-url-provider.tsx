@@ -1,7 +1,9 @@
 'use client';
 
 import type { PropsWithChildren } from 'react';
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
+
+import { type ArgoLinks, createArgoLinks } from '@/lib/utils/argo-url';
 
 const ArgoUrlContext = createContext<string | undefined>(undefined);
 
@@ -17,6 +19,7 @@ export function ArgoUrlProvider({ argoUrl, children }: ArgoUrlProviderProps) {
   );
 }
 
-export function useArgoUrl(): string | undefined {
-  return useContext(ArgoUrlContext);
+export function useArgoLinks(): ArgoLinks | undefined {
+  const argoUrl = useContext(ArgoUrlContext);
+  return useMemo(() => createArgoLinks(argoUrl), [argoUrl]);
 }

@@ -17,10 +17,12 @@ vars:
   SSO_DASHBOARD_URL:
     source: env
     default: "http://dashboard.default.127.0.0.1.nip.io:8080"
-  # Must match the value of the same name in the root devspace.yaml.
+  # Must match ENABLE_ARGO in the root devspace.yaml, which deploys Argo.
   ENABLE_ARGO:
     source: env
     default: false
+  # Argo UI URL the dashboard links to when ENABLE_ARGO is true. Dashboard-only;
+  # the default is the Argo server exposed through the localhost gateway.
   ARGO_URL:
     source: env
     default: "http://argo.default.127.0.0.1.nip.io:8080"

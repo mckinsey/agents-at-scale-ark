@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GlobalProviders } from '@/providers/GlobalProviders';
-import { useArgoUrl } from '@/providers/argo-url-provider';
+import { useArgoLinks } from '@/providers/argo-url-provider';
 
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/agents'),
@@ -56,7 +56,12 @@ vi.mock('@/providers/AuthProviders', () => ({
 }));
 
 function ArgoUrlProbe() {
-  return <div data-testid="argo-url">{useArgoUrl() ?? 'unset'}</div>;
+  const argoLinks = useArgoLinks();
+  return (
+    <div data-testid="argo-url">
+      {argoLinks?.workflowTemplate('ns', 'tpl') ?? 'unset'}
+    </div>
+  );
 }
 
 describe('GlobalProviders', () => {
@@ -85,7 +90,7 @@ describe('GlobalProviders', () => {
       </GlobalProviders>,
     );
     expect(screen.getByTestId('argo-url')).toHaveTextContent(
-      'https://argo.example.com',
+      'https://argo.example.com/workflow-templates/ns/tpl',
     );
   });
 

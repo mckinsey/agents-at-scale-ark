@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import type { WorkflowParameter } from '@/lib/services/workflow-templates';
 import { useNamespace } from '@/providers/NamespaceProvider';
-import { useArgoUrl } from '@/providers/argo-url-provider';
+import { useArgoLinks } from '@/providers/argo-url-provider';
 
 export interface Flow {
   id: string;
@@ -47,7 +47,7 @@ export function FlowRow({
   leading,
 }: FlowRowProps) {
   const { namespace } = useNamespace();
-  const argoUrl = useArgoUrl();
+  const argoLinks = useArgoLinks();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const handleRunWorkflow = async (
@@ -109,7 +109,7 @@ export function FlowRow({
       </div>
 
       <div className="relative z-10 flex flex-shrink-0 items-center gap-1">
-        {argoUrl && (
+        {argoLinks && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -119,7 +119,7 @@ export function FlowRow({
                   className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
                   asChild>
                   <a
-                    href={`${argoUrl}/workflow-templates/${namespace}/${flow.id}`}
+                    href={argoLinks.workflowTemplate(namespace, flow.id)}
                     target="_blank"
                     rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4" />

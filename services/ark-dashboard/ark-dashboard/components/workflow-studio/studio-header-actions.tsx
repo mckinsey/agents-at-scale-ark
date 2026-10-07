@@ -26,7 +26,7 @@ import {
 } from '@/lib/services/workflow-templates';
 import { buildWorkflowRunsUrl } from '@/lib/utils/workflow';
 import { useNamespace } from '@/providers/NamespaceProvider';
-import { useArgoUrl } from '@/providers/argo-url-provider';
+import { useArgoLinks } from '@/providers/argo-url-provider';
 
 const STATS_POLL_INTERVAL_MS = 30000;
 
@@ -44,7 +44,7 @@ export function StudioHeaderActions({
   persisted,
 }: Readonly<StudioHeaderActionsProps>) {
   const { namespace, readOnlyMode } = useNamespace();
-  const argoUrl = useArgoUrl();
+  const argoLinks = useArgoLinks();
   const { push } = useNamespacedNavigation();
 
   const [activityOpen, setActivityOpen] = useState(false);
@@ -86,9 +86,15 @@ export function StudioHeaderActions({
   }, [namespace, persisted, workflowName]);
 
   const handleOpenInArgo = useCallback(() => {
-    const url = `${argoUrl}/workflow-templates/${namespace}/${workflowName}`;
-    window.open(url, '_blank', 'noopener');
-  }, [argoUrl, namespace, workflowName]);
+    if (!argoLinks) {
+      return;
+    }
+    window.open(
+      argoLinks.workflowTemplate(namespace, workflowName),
+      '_blank',
+      'noopener',
+    );
+  }, [argoLinks, namespace, workflowName]);
 
   const handleConfirmDelete = useCallback(async () => {
     try {
@@ -139,7 +145,7 @@ export function StudioHeaderActions({
       <div
         className="flex items-center gap-2"
         data-testid="studio-header-actions-content">
-        {argoUrl && (
+        {argoLinks && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
