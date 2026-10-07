@@ -1,4 +1,5 @@
-import { apiClient, APIClient } from '@/lib/api/client';
+import type { APIClient } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 
 const PAGE_LIMIT = 100;
 
@@ -13,12 +14,15 @@ interface PaginatedResponse<T> {
  * the server reports the last page (`continue_token` null/absent).
  *
  * Pass `client` to run against the server-side API client (SSR/API routes);
- * defaults to the browser client.
+ * defaults to the browser client. Pass `headers` to forward request-scoped
+ * headers (e.g. an `Authorization` bearer minted from the caller's session)
+ * to every page fetch.
  */
 export async function fetchAllPages<T>(
   endpoint: string,
   params: Record<string, string | number | boolean> = {},
   client: APIClient = apiClient,
+  headers?: HeadersInit,
 ): Promise<T[]> {
   const items: T[] = [];
   let continueToken: string | null | undefined;
@@ -34,6 +38,7 @@ export async function fetchAllPages<T>(
 
     const response = await client.get<PaginatedResponse<T>>(endpoint, {
       params: pageParams,
+      headers,
     });
 
     items.push(...response.items);
