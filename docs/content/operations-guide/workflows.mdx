@@ -1,0 +1,75 @@
+import { Tabs } from 'nextra/components'
+
+# Workflows
+
+Enable the dashboard's Argo Workflows links for a tenant namespace. The dashboard shows "Open in Argo" links on workflow templates, the Workflow Studio, and workflow runs only when the Argo UI URL is set on the `ark-dashboard` chart.
+
+## Prerequisites
+
+- Argo Workflows is installed in the cluster. See [Workflows](/developer-guide/workflows#installing) for installation.
+- The Argo UI is reachable at a URL that dashboard users can open in their browser.
+
+Ark's Argo Workflows chart runs one Argo server for all namespaces, and each dashboard link includes the tenant namespace in its path. Use the same Argo UI URL for every tenant dashboard.
+
+## Enable Argo links when provisioning a namespace
+
+Set `app.config.argoUrl` when you install the tenant's dashboard.
+
+<Tabs items={['Ark CLI', 'Helm']}>
+<Tabs.Tab>
+`ark install` has no flag for chart values. Add the value to `.arkrc.yaml` in your home directory or the current directory:
+
+```yaml
+services:
+  ark-dashboard:
+    installArgs:
+      - --set
+      - app.config.argoUrl=https://argo.example.com
+```
+
+Then provision the namespace as described in [Tenant and Namespace Management](/operations-guide/tenant-namespace-management):
+
+```bash
+kubectl config set-context --current --namespace=tenant-a
+ark install ark-dashboard
+```
+
+Every later `ark install ark-dashboard` applies the same value, so new tenants get Argo links without extra steps.
+</Tabs.Tab>
+<Tabs.Tab>
+```bash
+helm upgrade --install ark-dashboard oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-dashboard \
+  --namespace tenant-a \
+  --set app.config.argoUrl=https://argo.example.com
+```
+
+Add the same `--set` to per-tenant installs in [Multi-Tenant Dashboard Hosting](/operations-guide/multi-tenant-dashboard-hosting), or add `argoUrl` under `app.config` in the values file.
+</Tabs.Tab>
+</Tabs>
+
+## Change the URL for an existing namespace
+
+```bash
+helm upgrade ark-dashboard oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-dashboard \
+  --namespace tenant-a \
+  --reuse-values \
+  --set app.config.argoUrl=https://argo.example.com
+```
+
+The dashboard reads the value at startup, so the upgrade's pod restart applies it. No image rebuild is required.
+
+## Disable Argo links
+
+Set `app.config.argoUrl` to an empty string, or leave it unset. This is the default. The dashboard then shows no Argo links.
+
+## Notes
+
+- `app.config.argoUrl` is separate from the `app.env` list. Overriding `app.env`, as the multi-tenant examples do, does not remove it.
+- Leading and trailing whitespace and trailing slashes are ignored. A value with only whitespace counts as unset.
+- The value only sets where links point. Access to the Argo UI is controlled by the Argo server's own authentication mode.
+
+## Related
+
+- [Tenant and Namespace Management](/operations-guide/tenant-namespace-management)
+- [Multi-Tenant Dashboard Hosting](/operations-guide/multi-tenant-dashboard-hosting)
+- [Workflows developer guide](/developer-guide/workflows)
