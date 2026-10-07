@@ -1,4 +1,23 @@
 apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: data-analyst
+spec:
+  prompt: You are a data analyst expert. Analyze datasets, create visualizations, and provide insights.
+  description: Data analysis and visualization specialist
+  tools:
+    - type: built-in
+      name: noop
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: market-analyst
+spec:
+  prompt: You are a market analyst. Summarize market conditions clearly and concisely.
+  description: Market conditions specialist
+---
+apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
   name: long-running-analysis

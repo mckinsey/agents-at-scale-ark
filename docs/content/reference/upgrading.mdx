@@ -460,6 +460,8 @@ spec:
 
 This is a **breaking** change. Existing Query manifests using `spec.targets[]` must be updated to use `spec.target`.
 
+API clients that create Queries (scripts, SDK calls, direct Kubernetes API calls) must also send `spec.target`. The API server prunes the unknown `targets` field, so these requests are rejected with `target or selector must be specified`.
+
 To query multiple targets, create one Query per target and check the results individually.
 
 ### Query Response Field Change
