@@ -48,8 +48,7 @@ func newAuthGatedTestMCPServer(t *testing.T, expectedToken string) (string, func
 		&mcpsdk.StreamableHTTPOptions{Stateless: true, JSONResponse: true},
 	)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		seen = append(seen, r.Header.Get("Authorization"))
 		mu.Unlock()
@@ -63,7 +62,14 @@ func newAuthGatedTestMCPServer(t *testing.T, expectedToken string) (string, func
 			return
 		}
 		mcpHandler.ServeHTTP(w, r)
-	})
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", handler)
+	// A trailing-slash pattern also serves an inline Tool's per-tool
+	// activator route (/mcp/{namespace}/{name}/{uid}), which the bare
+	// "/mcp" pattern above does not match.
+	mux.HandleFunc("/mcp/", handler)
 
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
 		host := "http://" + r.Host

@@ -155,9 +155,9 @@ func TestCreateToolExecutorInlineRejectsUnusableStatus(t *testing.T) {
 
 func TestInlineInvocationNeedsNoClusterAccessOrCredential(t *testing.T) {
 	url, seenAuth := newAuthGatedTestMCPServer(t, "")
-	tool := inlineTool(testToolGreet, url, "uid-1")
+	tool := inlineTool(url)
 
-	executor, err := CreateToolExecutor(t.Context(), nil, tool, "default", ToolExecutorDeps{MCPPool: testPool(t)})
+	executor, err := CreateToolExecutor(t.Context(), nil, tool, "default", ToolExecutorDeps{MCPPool: testPool(t), ActivatorBaseURL: url})
 	require.NoError(t, err, "invocation reads no Kubernetes resource, so it needs no client and no author review")
 
 	result, err := executor.Execute(t.Context(), greetCall())
