@@ -9,6 +9,7 @@ import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { TrackedButton } from '@/components/ui/tracked-button';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Model } from '@/lib/services';
 import { useUpdateModelById } from '@/lib/services/models-hooks';
@@ -40,6 +41,7 @@ type UpdateModelFormProps = {
 export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode, namespace } = useNamespace();
+  const modelsReturnHref = useListReturnHref('/models');
 
   const defaultValues = getDefaultValuesForUpdate(model);
   const baseUrlState = getBaseUrlState(model, model.provider);
@@ -93,7 +95,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
               current={model.id}
             />
             <div className="flex items-center gap-2">
-              <NamespacedLink href="/models">
+              <NamespacedLink href={modelsReturnHref}>
                 <Button variant="outline">Cancel</Button>
               </NamespacedLink>
               <TrackedButton
