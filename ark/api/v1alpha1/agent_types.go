@@ -59,7 +59,7 @@ type ToolApprovalConfig struct {
 
 type AgentTool struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=built-in;custom;mcp;http;agent;team;builtin
+	// +kubebuilder:validation:Enum=built-in;custom;mcp;http;agent;team;builtin;inline
 	Type string `json:"type"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1

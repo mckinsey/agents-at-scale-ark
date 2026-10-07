@@ -76,6 +76,6 @@ func (r *ToolReconciler) evaluateInline(ctx context.Context, tool *arkv1alpha1.T
 		available: true,
 		reason:    arkv1alpha1.ToolReasonAvailable,
 		message:   inlineAvailableMessage,
-		address:   inlinetools.ResolvedAddress(namespace, tool),
+		address:   inlinetools.ResolvedAddress(inlinetools.ActivatorBaseURL(namespace), tool),
 	}
 }
