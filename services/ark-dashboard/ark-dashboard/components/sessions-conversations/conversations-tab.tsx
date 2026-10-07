@@ -8,6 +8,7 @@ import { MessageDisplay } from './message-display';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ResourceErrorState } from '@/components/sections/resource-list-states';
 
 const NO_CONVERSATIONS: Conversation[] = [];
 
@@ -19,7 +20,13 @@ export function ConversationsTab({ sessionId }: Props) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showToolCalls, setShowToolCalls] = useState(true);
 
-  const { data: conversations, isLoading } = useListConversations(sessionId);
+  const {
+    data: conversations,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useListConversations(sessionId);
 
   const allConversations = conversations ?? NO_CONVERSATIONS;
 
@@ -38,6 +45,17 @@ export function ConversationsTab({ sessionId }: Props) {
       <div className="space-y-4">
         <Skeleton className="h-96" />
       </div>
+    );
+  }
+
+  if (isError && allConversations.length === 0) {
+    return (
+      <ResourceErrorState
+        className="mt-5"
+        title="Failed to load conversations"
+        description={error instanceof Error ? error.message : undefined}
+        onRetry={() => refetch()}
+      />
     );
   }
 

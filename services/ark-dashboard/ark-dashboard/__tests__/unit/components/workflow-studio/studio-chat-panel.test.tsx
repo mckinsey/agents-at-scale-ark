@@ -25,6 +25,12 @@ vi.mock('@/lib/services/chat', () => ({
   },
 }));
 
+const mockInvalidateQueriesList = vi.fn();
+
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useInvalidateQueriesList: () => mockInvalidateQueriesList,
+}));
+
 vi.mock('@/lib/services/studio-chat-history', () => ({
   studioChatHistoryService: {
     load: vi.fn(async () => null),
@@ -274,6 +280,20 @@ describe('StudioChatPanel', () => {
       expect(
         await screen.findByText(ARGO_MAKE_AUTHOR_AGENT_NAME),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('queries list cache', () => {
+    it('invalidates the queries list once the author query is created', async () => {
+      mockStream(() => [contentChunk('ok'), finalChunk()]);
+      renderPanel({ draft: validYaml, lastAgent: validYaml });
+
+      typeAndSend('add a validation step');
+
+      await waitFor(() =>
+        expect(mockInvalidateQueriesList).toHaveBeenCalledTimes(1),
+      );
+      expect(chatService.startStreamChatResponse).toHaveBeenCalled();
     });
   });
 

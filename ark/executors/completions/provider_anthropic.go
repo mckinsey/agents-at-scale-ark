@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -17,9 +19,24 @@ import (
 
 const defaultAnthropicVersion = "2023-06-01"
 
+const defaultAnthropicBackstopSeconds = 1800
+
 var anthropicHTTPClient = &http.Client{
-	Timeout:   60 * time.Second,
-	Transport: common.NewSharedTransport(),
+	Transport: &common.BackstopTransport{
+		Base:     common.NewSharedTransport(),
+		Backstop: getAnthropicBackstop(),
+	},
+}
+
+// getAnthropicBackstop reads ARK_ANTHROPIC_HTTP_BACKSTOP_SECONDS env var or returns default
+func getAnthropicBackstop() time.Duration {
+	if backstopStr := os.Getenv("ARK_ANTHROPIC_HTTP_BACKSTOP_SECONDS"); backstopStr != "" {
+		if backstopSec, err := strconv.Atoi(backstopStr); err == nil && backstopSec > 0 {
+			logf.Log.V(1).Info("Using custom Anthropic HTTP backstop", "seconds", backstopSec)
+			return time.Duration(backstopSec) * time.Second
+		}
+	}
+	return defaultAnthropicBackstopSeconds * time.Second
 }
 
 type AnthropicProvider struct {
@@ -40,7 +57,7 @@ func (ap *AnthropicProvider) SetOutputSchema(schema *runtime.RawExtension, schem
 }
 
 func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
-	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages)
+	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages, tools)
 	anthropicTools := convertToolsToAnthropic(tools)
 
 	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, toolChoice, ap.Properties)

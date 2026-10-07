@@ -8,7 +8,6 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from ark_sdk.k8s import create_api_client
 from ark_sdk.client import set_default_user_agent
 from dotenv import load_dotenv
 from opentelemetry import baggage, propagate, trace
@@ -118,9 +117,6 @@ async def lifespan(app: FastAPI):
     
     # Shutdown A2A manager
     await a2a_manager.shutdown()
-    
-    # Close all kubernetes async clients
-    await create_api_client().close()
 
 
 app = FastAPI(

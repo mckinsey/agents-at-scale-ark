@@ -1,10 +1,22 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
 import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import type { PaginatedSessions } from '@/lib/services/broker-sessions';
 import { toast } from '@/components/ui/sonner';
+
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock('/sessions');
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
 
 vi.mock('@/lib/services/broker-sessions-hooks');
 vi.mock('@/lib/services/broker-sessions');
@@ -320,5 +332,32 @@ describe('SessionsTable', () => {
       sort: 'date',
       order: 'desc',
     });
+  });
+
+  it('should show an error state instead of the empty state when the list fails to load', async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    vi.mocked(useListSessions).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('Internal Server Error'),
+      refetch,
+    } as unknown as ReturnType<typeof useListSessions>);
+
+    render(
+      <SessionsTable
+        onSelectSession={mockOnSelectSession}
+        selectedSessionId={null}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Failed to load sessions',
+    );
+    expect(screen.queryByText('No sessions found')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import { ARGO_MAKE_AUTHOR_AGENT_NAME } from '@/lib/constants/argo-make';
 import { chatService } from '@/lib/services/chat';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import type { ConversationMessage } from '@/lib/services/conversations';
+import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
 import { studioChatHistoryService } from '@/lib/services/studio-chat-history';
 import type {
   ArkCompletedQueryData,
@@ -240,6 +241,7 @@ export function useStudioChat({
   timeout,
 }: UseStudioChatParams): UseStudioChatReturn {
   const { namespace } = useNamespace();
+  const invalidateQueriesList = useInvalidateQueriesList();
   const [messages, setMessages] = useState<StudioChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -352,6 +354,7 @@ export function useStudioChat({
           conversationIdRef.current,
           timeout,
         );
+        invalidateQueriesList();
 
         for await (const chunk of chunks) {
           const outcome = handleStreamChunk(
@@ -417,6 +420,7 @@ export function useStudioChat({
       sessionId,
       timeout,
       commitAgentYaml,
+      invalidateQueriesList,
     ],
   );
 

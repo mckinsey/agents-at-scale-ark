@@ -14,6 +14,7 @@ import { NamespacedLink } from '@/components/namespaced-link';
 import { A2AServerStatus } from '@/components/sections/a2a-server-status';
 import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { summarizeA2AServerStatus } from '@/lib/services/a2a-servers';
 import { useA2AServer } from '@/lib/services/a2a-servers-hooks';
 
@@ -31,6 +32,7 @@ export default function A2AServerPage() {
   const name = decodeURIComponent(params.name as string);
 
   const { data: server, isLoading, error } = useA2AServer(name);
+  const a2aReturnHref = useListReturnHref('/a2a');
 
   const status = useMemo(
     () => summarizeA2AServerStatus(server?.status),
@@ -80,7 +82,9 @@ export default function A2AServerPage() {
             </p>
           )}
           <Button variant="outline" asChild>
-            <NamespacedLink href="/a2a">Back to A2A servers</NamespacedLink>
+            <NamespacedLink href={a2aReturnHref}>
+              Back to A2A servers
+            </NamespacedLink>
           </Button>
         </div>
       </div>

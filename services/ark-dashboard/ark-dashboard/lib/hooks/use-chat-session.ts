@@ -33,6 +33,7 @@ import {
   type MemoryNoticeLookup,
   isBrokerUnavailableError,
 } from '@/lib/services/chat';
+import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
 import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
@@ -223,6 +224,7 @@ export function useChatSession({
   type,
 }: UseChatSessionParams): UseChatSessionReturn {
   const { namespace } = useNamespace();
+  const invalidateQueriesList = useInvalidateQueriesList();
   const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
   const [lastConversationId, setLastConversationId] = useAtom(
     lastConversationIdAtom,
@@ -560,6 +562,7 @@ export function useChatSession({
 
       queryName = streamQueryName;
       lastQueryName.current = queryName;
+      invalidateQueriesList();
 
       const streamAbortController = chatStreamAbortControllerRef.current;
       let forceClosePhase: string | undefined;
@@ -980,6 +983,7 @@ export function useChatSession({
       chatKey,
       chatMessages,
       conversationId,
+      invalidateQueriesList,
       name,
       namespace,
       queryTimeout,
@@ -1011,6 +1015,7 @@ export function useChatSession({
           apiParameters,
         );
         queryName = query.name;
+        invalidateQueriesList();
       }
 
       lastQueryName.current = queryName;
@@ -1154,6 +1159,7 @@ export function useChatSession({
     [
       applyMemoryLookup,
       conversationId,
+      invalidateQueriesList,
       name,
       namespace,
       queryTimeout,

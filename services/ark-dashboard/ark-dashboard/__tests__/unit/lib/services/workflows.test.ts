@@ -43,7 +43,9 @@ describe('workflowsService', () => {
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default');
-      expect(result).toEqual(mockWorkflows);
+      expect(result.items).toEqual(mockWorkflows);
+      expect(result.hasMore).toBe(false);
+      expect(result.continueToken).toBeUndefined();
     });
 
     it('should list workflows with workflowName filter', async () => {
@@ -65,7 +67,7 @@ describe('workflowsService', () => {
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&workflowName=test');
-      expect(result).toEqual(mockWorkflows);
+      expect(result.items).toEqual(mockWorkflows);
     });
 
     it('should list workflows with workflowTemplateName filter', async () => {
@@ -113,6 +115,60 @@ describe('workflowsService', () => {
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=custom-ns&workflowName=prod&workflowTemplateName=ci-template&status=running');
+    });
+
+    it('should append limit and continue to the query string when given', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+      } as unknown as ArgoWorkflowList);
+
+      await workflowsService.list('default', undefined, {
+        limit: 25,
+        continueToken: 'abc123',
+      });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&limit=25&continue=abc123');
+    });
+
+    it('forwards an AbortSignal to apiClient.get when given', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+      } as unknown as ArgoWorkflowList);
+      const controller = new AbortController();
+
+      await workflowsService.list('default', undefined, {
+        signal: controller.signal,
+      });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default',
+        { signal: controller.signal },
+      );
+    });
+
+    it('should report hasMore true and surface the continue token when present', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+        metadata: { continue: 'next-page-token' },
+      } as ArgoWorkflowList);
+
+      const result = await workflowsService.list('default');
+
+      expect(result.hasMore).toBe(true);
+      expect(result.continueToken).toBe('next-page-token');
+    });
+
+    it('should report hasMore false when there is no continue token', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+        metadata: {},
+      } as ArgoWorkflowList);
+
+      const result = await workflowsService.list('default');
+
+      expect(result.hasMore).toBe(false);
+      expect(result.continueToken).toBeUndefined();
     });
   });
 
@@ -572,8 +628,8 @@ describe('expandCompressedNodes', () => {
 
     const result = await workflowsService.list('default');
 
-    expect(result).toHaveLength(2);
-    for (const item of result) {
+    expect(result.items).toHaveLength(2);
+    for (const item of result.items) {
       expect(item.status?.nodes).toEqual(nodes);
     }
   });

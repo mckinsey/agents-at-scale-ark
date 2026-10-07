@@ -1,6 +1,5 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -39,8 +38,10 @@ import {
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { useUrlState } from '@/lib/hooks/use-url-state';
 import { type Event, eventsService } from '@/lib/services/events';
 import { cn } from '@/lib/utils';
+import { parsePage, parsePageSize } from '@/lib/utils/pagination';
 import { formatAge } from '@/lib/utils/time';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -57,12 +58,19 @@ const COL = {
 
 const ALL = 'all';
 
+const DEFAULT_LIMIT = 10;
+
+const URL_STATE_SPEC = {
+  page: { default: 1, parse: parsePage },
+  limit: { default: DEFAULT_LIMIT, parse: parsePageSize },
+  type: { default: '' },
+  kind: { default: '' },
+  name: { default: '' },
+};
+
+type EventsFilterKey = 'name' | 'type' | 'kind';
+
 interface EventsSectionProps {
-  readonly page: number;
-  readonly limit: number;
-  readonly type?: string;
-  readonly kind?: string;
-  readonly name?: string;
   readonly totalCount?: number;
 }
 
@@ -133,19 +141,12 @@ function EventsTableSkeleton() {
   );
 }
 
-export function EventsSection({
-  page,
-  limit,
-  type,
-  kind,
-  name,
-  totalCount,
-}: EventsSectionProps) {
+export function EventsSection({ totalCount }: EventsSectionProps) {
   const { namespace } = useNamespace();
-  const router = useRouter();
   const { push: namespacedPush } = useNamespacedNavigation();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+
+  const [urlState, setUrlState] = useUrlState(URL_STATE_SPEC);
+  const { page, limit, type, kind, name } = urlState;
 
   // Component state (not for filters!)
   const [events, setEvents] = useState<Event[]>([]);
@@ -171,9 +172,9 @@ export function EventsSection({
         const filters = {
           page,
           limit,
-          type,
-          kind,
-          name,
+          type: type || undefined,
+          kind: kind || undefined,
+          name: name || undefined,
         };
 
         // Always load filter options from ALL events to get complete lists
@@ -242,75 +243,29 @@ export function EventsSection({
     }
   }, [loadEvents, namespace, page, limit, type, kind, name]);
 
-  // Create query string helper
-  const createQueryString = useCallback(
-    (updates: Record<string, string | undefined>) => {
-      const params = new URLSearchParams(searchParams.toString());
+  // Changing any of these resets the page, so none of them sets it explicitly.
+  const handleFilterChange = (key: EventsFilterKey, value: string) => {
+    const next = value === ALL ? '' : value;
+    const updates: Partial<Record<EventsFilterKey, string>> = { [key]: next };
 
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value === undefined || value === null || value === '') {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      });
-
-      return params.toString();
-    },
-    [searchParams],
-  );
-
-  // User interaction handlers
-  const handleFilterChange = (key: string, value: string | undefined) => {
-    const effectiveValue = value === ALL ? undefined : value;
-
-    // Only update the changed filter and reset page
-    const params: Record<string, string | undefined> = {
-      [key]: effectiveValue,
-      page: '1', // Reset to first page on filter change
-    };
-
-    // If changing the kind filter and it's actually different, also clear name
-    if (key === 'kind' && effectiveValue !== kind) {
-      params.name = undefined; // Explicitly clear name when kind changes
+    // A different kind invalidates the name picked under the previous one.
+    if (key === 'kind' && next !== kind) {
+      updates.name = '';
     }
 
-    const queryString = createQueryString(params);
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, {
-      scroll: false,
-    });
+    setUrlState(updates);
   };
 
   const handlePageChange = (newPage: number) => {
-    // Only update the page parameter, leave everything else as-is
-    const queryString = createQueryString({ page: newPage.toString() });
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, {
-      scroll: false,
-    });
+    setUrlState({ page: newPage });
   };
 
   const handleItemsPerPageChange = (newLimit: number) => {
-    // Only update limit and reset page, leave filters as-is
-    const queryString = createQueryString({
-      limit: newLimit.toString(),
-      page: '1', // Reset to first page on limit change
-    });
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, {
-      scroll: false,
-    });
+    setUrlState({ limit: newLimit });
   };
 
   const clearFilters = () => {
-    const queryString = createQueryString({
-      type: undefined,
-      kind: undefined,
-      name: undefined,
-      page: '1',
-      limit: limit.toString(),
-    });
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, {
-      scroll: false,
-    });
+    setUrlState({ type: '', kind: '', name: '' });
   };
 
   const handleRowClick = (event: Event, target: EventTarget | null) => {
