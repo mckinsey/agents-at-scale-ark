@@ -17,11 +17,37 @@ spec:
     try:
     - script:
         timeout: 300s
+        # The argo-workflows subchart ships its CRDs as regular templates
+        # (templates/crds/*.yaml), not Helm's special top-level crds/
+        # directory - so they're subject to the normal release-ownership
+        # check. A plain `helm install` then fails with "invalid ownership
+        # metadata" the moment any other release, or an unowned `kubectl
+        # apply` of the same CRDs (e.g. workflow-pagination-performance,
+        # which applies them this way on purpose since it only needs the
+        # Workflow CRD registered), has already created them. Apply the CRDs
+        # ourselves first - idempotent, ownership-agnostic - then install the
+        # rest of the chart with crds.install=false so it never tries to
+        # adopt them.
         content: |
           helm dependency update ../../services/argo-workflows/chart >/dev/null
+          helm template argo-workflows ../../services/argo-workflows/chart \
+            --namespace "$NAMESPACE" \
+            --set argo-workflows.singleNamespace=true \
+            --set httpRoute.argo.enabled=false \
+            --set minio.enabled=false \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflows.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowtemplates.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_clusterworkflowtemplates.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_cronworkflows.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowtaskresults.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowtasksets.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workfloweventbindings.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowartifactgctasks.yaml \
+            | kubectl apply -f -
           helm install argo ../../services/argo-workflows/chart \
             --namespace "$NAMESPACE" \
             --set argo-workflows.singleNamespace=true \
+            --set argo-workflows.crds.install=false \
             --set httpRoute.argo.enabled=false \
             --set minio.enabled=false \
             --wait --timeout=300s

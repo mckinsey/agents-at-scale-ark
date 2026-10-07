@@ -12,6 +12,7 @@ import { Provider as JotaiProvider, createStore } from 'jotai';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
 import { filesService } from '@/lib/services/files';
 import {
   useDeleteDirectory,
@@ -26,6 +27,16 @@ import type {
 } from '@/lib/types/files';
 
 import { FilesSection } from './files-section';
+
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock('/files');
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
