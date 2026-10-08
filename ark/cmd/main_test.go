@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -28,15 +29,18 @@ import (
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/yaml"
 
 	"mckinsey.com/ark/internal/apiserver"
 	"mckinsey.com/ark/internal/inlinetools"
 	"mckinsey.com/ark/internal/inlinetools/activator"
+	"mckinsey.com/ark/internal/inlinetools/runner"
 )
 
 const (
 	kindDeployment    = "Deployment"
 	kindNetworkPolicy = "NetworkPolicy"
+	nameArkController = "ark-controller"
 )
 
 func TestValidateRole(t *testing.T) {
@@ -210,7 +214,7 @@ func TestInlineActivatorChartIsScopedRestrictedAndIndependentOfControllerReplica
 								assert.NotEqual(t, inlinetools.ActivatorName, subject.Name)
 							}
 						}
-						if object.GetKind() == kindDeployment && object.GetName() == "ark-controller" {
+						if object.GetKind() == kindDeployment && object.GetName() == nameArkController {
 							var deployment appsv1.Deployment
 							require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &deployment))
 							assert.Equal(t, replicas, fmt.Sprint(*deployment.Spec.Replicas))
@@ -315,7 +319,7 @@ func TestInlineActivatorChartRejectsUnsafeInstallation(t *testing.T) {
 	require.NoError(t, err)
 	for _, object := range objects {
 		assert.NotEqual(t, inlinetools.ActivatorName, object.GetName())
-		if object.GetKind() == kindDeployment && object.GetName() == "ark-controller" {
+		if object.GetKind() == kindDeployment && object.GetName() == nameArkController {
 			var deployment appsv1.Deployment
 			require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &deployment))
 			assert.Contains(t, deployment.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: inlinetools.EnabledEnvVar, Value: "false"})
@@ -359,6 +363,43 @@ func TestInlineActivatorChartCoexistsWithNetworkPolicyBaseline(t *testing.T) {
 	assert.True(t, found, "expected ark-system-baseline NetworkPolicy to render")
 }
 
+func TestDevspaceDefaultValuesRenderChartWithInlineToolsOff(t *testing.T) {
+	devspaceConfig, err := os.ReadFile("../devspace.yaml")
+	require.NoError(t, err)
+	var config struct {
+		Deployments map[string]struct {
+			Helm struct {
+				Values map[string]any `json:"values"`
+			} `json:"helm"`
+		} `json:"deployments"`
+	}
+	require.NoError(t, yaml.Unmarshal(devspaceConfig, &config))
+	values, err := yaml.Marshal(config.Deployments[nameArkController].Helm.Values)
+	require.NoError(t, err)
+	require.Contains(t, string(values), "controllerManager")
+	valuesFile := filepath.Join(t.TempDir(), "devspace-values.yaml")
+	require.NoError(t, os.WriteFile(valuesFile, values, 0o600))
+
+	objects, err := renderInlineActivator(t, "--values", valuesFile)
+	require.NoError(t, err)
+	foundController := false
+	for _, object := range objects {
+		assert.NotEqual(t, inlinetools.ActivatorName, object.GetName())
+		if object.GetKind() != "Deployment" || object.GetName() != nameArkController {
+			continue
+		}
+		var deployment appsv1.Deployment
+		require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &deployment))
+		env := deployment.Spec.Template.Spec.Containers[0].Env
+		assert.Contains(t, env, corev1.EnvVar{Name: inlinetools.EnabledEnvVar, Value: "false"})
+		for _, variable := range env {
+			assert.NotEqual(t, runner.EnvImageTag, variable.Name)
+		}
+		foundController = true
+	}
+	assert.True(t, foundController)
+}
+
 func TestInlineActivatorScopedControllerRetainsAdmissionReviewPermissionWithoutMetrics(t *testing.T) {
 	objects, err := renderInlineActivator(t, "--set", "inlineTools.activator.enabled=true", "--set", "inlineTools.enabled=true", "--set", "metrics.enable=false", "--set-json", `controllerManager.watchNamespaces=["ark-system"]`)
 	require.NoError(t, err)
@@ -377,7 +418,7 @@ func TestInlineActivatorScopedControllerRetainsAdmissionReviewPermissionWithoutM
 				assert.NotEqual(t, inlinetools.ActivatorName, subject.Name)
 			}
 			if binding.RoleRef.Name == "ark-controller-cluster-role" {
-				assert.Equal(t, []rbacv1.Subject{{Kind: "ServiceAccount", Name: "ark-controller", Namespace: "ark-system"}}, binding.Subjects)
+				assert.Equal(t, []rbacv1.Subject{{Kind: "ServiceAccount", Name: nameArkController, Namespace: "ark-system"}}, binding.Subjects)
 				foundBinding = true
 			}
 		}
