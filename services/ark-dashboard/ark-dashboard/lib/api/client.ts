@@ -80,7 +80,10 @@ class APIClient {
   private extractErrorMessage(errorData: unknown): string {
     if (typeof errorData === 'object' && errorData !== null) {
       if ('detail' in errorData && errorData.detail) {
-        return stripAdmissionWebhookPrefix(String(errorData.detail));
+        const { detail } = errorData;
+        return typeof detail === 'string'
+          ? stripAdmissionWebhookPrefix(detail)
+          : JSON.stringify(detail);
       }
       if ('message' in errorData && errorData.message) {
         return String(errorData.message);

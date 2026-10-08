@@ -185,6 +185,18 @@ describe('APIClient', () => {
       }
     })
 
+    it('should serialize non-string error details instead of [object Object]', async () => {
+      const detail = [{ loc: ['body', 'maxTurns'], msg: 'Input should be a valid integer' }]
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ detail }),
+      })
+
+      await expect(client.put('/test', {})).rejects.toThrow(JSON.stringify(detail))
+    })
+
     it('should keep error details that only mention an admission webhook', async () => {
       const detail =
         'failed calling webhook "vteam-v1.kb.io": admission webhook unreachable'
