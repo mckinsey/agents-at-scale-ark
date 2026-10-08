@@ -50,6 +50,14 @@ inputs:
     description: 'Set policy.thirdPartyWebhooks.enabled=true on the aggregated apiserver (postgresql backend only)'
     required: false
     default: 'false'
+  enable-inline-tools:
+    description: 'Enable inline Tool authoring and the activator (dedicated inline e2e job)'
+    required: false
+    default: 'false'
+  mock-llm-enabled:
+    description: 'Pre-install the mock-llm sample into the default namespace (set false for suites that helm install their own there)'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -85,6 +93,7 @@ runs:
       with:
         metrics-enabled: false
         traefik-enabled: false
+        mock-llm-enabled: ${{ inputs.mock-llm-enabled }}
 
     - name: Run setup-e2e script
       shell: bash
@@ -95,7 +104,8 @@ runs:
           --storage-backend ${{ inputs.storage-backend }} \
           ${{ inputs.prefetch-test-images == 'true' && '--prefetch-test-images' || '' }} \
           ${{ inputs.prefetch-argo-images == 'true' && '--prefetch-argo-images' || '' }} \
-          ${{ inputs.enable-third-party-webhooks == 'true' && '--enable-third-party-webhooks' || '' }}
+          ${{ inputs.enable-third-party-webhooks == 'true' && '--enable-third-party-webhooks' || '' }} \
+          ${{ inputs.enable-inline-tools == 'true' && '--enable-inline-tools' || '' }}
       env:
         DOCKER_CICD_CACHE_REGISTRY: ${{ inputs.ci-cache-registry || format('ghcr.io/{0}', github.repository_owner) }}
         DOCKER_CICD_CACHE_REGISTRY_USERNAME: ${{ inputs.ci-cache-registry-username || github.actor }}
