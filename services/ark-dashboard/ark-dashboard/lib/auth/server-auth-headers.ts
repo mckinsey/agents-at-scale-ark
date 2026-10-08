@@ -14,10 +14,15 @@ import { TokenRefreshError } from '@/lib/auth/token-manager';
  * NextAuth session JWT, the same way `app/api/v1/[...proxy]/route.ts` does
  * for client-side calls. In open mode the session cookie is absent and
  * `getToken` returns null, so an empty header set is returned.
+ *
+ * Side effect: when the access token is close to expiry, this calls the IdP
+ * to refresh it and persists the new token via `cookies().set` (through
+ * `persistSessionToken`). That write only works inside a Route Handler or
+ * Server Action — calling this from a Server Component throws.
  */
 export async function getArkApiAuthHeaders(
   request: NextRequest,
-): Promise<HeadersInit> {
+): Promise<Record<string, string>> {
   let token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,

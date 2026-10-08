@@ -137,9 +137,9 @@ async function proxyToArkApi(
   // browser-side Host header so the backend sees the right authority.
   headers.delete('host');
 
-  new Headers(authHeaders).forEach((value, key) => {
+  for (const [key, value] of Object.entries(authHeaders)) {
     headers.set(key, value);
-  });
+  }
 
   // Bound the backend call so a hung ark-api can't pile requests up in Node's
   // queue and exhaust the dashboard process. Abort on either a client
