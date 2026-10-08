@@ -1,4 +1,5 @@
-import { apiClient, APIClient } from '@/lib/api/client';
+import type { APIClient } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 
 const PAGE_LIMIT = 100;
 
