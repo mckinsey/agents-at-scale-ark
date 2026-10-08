@@ -29,6 +29,13 @@ type WatchOptions struct {
 	LabelSelector   string
 	FieldSelector   string
 	ResourceVersion string
+	// SendInitialEvents marks a WatchList request (KEP-3157): the initial state
+	// is streamed first and the bookmark that closes it carries the
+	// initial-events-end annotation. Ordinary watches never get that annotation.
+	SendInitialEvents bool
+	// AllowWatchBookmarks is the client's opt-in to BOOKMARK events. Without it
+	// no bookmark is sent, matching the kube-apiserver watch cache.
+	AllowWatchBookmarks bool
 }
 
 type Backend interface {
