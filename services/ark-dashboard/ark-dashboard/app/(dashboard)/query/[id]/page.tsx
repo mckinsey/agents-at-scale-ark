@@ -24,7 +24,7 @@ import { JsonViewer } from '@/components/common/json-viewer';
 import { ContentCopy } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
-import { QueryTargetsField } from '@/components/query-fields/query-targets-field';
+import { QueryTargetField } from '@/components/query-fields/query-target-field';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
@@ -139,10 +139,7 @@ interface QueryStatus {
   };
 }
 
-interface TypedQueryDetailResponse extends Omit<
-  QueryDetailResponse,
-  'status' | 'targets'
-> {
+interface TypedQueryDetailResponse extends Omit<QueryDetailResponse, 'status'> {
   status?: QueryStatus | null;
   metadata?: Record<string, string>;
   target?: { name: string; type: string };
@@ -759,12 +756,10 @@ function QueryDetailContent() {
             label="Target"
             valueClassName=""
             value={
-              <QueryTargetsField
-                value={query.target ? [query.target] : []}
-                onChange={targets =>
-                  setQuery(prev =>
-                    prev ? { ...prev, target: targets[0] } : null,
-                  )
+              <QueryTargetField
+                value={query.target ?? undefined}
+                onChange={target =>
+                  setQuery(prev => (prev ? { ...prev, target } : null))
                 }
                 availableTargets={availableTargets}
                 loading={targetsLoading}
