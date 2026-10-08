@@ -3,7 +3,10 @@
 import { useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { ChevronLeft } from '@/components/icons';
+import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { APIError } from '@/lib/api/client';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,11 +22,20 @@ export default function SessionDetailPage() {
   const session_id = params.session_id as string;
   const { push } = useNamespacedNavigation();
 
-  const handleBackToSessions = useCallback(() => {
-    push('/sessions');
-  }, [push]);
+  const sessionsReturnHref = useListReturnHref('/sessions');
 
-  const { data: session, isLoading, isError } = useGetSession(session_id);
+  const handleBackToSessions = useCallback(() => {
+    push(sessionsReturnHref);
+  }, [push, sessionsReturnHref]);
+
+  const {
+    data: session,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useGetSession(session_id);
+  const isNotFound = error instanceof APIError && error.status === 404;
 
   if (isLoading && !session) {
     return (
@@ -35,7 +47,7 @@ export default function SessionDetailPage() {
     );
   }
 
-  if (!session) {
+  if (isNotFound || !session) {
     return (
       <div className="flex h-full flex-col space-y-6 py-8">
         <button
@@ -45,9 +57,17 @@ export default function SessionDetailPage() {
           <ChevronLeft className="size-4" />
           Back to all sessions
         </button>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
-          {isError ? 'Failed to load session details' : 'Session not found'}
-        </div>
+        {isError && !isNotFound ? (
+          <ResourceErrorState
+            title="Failed to load session details"
+            description={error instanceof Error ? error.message : undefined}
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <div className="text-muted-foreground flex flex-1 items-center justify-center">
+            Session not found
+          </div>
+        )}
       </div>
     );
   }

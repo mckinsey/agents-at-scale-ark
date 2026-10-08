@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.1.70-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70-rc.1...v0.1.70-rc.2) (2026-10-05)
+
+
+### Bug Fixes
+
+* **dashboard:** keep cached queries list fresh after writes and while queries run ([#3693](https://github.com/mckinsey/agents-at-scale-ark/issues/3693)) ([bf5436e](https://github.com/mckinsey/agents-at-scale-ark/commit/bf5436e18aeff10aca939bad2408ed9e77520904))
+* **dashboard:** refresh teams list after creating or updating a team ([#3690](https://github.com/mckinsey/agents-at-scale-ark/issues/3690)) ([611b1c6](https://github.com/mckinsey/agents-at-scale-ark/commit/611b1c6ed0bfb3d025b2831303c02e025070a77a))
+* **dashboard:** show error and not-found states on sessions pages ([#3689](https://github.com/mckinsey/agents-at-scale-ark/issues/3689)) ([4b624ea](https://github.com/mckinsey/agents-at-scale-ark/commit/4b624eafc9ad7efdf6c14a789585a5eb85ffef92))
+* **deps:** bump @modelcontextprotocol/sdk to 1.32.0 ([#3696](https://github.com/mckinsey/agents-at-scale-ark/issues/3696)) ([889e1d8](https://github.com/mckinsey/agents-at-scale-ark/commit/889e1d8107f8c9bfde9564e80887216db203561d))
+
+## [0.1.70-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70-rc...v0.1.70-rc.1) (2026-10-02)
+
+
+### Features
+
+* **ark-api, ark-landing-page:** per-user read-only via RBAC; rename namespace demo to landing-page labels ([#3561](https://github.com/mckinsey/agents-at-scale-ark/issues/3561)) ([8e91347](https://github.com/mckinsey/agents-at-scale-ark/commit/8e913474e15353b1705c1fb520e08d485481ab95))
+* **ark-broker:** add a NetworkPolicy template to the chart ([#3620](https://github.com/mckinsey/agents-at-scale-ark/issues/3620)) ([b1d4e10](https://github.com/mckinsey/agents-at-scale-ark/commit/b1d4e107b3559f760fd7da272f623ad08cd6ea27))
+* **controller:** make Query service-account impersonation opt-in and per-Query authorised ([#3240](https://github.com/mckinsey/agents-at-scale-ark/issues/3240)) ([e7bb93f](https://github.com/mckinsey/agents-at-scale-ark/commit/e7bb93fe182b90fd0856a55f4c374e5d3b0e9875))
+* **dashboard:** incremental workflow node log loading ([#3611](https://github.com/mckinsey/agents-at-scale-ark/issues/3611)) ([35c3244](https://github.com/mckinsey/agents-at-scale-ark/commit/35c3244f95d2c0eca039b4d3a98f09ccbd720506))
+* **dashboard:** read only sessions view ([#3642](https://github.com/mckinsey/agents-at-scale-ark/issues/3642)) ([b1846d3](https://github.com/mckinsey/agents-at-scale-ark/commit/b1846d33c79c7ed35d49934ecf49c9b0916802a2))
+* **eventing:** migrate to events.k8s.io/v1 recorder API ([#3543](https://github.com/mckinsey/agents-at-scale-ark/issues/3543) part 2) ([#3618](https://github.com/mckinsey/agents-at-scale-ark/issues/3618)) ([793b6d1](https://github.com/mckinsey/agents-at-scale-ark/commit/793b6d1bb1e29cdf5ff8890d77e51ac363acbc07))
+* remove the broker purge-all delete routes ([#3592](https://github.com/mckinsey/agents-at-scale-ark/issues/3592)) ([65acf95](https://github.com/mckinsey/agents-at-scale-ark/commit/65acf9568ff3ab0d142f576e4d3f428784b47641))
+
+
+### Bug Fixes
+
+* address CVEs from issue [#3644](https://github.com/mckinsey/agents-at-scale-ark/issues/3644) ([#3645](https://github.com/mckinsey/agents-at-scale-ark/issues/3645)) ([c686b26](https://github.com/mckinsey/agents-at-scale-ark/commit/c686b265f1a5e087752c26be701a370b7ba48493))
+* **ark-broker:** Postgres cross-replica message/event streams ([#3569](https://github.com/mckinsey/agents-at-scale-ark/issues/3569)) ([2a56671](https://github.com/mckinsey/agents-at-scale-ark/commit/2a56671ec191cde628e6dcef383b2d6f44aa5d3e))
+* **ark-dashboard:** preserve MCP secret header keys on edit ([#3631](https://github.com/mckinsey/agents-at-scale-ark/issues/3631)) ([4180300](https://github.com/mckinsey/agents-at-scale-ark/commit/4180300be985e93106d3959353dc7242071d781d))
+* **ark-dashboard:** stop chat stream on terminal query phase ([#2862](https://github.com/mckinsey/agents-at-scale-ark/issues/2862)) ([#3633](https://github.com/mckinsey/agents-at-scale-ark/issues/3633)) ([1365d36](https://github.com/mckinsey/agents-at-scale-ark/commit/1365d36596e262fd5ed5bb136f6c4f9f188d6b18))
+* **ark-sdk:** close the Kubernetes client created by with_ark_client ([#3661](https://github.com/mckinsey/agents-at-scale-ark/issues/3661)) ([d929af7](https://github.com/mckinsey/agents-at-scale-ark/commit/d929af776034554df8fa56b1967b485789e8b2ea))
+* **broker:** always-armed idle timeout for stream subscribers ([#2862](https://github.com/mckinsey/agents-at-scale-ark/issues/2862)) ([#3625](https://github.com/mckinsey/agents-at-scale-ark/issues/3625)) ([110d360](https://github.com/mckinsey/agents-at-scale-ark/commit/110d36007d1a6d1f56e5ee154c66d8efd2ecefd8))
+* bump sharp, @modelcontextprotocol/sdk and source-map-js for Xray… ([#3682](https://github.com/mckinsey/agents-at-scale-ark/issues/3682)) ([43795ce](https://github.com/mckinsey/agents-at-scale-ark/commit/43795cefee2b6f53c489157bceb9e6a3ae777f47))
+* **ci:** pin argo CLI version in ark-tools image ([#3614](https://github.com/mckinsey/agents-at-scale-ark/issues/3614)) ([dc2cf00](https://github.com/mckinsey/agents-at-scale-ark/commit/dc2cf003825a4b680bb143cc98bb34e73a850801)), closes [#3615](https://github.com/mckinsey/agents-at-scale-ark/issues/3615)
+* **completions:** make keepalive-tolerant SSE decoder apply on every streaming path ([#3656](https://github.com/mckinsey/agents-at-scale-ark/issues/3656)) ([7904ead](https://github.com/mckinsey/agents-at-scale-ark/commit/7904ead16030c28a08b6ef0617a0a447be7a3207))
+* **completions:** replace Anthropic 60s client timeout with context-aware backstop ([#3654](https://github.com/mckinsey/agents-at-scale-ark/issues/3654)) ([c5280c1](https://github.com/mckinsey/agents-at-scale-ark/commit/c5280c1b8462ffee4b17a7e6cd99014775749011))
+* **completions:** terminate tool no longer fails the query ([#489](https://github.com/mckinsey/agents-at-scale-ark/issues/489)) ([#3663](https://github.com/mckinsey/agents-at-scale-ark/issues/3663)) ([f717b5f](https://github.com/mckinsey/agents-at-scale-ark/commit/f717b5f372c0498c3ffe22acaf3d8184ae40d77f))
+* **controller:** stop ark-apiserver crash-looping on cold start; fix flaky Query TTL/broker tests ([#3683](https://github.com/mckinsey/agents-at-scale-ark/issues/3683)) ([fdbdd73](https://github.com/mckinsey/agents-at-scale-ark/commit/fdbdd73662d5bcc861d4168b0d88a903dec730a8))
+* dashboard goes to default namespace on first load when using namespace param ([#3489](https://github.com/mckinsey/agents-at-scale-ark/issues/3489)) ([9b3ab77](https://github.com/mckinsey/agents-at-scale-ark/commit/9b3ab77d2b863a68781969f2ce7baa47c1affa4c))
+* **dashboard:** distinguish load errors from empty state in list sections ([#3524](https://github.com/mckinsey/agents-at-scale-ark/issues/3524)) ([77a4911](https://github.com/mckinsey/agents-at-scale-ark/commit/77a4911c3f2101360a38cf1aaf4c70b1cf5846d2))
+* **dashboard:** repair workflow node log viewer defects from [#3611](https://github.com/mckinsey/agents-at-scale-ark/issues/3611) ([#3664](https://github.com/mckinsey/agents-at-scale-ark/issues/3664)) ([6fec568](https://github.com/mckinsey/agents-at-scale-ark/commit/6fec5681b75b054b464b91af3725ab2c96b67e12))
+* **perf:** query reconcile amplification ([#3643](https://github.com/mckinsey/agents-at-scale-ark/issues/3643)) ([5e43e4e](https://github.com/mckinsey/agents-at-scale-ark/commit/5e43e4e5b549efa0ebe4d3a213449c26ee06cb63))
+
+
+### Performance Improvements
+
+* **controller:** trim cached Query objects via a cache transform ([#3518](https://github.com/mckinsey/agents-at-scale-ark/issues/3518)) ([53c5676](https://github.com/mckinsey/agents-at-scale-ark/commit/53c5676df32a5e39a6688ca6d650aa4d7804c782))
+* **dashboard:** cache resource lists + detail via React Query ([#3586](https://github.com/mckinsey/agents-at-scale-ark/issues/3586)) ([50c41f5](https://github.com/mckinsey/agents-at-scale-ark/commit/50c41f553bd7388f4c207c0b8b754f059008363e))
+* **dashboard:** trim list-page payloads (teams N+1, agents summary view) ([#3545](https://github.com/mckinsey/agents-at-scale-ark/issues/3545)) ([f411763](https://github.com/mckinsey/agents-at-scale-ark/commit/f4117631079e81f8224c2c3a45339328e6ab8369))
+
+
+### Documentation
+
+* document ark-broker as required for dashboard streaming chat ([#3647](https://github.com/mckinsey/agents-at-scale-ark/issues/3647)) ([2ac9418](https://github.com/mckinsey/agents-at-scale-ark/commit/2ac9418e6436738f7a77f1a901be13d68bee587f))
+
 ## [0.1.70-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.69...v0.1.70-rc) (2026-09-24)
 
 

@@ -43,6 +43,7 @@ import {
   agentsService,
   toolsService,
 } from '@/lib/services';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 type TypeFilter = 'All' | ToolTypeKey;
@@ -55,6 +56,16 @@ const TYPE_ITEMS: ReadonlyArray<{ value: TypeFilter; label: string }> = [
   { value: 'team', label: 'Team' },
 ];
 
+function parseTypeFilter(raw: string): TypeFilter {
+  const match = TYPE_ITEMS.find(item => item.value === raw);
+  return match ? match.value : 'All';
+}
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  type: { default: 'All', parse: parseTypeFilter },
+};
+
 export function ToolsSection() {
   const { readOnlyMode, namespace } = useNamespace();
   const [tools, setTools] = useState<Tool[]>([]);
@@ -62,8 +73,7 @@ export function ToolsSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const showLoading = useDelayedLoading(loading);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('All');
+  const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
   const hasLoadedOnce = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -120,17 +130,17 @@ export function ToolsSection() {
   }, [tools, agents]);
 
   const filteredTools = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = filters.q.trim().toLowerCase();
     return tools.filter(tool => {
       const matchesSearch =
         !q ||
         tool.name.toLowerCase().includes(q) ||
         (tool.description?.toLowerCase().includes(q) ?? false);
       const matchesType =
-        typeFilter === 'All' || getToolTypeKey(tool) === typeFilter;
+        filters.type === 'All' || getToolTypeKey(tool) === filters.type;
       return matchesSearch && matchesType;
     });
-  }, [tools, searchQuery, typeFilter]);
+  }, [tools, filters.q, filters.type]);
 
   const handleDelete = async (id: string) => {
     const tool = tools.find(t => t.id === id);
@@ -208,15 +218,20 @@ export function ToolsSection() {
           />
         )}
         <div className="flex flex-none items-end gap-3">
-          <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+          <ResourceSearchInput
+            value={filters.q}
+            onChange={q => setFilters({ q })}
+          />
           <div className="flex w-48 flex-col gap-2">
             <span className="text-fg-secondary text-sm leading-5 tracking-[-0.112px]">
               Type
             </span>
             <Select
               items={TYPE_ITEMS}
-              value={typeFilter}
-              onValueChange={v => setTypeFilter(v as TypeFilter)}>
+              value={filters.type}
+              onValueChange={v =>
+                setFilters({ type: parseTypeFilter(String(v)) })
+              }>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="All" />
               </SelectTrigger>

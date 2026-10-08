@@ -58,6 +58,23 @@ def format_error_response(response_text: str, status_code: int, reason_phrase: s
         return {'error': {'message': f'{status_code} {reason_phrase}', 'type': 'server_error'}}
 
 
+def build_broker_unavailable_body(message: str, error_type: str) -> dict:
+    """Build a structured body for broker-unavailable errors."""
+    return {
+        "error": {"message": message, "type": error_type},
+        "code": "broker_unavailable",
+        "fallback": "poll",
+    }
+
+
+def build_broker_unavailable_response(message: str, error_type: str) -> JSONResponse:
+    """Build the 503 JSONResponse for broker-unavailable errors."""
+    return JSONResponse(
+        content=build_broker_unavailable_body(message, error_type),
+        status_code=503,
+    )
+
+
 async def proxy_sse_stream(url: str):
     """Proxy SSE stream from broker service."""
     timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=None)
@@ -79,7 +96,7 @@ async def proxy_sse_stream(url: str):
                         yield line + "\n\n"
     except httpx.ConnectError as e:
         logger.error(f"Failed to connect to broker at {url}: {e}")
-        yield f"data: {json.dumps({'error': {'message': 'Failed to connect to broker service', 'type': 'connection_error'}})}\n\n"
+        yield f"data: {json.dumps(build_broker_unavailable_body('Failed to connect to broker service', 'connection_error'))}\n\n"
     except Exception as e:
         logger.error(f"Error proxying SSE stream: {e}")
         yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'server_error'}})}\n\n"
@@ -95,9 +112,8 @@ async def proxy_broker_request(
     """Generic proxy for broker requests - handles both SSE streaming and JSON fetching."""
     broker_url = await get_broker_url(memory, impersonation=impersonation)
     if not broker_url:
-        return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
-            status_code=503,
+        return build_broker_unavailable_response(
+            f"Memory service '{memory}' not available", "service_unavailable"
         )
 
     safe_url = validate_and_build_url(broker_url, path)
@@ -126,9 +142,8 @@ async def proxy_broker_request(
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
         logger.error(f"Failed to connect to broker: {e}")
-        return JSONResponse(
-            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
-            status_code=503,
+        return build_broker_unavailable_response(
+            "Failed to connect to broker service", "connection_error"
         )
     except Exception as e:
         logger.error(f"Error fetching from broker: {e}")
@@ -242,9 +257,8 @@ async def get_chunks(
     if watch and query_id:
         broker_url = await get_broker_url(memory, impersonation=impersonation)
         if not broker_url:
-            return JSONResponse(
-                content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
-                status_code=503,
+            return build_broker_unavailable_response(
+                f"Memory service '{memory}' not available", "service_unavailable"
             )
         # Validate query_id to prevent path traversal
         validate_path_segment(query_id, "query_id")
@@ -304,4 +318,3 @@ async def get_session(
 ):
     """Get a single session by ID from the broker."""
     return await proxy_broker_request(memory, f"/sessions/{session_id}", False, {}, impersonation=impersonation)
-

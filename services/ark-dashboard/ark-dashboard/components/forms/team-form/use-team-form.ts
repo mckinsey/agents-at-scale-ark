@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
@@ -9,6 +10,7 @@ import { toast } from '@/components/ui/sonner';
 import type { components } from '@/lib/api/generated/types';
 import type { AgentListItem, Team, TeamMember } from '@/lib/services';
 import { agentsService, teamsService } from '@/lib/services';
+import { GET_ALL_TEAMS_QUERY_KEY } from '@/lib/services/teams-hooks';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -74,6 +76,7 @@ interface UseTeamFormOptions {
 
 export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
   const { namespace } = useNamespace();
+  const queryClient = useQueryClient();
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
@@ -211,6 +214,9 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             },
           );
 
+          queryClient.invalidateQueries({
+            queryKey: [GET_ALL_TEAMS_QUERY_KEY],
+          });
           setTeam(updatedTeam);
           setInitialMembers(selectedMembers);
           setInitialGraphEdges(graphEdges);
@@ -238,6 +244,9 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
           });
+          queryClient.invalidateQueries({
+            queryKey: [GET_ALL_TEAMS_QUERY_KEY],
+          });
           onSuccessRef.current?.();
         }
       } catch (error) {
@@ -256,7 +265,16 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
         setSaving(false);
       }
     },
-    [mode, team, teamName, selectedMembers, graphEdges, form, namespace],
+    [
+      mode,
+      team,
+      teamName,
+      selectedMembers,
+      graphEdges,
+      form,
+      namespace,
+      queryClient,
+    ],
   );
 
   return {

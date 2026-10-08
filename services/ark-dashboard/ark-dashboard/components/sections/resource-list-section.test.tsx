@@ -3,8 +3,20 @@ import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
+
 import type { ResourceListItem } from './resource-list-section';
 import { ResourceListSection } from './resource-list-section';
+
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock();
+});
+
+beforeEach(() => {
+  resetAppRouterMock();
+});
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({

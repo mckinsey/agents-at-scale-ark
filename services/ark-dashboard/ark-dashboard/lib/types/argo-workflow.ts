@@ -98,4 +98,8 @@ export interface ArgoWorkflowList {
   apiVersion: string;
   kind: string;
   items: ArgoWorkflow[];
+  metadata?: {
+    continue?: string;
+    remainingItemCount?: string | number;
+  };
 }

@@ -1,11 +1,12 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
 import {
   AccountTree,
+  ArrowBack,
+  ArrowForward,
   AutoAwesome,
   Bolt,
   Build,
@@ -46,13 +47,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
 import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
-import { useDebounce } from '@/lib/hooks/use-debounce';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
+import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -66,7 +69,6 @@ type WorkflowStepType =
   | 'container'
   | 'script'
   | 'suspend';
-type SortOrder = 'newest' | 'oldest';
 type TeamStepType =
   | 'orchestrator'
   | 'agent'
@@ -74,17 +76,19 @@ type TeamStepType =
   | 'tool-call'
   | 'response';
 
-const sortOrderItems = [
-  { label: 'Newest First', value: 'newest' },
-  { label: 'Oldest First', value: 'oldest' },
-];
-
 const statusFilterItems = [
   { label: 'All', value: 'all' },
   { label: 'Running', value: 'Running' },
   { label: 'Succeeded', value: 'Succeeded' },
   { label: 'Failed', value: 'Failed' },
 ];
+
+const URL_STATE_SPEC = {
+  workflowName: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  workflowTemplateName: { default: '' },
+  status: { default: 'all', parse: normalizeStatus },
+  run: { default: '' },
+};
 
 interface WorkflowStepDetail {
   image?: string;
@@ -816,7 +820,7 @@ function SessionListItem({
   );
 }
 
-const normalizeStatus = (status: string): string => {
+function normalizeStatus(status: string): string {
   if (!status || status === 'all') return 'all';
 
   const statusMap: Record<string, string> = {
@@ -828,7 +832,7 @@ const normalizeStatus = (status: string): string => {
   };
 
   return statusMap[status.toLowerCase()] || status;
-};
+}
 
 function TemplateOptions({
   templateNames,
@@ -883,6 +887,7 @@ function SessionsBody({
   selectedSession,
   isDetailLoading,
   hasActiveFilters,
+  hasNext,
   onClearFilters,
 }: {
   readonly error: Error | null;
@@ -893,6 +898,7 @@ function SessionsBody({
   readonly selectedSession?: Session;
   readonly isDetailLoading: boolean;
   readonly hasActiveFilters: boolean;
+  readonly hasNext: boolean;
   readonly onClearFilters: () => void;
 }) {
   if (error) {
@@ -914,11 +920,16 @@ function SessionsBody({
   }
 
   if (sessions.length === 0 && hasActiveFilters) {
+    // Filters apply per-page, so an empty page with hasNext doesn't mean "no matches".
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <ResourceNoResults
           icon={<SearchIcon className="size-full" />}
-          message="No workflow runs found matching your filters"
+          message={
+            hasNext
+              ? 'No matches on this page — more runs exist further on. Try Next page.'
+              : 'No workflow runs found matching your filters'
+          }
         />
         <Button variant="outline" onClick={onClearFilters}>
           Clear filters
@@ -980,104 +991,83 @@ export function SessionsSection({
   readonly onCountChange?: (count: number) => void;
 }) {
   const { namespace, isNamespaceResolved } = useNamespace();
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
 
   // Note: sourceFilter is currently unused but reserved for future support of Team sessions
   // Currently only workflow sessions are implemented
   const [sourceFilter] = useState<SessionSourceFilter>('all');
+  // A one-shot deep link (e.g. from the "View run" toast) to an exact,
+  // known workflow - shown directly regardless of filters/pagination.
+  const initialRunRef = useRef(urlState.run || null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
-    null,
+    () => initialRunRef.current,
   );
   const [useRealData] = useState(true);
 
-  const [workflowNameInput, setWorkflowNameInput] = useState(
-    searchParams.get('workflowName') || '',
+  useEffect(() => {
+    if (!urlState.run) {
+      return;
+    }
+    initialRunRef.current = urlState.run;
+    setSelectedSessionId(urlState.run);
+    setUrlState({ run: '' });
+  }, [urlState.run, setUrlState]);
+
+  const statusFilter = urlState.status;
+  const workflowNameInput = urlState.workflowName;
+
+  // workflowTemplateNameInput is the raw text shown in the input and used to
+  // filter dropdown suggestions. selectedTemplateName is the committed filter
+  // actually sent to the API - it is only set by picking a dropdown option, since
+  // the backend applies this as an exact-match label selector (see PR #3679 review).
+  const selectedTemplateName = urlState.workflowTemplateName;
+  const [templateTextDraft, setTemplateTextDraft] = useState<string | null>(
+    null,
   );
-  const [workflowTemplateNameInput, setWorkflowTemplateNameInput] = useState(
-    searchParams.get('workflowTemplateName') || '',
-  );
-  const [statusFilter, setStatusFilter] = useState(
-    normalizeStatus(searchParams.get('status') || 'all'),
-  );
-  const [sortOrder, setSortOrder] = useState<SortOrder>(
-    (searchParams.get('sort') as SortOrder) || 'newest',
-  );
+  const workflowTemplateNameInput = templateTextDraft ?? selectedTemplateName;
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const templateInputRef = useRef<HTMLDivElement>(null);
 
-  const debouncedWorkflowName = useDebounce(workflowNameInput, 500);
-  const debouncedWorkflowTemplateName = useDebounce(
-    workflowTemplateNameInput,
-    500,
-  );
-
   const filters = useMemo(
     () => ({
-      workflowName: debouncedWorkflowName || undefined,
-      workflowTemplateName: debouncedWorkflowTemplateName || undefined,
+      workflowName: committedState.workflowName || undefined,
+      workflowTemplateName: selectedTemplateName || undefined,
       status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
     }),
-    [debouncedWorkflowName, debouncedWorkflowTemplateName, statusFilter],
+    [committedState.workflowName, selectedTemplateName, statusFilter],
   );
 
-  // Update URL when filters or sort change
-  useEffect(() => {
-    const params = new URLSearchParams();
-
-    // Preserve namespace parameter
-    const namespaceParam = searchParams.get('namespace');
-    if (namespaceParam) {
-      params.set('namespace', namespaceParam);
-    }
-
-    if (debouncedWorkflowName) {
-      params.set('workflowName', debouncedWorkflowName);
-    }
-    if (debouncedWorkflowTemplateName) {
-      params.set('workflowTemplateName', debouncedWorkflowTemplateName);
-    }
-    if (statusFilter && statusFilter !== 'all') {
-      params.set('status', statusFilter.toLowerCase());
-    }
-    if (sortOrder !== 'newest') {
-      params.set('sort', sortOrder);
-    }
-
-    const queryString = params.toString();
-    if (queryString === searchParams.toString()) {
-      return;
-    }
-    const newUrl = queryString ? `?${queryString}` : window.location.pathname;
-    router.replace(newUrl, { scroll: false });
-  }, [
-    searchParams,
-    debouncedWorkflowName,
-    debouncedWorkflowTemplateName,
-    statusFilter,
-    sortOrder,
-    router,
-  ]);
+  const handleWorkflowsPageError = useCallback((err: Error) => {
+    toast.error('Failed to load page', { description: err.message });
+  }, []);
 
   const {
     workflows,
     loading,
     error,
-    refetch: refetchWorkflows,
-  } = useWorkflows(namespace, filters);
+    hasNext,
+    hasPrevious,
+    goToNextPage,
+    goToPreviousPage,
+    updateWorkflowItem,
+  } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
+  // Suggestions come from the full set of workflow templates, not the current
+  // page of workflow runs - a page can easily miss templates that still need
+  // to be selectable (see PR #3679 review).
+  const { data: workflowTemplates } = useGetAllWorkflowTemplates();
+
   const uniqueWorkflowTemplateNames = useMemo(() => {
     const templateNames = new Set<string>();
-    workflows.forEach(workflow => {
-      const templateName = workflow.spec.workflowTemplateRef?.name;
-      if (templateName) {
-        templateNames.add(templateName);
+    workflowTemplates?.forEach(template => {
+      if (template.metadata.name) {
+        templateNames.add(template.metadata.name);
       }
     });
     return Array.from(templateNames).sort();
-  }, [workflows]);
+  }, [workflowTemplates]);
 
   const filteredTemplateNames = useMemo(() => {
     if (!workflowTemplateNameInput) return uniqueWorkflowTemplateNames;
@@ -1087,43 +1077,39 @@ export function SessionsSection({
     );
   }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
 
-  const filteredAndSortedSessions = allSessions
-    .filter(session => {
-      if (sourceFilter === 'all') return true;
-      if (sourceFilter === 'workflows') return session.type === 'workflow';
-      return true;
-    })
-    .sort((a, b) => {
-      const timeA = new Date(a.startedAt).getTime();
-      const timeB = new Date(b.startedAt).getTime();
-      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
-    });
+  // Filters apply only within the current page, not the whole collection.
+  const filteredSessions = allSessions.filter(session => {
+    if (sourceFilter === 'all') return true;
+    if (sourceFilter === 'workflows') return session.type === 'workflow';
+    return true;
+  });
 
   useEffect(() => {
+    const isUnresolvedDeepLink =
+      initialRunRef.current && selectedSessionId === initialRunRef.current;
     if (
-      filteredAndSortedSessions.length > 0 &&
-      !filteredAndSortedSessions.find(s => s.id === selectedSessionId)
+      filteredSessions.length > 0 &&
+      !filteredSessions.find(s => s.id === selectedSessionId) &&
+      !isUnresolvedDeepLink
     ) {
-      setSelectedSessionId(filteredAndSortedSessions[0].id);
+      setSelectedSessionId(filteredSessions[0].id);
     }
-  }, [filteredAndSortedSessions, selectedSessionId]);
+  }, [filteredSessions, selectedSessionId]);
 
-  const sessionCount = filteredAndSortedSessions.length;
+  const sessionCount = filteredSessions.length;
 
   useEffect(() => {
     onCountChange?.(sessionCount);
   }, [onCountChange, sessionCount]);
 
-  const selectedSessionFromList = filteredAndSortedSessions.find(
+  const selectedSessionFromList = filteredSessions.find(
     s => s.id === selectedSessionId,
   );
 
   const { workflow: selectedWorkflowDetail, loading: loadingDetail } =
     useWorkflow(
       namespace,
-      useRealData && selectedSessionFromList?.type === 'workflow'
-        ? selectedSessionId || ''
-        : '',
+      useRealData && selectedSessionId ? selectedSessionId : '',
     );
 
   const selectedSession =
@@ -1147,12 +1133,12 @@ export function SessionsSection({
         previousStatus === 'Running' || previousStatus === 'Pending';
 
       if (isTerminalState && wasRunning) {
-        void refetchWorkflows();
+        updateWorkflowItem(selectedWorkflowDetail);
       }
 
       previousStatusRef.current = currentStatus;
     }
-  }, [selectedWorkflowDetail, useRealData, refetchWorkflows]);
+  }, [selectedWorkflowDetail, useRealData, updateWorkflowItem]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1175,16 +1161,21 @@ export function SessionsSection({
   const hasActiveFilters =
     workflowNameInput ||
     workflowTemplateNameInput ||
-    (statusFilter && statusFilter !== 'all') ||
-    sortOrder !== 'newest';
+    selectedTemplateName ||
+    (statusFilter && statusFilter !== 'all');
 
   const isLoading = loading || !isNamespaceResolved;
 
   const clearFilters = () => {
-    setWorkflowNameInput('');
-    setWorkflowTemplateNameInput('');
-    setStatusFilter('all');
-    setSortOrder('newest');
+    setTemplateTextDraft(null);
+    setUrlState(
+      {
+        workflowName: '',
+        workflowTemplateName: '',
+        status: 'all',
+      },
+      { flush: true },
+    );
   };
 
   return (
@@ -1193,7 +1184,7 @@ export function SessionsSection({
         <div className="flex w-full flex-col gap-3 pb-1 lg:flex-row lg:items-end">
           <ResourceSearchInput
             value={workflowNameInput}
-            onChange={setWorkflowNameInput}
+            onChange={workflowName => setUrlState({ workflowName })}
             placeholder="Search"
             testId="workflow-runs-search"
             className="w-full lg:max-w-[493px] lg:flex-1"
@@ -1214,7 +1205,11 @@ export function SessionsSection({
                 placeholder="All templates"
                 value={workflowTemplateNameInput}
                 onChange={e => {
-                  setWorkflowTemplateNameInput(e.target.value);
+                  const value = e.target.value;
+                  setTemplateTextDraft(value);
+                  if (value !== selectedTemplateName) {
+                    setUrlState({ workflowTemplateName: '' });
+                  }
                   if (!templateDropdownOpen) {
                     setTemplateDropdownOpen(true);
                   }
@@ -1230,38 +1225,17 @@ export function SessionsSection({
                     filteredTemplateNames={filteredTemplateNames}
                     query={workflowTemplateNameInput}
                     onSelect={templateName => {
-                      setWorkflowTemplateNameInput(templateName);
+                      setTemplateTextDraft(null);
+                      setUrlState(
+                        { workflowTemplateName: templateName },
+                        { flush: true },
+                      );
                       setTemplateDropdownOpen(false);
                     }}
                   />
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="flex w-full flex-col gap-2 lg:w-[197px]">
-            <span
-              id="workflow-sort-label"
-              className="label-regular-primary text-fg-secondary">
-              Sort
-            </span>
-            <Select
-              items={sortOrderItems}
-              value={sortOrder}
-              onValueChange={value => setSortOrder(value as SortOrder)}>
-              <SelectTrigger
-                aria-labelledby="workflow-sort-label"
-                className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sortOrderItems.map(item => (
-                  <SelectItem key={item.value} value={item.value}>
-                    <SelectItemText>{item.label}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="flex w-full flex-col gap-2 lg:w-[197px]">
@@ -1273,7 +1247,9 @@ export function SessionsSection({
             <Select
               items={statusFilterItems}
               value={statusFilter || 'all'}
-              onValueChange={value => setStatusFilter(value as string)}>
+              onValueChange={value =>
+                setUrlState({ status: String(value).toLowerCase() })
+              }>
               <SelectTrigger
                 aria-labelledby="workflow-status-label"
                 className="w-full">
@@ -1301,14 +1277,44 @@ export function SessionsSection({
         <SessionsBody
           error={error}
           isLoading={isLoading}
-          sessions={filteredAndSortedSessions}
+          sessions={filteredSessions}
           selectedSessionId={selectedSessionId}
           onSelectSession={setSelectedSessionId}
           selectedSession={selectedSession}
           isDetailLoading={loadingDetail && useRealData}
           hasActiveFilters={Boolean(hasActiveFilters)}
+          hasNext={hasNext}
           onClearFilters={clearFilters}
         />
+
+        <nav
+          aria-label="Workflow runs pagination"
+          className="flex shrink-0 items-center justify-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={goToPreviousPage}
+            disabled={!hasPrevious || isLoading}
+            aria-label="Go to previous page"
+            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            <IconShell size="sm">
+              <ArrowBack />
+            </IconShell>
+            <span className="text-sm leading-5 tracking-[-0.028px]">
+              Previous
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={goToNextPage}
+            disabled={!hasNext || isLoading}
+            aria-label="Go to next page"
+            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            <span className="text-sm leading-5 tracking-[-0.028px]">Next</span>
+            <IconShell size="sm">
+              <ArrowForward />
+            </IconShell>
+          </button>
+        </nav>
       </div>
     </ErrorBoundary>
   );
