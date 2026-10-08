@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
 
+import { isTerminalPhase } from './workflow-mapper';
 import {
   type WorkflowFilters,
   type WorkflowLifecycleAction,
@@ -10,14 +11,11 @@ import {
 
 const SHUTDOWN_POLL_INTERVAL_MS = 2000;
 const WATCH_POLL_INTERVAL_MS = 5000;
-const TERMINAL_PHASES = new Set(['Succeeded', 'Failed', 'Error']);
-
-function isFinished(workflow: ArgoWorkflow): boolean {
-  return TERMINAL_PHASES.has(workflow.status?.phase ?? '');
-}
 
 function isShuttingDown(workflow: ArgoWorkflow): boolean {
-  return Boolean(workflow.spec?.shutdown) && !isFinished(workflow);
+  return (
+    Boolean(workflow.spec?.shutdown) && !isTerminalPhase(workflow.status?.phase)
+  );
 }
 
 function usePollWorkflows(
@@ -216,7 +214,7 @@ export function useWorkflows(
     .filter(
       workflow =>
         watchedNames.has(workflow.metadata.name) &&
-        !isFinished(workflow) &&
+        !isTerminalPhase(workflow.status?.phase) &&
         !isShuttingDown(workflow),
     )
     .map(workflow => workflow.metadata.name)
@@ -324,12 +322,7 @@ export function useWorkflow(
           setError(null);
           setLoading(false);
 
-          const isTerminalState =
-            data.status?.phase === 'Succeeded' ||
-            data.status?.phase === 'Failed' ||
-            data.status?.phase === 'Error';
-
-          if (isTerminalState && intervalId) {
+          if (isTerminalPhase(data.status?.phase) && intervalId) {
             clearInterval(intervalId);
             intervalId = null;
           }
@@ -349,12 +342,7 @@ export function useWorkflow(
       const initialData = await fetchWorkflow();
 
       if (mounted && initialData) {
-        const isTerminalState =
-          initialData.status?.phase === 'Succeeded' ||
-          initialData.status?.phase === 'Failed' ||
-          initialData.status?.phase === 'Error';
-
-        if (!isTerminalState) {
+        if (!isTerminalPhase(initialData.status?.phase)) {
           intervalId = setInterval(fetchWorkflow, refreshInterval);
         }
       }

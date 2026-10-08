@@ -16,7 +16,7 @@ type ButtonVariantProps = VariantProps<typeof buttonVariants>;
 interface IconActionButtonProps {
   label: string;
   tooltip?: React.ReactNode;
-  onClick?: () => void;
+  onClick: () => void;
   disabled?: boolean;
   className?: string;
   variant?: ButtonVariantProps['variant'];

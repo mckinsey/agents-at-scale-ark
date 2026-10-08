@@ -11,6 +11,7 @@ import {
   Bolt,
   Build,
   Cancel,
+  CancelRegular,
   ChatBubble,
   CheckCircle,
   ChevronDown as ChevronDownIcon,
@@ -22,15 +23,14 @@ import {
   InsertDriveFile,
   Memory as MemoryIcon,
   OpenInNew,
+  Pause,
   PlayArrow,
-  RunCancel,
-  RunPause,
-  RunResubmit,
-  RunRetry,
-  RunStop,
+  PromptSuggestion,
   Schedule,
   Search as SearchIcon,
   SmartToy,
+  StopRegular,
+  Sync,
   Terminal,
   Terminal2,
 } from '@/components/icons';
@@ -810,6 +810,54 @@ interface WorkflowRunControlsProps {
   readonly className?: string;
 }
 
+interface RunControl {
+  readonly action: WorkflowLifecycleAction;
+  readonly label: string;
+  readonly Icon: React.ComponentType;
+}
+
+const RESUME_CONTROL: RunControl = {
+  action: 'resume',
+  label: 'Resume',
+  Icon: PlayArrow,
+};
+const PAUSE_CONTROL: RunControl = {
+  action: 'suspend',
+  label: 'Pause',
+  Icon: Pause,
+};
+const STOP_CONTROL: RunControl = {
+  action: 'stop',
+  label: 'Stop',
+  Icon: StopRegular,
+};
+const CANCEL_CONTROL: RunControl = {
+  action: 'terminate',
+  label: 'Cancel',
+  Icon: CancelRegular,
+};
+const RETRY_CONTROL: RunControl = {
+  action: 'retry',
+  label: 'Retry',
+  Icon: Sync,
+};
+const RESUBMIT_CONTROL: RunControl = {
+  action: 'resubmit',
+  label: 'Resubmit',
+  Icon: PromptSuggestion,
+};
+
+function getRunControls(status: StepStatus, suspended: boolean): RunControl[] {
+  if (status === 'failed') {
+    return [RETRY_CONTROL, RESUBMIT_CONTROL];
+  }
+  return [
+    suspended ? RESUME_CONTROL : PAUSE_CONTROL,
+    STOP_CONTROL,
+    CANCEL_CONTROL,
+  ];
+}
+
 function WorkflowRunControls({
   status,
   suspended,
@@ -834,73 +882,26 @@ function WorkflowRunControls({
           onClick={() => onAction('resubmit')}>
           Resubmit
           <IconShell size="sm" variant="secondary">
-            <RunResubmit />
+            <PromptSuggestion />
           </IconShell>
         </Button>
       </div>
     );
   }
 
-  if (status === 'failed') {
-    return (
-      <div aria-busy={disabled} className={wrapperClassName}>
-        <IconActionButton
-          label="Retry"
-          variant="outline"
-          size="icon-xs"
-          disabled={disabled}
-          onClick={() => onAction('retry')}>
-          <RunRetry />
-        </IconActionButton>
-        <IconActionButton
-          label="Resubmit"
-          variant="outline"
-          size="icon-xs"
-          disabled={disabled}
-          onClick={() => onAction('resubmit')}>
-          <RunResubmit />
-        </IconActionButton>
-      </div>
-    );
-  }
-
   return (
     <div aria-busy={disabled} className={wrapperClassName}>
-      {suspended ? (
+      {getRunControls(status, suspended).map(({ action, label, Icon }) => (
         <IconActionButton
-          label="Resume"
+          key={action}
+          label={label}
           variant="outline"
           size="icon-xs"
           disabled={disabled}
-          onClick={() => onAction('resume')}>
-          <PlayArrow />
+          onClick={() => onAction(action)}>
+          <Icon />
         </IconActionButton>
-      ) : (
-        <IconActionButton
-          label="Pause"
-          variant="outline"
-          size="icon-xs"
-          disabled={disabled}
-          onClick={() => onAction('suspend')}>
-          <RunPause />
-        </IconActionButton>
-      )}
-      <IconActionButton
-        label="Stop"
-        variant="outline"
-        size="icon-xs"
-        disabled={disabled}
-        onClick={() => onAction('stop')}>
-        <RunStop />
-      </IconActionButton>
-      <IconActionButton
-        label="Cancel"
-        variant="outline"
-        size="icon-xs"
-        disabled={disabled}
-        onClick={() => onAction('terminate')}>
-        <RunCancel />
-      </IconActionButton>
+      ))}
     </div>
   );
 }

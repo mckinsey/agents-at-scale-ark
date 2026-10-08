@@ -62,6 +62,12 @@ export interface MappedWorkflowSession {
   shutdownRequested: boolean;
 }
 
+const TERMINAL_PHASES = new Set(['Succeeded', 'Failed', 'Error']);
+
+export function isTerminalPhase(phase: string | undefined): boolean {
+  return TERMINAL_PHASES.has(phase ?? '');
+}
+
 function mapArgoPhaseToStatus(phase: string): MappedStepStatus {
   switch (phase) {
     case 'Pending':

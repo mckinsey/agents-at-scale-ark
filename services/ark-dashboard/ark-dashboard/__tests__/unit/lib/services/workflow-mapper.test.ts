@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isTerminalPhase,
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
@@ -108,6 +109,19 @@ function retryChainNodes(): NodeMap {
     'step-5': pod('step-5', 'log-step-5'),
   };
 }
+
+describe('isTerminalPhase', () => {
+  it.each(['Succeeded', 'Failed', 'Error'])('treats %s as finished', phase => {
+    expect(isTerminalPhase(phase)).toBe(true);
+  });
+
+  it.each(['Pending', 'Running', undefined])(
+    'treats %s as not finished',
+    phase => {
+      expect(isTerminalPhase(phase)).toBe(false);
+    },
+  );
+});
 
 describe('mapArgoWorkflowToSession', () => {
   it('does not throw when status is missing and falls back to creationTimestamp', () => {

@@ -6,7 +6,7 @@ interface IconProps extends React.SVGProps<SVGSVGElement> {
   readonly className?: string;
 }
 
-export function RunStop({ className, ...props }: Readonly<IconProps>) {
+export function StopRegular({ className, ...props }: Readonly<IconProps>) {
   return (
     <svg
       className={cn('size-full', className)}
