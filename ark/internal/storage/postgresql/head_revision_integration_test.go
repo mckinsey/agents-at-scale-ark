@@ -35,7 +35,9 @@ func freshDatabaseConfig(t *testing.T) Config {
 		t.Fatalf("create database: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = admin.Exec("DROP DATABASE IF EXISTS " + name + " WITH (FORCE)")
+		if _, err := admin.Exec("DROP DATABASE IF EXISTS " + name + " WITH (FORCE)"); err != nil {
+			t.Logf("drop database %s: %v", name, err)
+		}
 		_ = admin.Close()
 	})
 	cfg.Database = name

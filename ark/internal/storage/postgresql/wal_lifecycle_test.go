@@ -34,9 +34,7 @@ func TestInitSchema_SerializesViaAdvisoryLock(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("pg_advisory_xact_lock").WithArgs(schemaInitLockKey).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS resources").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("INSERT INTO storage_metadata").WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectQuery("SELECT value FROM storage_metadata WHERE key = 'head_revision_base'").
-		WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(1))
+	mock.ExpectExec("INSERT INTO storage_metadata").WithArgs(headRevisionBase).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	p := &PostgreSQLBackend{db: db}
@@ -90,25 +88,12 @@ func TestInitSchema_Errors(t *testing.T) {
 			},
 		},
 		{
-			name: "head revision base read fails",
-			expect: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin()
-				mock.ExpectExec("pg_advisory_xact_lock").WithArgs(schemaInitLockKey).WillReturnResult(sqlmock.NewResult(0, 0))
-				mock.ExpectExec("CREATE TABLE IF NOT EXISTS resources").WillReturnResult(sqlmock.NewResult(0, 0))
-				mock.ExpectExec("INSERT INTO storage_metadata").WillReturnResult(sqlmock.NewResult(0, 0))
-				mock.ExpectQuery("SELECT value FROM storage_metadata").WillReturnError(context.DeadlineExceeded)
-				mock.ExpectRollback()
-			},
-		},
-		{
 			name: "commit fails",
 			expect: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("pg_advisory_xact_lock").WithArgs(schemaInitLockKey).WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectExec("CREATE TABLE IF NOT EXISTS resources").WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectExec("INSERT INTO storage_metadata").WillReturnResult(sqlmock.NewResult(0, 0))
-				mock.ExpectQuery("SELECT value FROM storage_metadata").
-					WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(1))
 				mock.ExpectCommit().WillReturnError(context.DeadlineExceeded)
 			},
 		},
