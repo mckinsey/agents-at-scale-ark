@@ -2,12 +2,14 @@
 import json
 import logging
 from functools import wraps
-from typing import Callable, Any
+from typing import Callable, Any, Optional
 
 from fastapi import HTTPException
 from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 from kubernetes.client.exceptions import ApiException as SyncApiException
+
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.impersonation_config import ImpersonationSettings
 from ...auth.impersonation_errors import build_impersonation_forbidden_response
@@ -30,6 +32,20 @@ def _extract_error_detail(exception: ApiException | SyncApiException) -> str:
         except (json.JSONDecodeError, AttributeError):
             pass
     return error_detail
+
+
+def _is_admission_denial(exception: ApiException | SyncApiException) -> bool:
+    detail = _extract_error_detail(exception) or ""
+    return detail.startswith("admission webhook ") and "denied the request" in detail
+
+
+def _rbac_impersonation(
+    exception: ApiException | SyncApiException,
+    impersonation: Optional[ImpersonationConfig],
+) -> Optional[ImpersonationConfig]:
+    if _is_admission_denial(exception):
+        return None
+    return impersonation
 
 
 def handle_k8s_errors(
@@ -99,7 +115,7 @@ def handle_k8s_errors(
                     raise HTTPException(status_code=422, detail=_extract_error_detail(e))
                 
                 elif e.status == 403:
-                    impersonation = kwargs.get("impersonation")
+                    impersonation = _rbac_impersonation(e, kwargs.get("impersonation"))
                     if impersonation is not None:
                         settings = ImpersonationSettings.from_env()
                         if settings.fallback:
