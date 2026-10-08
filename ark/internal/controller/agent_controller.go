@@ -27,6 +27,10 @@ import (
 const (
 	// Condition types
 	AgentAvailable = "Available"
+
+	reasonModelNotFound      = "ModelNotFound"
+	reasonModelNotReady      = "ModelNotReady"
+	reasonModelNotConfigured = "ModelNotConfigured"
 )
 
 type AgentReconciler struct {
@@ -136,7 +140,7 @@ func (r *AgentReconciler) checkModel(ctx context.Context, agent *arkv1alpha1.Age
 	}
 
 	if agent.Spec.ModelRef == nil {
-		return false, "ModelNotConfigured", "Agent has no model configured; the default executor requires a model"
+		return false, reasonModelNotConfigured, "Agent has no model configured; the default executor requires a model"
 	}
 
 	reason, msg, lookupErr := r.checkModelDependency(ctx, agent)
@@ -150,12 +154,12 @@ func (r *AgentReconciler) checkModel(ctx context.Context, agent *arkv1alpha1.Age
 		return false, reason, fmt.Sprintf(
 			"Agent has no model configured; error checking fallback '%s' model: %v",
 			modelName, lookupErr)
-	case reason == "ModelNotReady":
+	case reason == reasonModelNotReady:
 		return false, reason, fmt.Sprintf(
 			"Agent has no model configured; the '%s' model it falls back to is not available",
 			modelName)
-	case reason == "ModelNotFound":
-		return false, "ModelNotConfigured", fmt.Sprintf(
+	case reason == reasonModelNotFound:
+		return false, reasonModelNotConfigured, fmt.Sprintf(
 			"Agent has no model configured and no '%s' model exists in namespace '%s'; the default executor requires a model",
 			modelName, modelNamespace)
 	default:
@@ -182,16 +186,16 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 	if err := r.Get(ctx, modelKey, &model); err != nil {
 		if errors.IsNotFound(err) {
 			msg := fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace)
-			return "ModelNotFound", msg, nil
+			return reasonModelNotFound, msg, nil
 		}
-		return "ModelNotFound", fmt.Sprintf("Error checking model: %v", err), err
+		return reasonModelNotFound, fmt.Sprintf("Error checking model: %v", err), err
 	}
 
 	// Check if model is available
 	modelCondition := meta.FindStatusCondition(model.Status.Conditions, "ModelAvailable")
 	if modelCondition == nil || modelCondition.Status != metav1.ConditionTrue {
 		msg := fmt.Sprintf("Model '%s' is not available", modelName)
-		return "ModelNotReady", msg, nil
+		return reasonModelNotReady, msg, nil
 	}
 
 	return "", "", nil
