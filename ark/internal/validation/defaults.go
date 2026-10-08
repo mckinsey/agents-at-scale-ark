@@ -34,17 +34,23 @@ func HasDefaultedModelRef(agent *arkv1alpha1.Agent) bool {
 	return agent.Annotations[annotations.DefaultedModelRef] == "true"
 }
 
+func isDefaultModelRef(ref *arkv1alpha1.AgentModelRef) bool {
+	return ref == nil || (ref.Name == DefaultModelName && ref.Namespace == "")
+}
+
 func defaultAgentModelRef(agent *arkv1alpha1.Agent) {
 	if !AgentRequiresModel(agent) {
 		if HasDefaultedModelRef(agent) {
-			agent.Spec.ModelRef = nil
+			if isDefaultModelRef(agent.Spec.ModelRef) {
+				agent.Spec.ModelRef = nil
+			}
 			delete(agent.Annotations, annotations.DefaultedModelRef)
 		}
 		return
 	}
 
 	if agent.Spec.ModelRef != nil {
-		if !HasDefaultedModelRef(agent) || agent.Spec.ModelRef.Name != DefaultModelName || agent.Spec.ModelRef.Namespace != "" {
+		if !HasDefaultedModelRef(agent) || !isDefaultModelRef(agent.Spec.ModelRef) {
 			delete(agent.Annotations, annotations.DefaultedModelRef)
 		}
 		return

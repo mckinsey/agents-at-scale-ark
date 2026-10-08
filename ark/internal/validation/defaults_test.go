@@ -99,6 +99,22 @@ func TestDefaultAgentModelRef(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps an explicit modelRef set together with an execution engine", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
+		DefaultAgent(agent)
+
+		agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{Name: "engine"}
+		agent.Spec.ModelRef = &arkv1alpha1.AgentModelRef{Name: "custom"}
+		DefaultAgent(agent)
+
+		if agent.Spec.ModelRef == nil || agent.Spec.ModelRef.Name != "custom" {
+			t.Fatal("should preserve the explicit modelRef")
+		}
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("expected the defaulted marker to be cleared")
+		}
+	})
+
 	t.Run("keeps an explicit modelRef on an execution engine agent", func(t *testing.T) {
 		agent := &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{Name: "a"},

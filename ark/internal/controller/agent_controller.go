@@ -140,6 +140,7 @@ func (r *AgentReconciler) checkModel(ctx context.Context, agent *arkv1alpha1.Age
 	}
 
 	reason, msg, lookupErr := r.checkModelDependency(ctx, agent)
+	modelName, modelNamespace := modelRefKey(agent)
 	switch {
 	case reason == "":
 		return true, "", ""
@@ -148,28 +149,33 @@ func (r *AgentReconciler) checkModel(ctx context.Context, agent *arkv1alpha1.Age
 	case lookupErr != nil:
 		return false, reason, fmt.Sprintf(
 			"Agent has no model configured; error checking fallback '%s' model: %v",
-			validation.DefaultModelName, lookupErr)
+			modelName, lookupErr)
 	case reason == "ModelNotReady":
 		return false, reason, fmt.Sprintf(
 			"Agent has no model configured; the '%s' model it falls back to is not available",
-			validation.DefaultModelName)
-	default:
+			modelName)
+	case reason == "ModelNotFound":
 		return false, "ModelNotConfigured", fmt.Sprintf(
 			"Agent has no model configured and no '%s' model exists in namespace '%s'; the default executor requires a model",
-			validation.DefaultModelName, agent.Namespace)
+			modelName, modelNamespace)
+	default:
+		return false, reason, msg
 	}
+}
+
+func modelRefKey(agent *arkv1alpha1.Agent) (name, namespace string) {
+	namespace = agent.Namespace
+	if agent.Spec.ModelRef.Namespace != "" {
+		namespace = agent.Spec.ModelRef.Namespace
+	}
+	return agent.Spec.ModelRef.Name, namespace
 }
 
 // checkModelDependency validates model dependency and returns the condition
 // reason for an unusable model, or an empty reason when the model is ready.
 // lookupErr is set when the model could not be read at all.
 func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (reason, message string, lookupErr error) {
-	modelName := agent.Spec.ModelRef.Name
-	modelNamespace := agent.Namespace
-
-	if agent.Spec.ModelRef.Namespace != "" {
-		modelNamespace = agent.Spec.ModelRef.Namespace
-	}
+	modelName, modelNamespace := modelRefKey(agent)
 
 	var model arkv1alpha1.Model
 	modelKey := types.NamespacedName{Name: modelName, Namespace: modelNamespace}
