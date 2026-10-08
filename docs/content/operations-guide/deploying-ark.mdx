@@ -283,7 +283,7 @@ An idle Deployment may pass this decision: it authorizes a target, not execution
 
 #### Activation and idle lifetime
 
-Activation, including the handshake, has a 60-second budget. Execution then has a separate 30-second budget; caller cancellation or an earlier caller deadline bounds both. Pending and active calls prevent idle scale-down. With neither remaining, the activator scales to zero after 60 seconds since the last completed call; discovery never refreshes that clock.
+Activation, including the handshake, has a 60-second budget. A cold runner's Service IP may refuse the first connection while kube-proxy catches up with its ready endpoints, so the handshake is retried within that budget. Execution then has a separate 30-second budget; caller cancellation or an earlier caller deadline bounds both. Pending and active calls prevent idle scale-down. With neither remaining, the activator scales to zero after 60 seconds since the last completed call; discovery never refreshes that clock.
 
 On restart, existing warm owned runners receive a fresh 60-second grace period before idle cleanup. Scale writes use the scale subresource with optimistic concurrency, and failed reads or changed ownership prevent the write. The controller alone performs bounded drain while the feature is disabled. Backend calls are sent once: uncertain responses are not replayed.
 
