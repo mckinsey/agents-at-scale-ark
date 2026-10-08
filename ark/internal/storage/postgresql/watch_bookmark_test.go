@@ -23,7 +23,7 @@ import (
 	"mckinsey.com/ark/internal/storage"
 )
 
-const initialEventsEndAnnotation = "k8s.io/initial-events-end"
+const initialEventsEndAnnotation = metav1.InitialEventsAnnotationKey
 
 type bookmarkConverter struct{}
 

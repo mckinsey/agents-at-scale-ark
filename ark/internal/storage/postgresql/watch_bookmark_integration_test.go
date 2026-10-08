@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -56,7 +57,7 @@ func bookmarkAnnotation(t *testing.T, ev watch.Event) (string, bool) {
 	if err != nil {
 		t.Fatalf("bookmark object has no metadata: %v", err)
 	}
-	v, ok := acc.GetAnnotations()["k8s.io/initial-events-end"]
+	v, ok := acc.GetAnnotations()[metav1.InitialEventsAnnotationKey]
 	return v, ok
 }
 
@@ -148,6 +149,69 @@ func TestWatch_BookmarkAnnotation_Integration(t *testing.T) {
 				}
 			case <-quiet:
 				return
+			}
+		}
+	})
+
+	// A reflector re-watching in WatchList mode sends its last known RV together
+	// with sendInitialEvents and replaces its whole cache with what arrives before
+	// the annotated bookmark, so the stream must carry the complete state as ADDED
+	// events, not the resume deltas a plain watch with that RV would get.
+	t.Run("watchlist with a resourceVersion streams the full initial state", func(t *testing.T) {
+		second := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: testKind}
+		second.Metadata.Name = testName + "-2"
+		second.Metadata.Namespace = testNS
+		second.Metadata.UID = "test-uid-bookmark-annotation-2"
+		second.Spec = map[string]interface{}{"k": "v2"}
+		if err := backend.Create(ctx, testKind, testNS, second.Metadata.Name, second); err != nil {
+			t.Fatalf("Create failed: %v", err)
+		}
+		rv2, err := backend.GetResourceVersion(ctx, testKind, testNS, second.Metadata.Name)
+		if err != nil {
+			t.Fatalf("GetResourceVersion failed: %v", err)
+		}
+
+		w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
+			ResourceVersion:     strconv.FormatInt(rv2, 10),
+			AllowWatchBookmarks: true,
+			SendInitialEvents:   true,
+		})
+		if err != nil {
+			t.Fatalf("Watch failed: %v", err)
+		}
+		defer w.Stop()
+
+		added := map[string]bool{}
+		deadline := time.After(10 * time.Second)
+		for {
+			var ev watch.Event
+			select {
+			case got, ok := <-w.ResultChan():
+				if !ok {
+					t.Fatal("watch closed before the terminal bookmark")
+				}
+				ev = got
+			case <-deadline:
+				t.Fatalf("no terminal bookmark within 10s; ADDED so far: %v", added)
+			}
+			if ev.Type == watch.Bookmark {
+				if v, found := bookmarkAnnotation(t, ev); !found || v != "true" {
+					continue
+				}
+				break
+			}
+			obj, ok := ev.Object.(*integrationTestObject)
+			if !ok {
+				t.Fatalf("unexpected object type %T in the initial state", ev.Object)
+			}
+			if ev.Type != watch.Added {
+				t.Errorf("initial state event for %q is %s, want %s", obj.Metadata.Name, ev.Type, watch.Added)
+			}
+			added[obj.Metadata.Name] = true
+		}
+		for _, name := range []string{testName, second.Metadata.Name} {
+			if !added[name] {
+				t.Errorf("%q missing from the initial state before the terminal bookmark; got %v", name, added)
 			}
 		}
 	})
