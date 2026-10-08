@@ -29,6 +29,12 @@ interface RunWorkflowDialogProps {
   onOpenChange?: (open: boolean) => void;
 }
 
+function emptyParamValues(
+  parameters: readonly WorkflowParameter[],
+): Record<string, string> {
+  return Object.fromEntries(parameters.map(param => [param.name, '']));
+}
+
 export function RunWorkflowDialog({
   templateName,
   parameters = [],
@@ -36,23 +42,31 @@ export function RunWorkflowDialog({
   trigger,
   open: controlledOpen,
   onOpenChange,
-}: RunWorkflowDialogProps) {
+}: Readonly<RunWorkflowDialogProps>) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
   const setOpen = (next: boolean) => {
-    setUncontrolledOpen(next);
+    if (controlledOpen === undefined) {
+      setUncontrolledOpen(next);
+    }
     onOpenChange?.(next);
   };
   const [workflowName, setWorkflowName] = useState('');
   const [workflowNameError, setWorkflowNameError] = useState<string>('');
-  const [paramValues, setParamValues] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    parameters.forEach(param => {
-      initial[param.name] = '';
-    });
-    return initial;
-  });
+  const [paramValues, setParamValues] = useState<Record<string, string>>(() =>
+    emptyParamValues(parameters),
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [wasOpen, setWasOpen] = useState(open);
+
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setWorkflowName('');
+      setWorkflowNameError('');
+      setParamValues(emptyParamValues(parameters));
+    }
+  }
 
   const validateWorkflowName = (name: string): string => {
     if (!name) {
@@ -107,15 +121,6 @@ export function RunWorkflowDialog({
   const handleOpenChange = (newOpen: boolean) => {
     if (!isSubmitting) {
       setOpen(newOpen);
-      if (newOpen) {
-        setWorkflowName('');
-        setWorkflowNameError('');
-        const initial: Record<string, string> = {};
-        parameters.forEach(param => {
-          initial[param.name] = '';
-        });
-        setParamValues(initial);
-      }
     }
   };
 
@@ -130,19 +135,26 @@ export function RunWorkflowDialog({
               Configure and run {templateName}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid max-h-[60vh] gap-4 overflow-y-auto py-4">
+          <div className="-mx-1 grid max-h-[60vh] gap-4 overflow-y-auto px-1 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="workflow-name">Workflow Name </Label>
+              <Label htmlFor="workflow-name">Workflow name</Label>
               <Input
                 id="workflow-name"
                 value={workflowName}
                 onChange={e => handleWorkflowNameChange(e.target.value)}
                 placeholder="Auto-generated if not specified"
-                className={workflowNameError ? 'border-destructive' : ''}
+                aria-invalid={workflowNameError ? true : undefined}
+                aria-describedby={
+                  workflowNameError ? 'workflow-name-error' : undefined
+                }
                 disabled={isSubmitting}
               />
               {workflowNameError && (
-                <p className="text-destructive text-xs">{workflowNameError}</p>
+                <p
+                  id="workflow-name-error"
+                  className="text-status-error text-sm">
+                  {workflowNameError}
+                </p>
               )}
             </div>
             {parameters.length > 0 && (

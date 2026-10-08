@@ -1070,10 +1070,14 @@ describe('SessionsSection', () => {
       expect(useWorkflows).toHaveBeenCalledWith(
         'tenant-alpha',
         expect.any(Object),
+        undefined,
+        expect.any(Function),
       );
       expect(useWorkflows).not.toHaveBeenCalledWith(
         'default',
-        expect.anything(),
+        expect.any(Object),
+        undefined,
+        expect.any(Function),
       );
     });
 

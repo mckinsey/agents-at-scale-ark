@@ -67,6 +67,7 @@ function WorkflowTemplateTableRow({
 }: Readonly<WorkflowTemplateTableRowProps>) {
   const { namespace, readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const detailHref = `/workflow-templates/${encodeURIComponent(template.id)}`;
 
   return (
     <>
@@ -75,7 +76,7 @@ function WorkflowTemplateTableRow({
           <span aria-hidden className={rowHoverOverlayClass} />
           <TruncatedTooltip label={template.name}>
             <NamespacedLink
-              href={`/workflow-templates/${encodeURIComponent(template.id)}`}
+              href={detailHref}
               className="text-fg-primary block w-full truncate after:absolute after:inset-0 after:content-['']">
               {template.name}
             </NamespacedLink>
@@ -83,9 +84,12 @@ function WorkflowTemplateTableRow({
         </TableCell>
         <TableCell size="small" className={cn(COL.title, 'relative z-10')}>
           <TruncatedTooltip label={template.title ?? '—'}>
-            <span className="text-fg-primary block w-full truncate">
+            <NamespacedLink
+              href={detailHref}
+              tabIndex={-1}
+              className="text-fg-primary block w-full truncate">
               {template.title ?? '—'}
-            </span>
+            </NamespacedLink>
           </TruncatedTooltip>
         </TableCell>
         <TableCell size="small" className={COL.stages}>
@@ -95,9 +99,12 @@ function WorkflowTemplateTableRow({
         </TableCell>
         <TableCell size="small" className="relative z-10">
           <TruncatedTooltip label={template.description ?? '—'}>
-            <span className="text-fg-primary block w-full truncate">
+            <NamespacedLink
+              href={detailHref}
+              tabIndex={-1}
+              className="text-fg-primary block w-full truncate">
               {template.description ?? '—'}
-            </span>
+            </NamespacedLink>
           </TruncatedTooltip>
         </TableCell>
         <TableCell size="small" className={cn(COL.action, 'relative z-10')}>
@@ -161,6 +168,7 @@ export function WorkflowTemplatesTable({
   const [runTarget, setRunTarget] = useState<WorkflowTemplateListItem | null>(
     null,
   );
+  const [isRunOpen, setIsRunOpen] = useState(false);
 
   return (
     <>
@@ -190,7 +198,10 @@ export function WorkflowTemplatesTable({
               key={template.id}
               template={template}
               onDelete={onDelete}
-              onRequestRun={() => setRunTarget(template)}
+              onRequestRun={() => {
+                setRunTarget(template);
+                setIsRunOpen(true);
+              }}
             />
           ))}
         </TableBody>
@@ -199,10 +210,8 @@ export function WorkflowTemplatesTable({
         <RunWorkflowDialog
           templateName={runTarget.id}
           parameters={runTarget.parameters}
-          open
-          onOpenChange={open => {
-            if (!open) setRunTarget(null);
-          }}
+          open={isRunOpen}
+          onOpenChange={setIsRunOpen}
           onRun={(parameters, workflowName) =>
             onRun(runTarget.id, parameters, workflowName)
           }

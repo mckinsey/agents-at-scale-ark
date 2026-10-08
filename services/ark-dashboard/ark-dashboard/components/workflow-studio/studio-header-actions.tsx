@@ -190,7 +190,7 @@ export function StudioHeaderActions({
                   data-testid="studio-activity-trigger">
                   <Badge
                     variant="alternative"
-                    className="border-stroke-divider mr-2 size-5 min-w-5 items-center justify-center rounded-full border bg-mist-50 p-0 text-slate-900"
+                    className="border-stroke-divider bg-fill-primary text-fg-primary-inverse mr-2 size-5 min-w-5 items-center justify-center rounded-full border p-0"
                     data-testid="studio-activity-badge">
                     {totalRuns}
                   </Badge>

@@ -22,16 +22,6 @@ beforeEach(() => {
   resetAppRouterMock();
 });
 
-vi.mock('next/navigation', async () => {
-  const { createAppRouterMock } =
-    await import('@/__tests__/setup/mock-app-router');
-  return createAppRouterMock();
-});
-
-beforeEach(() => {
-  resetAppRouterMock();
-});
-
 vi.mock('@/lib/services/agents-hooks', () => ({
   useGetAllAgents: () => mockUseGetAllAgents(),
   useDeleteAgent: () => ({ mutate: mockMutate }),

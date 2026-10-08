@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { toast } from 'sonner';
 
 import {
   NameWorkflowDialog,
@@ -9,7 +8,7 @@ import {
 } from '@/components/dialogs/name-workflow-dialog';
 import { AccountTree } from '@/components/icons';
 import {
-  CreateResourceButton,
+  ResourceListCreateButton,
   ResourceListSection,
 } from '@/components/sections/resource-list-section';
 import { WorkflowTemplatesNotInstalled } from '@/components/sections/workflow-templates-not-installed';
@@ -17,6 +16,7 @@ import {
   type WorkflowTemplateListItem,
   WorkflowTemplatesTable,
 } from '@/components/sections/workflow-templates-table';
+import { toast } from '@/components/ui/sonner';
 import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useWorkflowTemplateAccess } from '@/lib/hooks/use-workflow-template-access';
@@ -122,7 +122,7 @@ export function WorkflowTemplatesSection() {
         subtitle="Automate complex processes with agentic orchestration"
         createAction={
           canCreate ? (
-            <CreateResourceButton
+            <ResourceListCreateButton
               label="Create workflow template"
               onClick={() => setShowNameDialog(true)}
               data-testid="workflow-create-template"

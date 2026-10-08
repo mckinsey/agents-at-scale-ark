@@ -3,7 +3,7 @@
 import { Memory } from '@/components/icons';
 import { ModelsTable } from '@/components/sections/models-table';
 import {
-  CreateResourceButton,
+  ResourceListCreateButton,
   ResourceListSection,
 } from '@/components/sections/resource-list-section';
 import { DOCS_URLS } from '@/lib/constants/docs';
@@ -25,7 +25,7 @@ export function ModelsSection() {
       title="Models"
       subtitle="Add and manage all your models"
       createAction={
-        <CreateResourceButton href="/models/new" label="Add model" />
+        <ResourceListCreateButton href="/models/new" label="Add model" />
       }
       learnMoreUrl={DOCS_URLS.models}
       entityLabel="Model"

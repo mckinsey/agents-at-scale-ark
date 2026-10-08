@@ -2,7 +2,7 @@
 
 import { Group } from '@/components/icons';
 import {
-  CreateResourceButton,
+  ResourceListCreateButton,
   ResourceListSection,
 } from '@/components/sections/resource-list-section';
 import { TeamsTable } from '@/components/sections/teams-table';
@@ -25,7 +25,7 @@ export function TeamsSection() {
       title="Teams"
       subtitle="Create and manage teams of agents"
       createAction={
-        <CreateResourceButton href="/teams/new" label="Create team" />
+        <ResourceListCreateButton href="/teams/new" label="Create team" />
       }
       learnMoreUrl={DOCS_URLS.teams}
       entityLabel="Team"

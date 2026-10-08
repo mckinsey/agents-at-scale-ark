@@ -65,7 +65,7 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   readonly subtitle: string;
   /**
    * Create control rendered in the header and the empty state. Use
-   * CreateResourceButton unless the resource needs something bespoke; omit it
+   * ResourceListCreateButton unless the resource needs something bespoke; omit it
    * for resources that cannot be created from the list.
    */
   readonly createAction?: ReactNode;
@@ -96,7 +96,7 @@ interface ResourceListSectionProps<T extends ResourceListItem> {
   ) => ReactNode;
 }
 
-interface CreateResourceButtonProps {
+interface ResourceListCreateButtonProps {
   readonly label: string;
   /** Route to the create page. Omit and pass onClick for dialog-based flows. */
   readonly href?: string;
@@ -104,12 +104,12 @@ interface CreateResourceButtonProps {
   readonly 'data-testid'?: string;
 }
 
-export function CreateResourceButton({
+export function ResourceListCreateButton({
   label,
   href,
   onClick,
   'data-testid': testId,
-}: Readonly<CreateResourceButtonProps>) {
+}: Readonly<ResourceListCreateButtonProps>) {
   const { readOnlyMode } = useNamespace();
 
   if (readOnlyMode) {

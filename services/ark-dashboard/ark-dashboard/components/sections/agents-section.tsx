@@ -4,7 +4,7 @@ import { AgentsApiAccess } from '@/components/dialogs/agents-api-access';
 import { SmartToy } from '@/components/icons';
 import { AgentsTable } from '@/components/sections/agents-table';
 import {
-  CreateResourceButton,
+  ResourceListCreateButton,
   ResourceListSection,
 } from '@/components/sections/resource-list-section';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
@@ -28,7 +28,7 @@ export function AgentsSection() {
       title="Agents"
       subtitle="Create and manage agents to automate tasks"
       createAction={
-        <CreateResourceButton href="/agents/new" label="Create agent" />
+        <ResourceListCreateButton href="/agents/new" label="Create agent" />
       }
       learnMoreUrl={DOCS_URLS.agents}
       entityLabel="Agent"
