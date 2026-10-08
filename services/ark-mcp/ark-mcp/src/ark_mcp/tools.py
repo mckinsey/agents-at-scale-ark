@@ -41,7 +41,7 @@ class QueryCreate(BaseModel):
     name: str
     input: str
     namespace: str = DEFAULT_NAMESPACE
-    targets: Optional[List[QueryTarget]] = None
+    target: Optional[QueryTarget] = None
     selector: Optional[Dict[str, Any]] = None
 
 
@@ -89,9 +89,9 @@ async def create_query_sdk(query: QueryCreate) -> Dict[str, Any]:
         async with with_ark_client(query.namespace, VERSION) as ark_client:
             spec = {"input": query.input}
 
-            # Add targets if specified
-            if query.targets:
-                spec["targets"] = [{"type": target.type, "name": target.name} for target in query.targets]
+            # Add target if specified
+            if query.target:
+                spec["target"] = {"type": query.target.type, "name": query.target.name}
 
             # Add selector if specified
             if query.selector:
@@ -150,7 +150,7 @@ async def wait_for_query_completion_sdk(
                 "namespace": namespace,
                 "phase": phase,
                 "status": status,
-                "responses": status.get("responses", []),
+                "response": status.get("response") or {},
                 "tokenUsage": status.get("tokenUsage", {}),
                 "success": phase == "done"
             }
@@ -203,7 +203,7 @@ def register_tools(mcp: FastMCP):
             name=query_name,
             input=input,
             namespace=namespace,
-            targets=[target]
+            target=target
         )
 
         # Raw query input is verbose-only; default level names the agent (see logging contract).
@@ -216,12 +216,15 @@ def register_tools(mcp: FastMCP):
             query_name, namespace, timeout_seconds=300
         )
 
+        if result["phase"] == "error":
+            conditions = result["status"].get("conditions") or []
+            error_message = result["response"].get("content") or next(
+                (c["message"] for c in conditions if c.get("message")), "Unknown error"
+            )
+            raise ToolError(f"Agent '{agent}' query failed: {error_message}")
+
         # Extract the response content for simpler return
-        response_content = ""
-        if result.get("responses"):
-            response_content = result["responses"][0].get("content", "")
-        elif result["phase"] == "error":
-            raise ToolError(f"Agent '{agent}' query failed: {result.get('status', {}).get('error', 'Unknown error')}")
+        response_content = result["response"].get("content", "")
 
         return {
             "success": result["success"],

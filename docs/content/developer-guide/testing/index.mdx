@@ -384,8 +384,8 @@ Create a Query and validate the response:
         name: test-query
       spec:
         input: What is your name?
-        targets:
-        - type: agent
+        target:
+          type: agent
           name: test-agent
   catch:
   - events: {}
