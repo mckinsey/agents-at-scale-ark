@@ -14,4 +14,3 @@ spec:
     - name: analyst
       type: agent
   strategy: sequential
-  maxTurns: 2
