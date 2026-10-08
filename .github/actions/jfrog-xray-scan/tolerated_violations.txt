@@ -45,3 +45,9 @@ XRAY-1100109 - CVE-2023-54404 (zod@4.4.3)
 - Verified against zod@4.4.3: parsing a 5,000,000-element array with the broker's schema succeeds with 0 issues and about 43MB heap growth; the control (z.array(z.string()) with failing elements) collects 2,500,000 issues and about 1.8GB heap growth.
 - ark-dashboard uses Zod only for client-side form validation and a marketplace install route; ark-cli and docs pull Zod transitively (MCP SDK, nextra) and do not validate attacker-controlled arrays.
 - Remove this entry once a patched Zod is released, or if any ark-broker schema gains an array with a validated element type.
+
+XRAY-1104189 - CVE-2026-104056 (authlib@1.8.0)
+- OIDC discovery metadata is cached without issuer-origin validation, so a poisoned discovery response can redirect the auth endpoints to attacker-controlled values. The advisory states Authlib "1.7.2 and below" is affected.
+- FALSE POSITIVE: Ark ships authlib 1.8.0 (services/ark-mcp), the patched release. authlib is transitive via fastmcp; pyproject pins constraint-dependencies = ["authlib>=1.8.0"] so the floor cannot regress. Xray's "fixed" metadata omits 1.8.0 and flags it anyway, the same defect as nanoid XRAY-1051070.
+- Verified independently of the advisory text: OSV reports zero known vulnerabilities for authlib 1.8.0, and 1.8.0 (released 2026-08-30) is the latest version on PyPI — there is no higher release to upgrade to.
+- Remove this entry once Xray corrects its fixed-version metadata, or a newer patched authlib is published.
