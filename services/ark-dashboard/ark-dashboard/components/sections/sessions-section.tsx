@@ -1214,19 +1214,31 @@ export function SessionsSection({
     goToNextPage,
     goToPreviousPage,
     updateWorkflowItem,
-    upsertWorkflow,
+    showCreatedWorkflow,
+    watchWorkflow,
   } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
 
   const { runAction, isPending: isRunActionPending } =
-    useWorkflowLifecycleActions(namespace, upsertWorkflow);
+    useWorkflowLifecycleActions(namespace, updateWorkflowItem);
+
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
 
   const handleRunAction = useCallback(
     (workflowName: string, action: WorkflowLifecycleAction) => {
       runAction(workflowName, action)
         .then(updated => {
-          if (action === 'resubmit' && updated) {
-            setSelectedSessionId(updated.metadata.name);
+          if (!updated) {
+            return;
           }
+          if (action === 'resubmit') {
+            if (showCreatedWorkflow(updated)) {
+              setSelectedSessionId(updated.metadata.name);
+              watchWorkflow(updated.metadata.name);
+            }
+            return;
+          }
+          watchWorkflow(updated.metadata.name);
+          setDetailRefreshKey(key => key + 1);
         })
         .catch((err: unknown) => {
           toast.error(RUN_ACTION_ERROR_TITLES[action], {
@@ -1237,7 +1249,7 @@ export function SessionsSection({
           });
         });
     },
-    [runAction],
+    [runAction, showCreatedWorkflow, watchWorkflow],
   );
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
@@ -1298,6 +1310,8 @@ export function SessionsSection({
     useWorkflow(
       namespace,
       useRealData && selectedSessionId ? selectedSessionId : '',
+      undefined,
+      detailRefreshKey,
     );
 
   const selectedSession =
@@ -1305,26 +1319,9 @@ export function SessionsSection({
       ? mapArgoWorkflowToSession(selectedWorkflowDetail)
       : selectedSessionFromList;
 
-  const previousStatusRef = useRef<string | undefined>(undefined);
-
   useEffect(() => {
     if (selectedWorkflowDetail && useRealData) {
-      const currentStatus = selectedWorkflowDetail.status?.phase;
-      const previousStatus = previousStatusRef.current;
-
-      const isTerminalState =
-        currentStatus === 'Succeeded' ||
-        currentStatus === 'Failed' ||
-        currentStatus === 'Error';
-
-      const wasRunning =
-        previousStatus === 'Running' || previousStatus === 'Pending';
-
-      if (isTerminalState && wasRunning) {
-        updateWorkflowItem(selectedWorkflowDetail);
-      }
-
-      previousStatusRef.current = currentStatus;
+      updateWorkflowItem(selectedWorkflowDetail);
     }
   }, [selectedWorkflowDetail, useRealData, updateWorkflowItem]);
 

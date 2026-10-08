@@ -59,6 +59,25 @@ describe('useWorkflow', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('fetches a finished workflow again when the refresh key changes', async () => {
+    vi.mocked(workflowsService.get).mockResolvedValue(terminalWorkflow);
+    const { result, rerender } = renderHook(
+      ({ refreshKey }) => useWorkflow('default', 'wf-1', 5000, refreshKey),
+      { initialProps: { refreshKey: 0 } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(workflowsService.get).toHaveBeenCalledTimes(1);
+
+    const retried = { ...terminalWorkflow, status: { phase: 'Running' } };
+    vi.mocked(workflowsService.get).mockResolvedValue(retried);
+    rerender({ refreshKey: 1 });
+
+    await waitFor(() =>
+      expect(result.current.workflow?.status?.phase).toBe('Running'),
+    );
+    expect(workflowsService.get).toHaveBeenCalledTimes(2);
+  });
+
   it('resets state and skips fetching when no name is provided', () => {
     const { result } = renderHook(() => useWorkflow(''));
 
@@ -405,7 +424,7 @@ describe('useWorkflows lifecycle updates', () => {
     await waitFor(() => expect(result.current.workflows).toHaveLength(2));
 
     act(() => {
-      result.current.upsertWorkflow(
+      result.current.updateWorkflowItem(
         runningWorkflow('wf-2', { spec: { suspend: true } }),
       );
     });
@@ -414,23 +433,98 @@ describe('useWorkflows lifecycle updates', () => {
     expect(result.current.workflows[1].spec.suspend).toBe(true);
   });
 
-  it('should prepend a workflow that is not in the list yet', async () => {
+  it('should not patch an item with a same-named workflow from another namespace', async () => {
     vi.mocked(workflowsService.list).mockResolvedValue(
-      makePage([
-        runningWorkflow('wf-1'),
-      ]),
+      makePage([runningWorkflow('wf-1')]),
     );
     const { result } = renderHook(() => useWorkflows('default'));
     await waitFor(() => expect(result.current.workflows).toHaveLength(1));
 
     act(() => {
-      result.current.upsertWorkflow(runningWorkflow('wf-new'));
+      result.current.updateWorkflowItem(
+        runningWorkflow('wf-1', {
+          metadata: { name: 'wf-1', namespace: 'other', uid: 'other-uid' },
+          spec: { suspend: true },
+        }),
+      );
     });
 
+    expect(result.current.workflows[0].spec.suspend).toBeUndefined();
+  });
+
+  it('should show a created workflow on top of the reloaded first page', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce(makePage([runningWorkflow('wf-1')], 'token-1'))
+      .mockResolvedValueOnce(makePage([runningWorkflow('wf-2')]))
+      .mockResolvedValueOnce(makePage([runningWorkflow('wf-1')], 'token-1'));
+    const { result } = renderHook(() => useWorkflows('default'));
+    await waitFor(() => expect(result.current.hasNext).toBe(true));
+    act(() => {
+      result.current.goToNextPage();
+    });
+    await waitFor(() => expect(result.current.page).toBe(1));
+
+    let shown = false;
+    act(() => {
+      shown = result.current.showCreatedWorkflow(runningWorkflow('wf-new'));
+    });
+
+    expect(shown).toBe(true);
+    await waitFor(() => expect(result.current.page).toBe(0));
+    expect(workflowsService.list).toHaveBeenLastCalledWith(
+      'default',
+      undefined,
+      { limit: 25, continueToken: undefined, signal: expect.any(AbortSignal) },
+    );
     expect(result.current.workflows.map(w => w.metadata.name)).toEqual([
       'wf-new',
       'wf-1',
     ]);
+  });
+
+  it('should not duplicate a created workflow the first page already contains', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce(makePage([runningWorkflow('wf-1')]))
+      .mockResolvedValueOnce(
+        makePage([runningWorkflow('wf-1'), runningWorkflow('wf-new')]),
+      );
+    const { result } = renderHook(() => useWorkflows('default'));
+    await waitFor(() => expect(result.current.workflows).toHaveLength(1));
+
+    act(() => {
+      result.current.showCreatedWorkflow(runningWorkflow('wf-new'));
+    });
+
+    await waitFor(() =>
+      expect(result.current.workflows.map(w => w.metadata.name)).toEqual([
+        'wf-1',
+        'wf-new',
+      ]),
+    );
+  });
+
+  it('should ignore a created workflow from a namespace the list no longer shows', async () => {
+    vi.mocked(workflowsService.list).mockResolvedValue(
+      makePage([runningWorkflow('wf-1')]),
+    );
+    const { result, rerender } = renderHook(
+      ({ namespace }) => useWorkflows(namespace),
+      { initialProps: { namespace: 'default' } },
+    );
+    await waitFor(() => expect(result.current.workflows).toHaveLength(1));
+    const showCreatedInOldNamespace = result.current.showCreatedWorkflow;
+    rerender({ namespace: 'other' });
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(2));
+
+    let shown = true;
+    act(() => {
+      shown = showCreatedInOldNamespace(runningWorkflow('wf-new'));
+    });
+
+    expect(shown).toBe(false);
+    expect(workflowsService.list).toHaveBeenCalledTimes(2);
+    const names = result.current.workflows.map(w => w.metadata.name);
+    expect(names).not.toContain('wf-new');
   });
 
   it('should poll a workflow while its shutdown is in progress', async () => {
@@ -507,6 +601,54 @@ describe('useWorkflows lifecycle updates', () => {
     );
     expect(result.current.workflows).toEqual([shuttingDown]);
     consoleError.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('should poll a watched workflow until it finishes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(workflowsService.list).mockResolvedValue(
+      makePage([runningWorkflow('wf-1'), runningWorkflow('wf-2')]),
+    );
+    vi.mocked(workflowsService.get).mockResolvedValue(
+      runningWorkflow('wf-1', { status: { phase: 'Succeeded' } }),
+    );
+    const { result } = renderHook(() => useWorkflows('default'));
+    await waitFor(() => expect(result.current.workflows).toHaveLength(2));
+
+    act(() => {
+      result.current.watchWorkflow('wf-1');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+
+    expect(workflowsService.get).toHaveBeenCalledTimes(1);
+    expect(workflowsService.get).toHaveBeenCalledWith('default', 'wf-1');
+    expect(result.current.workflows[0].status?.phase).toBe('Succeeded');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(workflowsService.get).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('should not poll a watched workflow that is not on the current page', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(workflowsService.list).mockResolvedValue(
+      makePage([runningWorkflow('wf-1')]),
+    );
+    const { result } = renderHook(() => useWorkflows('default'));
+    await waitFor(() => expect(result.current.workflows).toHaveLength(1));
+
+    act(() => {
+      result.current.watchWorkflow('wf-elsewhere');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+
+    expect(workflowsService.get).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 

@@ -37,10 +37,11 @@ from .workflow_lifecycle import (
     formulate_retry_workflow,
     validate_stoppable,
     validate_suspendable,
-    workflow_pod_suffix,
 )
 
 MERGE_PATCH_CONTENT_TYPE = "application/merge-patch+json"
+POD_NODE_ID_ANNOTATION = "workflows.argoproj.io/node-id"
+WORKFLOW_REPLACE_MAX_ATTEMPTS = 3
 
 logger = logging.getLogger(__name__)
 
@@ -1465,33 +1466,47 @@ async def _replace_workflow(
     ``mutate`` receives the workflow dict and returns either the mutated
     workflow or a (workflow, pod_node_ids) tuple. When ``delete_pods`` is set,
     the pods backing those node IDs are deleted before the workflow is written.
+    The read-mutate-write cycle is repeated when the controller updates the
+    workflow between the read and the write.
     """
     async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
         workflow_resource = await _get_workflow_resource(dynamic_client)
-        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
-        workflow = existing.to_dict()
+        for _ in range(WORKFLOW_REPLACE_MAX_ATTEMPTS):
+            existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
+            workflow = existing.to_dict()
 
-        try:
-            result = mutate(workflow)
-        except LifecyclePreconditionError as e:
-            raise HTTPException(status_code=409, detail=str(e)) from e
+            try:
+                result = mutate(workflow)
+            except LifecyclePreconditionError as e:
+                raise HTTPException(status_code=409, detail=str(e)) from e
 
-        pod_node_ids: list[str] = []
-        if isinstance(result, tuple):
-            new_workflow, pod_node_ids = result
-        else:
-            new_workflow = result
+            pod_node_ids: list[str] = []
+            if isinstance(result, tuple):
+                new_workflow, pod_node_ids = result
+            else:
+                new_workflow = result
 
-        if delete_pods and pod_node_ids:
-            await _delete_workflow_pods(api, namespace, workflow_name, pod_node_ids)
+            if delete_pods and pod_node_ids:
+                await _delete_workflow_pods(api, namespace, workflow_name, pod_node_ids)
 
-        replaced = await workflow_resource.replace(
-            name=workflow_name,
-            namespace=namespace,
-            body=new_workflow,
-        )
-        return _create_resource_response(replaced.to_dict(), request)
+            try:
+                replaced = await workflow_resource.replace(
+                    name=workflow_name,
+                    namespace=namespace,
+                    body=new_workflow,
+                )
+            except ApiException as e:
+                if e.status != 409:
+                    raise
+                logger.info(f"Workflow {workflow_name} changed during update, retrying: {e.reason}")
+                continue
+            return _create_resource_response(replaced.to_dict(), request)
+
+    raise HTTPException(
+        status_code=409,
+        detail=f"Workflow '{workflow_name}' was modified while the action was applied; try again",
+    )
 
 
 async def _delete_workflow_pods(
@@ -1502,25 +1517,21 @@ async def _delete_workflow_pods(
 ) -> None:
     """Delete the pods backing the given workflow node IDs, ignoring absent pods.
 
-    Pods carry no node-id label, so they are matched by the trailing hash
-    segment their name shares with the node ID (the same suffix match used to
-    resolve node logs).
+    Pods are matched by the node-id annotation the Argo controller sets on
+    every pod it creates.
     """
     core_v1 = CoreV1Api(api)
-    suffixes = {suffix for suffix in (workflow_pod_suffix(node_id) for node_id in node_ids) if suffix}
-    if not suffixes:
-        return
-
+    wanted = set(node_ids)
     pods = await core_v1.list_namespaced_pod(
         namespace=namespace,
         label_selector=f"workflows.argoproj.io/workflow={workflow_name}",
     )
     for pod in pods.items:
-        pod_name = pod.metadata.name
-        if not any(pod_name.endswith(suffix) for suffix in suffixes):
+        annotations = pod.metadata.annotations or {}
+        if annotations.get(POD_NODE_ID_ANNOTATION) not in wanted:
             continue
         try:
-            await core_v1.delete_namespaced_pod(name=pod_name, namespace=namespace)
+            await core_v1.delete_namespaced_pod(name=pod.metadata.name, namespace=namespace)
         except ApiException as e:
             if e.status != 404:
                 raise

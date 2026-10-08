@@ -12,7 +12,6 @@ from ark_api.api.v1.workflow_lifecycle import (
     formulate_retry_workflow,
     validate_stoppable,
     validate_suspendable,
-    workflow_pod_suffix,
 )
 
 
@@ -420,17 +419,6 @@ class TestValidators(unittest.TestCase):
 
     def test_stop_allows_running(self):
         validate_stoppable({"status": {"phase": "Running"}})
-
-
-class TestPodSuffix(unittest.TestCase):
-    def test_extracts_trailing_segment(self):
-        self.assertEqual(workflow_pod_suffix("retry-test-abc-1103260778"), "1103260778")
-
-    def test_returns_whole_string_without_separator(self):
-        self.assertEqual(workflow_pod_suffix("nodashes"), "nodashes")
-
-    def test_returns_none_for_empty(self):
-        self.assertIsNone(workflow_pod_suffix(""))
 
 
 if __name__ == "__main__":

@@ -283,8 +283,3 @@ def validate_stoppable(workflow: dict) -> None:
     if phase is not None and phase in COMPLETED_PHASES:
         raise LifecyclePreconditionError(f"Cannot shut down a completed workflow (phase {phase})")
 
-
-def workflow_pod_suffix(node_id: str) -> Optional[str]:
-    """The trailing hash segment shared by a node ID and its pod name."""
-    _, _, suffix = node_id.rpartition("-")
-    return suffix or None

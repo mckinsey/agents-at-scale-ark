@@ -240,7 +240,8 @@ describe('SessionsSection', () => {
   const mockRouter = getAppRouterMock();
   const allWorkflows = [mockWorkflow, mockFailedWorkflow, mockRunningWorkflow];
   const mockRunAction = vi.fn();
-  const mockUpsertWorkflow = vi.fn();
+  const mockShowCreatedWorkflow = vi.fn();
+  const mockWatchWorkflow = vi.fn();
   const mockUpdateWorkflowItem = vi.fn();
 
   const getCard = (name: RegExp) =>
@@ -262,7 +263,8 @@ describe('SessionsSection', () => {
       loading: false,
       error: null,
       refetch: vi.fn(),
-      upsertWorkflow: mockUpsertWorkflow,
+      showCreatedWorkflow: mockShowCreatedWorkflow,
+      watchWorkflow: mockWatchWorkflow,
       updateWorkflowItem: mockUpdateWorkflowItem,
     } as any);
     render(<SessionsSection />);
@@ -342,7 +344,8 @@ describe('SessionsSection', () => {
       loading: false,
       error: null,
       refetch: vi.fn(),
-      upsertWorkflow: mockUpsertWorkflow,
+      showCreatedWorkflow: mockShowCreatedWorkflow,
+      watchWorkflow: mockWatchWorkflow,
       updateWorkflowItem: mockUpdateWorkflowItem,
     } as any);
     vi.mocked(useWorkflow).mockReturnValue({
@@ -351,6 +354,7 @@ describe('SessionsSection', () => {
       error: null,
     } as any);
     mockRunAction.mockResolvedValue(undefined);
+    mockShowCreatedWorkflow.mockReturnValue(true);
     vi.mocked(useWorkflowLifecycleActions).mockReturnValue({
       runAction: mockRunAction,
       isPending: () => false,
@@ -586,7 +590,7 @@ describe('SessionsSection', () => {
 
       expect(useWorkflowLifecycleActions).toHaveBeenCalledWith(
         'default',
-        mockUpsertWorkflow,
+        mockUpdateWorkflowItem,
       );
     });
 
@@ -655,14 +659,14 @@ describe('SessionsSection', () => {
       });
     });
 
-    it('should patch the list item when the selected run reaches a terminal phase', () => {
+    it('should patch the list item with every fresh detail of the selected run', () => {
       vi.mocked(useWorkflow).mockReturnValue({
         workflow: mockRunningWorkflow as unknown as ArgoWorkflow,
         loading: false,
         error: null,
       });
       const { rerender } = render(<SessionsSection />);
-      expect(mockUpdateWorkflowItem).not.toHaveBeenCalled();
+      expect(mockUpdateWorkflowItem).toHaveBeenCalledWith(mockRunningWorkflow);
 
       const finished = {
         ...mockRunningWorkflow,
@@ -676,6 +680,49 @@ describe('SessionsSection', () => {
       rerender(<SessionsSection />);
 
       expect(mockUpdateWorkflowItem).toHaveBeenCalledWith(finished);
+    });
+
+    it('should patch the list item when the selected run is already finished on its first fetch', () => {
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: mockFailedWorkflow as unknown as ArgoWorkflow,
+        loading: false,
+        error: null,
+      });
+      render(<SessionsSection />);
+
+      expect(mockUpdateWorkflowItem).toHaveBeenCalledWith(mockFailedWorkflow);
+    });
+
+    it('should refresh the selected run details after an action', async () => {
+      const user = userEvent.setup();
+      mockRunAction.mockResolvedValue(mockFailedWorkflow);
+      render(<SessionsSection />);
+      const lastRefreshKey = () => vi.mocked(useWorkflow).mock.lastCall?.[3];
+      expect(lastRefreshKey()).toBe(0);
+
+      await user.click(
+        getCard(/failed-workflow-456/i).getByRole('button', { name: 'Retry' }),
+      );
+
+      await waitFor(() => expect(lastRefreshKey()).toBe(1));
+    });
+
+    it('should keep following a run on its card after an action', async () => {
+      const user = userEvent.setup();
+      mockRunAction.mockResolvedValue({
+        ...mockFailedWorkflow,
+        status: { ...mockFailedWorkflow.status, phase: 'Running' },
+      });
+      render(<SessionsSection />);
+
+      await user.click(
+        getCard(/failed-workflow-456/i).getByRole('button', { name: 'Retry' }),
+      );
+
+      await waitFor(() =>
+        expect(mockWatchWorkflow).toHaveBeenCalledWith('failed-workflow-456'),
+      );
+      expect(toast.error).not.toHaveBeenCalled();
     });
 
     it('should show an error toast when a run action fails', async () => {
@@ -743,7 +790,8 @@ describe('SessionsSection', () => {
         loading: false,
         error: null,
         refetch: vi.fn(),
-        upsertWorkflow: mockUpsertWorkflow,
+        showCreatedWorkflow: mockShowCreatedWorkflow,
+        watchWorkflow: mockWatchWorkflow,
         updateWorkflowItem: mockUpdateWorkflowItem,
       } as any);
       mockRunAction.mockResolvedValue(resubmitted);
@@ -760,6 +808,35 @@ describe('SessionsSection', () => {
           screen.getByRole('button', { name: /resubmitted-workflow-001/i }),
         ).toHaveAttribute('aria-current', 'true');
       });
+      expect(mockShowCreatedWorkflow).toHaveBeenCalledWith(resubmitted);
+      expect(mockWatchWorkflow).toHaveBeenCalledWith(
+        'resubmitted-workflow-001',
+      );
+    });
+
+    it('should keep the selection when the resubmitted run belongs to another namespace', async () => {
+      const user = userEvent.setup();
+      mockShowCreatedWorkflow.mockReturnValue(false);
+      mockRunAction.mockResolvedValue({
+        ...mockRunningWorkflow,
+        metadata: {
+          ...mockRunningWorkflow.metadata,
+          name: 'resubmitted-workflow-001',
+          namespace: 'other',
+        },
+      });
+      render(<SessionsSection />);
+
+      await user.click(
+        getCard(/failed-workflow-456/i).getByRole('button', {
+          name: 'Resubmit',
+        }),
+      );
+
+      await waitFor(() => expect(mockShowCreatedWorkflow).toHaveBeenCalled());
+      expect(
+        screen.getByRole('button', { name: /test-workflow-123/i }),
+      ).toHaveAttribute('aria-current', 'true');
     });
 
     it('should not select another run after a non-resubmit action', async () => {
@@ -1254,6 +1331,8 @@ describe('SessionsSection', () => {
       expect(useWorkflow).toHaveBeenCalledWith(
         'default',
         'brand-new-workflow-xyz123',
+        undefined,
+        0,
       );
       await waitFor(() => {
         expect(mockRouter.replace).toHaveBeenCalledWith(
@@ -1264,6 +1343,8 @@ describe('SessionsSection', () => {
       expect(vi.mocked(useWorkflow).mock.lastCall).toEqual([
         'default',
         'brand-new-workflow-xyz123',
+        undefined,
+        0,
       ]);
     });
 

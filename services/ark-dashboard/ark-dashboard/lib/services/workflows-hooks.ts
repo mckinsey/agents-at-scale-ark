@@ -9,13 +9,42 @@ import {
 } from './workflows';
 
 const SHUTDOWN_POLL_INTERVAL_MS = 2000;
+const WATCH_POLL_INTERVAL_MS = 5000;
 const TERMINAL_PHASES = new Set(['Succeeded', 'Failed', 'Error']);
 
+function isFinished(workflow: ArgoWorkflow): boolean {
+  return TERMINAL_PHASES.has(workflow.status?.phase ?? '');
+}
+
 function isShuttingDown(workflow: ArgoWorkflow): boolean {
-  return (
-    Boolean(workflow.spec?.shutdown) &&
-    !TERMINAL_PHASES.has(workflow.status?.phase ?? '')
-  );
+  return Boolean(workflow.spec?.shutdown) && !isFinished(workflow);
+}
+
+function usePollWorkflows(
+  namespace: string,
+  joinedNames: string,
+  intervalMs: number,
+  onUpdate: (workflow: ArgoWorkflow) => void,
+) {
+  useEffect(() => {
+    if (!namespace || !joinedNames) {
+      return;
+    }
+
+    const names = joinedNames.split(',');
+    const intervalId = setInterval(() => {
+      for (const name of names) {
+        workflowsService
+          .get(namespace, name)
+          .then(onUpdate)
+          .catch(refreshError => {
+            console.error(`Failed to refresh workflow ${name}`, refreshError);
+          });
+      }
+    }, intervalMs);
+
+    return () => clearInterval(intervalId);
+  }, [namespace, joinedNames, intervalMs, onUpdate]);
 }
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -38,6 +67,13 @@ export function useWorkflows(
 
   // Lets a newer fetch cancel a stale in-flight one.
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const pinnedWorkflowRef = useRef<ArgoWorkflow | null>(null);
+
+  const namespaceRef = useRef(namespace);
+  useEffect(() => {
+    namespaceRef.current = namespace;
+  }, [namespace]);
 
   const fetchPage = useCallback(
     async (targetPage: number, options?: { silent?: boolean }) => {
@@ -64,7 +100,16 @@ export function useWorkflows(
         if (abortControllerRef.current !== controller) {
           return;
         }
-        setWorkflows(result.items);
+        const pinned = pinnedWorkflowRef.current;
+        pinnedWorkflowRef.current = null;
+        const pinnedName = pinned?.metadata.name;
+        setWorkflows(
+          pinned &&
+            targetPage === 0 &&
+            !result.items.some(item => item.metadata.name === pinnedName)
+            ? [pinned, ...result.items]
+            : result.items,
+        );
         setHasNext(result.hasMore);
         if (result.continueToken) {
           tokenStackRef.current[targetPage + 1] = result.continueToken;
@@ -125,23 +170,41 @@ export function useWorkflows(
   const updateWorkflowItem = useCallback((updated: ArgoWorkflow) => {
     setWorkflows(prev =>
       prev.map(workflow =>
-        workflow.metadata.name === updated.metadata.name ? updated : workflow,
+        workflow.metadata.name === updated.metadata.name &&
+        workflow.metadata.namespace === updated.metadata.namespace
+          ? updated
+          : workflow,
       ),
     );
   }, []);
 
-  const upsertWorkflow = useCallback((updated: ArgoWorkflow) => {
-    setWorkflows(current => {
-      const exists = current.some(
-        workflow => workflow.metadata.name === updated.metadata.name,
-      );
-      if (!exists) {
-        return [updated, ...current];
+  const showCreatedWorkflow = useCallback(
+    (created: ArgoWorkflow): boolean => {
+      if (created.metadata.namespace !== namespaceRef.current) {
+        return false;
       }
-      return current.map(workflow =>
-        workflow.metadata.name === updated.metadata.name ? updated : workflow,
-      );
-    });
+      setWorkflows(current => [
+        created,
+        ...current.filter(
+          workflow => workflow.metadata.name !== created.metadata.name,
+        ),
+      ]);
+      pinnedWorkflowRef.current = created;
+      tokenStackRef.current = [undefined];
+      fetchPage(0, { silent: true });
+      return true;
+    },
+    [fetchPage],
+  );
+
+  const [watchedNames, setWatchedNames] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  const watchWorkflow = useCallback((name: string) => {
+    setWatchedNames(current =>
+      current.has(name) ? current : new Set(current).add(name),
+    );
   }, []);
 
   const shuttingDownNames = workflows
@@ -149,25 +212,28 @@ export function useWorkflows(
     .map(workflow => workflow.metadata.name)
     .join(',');
 
-  useEffect(() => {
-    if (!namespace || !shuttingDownNames) {
-      return;
-    }
+  const watchedActiveNames = workflows
+    .filter(
+      workflow =>
+        watchedNames.has(workflow.metadata.name) &&
+        !isFinished(workflow) &&
+        !isShuttingDown(workflow),
+    )
+    .map(workflow => workflow.metadata.name)
+    .join(',');
 
-    const names = shuttingDownNames.split(',');
-    const intervalId = setInterval(() => {
-      for (const name of names) {
-        workflowsService
-          .get(namespace, name)
-          .then(updateWorkflowItem)
-          .catch(refreshError => {
-            console.error(`Failed to refresh workflow ${name}`, refreshError);
-          });
-      }
-    }, SHUTDOWN_POLL_INTERVAL_MS);
-
-    return () => clearInterval(intervalId);
-  }, [namespace, shuttingDownNames, updateWorkflowItem]);
+  usePollWorkflows(
+    namespace,
+    shuttingDownNames,
+    SHUTDOWN_POLL_INTERVAL_MS,
+    updateWorkflowItem,
+  );
+  usePollWorkflows(
+    namespace,
+    watchedActiveNames,
+    WATCH_POLL_INTERVAL_MS,
+    updateWorkflowItem,
+  );
 
   return {
     workflows,
@@ -179,7 +245,8 @@ export function useWorkflows(
     goToNextPage,
     goToPreviousPage,
     updateWorkflowItem,
-    upsertWorkflow,
+    showCreatedWorkflow,
+    watchWorkflow,
     refetch: () => fetchPage(page),
   };
 }
@@ -233,6 +300,7 @@ export function useWorkflow(
   namespace: string,
   name: string,
   refreshInterval: number = 5000,
+  refreshKey: number = 0,
 ) {
   const [workflow, setWorkflow] = useState<ArgoWorkflow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -301,7 +369,7 @@ export function useWorkflow(
         intervalId = null;
       }
     };
-  }, [name, namespace, refreshInterval]);
+  }, [name, namespace, refreshInterval, refreshKey]);
 
   return { workflow, loading, error };
 }
