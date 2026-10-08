@@ -6,18 +6,23 @@ Enable the dashboard's Argo Workflows links for a tenant namespace. The dashboar
 
 ## Prerequisites
 
-- Argo Workflows is installed in the cluster. See [Workflows](/developer-guide/workflows#installing) for installation.
+- Argo Workflows is installed, either once for the cluster or once per tenant. See [Workflows](/developer-guide/workflows#installing) for installation.
 - The Argo UI is reachable at a URL that dashboard users can open in their browser.
 
-Ark's Argo Workflows chart runs one Argo server for all namespaces, and each dashboard link includes the tenant namespace in its path. Use the same Argo UI URL for every tenant dashboard.
+## Choose a setup
 
-## Enable Argo links when provisioning a namespace
+Each tenant namespace runs its own `ark-dashboard` release, and each release has its own `app.config.argoUrl`. Pick the section that matches how Argo is installed:
 
-Set `app.config.argoUrl` when you install the tenant's dashboard.
+- **Shared Argo installation.** One Argo server serves every namespace. This is the default for Ark's Argo Workflows chart. Each dashboard link includes the tenant namespace in its path, so every tenant dashboard uses the same URL.
+- **Per-tenant Argo installation.** Each tenant has its own Argo server and UI URL. Each tenant dashboard uses its own tenant's URL.
+
+## Enable Argo links with a shared Argo installation
+
+Set the same `app.config.argoUrl` on every tenant's dashboard.
 
 <Tabs items={['Ark CLI', 'Helm']}>
 <Tabs.Tab>
-`ark install` has no flag for chart values. Add the value to `.arkrc.yaml` in your home directory or the current directory:
+`ark install` has no flag for chart values. Add the value to `.arkrc.yaml` in your home directory:
 
 ```yaml
 services:
@@ -44,6 +49,51 @@ helm upgrade --install ark-dashboard oci://ghcr.io/mckinsey/agents-at-scale-ark/
 ```
 
 Add the same `--set` to per-tenant installs in [Multi-Tenant Dashboard Hosting](/operations-guide/multi-tenant-dashboard-hosting), or add `argoUrl` under `app.config` in the values file.
+</Tabs.Tab>
+</Tabs>
+
+## Enable Argo links with a per-tenant Argo installation
+
+Set each tenant's dashboard to that tenant's Argo UI URL.
+
+<Tabs items={['Ark CLI', 'Helm']}>
+<Tabs.Tab>
+A `.arkrc.yaml` in your home directory applies to every tenant, so do not set `argoUrl` there. Create one directory per tenant with its own `.arkrc.yaml`. The Ark CLI reads `.arkrc.yaml` from the current directory, and its `installArgs` for `ark-dashboard` replace the ones in your home directory.
+
+For example, `tenant-a/.arkrc.yaml`:
+
+```yaml
+services:
+  ark-dashboard:
+    installArgs:
+      - --set
+      - app.config.argoUrl=https://argo.tenant-a.example.com
+```
+
+Run the install from the tenant's directory:
+
+```bash
+cd tenant-a
+kubectl config set-context --current --namespace=tenant-a
+ark install ark-dashboard
+```
+
+Repeat for each tenant with its own directory and URL.
+</Tabs.Tab>
+<Tabs.Tab>
+Install each tenant's dashboard with its own URL:
+
+```bash
+helm upgrade --install ark-dashboard oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-dashboard \
+  --namespace tenant-a \
+  --set app.config.argoUrl=https://argo.tenant-a.example.com
+
+helm upgrade --install ark-dashboard oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-dashboard \
+  --namespace tenant-b \
+  --set app.config.argoUrl=https://argo.tenant-b.example.com
+```
+
+With a values file per tenant, set `argoUrl` under `app.config` in each file.
 </Tabs.Tab>
 </Tabs>
 
