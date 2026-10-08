@@ -1512,6 +1512,8 @@ describe('SessionsSection', () => {
       expect(useWorkflow).toHaveBeenCalledWith(
         'tenant-alpha',
         expect.any(String),
+        undefined,
+        0,
       );
     });
   });
