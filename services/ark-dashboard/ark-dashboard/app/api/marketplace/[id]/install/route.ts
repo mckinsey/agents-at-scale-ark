@@ -125,8 +125,12 @@ function validateHelmInputs(
 /**
  * Fetch and validate marketplace item exists
  */
-async function fetchAndValidateMarketplaceItem(id: string, namespace: string) {
-  const item = await getRawMarketplaceItemById(id, namespace);
+async function fetchAndValidateMarketplaceItem(
+  request: NextRequest,
+  id: string,
+  namespace: string,
+) {
+  const item = await getRawMarketplaceItemById(request, id, namespace);
 
   if (!item) {
     return {
@@ -184,7 +188,7 @@ export async function POST(
       );
     }
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(id, namespace);
+    const { item, error } = await fetchAndValidateMarketplaceItem(request, id, namespace);
     if (error) return error;
 
     if (!item!.ark?.chartPath || !item!.ark?.helmReleaseName) {
@@ -245,7 +249,7 @@ export async function DELETE(
       );
     }
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(id, namespace);
+    const { item, error } = await fetchAndValidateMarketplaceItem(request, id, namespace);
     if (error) return error;
 
     if (!item!.ark?.helmReleaseName) {

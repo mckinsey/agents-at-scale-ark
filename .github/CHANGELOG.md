@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.71-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70...v0.1.71-rc) (2026-10-08)
+
+
+### Features
+
+* **dashboard:** preserve list state when returning from a detail pag… ([#3525](https://github.com/mckinsey/agents-at-scale-ark/issues/3525)) ([f912240](https://github.com/mckinsey/agents-at-scale-ark/commit/f9122404d9b2c5543da476107655a4b4a1388b9e))
+* marketplace qbds update ([#3549](https://github.com/mckinsey/agents-at-scale-ark/issues/3549)) ([1d214c5](https://github.com/mckinsey/agents-at-scale-ark/commit/1d214c5acc736ce9bb032acae45a038702a3a01e))
+
+
+### Bug Fixes
+
+* **apiserver:** stop stamping initial-events-end on ordinary PostgreSQL watches ([#3721](https://github.com/mckinsey/agents-at-scale-ark/issues/3721)) ([d82a56b](https://github.com/mckinsey/agents-at-scale-ark/commit/d82a56b0a31525bb96fb14d05aaa0670f173aa0d))
+* **ark-api:** signal broker unavailability for dashboard fallback ([#3648](https://github.com/mckinsey/agents-at-scale-ark/issues/3648)) ([b0c53bf](https://github.com/mckinsey/agents-at-scale-ark/commit/b0c53bf9233d7944e6521b728cf389a91ce8238c))
+* bump vite to 8.3.3 to patch GHSA-587h-7wmj-h5pm (XRAY-1101533) ([#3719](https://github.com/mckinsey/agents-at-scale-ark/issues/3719)) ([848dee8](https://github.com/mckinsey/agents-at-scale-ark/commit/848dee8f0ef5c9e83cc3d74da489d764ac06b5ac))
+* completed query targets → target migration ([#3699](https://github.com/mckinsey/agents-at-scale-ark/issues/3699)) ([9013c4f](https://github.com/mckinsey/agents-at-scale-ark/commit/9013c4f9c279663d3db87c07b9f62ba5e19bf940))
+* **completions:** send tool_use and tool_result blocks to Anthropic and Bedrock ([#3582](https://github.com/mckinsey/agents-at-scale-ark/issues/3582)) ([e7f5d1d](https://github.com/mckinsey/agents-at-scale-ark/commit/e7f5d1d7fde1b55d7cbf637a9027799428a602c5))
+* **dashboard:** stop assuming the default namespace for workflow pod steps ([#3372](https://github.com/mckinsey/agents-at-scale-ark/issues/3372)) ([857f8b8](https://github.com/mckinsey/agents-at-scale-ark/commit/857f8b8c656245c1f6c06420d5e190ce16828aee)), closes [#3302](https://github.com/mckinsey/agents-at-scale-ark/issues/3302)
+* jFrog and build errors ([#3738](https://github.com/mckinsey/agents-at-scale-ark/issues/3738)) ([9f4524d](https://github.com/mckinsey/agents-at-scale-ark/commit/9f4524df3bbbf372aa65f03e649d932ba489fd5f))
+* marketplace install fails with 401 Missing authorization header under SSO auth ([#3727](https://github.com/mckinsey/agents-at-scale-ark/issues/3727)) ([6e9eb18](https://github.com/mckinsey/agents-at-scale-ark/commit/6e9eb18de9e3e5a7c58e10920f447faec31b974e))
+* upgrade handlebars to fix jFrog ([#3712](https://github.com/mckinsey/agents-at-scale-ark/issues/3712)) ([77fde83](https://github.com/mckinsey/agents-at-scale-ark/commit/77fde83b75d700a14a93ae1505cc23988212723a))
+
 ## [0.1.70-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70-rc.1...v0.1.70-rc.2) (2026-10-05)
 
 
