@@ -1559,6 +1559,16 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 // emitRow sends a single relist row downstream. Returns false if the watcher
 // should stop iterating (done/cancelled).
 func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labels, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt, deletionTimestamp sql.NullTime) bool {
+	// The initial state of a watch that starts from nothing holds only live
+	// objects, so a tombstone still in the retention window is not a DELETED the
+	// client can act on. Marking it seen keeps the broadcaster fan-out and later
+	// lookback relists from emitting it after the initial-events-end bookmark. A
+	// delete that commits after this relist is not visible here and still flows.
+	if deletedAt.Valid && w.startRV == 0 && !w.initialSynced {
+		w.markSeen(uid, rv)
+		w.advanceRV(rv)
+		return true
+	}
 	uidNew := !w.hasSeenUID(uid)
 	if w.markSeen(uid, rv) {
 		return true
