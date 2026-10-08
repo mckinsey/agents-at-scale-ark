@@ -76,6 +76,7 @@ spec:
             await_watch_line() {
               name=$1
               what=$2
+              restart_on_exit=$3
               i=0
               while :; do
                 if grep -q "/${name}$" "$WATCH_OUT"; then
@@ -83,6 +84,11 @@ spec:
                   return 0
                 fi
                 if ! kill -0 "$WATCH_PID" 2>/dev/null; then
+                  if [ "$restart_on_exit" != "yes" ]; then
+                    echo "FAIL ${what}: the watch exited before delivering it"
+                    cat "$WATCH_OUT"
+                    return 1
+                  fi
                   start_watch
                 fi
                 i=$((i + 1))
@@ -95,7 +101,7 @@ spec:
               return 1
             }
 
-            await_watch_line smoke-test-model "watch established (initial list delivered)"
+            await_watch_line smoke-test-model "watch established (initial list delivered)" yes
 
             cat <<'MANIFEST' | kubectl apply -n $NAMESPACE -f -
             apiVersion: ark.mckinsey.com/v1alpha1
@@ -114,7 +120,7 @@ spec:
                     value: smoke-test-key
             MANIFEST
 
-            await_watch_line smoke-test-watch "watch delivered the create event"
+            await_watch_line smoke-test-watch "watch delivered the create event" no
             echo "OK Watch routing operational"
           env:
           - name: NAMESPACE
