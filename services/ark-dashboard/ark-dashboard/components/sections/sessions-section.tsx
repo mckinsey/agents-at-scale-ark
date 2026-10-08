@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
@@ -51,7 +50,7 @@ import {
 import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
 import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
-import { useDebounce } from '@/lib/hooks/use-debounce';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
@@ -83,6 +82,13 @@ const statusFilterItems = [
   { label: 'Succeeded', value: 'Succeeded' },
   { label: 'Failed', value: 'Failed' },
 ];
+
+const URL_STATE_SPEC = {
+  workflowName: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  workflowTemplateName: { default: '' },
+  status: { default: 'all', parse: normalizeStatus },
+  run: { default: '' },
+};
 
 interface WorkflowStepDetail {
   image?: string;
@@ -814,7 +820,7 @@ function SessionListItem({
   );
 }
 
-const normalizeStatus = (status: string): string => {
+function normalizeStatus(status: string): string {
   if (!status || status === 'all') return 'all';
 
   const statusMap: Record<string, string> = {
@@ -826,7 +832,7 @@ const normalizeStatus = (status: string): string => {
   };
 
   return statusMap[status.toLowerCase()] || status;
-};
+}
 
 function TemplateOptions({
   templateNames,
@@ -985,78 +991,51 @@ export function SessionsSection({
   readonly onCountChange?: (count: number) => void;
 }) {
   const { namespace, isNamespaceResolved } = useNamespace();
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
 
   // Note: sourceFilter is currently unused but reserved for future support of Team sessions
   // Currently only workflow sessions are implemented
   const [sourceFilter] = useState<SessionSourceFilter>('all');
   // A one-shot deep link (e.g. from the "View run" toast) to an exact,
   // known workflow - shown directly regardless of filters/pagination.
-  const initialRunRef = useRef(searchParams.get('run'));
+  const initialRunRef = useRef(urlState.run || null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     () => initialRunRef.current,
   );
   const [useRealData] = useState(true);
 
-  const [workflowNameInput, setWorkflowNameInput] = useState(
-    searchParams.get('workflowName') || '',
-  );
-  const initialWorkflowTemplateName = searchParams.get('workflowTemplateName') || '';
+  useEffect(() => {
+    if (!urlState.run) {
+      return;
+    }
+    initialRunRef.current = urlState.run;
+    setSelectedSessionId(urlState.run);
+    setUrlState({ run: '' });
+  }, [urlState.run, setUrlState]);
+
+  const statusFilter = urlState.status;
+  const workflowNameInput = urlState.workflowName;
+
   // workflowTemplateNameInput is the raw text shown in the input and used to
   // filter dropdown suggestions. selectedTemplateName is the committed filter
   // actually sent to the API - it is only set by picking a dropdown option, since
   // the backend applies this as an exact-match label selector (see PR #3679 review).
-  const [workflowTemplateNameInput, setWorkflowTemplateNameInput] = useState(
-    initialWorkflowTemplateName,
+  const selectedTemplateName = urlState.workflowTemplateName;
+  const [templateTextDraft, setTemplateTextDraft] = useState<string | null>(
+    null,
   );
-  const [selectedTemplateName, setSelectedTemplateName] = useState(
-    initialWorkflowTemplateName,
-  );
-  const [statusFilter, setStatusFilter] = useState(
-    normalizeStatus(searchParams.get('status') || 'all'),
-  );
+  const workflowTemplateNameInput = templateTextDraft ?? selectedTemplateName;
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const templateInputRef = useRef<HTMLDivElement>(null);
 
-  const debouncedWorkflowName = useDebounce(workflowNameInput, 500);
-
   const filters = useMemo(
     () => ({
-      workflowName: debouncedWorkflowName || undefined,
+      workflowName: committedState.workflowName || undefined,
       workflowTemplateName: selectedTemplateName || undefined,
       status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
     }),
-    [debouncedWorkflowName, selectedTemplateName, statusFilter],
+    [committedState.workflowName, selectedTemplateName, statusFilter],
   );
-
-  // Update URL when filters change
-  useEffect(() => {
-    const params = new URLSearchParams();
-
-    // Preserve namespace parameter
-    const namespaceParam = searchParams.get('namespace');
-    if (namespaceParam) {
-      params.set('namespace', namespaceParam);
-    }
-
-    if (debouncedWorkflowName) {
-      params.set('workflowName', debouncedWorkflowName);
-    }
-    if (selectedTemplateName) {
-      params.set('workflowTemplateName', selectedTemplateName);
-    }
-    if (statusFilter && statusFilter !== 'all') {
-      params.set('status', statusFilter.toLowerCase());
-    }
-
-    const queryString = params.toString();
-    if (queryString === searchParams.toString()) {
-      return;
-    }
-    const newUrl = queryString ? `?${queryString}` : window.location.pathname;
-    router.replace(newUrl, { scroll: false });
-  }, [searchParams, debouncedWorkflowName, selectedTemplateName, statusFilter, router]);
 
   const handleWorkflowsPageError = useCallback((err: Error) => {
     toast.error('Failed to load page', { description: err.message });
@@ -1188,10 +1167,15 @@ export function SessionsSection({
   const isLoading = loading || !isNamespaceResolved;
 
   const clearFilters = () => {
-    setWorkflowNameInput('');
-    setWorkflowTemplateNameInput('');
-    setSelectedTemplateName('');
-    setStatusFilter('all');
+    setTemplateTextDraft(null);
+    setUrlState(
+      {
+        workflowName: '',
+        workflowTemplateName: '',
+        status: 'all',
+      },
+      { flush: true },
+    );
   };
 
   return (
@@ -1200,7 +1184,7 @@ export function SessionsSection({
         <div className="flex w-full flex-col gap-3 pb-1 lg:flex-row lg:items-end">
           <ResourceSearchInput
             value={workflowNameInput}
-            onChange={setWorkflowNameInput}
+            onChange={workflowName => setUrlState({ workflowName })}
             placeholder="Search"
             testId="workflow-runs-search"
             className="w-full lg:max-w-[493px] lg:flex-1"
@@ -1222,11 +1206,9 @@ export function SessionsSection({
                 value={workflowTemplateNameInput}
                 onChange={e => {
                   const value = e.target.value;
-                  setWorkflowTemplateNameInput(value);
-                  // Only an exact dropdown pick becomes the committed filter -
-                  // free text here never reaches the API (see PR #3679 review).
+                  setTemplateTextDraft(value);
                   if (value !== selectedTemplateName) {
-                    setSelectedTemplateName('');
+                    setUrlState({ workflowTemplateName: '' });
                   }
                   if (!templateDropdownOpen) {
                     setTemplateDropdownOpen(true);
@@ -1243,8 +1225,11 @@ export function SessionsSection({
                     filteredTemplateNames={filteredTemplateNames}
                     query={workflowTemplateNameInput}
                     onSelect={templateName => {
-                      setWorkflowTemplateNameInput(templateName);
-                      setSelectedTemplateName(templateName);
+                      setTemplateTextDraft(null);
+                      setUrlState(
+                        { workflowTemplateName: templateName },
+                        { flush: true },
+                      );
                       setTemplateDropdownOpen(false);
                     }}
                   />
@@ -1262,7 +1247,9 @@ export function SessionsSection({
             <Select
               items={statusFilterItems}
               value={statusFilter || 'all'}
-              onValueChange={value => setStatusFilter(value as string)}>
+              onValueChange={value =>
+                setUrlState({ status: String(value).toLowerCase() })
+              }>
               <SelectTrigger
                 aria-labelledby="workflow-status-label"
                 className="w-full">
@@ -1308,7 +1295,7 @@ export function SessionsSection({
             onClick={goToPreviousPage}
             disabled={!hasPrevious || isLoading}
             aria-label="Go to previous page"
-            className="flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 text-fg-primary transition-opacity hover:bg-stateslayer-overlay-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
             <IconShell size="sm">
               <ArrowBack />
             </IconShell>
@@ -1321,7 +1308,7 @@ export function SessionsSection({
             onClick={goToNextPage}
             disabled={!hasNext || isLoading}
             aria-label="Go to next page"
-            className="flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 text-fg-primary transition-opacity hover:bg-stateslayer-overlay-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
             <span className="text-sm leading-5 tracking-[-0.028px]">Next</span>
             <IconShell size="sm">
               <ArrowForward />
