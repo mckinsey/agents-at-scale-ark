@@ -56,6 +56,7 @@ func newBookmarkWatcher(opts storage.WatchOptions) *postgresWatcher {
 		sendInitialEvents: opts.SendInitialEvents,
 		allowBookmarks:    opts.AllowWatchBookmarks,
 		initialSynced:     true,
+		initialHeadRV:     7,
 	}
 }
 
@@ -126,9 +127,8 @@ func TestSendBookmark_WatchListWaitsForTheInitialSync(t *testing.T) {
 	w.initialSynced = false
 
 	w.sendBookmark()
-	before, _ := takeEvent(t, w)
-	if _, found := bookmarkMeta(t, before).GetAnnotations()[initialEventsEndAnnotation]; found {
-		t.Fatal("initial-events-end sent before the initial relist succeeded")
+	if ev, ok := takeEvent(t, w); ok {
+		t.Fatalf("WatchList got a %s before the initial relist succeeded", ev.Type)
 	}
 
 	w.initialSynced = true

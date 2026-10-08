@@ -762,9 +762,9 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 // head revision base. The floor term recovers the head when the highest-RV row
 // has itself been purged (e.g. the newest object was deleted and its tombstone
 // hard-deleted), where a plain MAX over surviving rows would fall back below the
-// floor and 410 every resume. The lift stays within [floor, true head], so a
-// watch resuming from it is at or above the floor yet never skips a committed
-// change.
+// floor and 410 every resume. A watch resuming from it is at or above the floor
+// yet never skips a committed change: the floor is at most the true head, and the
+// base is above every write because bootstrapHeadRevisionQuery burns its value.
 func (p *PostgreSQLBackend) headResourceVersion(ctx context.Context, snapshot string) (int64, error) {
 	var maxRV int64
 	err := p.db.QueryRowContext(ctx,
@@ -1293,11 +1293,14 @@ type postgresWatcher struct {
 	// ordinary watch k8s.io/apiserver >= 0.37 reacts to it by calling a nil
 	// watchListCompleteHook and the stream dies (#3720). initialSynced flips once
 	// a relist succeeded, so the terminal bookmark follows the actual initial
-	// state; initialEventsBookmarkSent records that it went out.
+	// state; initialEventsBookmarkSent records that it went out. initialHeadRV is
+	// the store head read before the initial relist query, so everything at or
+	// below it was in that relist's snapshot or is covered by its lookback.
 	sendInitialEvents         bool
 	allowBookmarks            bool
 	initialSynced             bool
 	initialEventsBookmarkSent bool
+	initialHeadRV             int64
 	// seenRVs maps a resource UID to the highest rv we've already emitted for it.
 	// Combined with the lookback window in relist(), this lets us re-fetch rows that
 	// might have been invisible during a prior relist (because their txn was still
@@ -1377,7 +1380,13 @@ func (w *postgresWatcher) recoverIfBehind() {
 			w.behind.Store(true)
 			return
 		}
+		wasSynced := w.initialSynced
 		w.initialSynced = true
+		// After a failed initial relist the recovery can run on the row path, which
+		// has no bookmark of its own; the client should not wait for the next tick.
+		if !wasSynced && w.sendInitialEvents {
+			w.sendBookmark()
+		}
 	}
 }
 
@@ -1387,8 +1396,9 @@ func (w *postgresWatcher) recoverIfBehind() {
 func (w *postgresWatcher) forwardRow(row *changeRow) bool {
 	// Until a relist succeeds the client has no consistent starting point. A row
 	// forwarded now would advance lastSeenRV, and the recovery relist reads only a
-	// lookback window below it, so older state would never be sent. Every dropped
-	// row is committed, so the relist that eventually succeeds reads it.
+	// lookback window below it, so older state would never be sent. A dropped row
+	// is already committed, so the relist that eventually succeeds reads it, unless
+	// relists keep failing past the tombstone retention window.
 	if !w.initialSynced {
 		return true
 	}
@@ -1420,7 +1430,19 @@ func (w *postgresWatcher) sendBookmark() {
 	if !w.allowBookmarks {
 		return
 	}
+	// A WatchList gets no bookmark before its initial state; kube-apiserver
+	// never sends one there either.
+	if w.sendInitialEvents && !w.initialSynced {
+		return
+	}
+	initialEventsEnd := w.sendInitialEvents && !w.initialEventsBookmarkSent
+	// The terminal bookmark's RV becomes the reflector's Replace point and its
+	// next resume point, so it must not run ahead of rows still queued for this
+	// watcher. The cached global head can, after a long initial relist.
 	rv := w.backend.liftHead(w.backend.cachedRV.Load())
+	if initialEventsEnd {
+		rv = w.initialHeadRV
+	}
 	if lastSeen := w.lastSeenRV.Load(); lastSeen > rv {
 		rv = lastSeen
 	}
@@ -1431,13 +1453,13 @@ func (w *postgresWatcher) sendBookmark() {
 	if obj == nil {
 		return
 	}
-	initialEventsEnd := false
 	if accessor, aErr := meta.Accessor(obj); aErr == nil {
 		accessor.SetResourceVersion(fmt.Sprintf("%d", rv))
-		if w.sendInitialEvents && w.initialSynced && !w.initialEventsBookmarkSent {
+		if initialEventsEnd {
 			accessor.SetAnnotations(map[string]string{metav1.InitialEventsAnnotationKey: "true"})
-			initialEventsEnd = true
 		}
+	} else {
+		initialEventsEnd = false
 	}
 	ev := watch.Event{Type: watch.Bookmark, Object: obj}
 	// Periodic bookmarks are best effort, but the client cannot finish its initial
@@ -1617,6 +1639,9 @@ func (w *postgresWatcher) relist() error {
 	// resume seenRVs is empty, so rows within the lookback window that the client
 	// already holds are re-emitted once as Added — idempotent for a reflector, and
 	// far less than the whole-table replay this resume path exists to avoid.
+	if !w.initialSynced {
+		w.initialHeadRV = w.backend.liftHead(w.backend.cachedRV.Load())
+	}
 	query, args := w.buildRelistQuery()
 	rows, err := w.backend.db.QueryContext(w.ctx, query, args...)
 	if err != nil {

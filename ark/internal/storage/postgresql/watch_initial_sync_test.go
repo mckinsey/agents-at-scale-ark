@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/watch"
 
@@ -148,5 +149,54 @@ func TestEmitRow_RetriedInitialRelistDeliversTombstoneOfEmittedObject(t *testing
 	}
 	if ev.Type != watch.Deleted {
 		t.Errorf("event type = %s, want %s", ev.Type, watch.Deleted)
+	}
+}
+
+func TestSendBookmark_InitialEventsEndRVDoesNotRunAheadOfTheInitialRelist(t *testing.T) {
+	w := newBookmarkWatcher(storage.WatchOptions{SendInitialEvents: true, AllowWatchBookmarks: true})
+	w.backend.cachedRV.Store(2000)
+	w.initialHeadRV = 10
+	w.lastSeenRV.Store(12)
+
+	w.sendBookmark()
+	w.sendBookmark()
+
+	first, _ := takeEvent(t, w)
+	if got := bookmarkMeta(t, first).GetResourceVersion(); got != "12" {
+		t.Errorf("initial-events-end resourceVersion = %s, want 12 (the initial relist, not the cached global head)", got)
+	}
+	second, _ := takeEvent(t, w)
+	if got := bookmarkMeta(t, second).GetResourceVersion(); got != "2000" {
+		t.Errorf("periodic bookmark resourceVersion = %s, want the cached head 2000", got)
+	}
+}
+
+func TestRecoverIfBehind_SendsInitialEventsEndAsSoonAsTheRecoverySucceeds(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	mock.ExpectQuery("SELECT resource_version").WillReturnRows(sqlmock.NewRows([]string{
+		"resource_version", "generation", "namespace", "name", "uid", "spec", "status", "labels",
+		"annotations", "finalizers", "owner_references", "created_at", "deleted_at", "deletion_timestamp",
+	}))
+
+	w := newBookmarkWatcher(storage.WatchOptions{SendInitialEvents: true, AllowWatchBookmarks: true})
+	w.backend.db = db
+	w.initialSynced = false
+	w.behind.Store(true)
+
+	w.recoverIfBehind()
+
+	ev, ok := takeEvent(t, w)
+	if !ok {
+		t.Fatal("no bookmark after the recovery relist; the client would wait for the next tick")
+	}
+	if got := bookmarkMeta(t, ev).GetAnnotations()[initialEventsEndAnnotation]; got != initialEventsEndValue {
+		t.Errorf("bookmark annotation = %q, want %q", got, initialEventsEndValue)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
 	}
 }
