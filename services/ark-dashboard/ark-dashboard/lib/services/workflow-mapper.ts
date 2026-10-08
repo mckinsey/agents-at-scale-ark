@@ -47,6 +47,8 @@ export interface MappedWorkflowStep {
   children?: MappedWorkflowStep[];
 }
 
+export type MappedPauseState = 'pausing' | 'paused';
+
 export interface MappedWorkflowSession {
   id: string;
   name: string;
@@ -59,6 +61,7 @@ export interface MappedWorkflowSession {
   namespace?: string;
   uid?: string;
   suspended: boolean;
+  pauseState?: MappedPauseState;
   shutdownRequested: boolean;
 }
 
@@ -554,6 +557,31 @@ function isWaitingAtSuspendNode(nodes: Record<string, ArgoNodeStatus>) {
   );
 }
 
+function hasActivePods(nodes: Record<string, ArgoNodeStatus>) {
+  return Object.values(nodes).some(
+    node =>
+      node.type === 'Pod' &&
+      (node.phase === 'Running' || node.phase === 'Pending'),
+  );
+}
+
+function getPauseState(
+  workflow: ArgoWorkflow,
+  nodes: Record<string, ArgoNodeStatus>,
+): MappedPauseState | undefined {
+  if (workflow.status?.phase !== 'Running') {
+    return undefined;
+  }
+  const podsActive = hasActivePods(nodes);
+  if (workflow.spec?.suspend === true) {
+    return podsActive ? 'pausing' : 'paused';
+  }
+  if (isWaitingAtSuspendNode(nodes) && !podsActive) {
+    return 'paused';
+  }
+  return undefined;
+}
+
 export function mapArgoWorkflowToSession(
   workflow: ArgoWorkflow,
 ): MappedWorkflowSession {
@@ -583,6 +611,7 @@ export function mapArgoWorkflowToSession(
     namespace: workflow.metadata.namespace,
     uid: workflow.metadata.uid,
     suspended: workflow.spec?.suspend === true || isWaitingAtSuspendNode(nodes),
+    pauseState: getPauseState(workflow, nodes),
     shutdownRequested: Boolean(workflow.spec?.shutdown),
   };
 }

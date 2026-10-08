@@ -253,12 +253,15 @@ describe('SessionsSection', () => {
         .parentElement!,
     );
 
-  const renderWithRunningWorkflowSpec = (spec: Record<string, unknown>) => {
+  const renderWithRunningWorkflowSpec = (
+    spec: Record<string, unknown>,
+    pauseState?: 'pausing' | 'paused',
+  ) => {
     vi.mocked(useWorkflows).mockReturnValue({
       workflows: [
         mockWorkflow,
         mockFailedWorkflow,
-        { ...mockRunningWorkflow, spec },
+        { ...mockRunningWorkflow, spec, pauseState },
       ],
       loading: false,
       error: null,
@@ -293,6 +296,7 @@ describe('SessionsSection', () => {
         namespace: w.metadata.namespace,
         uid: w.metadata.uid,
         suspended: w.spec?.suspend === true,
+        pauseState: w.pauseState,
         shutdownRequested: Boolean(w.spec?.shutdown),
       })),
     );
@@ -592,6 +596,39 @@ describe('SessionsSection', () => {
         'default',
         mockUpdateWorkflowItem,
       );
+    });
+
+    it('should show Pausing and keep Resume disabled while running steps finish', () => {
+      renderWithRunningWorkflowSpec({ suspend: true }, 'pausing');
+
+      const card = getRunningCard();
+      expect(card.getByText('Pausing')).toBeInTheDocument();
+      expect(card.getByRole('button', { name: 'Resume' })).toBeDisabled();
+      expect(card.getByRole('button', { name: 'Stop' })).toBeEnabled();
+      expect(card.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    });
+
+    it('should show Paused and enable Resume once no step is running', () => {
+      renderWithRunningWorkflowSpec({ suspend: true }, 'paused');
+
+      const card = getRunningCard();
+      expect(card.getByText('Paused')).toBeInTheDocument();
+      expect(card.getByRole('button', { name: 'Resume' })).toBeEnabled();
+    });
+
+    it('should explain on the Pause tooltip that running steps finish first', async () => {
+      const user = userEvent.setup();
+      render(<SessionsSection />);
+
+      await user.hover(getRunningCard().getByRole('button', { name: 'Pause' }));
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByText(
+            'Pause: running steps finish, no new steps start until resumed',
+          ).length,
+        ).toBeGreaterThan(0);
+      });
     });
 
     it('should offer Resume instead of Pause for a suspended workflow', async () => {

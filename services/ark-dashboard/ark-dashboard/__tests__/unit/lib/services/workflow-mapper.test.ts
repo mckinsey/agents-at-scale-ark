@@ -170,6 +170,66 @@ describe('mapArgoWorkflowToSession suspended', () => {
   });
 });
 
+describe('mapArgoWorkflowToSession pauseState', () => {
+  function node(
+    id: string,
+    type: NodeMap[string]['type'],
+    phase: NodeMap[string]['phase'],
+  ): NodeMap[string] {
+    return { id, name: `wf-1.${id}`, displayName: id, type, phase };
+  }
+
+  function pauseStateOf(
+    spec: ArgoWorkflow['spec'],
+    nodes: NodeMap,
+    phase: 'Running' | 'Succeeded' = 'Running',
+  ) {
+    return mapArgoWorkflowToSession(
+      makeWorkflow({ spec, status: { phase, nodes } }),
+    ).pauseState;
+  }
+
+  it('is pausing while a paused run still has a running pod', () => {
+    expect(
+      pauseStateOf({ suspend: true }, { a: node('a', 'Pod', 'Running') }),
+    ).toBe('pausing');
+  });
+
+  it('is pausing while a paused run still has a pending pod', () => {
+    expect(
+      pauseStateOf({ suspend: true }, { a: node('a', 'Pod', 'Pending') }),
+    ).toBe('pausing');
+  });
+
+  it('is paused once a paused run has no active pod', () => {
+    expect(
+      pauseStateOf({ suspend: true }, { a: node('a', 'Pod', 'Succeeded') }),
+    ).toBe('paused');
+  });
+
+  it('is paused while waiting at a suspend step with nothing else running', () => {
+    expect(pauseStateOf({}, { gate: node('gate', 'Suspend', 'Running') })).toBe(
+      'paused',
+    );
+  });
+
+  it('is not paused while other branches run next to a waiting suspend step', () => {
+    expect(
+      pauseStateOf(
+        {},
+        {
+          gate: node('gate', 'Suspend', 'Running'),
+          a: node('a', 'Pod', 'Running'),
+        },
+      ),
+    ).toBeUndefined();
+  });
+
+  it('is not paused once the run has finished', () => {
+    expect(pauseStateOf({ suspend: true }, {}, 'Succeeded')).toBeUndefined();
+  });
+});
+
 describe('mapArgoWorkflowToSession', () => {
   it('does not throw when status is missing and falls back to creationTimestamp', () => {
     const workflow = makeWorkflow({ status: undefined });

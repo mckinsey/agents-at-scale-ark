@@ -176,6 +176,7 @@ interface WorkflowSession extends BaseSession {
   type: 'workflow';
   steps: WorkflowStep[];
   suspended?: boolean;
+  pauseState?: PauseState;
   shutdownRequested?: boolean;
 }
 
@@ -186,13 +187,26 @@ interface TeamSession extends BaseSession {
 
 type Session = WorkflowSession | TeamSession;
 
-const STATUS_LABELS: Record<StepStatus, string> = {
+type PauseState = 'pausing' | 'paused';
+
+type DisplayStatus = StepStatus | PauseState;
+
+const STATUS_LABELS: Record<DisplayStatus, string> = {
   pending: 'Pending',
   running: 'Running',
+  pausing: 'Pausing',
+  paused: 'Paused',
   succeeded: 'Succeeded',
   failed: 'Failed',
   skipped: 'Skipped',
 };
+
+function getSessionDisplayStatus(session: Session): DisplayStatus {
+  if (session.type === 'workflow' && session.pauseState) {
+    return session.pauseState;
+  }
+  return session.status;
+}
 
 function getStatusBorderClass(status: StepStatus): string {
   switch (status) {
@@ -207,7 +221,7 @@ function getStatusBorderClass(status: StepStatus): string {
   }
 }
 
-function getStatusIcon(status: StepStatus) {
+function getStatusIcon(status: DisplayStatus) {
   switch (status) {
     case 'succeeded':
       return (
@@ -222,9 +236,16 @@ function getStatusIcon(status: StepStatus) {
         </IconShell>
       );
     case 'running':
+    case 'pausing':
       return (
         <IconShell size="sm" className="text-fg-secondary" asChild>
           <Spinner size="sm" />
+        </IconShell>
+      );
+    case 'paused':
+      return (
+        <IconShell size="sm" variant="secondary">
+          <Pause />
         </IconShell>
       );
     case 'skipped':
@@ -255,7 +276,7 @@ function DurationLabel({ duration }: { readonly duration: string }) {
   );
 }
 
-function StatusLabel({ status }: { readonly status: StepStatus }) {
+function StatusLabel({ status }: { readonly status: DisplayStatus }) {
   return (
     <div className="flex shrink-0 items-center gap-1">
       {getStatusIcon(status)}
@@ -758,7 +779,7 @@ function SessionDetailView({
               </span>
             </div>
           )}
-          <StatusLabel status={session.status} />
+          <StatusLabel status={getSessionDisplayStatus(session)} />
           {session.type === 'workflow' && session.namespace && session.uid && (
             <Button variant="outline" size="xs" asChild>
               <a
@@ -805,6 +826,7 @@ const RUN_CONTROL_STATUSES = new Set<StepStatus>([
 interface WorkflowRunControlsProps {
   readonly status: StepStatus;
   readonly suspended: boolean;
+  readonly pauseState?: PauseState;
   readonly disabled: boolean;
   readonly onAction: (action: WorkflowLifecycleAction) => void;
   readonly className?: string;
@@ -813,6 +835,7 @@ interface WorkflowRunControlsProps {
 interface RunControl {
   readonly action: WorkflowLifecycleAction;
   readonly label: string;
+  readonly tooltip?: string;
   readonly Icon: React.ComponentType;
 }
 
@@ -824,6 +847,7 @@ const RESUME_CONTROL: RunControl = {
 const PAUSE_CONTROL: RunControl = {
   action: 'suspend',
   label: 'Pause',
+  tooltip: 'Pause: running steps finish, no new steps start until resumed',
   Icon: Pause,
 };
 const STOP_CONTROL: RunControl = {
@@ -861,6 +885,7 @@ function getRunControls(status: StepStatus, suspended: boolean): RunControl[] {
 function WorkflowRunControls({
   status,
   suspended,
+  pauseState,
   disabled,
   onAction,
   className,
@@ -891,17 +916,22 @@ function WorkflowRunControls({
 
   return (
     <div aria-busy={disabled} className={wrapperClassName}>
-      {getRunControls(status, suspended).map(({ action, label, Icon }) => (
-        <IconActionButton
-          key={action}
-          label={label}
-          variant="outline"
-          size="icon-xs"
-          disabled={disabled}
-          onClick={() => onAction(action)}>
-          <Icon />
-        </IconActionButton>
-      ))}
+      {getRunControls(status, suspended).map(
+        ({ action, label, tooltip, Icon }) => (
+          <IconActionButton
+            key={action}
+            label={label}
+            tooltip={tooltip}
+            variant="outline"
+            size="icon-xs"
+            disabled={
+              disabled || (action === 'resume' && pauseState === 'pausing')
+            }
+            onClick={() => onAction(action)}>
+            <Icon />
+          </IconActionButton>
+        ),
+      )}
     </div>
   );
 }
@@ -943,8 +973,10 @@ function SessionListItem({
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex items-center gap-1">
               <span data-testid="session-status" data-status={session.status}>
-                {getStatusIcon(session.status)}
-                <span className="sr-only">{STATUS_LABELS[session.status]}</span>
+                {getStatusIcon(getSessionDisplayStatus(session))}
+                <span className="sr-only">
+                  {STATUS_LABELS[getSessionDisplayStatus(session)]}
+                </span>
               </span>
               <span className="paragraph-small-primary text-fg-secondary">
                 {new Date(session.startedAt).toLocaleString()}
@@ -967,6 +999,7 @@ function SessionListItem({
         <WorkflowRunControls
           status={session.status}
           suspended={Boolean(session.suspended)}
+          pauseState={session.pauseState}
           disabled={isRunActionPending || shutdownInProgress}
           onAction={onRunAction}
           className="absolute right-3 bottom-2"
