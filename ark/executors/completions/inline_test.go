@@ -61,6 +61,23 @@ func TestCreateToolExecutorInlineUsesMCPExecutor(t *testing.T) {
 	require.Equal(t, "Hi ark", result.Content)
 }
 
+func TestInlineToolFailureUsesSharedMCPResultHandling(t *testing.T) {
+	activatorBaseURL := newTestMCPServer(t)
+	tool := inlineTool(activatorBaseURL)
+	tool.Name = testToolBoom
+	tool.Status.ResolvedAddress = inlinetools.ResolvedAddress(activatorBaseURL, tool)
+
+	executor, err := CreateToolExecutor(t.Context(), setupTestClientForTools([]client.Object{tool}), tool, "default",
+		ToolExecutorDeps{MCPPool: testPool(t), ActivatorBaseURL: activatorBaseURL})
+	require.NoError(t, err)
+
+	result, err := executor.Execute(t.Context(), boomCall())
+
+	require.NoError(t, err, "an inline script failure is a tool result, not a transport error")
+	require.Equal(t, testToolBoomText, result.Error, "inline failures reuse the MCP isError path")
+	require.Empty(t, result.Content)
+}
+
 func TestCreateToolExecutorInlineDoesNotReuseMCPServerClient(t *testing.T) {
 	activatorBaseURL := newTestMCPServer(t)
 	serverEndpoint := newTestMCPServer(t)

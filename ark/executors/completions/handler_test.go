@@ -2099,3 +2099,37 @@ func TestSetupExecutionFailures(t *testing.T) {
 		assert.IsType(t, &NoopMemory{}, state.memory)
 	})
 }
+
+func TestExecuteToolReportsToolFailureText(t *testing.T) {
+	serverEndpoint := newTestMCPServer(t)
+	mcpServer := &arkv1alpha1.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "boom-server", Namespace: "default"},
+		Spec: arkv1alpha1.MCPServerSpec{
+			Address:   arkv1alpha1.ValueSource{Value: serverEndpoint},
+			Transport: "http",
+			Timeout:   "5s",
+		},
+	}
+	tool := &arkv1alpha1.Tool{
+		ObjectMeta: metav1.ObjectMeta{Name: testToolBoom, Namespace: "default"},
+		Spec: arkv1alpha1.ToolSpec{
+			Type: ToolTypeMCP,
+			MCP: &arkv1alpha1.MCPToolRef{
+				MCPServerRef: arkv1alpha1.MCPServerRef{Name: "boom-server", Namespace: "default"},
+				ToolName:     testToolBoom,
+			},
+		},
+	}
+	h := newTestHandler(tool, mcpServer)
+	query := arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "boom-query", Namespace: "default"},
+		Spec:       arkv1alpha1.QuerySpec{Input: runtime.RawExtension{Raw: []byte(`"{\"name\":\"ark\"}"`)}},
+	}
+
+	messages, err := h.executeTool(t.Context(), query, testToolBoom, []Message{NewUserMessage(`{"name":"ark"}`)})
+
+	require.NoError(t, err, "a tool-level failure is a result, not a transport error")
+	require.Len(t, messages, 1)
+	assert.Equal(t, testToolBoomText, extractAssistantText(messages),
+		"a direct Tool query must report why the tool failed, not an empty success")
+}
