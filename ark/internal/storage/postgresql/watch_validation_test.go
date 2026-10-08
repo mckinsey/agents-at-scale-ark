@@ -71,7 +71,7 @@ func TestWatch_EventDropUnderBurst(t *testing.T) {
 
 	backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 
-	w, err := backend.Watch(ctx, kind, ns, storage.WatchOptions{})
+	w, err := backend.Watch(ctx, kind, ns, storage.WatchOptions{AllowWatchBookmarks: true})
 	if err != nil {
 		t.Fatalf("Watch failed: %v", err)
 	}

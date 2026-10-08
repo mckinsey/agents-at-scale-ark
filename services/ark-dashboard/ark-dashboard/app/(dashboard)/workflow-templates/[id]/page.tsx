@@ -5,12 +5,14 @@ import { useParams } from 'next/navigation';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Spinner } from '@/components/ui/spinner';
 import { WorkflowStudio } from '@/components/workflow-studio/workflow-studio';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useWorkflowTemplateAccess } from '@/lib/hooks/use-workflow-template-access';
 
 export default function WorkflowTemplatePage() {
   const params = useParams();
   const id = typeof params.id === 'string' ? params.id : '';
   const { canUpdate, loading } = useWorkflowTemplateAccess();
+  const templatesReturnHref = useListReturnHref('/workflow-templates');
 
   if (loading) {
     return (
@@ -28,7 +30,7 @@ export default function WorkflowTemplatePage() {
           namespace.
         </p>
         <NamespacedLink
-          href="/workflow-templates"
+          href={templatesReturnHref}
           className="text-sm underline">
           Back to workflow templates
         </NamespacedLink>
