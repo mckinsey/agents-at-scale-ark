@@ -1,4 +1,7 @@
 """Tests for the pure Argo Workflow lifecycle CR mutations."""
+import base64
+import gzip
+import json
 import unittest
 
 from ark_api.api.v1.workflow_lifecycle import (
@@ -7,6 +10,8 @@ from ark_api.api.v1.workflow_lifecycle import (
     LABEL_PHASE,
     LABEL_RESUBMITTED_FROM,
     LifecyclePreconditionError,
+    compress_node_status,
+    expand_node_status,
     formulate_resubmit_workflow,
     formulate_resume_workflow,
     formulate_retry_workflow,
@@ -419,6 +424,47 @@ class TestValidators(unittest.TestCase):
 
     def test_stop_allows_running(self):
         validate_stoppable({"status": {"phase": "Running"}})
+
+
+def _compress(nodes: dict) -> str:
+    return base64.b64encode(gzip.compress(json.dumps(nodes).encode())).decode()
+
+
+class TestNodeStatusCompression(unittest.TestCase):
+    NODES = {"wf-1-111": {"id": "wf-1-111", "type": "Pod", "phase": "Failed"}}
+
+    def test_expands_compressed_nodes(self):
+        workflow = {"status": {"phase": "Failed", "compressedNodes": _compress(self.NODES)}}
+
+        expanded, was_compressed = expand_node_status(workflow)
+
+        self.assertTrue(was_compressed)
+        self.assertEqual(expanded["status"]["nodes"], self.NODES)
+        self.assertNotIn("compressedNodes", expanded["status"])
+        self.assertIn("compressedNodes", workflow["status"])
+
+    def test_leaves_uncompressed_workflow_untouched(self):
+        workflow = {"status": {"phase": "Failed", "nodes": self.NODES}}
+
+        expanded, was_compressed = expand_node_status(workflow)
+
+        self.assertFalse(was_compressed)
+        self.assertIs(expanded, workflow)
+
+    def test_rejects_offloaded_node_status(self):
+        with self.assertRaises(LifecyclePreconditionError):
+            expand_node_status({"status": {"offloadNodeStatusVersion": "fnv:123"}})
+
+    def test_rejects_undecodable_compressed_nodes(self):
+        with self.assertRaises(LifecyclePreconditionError):
+            expand_node_status({"status": {"compressedNodes": "not-gzip"}})
+
+    def test_compress_round_trips_nodes(self):
+        compressed = compress_node_status({"status": {"phase": "Running", "nodes": self.NODES}})
+
+        self.assertNotIn("nodes", compressed["status"])
+        expanded, _ = expand_node_status(compressed)
+        self.assertEqual(expanded["status"]["nodes"], self.NODES)
 
 
 if __name__ == "__main__":

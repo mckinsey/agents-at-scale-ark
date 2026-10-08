@@ -6,6 +6,9 @@ can run through the generic dynamic client. They are pure: they take a workflow
 dict and return the mutated object (plus, for retry, the node IDs whose pods
 must be deleted), performing no I/O.
 """
+import base64
+import gzip
+import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Optional
@@ -270,6 +273,44 @@ def formulate_resubmit_workflow(workflow: dict) -> dict:
         "metadata": new_metadata,
         "spec": spec,
     }
+
+
+def expand_node_status(workflow: dict) -> tuple[dict, bool]:
+    """Inline node status the controller compressed, like the argo-server hydrator.
+
+    Returns the workflow with ``status.nodes`` populated from
+    ``status.compressedNodes`` and whether it was compressed, so the caller can
+    compress it again before writing. Node status offloaded to the Argo
+    persistence database cannot be read here and is rejected.
+    """
+    status = workflow.get("status") or {}
+    if status.get("offloadNodeStatusVersion"):
+        raise LifecyclePreconditionError(
+            "Workflow node status is offloaded to the Argo database; use the Argo UI or CLI for this action"
+        )
+    compressed = status.get("compressedNodes")
+    if not compressed:
+        return workflow, False
+
+    try:
+        nodes = json.loads(gzip.decompress(base64.b64decode(compressed)))
+    except (ValueError, OSError) as e:
+        raise LifecyclePreconditionError("Workflow compressed node status could not be decoded") from e
+
+    expanded = deepcopy(workflow)
+    expanded["status"]["nodes"] = nodes
+    expanded["status"].pop("compressedNodes")
+    return expanded, True
+
+
+def compress_node_status(workflow: dict) -> dict:
+    """Move ``status.nodes`` back into ``status.compressedNodes`` (gzip + base64, as Argo stores it)."""
+    compressed = deepcopy(workflow)
+    status = compressed.setdefault("status", {})
+    nodes = status.pop("nodes", None) or {}
+    payload = json.dumps(nodes, separators=(",", ":")).encode()
+    status["compressedNodes"] = base64.b64encode(gzip.compress(payload)).decode()
+    return compressed
 
 
 def validate_suspendable(workflow: dict) -> None:

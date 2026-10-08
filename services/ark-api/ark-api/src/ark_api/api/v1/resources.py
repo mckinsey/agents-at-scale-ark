@@ -32,6 +32,8 @@ from .workflow_lifecycle import (
     WORKFLOW_API_VERSION,
     WORKFLOW_KIND,
     LifecyclePreconditionError,
+    compress_node_status,
+    expand_node_status,
     formulate_resubmit_workflow,
     formulate_resume_workflow,
     formulate_retry_workflow,
@@ -1464,7 +1466,8 @@ async def _replace_workflow(
     """Read a Workflow, apply a pure CR mutation, and write it back with a full replace.
 
     ``mutate`` receives the workflow dict and returns either the mutated
-    workflow or a (workflow, pod_node_ids) tuple. When ``delete_pods`` is set,
+    workflow or a (workflow, pod_node_ids) tuple, with compressed node status
+    already expanded and compressed again on write. When ``delete_pods`` is set,
     the pods backing those node IDs are deleted before the workflow is written.
     The read-mutate-write cycle is repeated when the controller updates the
     workflow between the read and the write.
@@ -1477,7 +1480,8 @@ async def _replace_workflow(
             workflow = existing.to_dict()
 
             try:
-                result = mutate(workflow)
+                expanded, was_compressed = expand_node_status(workflow)
+                result = mutate(expanded)
             except LifecyclePreconditionError as e:
                 raise HTTPException(status_code=409, detail=str(e)) from e
 
@@ -1486,6 +1490,8 @@ async def _replace_workflow(
                 new_workflow, pod_node_ids = result
             else:
                 new_workflow = result
+            if was_compressed:
+                new_workflow = compress_node_status(new_workflow)
 
             if delete_pods and pod_node_ids:
                 await _delete_workflow_pods(api, namespace, workflow_name, pod_node_ids)

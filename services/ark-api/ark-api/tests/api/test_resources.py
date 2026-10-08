@@ -1,4 +1,7 @@
 """Tests for generic Kubernetes resources API endpoints."""
+import base64
+import gzip
+import json
 import os
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -3064,6 +3067,77 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
         resource.replace.assert_called_once()
+
+    @staticmethod
+    def _compress(nodes: dict) -> str:
+        return base64.b64encode(gzip.compress(json.dumps(nodes).encode())).decode()
+
+    @staticmethod
+    def _decompress(compressed: str) -> dict:
+        return json.loads(gzip.decompress(base64.b64decode(compressed)))
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_resets_compressed_nodes_and_keeps_them_compressed(self, mock_dynamic_client_cls, mock_api_client):
+        nodes = {
+            "wf-1": {"id": "wf-1", "type": "Steps", "phase": "Failed", "children": ["wf-1-111"]},
+            "wf-1-111": {"id": "wf-1-111", "type": "Pod", "phase": "Failed"},
+        }
+        existing = {
+            "metadata": {"name": "wf-1", "labels": {}},
+            "spec": {},
+            "status": {"phase": "Failed", "compressedNodes": self._compress(nodes)},
+        }
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+        core = self._core_with_pods(("wf-1-step-111", "wf-1-111"))
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 200)
+        core.delete_namespaced_pod.assert_called_once_with(name="wf-1-step-111", namespace="default")
+        _, kwargs = resource.replace.call_args
+        status = kwargs["body"]["status"]
+        self.assertNotIn("nodes", status)
+        written_nodes = self._decompress(status["compressedNodes"])
+        self.assertNotIn("wf-1-111", written_nodes)
+        self.assertEqual(written_nodes["wf-1"]["phase"], "Running")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resume_resolves_suspend_gate_in_compressed_nodes(self, mock_dynamic_client_cls, mock_api_client):
+        nodes = {"gate": {"id": "gate", "type": "Suspend", "phase": "Running"}}
+        existing = {
+            "spec": {},
+            "status": {"phase": "Running", "compressedNodes": self._compress(nodes)},
+        }
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+
+        response = self.client.put(f"{self.BASE}/resume")
+
+        self.assertEqual(response.status_code, 200)
+        _, kwargs = resource.replace.call_args
+        written_nodes = self._decompress(kwargs["body"]["status"]["compressedNodes"])
+        self.assertEqual(written_nodes["gate"]["phase"], "Succeeded")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_rejects_offloaded_node_status(self, mock_dynamic_client_cls, mock_api_client):
+        existing = {
+            "metadata": {"name": "wf-1", "labels": {}},
+            "spec": {},
+            "status": {"phase": "Failed", "offloadNodeStatusVersion": "fnv:123"},
+        }
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+        core = self._core_with_pods()
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("offloaded", response.json()["detail"])
+        core.list_namespaced_pod.assert_not_called()
+        resource.replace.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
