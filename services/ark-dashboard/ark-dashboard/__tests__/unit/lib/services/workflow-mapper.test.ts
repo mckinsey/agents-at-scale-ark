@@ -123,6 +123,53 @@ describe('isTerminalPhase', () => {
   );
 });
 
+describe('mapArgoWorkflowToSession suspended', () => {
+  function suspendNode(phase: NodeMap[string]['phase']): NodeMap[string] {
+    return {
+      id: 'wf-1-gate',
+      name: 'wf-1.approve',
+      displayName: 'approve',
+      type: 'Suspend',
+      phase,
+      boundaryID: 'wf-1',
+    };
+  }
+
+  it('is suspended when the whole workflow is suspended', () => {
+    const session = mapArgoWorkflowToSession(
+      makeWorkflow({ spec: { suspend: true }, status: { phase: 'Running' } }),
+    );
+
+    expect(session.suspended).toBe(true);
+  });
+
+  it('is suspended while waiting at a suspend step', () => {
+    const session = mapArgoWorkflowToSession(
+      makeWorkflow({
+        status: {
+          phase: 'Running',
+          nodes: { 'wf-1-gate': suspendNode('Running') },
+        },
+      }),
+    );
+
+    expect(session.suspended).toBe(true);
+  });
+
+  it('is not suspended once the suspend step has been resumed', () => {
+    const session = mapArgoWorkflowToSession(
+      makeWorkflow({
+        status: {
+          phase: 'Running',
+          nodes: { 'wf-1-gate': suspendNode('Succeeded') },
+        },
+      }),
+    );
+
+    expect(session.suspended).toBe(false);
+  });
+});
+
 describe('mapArgoWorkflowToSession', () => {
   it('does not throw when status is missing and falls back to creationTimestamp', () => {
     const workflow = makeWorkflow({ status: undefined });

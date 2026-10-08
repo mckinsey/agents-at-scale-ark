@@ -548,6 +548,12 @@ function mapTopLevelNodes(
   return mapNodeIdsToSteps(topLevelNodeIds, context, ROOT_CHILD_OPTIONS);
 }
 
+function isWaitingAtSuspendNode(nodes: Record<string, ArgoNodeStatus>) {
+  return Object.values(nodes).some(
+    node => node.type === 'Suspend' && node.phase === 'Running',
+  );
+}
+
 export function mapArgoWorkflowToSession(
   workflow: ArgoWorkflow,
 ): MappedWorkflowSession {
@@ -576,7 +582,7 @@ export function mapArgoWorkflowToSession(
     steps,
     namespace: workflow.metadata.namespace,
     uid: workflow.metadata.uid,
-    suspended: workflow.spec?.suspend === true,
+    suspended: workflow.spec?.suspend === true || isWaitingAtSuspendNode(nodes),
     shutdownRequested: Boolean(workflow.spec?.shutdown),
   };
 }
