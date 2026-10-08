@@ -9,6 +9,7 @@ import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { TrackedButton } from '@/components/ui/tracked-button';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useCreateModel } from '@/lib/services/models-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -28,6 +29,7 @@ type CreateModelFormProps = {
 export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode, namespace } = useNamespace();
+  const modelsReturnHref = useListReturnHref('/models');
   const form = useForm<FormValues>({
     mode: 'onTouched',
     resolver: zodResolver(schema),
@@ -84,7 +86,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
               current="New model"
             />
             <div className="flex items-center gap-2">
-              <NamespacedLink href="/models">
+              <NamespacedLink href={modelsReturnHref}>
                 <Button variant="outline">Cancel</Button>
               </NamespacedLink>
               <TrackedButton

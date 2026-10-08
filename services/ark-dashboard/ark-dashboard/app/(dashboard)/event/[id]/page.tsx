@@ -14,6 +14,7 @@ import { EventTypeIndicator } from '@/components/common/event-type-indicator';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import type { Event } from '@/lib/services/events';
 import { eventsService } from '@/lib/services/events';
 import { formatTimestamp } from '@/lib/utils/time';
@@ -32,6 +33,7 @@ function EventBreadcrumb({ current }: Readonly<{ current: string }>) {
 
 function EventDetailContent() {
   const { namespace } = useNamespace();
+  const eventsReturnHref = useListReturnHref('/events');
   const params = useParams();
   const eventId = params.id as string;
 
@@ -79,7 +81,7 @@ function EventDetailContent() {
         {breadcrumb}
         <div className="mt-5 flex flex-1 flex-col items-center justify-center gap-3">
           <p className="headings-h3-regular text-fg-primary">Event not found</p>
-          <NamespacedLink href="/events">
+          <NamespacedLink href={eventsReturnHref}>
             <Button variant="outline">Back to events</Button>
           </NamespacedLink>
         </div>

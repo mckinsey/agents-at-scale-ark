@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 
 import type {
   MarketplaceFilters,
-  MarketplaceItemDetail,
   MarketplaceResponse,
 } from '@/lib/api/generated/marketplace-types';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -23,16 +22,6 @@ export function useGetMarketplaceItems(filters?: MarketplaceFilters) {
     queryKey: ['marketplace', 'items', namespace, filters],
     queryFn: () => marketplaceService.getMarketplaceItems(namespace, filters),
     enabled: Boolean(namespace),
-    retry: retryQueryHandler,
-  });
-}
-
-export function useGetMarketplaceItemById(id: string) {
-  const { namespace } = useNamespace();
-  return useQuery<MarketplaceItemDetail>({
-    queryKey: ['marketplace', 'item', namespace, id],
-    queryFn: () => marketplaceService.getMarketplaceItemById(id, namespace),
-    enabled: Boolean(id && namespace),
     retry: retryQueryHandler,
   });
 }
@@ -101,22 +90,6 @@ export function useInstallMarketplaceItem() {
     },
     onError: error => {
       toast.error('Installation failed', {
-        description: error instanceof Error ? error.message : 'An unexpected error occurred',
-      });
-    },
-  });
-}
-
-export function useUninstallMarketplaceItem() {
-  const { namespace } = useNamespace();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => marketplaceService.uninstallMarketplaceItem(id, namespace),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['marketplace'] });
-    },
-    onError: error => {
-      toast.error('Failed to load uninstall command', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred',
       });
     },

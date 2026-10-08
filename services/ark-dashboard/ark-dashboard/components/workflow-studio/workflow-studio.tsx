@@ -43,6 +43,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 import { parseWorkflowParameters } from '@/lib/utils/parse-workflow-parameters';
 import { validateWorkflowYaml } from '@/lib/utils/validate-workflow-yaml';
@@ -260,6 +261,7 @@ export function WorkflowStudio({
   });
   const gate = useAuthorAgentGate();
   const { namespace, readOnlyMode } = useNamespace();
+  const templatesReturnHref = useListReturnHref('/workflow-templates');
   const chatSessionId = studio.workflowName
     ? `argo-make-${namespace}-${studio.workflowName}`
     : undefined;
@@ -388,7 +390,7 @@ export function WorkflowStudio({
         <div className="flex items-center justify-between gap-4 px-6 pt-4">
           <div className="text-fg-secondary flex min-w-0 items-center gap-1 text-sm">
             <NamespacedLink
-              href="/workflow-templates"
+              href={templatesReturnHref}
               className="hover:text-fg-primary flex items-center gap-1">
               <ChevronLeft className="h-4 w-4" />
               Workflow Templates
