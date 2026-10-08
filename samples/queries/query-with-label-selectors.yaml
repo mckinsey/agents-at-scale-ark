@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-with-label-selectors
+spec:
+  input: "What is the weather forecast for today?"
+  selector:
+    matchLabels:
+      category: weather
+    matchExpressions:
+      - key: tier
+        operator: In
+        values: ["production", "staging"]
+      - key: active
+        operator: Exists

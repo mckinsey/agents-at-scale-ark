@@ -6,5 +6,5 @@ metadata:
 spec:
   input: What is 2+2-9*6?
   target:
-    type: model
     name: default
+    type: model
