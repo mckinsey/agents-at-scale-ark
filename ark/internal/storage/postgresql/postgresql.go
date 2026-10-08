@@ -191,6 +191,9 @@ type PostgreSQLBackend struct {
 	// cachedPurgeFloor mirrors the persisted watch_purge_floor so Watch() can
 	// reject too-old resume points without a DB round-trip.
 	cachedPurgeFloor atomic.Int64
+	// headRevisionBase is the lowest head revision the store ever reports, so an
+	// empty store still hands out a resourceVersion (see bootstrapHeadRevision).
+	headRevisionBase int64
 	walOnce          sync.Once
 	notifyOnce       sync.Once
 }
@@ -304,6 +307,8 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 		cancel()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
+	backend.refreshPurgeFloor()
+	backend.refreshCachedRV()
 
 	setDBPoolStats(db.Stats)
 
@@ -412,7 +417,52 @@ func (p *PostgreSQLBackend) initSchema() error {
 	if _, err := tx.Exec(schema); err != nil {
 		return err
 	}
-	return tx.Commit()
+	base, err := bootstrapHeadRevision(tx)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	p.headRevisionBase = base
+	return nil
+}
+
+// bootstrapHeadRevisionQuery records the head revision base once per database and,
+// only on that first insert, burns one value of the resource_version sequence. A
+// fresh store has no rows, so without a base its LIST carries no resourceVersion and
+// a WatchList never gets its initial-events-end bookmark (#3575). Reporting 1 is
+// safe only if no write can still be assigned rv 1: a client resuming from 1 would
+// skip it. The nextval guarantees every future write lands above the base.
+const bootstrapHeadRevisionQuery = `
+	WITH inserted AS (
+		INSERT INTO storage_metadata (key, value) VALUES ('head_revision_base', 1)
+		ON CONFLICT (key) DO NOTHING
+		RETURNING value
+	)
+	SELECT nextval('resources_resource_version_seq') FROM inserted`
+
+func bootstrapHeadRevision(tx *sql.Tx) (int64, error) {
+	if _, err := tx.Exec(bootstrapHeadRevisionQuery); err != nil {
+		return 0, fmt.Errorf("failed to bootstrap head revision: %w", err)
+	}
+	var base int64
+	if err := tx.QueryRow(`SELECT value FROM storage_metadata WHERE key = 'head_revision_base'`).Scan(&base); err != nil {
+		return 0, fmt.Errorf("failed to read head revision base: %w", err)
+	}
+	return base, nil
+}
+
+// liftHead raises a MAX(resource_version) reading to the purge floor and the head
+// revision base, so the reported head never drops below a valid resume point.
+func (p *PostgreSQLBackend) liftHead(rv int64) int64 {
+	if floor := p.cachedPurgeFloor.Load(); floor > rv {
+		rv = floor
+	}
+	if p.headRevisionBase > rv {
+		rv = p.headRevisionBase
+	}
+	return rv
 }
 
 // startWALConsumer and runWALConsumer are in wal_consumer.go
@@ -420,9 +470,6 @@ func (p *PostgreSQLBackend) initSchema() error {
 func (p *PostgreSQLBackend) refreshBookmarkLoop() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
-
-	p.refreshCachedRV()
-	p.refreshPurgeFloor()
 
 	for {
 		select {
@@ -440,7 +487,7 @@ func (p *PostgreSQLBackend) refreshCachedRV() {
 	if err != nil {
 		return
 	}
-	p.cachedRV.Store(rv)
+	p.cachedRV.Store(p.liftHead(rv))
 }
 
 func (p *PostgreSQLBackend) cleanupLoop() {
@@ -720,12 +767,13 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 }
 
 // headResourceVersion returns the store head revision as of snapshot: the max
-// resource_version committed in that snapshot, lifted to the purge floor. The
-// floor term recovers the head when the highest-RV row has itself been purged
-// (e.g. the newest object was deleted and its tombstone hard-deleted), where a
-// plain MAX over surviving rows would fall back below the floor and 410 every
-// resume. GREATEST stays within [floor, true head], so a watch resuming from it
-// is at or above the floor yet never skips a committed change.
+// resource_version committed in that snapshot, lifted to the purge floor and the
+// head revision base. The floor term recovers the head when the highest-RV row
+// has itself been purged (e.g. the newest object was deleted and its tombstone
+// hard-deleted), where a plain MAX over surviving rows would fall back below the
+// floor and 410 every resume. The lift stays within [floor, true head], so a
+// watch resuming from it is at or above the floor yet never skips a committed
+// change.
 func (p *PostgreSQLBackend) headResourceVersion(ctx context.Context, snapshot string) (int64, error) {
 	var maxRV int64
 	err := p.db.QueryRowContext(ctx,
@@ -734,10 +782,7 @@ func (p *PostgreSQLBackend) headResourceVersion(ctx context.Context, snapshot st
 	if err != nil {
 		return 0, fmt.Errorf("failed to compute list resourceVersion: %w", err)
 	}
-	if floor := p.cachedPurgeFloor.Load(); floor > maxRV {
-		return floor, nil
-	}
-	return maxRV, nil
+	return p.liftHead(maxRV), nil
 }
 
 func (p *PostgreSQLBackend) buildListQuery(kind, namespace string, opts storage.ListOptions, contTok listContinueToken) (string, []interface{}, error) {
@@ -1377,7 +1422,7 @@ func (w *postgresWatcher) sendBookmark() {
 	if !w.allowBookmarks {
 		return
 	}
-	rv := w.backend.cachedRV.Load()
+	rv := w.backend.liftHead(w.backend.cachedRV.Load())
 	if lastSeen := w.lastSeenRV.Load(); lastSeen > rv {
 		rv = lastSeen
 	}
