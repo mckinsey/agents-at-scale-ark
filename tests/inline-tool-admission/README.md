@@ -15,9 +15,8 @@ Inline authoring admission: authorization and authoritative authorship.
   annotation is replaced by the real authenticated identity, not trusted.
 
 Admission is the same decision on both storage backends — the webhook on etcd
-and the embedded apiserver on postgresql — but the inline e2e job passes no
-`storage-backend` input, so today this suite runs on etcd only and exercises the
-webhook path. Both-backend e2e coverage is still outstanding (task 7.2).
+and the embedded apiserver on postgresql — and the inline e2e job runs this
+suite on both, so each path is exercised by its own leg.
 
 ## Prerequisites
 Labelled `inline-tools: "true"` and excluded from the standard e2e run. Needs a
