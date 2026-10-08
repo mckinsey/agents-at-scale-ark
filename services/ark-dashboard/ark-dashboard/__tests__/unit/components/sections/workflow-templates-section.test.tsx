@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -125,6 +126,17 @@ const templates: WorkflowTemplate[] = [
   },
 ];
 
+const renderSection = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <WorkflowTemplatesSection />
+    </QueryClientProvider>,
+  );
+};
+
 describe('WorkflowTemplatesSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,13 +148,13 @@ describe('WorkflowTemplatesSection', () => {
 
   it('shows Loading... while data is pending', () => {
     mockList.mockReturnValue(new Promise(() => {}));
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
   it('renders the table with the returned templates', async () => {
     mockList.mockResolvedValue(templates);
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     expect(
       await screen.findByTestId('workflow-templates-table'),
     ).toBeInTheDocument();
@@ -152,7 +164,7 @@ describe('WorkflowTemplatesSection', () => {
 
   it('maps title, description and stage count from annotations', async () => {
     mockList.mockResolvedValue(templates);
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     await screen.findByTestId('workflow-templates-table');
     expect(screen.getByText('Data Processing Pipeline')).toBeInTheDocument();
     expect(
@@ -163,7 +175,7 @@ describe('WorkflowTemplatesSection', () => {
 
   it('requests templates for the current namespace, once on mount', async () => {
     mockList.mockResolvedValue(templates);
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     await screen.findByTestId('workflow-templates-table');
     expect(mockList).toHaveBeenCalledTimes(1);
     expect(mockList).toHaveBeenCalledWith('default');
@@ -171,7 +183,7 @@ describe('WorkflowTemplatesSection', () => {
 
   it('filters by search term (case-insensitive)', async () => {
     mockList.mockResolvedValue(templates);
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     await screen.findByTestId('workflow-templates-table');
     await userEvent.type(screen.getByPlaceholderText('Search'), 'COMPOSER');
     expect(screen.getByText('composer-workflow')).toBeInTheDocument();
@@ -180,7 +192,7 @@ describe('WorkflowTemplatesSection', () => {
 
   it('shows the empty state when there are no templates', async () => {
     mockList.mockResolvedValue([]);
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     expect(
       await screen.findByText('No Workflow Templates Yet'),
     ).toBeInTheDocument();
@@ -193,13 +205,13 @@ describe('WorkflowTemplatesSection', () => {
   it('shows the not-installed state when Argo is missing', async () => {
     mockIsArgoNotInstalledError.mockReturnValue(true);
     mockList.mockRejectedValue(new Error('argo missing'));
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     expect(await screen.findByTestId('not-installed')).toBeInTheDocument();
   });
 
   it('shows an error toast for generic load failures', async () => {
     mockList.mockRejectedValue(new Error('boom'));
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(screen.queryByTestId('not-installed')).not.toBeInTheDocument();
   });
@@ -207,7 +219,7 @@ describe('WorkflowTemplatesSection', () => {
   it('hides the create button when the user cannot create', async () => {
     mockAccess.canCreate = false;
     mockList.mockResolvedValue(templates);
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     await screen.findByTestId('workflow-templates-table');
     expect(
       screen.queryByTestId('workflow-create-template'),
@@ -217,7 +229,7 @@ describe('WorkflowTemplatesSection', () => {
   it('disables the create button in read-only mode', async () => {
     mockReadOnly.value = true;
     mockList.mockResolvedValue(templates);
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     await screen.findByTestId('workflow-templates-table');
     expect(screen.getByTestId('workflow-create-template')).toBeDisabled();
   });
@@ -225,7 +237,7 @@ describe('WorkflowTemplatesSection', () => {
   it('forwards name, title and description as query params', async () => {
     const user = userEvent.setup();
     mockList.mockResolvedValue(templates);
-    render(<WorkflowTemplatesSection />);
+    renderSection();
     await screen.findByTestId('workflow-templates-table');
 
     await user.click(screen.getByTestId('workflow-create-template'));

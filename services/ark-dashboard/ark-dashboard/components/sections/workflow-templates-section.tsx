@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -26,6 +26,10 @@ import {
   isArgoNotInstalledError,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
+import {
+  useDeleteWorkflowTemplate,
+  useGetAllWorkflowTemplates,
+} from '@/lib/services/workflow-templates-hooks';
 import { countWorkflowTasks } from '@/lib/utils/workflow';
 import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -48,23 +52,19 @@ export function WorkflowTemplatesSection() {
   const { namespace } = useNamespace();
   const { canCreate } = useWorkflowTemplateAccess();
   const { push } = useNamespacedNavigation();
-  const [argoMissingIn, setArgoMissingIn] = useState<string | null>(null);
   const [showNameDialog, setShowNameDialog] = useState(false);
-  const argoInstalled = argoMissingIn !== namespace;
-
-  const loadItems = useCallback(async () => {
-    try {
-      const templates = await workflowTemplatesService.list(namespace);
-      setArgoMissingIn(null);
-      return templates.map(mapTemplateToItem);
-    } catch (error) {
-      if (isArgoNotInstalledError(error)) {
-        setArgoMissingIn(namespace);
-        return [];
-      }
-      throw error;
-    }
-  }, [namespace]);
+  const {
+    data: templates,
+    isPending,
+    error,
+    refetch,
+    dataUpdatedAt,
+  } = useGetAllWorkflowTemplates();
+  const deleteTemplate = useDeleteWorkflowTemplate();
+  const items = useMemo(
+    () => (templates ?? []).map(mapTemplateToItem),
+    [templates],
+  );
 
   const handleRun = useCallback(
     async (
@@ -109,7 +109,7 @@ export function WorkflowTemplatesSection() {
     );
   };
 
-  if (!argoInstalled) {
+  if (isArgoNotInstalledError(error)) {
     return <WorkflowTemplatesNotInstalled />;
   }
 
@@ -142,11 +142,15 @@ export function WorkflowTemplatesSection() {
             <p>Get started by creating your first workflow template.</p>
           </>
         }
-        loadItems={loadItems}
-        deleteItem={id => workflowTemplatesService.delete(namespace, id)}
-        renderTable={(templates, onDelete) => (
+        items={items}
+        loading={isPending}
+        error={error}
+        dataUpdatedAt={dataUpdatedAt}
+        onDelete={id => deleteTemplate.mutate(id)}
+        onReload={() => refetch()}
+        renderTable={(rows, onDelete) => (
           <WorkflowTemplatesTable
-            templates={templates}
+            templates={rows}
             onDelete={onDelete}
             onRun={handleRun}
           />

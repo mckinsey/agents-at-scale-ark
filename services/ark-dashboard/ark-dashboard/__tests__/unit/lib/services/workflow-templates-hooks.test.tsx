@@ -19,6 +19,7 @@ vi.mock('@/lib/services/workflow-templates', () => ({
   workflowTemplatesService: {
     list: vi.fn(),
   },
+  isArgoNotInstalledError: vi.fn(() => false),
 }));
 
 const createWrapper = () => {
@@ -26,6 +27,7 @@ const createWrapper = () => {
     defaultOptions: {
       queries: {
         retry: false,
+        retryDelay: 0,
       },
     },
   });

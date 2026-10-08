@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactNode, useEffect, useMemo } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -164,8 +157,6 @@ export function ResourceListSection<T extends ResourceListItem>({
   onReload,
   renderTable,
 }: ResourceListSectionProps<T>) {
-  const [items, setItems] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
   const showLoading = useDelayedLoading(loading);
 
@@ -203,6 +194,7 @@ export function ResourceListSection<T extends ResourceListItem>({
         item.name.toLowerCase().includes(q) ||
         (item.description?.toLowerCase().includes(q) ?? false);
       const matchesStatus =
+        !showStatusFilter ||
         filters.status === 'All' ||
         (item.available ?? 'Unknown') === filters.status;
       const matchesOrigin =
@@ -211,7 +203,14 @@ export function ResourceListSection<T extends ResourceListItem>({
         originFilter.getValue(item) === originValue;
       return matchesSearch && matchesStatus && matchesOrigin;
     });
-  }, [items, filters.q, filters.status, originFilter, originValue]);
+  }, [
+    items,
+    filters.q,
+    filters.status,
+    originFilter,
+    originValue,
+    showStatusFilter,
+  ]);
 
   // loadFailed: the first load never succeeded, so there is nothing to show —
   // the error replaces the list. refreshFailed: a later reload failed but we

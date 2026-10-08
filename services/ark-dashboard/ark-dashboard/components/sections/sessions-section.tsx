@@ -49,7 +49,10 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
-import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
+import {
+  ARGO_BASE_URL,
+  ARGO_WORKFLOWS_DOCS_URL,
+} from '@/lib/constants/workflows';
 import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   mapArgoWorkflowToSession,
@@ -467,7 +470,7 @@ function WorkflowStepDetail({
           <WorkflowNodeLogs
             target={logTarget}
             isRunning={status === 'running' || status === 'pending'}
-            argoUrl={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+            argoUrl={`${ARGO_BASE_URL}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
           />
         </LogEntryBlock>
       )}
@@ -1236,33 +1239,6 @@ export function SessionsSection({
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="flex w-full flex-col gap-2 lg:w-[197px]">
-            <span
-              id="workflow-sort-label"
-              className="label-regular-primary text-fg-secondary">
-              Sort
-            </span>
-            <Select
-              items={sortOrderItems}
-              value={sortOrder}
-              onValueChange={value =>
-                setUrlState({ sort: parseSortOrder(String(value)) })
-              }>
-              <SelectTrigger
-                aria-labelledby="workflow-sort-label"
-                className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sortOrderItems.map(item => (
-                  <SelectItem key={item.value} value={item.value}>
-                    <SelectItemText>{item.label}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="flex w-full flex-col gap-2 lg:w-[197px]">
