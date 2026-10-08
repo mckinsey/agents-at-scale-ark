@@ -165,3 +165,60 @@ func TestWatch_InitialStateSkipsTombstones_Integration(t *testing.T) {
 		}
 	})
 }
+
+// The initial state of a large kind fills outCh, so the initial-events-end bookmark
+// that follows the relist must wait for a slow client instead of being dropped.
+func TestWatch_InitialEventsEndSurvivesSlowConsumer_Integration(t *testing.T) {
+	cfg := testConfig(t)
+	backend, err := New(cfg, &bookmarkIntegrationConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	testNS := "integration-test"
+	testKind := "SlowConsumerResource"
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", testKind)
+
+	const objects = 300
+	for i := 0; i < objects; i++ {
+		obj := newInitialStateObject(testKind, testNS, "slow-"+strconv.Itoa(i))
+		if err := backend.Create(ctx, testKind, testNS, obj.Metadata.Name, obj); err != nil {
+			t.Fatalf("Create %d failed: %v", i, err)
+		}
+	}
+
+	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{AllowWatchBookmarks: true, SendInitialEvents: true})
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+	defer w.Stop()
+
+	added := 0
+	deadline := time.After(20 * time.Second)
+	for {
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				t.Fatalf("watch closed after %d ADDED without the initial-events-end bookmark", added)
+			}
+			switch ev.Type {
+			case watch.Added:
+				added++
+				time.Sleep(2 * time.Millisecond)
+			case watch.Bookmark:
+				if v, found := bookmarkAnnotation(t, ev); found && v == "true" {
+					if added != objects {
+						t.Errorf("initial-events-end after %d ADDED, want %d", added, objects)
+					}
+					return
+				}
+				t.Fatalf("plain bookmark after %d ADDED; the initial-events-end bookmark was dropped", added)
+			}
+		case <-deadline:
+			t.Fatalf("no initial-events-end bookmark within 20s after %d ADDED", added)
+		}
+	}
+}

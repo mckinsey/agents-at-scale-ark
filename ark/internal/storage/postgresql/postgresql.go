@@ -191,8 +191,8 @@ type PostgreSQLBackend struct {
 	// cachedPurgeFloor mirrors the persisted watch_purge_floor so Watch() can
 	// reject too-old resume points without a DB round-trip.
 	cachedPurgeFloor atomic.Int64
-	// headRevisionBase is the lowest head revision the store ever reports, so an
-	// empty store still hands out a resourceVersion (see bootstrapHeadRevision).
+	// headRevisionBase is the lowest head revision the store reports once the
+	// schema is initialized, so an empty store still hands out a resourceVersion.
 	headRevisionBase int64
 	walOnce          sync.Once
 	notifyOnce       sync.Once
@@ -417,41 +417,32 @@ func (p *PostgreSQLBackend) initSchema() error {
 	if _, err := tx.Exec(schema); err != nil {
 		return err
 	}
-	base, err := bootstrapHeadRevision(tx)
-	if err != nil {
-		return err
+	if _, err := tx.Exec(bootstrapHeadRevisionQuery, headRevisionBase); err != nil {
+		return fmt.Errorf("failed to bootstrap head revision: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	p.headRevisionBase = base
+	p.headRevisionBase = headRevisionBase
 	return nil
 }
 
-// bootstrapHeadRevisionQuery records the head revision base once per database and,
-// only on that first insert, burns one value of the resource_version sequence. A
-// fresh store has no rows, so without a base its LIST carries no resourceVersion and
-// a WatchList never gets its initial-events-end bookmark (#3575). Reporting 1 is
-// safe only if no write can still be assigned rv 1: a client resuming from 1 would
-// skip it. The nextval guarantees every future write lands above the base.
+// headRevisionBase is the head revision an empty store reports. A fresh store has
+// no rows, so without it the LIST carries no resourceVersion and a WatchList never
+// gets its initial-events-end bookmark (#3575).
+const headRevisionBase int64 = 1
+
+// bootstrapHeadRevisionQuery records the base once per database and, only on that
+// first insert, burns one value of the resource_version sequence so every write
+// lands above the base. Otherwise the first write would get rv 1 and reach a client
+// resuming from the base as MODIFIED instead of ADDED.
 const bootstrapHeadRevisionQuery = `
 	WITH inserted AS (
-		INSERT INTO storage_metadata (key, value) VALUES ('head_revision_base', 1)
+		INSERT INTO storage_metadata (key, value) VALUES ('head_revision_base', $1)
 		ON CONFLICT (key) DO NOTHING
 		RETURNING value
 	)
 	SELECT nextval('resources_resource_version_seq') FROM inserted`
-
-func bootstrapHeadRevision(tx *sql.Tx) (int64, error) {
-	if _, err := tx.Exec(bootstrapHeadRevisionQuery); err != nil {
-		return 0, fmt.Errorf("failed to bootstrap head revision: %w", err)
-	}
-	var base int64
-	if err := tx.QueryRow(`SELECT value FROM storage_metadata WHERE key = 'head_revision_base'`).Scan(&base); err != nil {
-		return 0, fmt.Errorf("failed to read head revision base: %w", err)
-	}
-	return base, nil
-}
 
 // liftHead raises a MAX(resource_version) reading to the purge floor and the head
 // revision base, so the reported head never drops below a valid resume point.
@@ -1394,6 +1385,13 @@ func (w *postgresWatcher) recoverIfBehind() {
 // seenRVs and deep-copied so the broadcaster's shared object is never mutated.
 // Returns false if the watcher is shutting down.
 func (w *postgresWatcher) forwardRow(row *changeRow) bool {
+	// Until a relist succeeds the client has no consistent starting point. A row
+	// forwarded now would advance lastSeenRV, and the recovery relist reads only a
+	// lookback window below it, so older state would never be sent. Every dropped
+	// row is committed, so the relist that eventually succeeds reads it.
+	if !w.initialSynced {
+		return true
+	}
 	// The shared broadcaster fans out its whole relist window to every subscriber;
 	// a resuming watcher drops rows below its resume floor rather than re-emit state
 	// the client already has. The floor sits a lookback window below startRV (not at
@@ -1433,15 +1431,29 @@ func (w *postgresWatcher) sendBookmark() {
 	if obj == nil {
 		return
 	}
+	initialEventsEnd := false
 	if accessor, aErr := meta.Accessor(obj); aErr == nil {
 		accessor.SetResourceVersion(fmt.Sprintf("%d", rv))
 		if w.sendInitialEvents && w.initialSynced && !w.initialEventsBookmarkSent {
 			accessor.SetAnnotations(map[string]string{metav1.InitialEventsAnnotationKey: "true"})
-			w.initialEventsBookmarkSent = true
+			initialEventsEnd = true
 		}
 	}
+	ev := watch.Event{Type: watch.Bookmark, Object: obj}
+	// Periodic bookmarks are best effort, but the client cannot finish its initial
+	// sync without the initial-events-end one, and outCh is often still full of the
+	// initial state right after the relist. Wait for room instead of dropping it.
+	if initialEventsEnd {
+		select {
+		case w.outCh <- ev:
+			w.initialEventsBookmarkSent = true
+		case <-w.done:
+		case <-w.ctx.Done():
+		}
+		return
+	}
 	select {
-	case w.outCh <- watch.Event{Type: watch.Bookmark, Object: obj}:
+	case w.outCh <- ev:
 	default:
 	}
 }
@@ -1564,7 +1576,9 @@ func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, sp
 	// client can act on. Marking it seen keeps the broadcaster fan-out and later
 	// lookback relists from emitting it after the initial-events-end bookmark. A
 	// delete that commits after this relist is not visible here and still flows.
-	if deletedAt.Valid && w.startRV == 0 && !w.initialSynced {
+	// An object a failed earlier relist already emitted gets its DELETED; seenRVs
+	// is reliable here because pruneSeen runs only after a successful relist.
+	if deletedAt.Valid && w.startRV == 0 && !w.initialSynced && !w.hasSeenUID(uid) {
 		w.markSeen(uid, rv)
 		w.advanceRV(rv)
 		return true
