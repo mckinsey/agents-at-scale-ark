@@ -16,8 +16,10 @@ export class APIError extends Error {
 const ADMISSION_WEBHOOK_PREFIX =
   /^admission webhook "[^"]+" denied the request:\s*/;
 
-function stripAdmissionWebhookPrefix(message: string): string {
-  return message.replace(ADMISSION_WEBHOOK_PREFIX, '');
+function formatErrorDetail(detail: unknown): string {
+  return typeof detail === 'string'
+    ? detail.replace(ADMISSION_WEBHOOK_PREFIX, '')
+    : JSON.stringify(detail);
 }
 
 interface RequestOptions extends RequestInit {
@@ -80,10 +82,7 @@ class APIClient {
   private extractErrorMessage(errorData: unknown): string {
     if (typeof errorData === 'object' && errorData !== null) {
       if ('detail' in errorData && errorData.detail) {
-        const { detail } = errorData;
-        return typeof detail === 'string'
-          ? stripAdmissionWebhookPrefix(detail)
-          : JSON.stringify(detail);
+        return formatErrorDetail(errorData.detail);
       }
       if ('message' in errorData && errorData.message) {
         return String(errorData.message);
