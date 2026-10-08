@@ -61,6 +61,7 @@ func TestSendBookmark_WatchListOnEmptyStoreGetsInitialEventsEnd(t *testing.T) {
 	w := newBookmarkWatcher(storage.WatchOptions{SendInitialEvents: true, AllowWatchBookmarks: true})
 	w.backend.headRevisionBase = 1
 	w.backend.cachedRV.Store(0)
+	w.initialHeadRV = w.backend.liftHead(w.backend.cachedRV.Load())
 
 	w.sendBookmark()
 
