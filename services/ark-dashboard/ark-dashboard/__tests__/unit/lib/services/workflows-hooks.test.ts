@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { APIError } from '@/lib/api/client';
 import { type WorkflowPage, workflowsService } from '@/lib/services/workflows';
@@ -410,6 +410,9 @@ function runningWorkflow(
 describe('useWorkflows lifecycle updates', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
     vi.useRealTimers();
   });
 
@@ -556,7 +559,6 @@ describe('useWorkflows lifecycle updates', () => {
       await vi.advanceTimersByTimeAsync(4000);
     });
     expect(workflowsService.get).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
   });
 
   it('should not insert a workflow that is not on the current page when patching in place', async () => {
@@ -601,7 +603,6 @@ describe('useWorkflows lifecycle updates', () => {
     );
     expect(result.current.workflows).toEqual([shuttingDown]);
     consoleError.mockRestore();
-    vi.useRealTimers();
   });
 
   it('should poll a watched workflow until it finishes', async () => {
@@ -630,7 +631,6 @@ describe('useWorkflows lifecycle updates', () => {
       await vi.advanceTimersByTimeAsync(10000);
     });
     expect(workflowsService.get).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
   });
 
   it('should not poll a watched workflow that is not on the current page', async () => {
@@ -649,7 +649,6 @@ describe('useWorkflows lifecycle updates', () => {
     });
 
     expect(workflowsService.get).not.toHaveBeenCalled();
-    vi.useRealTimers();
   });
 
   it('should not poll when no shutdown is in progress', async () => {
@@ -667,7 +666,6 @@ describe('useWorkflows lifecycle updates', () => {
     });
 
     expect(workflowsService.get).not.toHaveBeenCalled();
-    vi.useRealTimers();
   });
 });
 

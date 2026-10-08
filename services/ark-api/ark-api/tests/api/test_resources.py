@@ -3171,6 +3171,20 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_every_action_returns_404_for_missing_workflow(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, {})
+        resource.get = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
+
+        for action in ("suspend", "resume", "stop", "terminate", "retry", "resubmit"):
+            with self.subTest(action=action):
+                response = self.client.put(f"{self.BASE}/{action}")
+                self.assertEqual(response.status_code, 404)
+        resource.patch.assert_not_called()
+        resource.replace.assert_not_called()
+        resource.create.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
     def test_resubmit_creates_new_workflow(self, mock_dynamic_client_cls, mock_api_client):
         existing = {
             "apiVersion": "argoproj.io/v1alpha1",
