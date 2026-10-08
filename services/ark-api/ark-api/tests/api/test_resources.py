@@ -2941,6 +2941,29 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resume_rejects_completed_workflow(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(
+            mock_dynamic_client_cls, mock_api_client,
+            {"spec": {"suspend": True}, "status": {"phase": "Failed", "nodes": {}}},
+        )
+        response = self.client.put(f"{self.BASE}/resume")
+        self.assertEqual(response.status_code, 409)
+        resource.replace.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resume_rejects_workflow_that_is_not_suspended(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(
+            mock_dynamic_client_cls, mock_api_client,
+            {"spec": {}, "status": {"phase": "Running", "nodes": {}}},
+        )
+        response = self.client.put(f"{self.BASE}/resume")
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("not suspended", response.json()["detail"])
+        resource.replace.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
     def test_resume_rejects_unresolvable_suspend_gate(self, mock_dynamic_client_cls, mock_api_client):
         existing = {
             "spec": {},

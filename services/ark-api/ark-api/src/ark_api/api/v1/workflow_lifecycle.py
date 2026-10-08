@@ -206,13 +206,31 @@ def formulate_retry_workflow(workflow: dict) -> tuple[dict, list[str]]:
     return new_workflow, pods_to_delete
 
 
+def _has_active_suspend_node(status: dict) -> bool:
+    return any(
+        node.get("type") == "Suspend" and node.get("phase") == "Running"
+        for node in (status.get("nodes") or {}).values()
+    )
+
+
+def _validate_resumable(workflow: dict) -> None:
+    status = workflow.get("status") or {}
+    phase = status.get("phase")
+    if phase in COMPLETED_PHASES:
+        raise LifecyclePreconditionError(f"Cannot resume a completed workflow (phase {phase})")
+    if not (workflow.get("spec") or {}).get("suspend") and not _has_active_suspend_node(status):
+        raise LifecyclePreconditionError("Workflow is not suspended")
+
+
 def formulate_resume_workflow(workflow: dict) -> dict:
     """Clear a whole-workflow suspend and resolve active suspend-node gates.
 
     Mirrors ``argo resume`` without a node selector: removes ``spec.suspend``
     and marks every active Suspend node Succeeded, resolving supplied output
-    parameter defaults. Written back with a full replace.
+    parameter defaults. Written back with a full replace. Rejects workflows
+    that have finished or are neither suspended nor waiting at a suspend node.
     """
+    _validate_resumable(workflow)
     new_workflow = deepcopy(workflow)
     spec = new_workflow.setdefault("spec", {})
     spec.pop("suspend", None)

@@ -272,6 +272,18 @@ class TestRetryWorkflow(unittest.TestCase):
 
 
 class TestResumeWorkflow(unittest.TestCase):
+    def test_rejects_completed_workflow(self):
+        wf = {"spec": {"suspend": True}, "status": {"phase": "Succeeded", "nodes": {}}}
+        with self.assertRaises(LifecyclePreconditionError):
+            formulate_resume_workflow(wf)
+
+    def test_rejects_workflow_that_is_not_suspended(self):
+        wf = {"spec": {}, "status": {"phase": "Running", "nodes": {
+            "gate": {"id": "gate", "type": "Suspend", "phase": "Succeeded"},
+        }}}
+        with self.assertRaises(LifecyclePreconditionError):
+            formulate_resume_workflow(wf)
+
     def test_clears_spec_suspend(self):
         wf = {"spec": {"suspend": True}, "status": {"nodes": {}}}
         new_wf = formulate_resume_workflow(wf)

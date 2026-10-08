@@ -1440,12 +1440,18 @@ async def _patch_workflow_spec(
     workflow_name: str,
     namespace: str,
     patch_spec: dict,
+    validate,
     impersonation: Optional[ImpersonationConfig],
 ) -> Response:
-    """Apply a merge patch to a Workflow's spec (used by suspend/stop/terminate)."""
+    """Validate a Workflow's state, then apply a merge patch to its spec (used by suspend/stop/terminate)."""
     async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
         workflow_resource = await _get_workflow_resource(dynamic_client)
+        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
+        try:
+            validate(existing.to_dict())
+        except LifecyclePreconditionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
         patched = await workflow_resource.patch(
             name=workflow_name,
             namespace=namespace,
@@ -1559,21 +1565,9 @@ async def suspend_workflow(
     Examples:
         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/suspend
     """
-    async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
-        workflow_resource = await _get_workflow_resource(dynamic_client)
-        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
-        try:
-            validate_suspendable(existing.to_dict())
-        except LifecyclePreconditionError as e:
-            raise HTTPException(status_code=409, detail=str(e)) from e
-        patched = await workflow_resource.patch(
-            name=workflow_name,
-            namespace=namespace,
-            body={"spec": {"suspend": True}},
-            content_type=MERGE_PATCH_CONTENT_TYPE,
-        )
-        return _create_resource_response(patched.to_dict(), request)
+    return await _patch_workflow_spec(
+        request, workflow_name, namespace, {"suspend": True}, validate_suspendable, impersonation=impersonation
+    )
 
 
 @router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resume")
@@ -1613,21 +1607,9 @@ async def stop_workflow(
     Examples:
         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/stop
     """
-    async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
-        workflow_resource = await _get_workflow_resource(dynamic_client)
-        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
-        try:
-            validate_stoppable(existing.to_dict())
-        except LifecyclePreconditionError as e:
-            raise HTTPException(status_code=409, detail=str(e)) from e
-        patched = await workflow_resource.patch(
-            name=workflow_name,
-            namespace=namespace,
-            body={"spec": {"shutdown": "Stop"}},
-            content_type=MERGE_PATCH_CONTENT_TYPE,
-        )
-        return _create_resource_response(patched.to_dict(), request)
+    return await _patch_workflow_spec(
+        request, workflow_name, namespace, {"shutdown": "Stop"}, validate_stoppable, impersonation=impersonation
+    )
 
 
 @router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/terminate")
@@ -1646,21 +1628,9 @@ async def terminate_workflow(
     Examples:
         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/terminate
     """
-    async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
-        workflow_resource = await _get_workflow_resource(dynamic_client)
-        existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
-        try:
-            validate_stoppable(existing.to_dict())
-        except LifecyclePreconditionError as e:
-            raise HTTPException(status_code=409, detail=str(e)) from e
-        patched = await workflow_resource.patch(
-            name=workflow_name,
-            namespace=namespace,
-            body={"spec": {"shutdown": "Terminate"}},
-            content_type=MERGE_PATCH_CONTENT_TYPE,
-        )
-        return _create_resource_response(patched.to_dict(), request)
+    return await _patch_workflow_spec(
+        request, workflow_name, namespace, {"shutdown": "Terminate"}, validate_stoppable, impersonation=impersonation
+    )
 
 
 @router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/retry")
