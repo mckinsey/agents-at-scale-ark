@@ -311,7 +311,7 @@ Calls reach the runner through the activator, which scales it up on the first ca
 
 ### Invoking an inline tool
 
-Attach an inline tool with `type: inline` in an agent's `spec.tools`, like any other tool. The default execution engine resolves `status.resolvedAddress` and calls the tool over MCP Streamable HTTP under its own connection identity, so an inline tool never shares a session with an [MCPServer](/reference/resources/mcpserver) of the same name. A tool whose `Available` condition is not `True` for the current `metadata.generation` is treated as unavailable rather than called. Invocation needs no author grant: `inline-tool-author-role` governs writing source, not running it. Agents that run on an external execution engine cannot call inline tools yet.
+Attach an inline tool with `type: inline` in an agent's `spec.tools`, like any other tool. The default execution engine resolves `status.resolvedAddress` and calls the tool over MCP Streamable HTTP under its own connection identity, so an inline tool never shares a session with an [MCPServer](/reference/resources/mcpserver) of the same name. A tool whose `Available` condition is not `True` for the current `metadata.generation` is treated as unavailable rather than called. Invocation needs no author grant: `inline-tool-author-role` governs writing source, not running it, and calls still pass the engine's existing resource, allowlist and approval checks. Executors built on the Ark SDK receive inline tools as ordinary MCP connections — see [Building execution engines](/developer-guide/building-execution-engines).
 
 ### Runner process cleanup
 
@@ -360,6 +360,31 @@ On each admitted inline spec write, admission stamps:
 | `ark.mckinsey.com/inline-authored-at` | RFC 3339 UTC timestamp of the write. |
 
 Both are overwritten by admission, so a requester cannot set them, and both survive metadata-only updates. They are the durable authorship record independent of cluster audit logging.
+
+The controller also emits a Normal `InlineSourceChanged` event on the Tool for each unreconciled spec change, carrying the SHA-256 of the source and the stamped author. Audit logging can be disabled on the PostgreSQL backend, so the annotations and this event are the records that always exist:
+
+```bash
+kubectl get events --field-selector involvedObject.name=word-count,reason=InlineSourceChanged
+```
+
+### Troubleshooting
+
+| Symptom | Cause |
+| --- | --- |
+| Write denied with a permission message | `inlineTools.enabled` is false, or the author holds no `use` on `inlinetools.ark.mckinsey.com` in that namespace. Both are required. |
+| `Available: False`, `RuntimeNotInstalled` | The feature is disabled. Authoring stays readable; nothing is provisioned. |
+| `Available: False`, `ActivatorUnavailable` | The activator Deployment is not ready, or `inlineTools.activator.enabled` is false. |
+| `Available: False`, `ConflictingNetworkPolicy` | Another policy selects the runner pods and widens the boundary. The message names it; narrow or delete it. |
+| `Available: False`, `ProvisioningFailed` | A child write or a required Pod/ReplicaSet/policy read failed. `kubectl describe tool <name>` carries the error. |
+| First call is slow, later calls are not | Cold start: the runner scales from zero, within the 60-second activation budget. It returns to zero 60 seconds after the last call. |
+| Tool error naming a missing package, or a connection failure | Runners are standard-library only with all egress denied. Move the tool to an [MCPServer](/reference/resources/mcpserver). |
+| Tool error with truncated stderr | Errors carry the last 4 KiB of stderr; stdout is capped at 256 KiB. Print less, or summarise in the script. |
+
+A runner logs nothing but its own startup line, so a failing call leaves no trace in `kubectl logs`. The script's stderr is returned to the caller in the tool error instead. A runner that never gets that far — a revision mismatch or an image it cannot pull — shows the reason in its pod events:
+
+```bash
+kubectl describe pod -l ark.mckinsey.com/inline-tool=word-count
+```
 
 ## Referencing tools from an agent
 
