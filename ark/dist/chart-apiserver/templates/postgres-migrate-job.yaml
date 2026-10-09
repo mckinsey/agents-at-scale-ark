@@ -1,12 +1,13 @@
+{{- if .Values.postgresql.migration.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ark-apiserver-postgres-cleanup
+  name: ark-apiserver-postgres-migrate
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "ark-apiserver.labels" . | nindent 4 }}
   annotations:
-    helm.sh/hook: post-delete
+    helm.sh/hook: pre-install,pre-upgrade
     helm.sh/hook-weight: "0"
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
@@ -24,13 +25,12 @@ spec:
         fsGroup: {{ .Values.containerSecurityContext.runAsGroup | default .Values.postgresql.sslFsGroup }}
         {{- end }}
       containers:
-        - name: postgres-cleanup
+        - name: postgres-migrate
           image: {{ include "ark-apiserver.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - --role=postgres-cleanup
+            - --role=postgres-migrate
           env:
-            {{- /* cleanup drops the publication (DDL/ownership), so it uses the privileged migration role */}}
             {{- include "ark-apiserver.postgresMigrateEnv" . | nindent 12 }}
           {{- if .Values.postgresql.sslSecretName }}
           volumeMounts:
@@ -47,3 +47,4 @@ spec:
             secretName: {{ .Values.postgresql.sslSecretName }}
             defaultMode: 0640
       {{- end }}
+{{- end }}

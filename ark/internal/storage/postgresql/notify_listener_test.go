@@ -116,7 +116,7 @@ func TestCreate_EmitsNotifyInWriteStatement(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("INSERT INTO resources.*pg_notify").WithArgs(
-		"Agent", "ns", "a1", "u1", "{}", "{}", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), notifyChannel,
+		"Agent", "ns", "a1", "u1", "{}", "{}", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), notifyChannel, sqlmock.AnyArg(),
 	).WillReturnRows(sqlmock.NewRows([]string{"resource_version", "generation", "created_at", "pg_notify"}).AddRow(int64(1), int64(1), time.Now(), ""))
 
 	p := &PostgreSQLBackend{db: db, converter: stubConverter{encoded: `{"metadata":{"uid":"u1"},"spec":{},"status":{}}`}}

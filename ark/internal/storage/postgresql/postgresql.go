@@ -31,6 +31,9 @@ import (
 
 const jsonNull = "null"
 
+// defaultSSLMode is the libpq sslmode applied when a Config leaves SSLMode unset.
+const defaultSSLMode = "require"
+
 // relistLookbackRVs is how far below the relist cursor a re-query reaches to catch
 // rows whose txn committed out of resource_version order (BIGSERIAL assigns rv at
 // statement time, visibility follows commit time); seenRVs dedups the overlap.
@@ -253,7 +256,7 @@ func buildConnString(cfg Config) string {
 
 func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error) {
 	if cfg.SSLMode == "" {
-		cfg.SSLMode = "require"
+		cfg.SSLMode = defaultSSLMode
 	}
 	if cfg.Port == 0 {
 		cfg.Port = 5432
@@ -299,10 +302,10 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 		cancel:       cancel,
 	}
 
-	if err := backend.initSchema(); err != nil {
+	if err := assertSchemaCompatible(ctx, db); err != nil {
 		_ = db.Close()
 		cancel()
-		return nil, fmt.Errorf("failed to initialize schema: %w", err)
+		return nil, fmt.Errorf("schema compatibility check failed: %w", err)
 	}
 
 	setDBPoolStats(db.Stats)
@@ -341,78 +344,6 @@ func (p *PostgreSQLBackend) warmPool() {
 		}()
 	}
 	wg.Wait()
-}
-
-// schemaInitLockKey serializes concurrent schema initialization. Postgres DDL is
-// not atomic against a simultaneous creator (IF NOT EXISTS only helps if the object
-// already exists at check time), so multiple replicas starting against a fresh
-// database race on the resources row-type. The advisory lock makes them serialize.
-// The value is an arbitrary application-chosen constant: pg_advisory_xact_lock keys
-// are raw int64s with no registry, so it only has to be stable and not collide with
-// other advisory-lock users of the same database.
-const schemaInitLockKey int64 = 8626421043
-
-func (p *PostgreSQLBackend) initSchema() error {
-	schema := `
-	CREATE TABLE IF NOT EXISTS resources (
-		id SERIAL PRIMARY KEY,
-		kind TEXT NOT NULL,
-		namespace TEXT NOT NULL,
-		name TEXT NOT NULL,
-		resource_version BIGSERIAL,
-		generation BIGINT DEFAULT 1,
-		uid TEXT NOT NULL,
-		spec JSONB NOT NULL DEFAULT '{}',
-		status JSONB DEFAULT '{}',
-		labels JSONB DEFAULT '{}',
-		annotations JSONB DEFAULT '{}',
-		finalizers JSONB DEFAULT '[]',
-		created_at TIMESTAMPTZ DEFAULT NOW(),
-		updated_at TIMESTAMPTZ DEFAULT NOW(),
-		deleted_at TIMESTAMPTZ
-	);
-	ALTER TABLE resources ADD COLUMN IF NOT EXISTS finalizers JSONB DEFAULT '[]';
-	ALTER TABLE resources ADD COLUMN IF NOT EXISTS owner_references JSONB DEFAULT '[]';
-	ALTER TABLE resources ADD COLUMN IF NOT EXISTS deletion_timestamp TIMESTAMPTZ;
-
-	ALTER TABLE resources DROP CONSTRAINT IF EXISTS resources_kind_namespace_name_key;
-	CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_unique_active ON resources(kind, namespace, name) WHERE deleted_at IS NULL;
-
-	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace ON resources(kind, namespace);
-	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace_name ON resources(kind, namespace, name);
-	CREATE INDEX IF NOT EXISTS idx_resources_labels ON resources USING GIN(labels);
-	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version);
-	CREATE INDEX IF NOT EXISTS idx_resources_deleted ON resources(deleted_at) WHERE deleted_at IS NOT NULL;
-	CREATE INDEX IF NOT EXISTS idx_resources_kind_rv ON resources(kind, resource_version);
-	CREATE INDEX IF NOT EXISTS idx_resources_rv ON resources(resource_version);
-
-	CREATE TABLE IF NOT EXISTS storage_metadata (
-		key TEXT PRIMARY KEY,
-		value BIGINT NOT NULL
-	);
-
-	DROP TRIGGER IF EXISTS resource_change_trigger ON resources;
-	DROP FUNCTION IF EXISTS notify_resource_change();
-
-	DO $$ BEGIN
-		IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'ark_cdc') THEN
-			CREATE PUBLICATION ark_cdc FOR TABLE resources;
-		END IF;
-	END $$;
-	`
-	tx, err := p.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.Exec("SELECT pg_advisory_xact_lock($1)", schemaInitLockKey); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(schema); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 // startWALConsumer and runWALConsumer are in wal_consumer.go
@@ -582,12 +513,12 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 	var createdAt time.Time
 	err = p.db.QueryRowContext(ctx, `
 		WITH ins AS (
-			INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references)
-			VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb)
+			INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, api_version)
+			VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $12)
 			RETURNING resource_version, generation, created_at
 		)
 		SELECT resource_version, generation, created_at, pg_notify($11, $1) FROM ins
-	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, notifyChannel).Scan(&rv, &generation, &createdAt, new(sql.NullString))
+	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, notifyChannel, p.converter.APIVersion(kind)).Scan(&rv, &generation, &createdAt, new(sql.NullString))
 	if err != nil {
 		if pgErr, ok := err.(*pq.Error); ok && pgErr.Code == "23505" {
 			return storage.ErrAlreadyExists
