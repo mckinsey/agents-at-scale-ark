@@ -122,6 +122,25 @@ Reading logs through the pod routes now needs `get` on `pods` as well as on `pod
 - Read the logs of other pods with `kubectl logs` or the Kubernetes API.
 - With impersonation enabled, add `get` on `pods` to user roles that only grant `pods/log`.
 
+### Generic Resource Writes Run as the Signed-In User
+
+With `AUTH_MODE` set to `sso` or `hybrid`, a signed-in user's write through the generic resources API now has to reach Kubernetes as that user. This covers creating, updating and deleting a `WorkflowTemplate`, creating a `Workflow`, and deleting an `ExecutionEngine`. When user impersonation is disabled, `ark-api` refuses these writes with `403`. They are never retried as the service account, even with impersonation fallback enabled.
+
+Nothing changes in `open` mode, for requests authenticated with an API key, or for reads. The dashboard is not affected in practice: in `sso` mode it already needs impersonation to evaluate the user's permissions.
+
+**Migration:**
+- For automation, use an [API key](/developer-guide/authentication#api-key-authentication). API key requests run as the `ark-api` service account.
+- To let signed-in users author and run workflows, enable [user impersonation](/developer-guide/authentication#user-impersonation). Users then need RBAC for everything they do, reads included:
+
+| To | Grant |
+|----|-------|
+| Open the dashboard | `list` on `agents`, `models`, `queries`, `teams` and `tools` in `ark.mckinsey.com` |
+| View templates and runs | `get`, `list`, `watch` on `workflowtemplates` and `workflows` in `argoproj.io` |
+| Read logs | `get`, `list` on `pods` and `get` on `pods/log` |
+| Create, update or delete templates | `create`, `update`, `delete` on `workflowtemplates` |
+| Run a workflow | `create` on `workflows` |
+| Delete an execution engine | `delete` on `executionengines` in `ark.mckinsey.com` |
+
 ## v0.1.70
 
 ### Broker Purge Endpoints Removed
