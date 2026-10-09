@@ -3,8 +3,8 @@ import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
 import { apiUrl } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
-import { generateUUID } from '@/lib/utils/uuid';
 import { a2aTasksService } from '@/lib/services/a2a-tasks';
+import { generateUUID } from '@/lib/utils/uuid';
 
 interface AxiosError extends Error {
   response?: {
@@ -206,6 +206,29 @@ export type ChatMessage = {
   timestamp: Date;
   queryId?: string;
 };
+
+export class BrokerUnavailableError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string,
+    public fallback?: string,
+    public queryName?: string,
+  ) {
+    super(message);
+    this.name = 'BrokerUnavailableError';
+  }
+}
+
+export function isBrokerUnavailableError(
+  err: unknown,
+): err is BrokerUnavailableError {
+  return (
+    err instanceof BrokerUnavailableError &&
+    err.status === 503 &&
+    (err.code === undefined || err.code === 'broker_unavailable')
+  );
+}
 
 export type ChatSession = {
   id: string;
@@ -473,7 +496,7 @@ export const chatService = {
         continue;
       }
       if (hasMemoryCondition(status)) {
-        return {settled: true, notice: extractMemoryNotice(status)};
+        return { settled: true, notice: extractMemoryNotice(status) };
       }
     }
     return MEMORY_LOOKUP_UNSETTLED;
@@ -590,7 +613,29 @@ export const chatService = {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to connect to stream: ${response.statusText}`);
+        let code: string | undefined;
+        let fallback: string | undefined;
+        try {
+          const body = await response.json();
+          if (body && typeof body === 'object') {
+            if (typeof body.code === 'string') code = body.code;
+            if (typeof body.fallback === 'string') fallback = body.fallback;
+          }
+        } catch {}
+        const message = `Failed to connect to stream: ${response.statusText}`;
+        if (
+          response.status === 503 &&
+          (code === undefined || code === 'broker_unavailable')
+        ) {
+          throw new BrokerUnavailableError(
+            message,
+            response.status,
+            code,
+            fallback,
+            queryName,
+          );
+        }
+        throw new Error(message);
       }
 
       const reader = response.body?.getReader();
