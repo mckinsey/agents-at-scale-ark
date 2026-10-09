@@ -19,7 +19,6 @@ vi.mock('@/lib/services/workflow-templates', () => ({
   workflowTemplatesService: {
     list: vi.fn(),
   },
-  isArgoNotInstalledError: vi.fn(() => false),
 }));
 
 const createWrapper = () => {

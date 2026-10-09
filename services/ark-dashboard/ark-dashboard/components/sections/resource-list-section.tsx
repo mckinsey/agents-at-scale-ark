@@ -48,6 +48,7 @@ const URL_STATE_SPEC = {
 export interface ResourceListItem {
   id: string;
   name: string;
+  title?: string | null;
   description?: string | null;
   available?: string | null;
 }
@@ -192,6 +193,7 @@ export function ResourceListSection<T extends ResourceListItem>({
       const matchesSearch =
         !q ||
         item.name.toLowerCase().includes(q) ||
+        (item.title?.toLowerCase().includes(q) ?? false) ||
         (item.description?.toLowerCase().includes(q) ?? false);
       const matchesStatus =
         !showStatusFilter ||

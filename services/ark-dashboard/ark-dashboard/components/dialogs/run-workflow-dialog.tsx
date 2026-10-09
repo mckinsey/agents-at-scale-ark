@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -29,12 +29,6 @@ interface RunWorkflowDialogProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-function emptyParamValues(
-  parameters: readonly WorkflowParameter[],
-): Record<string, string> {
-  return Object.fromEntries(parameters.map(param => [param.name, '']));
-}
-
 export function RunWorkflowDialog({
   templateName,
   parameters = [],
@@ -53,20 +47,18 @@ export function RunWorkflowDialog({
   };
   const [workflowName, setWorkflowName] = useState('');
   const [workflowNameError, setWorkflowNameError] = useState<string>('');
-  const [paramValues, setParamValues] = useState<Record<string, string>>(() =>
-    emptyParamValues(parameters),
-  );
+  const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [wasOpen, setWasOpen] = useState(open);
 
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) {
-      setWorkflowName('');
-      setWorkflowNameError('');
-      setParamValues(emptyParamValues(parameters));
+  useEffect(() => {
+    if (!open) {
+      return;
     }
-  }
+
+    setWorkflowName('');
+    setWorkflowNameError('');
+    setParamValues({});
+  }, [open]);
 
   const validateWorkflowName = (name: string): string => {
     if (!name) {
