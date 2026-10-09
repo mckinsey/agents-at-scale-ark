@@ -60,6 +60,10 @@ spec:
           - name: NEXT_PUBLIC_BASE_PATH
             value: {{ . | quote }}
           {{- end }}
+          {{- with .Values.app.config.argoUrl }}
+          - name: ARGO_URL
+            value: {{ . | quote }}
+          {{- end }}
           {{- if .Values.app.env }}
           {{- range .Values.app.env }}
           - name: {{ .name }}

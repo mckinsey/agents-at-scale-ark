@@ -6,6 +6,7 @@ import {
   type WorkflowTemplateListItem,
   WorkflowTemplatesTable,
 } from '@/components/sections/workflow-templates-table';
+import { ArgoUrlProvider } from '@/providers/argo-url-provider';
 
 let readOnly = false;
 
@@ -98,6 +99,44 @@ describe('WorkflowTemplatesTable', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Run workflow' }));
     await user.click(screen.getByRole('button', { name: 'Run' }));
     expect(onRun).toHaveBeenCalledWith('data-pipeline', undefined, undefined);
+  });
+
+  it('links Open in Argo to the configured Argo UI', async () => {
+    const user = userEvent.setup();
+    render(
+      <ArgoUrlProvider argoUrl="https://argo.example.com">
+        <WorkflowTemplatesTable
+          templates={templates}
+          onDelete={vi.fn()}
+          onRun={vi.fn()}
+        />
+      </ArgoUrlProvider>,
+    );
+    await user.click(screen.getByLabelText('Workflow template actions'));
+    expect(
+      screen.getByRole('menuitem', { name: 'Open in Argo' }),
+    ).toHaveAttribute(
+      'href',
+      'https://argo.example.com/workflow-templates/default/data-pipeline',
+    );
+  });
+
+  it('hides Open in Argo when no Argo URL is configured', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowTemplatesTable
+        templates={templates}
+        onDelete={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByLabelText('Workflow template actions'));
+    expect(
+      screen.getByRole('menuitem', { name: 'Run workflow' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitem', { name: 'Open in Argo' }),
+    ).not.toBeInTheDocument();
   });
 
   it('disables Delete in read-only mode', async () => {

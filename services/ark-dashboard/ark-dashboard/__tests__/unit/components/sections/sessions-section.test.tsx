@@ -23,6 +23,7 @@ import {
 } from '@/lib/services/workflow-mapper';
 import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
 import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
+import { ArgoUrlProvider } from '@/providers/argo-url-provider';
 
 const mockUseNamespace = vi.fn();
 
@@ -1012,17 +1013,38 @@ describe('SessionsSection', () => {
         error: null,
       } as any);
 
-      render(<SessionsSection />);
+      render(
+        <ArgoUrlProvider argoUrl="https://argo.example.com">
+          <SessionsSection />
+        </ArgoUrlProvider>,
+      );
 
       await waitFor(() => {
         const argoLink = screen.getByRole('link', { name: /view in argo/i });
         expect(argoLink).toHaveAttribute(
           'href',
-          'http://localhost:2746/workflows/default/test-workflow-123?uid=abc-123-def',
+          'https://argo.example.com/workflows/default/test-workflow-123?uid=abc-123-def',
         );
         expect(argoLink).toHaveAttribute('target', '_blank');
         expect(argoLink).toHaveAttribute('rel', 'noopener noreferrer');
       });
+    });
+
+    it('should hide the Argo Workflows link when no Argo URL is configured', async () => {
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: mockWorkflow,
+        loading: false,
+        error: null,
+      } as unknown as ReturnType<typeof useWorkflow>);
+
+      render(<SessionsSection />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/5m 30s/).length).toBeGreaterThan(0);
+      });
+      expect(
+        screen.queryByRole('link', { name: /view in argo/i }),
+      ).not.toBeInTheDocument();
     });
 
     it('should display workflow duration in list and detail view', async () => {
