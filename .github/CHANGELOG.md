@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.72-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.71...v0.1.72-rc) (2026-10-09)
+
+
+### Features
+
+* workflow templates QBDS update ([#3621](https://github.com/mckinsey/agents-at-scale-ark/issues/3621)) ([38c4999](https://github.com/mckinsey/agents-at-scale-ark/commit/38c49994f352876885cbade83524123ba2857af6))
+
 ## [0.1.71-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70...v0.1.71-rc) (2026-10-08)
 
 
