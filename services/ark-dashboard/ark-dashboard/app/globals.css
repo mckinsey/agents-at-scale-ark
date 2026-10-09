@@ -282,6 +282,10 @@
   --color-tags-accent-subtle-red: var(--tags-accent-subtle-red);
   --color-tags-accent-primary-emerald: var(--tags-accent-primary-emerald);
   --color-tags-accent-subtle-emerald: var(--tags-accent-subtle-emerald);
+  --color-tags-accent-primary-pink: var(--tags-accent-primary-pink);
+  --color-tags-accent-subtle-pink: var(--tags-accent-subtle-pink);
+  --color-tags-accent-primary-violet: var(--tags-accent-primary-violet);
+  --color-tags-accent-subtle-violet: var(--tags-accent-subtle-violet);
 
   /*** State Layer Tokens */
 
@@ -357,6 +361,10 @@
   --tags-accent-subtle-red: var(--color-red-50);
   --tags-accent-primary-emerald: var(--color-emerald-600);
   --tags-accent-subtle-emerald: var(--color-emerald-50);
+  --tags-accent-primary-pink: var(--color-pink-600);
+  --tags-accent-subtle-pink: var(--color-pink-50);
+  --tags-accent-primary-violet: var(--color-violet-600);
+  --tags-accent-subtle-violet: var(--color-violet-50);
 
   /** Light mode border tokens */
 
@@ -488,6 +496,10 @@
   --tags-accent-subtle-red: var(--color-red-950);
   --tags-accent-primary-emerald: var(--color-emerald-400);
   --tags-accent-subtle-emerald: var(--color-emerald-950);
+  --tags-accent-primary-pink: var(--color-pink-400);
+  --tags-accent-subtle-pink: var(--color-pink-950);
+  --tags-accent-primary-violet: var(--color-violet-400);
+  --tags-accent-subtle-violet: var(--color-violet-950);
 
   /** Dark mode border tokens */
 

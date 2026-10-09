@@ -756,6 +756,10 @@ jobs:
         if: always()
         run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
 
+      - name: Fail on apiserver panics
+        if: matrix.storage-backend == 'postgresql'
+        run: ./scripts/check-apiserver-panics.sh /tmp/cluster-logs
+
       - name: Upload cluster logs
         if: always()
         uses: actions/upload-artifact@v7
@@ -804,6 +808,9 @@ jobs:
       - name: Collect cluster logs
         if: always()
         run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Fail on apiserver panics
+        run: ./scripts/check-apiserver-panics.sh /tmp/cluster-logs
 
       - name: Upload cluster logs
         if: always()
@@ -892,6 +899,10 @@ jobs:
       - name: Collect cluster logs
         if: always()
         run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Fail on apiserver panics
+        if: matrix.storage-backend == 'postgresql'
+        run: ./scripts/check-apiserver-panics.sh /tmp/cluster-logs
 
       - name: Upload cluster logs
         if: always()
@@ -1053,7 +1064,7 @@ jobs:
         run: |
           cd tests/pytest/ui-tests
           mkdir -p screenshots
-          pytest tests/ -n 2 --dist loadgroup --reruns 1 -v --tb=short --log-cli-level=INFO
+          pytest tests/ -n 3 --dist loadgroup --reruns 1 -v --tb=short --log-cli-level=INFO
 
       - name: Upload test screenshots
         if: always()
