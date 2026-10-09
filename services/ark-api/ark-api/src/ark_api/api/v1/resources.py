@@ -19,6 +19,7 @@ from ark_sdk.k8s import get_context
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.generic_resources import GenericResourceGuard
 from ...constants.query_param_descriptions import (
     NAMESPACE_DESCRIPTION,
     LABEL_SELECTOR_DESCRIPTION,
@@ -56,49 +57,7 @@ def _create_resource_response(data: dict, request: Request) -> Response:
     return JSONResponse(content=data)
 
 
-@router.get("/api/{version}/{kind}/{resource_name}")
-@handle_k8s_errors(operation="get", resource_type="resource")
-async def get_core_resource(
-    request: Request,
-    version: str,
-    kind: str,
-    resource_name: str,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
-    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
-) -> Response:
-    """
-    Get a core Kubernetes resource by name.
-
-    Args:
-        version: API version (e.g., 'v1')
-        kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-        resource_name: The name of the resource
-        namespace: The namespace (defaults to current context)
-
-    Returns:
-        Response: The raw Kubernetes resource as JSON
-
-    Examples:
-        - GET /v1/resources/api/v1/Pod/my-pod
-        - GET /v1/resources/api/v1/Service/my-service
-    """
-    if namespace is None:
-        namespace = get_context()["namespace"]
-
-    async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
-
-        api_resource = await dynamic_client.resources.get(
-            api_version=version,
-            kind=kind
-        )
-
-        resource = await api_resource.get(name=resource_name, namespace=namespace)
-
-        return _create_resource_response(resource.to_dict(), request)
-
-
-@router.get("/api/{version}/{kind}")
+@router.get("/api/{version}/{kind}", dependencies=[Depends(GenericResourceGuard("list", core=True))])
 @handle_k8s_errors(operation="list", resource_type="resource")
 async def list_core_resources(
     request: Request,
@@ -113,15 +72,17 @@ async def list_core_resources(
 
     Args:
         version: API version (e.g., 'v1')
-        kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+        kind: Kubernetes Kind (e.g., 'Service')
         namespace: The namespace (defaults to current context)
         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
+
+    Only (group, version, Kind, verb) tuples on the generic resources allowlist
+    are served; everything else returns 403.
 
     Returns:
         Response: List of raw Kubernetes resources as JSON
 
     Examples:
-        - GET /v1/resources/api/v1/Pod
         - GET /v1/resources/api/v1/Service
         - GET /v1/resources/api/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
     """
@@ -141,7 +102,7 @@ async def list_core_resources(
         return _create_resource_response(resources.to_dict(), request)
 
 
-@router.get("/apis/{group}/{version}/{kind}/{resource_name}")
+@router.get("/apis/{group}/{version}/{kind}/{resource_name}", dependencies=[Depends(GenericResourceGuard("get"))])
 @handle_k8s_errors(operation="get", resource_type="resource")
 async def get_grouped_resource(
     request: Request,
@@ -156,19 +117,21 @@ async def get_grouped_resource(
     Get a grouped Kubernetes resource by name.
 
     Args:
-        group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-        version: API version (e.g., 'v1', 'v1alpha1')
-        kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+        group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+        version: API version (e.g., 'v1alpha1')
+        kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'Agent')
         resource_name: The name of the resource
         namespace: The namespace (defaults to current context)
+
+    Only (group, version, Kind, verb) tuples on the generic resources allowlist
+    are served; everything else returns 403.
 
     Returns:
         Response: The raw Kubernetes resource as JSON
 
     Examples:
-        - GET /v1/resources/apis/apps/v1/Deployment/my-deployment
-        - GET /v1/resources/apis/batch/v1/Job/my-job
         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+        - GET /v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent/my-agent
     """
     if namespace is None:
         namespace = get_context()["namespace"]
@@ -189,7 +152,7 @@ async def get_grouped_resource(
         return _create_resource_response(resource.to_dict(), request)
 
 
-@router.get("/apis/{group}/{version}/{kind}")
+@router.get("/apis/{group}/{version}/{kind}", dependencies=[Depends(GenericResourceGuard("list"))])
 @handle_k8s_errors(operation="list", resource_type="resource")
 async def list_grouped_resources(
     request: Request,
@@ -209,9 +172,9 @@ async def list_grouped_resources(
     List grouped Kubernetes resources with optional filtering and cursor pagination.
 
     Args:
-        group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-        version: API version (e.g., 'v1', 'v1alpha1')
-        kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+        group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+        version: API version (e.g., 'v1alpha1', 'v1prealpha1')
+        kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
         namespace: The namespace (defaults to current context)
         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
         workflowName: Filter by workflow name (partial match, case insensitive). Applied only
@@ -224,6 +187,9 @@ async def list_grouped_resources(
         limit: Maximum number of items returned by the underlying Kubernetes list call.
             Omit for the full, unpaginated list (used by non-paginated callers).
         continue_token: Opaque cursor from a previous page's response metadata
+
+    Only (group, version, Kind, verb) tuples on the generic resources allowlist
+    are served; everything else returns 403.
 
     Returns:
         Response: List of raw Kubernetes resources as JSON. When the Kubernetes API has more
@@ -242,12 +208,10 @@ async def list_grouped_resources(
                -> next 25 items, with a new (or absent) "continue" token
 
     Examples:
-        - GET /v1/resources/apis/apps/v1/Deployment
-        - GET /v1/resources/apis/batch/v1/Job
         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit=25
-        - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
+        - GET /v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine
     """
     if namespace is None:
         namespace = get_context()["namespace"]
@@ -292,49 +256,7 @@ async def list_grouped_resources(
         return _create_resource_response(resources_dict, request)
 
 
-@router.post("/api/{version}/{kind}")
-@handle_k8s_errors(operation="create", resource_type="resource")
-async def create_core_resource(
-    request: Request,
-    version: str,
-    kind: str,
-    body: dict,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
-    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
-) -> Response:
-    """
-    Create a core Kubernetes resource.
-
-    Args:
-        version: API version (e.g., 'v1')
-        kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-        body: The resource definition as JSON
-        namespace: The namespace (defaults to current context)
-
-    Returns:
-        Response: The created Kubernetes resource as JSON
-
-    Examples:
-        - POST /v1/resources/api/v1/Pod
-        - POST /v1/resources/api/v1/Service
-    """
-    if namespace is None:
-        namespace = get_context()["namespace"]
-
-    async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
-
-        api_resource = await dynamic_client.resources.get(
-            api_version=version,
-            kind=kind
-        )
-
-        resource = await api_resource.create(body=body, namespace=namespace)
-
-        return _create_resource_response(resource.to_dict(), request)
-
-
-@router.post("/apis/{group}/{version}/{kind}")
+@router.post("/apis/{group}/{version}/{kind}", dependencies=[Depends(GenericResourceGuard("create"))])
 @handle_k8s_errors(operation="create", resource_type="resource")
 async def create_grouped_resource(
     request: Request,
@@ -349,19 +271,21 @@ async def create_grouped_resource(
     Create a grouped Kubernetes resource.
 
     Args:
-        group: API group (e.g., 'apps', 'batch', 'argoproj.io')
-        version: API version (e.g., 'v1', 'v1alpha1')
-        kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'Workflow')
+        group: API group (e.g., 'argoproj.io')
+        version: API version (e.g., 'v1alpha1')
+        kind: Kubernetes Kind (e.g., 'Workflow', 'WorkflowTemplate')
         body: The resource definition as JSON
         namespace: The namespace (defaults to current context)
+
+    Only (group, version, Kind, verb) tuples on the generic resources allowlist
+    are served; everything else returns 403.
 
     Returns:
         Response: The created Kubernetes resource as JSON
 
     Examples:
-        - POST /v1/resources/apis/apps/v1/Deployment
-        - POST /v1/resources/apis/batch/v1/Job
         - POST /v1/resources/apis/argoproj.io/v1alpha1/Workflow
+        - POST /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
     """
     if namespace is None:
         namespace = get_context()["namespace"]
@@ -382,61 +306,7 @@ async def create_grouped_resource(
         return _create_resource_response(resource.to_dict(), request)
 
 
-@router.put("/api/{version}/{kind}/{resource_name}")
-@handle_k8s_errors(operation="update", resource_type="resource")
-async def update_core_resource(
-    request: Request,
-    version: str,
-    kind: str,
-    resource_name: str,
-    body: dict,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
-    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
-) -> Response:
-    """
-    Update (replace) a core Kubernetes resource by name.
-
-    Honours a caller-supplied resourceVersion for optimistic concurrency; only
-    when the caller omits it do we inject the live object's resourceVersion so
-    the replace succeeds (last-write-wins convenience). The URL path name is
-    authoritative for the target resource.
-
-    Args:
-        version: API version (e.g., 'v1')
-        kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-        resource_name: The name of the resource
-        body: The resource definition as JSON
-        namespace: The namespace (defaults to current context)
-
-    Returns:
-        Response: The updated Kubernetes resource as JSON
-
-    Examples:
-        - PUT /v1/resources/api/v1/ConfigMap/my-config
-        - PUT /v1/resources/api/v1/Service/my-service
-    """
-    if namespace is None:
-        namespace = get_context()["namespace"]
-
-    async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
-
-        api_resource = await dynamic_client.resources.get(
-            api_version=version,
-            kind=kind
-        )
-
-        metadata = body.setdefault("metadata", {})
-        if not metadata.get("resourceVersion"):
-            existing = await api_resource.get(name=resource_name, namespace=namespace)
-            metadata["resourceVersion"] = existing.metadata.resourceVersion
-
-        resource = await api_resource.replace(name=resource_name, body=body, namespace=namespace)
-
-        return _create_resource_response(resource.to_dict(), request)
-
-
-@router.put("/apis/{group}/{version}/{kind}/{resource_name}")
+@router.put("/apis/{group}/{version}/{kind}/{resource_name}", dependencies=[Depends(GenericResourceGuard("update"))])
 @handle_k8s_errors(operation="update", resource_type="resource")
 async def update_grouped_resource(
     request: Request,
@@ -457,18 +327,20 @@ async def update_grouped_resource(
     authoritative for the target resource.
 
     Args:
-        group: API group (e.g., 'apps', 'batch', 'argoproj.io')
-        version: API version (e.g., 'v1', 'v1alpha1')
-        kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+        group: API group (e.g., 'argoproj.io')
+        version: API version (e.g., 'v1alpha1')
+        kind: Kubernetes Kind (e.g., 'WorkflowTemplate')
         resource_name: The name of the resource
         body: The resource definition as JSON
         namespace: The namespace (defaults to current context)
+
+    Only (group, version, Kind, verb) tuples on the generic resources allowlist
+    are served; everything else returns 403.
 
     Returns:
         Response: The updated Kubernetes resource as JSON
 
     Examples:
-        - PUT /v1/resources/apis/apps/v1/Deployment/my-deployment
         - PUT /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
     """
     if namespace is None:
@@ -538,48 +410,7 @@ async def create_access_review(
         return AccessReviewResponse(allowed=allowed)
 
 
-@router.delete("/api/{version}/{kind}/{resource_name}")
-@handle_k8s_errors(operation="delete", resource_type="resource")
-async def delete_core_resource(
-    version: str,
-    kind: str,
-    resource_name: str,
-    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
-    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
-) -> Response:
-    """
-    Delete a core Kubernetes resource by name.
-
-    Args:
-        version: API version (e.g., 'v1')
-        kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-        resource_name: The name of the resource
-        namespace: The namespace (defaults to current context)
-
-    Returns:
-        Response: HTTP 204 No Content on success
-
-    Examples:
-        - DELETE /v1/resources/api/v1/Pod/my-pod
-        - DELETE /v1/resources/api/v1/Service/my-service
-    """
-    if namespace is None:
-        namespace = get_context()["namespace"]
-
-    async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
-
-        api_resource = await dynamic_client.resources.get(
-            api_version=version,
-            kind=kind
-        )
-
-        await api_resource.delete(name=resource_name, namespace=namespace)
-
-        return Response(status_code=204)
-
-
-@router.delete("/apis/{group}/{version}/{kind}/{resource_name}")
+@router.delete("/apis/{group}/{version}/{kind}/{resource_name}", dependencies=[Depends(GenericResourceGuard("delete"))])
 @handle_k8s_errors(operation="delete", resource_type="resource")
 async def delete_grouped_resource(
     group: str,
@@ -593,19 +424,21 @@ async def delete_grouped_resource(
     Delete a grouped Kubernetes resource by name.
 
     Args:
-        group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-        version: API version (e.g., 'v1', 'v1alpha1')
-        kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+        group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+        version: API version (e.g., 'v1alpha1', 'v1prealpha1')
+        kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
         resource_name: The name of the resource
         namespace: The namespace (defaults to current context)
+
+    Only (group, version, Kind, verb) tuples on the generic resources allowlist
+    are served; everything else returns 403.
 
     Returns:
         Response: HTTP 204 No Content on success
 
     Examples:
-        - DELETE /v1/resources/apis/apps/v1/Deployment/my-deployment
-        - DELETE /v1/resources/apis/batch/v1/Job/my-job
         - DELETE /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+        - DELETE /v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine/my-engine
     """
     if namespace is None:
         namespace = get_context()["namespace"]
