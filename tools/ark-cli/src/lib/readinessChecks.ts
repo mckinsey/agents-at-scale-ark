@@ -71,7 +71,7 @@ type FailureReason = 'not-found' | 'forbidden' | 'unreachable' | 'undetermined';
 const UNSERVED_RESOURCE_PATTERN =
   /doesn't have a resource type|no matches for kind|the server could not find the requested resource/i;
 
-function classifyFailure(stderr: string): FailureReason {
+export function classifyFailure(stderr: string): FailureReason {
   if (/not\s*found/i.test(stderr) || UNSERVED_RESOURCE_PATTERN.test(stderr)) {
     return 'not-found';
   }
