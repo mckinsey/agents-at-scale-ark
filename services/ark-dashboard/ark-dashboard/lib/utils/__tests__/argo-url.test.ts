@@ -18,6 +18,22 @@ describe('normalizeArgoUrl', () => {
     );
   });
 
+  it('treats a value of only slashes as unset', () => {
+    expect(normalizeArgoUrl('///')).toBeUndefined();
+  });
+
+  it('strips a long run of trailing slashes', () => {
+    expect(
+      normalizeArgoUrl(`https://argo.example.com${'/'.repeat(10000)}`),
+    ).toBe('https://argo.example.com');
+  });
+
+  it('keeps slashes that are not trailing', () => {
+    expect(normalizeArgoUrl(`${'/'.repeat(10000)}x`)).toBe(
+      `${'/'.repeat(10000)}x`,
+    );
+  });
+
   it('keeps a path prefix', () => {
     expect(normalizeArgoUrl('https://example.com/argo/')).toBe(
       'https://example.com/argo',

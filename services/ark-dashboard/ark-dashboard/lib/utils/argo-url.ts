@@ -10,8 +10,12 @@ export interface ArgoLinks {
 }
 
 export function normalizeArgoUrl(raw: string | undefined): string | undefined {
-  const trimmed = raw?.trim().replace(/\/+$/, '');
-  return trimmed || undefined;
+  const trimmed = raw?.trim() ?? '';
+  let end = trimmed.length;
+  while (end > 0 && trimmed[end - 1] === '/') {
+    end--;
+  }
+  return trimmed.slice(0, end) || undefined;
 }
 
 export function createArgoLinks(
