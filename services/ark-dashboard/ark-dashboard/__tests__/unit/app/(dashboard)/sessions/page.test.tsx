@@ -11,10 +11,6 @@ vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
   useNamespacedNavigation: () => ({ push: mockPush }),
 }));
 
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: () => <div data-testid="page-header">Page Header</div>,
-}));
-
 vi.mock('@/components/sessions-conversations/sessions-table', () => ({
   SessionsTable: ({
     onSelectSession,
@@ -24,8 +20,7 @@ vi.mock('@/components/sessions-conversations/sessions-table', () => ({
     <div data-testid="sessions-table">
       <button
         data-testid="select-session-btn"
-        onClick={() => onSelectSession('test-session-123')}
-      >
+        onClick={() => onSelectSession('test-session-123')}>
         Select Session
       </button>
     </div>

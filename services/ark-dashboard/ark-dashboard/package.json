@@ -61,8 +61,6 @@
     "openai": "^6.1.0",
     "react": "^19.2.5",
     "react-day-picker": "^9.14.0",
-    "react-dnd": "^16.0.1",
-    "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^19.2.5",
     "react-hook-form": "^7.63.0",
     "react-markdown": "^9.1.0",
