@@ -19,15 +19,52 @@ const (
 	toolTypeBuiltIn = "built-in"
 )
 
-func DefaultAgent(agent *arkv1alpha1.Agent) {
-	_, isA2A := agent.Annotations[annotations.A2AServerName]
-	hasModel := agent.Spec.ModelRef != nil
-
-	if !hasModel && !isA2A {
-		agent.Spec.ModelRef = &arkv1alpha1.AgentModelRef{
-			Name: "default",
-		}
+// AgentRequiresModel reports whether the agent needs a model to run. A2A agents
+// (model is external) and agents delegating to an ExecutionEngine are exempt.
+func AgentRequiresModel(agent *arkv1alpha1.Agent) bool {
+	if _, isA2A := agent.Annotations[annotations.A2AServerName]; isA2A {
+		return false
 	}
+	return agent.Spec.ExecutionEngine == nil
+}
+
+// HasDefaultedModelRef reports whether the agent's modelRef was injected by
+// DefaultAgent rather than supplied by the user.
+func HasDefaultedModelRef(agent *arkv1alpha1.Agent) bool {
+	return agent.Annotations[annotations.DefaultedModelRef] == "true"
+}
+
+func isDefaultModelRef(ref *arkv1alpha1.AgentModelRef) bool {
+	return ref == nil || (ref.Name == DefaultModelName && ref.Namespace == "")
+}
+
+func defaultAgentModelRef(agent *arkv1alpha1.Agent) {
+	if !AgentRequiresModel(agent) {
+		if HasDefaultedModelRef(agent) {
+			if isDefaultModelRef(agent.Spec.ModelRef) {
+				agent.Spec.ModelRef = nil
+			}
+			delete(agent.Annotations, annotations.DefaultedModelRef)
+		}
+		return
+	}
+
+	if agent.Spec.ModelRef != nil {
+		if !HasDefaultedModelRef(agent) || !isDefaultModelRef(agent.Spec.ModelRef) {
+			delete(agent.Annotations, annotations.DefaultedModelRef)
+		}
+		return
+	}
+
+	agent.Spec.ModelRef = &arkv1alpha1.AgentModelRef{Name: DefaultModelName}
+	if agent.Annotations == nil {
+		agent.Annotations = make(map[string]string)
+	}
+	agent.Annotations[annotations.DefaultedModelRef] = "true"
+}
+
+func DefaultAgent(agent *arkv1alpha1.Agent) {
+	defaultAgentModelRef(agent)
 
 	for _, tool := range agent.Spec.Tools {
 		if tool.Type == toolTypeCustom {

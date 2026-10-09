@@ -22,10 +22,10 @@ export function createArgoLinks(
   }
   return {
     workflowTemplate: (namespace, name) =>
-      `${baseUrl}/workflow-templates/${namespace}/${name}`,
+      `${baseUrl}/workflow-templates/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`,
     workflow: (namespace, name, query) => {
       const search = query ? `?${new URLSearchParams(query)}` : '';
-      return `${baseUrl}/workflows/${namespace}/${name}${search}`;
+      return `${baseUrl}/workflows/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}${search}`;
     },
   };
 }

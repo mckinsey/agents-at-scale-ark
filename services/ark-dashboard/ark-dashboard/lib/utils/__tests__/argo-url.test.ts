@@ -45,6 +45,15 @@ describe('createArgoLinks', () => {
     ).toBe('https://argo.example.com/workflows/default/run-1');
   });
 
+  it('encodes namespace and name path segments', () => {
+    expect(
+      createArgoLinks('https://argo.example.com')?.workflowTemplate(
+        'team a',
+        'tpl/1',
+      ),
+    ).toBe('https://argo.example.com/workflow-templates/team%20a/tpl%2F1');
+  });
+
   it('builds workflow links with query params in order', () => {
     expect(
       createArgoLinks('https://argo.example.com')?.workflow(
