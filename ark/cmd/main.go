@@ -78,15 +78,21 @@ type config struct {
 	maxConcurrentQueries                             int
 	maxConcurrentReconciles                          int
 	defaultMemoryAutoProvision                       bool
+	migrateDownTo                                    int64
 }
 
 const (
 	RoleAPIServer       = "apiserver"
 	RoleController      = "controller"
 	RolePostgresCleanup = "postgres-cleanup"
+	RolePostgresMigrate = "postgres-migrate"
 )
 
-var validRoles = []string{RoleAPIServer, RoleController, RolePostgresCleanup}
+var validRoles = []string{RoleAPIServer, RoleController, RolePostgresCleanup, RolePostgresMigrate}
+
+// migrateNoDownTo is the sentinel for --migrate-down-to meaning "apply all
+// pending migrations" rather than rolling back to a specific version.
+const migrateNoDownTo int64 = -1
 
 func validateRole(role string) error {
 	if slices.Contains(validRoles, role) {
@@ -152,6 +158,11 @@ func main() {
 		return
 	}
 
+	if result.role == RolePostgresMigrate {
+		runPostgresMigrate(result.migrateDownTo)
+		return
+	}
+
 	mgr, metricsCertWatcher, webhookCertWatcher := setupManager(result.config)
 
 	switch result.role {
@@ -208,7 +219,9 @@ func parseFlags() struct {
 	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system",
 		"Address of the completions engine for A2A communication")
 	flag.StringVar(&cfg.role, "role", "",
-		"Required: process role — 'apiserver' (runs only the aggregated API server), 'controller' (runs only reconcilers and webhooks) or 'postgres-cleanup' (drops the PostgreSQL replication slot and publication, then exits)")
+		"Required: process role — 'apiserver' (runs only the aggregated API server), 'controller' (runs only reconcilers and webhooks), 'postgres-cleanup' (drops the PostgreSQL replication slot and publication, then exits) or 'postgres-migrate' (applies schema migrations with the privileged role, then exits)")
+	flag.Int64Var(&cfg.migrateDownTo, "migrate-down-to", migrateNoDownTo,
+		"Only with --role=postgres-migrate: roll the schema back to this version instead of applying pending migrations. Default -1 applies all pending migrations.")
 	flag.IntVar(&cfg.maxConcurrentQueries, "max-concurrent-queries", 32,
 		"Maximum number of Query executions running concurrently in goroutines. "+
 			"When the cap is reached, Reconcile requeues so the workqueue holds the backlog "+
@@ -479,6 +492,31 @@ func runPostgresCleanup() {
 		os.Exit(1)
 	}
 	setupLog.Info("postgres cleanup complete")
+}
+
+// runPostgresMigrate applies schema migrations (or rolls back to a version) using
+// the privileged migration role supplied through the ARK_POSTGRES_* env vars, then
+// exits. It is invoked as a distinct step (a Helm hook Job) so the runtime role
+// never needs DDL privileges.
+func runPostgresMigrate(downTo int64) {
+	cfg := postgresCleanupConfig()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+
+	var err error
+	if downTo >= 0 {
+		setupLog.Info("rolling back postgres schema", "downTo", downTo)
+		err = postgresql.MigrateDownTo(ctx, cfg, downTo)
+	} else {
+		setupLog.Info("applying postgres schema migrations")
+		err = postgresql.Migrate(ctx, cfg)
+	}
+	cancel()
+	if err != nil {
+		setupLog.Error(err, "postgres migration failed")
+		os.Exit(1)
+	}
+	setupLog.Info("postgres migration complete")
 }
 
 // envBool applies an optional boolean env var, leaving dst at its caller-set default when the

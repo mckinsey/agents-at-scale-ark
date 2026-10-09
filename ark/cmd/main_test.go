@@ -105,6 +105,7 @@ func TestParseFlags(t *testing.T) {
 				maxConcurrentQueries:       32,
 				maxConcurrentReconciles:    4,
 				defaultMemoryAutoProvision: true,
+				migrateDownTo:              -1,
 			},
 		},
 		{
@@ -145,6 +146,7 @@ func TestParseFlags(t *testing.T) {
 				maxConcurrentQueries:       10,
 				maxConcurrentReconciles:    5,
 				defaultMemoryAutoProvision: true,
+				migrateDownTo:              -1,
 			},
 			wantShowVersion: true,
 		},
