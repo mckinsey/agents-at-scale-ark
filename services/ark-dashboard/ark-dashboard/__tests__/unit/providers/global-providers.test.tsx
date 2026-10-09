@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GlobalProviders } from '@/providers/GlobalProviders';
+import { useArgoLinks } from '@/providers/argo-url-provider';
 
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/agents'),
@@ -54,9 +55,22 @@ vi.mock('@/providers/AuthProviders', () => ({
   ),
 }));
 
+function ArgoUrlProbe() {
+  const argoLinks = useArgoLinks();
+  return (
+    <div data-testid="argo-url">
+      {argoLinks?.workflowTemplate('ns', 'tpl') ?? 'unset'}
+    </div>
+  );
+}
+
 describe('GlobalProviders', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should render children', () => {
@@ -66,5 +80,27 @@ describe('GlobalProviders', () => {
       </GlobalProviders>,
     );
     expect(screen.getByTestId('child')).toBeInTheDocument();
+  });
+
+  it('provides ARGO_URL read from the environment at render time', () => {
+    vi.stubEnv('ARGO_URL', 'https://argo.example.com/');
+    render(
+      <GlobalProviders>
+        <ArgoUrlProbe />
+      </GlobalProviders>,
+    );
+    expect(screen.getByTestId('argo-url')).toHaveTextContent(
+      'https://argo.example.com/workflow-templates/ns/tpl',
+    );
+  });
+
+  it('provides no Argo URL when ARGO_URL is unset', () => {
+    vi.stubEnv('ARGO_URL', '');
+    render(
+      <GlobalProviders>
+        <ArgoUrlProbe />
+      </GlobalProviders>,
+    );
+    expect(screen.getByTestId('argo-url')).toHaveTextContent('unset');
   });
 });

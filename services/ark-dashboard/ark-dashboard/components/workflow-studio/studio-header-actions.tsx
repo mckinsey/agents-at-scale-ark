@@ -19,7 +19,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ARGO_BASE_URL } from '@/lib/constants/workflows';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   type WorkflowStats,
@@ -27,6 +26,7 @@ import {
 } from '@/lib/services/workflow-templates';
 import { buildWorkflowRunsUrl } from '@/lib/utils/workflow';
 import { useNamespace } from '@/providers/NamespaceProvider';
+import { useArgoLinks } from '@/providers/argo-url-provider';
 
 const STATS_POLL_INTERVAL_MS = 30000;
 
@@ -44,6 +44,7 @@ export function StudioHeaderActions({
   persisted,
 }: Readonly<StudioHeaderActionsProps>) {
   const { namespace, readOnlyMode } = useNamespace();
+  const argoLinks = useArgoLinks();
   const { push } = useNamespacedNavigation();
 
   const [activityOpen, setActivityOpen] = useState(false);
@@ -85,9 +86,15 @@ export function StudioHeaderActions({
   }, [namespace, persisted, workflowName]);
 
   const handleOpenInArgo = useCallback(() => {
-    const url = `${ARGO_BASE_URL}/workflow-templates/${namespace}/${workflowName}`;
-    window.open(url, '_blank', 'noopener');
-  }, [namespace, workflowName]);
+    if (!argoLinks) {
+      return;
+    }
+    window.open(
+      argoLinks.workflowTemplate(namespace, workflowName),
+      '_blank',
+      'noopener',
+    );
+  }, [argoLinks, namespace, workflowName]);
 
   const handleConfirmDelete = useCallback(async () => {
     try {
@@ -138,24 +145,26 @@ export function StudioHeaderActions({
       <div
         className="flex items-center gap-2"
         data-testid="studio-header-actions-content">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              aria-label="Open in Argo"
-              disabled={!persisted}
-              onClick={handleOpenInArgo}
-              data-testid="studio-open-argo">
-              <OpenInNew className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {persisted ? 'Open in Argo' : notPersistedTip}
-          </TooltipContent>
-        </Tooltip>
+        {argoLinks && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                aria-label="Open in Argo"
+                disabled={!persisted}
+                onClick={handleOpenInArgo}
+                data-testid="studio-open-argo">
+                <OpenInNew className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {persisted ? 'Open in Argo' : notPersistedTip}
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {!readOnlyMode && (
           <Tooltip>
