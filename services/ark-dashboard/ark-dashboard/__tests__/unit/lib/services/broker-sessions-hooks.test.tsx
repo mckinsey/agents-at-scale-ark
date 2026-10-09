@@ -122,6 +122,47 @@ describe('broker-sessions hooks', () => {
 
       expect(result.current.data).toEqual(mockResponse);
     });
+
+    it('should keep previous sessions while a new search is loading', async () => {
+      const firstResponse: PaginatedSessions = {
+        items: [
+          {
+            sessionId: 'session-1',
+            name: 'Test Session',
+            status: 'active',
+            errorCount: 0,
+            participants: [],
+            conversationCount: 2,
+            createdAt: '2024-01-01T00:00:00Z',
+            lastActivity: '2024-01-01T01:00:00Z',
+          },
+        ],
+        total: 1,
+        hasMore: false,
+      };
+
+      vi.mocked(brokerSessionsService.getSessions)
+        .mockResolvedValueOnce(firstResponse)
+        .mockReturnValueOnce(new Promise<PaginatedSessions>(() => {}));
+
+      const { result, rerender } = renderHook(
+        ({ search }: { search?: string }) => useListSessions({ search }),
+        { wrapper: createWrapper(), initialProps: { search: undefined } },
+      );
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      rerender({ search: 'te' });
+
+      await waitFor(() =>
+        expect(brokerSessionsService.getSessions).toHaveBeenLastCalledWith({
+          search: 'te',
+        }),
+      );
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.isPlaceholderData).toBe(true);
+      expect(result.current.data).toEqual(firstResponse);
+    });
   });
 
   describe('useGetSession', () => {
