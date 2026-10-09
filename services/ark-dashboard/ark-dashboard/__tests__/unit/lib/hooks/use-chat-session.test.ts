@@ -645,7 +645,7 @@ describe('useChatSession', () => {
       expect(result.current.brokerFallbackNoticeVisible).toBe(true);
     });
 
-    it('keeps polling for later turns after a broker fallback', async () => {
+    it('tries streaming again on later turns after a broker fallback', async () => {
       mockStreamChatResponse.mockImplementation(async function* () {
         throw new BrokerUnavailableError(
           'Failed to connect to stream: Service Unavailable',
@@ -666,8 +666,6 @@ describe('useChatSession', () => {
           terminal: true,
           response: 'Second polled',
         });
-      mockSubmitChatQuery.mockResolvedValue({ name: 'second-query' });
-
       const { result } = renderHook(
         () => useChatSession({ name: 'test-agent', type: 'agent' }),
         { wrapper },
@@ -692,16 +690,12 @@ describe('useChatSession', () => {
         expect(result.current.isProcessing).toBe(false);
       });
 
-      expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
-      expect(mockSubmitChatQuery).toHaveBeenCalledTimes(1);
-      expect(mockGetQueryResult).toHaveBeenCalledWith(
-        'default',
-        'second-query',
-      );
+      expect(mockStartStreamChatResponse).toHaveBeenCalledTimes(1);
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
       expect(result.current.messages.at(-1)?.content).toBe('Second polled');
     });
 
-    it('retries streaming on the next turn after a 503 without a broker_unavailable code', async () => {
+    it('does not show the notice for a 503 without a broker_unavailable code', async () => {
       mockStreamChatResponse.mockImplementation(async function* () {
         throw new BrokerUnavailableError(
           'Failed to connect to stream: Service Unavailable',
@@ -731,18 +725,47 @@ describe('useChatSession', () => {
       });
 
       expect(result.current.messages.at(-1)?.content).toBe('Polled');
+      expect(result.current.brokerFallbackNoticeVisible).toBe(false);
+    });
 
-      mockStartStreamChatResponse.mockClear();
+    it('does not show the notice again after it is dismissed', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new BrokerUnavailableError(
+          'Failed to connect to stream: Service Unavailable',
+          503,
+          'broker_unavailable',
+          'poll',
+          'test-query',
+        );
+      });
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled',
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(result.current.brokerFallbackNoticeVisible).toBe(true);
+
+      act(() => {
+        result.current.dismissBrokerFallbackNotice();
+      });
+
+      expect(result.current.brokerFallbackNoticeVisible).toBe(false);
 
       await act(async () => {
         await result.current.sendMessage('Again');
       });
 
-      await waitFor(() => {
-        expect(result.current.isProcessing).toBe(false);
-      });
-
-      expect(mockStartStreamChatResponse).toHaveBeenCalledTimes(1);
+      expect(result.current.brokerFallbackNoticeVisible).toBe(false);
     });
   });
 

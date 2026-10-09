@@ -363,7 +363,7 @@ export function useChatSession({
   const [error, setError] = useState<string | null>(null);
   const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
   const brokerFallbackNotice = useBrokerFallbackNotice();
-  const brokerStreamingUnavailableRef = useRef(false);
+  const notifyBrokerFallback = brokerFallbackNotice.notify;
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
@@ -1202,7 +1202,7 @@ export function useChatSession({
       let aborted = false;
 
       try {
-        if (isChatStreamingEnabled && !brokerStreamingUnavailableRef.current) {
+        if (isChatStreamingEnabled) {
           await handleStreamChatResponse(userMessage, apiParameters);
           await ensureConversationId();
         } else {
@@ -1213,8 +1213,7 @@ export function useChatSession({
 
         if (isBrokerUnavailableError(err)) {
           if (err.code === 'broker_unavailable') {
-            brokerStreamingUnavailableRef.current = true;
-            brokerFallbackNotice.notify();
+            notifyBrokerFallback();
           }
           updateChatMessages(stripEmptyAssistantPlaceholder);
           try {
@@ -1299,7 +1298,7 @@ export function useChatSession({
     },
     [
       beginMemoryNoticeTurn,
-      brokerFallbackNotice,
+      notifyBrokerFallback,
       ensureConversationId,
       handlePollChatResponse,
       handleStreamChatResponse,

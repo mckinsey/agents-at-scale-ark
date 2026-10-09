@@ -1,9 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
-
-export const BROKER_FALLBACK_NOTICE_STORAGE_KEY =
-  'ark-dashboard:broker-fallback-acknowledged';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 export interface UseBrokerFallbackNoticeResult {
   visible: boolean;
@@ -11,36 +8,19 @@ export interface UseBrokerFallbackNoticeResult {
   dismiss: () => void;
 }
 
-function isAcknowledged(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  try {
-    return (
-      window.localStorage.getItem(BROKER_FALLBACK_NOTICE_STORAGE_KEY) === 'true'
-    );
-  } catch {
-    return false;
-  }
-}
-
 export function useBrokerFallbackNotice(): UseBrokerFallbackNoticeResult {
   const [visible, setVisible] = useState(false);
+  const dismissedRef = useRef(false);
 
   const notify = useCallback(() => {
-    if (!isAcknowledged()) {
+    if (!dismissedRef.current) {
       setVisible(true);
     }
   }, []);
 
   const dismiss = useCallback(() => {
+    dismissedRef.current = true;
     setVisible(false);
-    if (typeof window === 'undefined') {
-      return;
-    }
-    try {
-      window.localStorage.setItem(BROKER_FALLBACK_NOTICE_STORAGE_KEY, 'true');
-    } catch {}
   }, []);
 
   return useMemo(
