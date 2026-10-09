@@ -112,6 +112,16 @@ On the core path, `/v1/resources/api/{version}/{kind}`, the get, create, update 
 **Migration:**
 - Move scripts and integrations that call `/v1/resources` for anything else to the resource-specific `ark-api` routes, such as `/v1/agents`, or to the Kubernetes API with credentials of their own.
 
+### Generic Log Routes Serve Only Workflow Pods
+
+The pod log routes, `GET /v1/resources/api/v1/namespaces/{namespace}/pods/{pod_name}/log` and its `/log/window` variant, now return `404` for pods without the `workflows.argoproj.io/workflow` label. The workflow node log routes only read pods of the workflow named in the path.
+
+Reading logs through the pod routes now needs `get` on `pods` as well as on `pods/log`, because `ark-api` checks the pod's labels first. The Ark chart already grants both to the `ark-api` service account. With [user impersonation](/developer-guide/authentication#user-impersonation) enabled, signed-in users need both too. The built-in `view` role includes them.
+
+**Migration:**
+- Read the logs of other pods with `kubectl logs` or the Kubernetes API.
+- With impersonation enabled, add `get` on `pods` to user roles that only grant `pods/log`.
+
 ## v0.1.70
 
 ### Broker Purge Endpoints Removed
