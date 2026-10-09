@@ -88,7 +88,7 @@ curl http://localhost:8000/v1/tools
     while True:
         q = requests.get(f"{base}/v1/queries/my-query").json()
         phase = q["status"].get("phase")
-        if phase in ("done", "error", "canceled"):
+        if phase in ("done", "error", "cancelled", "canceled"):
             break
         time.sleep(1)
 

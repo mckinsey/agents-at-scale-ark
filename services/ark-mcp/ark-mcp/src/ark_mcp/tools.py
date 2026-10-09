@@ -144,7 +144,7 @@ async def wait_for_query_completion_sdk(
         logger.info(f"Query {name} status: {phase}")
 
         # Terminal phases
-        if phase in ["done", "error", "canceled"]:
+        if phase in ["done", "error", "cancelled", "canceled"]:
             return {
                 "name": name,
                 "namespace": namespace,

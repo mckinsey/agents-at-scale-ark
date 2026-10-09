@@ -548,7 +548,61 @@ describe('FloatingChat', () => {
       );
     });
 
-    it('force-closes cleanly on phase:canceled without marking a failure (#2862)', async () => {
+    it('force-closes cleanly on phase:cancelled without marking a failure (#2862)', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* (
+          _namespace,
+          _input,
+          _targetType,
+          _targetName,
+          _sessionId,
+          _conversationId,
+          _timeout,
+          abortSignal,
+        ) {
+          yield { choices: [{ delta: { content: 'partial' } }] };
+          await new Promise<void>((_resolve, reject) => {
+            if (abortSignal?.aborted) return reject(makeAbortError());
+            abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+        },
+      );
+      vi.mocked(chatService.streamQueryStatus).mockImplementation(
+        async (
+          _namespace,
+          _queryName,
+          _onUpdate,
+          _pollInterval,
+          onTerminal,
+        ) => {
+          onTerminal?.('cancelled');
+          return () => {};
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Hi');
+      await user.click(screen.getByRole('button', { name: /send/i }));
+
+      await waitFor(
+        () => {
+          expect(input).not.toBeDisabled();
+        },
+        { timeout: 4000 },
+      );
+      // cancelled is not a failure: the partial answer stays, nothing is marked failed.
+      expect(screen.getByText('partial')).toBeInTheDocument();
+      expect(screen.queryByText('Query failed')).not.toBeInTheDocument();
+    });
+
+    it('force-closes cleanly on legacy phase:canceled without marking a failure (#2862)', async () => {
       const user = userEvent.setup();
 
       vi.mocked(chatService.streamChatResponse).mockImplementation(
@@ -597,7 +651,6 @@ describe('FloatingChat', () => {
         },
         { timeout: 4000 },
       );
-      // canceled is not a failure: the partial answer stays, nothing is marked failed.
       expect(screen.getByText('partial')).toBeInTheDocument();
       expect(screen.queryByText('Query failed')).not.toBeInTheDocument();
     });

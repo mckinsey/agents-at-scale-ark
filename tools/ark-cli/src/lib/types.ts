@@ -142,7 +142,13 @@ export interface QueryResponse {
 }
 
 export interface QueryStatus {
-  phase?: 'initializing' | 'running' | 'done' | 'error' | 'canceled';
+  phase?:
+    | 'initializing'
+    | 'running'
+    | 'done'
+    | 'error'
+    | 'cancelled'
+    | 'canceled';
   conditions?: K8sCondition[];
   response?: QueryResponse;
   message?: string;

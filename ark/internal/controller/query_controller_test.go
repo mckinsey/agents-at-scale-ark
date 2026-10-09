@@ -634,8 +634,22 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			},
 			Entry("done stays done", "cancel-done", statusDone, "QuerySucceeded"),
 			Entry("error stays error", "cancel-error", statusError, "QueryErrored"),
-			Entry("canceled stays canceled", "cancel-canceled", statusCanceled, "QueryCanceled"),
+			Entry("cancelled stays cancelled", "cancel-cancelled", statusCancelled, "QueryCanceled"),
 		)
+
+		It("leaves a query stored with the legacy canceled phase untouched", func() {
+			q := newTimeoutQuery("cancel-legacy-canceled").seed(ctx, k8sClient, arkv1alpha1.QueryPhaseLegacyCanceled)
+
+			refetched := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: q.Name, Namespace: q.Namespace}, refetched)).To(Succeed())
+			legacyRV := refetched.ResourceVersion
+
+			refetched.Spec.Cancel = true
+			after := reconcile(refetched)
+
+			Expect(after.Status.Phase).To(Equal(arkv1alpha1.QueryPhaseLegacyCanceled))
+			Expect(after.ResourceVersion).To(Equal(legacyRV))
+		})
 
 		It("does not clobber a query that reached done after the reconcile snapshot was taken", func() {
 			q := newTimeoutQuery("cancel-refetch-race").seed(ctx, k8sClient, "")
@@ -659,7 +673,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 			Expect(after.Status.Phase).To(Equal(statusDone), "refetched terminal phase must win over the stale running snapshot")
 			Expect(after.ResourceVersion).To(Equal(terminalRV), "cancel must issue no status write once the refetch sees a terminal phase")
 			Expect(after.Status.Response).NotTo(BeNil())
-			Expect(after.Status.Response.Phase).To(Equal(statusDone), "the completed response must not be stranded under a canceled phase")
+			Expect(after.Status.Response.Phase).To(Equal(statusDone), "the completed response must not be stranded under a cancelled phase")
 			afterCond := findCompletedCondition(after)
 			Expect(afterCond).NotTo(BeNil())
 			Expect(afterCond.Reason).To(Equal("QuerySucceeded"), "condition reason must not be clobbered to QueryCanceled")
@@ -693,7 +707,7 @@ var _ = Describe("Query Controller handleRunningPhase", func() {
 
 			after := &arkv1alpha1.Query{}
 			Expect(k8sClient.Get(ctx, req.NamespacedName, after)).To(Succeed())
-			Expect(after.Status.Phase).To(Equal(statusCanceled), "a running query must transition to canceled")
+			Expect(after.Status.Phase).To(Equal(statusCancelled), "a running query must transition to cancelled")
 			afterCond := findCompletedCondition(after)
 			Expect(afterCond).NotTo(BeNil())
 			Expect(afterCond.Reason).To(Equal("QueryCanceled"), "condition reason must reflect the cancel")
@@ -941,10 +955,11 @@ var _ = Describe("Query TTL helpers", func() {
 	})
 
 	Describe("isTerminalPhase", func() {
-		It("returns true for done/error/canceled", func() {
+		It("returns true for done/error/cancelled and legacy canceled", func() {
 			Expect(isTerminalPhase(statusDone)).To(BeTrue())
 			Expect(isTerminalPhase(statusError)).To(BeTrue())
-			Expect(isTerminalPhase(statusCanceled)).To(BeTrue())
+			Expect(isTerminalPhase(statusCancelled)).To(BeTrue())
+			Expect(isTerminalPhase(arkv1alpha1.QueryPhaseLegacyCanceled)).To(BeTrue())
 		})
 		It("returns false for in-flight or unknown phases", func() {
 			Expect(isTerminalPhase(statusRunning)).To(BeFalse())

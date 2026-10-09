@@ -20,7 +20,12 @@ export type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
 export type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
 
 // Define terminal status phases
-type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
+type TerminalQueryStatusPhase =
+  | 'done'
+  | 'error'
+  | 'cancelled'
+  | 'canceled'
+  | 'unknown';
 
 // Define non-terminal status phases
 type NonTerminalQueryStatusPhase =
@@ -37,6 +42,7 @@ type QueryStatusPhase = TerminalQueryStatusPhase | NonTerminalQueryStatusPhase;
 const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   'done',
   'error',
+  'cancelled',
   'canceled',
   'unknown',
 ] as const;

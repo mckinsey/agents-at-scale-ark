@@ -66,7 +66,7 @@ spec:
 | `spec.serviceAccount` | string | no | Kubernetes ServiceAccount the controller impersonates when resolving the query's targets. Requires controller impersonation to be enabled (opt-in) and the requester to be authorized to impersonate it. See [Service account impersonation](#service-account-impersonation). |
 | `spec.timeout` | duration | no | Execution timeout (`30s`, `5m`, `1h`). Defaults to `30m`. |
 | `spec.ttl` | duration | no | How long the Query resource lingers after completion. Mutating webhook resolves the default from `ArkConfig/default.spec.queryTTL` (falls back to `720h`). |
-| `spec.cancel` | bool | no | When `true`, indicates intent to cancel a running query. The controller transitions the query to `phase: canceled`. |
+| `spec.cancel` | bool | no | When `true`, indicates intent to cancel a running query. The controller transitions the query to `phase: cancelled`. |
 | `spec.overrides[]` | list | no | HTTP header overrides applied when the query's target calls its model or any MCP server. See [Overrides](/user-guide/overrides). |
 
 ## Targets
@@ -254,7 +254,7 @@ To cancel a running query, patch `spec.cancel: true`:
 kubectl patch query slow-q1 --type='merge' -p='{"spec":{"cancel": true}}'
 ```
 
-The controller transitions the query to `phase: canceled` once the in-flight dispatch acknowledges. The dashboard chat panel does the same when you click **Stop** on an embedded chat.
+The controller transitions the query to `phase: cancelled` once the in-flight dispatch acknowledges. The dashboard chat panel does the same when you click **Stop** on an embedded chat.
 
 ## Deletion and cleanup
 
@@ -307,7 +307,7 @@ status:
 
 | Field | Description |
 | --- | --- |
-| `status.phase` | One of `pending`, `provisioning`, `running`, `done`, `error`, `canceled`. |
+| `status.phase` | One of `pending`, `provisioning`, `running`, `done`, `error`, `cancelled`. |
 | `status.conditions[]` | Standard Kubernetes conditions. The `Completed` condition flips to `True` on success or failure. `MemoryUnavailable` and `MemoryDegraded` report conversation history that was dropped — both are written on every query whose dispatch completes, so read `status`, not presence. See [telling when memory is not working](/reference/resources/memory#telling-when-memory-is-not-working). |
 | `status.response` | Single response object (singular — there is no `responses[]` array). A selector resolves to one target, so there is always exactly one response. |
 | `status.response.content` | The final assistant message, not a concatenation of every message produced during execution. When a target emits multiple assistant messages, for example an A2A agent returning several text artifacts, only the last one lands here. Read `status.response.raw` for the full set. See [A2A queries](/developer-guide/queries/a2a-queries#artifacts). |
@@ -329,7 +329,7 @@ status:
 | `running` | Dispatched to the executor; waiting for the response. |
 | `done` | Execution finished successfully. |
 | `error` | Execution failed; details in `status.response.content`. |
-| `canceled` | `spec.cancel: true` was honoured. |
+| `cancelled` | `spec.cancel: true` was honoured. Queries cancelled before this spelling change may still report the legacy `canceled`. |
 
 ### Print columns
 

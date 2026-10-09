@@ -30,21 +30,22 @@ const (
 
 // Query status phases, mirroring the status.phase enum.
 const (
-	QueryPhasePending       = "pending"
-	QueryPhaseProvisioning  = "provisioning"
-	QueryPhaseRunning       = "running"
-	QueryPhaseQueued        = "queued"
-	QueryPhaseInputRequired = "input-required"
-	QueryPhaseDone          = "done"
-	QueryPhaseError         = "error"
-	QueryPhaseCanceled      = "canceled"
+	QueryPhasePending        = "pending"
+	QueryPhaseProvisioning   = "provisioning"
+	QueryPhaseRunning        = "running"
+	QueryPhaseQueued         = "queued"
+	QueryPhaseInputRequired  = "input-required"
+	QueryPhaseDone           = "done"
+	QueryPhaseError          = "error"
+	QueryPhaseCancelled      = "cancelled"
+	QueryPhaseLegacyCanceled = "canceled"
 )
 
 // IsTerminalPhase reports whether a Query phase is terminal: the reconcile has
 // finished and no further status write is expected.
 func IsTerminalPhase(phase string) bool {
 	switch phase {
-	case QueryPhaseDone, QueryPhaseError, QueryPhaseCanceled:
+	case QueryPhaseDone, QueryPhaseError, QueryPhaseCancelled, QueryPhaseLegacyCanceled:
 		return true
 	}
 	return false
@@ -171,7 +172,7 @@ type TokenUsage struct {
 
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
-	// +kubebuilder:validation:Enum=pending;provisioning;running;queued;input-required;error;done;canceled
+	// +kubebuilder:validation:Enum=pending;provisioning;running;queued;input-required;error;done;cancelled;canceled
 	Phase string `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Conditions represent the latest available observations of a query's state

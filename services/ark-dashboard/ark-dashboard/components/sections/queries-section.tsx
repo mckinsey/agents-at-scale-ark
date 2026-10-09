@@ -59,7 +59,8 @@ const STATUS_CONFIG: Record<string, StatusConfig> = {
   running: { label: 'Running', dotClass: 'bg-status-information' },
   provisioning: { label: 'Provisioning', dotClass: 'bg-status-warning' },
   queued: { label: 'Queued', dotClass: 'bg-status-warning' },
-  canceled: { label: 'Canceled', dotClass: 'bg-fg-tertiary' },
+  cancelled: { label: 'Cancelled', dotClass: 'bg-fg-tertiary' },
+  canceled: { label: 'Cancelled', dotClass: 'bg-fg-tertiary' },
 };
 
 function getInputDisplayText(

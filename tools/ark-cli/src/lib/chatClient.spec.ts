@@ -294,7 +294,23 @@ describe('ChatClient', () => {
       expect(onChunk).toHaveBeenCalledWith('OK', undefined, undefined);
     });
 
-    it('should return empty string when canceled and call content onChunk', async () => {
+    it('should return empty string when cancelled and call content onChunk', async () => {
+      const client = new ChatClient(mockArkApiClient);
+      mockCreateQuery.mockResolvedValue({name: 'cancel-q'});
+      mockGetQuery.mockResolvedValue({
+        status: {phase: 'cancelled', response: {content: ''}},
+      });
+
+      const result = await client.sendMessage(
+        'agent/a',
+        [{role: 'user', content: 'Hi'}],
+        {streamingEnabled: false}
+      );
+
+      expect(result).toBe('');
+    });
+
+    it('should return empty string when legacy canceled and call content onChunk', async () => {
       const client = new ChatClient(mockArkApiClient);
       mockCreateQuery.mockResolvedValue({name: 'cancel-q'});
       mockGetQuery.mockResolvedValue({
