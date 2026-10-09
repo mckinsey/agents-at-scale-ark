@@ -11,6 +11,7 @@ import {
   Bolt,
   Build,
   Cancel,
+  CancelRegular,
   ChatBubble,
   CheckCircle,
   ChevronDown as ChevronDownIcon,
@@ -22,9 +23,14 @@ import {
   InsertDriveFile,
   Memory as MemoryIcon,
   OpenInNew,
+  Pause,
+  PlayArrow,
+  PromptSuggestion,
   Schedule,
   Search as SearchIcon,
   SmartToy,
+  StopRegular,
+  Sync,
   Terminal,
   Terminal2,
 } from '@/components/icons';
@@ -37,6 +43,7 @@ import {
 } from '@/components/sections/resource-list-states';
 import { WorkflowNodeLogs } from '@/components/sections/workflow-node-logs';
 import { Button } from '@/components/ui/button';
+import { IconActionButton } from '@/components/ui/icon-action-button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
 import {
@@ -56,7 +63,12 @@ import {
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
 import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
-import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
+import type { WorkflowLifecycleAction } from '@/lib/services/workflows';
+import {
+  useWorkflow,
+  useWorkflowLifecycleActions,
+  useWorkflows,
+} from '@/lib/services/workflows-hooks';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -163,6 +175,9 @@ interface BaseSession {
 interface WorkflowSession extends BaseSession {
   type: 'workflow';
   steps: WorkflowStep[];
+  suspended?: boolean;
+  pauseState?: PauseState;
+  shutdownRequested?: boolean;
 }
 
 interface TeamSession extends BaseSession {
@@ -172,13 +187,26 @@ interface TeamSession extends BaseSession {
 
 type Session = WorkflowSession | TeamSession;
 
-const STATUS_LABELS: Record<StepStatus, string> = {
+type PauseState = 'pausing' | 'paused';
+
+type DisplayStatus = StepStatus | PauseState;
+
+const STATUS_LABELS: Record<DisplayStatus, string> = {
   pending: 'Pending',
   running: 'Running',
+  pausing: 'Pausing',
+  paused: 'Paused',
   succeeded: 'Succeeded',
   failed: 'Failed',
   skipped: 'Skipped',
 };
+
+function getSessionDisplayStatus(session: Session): DisplayStatus {
+  if (session.type === 'workflow' && session.pauseState) {
+    return session.pauseState;
+  }
+  return session.status;
+}
 
 function getStatusBorderClass(status: StepStatus): string {
   switch (status) {
@@ -193,7 +221,7 @@ function getStatusBorderClass(status: StepStatus): string {
   }
 }
 
-function getStatusIcon(status: StepStatus) {
+function getStatusIcon(status: DisplayStatus) {
   switch (status) {
     case 'succeeded':
       return (
@@ -208,9 +236,16 @@ function getStatusIcon(status: StepStatus) {
         </IconShell>
       );
     case 'running':
+    case 'pausing':
       return (
         <IconShell size="sm" className="text-fg-secondary" asChild>
           <Spinner size="sm" />
+        </IconShell>
+      );
+    case 'paused':
+      return (
+        <IconShell size="sm" variant="secondary">
+          <Pause />
         </IconShell>
       );
     case 'skipped':
@@ -241,7 +276,7 @@ function DurationLabel({ duration }: { readonly duration: string }) {
   );
 }
 
-function StatusLabel({ status }: { readonly status: StepStatus }) {
+function StatusLabel({ status }: { readonly status: DisplayStatus }) {
   return (
     <div className="flex shrink-0 items-center gap-1">
       {getStatusIcon(status)}
@@ -744,7 +779,7 @@ function SessionDetailView({
               </span>
             </div>
           )}
-          <StatusLabel status={session.status} />
+          <StatusLabel status={getSessionDisplayStatus(session)} />
           {session.type === 'workflow' && session.namespace && session.uid && (
             <Button variant="outline" size="xs" asChild>
               <a
@@ -773,50 +808,204 @@ function SessionDetailView({
   );
 }
 
+const RUN_ACTION_ERROR_TITLES: Record<WorkflowLifecycleAction, string> = {
+  suspend: 'Failed to pause workflow',
+  resume: 'Failed to resume workflow',
+  stop: 'Failed to stop workflow',
+  terminate: 'Failed to cancel workflow',
+  retry: 'Failed to retry workflow',
+  resubmit: 'Failed to resubmit workflow',
+};
+
+const RUN_CONTROL_STATUSES = new Set<StepStatus>([
+  'running',
+  'succeeded',
+  'failed',
+]);
+
+interface WorkflowRunControlsProps {
+  readonly status: StepStatus;
+  readonly suspended: boolean;
+  readonly pauseState?: PauseState;
+  readonly disabled: boolean;
+  readonly onAction: (action: WorkflowLifecycleAction) => void;
+  readonly className?: string;
+}
+
+interface RunControl {
+  readonly action: WorkflowLifecycleAction;
+  readonly label: string;
+  readonly tooltip?: string;
+  readonly Icon: React.ComponentType;
+}
+
+const RESUME_CONTROL: RunControl = {
+  action: 'resume',
+  label: 'Resume',
+  Icon: PlayArrow,
+};
+const PAUSE_CONTROL: RunControl = {
+  action: 'suspend',
+  label: 'Pause',
+  tooltip: 'Pause: running steps finish, no new steps start until resumed',
+  Icon: Pause,
+};
+const STOP_CONTROL: RunControl = {
+  action: 'stop',
+  label: 'Stop',
+  Icon: StopRegular,
+};
+const CANCEL_CONTROL: RunControl = {
+  action: 'terminate',
+  label: 'Cancel',
+  Icon: CancelRegular,
+};
+const RETRY_CONTROL: RunControl = {
+  action: 'retry',
+  label: 'Retry',
+  Icon: Sync,
+};
+const RESUBMIT_CONTROL: RunControl = {
+  action: 'resubmit',
+  label: 'Resubmit',
+  Icon: PromptSuggestion,
+};
+
+function getRunControls(status: StepStatus, suspended: boolean): RunControl[] {
+  if (status === 'failed') {
+    return [RETRY_CONTROL, RESUBMIT_CONTROL];
+  }
+  return [
+    suspended ? RESUME_CONTROL : PAUSE_CONTROL,
+    STOP_CONTROL,
+    CANCEL_CONTROL,
+  ];
+}
+
+function WorkflowRunControls({
+  status,
+  suspended,
+  pauseState,
+  disabled,
+  onAction,
+  className,
+}: WorkflowRunControlsProps) {
+  const wrapperClassName = cn(
+    'flex items-center gap-2 transition-opacity',
+    disabled && 'opacity-40',
+    className,
+  );
+
+  if (status === 'succeeded') {
+    return (
+      <div aria-busy={disabled} className={wrapperClassName}>
+        <Button
+          variant="outline"
+          size="xxs"
+          className="h-5"
+          disabled={disabled}
+          onClick={() => onAction('resubmit')}>
+          Resubmit
+          <IconShell size="sm" variant="secondary">
+            <PromptSuggestion />
+          </IconShell>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div aria-busy={disabled} className={wrapperClassName}>
+      {getRunControls(status, suspended).map(
+        ({ action, label, tooltip, Icon }) => (
+          <IconActionButton
+            key={action}
+            label={label}
+            tooltip={tooltip}
+            variant="outline"
+            size="icon-xs"
+            disabled={
+              disabled || (action === 'resume' && pauseState === 'pausing')
+            }
+            onClick={() => onAction(action)}>
+            <Icon />
+          </IconActionButton>
+        ),
+      )}
+    </div>
+  );
+}
+
 function SessionListItem({
   session,
   isSelected,
   onClick,
+  onRunAction,
+  isRunActionPending,
 }: {
-  session: Session;
-  isSelected: boolean;
-  onClick: () => void;
+  readonly session: Session;
+  readonly isSelected: boolean;
+  readonly onClick: () => void;
+  readonly onRunAction: (action: WorkflowLifecycleAction) => void;
+  readonly isRunActionPending: boolean;
 }) {
+  const showRunControls =
+    session.type === 'workflow' && RUN_CONTROL_STATUSES.has(session.status);
+  const shutdownInProgress =
+    session.type === 'workflow' &&
+    session.status === 'running' &&
+    Boolean(session.shutdownRequested);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={session.name}
-      aria-current={isSelected ? 'true' : undefined}
-      className={cn(
-        'flex w-full min-w-0 cursor-pointer items-center px-3 py-2 text-left transition-colors',
-        isSelected
-          ? 'bg-fill-onsurface-ui-1'
-          : 'hover:bg-stateslayer-overlay-hover',
-      )}>
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <span data-testid="session-status" data-status={session.status}>
-              {getStatusIcon(session.status)}
-              <span className="sr-only">{STATUS_LABELS[session.status]}</span>
-            </span>
-            <span className="paragraph-small-primary text-fg-secondary">
-              {new Date(session.startedAt).toLocaleString()}
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onClick}
+        title={session.name}
+        aria-current={isSelected ? 'true' : undefined}
+        className={cn(
+          'flex w-full min-w-0 cursor-pointer items-center px-3 py-2 text-left transition-colors',
+          isSelected
+            ? 'bg-fill-onsurface-ui-1'
+            : 'hover:bg-stateslayer-overlay-hover',
+        )}>
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <span data-testid="session-status" data-status={session.status}>
+                {getStatusIcon(getSessionDisplayStatus(session))}
+                <span className="sr-only">
+                  {STATUS_LABELS[getSessionDisplayStatus(session)]}
+                </span>
+              </span>
+              <span className="paragraph-small-primary text-fg-secondary">
+                {new Date(session.startedAt).toLocaleString()}
+              </span>
+            </div>
+            <span className="paragraph-regular-primary text-fg-primary w-full truncate">
+              {session.name}
             </span>
           </div>
-          <span className="paragraph-regular-primary text-fg-primary w-full truncate">
-            {session.name}
-          </span>
+          <div
+            className={cn(
+              'flex min-w-0 items-center justify-between gap-1',
+              showRunControls && 'min-h-5',
+            )}>
+            <DurationLabel duration={session.duration} />
+          </div>
         </div>
-        <div className="flex min-w-0 items-center justify-between gap-1">
-          <DurationLabel duration={session.duration} />
-          <span className="label-small-primary text-fg-secondary py-1 capitalize">
-            {session.type}
-          </span>
-        </div>
-      </div>
-    </button>
+      </button>
+      {showRunControls && (
+        <WorkflowRunControls
+          status={session.status}
+          suspended={Boolean(session.suspended)}
+          pauseState={session.pauseState}
+          disabled={isRunActionPending || shutdownInProgress}
+          onAction={onRunAction}
+          className="absolute right-3 bottom-2"
+        />
+      )}
+    </div>
   );
 }
 
@@ -889,6 +1078,8 @@ function SessionsBody({
   hasActiveFilters,
   hasNext,
   onClearFilters,
+  onRunAction,
+  isRunActionPending,
 }: {
   readonly error: Error | null;
   readonly isLoading: boolean;
@@ -900,6 +1091,11 @@ function SessionsBody({
   readonly hasActiveFilters: boolean;
   readonly hasNext: boolean;
   readonly onClearFilters: () => void;
+  readonly onRunAction: (
+    sessionId: string,
+    action: WorkflowLifecycleAction,
+  ) => void;
+  readonly isRunActionPending: (sessionId: string) => boolean;
 }) {
   if (error) {
     return (
@@ -963,6 +1159,8 @@ function SessionsBody({
             session={session}
             isSelected={session.id === selectedSessionId}
             onClick={() => onSelectSession(session.id)}
+            onRunAction={action => onRunAction(session.id, action)}
+            isRunActionPending={isRunActionPending(session.id)}
           />
         ))}
       </div>
@@ -1050,7 +1248,43 @@ export function SessionsSection({
     goToNextPage,
     goToPreviousPage,
     updateWorkflowItem,
+    showCreatedWorkflow,
+    watchWorkflow,
   } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
+
+  const { runAction, isPending: isRunActionPending } =
+    useWorkflowLifecycleActions(namespace, updateWorkflowItem);
+
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
+
+  const handleRunAction = useCallback(
+    (workflowName: string, action: WorkflowLifecycleAction) => {
+      runAction(workflowName, action)
+        .then(updated => {
+          if (!updated) {
+            return;
+          }
+          if (action === 'resubmit') {
+            if (showCreatedWorkflow(updated)) {
+              setSelectedSessionId(updated.metadata.name);
+              watchWorkflow(updated.metadata.name);
+            }
+            return;
+          }
+          watchWorkflow(updated.metadata.name);
+          setDetailRefreshKey(key => key + 1);
+        })
+        .catch((err: unknown) => {
+          toast.error(RUN_ACTION_ERROR_TITLES[action], {
+            description:
+              err instanceof Error
+                ? err.message
+                : 'An unexpected error occurred',
+          });
+        });
+    },
+    [runAction, showCreatedWorkflow, watchWorkflow],
+  );
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
@@ -1110,6 +1344,8 @@ export function SessionsSection({
     useWorkflow(
       namespace,
       useRealData && selectedSessionId ? selectedSessionId : '',
+      undefined,
+      detailRefreshKey,
     );
 
   const selectedSession =
@@ -1117,26 +1353,9 @@ export function SessionsSection({
       ? mapArgoWorkflowToSession(selectedWorkflowDetail)
       : selectedSessionFromList;
 
-  const previousStatusRef = useRef<string | undefined>(undefined);
-
   useEffect(() => {
     if (selectedWorkflowDetail && useRealData) {
-      const currentStatus = selectedWorkflowDetail.status?.phase;
-      const previousStatus = previousStatusRef.current;
-
-      const isTerminalState =
-        currentStatus === 'Succeeded' ||
-        currentStatus === 'Failed' ||
-        currentStatus === 'Error';
-
-      const wasRunning =
-        previousStatus === 'Running' || previousStatus === 'Pending';
-
-      if (isTerminalState && wasRunning) {
-        updateWorkflowItem(selectedWorkflowDetail);
-      }
-
-      previousStatusRef.current = currentStatus;
+      updateWorkflowItem(selectedWorkflowDetail);
     }
   }, [selectedWorkflowDetail, useRealData, updateWorkflowItem]);
 
@@ -1285,6 +1504,8 @@ export function SessionsSection({
           hasActiveFilters={Boolean(hasActiveFilters)}
           hasNext={hasNext}
           onClearFilters={clearFilters}
+          onRunAction={handleRunAction}
+          isRunActionPending={isRunActionPending}
         />
 
         <nav

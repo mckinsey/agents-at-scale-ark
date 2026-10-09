@@ -1,4 +1,7 @@
 """Tests for generic Kubernetes resources API endpoints."""
+import base64
+import gzip
+import json
 import os
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -2788,6 +2791,419 @@ class TestLogWindowTimestampHelpers(unittest.TestCase):
 
         self.assertEqual(list(collector.lines), ["first", "second"])
         self.assertTrue(collector.reached_known_lines)
+
+
+class TestWorkflowLifecycleEndpoints(unittest.TestCase):
+    """Test cases for the Argo Workflow lifecycle action endpoints."""
+
+    BASE = "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/wf-1"
+
+    def setUp(self):
+        from ark_api.main import app
+        self.client = TestClient(app)
+
+    def _wire(self, mock_dynamic_client_cls, mock_api_client, existing: dict):
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        get_result = Mock()
+        get_result.to_dict.return_value = existing
+        mock_api_resource.get = AsyncMock(return_value=get_result)
+
+        def echo(**kwargs):
+            result = Mock()
+            result.to_dict.return_value = kwargs.get("body", existing)
+            return result
+
+        mock_api_resource.patch = AsyncMock(side_effect=echo)
+        mock_api_resource.replace = AsyncMock(side_effect=echo)
+        mock_api_resource.create = AsyncMock(side_effect=echo)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+        return mock_api_resource
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_suspend_patches_spec(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Running"}})
+        response = self.client.put(f"{self.BASE}/suspend")
+        self.assertEqual(response.status_code, 200)
+        _, kwargs = resource.patch.call_args
+        self.assertEqual(kwargs["body"], {"spec": {"suspend": True}})
+        self.assertEqual(kwargs["content_type"], "application/merge-patch+json")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_suspend_rejects_completed_workflow(self, mock_dynamic_client_cls, mock_api_client):
+        self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Succeeded"}})
+        response = self.client.put(f"{self.BASE}/suspend")
+        self.assertEqual(response.status_code, 409)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_stop_patches_shutdown(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Running"}})
+        response = self.client.put(f"{self.BASE}/stop")
+        self.assertEqual(response.status_code, 200)
+        _, kwargs = resource.patch.call_args
+        self.assertEqual(kwargs["body"], {"spec": {"shutdown": "Stop"}})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_terminate_patches_shutdown(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Running"}})
+        response = self.client.put(f"{self.BASE}/terminate")
+        self.assertEqual(response.status_code, 200)
+        _, kwargs = resource.patch.call_args
+        self.assertEqual(kwargs["body"], {"spec": {"shutdown": "Terminate"}})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resume_replaces_and_clears_suspend(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(
+            mock_dynamic_client_cls, mock_api_client,
+            {"spec": {"suspend": True}, "status": {"nodes": {}}},
+        )
+        response = self.client.put(f"{self.BASE}/resume")
+        self.assertEqual(response.status_code, 200)
+        resource.replace.assert_called_once()
+        _, kwargs = resource.replace.call_args
+        self.assertNotIn("suspend", kwargs["body"]["spec"])
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_deletes_pods_and_replaces(self, mock_dynamic_client_cls, mock_api_client):
+        existing = {
+            "metadata": {"name": "wf-1", "labels": {}},
+            "spec": {},
+            "status": {
+                "phase": "Failed",
+                "nodes": {
+                    "wf-1-111": {"id": "wf-1-111", "type": "Pod", "phase": "Failed"},
+                },
+            },
+        }
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+
+        core = self._core_with_pods(("wf-1-succeed-111", "wf-1-111"))
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 200)
+        core.delete_namespaced_pod.assert_called_once_with(name="wf-1-succeed-111", namespace="default")
+        resource.replace.assert_called_once()
+        _, kwargs = resource.replace.call_args
+        self.assertEqual(kwargs["body"]["status"]["phase"], "Running")
+
+    @staticmethod
+    def _failed_with_pod_node(node_id: str) -> dict:
+        return {
+            "metadata": {"name": "wf-1", "labels": {}},
+            "spec": {},
+            "status": {
+                "phase": "Failed",
+                "nodes": {node_id: {"id": node_id, "type": "Pod", "phase": "Failed"}},
+            },
+        }
+
+    @staticmethod
+    def _core_with_pods(*pods_with_node_ids: tuple[str, str | None], delete_error: Exception | None = None) -> AsyncMock:
+        core = AsyncMock()
+        pods = Mock()
+        pods.items = []
+        for pod_name, node_id in pods_with_node_ids:
+            pod = Mock()
+            pod.metadata.name = pod_name
+            pod.metadata.annotations = {"workflows.argoproj.io/node-id": node_id} if node_id else None
+            pods.items.append(pod)
+        core.list_namespaced_pod = AsyncMock(return_value=pods)
+        core.delete_namespaced_pod = AsyncMock(side_effect=delete_error)
+        return core
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_stop_rejects_completed_workflow(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Failed"}})
+        response = self.client.put(f"{self.BASE}/stop")
+        self.assertEqual(response.status_code, 409)
+        resource.patch.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_terminate_rejects_completed_workflow(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Succeeded"}})
+        response = self.client.put(f"{self.BASE}/terminate")
+        self.assertEqual(response.status_code, 409)
+        resource.patch.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resume_rejects_completed_workflow(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(
+            mock_dynamic_client_cls, mock_api_client,
+            {"spec": {"suspend": True}, "status": {"phase": "Failed", "nodes": {}}},
+        )
+        response = self.client.put(f"{self.BASE}/resume")
+        self.assertEqual(response.status_code, 409)
+        resource.replace.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resume_rejects_workflow_that_is_not_suspended(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(
+            mock_dynamic_client_cls, mock_api_client,
+            {"spec": {}, "status": {"phase": "Running", "nodes": {}}},
+        )
+        response = self.client.put(f"{self.BASE}/resume")
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("not suspended", response.json()["detail"])
+        resource.replace.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resume_rejects_unresolvable_suspend_gate(self, mock_dynamic_client_cls, mock_api_client):
+        existing = {
+            "spec": {},
+            "status": {
+                "nodes": {
+                    "gate": {
+                        "id": "gate",
+                        "type": "Suspend",
+                        "phase": "Running",
+                        "outputs": {"parameters": [{"name": "approve", "valueFrom": {}}]},
+                    },
+                },
+            },
+        }
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+        response = self.client.put(f"{self.BASE}/resume")
+        self.assertEqual(response.status_code, 409)
+        resource.replace.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_deletes_only_matching_pods_and_ignores_missing_ones(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
+        core = self._core_with_pods(
+            ("wf-1-other-999", "wf-1-999"),
+            ("wf-1-step-111", "wf-1-111"),
+            delete_error=ApiException(status=404, reason="Not Found"),
+        )
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 200)
+        core.list_namespaced_pod.assert_called_once_with(
+            namespace="default",
+            label_selector="workflows.argoproj.io/workflow=wf-1",
+        )
+        core.delete_namespaced_pod.assert_called_once_with(name="wf-1-step-111", namespace="default")
+        resource.replace.assert_called_once()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_fails_when_pod_deletion_fails(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
+        core = self._core_with_pods(
+            ("wf-1-step-111", "wf-1-111"),
+            delete_error=ApiException(status=403, reason="Forbidden"),
+        )
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 403)
+        resource.replace.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_does_not_delete_pod_whose_node_id_shares_trailing_digits(self, mock_dynamic_client_cls, mock_api_client):
+        self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
+        core = self._core_with_pods(
+            ("wf-1-ok-9111", "wf-1-9111"),
+            ("wf-1-step-111", "wf-1-111"),
+        )
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 200)
+        core.delete_namespaced_pod.assert_called_once_with(name="wf-1-step-111", namespace="default")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_skips_pods_without_node_id_annotation(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
+        core = self._core_with_pods(("wf-1-step-111", None))
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 200)
+        core.delete_namespaced_pod.assert_not_called()
+        resource.replace.assert_called_once()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_rereads_and_rewrites_after_update_conflict(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
+        written = Mock()
+        written.to_dict.return_value = {"status": {"phase": "Running"}}
+        resource.replace = AsyncMock(side_effect=[ApiException(status=409, reason="Conflict"), written])
+        core = self._core_with_pods(("wf-1-step-111", "wf-1-111"))
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(resource.get.call_count, 2)
+        self.assertEqual(resource.replace.call_count, 2)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resume_reports_concurrent_modification_when_conflicts_persist(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(
+            mock_dynamic_client_cls, mock_api_client,
+            {"spec": {"suspend": True}, "status": {"phase": "Running", "nodes": {}}},
+        )
+        resource.replace = AsyncMock(side_effect=ApiException(status=409, reason="Conflict"))
+
+        response = self.client.put(f"{self.BASE}/resume")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("was modified", response.json()["detail"])
+        self.assertEqual(resource.replace.call_count, 3)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_propagates_non_conflict_replace_errors(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
+        resource.replace = AsyncMock(side_effect=ApiException(status=422, reason="Invalid"))
+        core = self._core_with_pods()
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 422)
+        resource.replace.assert_called_once()
+
+    @staticmethod
+    def _compress(nodes: dict) -> str:
+        return base64.b64encode(gzip.compress(json.dumps(nodes).encode())).decode()
+
+    @staticmethod
+    def _decompress(compressed: str) -> dict:
+        return json.loads(gzip.decompress(base64.b64decode(compressed)))
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_resets_compressed_nodes_and_keeps_them_compressed(self, mock_dynamic_client_cls, mock_api_client):
+        nodes = {
+            "wf-1": {"id": "wf-1", "type": "Steps", "phase": "Failed", "children": ["wf-1-111"]},
+            "wf-1-111": {"id": "wf-1-111", "type": "Pod", "phase": "Failed"},
+        }
+        existing = {
+            "metadata": {"name": "wf-1", "labels": {}},
+            "spec": {},
+            "status": {"phase": "Failed", "compressedNodes": self._compress(nodes)},
+        }
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+        core = self._core_with_pods(("wf-1-step-111", "wf-1-111"))
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 200)
+        core.delete_namespaced_pod.assert_called_once_with(name="wf-1-step-111", namespace="default")
+        _, kwargs = resource.replace.call_args
+        status = kwargs["body"]["status"]
+        self.assertNotIn("nodes", status)
+        written_nodes = self._decompress(status["compressedNodes"])
+        self.assertNotIn("wf-1-111", written_nodes)
+        self.assertEqual(written_nodes["wf-1"]["phase"], "Running")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resume_resolves_suspend_gate_in_compressed_nodes(self, mock_dynamic_client_cls, mock_api_client):
+        nodes = {"gate": {"id": "gate", "type": "Suspend", "phase": "Running"}}
+        existing = {
+            "spec": {},
+            "status": {"phase": "Running", "compressedNodes": self._compress(nodes)},
+        }
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+
+        response = self.client.put(f"{self.BASE}/resume")
+
+        self.assertEqual(response.status_code, 200)
+        _, kwargs = resource.replace.call_args
+        written_nodes = self._decompress(kwargs["body"]["status"]["compressedNodes"])
+        self.assertEqual(written_nodes["gate"]["phase"], "Succeeded")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_rejects_offloaded_node_status(self, mock_dynamic_client_cls, mock_api_client):
+        existing = {
+            "metadata": {"name": "wf-1", "labels": {}},
+            "spec": {},
+            "status": {"phase": "Failed", "offloadNodeStatusVersion": "fnv:123"},
+        }
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+        core = self._core_with_pods()
+
+        with patch('ark_api.api.v1.resources.CoreV1Api', return_value=core):
+            response = self.client.put(f"{self.BASE}/retry")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("offloaded", response.json()["detail"])
+        core.list_namespaced_pod.assert_not_called()
+        resource.replace.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_retry_rejects_running_workflow(self, mock_dynamic_client_cls, mock_api_client):
+        self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Running", "nodes": {}}})
+        response = self.client.put(f"{self.BASE}/retry")
+        self.assertEqual(response.status_code, 409)
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_every_action_returns_404_for_missing_workflow(self, mock_dynamic_client_cls, mock_api_client):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, {})
+        resource.get = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
+
+        for action in ("suspend", "resume", "stop", "terminate", "retry", "resubmit"):
+            with self.subTest(action=action):
+                response = self.client.put(f"{self.BASE}/{action}")
+                self.assertEqual(response.status_code, 404)
+        resource.patch.assert_not_called()
+        resource.replace.assert_not_called()
+        resource.create.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    def test_resubmit_creates_new_workflow(self, mock_dynamic_client_cls, mock_api_client):
+        existing = {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "Workflow",
+            "metadata": {"name": "wf-1", "generateName": "wf-", "labels": {}},
+            "spec": {"entrypoint": "main"},
+            "status": {"phase": "Succeeded"},
+        }
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+        response = self.client.put(f"{self.BASE}/resubmit")
+        self.assertEqual(response.status_code, 200)
+        resource.create.assert_called_once()
+        _, kwargs = resource.create.call_args
+        body = kwargs["body"]
+        self.assertNotIn("status", body)
+        self.assertEqual(body["metadata"]["generateName"], "wf-")
+        self.assertEqual(
+            body["metadata"]["labels"]["workflows.argoproj.io/resubmitted-from-workflow"], "wf-1"
+        )
 
 
 if __name__ == "__main__":

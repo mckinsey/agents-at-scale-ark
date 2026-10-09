@@ -38,10 +38,10 @@ rules:
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "list"]
-  # Permission to read pods and pod logs for workflow log fetching
+  # Permission to read pods and pod logs for workflow log fetching, and to delete failed pods on workflow retry
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "delete"]
   # Gateway API resources
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["httproutes", "gateways"]

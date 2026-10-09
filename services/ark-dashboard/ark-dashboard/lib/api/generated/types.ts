@@ -1818,6 +1818,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resubmit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Resubmit Workflow
+         * @description Resubmit a workflow: create a fresh workflow from the existing spec.
+         *
+         *     The new workflow gets a fresh name, an empty status, and a
+         *     workflows.argoproj.io/resubmitted-from-workflow label pointing at the source.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/resubmit
+         */
+        put: operations["resubmit_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resubmit_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Resume Workflow
+         * @description Resume a suspended workflow.
+         *
+         *     Clears spec.suspend and marks active suspend-node gates Succeeded.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/resume
+         */
+        put: operations["resume_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resume_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Retry Workflow
+         * @description Retry a Failed or Error workflow from the point of failure.
+         *
+         *     Successful nodes keep their outputs; failed leaf nodes and their pods are
+         *     dropped, failed group nodes are reset, and the workflow flips back to
+         *     Running with the same name.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/retry
+         */
+        put: operations["retry_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__retry_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Stop Workflow
+         * @description Stop a workflow: kill running pods, mark it Failed, but still run onExit handlers.
+         *
+         *     Sets spec.shutdown=Stop.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/stop
+         */
+        put: operations["stop_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__stop_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Suspend Workflow
+         * @description Suspend a running workflow. No new nodes are scheduled; running pods finish.
+         *
+         *     Sets spec.suspend=true. The workflow stays Running.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/suspend
+         */
+        put: operations["suspend_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__suspend_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/terminate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Terminate Workflow
+         * @description Terminate a workflow: kill running pods and mark it Failed, skipping onExit handlers.
+         *
+         *     Sets spec.shutdown=Terminate.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/terminate
+         */
+        put: operations["terminate_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__terminate_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/{node_id}/log": {
         parameters: {
             query?: never;
@@ -8575,6 +8728,198 @@ export interface operations {
                 version: string;
                 kind: string;
                 resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resubmit_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resubmit_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resume_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__retry_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__stop_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suspend_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__suspend_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    terminate_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__terminate_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
             };
             cookie?: never;
         };
