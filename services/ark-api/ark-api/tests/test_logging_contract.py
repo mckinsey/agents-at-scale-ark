@@ -12,6 +12,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from a2a.types import Part
+
 from ark_api.api.v1.a2agw.execution import ARKAgentExecutor
 from ark_api.utils.query_watch import _get_error_detail
 
@@ -48,8 +50,7 @@ class TestA2AExecutorPromptContract(unittest.IsolatedAsyncioTestCase):
 
     def _context(self, text: str):
         # _extract_message_text walks message.parts looking for a text part.
-        part = SimpleNamespace(kind="text", text=text)
-        message = SimpleNamespace(parts=[part])
+        message = SimpleNamespace(parts=[Part(text=text)])
         return SimpleNamespace(task_id="t-1", context_id="c-1", message=message)
 
     def _executor(self) -> ARKAgentExecutor:

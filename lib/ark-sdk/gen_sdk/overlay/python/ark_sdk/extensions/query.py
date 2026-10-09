@@ -82,6 +82,11 @@ def extract_query_ref(message: Any) -> QueryRef:
         metadata = message.get("metadata") or {}
     elif hasattr(message, "metadata") and message.metadata:
         metadata = message.metadata
+        if hasattr(metadata, "DESCRIPTOR"):
+            # a2a-sdk 1.x's Message.metadata is a protobuf Struct, not a dict
+            from google.protobuf.json_format import MessageToDict
+
+            metadata = MessageToDict(metadata)
 
     ref_data = metadata.get(QUERY_EXTENSION_METADATA_KEY)
     if not ref_data or not isinstance(ref_data, dict):
