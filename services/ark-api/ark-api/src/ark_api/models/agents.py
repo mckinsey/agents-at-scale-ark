@@ -73,11 +73,19 @@ class AgentLabelSelector(BaseModel):
     matchExpressions: Optional[List[AgentLabelSelectorRequirement]] = None
 
 
+class ToolApprovalConfig(BaseModel):
+    """Approval configuration for human-in-the-loop tool execution."""
+    required: Optional[bool] = None
+    timeout: Optional[str] = None
+    onTimeout: Optional[str] = None
+
+
 class AgentTool(BaseModel):
     """Tool configuration for an agent."""
     type: str  # "built-in", "mcp", "http", "agent", "team", "builtin" (or deprecated "custom")
     name: Optional[str] = None
     labelSelector: Optional[AgentLabelSelector] = None
+    approval: Optional[ToolApprovalConfig] = None
 
 
 class AgentHeaderValue(BaseModel):
