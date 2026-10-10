@@ -232,7 +232,7 @@ The `graph` team strategy is deprecated and has been merged into `sequential`.
 On create or update, you will see a deprecation warning.
 
 <Callout type="warning">
-The `graph` strategy value will be removed in v1.0.0. Update your team manifests to use `sequential`, or `selector` with `spec.graph` to keep edge constraints. The `spec.graph` field is retained for `selector` teams.
+The `graph` strategy value will be removed in v1.0.0. Update your team manifests to use `sequential`, or `selector` with `spec.graph` to keep edge constraints. A `selector` team also requires `spec.selector.agent` and `spec.maxTurns`.
 </Callout>
 
 **Migration:**

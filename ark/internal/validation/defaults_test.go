@@ -190,8 +190,8 @@ func TestDefaultTeam(t *testing.T) {
 		if warning == "" {
 			t.Fatal("expected migration warning annotation")
 		}
-		if !strings.Contains(warning, "'graph' strategy value will be removed") || !strings.Contains(warning, "spec.graph field is retained for 'selector'") {
-			t.Fatalf("expected warning to scope removal to the strategy value and retain spec.graph, got %q", warning)
+		if !strings.Contains(warning, "Only the 'graph' strategy value will be removed") {
+			t.Fatalf("expected warning to scope removal to the strategy value, got %q", warning)
 		}
 	})
 
