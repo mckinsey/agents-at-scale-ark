@@ -156,47 +156,47 @@ function calculateTotalCount(
 export const eventsService = {
   // Get all events with optional filters
   async getAll(
+    namespace: string,
     filters?: EventFilters,
   ): Promise<{ items: Event[]; total: number }> {
-    try {
-      const effectiveFilters = filters || {};
-      const params = buildEventApiParams(effectiveFilters);
+    const effectiveFilters = filters || {};
+    const params = buildEventApiParams(effectiveFilters);
 
-      const queryString = params.toString();
-      const url = `/api/v1/events${queryString ? `?${queryString}` : ''}`;
+    const queryString = params.toString();
+    const url = `/api/v1/events${queryString ? `?${queryString}` : ''}`;
 
-      logApiRequest(effectiveFilters, params, url);
+    logApiRequest(effectiveFilters, params, url);
 
-      const response = await apiClient.get<EventListResponse>(url);
+    const response = await apiClient.get<EventListResponse>(url, {
+      params: { namespace },
+    });
 
-      logApiResponse(url, response);
+    logApiResponse(url, response);
 
-      if (!response?.items) {
-        return { items: [], total: 0 };
-      }
-
-      const items = response.items.map(mapEventApiResponseToEvent);
-      const totalCount = calculateTotalCount(
-        response,
-        effectiveFilters,
-        items.length,
-      );
-
-      return {
-        items,
-        total: totalCount,
-      };
-    } catch (error) {
-      console.error('Failed to fetch events:', error);
+    if (!response?.items) {
       return { items: [], total: 0 };
     }
+
+    const items = response.items.map(mapEventApiResponseToEvent);
+    const totalCount = calculateTotalCount(
+      response,
+      effectiveFilters,
+      items.length,
+    );
+
+    return {
+      items,
+      total: totalCount,
+    };
   },
 
   // Get a single event by name
-  async get(eventName: string): Promise<Event> {
+  async get(namespace: string, eventName: string): Promise<Event> {
     try {
       const url = `/api/v1/events/${eventName}`;
-      const response = await apiClient.get<EventApiResponse>(url);
+      const response = await apiClient.get<EventApiResponse>(url, {
+        params: { namespace },
+      });
 
       return mapEventApiResponseToEvent(response);
     } catch (error) {
@@ -206,24 +206,19 @@ export const eventsService = {
   },
 
   // Helper to fetch events for filter population
-  async _getEventsForFilters(): Promise<Event[]> {
-    try {
-      const result = await this.getAll({ limit: 200 });
-      return result.items;
-    } catch (error) {
-      console.error('Failed to fetch events for filters:', error);
-      return [];
-    }
+  async _getEventsForFilters(namespace: string): Promise<Event[]> {
+    const result = await this.getAll(namespace, { limit: 200 });
+    return result.items;
   },
 
   // Get all filter options
-  async getAllFilterOptions(): Promise<{
+  async getAllFilterOptions(namespace: string): Promise<{
     types: string[];
     kinds: string[];
     names: string[];
   }> {
     try {
-      const events = await this._getEventsForFilters();
+      const events = await this._getEventsForFilters(namespace);
 
       const types = new Set(events.map(event => event.type).filter(Boolean));
       const kinds = new Set(

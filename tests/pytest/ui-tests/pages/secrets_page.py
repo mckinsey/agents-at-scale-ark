@@ -1,8 +1,7 @@
 import logging
 import random
-import pytest
 from datetime import datetime
-from playwright.sync_api import Page
+from playwright.sync_api import expect
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -44,12 +43,12 @@ class SecretsPage(BasePage):
                     self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']", timeout=3000)
                 else:
                     return
-            except:
+            except Exception:
                 pass
         self.page.keyboard.press("Escape")
 
     def _goto_secrets(self) -> None:
-        self.page.goto("http://localhost:3274/secrets")
+        self.page.goto("http://localhost:3274/secrets", wait_until="domcontentloaded")
         self.wait_for_navigation_complete()
         self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
         self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
@@ -74,34 +73,23 @@ class SecretsPage(BasePage):
 
         logger.info(f"Creating secret: {secret_name}")
 
+        # Creating a secret navigates to a full page (/secrets/new), not a modal.
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
-        self.wait_for_modal_open()
+        self.wait_for_navigation_complete()
 
-        inputs = self.page.locator("[role='dialog'] input, [data-slot='dialog-content'] input")
-        inputs.first.wait_for(state="visible", timeout=10000)
-        try:
-            inputs.nth(1).wait_for(state="visible", timeout=5000)
-        except Exception:
-            pass
+        name_input = self.page.get_by_placeholder("e.g., api-key-production")
+        name_input.wait_for(state="visible", timeout=10000)
+        name_input.fill(secret_name)
 
-        input_count = inputs.count()
-        logger.info(f"Found {input_count} inputs in dialog")
+        value_input = self.page.get_by_placeholder("Enter the secret value")
+        value_input.fill(secret_value)
 
-        if input_count >= 2:
-            inputs.nth(0).fill(secret_name)
-            inputs.nth(1).fill(secret_value)
-        else:
-            inputs.first.fill(secret_name)
-            textarea = self.page.locator("[role='dialog'] textarea, [data-slot='dialog-content'] textarea").first
-            if textarea.is_visible(timeout=2000):
-                textarea.fill(secret_value)
-
-        save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
+        save_button = self.page.get_by_role("button", name="Create")
         save_button.wait_for(state="visible", timeout=5000)
-        save_button.click(force=True)
+        save_button.click()
 
         popup_visible = self._check_toast_popup()
-        self.wait_for_modal_close()
+        self.wait_for_navigation_complete()
 
         self.navigate_to_secrets_tab()
         in_table = self.is_secret_in_table(secret_name)
@@ -122,10 +110,14 @@ class SecretsPage(BasePage):
             name_element = self.page.get_by_text(secret_name, exact=True).first
             name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete secret'] or .//button[.//*[contains(@class,'lucide-trash')]]  ][1]")
-            delete_btn = card.locator("button[aria-label='Delete secret'], button:has(svg.lucide-trash-2)").first
+            row = self.page.get_by_role("row").filter(has_text=secret_name).first
+            delete_btn = row.get_by_role("button", name="Delete secret")
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click(force=True)
+            # The delete action is disabled while the secret is still used by a model.
+            # After the using model is deleted, the "in use" status can take a moment to
+            # refresh, so wait for the button to become enabled before clicking.
+            expect(delete_btn).to_be_enabled(timeout=15000)
+            delete_btn.click()
         except Exception as e:
             logger.warning("Delete button not accessible for secret '%s': %s", secret_name, e)
             return self._delete_not_available(secret_name)

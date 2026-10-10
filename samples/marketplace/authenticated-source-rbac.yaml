@@ -1,0 +1,28 @@
+# Lets a group of users USE a private marketplace source.
+# Ark reads the source's credential Secret as the user making the request, so
+# giving a group `get` on that Secret is what allows them to load the source.
+# One RoleBinding covers the whole group. Scoped to this one Secret by name.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: marketplace-source-internal-mirror-reader
+  namespace: team-a
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["marketplace-source-internal-mirror-auth"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: marketplace-source-internal-mirror-reader
+  namespace: team-a
+subjects:
+  - kind: Group
+    name: team-a-catalogue-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: marketplace-source-internal-mirror-reader
+  apiGroup: rbac.authorization.k8s.io

@@ -18,3 +18,44 @@ config:
     response:
       status: 200
       content: '{"id":"mock-response","object":"chat.completion","model":"gpt-4.1-mini","choices":[{"message":{"role":"assistant","content":"Hello! I received your message."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}'
+
+  # --- human-in-the-loop journeys (tests/test_hitl_approvals.py) -------------
+  #
+  # An approval card only appears once an agent emits a tool call, and the
+  # executor streams every model call that carries an event stream - which is
+  # every query the dashboard starts. mock-llm cannot script that directly:
+  # its SSE writer only ever reads choices[0].message.content and hardcodes
+  # finish_reason "stop", so a scripted tool_calls response comes back as an
+  # empty text chunk (and 500s outright when content is absent).
+  #
+  # Its one raw-passthrough path is the error branch, which writes the rule
+  # body as a single SSE frame under HTTP 200. Asking for status 400 on a
+  # streaming request therefore delivers the chunk below verbatim, which is a
+  # complete tool call in one frame - id, name and arguments together, which
+  # is what the executor accumulates. The match is guarded on body.stream so
+  # non-streaming callers (the model probe) still get a normal 200 above.
+  #
+  # This leans on mock-llm internals, so it is pinned to the chart version CI
+  # installs (0.1.28); re-check it when that version moves.
+  - path: "/v1/chat/completions"
+    match: "body.stream && contains(to_string(body.messages), 'Roll out version')"
+    response:
+      status: 400
+      content: '{"id":"hitl-tool-call","object":"chat.completion.chunk","created":0,"model":"gpt-4.1-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"","tool_calls":[{"index":0,"id":"call_hitl_rollout","type":"function","function":{"name":"hitl-protected-action","arguments":"{\"target\": \"production\", \"version\": \"v2.1.0\"}"}}]},"finish_reason":"tool_calls"}]}'
+
+  # Second turn. Once a tool result is in the history the agent must answer
+  # instead of calling again, or the approval would be raised over and over.
+  # Rules are last-match-wins, so this has to stay below the tool-call rule.
+  - path: "/v1/chat/completions"
+    match: "length(body.messages[?role=='tool']) > `0`"
+    response:
+      status: 200
+      content: '{"id":"hitl-answer","object":"chat.completion","model":"gpt-4.1-mini","choices":[{"message":{"role":"assistant","content":"Rolled out v2.1.0 to production."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}'
+
+  # Endpoint backing the approval-gated tool used by the HITL journeys. Keeping
+  # it in-cluster means those tests need no outbound network for the tool call
+  # itself. See fixtures/hitl-approval-agents.yaml.
+  - path: "/hitl-protected-action"
+    response:
+      status: 200
+      content: '{"result":"hitl-protected-action executed"}'

@@ -449,6 +449,78 @@ describe('runLogin expired terminal state', () => {
   });
 });
 
+describe('runLogin callback reachability guard', () => {
+  const authUrlWithRedirect = (redirectUri: string) =>
+    `https://idp/authorize?client_id=cid&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&state=s`;
+
+  it('warns when the callback port differs from the port-forward port', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: authUrlWithRedirect(
+          'http://127.0.0.1:34780/v1/mcp/auth/callback'
+        ),
+        flow_expires_at: 'x',
+      }),
+      status: vi.fn().mockResolvedValue({state: 'authorized'}),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    await runLogin('notion-mcp', {open: false}, deps);
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      expect.stringContaining('port 1234')
+    );
+  });
+
+  it('does not warn when the callback port matches the port-forward port', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: authUrlWithRedirect(
+          'http://127.0.0.1:1234/v1/mcp/auth/callback'
+        ),
+        flow_expires_at: 'x',
+      }),
+      status: vi.fn().mockResolvedValue({state: 'authorized'}),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    await runLogin('notion-mcp', {open: false}, deps);
+    expect(mockOutput.warning).not.toHaveBeenCalled();
+  });
+
+  it('does not warn for a public https callback host', async () => {
+    const client = {
+      start: vi.fn().mockResolvedValue({
+        auth_id: 'aid',
+        authorization_url: authUrlWithRedirect(
+          'https://ark.example.com/v1/mcp/auth/callback'
+        ),
+        flow_expires_at: 'x',
+      }),
+      status: vi.fn().mockResolvedValue({state: 'authorized'}),
+      logout: vi.fn(),
+    };
+    const {deps} = makeDeps({
+      buildClient: () =>
+        client as unknown as InstanceType<typeof McpAuthClient>,
+      openBrowser: vi.fn(),
+    });
+    await runLogin('notion-mcp', {open: false}, deps);
+    expect(mockOutput.warning).not.toHaveBeenCalled();
+  });
+});
+
 describe('execa carve-out', () => {
   it('runLogin never shells out to kubectl get/patch — only port-forward is allowed', async () => {
     const client = {

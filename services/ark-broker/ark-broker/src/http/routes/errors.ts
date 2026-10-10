@@ -42,3 +42,13 @@ export function sendInternalError(res: Response, reqId: unknown): void {
     },
   });
 }
+
+export function sendMissingQueryIdError(res: Response, reqId: unknown): void {
+  res.status(400).json({
+    error: {
+      code: 'BAD_REQUEST',
+      message: 'Query ID is required',
+      requestId: reqId === undefined ? undefined : String(reqId),
+    },
+  });
+}

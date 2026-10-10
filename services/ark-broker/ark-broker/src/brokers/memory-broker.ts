@@ -1,5 +1,8 @@
 import {BrokerItem} from './stream/broker-item.js';
-import type {Stream} from './stream/stream.js';
+import type {
+  ConversationStats,
+  MessageStream,
+} from './stream/message-stream.js';
 import {PaginatedList, PaginationParams} from './pagination.js';
 
 export type Message = unknown;
@@ -11,9 +14,9 @@ export interface MessageData {
 }
 
 export class MemoryBroker {
-  private readonly stream: Stream<MessageData>;
+  private readonly stream: MessageStream;
 
-  constructor(stream: Stream<MessageData>) {
+  constructor(stream: MessageStream) {
     this.stream = stream;
   }
 
@@ -32,31 +35,35 @@ export class MemoryBroker {
     messages: Message[],
     ttlSeconds?: number
   ): Promise<BrokerItem<MessageData>[]> {
-    const items: BrokerItem<MessageData>[] = [];
-    for (const message of messages) {
-      items.push(
-        await this.addMessage(conversationId, queryId, message, ttlSeconds)
-      );
-    }
-    return items;
+    return this.stream.appendMany(
+      messages.map((message) => ({conversationId, queryId, message})),
+      ttlSeconds
+    );
   }
 
   async getByConversation(
     conversationId: string
   ): Promise<BrokerItem<MessageData>[]> {
-    return this.stream.filter(
-      (item) => item.data.conversationId === conversationId
-    );
+    return this.stream.filterBy({conversationId});
   }
 
   async getByQuery(queryId: string): Promise<BrokerItem<MessageData>[]> {
-    return this.stream.filter((item) => item.data.queryId === queryId);
+    return this.stream.filterBy({queryId});
+  }
+
+  async messagesAfter(
+    cursor: number,
+    conversationId?: string
+  ): Promise<BrokerItem<MessageData>[]> {
+    return this.stream.filterBy({conversationId, afterSequence: cursor});
   }
 
   async getConversationIds(): Promise<string[]> {
-    const all = await this.stream.all();
-    const ids = new Set(all.map((item) => item.data.conversationId));
-    return Array.from(ids);
+    return this.stream.distinctConversationIds();
+  }
+
+  async getConversationStats(): Promise<ConversationStats[]> {
+    return this.stream.conversationStats();
   }
 
   all(): Promise<BrokerItem<MessageData>[]> {
@@ -72,17 +79,15 @@ export class MemoryBroker {
   }
 
   async deleteConversation(conversationId: string): Promise<void> {
-    return this.stream.delete(
-      (item) => item.data.conversationId === conversationId
-    );
+    return this.stream.deleteBy({conversationId});
   }
 
   async deleteQuery(conversationId: string, queryId: string): Promise<void> {
-    return this.stream.delete(
-      (item) =>
-        item.data.conversationId === conversationId &&
-        item.data.queryId === queryId
-    );
+    return this.stream.deleteBy({conversationId, queryId});
+  }
+
+  async deleteByQuery(queryId: string): Promise<void> {
+    return this.stream.deleteByQuery(queryId);
   }
 
   subscribe(callback: (item: BrokerItem<MessageData>) => void): () => void {
@@ -104,19 +109,7 @@ export class MemoryBroker {
     params: PaginationParams,
     filters?: {conversationId?: string; queryId?: string}
   ): Promise<PaginatedList<BrokerItem<MessageData>>> {
-    const predicate = filters
-      ? (item: BrokerItem<MessageData>): boolean => {
-          if (
-            filters.conversationId &&
-            item.data.conversationId !== filters.conversationId
-          )
-            return false;
-          if (filters.queryId && item.data.queryId !== filters.queryId)
-            return false;
-          return true;
-        }
-      : undefined;
-    return this.stream.paginate(params, predicate);
+    return this.stream.paginateBy(params, filters);
   }
 
   async getCurrentSequence(): Promise<number> {

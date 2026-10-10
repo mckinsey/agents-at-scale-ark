@@ -25,7 +25,13 @@ export type DeploymentStatus =
 
 export type ServiceStatus = {
   name: string;
-  status: 'healthy' | 'warning' | 'unhealthy' | 'not installed' | 'not ready';
+  status:
+    | 'healthy'
+    | 'warning'
+    | 'unhealthy'
+    | 'not installed'
+    | 'not ready'
+    | 'no access';
   deploymentStatus?: DeploymentStatus;
   url?: string;
   version?: string;
@@ -122,6 +128,12 @@ export interface QueryTarget {
   name: string;
 }
 
+// Template parameter passed on a Query (spec.parameters)
+export interface QueryParameter {
+  name: string;
+  value?: string;
+}
+
 export interface QueryResponse {
   content?: string;
   a2a?: {
@@ -156,6 +168,7 @@ export interface Query {
     sessionId?: string;
     conversationId?: string;
     timeout?: string;
+    parameters?: QueryParameter[];
   };
   status?: QueryStatus;
 }

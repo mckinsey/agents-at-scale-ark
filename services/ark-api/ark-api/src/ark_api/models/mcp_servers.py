@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, model_serializer
 
-from .common import AvailabilityStatus
+from .common import AvailabilityStatus, PaginatedListResponse
 
 
 class MCPServerConfigMapKeyRef(BaseModel):
@@ -52,9 +52,33 @@ class MCPServerValueSource(BaseModel):
             }
 
 
+class MCPServerAddressSource(BaseModel):
+    """Read model for spec.address: reports both fields as stored.
+
+    MCPServerValueSource is the write model and its serializer collapses to
+    whichever of value/valueFrom is set, which would hide the origin here.
+    """
+    value: Optional[str] = None
+    valueFrom: Optional[MCPServerValueFrom] = None
+
+
 class MCPServerHeader(BaseModel):
     name: str
     value: MCPServerValueSource
+
+
+class MCPServerAuthorization(BaseModel):
+    """Authorization state of an MCPServer, for rendering state and expiry.
+
+    Sourced from status.authorization. Never carries token or Secret material.
+    """
+    state: str
+    resourceName: Optional[str] = None
+    expiresAt: Optional[str] = None
+    # True when the controller mints this server's token itself via
+    # spec.authorization.clientCredentials. No interactive flow exists,
+    # so consumers must not offer an authenticate action.
+    machineManaged: bool = False
 
 
 class MCPServerResponse(BaseModel):
@@ -66,11 +90,11 @@ class MCPServerResponse(BaseModel):
     available: Optional[AvailabilityStatus] = None
     status_message: Optional[str] = None
     tool_count: Optional[int] = None
+    authorization: Optional[MCPServerAuthorization] = None
 
 
-class MCPServerListResponse(BaseModel):
+class MCPServerListResponse(PaginatedListResponse):
     items: List[MCPServerResponse]
-    total: int
 
 
 class MCPServerDetailResponse(BaseModel):
@@ -81,9 +105,11 @@ class MCPServerDetailResponse(BaseModel):
     annotations: Optional[Dict[str, str]] = None
     available: Optional[AvailabilityStatus] = None
     address: Optional[str] = None
+    address_source: Optional[MCPServerAddressSource] = None
     transport: Optional[str] = None
     headers: Optional[List[MCPServerHeader]]
     tool_count: Optional[int] = None
+    authorization: Optional[MCPServerAuthorization] = None
 
 
 class MCPTransport(BaseModel):

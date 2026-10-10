@@ -45,7 +45,6 @@ runs:
         sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
         sudo chmod +x /usr/local/bin/yq
         curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-        curl -sS https://webinstall.dev/k9s | bash
         export PATH="$HOME/.local/bin:$PATH"
         sudo apt-get update && sudo apt-get install -y gettext
 
@@ -126,6 +125,16 @@ runs:
           --set image.pullPolicy=Always \
           --wait --timeout=5m
 
+        # Install ark-broker from local chart — ark-tenant now refuses to
+        # install without a broker Service already present in the namespace.
+        helm upgrade --install ark-broker services/ark-broker/chart \
+          --namespace default \
+          --set app.image.repository="${{ inputs.ci-cache-registry }}/ark-broker" \
+          --set app.image.tag="${{ inputs.ark-image-tag }}" \
+          --set app.image.pullPolicy=Always \
+          --set restartController.enabled=false \
+          --wait --timeout=5m
+
         # Install ark-tenant from local chart
         helm upgrade --install ark-tenant charts/ark-tenant \
           --namespace default \
@@ -186,6 +195,7 @@ runs:
         helm uninstall ark-dashboard --namespace default --ignore-not-found || true
         helm uninstall ark-api --namespace default --ignore-not-found || true
         helm uninstall ark-tenant --namespace default --ignore-not-found || true
+        helm uninstall ark-broker --namespace default --ignore-not-found || true
         helm uninstall ark-controller --namespace ark-system --ignore-not-found || true
         ark status
         sleep 10 && ark status

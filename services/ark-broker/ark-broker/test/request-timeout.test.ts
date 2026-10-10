@@ -1,6 +1,7 @@
 import http from 'http';
 import express from 'express';
 import {CompletionChunkBroker} from '../src/brokers/chunks-broker';
+import {InMemoryChunkStream} from '../src/brokers/stream/in-memory-chunk-stream';
 import {createLogger} from '../src/logging/logger';
 import {createHttpLogger} from '../src/http/middleware/http-logger';
 import {requestId} from '../src/http/middleware/request-id';
@@ -14,7 +15,7 @@ function createBrokerServer(
   chunks: CompletionChunkBroker;
 } {
   const logger = createLogger({level: 'silent', pretty: false});
-  const chunks = new CompletionChunkBroker(logger);
+  const chunks = new CompletionChunkBroker(new InMemoryChunkStream(logger));
   const app = express();
   app.use(express.json());
   app.use(requestId);

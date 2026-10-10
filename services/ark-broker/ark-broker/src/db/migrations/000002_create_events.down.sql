@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS events;
+DROP SEQUENCE IF EXISTS events_seq;

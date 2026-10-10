@@ -1,0 +1,27 @@
+{{- if .Values.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ark-apiserver-selfsigned-issuer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ark-apiserver-serving-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+    - ark-apiserver.{{ .Release.Namespace }}.svc
+    - ark-apiserver.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: ark-apiserver-selfsigned-issuer
+  secretName: ark-apiserver-tls
+{{- end }}

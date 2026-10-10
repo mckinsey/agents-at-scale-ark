@@ -1,27 +1,40 @@
+import type { ComponentProps } from 'react';
+
+import { StatusBadge } from '@/components/ui/badge';
 import { A2ATaskPhase } from '@/lib/services/a2a-tasks';
 
-import { type StatusDotVariant } from './status-dot';
+export type TaskStatusVariant = NonNullable<
+  ComponentProps<typeof StatusBadge>['variant']
+>;
 
-export const mapTaskPhaseToVariant = (phase?: string): StatusDotVariant => {
+export interface TaskStatusConfig {
+  label: string;
+  variant: TaskStatusVariant;
+}
+
+const PHASE_CONFIG: Record<string, TaskStatusConfig> = {
+  [A2ATaskPhase.COMPLETED]: { label: 'Completed', variant: 'success' },
+  [A2ATaskPhase.RUNNING]: { label: 'Running', variant: 'neutral-brand' },
+  [A2ATaskPhase.ASSIGNED]: { label: 'Assigned', variant: 'neutral-brand' },
+  [A2ATaskPhase.PENDING]: { label: 'Pending', variant: 'warning' },
+  [A2ATaskPhase.INPUT_REQUIRED]: {
+    label: 'Input required',
+    variant: 'warning',
+  },
+  [A2ATaskPhase.AUTH_REQUIRED]: { label: 'Auth required', variant: 'warning' },
+  [A2ATaskPhase.FAILED]: { label: 'Failed', variant: 'error' },
+  [A2ATaskPhase.CANCELLED]: { label: 'Cancelled', variant: 'neutral' },
+};
+
+const UNKNOWN_STATUS: TaskStatusConfig = {
+  label: 'Unknown',
+  variant: 'neutral',
+};
+
+export const mapTaskPhaseToStatus = (phase?: string): TaskStatusConfig => {
   if (!phase) {
-    return 'unknown';
+    return UNKNOWN_STATUS;
   }
 
-  const normalizedPhase = phase.toLowerCase();
-  switch (normalizedPhase) {
-    case A2ATaskPhase.COMPLETED:
-      return 'completed';
-    case A2ATaskPhase.RUNNING:
-    case A2ATaskPhase.ASSIGNED:
-      return 'running';
-    case A2ATaskPhase.FAILED:
-    case A2ATaskPhase.CANCELLED:
-      return 'failed';
-    case A2ATaskPhase.INPUT_REQUIRED:
-    case A2ATaskPhase.AUTH_REQUIRED:
-    case A2ATaskPhase.PENDING:
-      return 'pending';
-    default:
-      return 'unknown';
-  }
+  return PHASE_CONFIG[phase.toLowerCase()] ?? UNKNOWN_STATUS;
 };

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   workflowsService,
   calculateDuration,
+  expandCompressedNodes,
   getRootNodeId,
   getAllNodesFlat,
   buildNodeHierarchy,
@@ -41,9 +42,10 @@ describe('workflowsService', () => {
       const result = await workflowsService.list('default');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default'
-      );
-      expect(result).toEqual(mockWorkflows);
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default');
+      expect(result.items).toEqual(mockWorkflows);
+      expect(result.hasMore).toBe(false);
+      expect(result.continueToken).toBeUndefined();
     });
 
     it('should list workflows with workflowName filter', async () => {
@@ -64,9 +66,8 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&workflowName=test'
-      );
-      expect(result).toEqual(mockWorkflows);
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&workflowName=test');
+      expect(result.items).toEqual(mockWorkflows);
     });
 
     it('should list workflows with workflowTemplateName filter', async () => {
@@ -81,8 +82,7 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=prod&workflowTemplateName=my-template'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=prod&workflowTemplateName=my-template');
     });
 
     it('should list workflows with status filter', async () => {
@@ -97,8 +97,7 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&status=succeeded'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&status=succeeded');
     });
 
     it('should list workflows with all filters', async () => {
@@ -115,8 +114,61 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=custom-ns&workflowName=prod&workflowTemplateName=ci-template&status=running'
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=custom-ns&workflowName=prod&workflowTemplateName=ci-template&status=running');
+    });
+
+    it('should append limit and continue to the query string when given', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+      } as unknown as ArgoWorkflowList);
+
+      await workflowsService.list('default', undefined, {
+        limit: 25,
+        continueToken: 'abc123',
+      });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&limit=25&continue=abc123');
+    });
+
+    it('forwards an AbortSignal to apiClient.get when given', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+      } as unknown as ArgoWorkflowList);
+      const controller = new AbortController();
+
+      await workflowsService.list('default', undefined, {
+        signal: controller.signal,
+      });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default',
+        { signal: controller.signal },
       );
+    });
+
+    it('should report hasMore true and surface the continue token when present', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+        metadata: { continue: 'next-page-token' },
+      } as ArgoWorkflowList);
+
+      const result = await workflowsService.list('default');
+
+      expect(result.hasMore).toBe(true);
+      expect(result.continueToken).toBe('next-page-token');
+    });
+
+    it('should report hasMore false when there is no continue token', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+        metadata: {},
+      } as ArgoWorkflowList);
+
+      const result = await workflowsService.list('default');
+
+      expect(result.hasMore).toBe(false);
+      expect(result.continueToken).toBeUndefined();
     });
   });
 
@@ -130,11 +182,10 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockWorkflow);
 
-      const result = await workflowsService.get('my-workflow');
+      const result = await workflowsService.get('default', 'my-workflow');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/my-workflow?namespace=default'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/my-workflow?namespace=default');
       expect(result).toEqual(mockWorkflow);
     });
 
@@ -147,11 +198,10 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockWorkflow);
 
-      const result = await workflowsService.get('test-wf', 'prod');
+      const result = await workflowsService.get('prod', 'test-wf');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf?namespace=prod'
-      );
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf?namespace=prod');
       expect(result).toEqual(mockWorkflow);
     });
   });
@@ -162,7 +212,7 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockYaml);
 
-      const result = await workflowsService.getYaml('my-workflow');
+      const result = await workflowsService.getYaml('default', 'my-workflow');
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/my-workflow?namespace=default',
@@ -180,7 +230,7 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockYaml);
 
-      await workflowsService.getYaml('test-wf', 'staging');
+      await workflowsService.getYaml('staging', 'test-wf');
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf?namespace=staging',
@@ -199,7 +249,7 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
-      const result = await workflowsService.getPodLogs('pod-123');
+      const result = await workflowsService.getPodLogs('default', 'pod-123');
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/api/v1/namespaces/default/pods/pod-123/log?tailLines=1000',
@@ -218,8 +268,8 @@ describe('workflowsService', () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
       const result = await workflowsService.getPodLogs(
-        'pod-456',
         'default',
+        'pod-456',
         'main'
       );
 
@@ -239,7 +289,7 @@ describe('workflowsService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
-      await workflowsService.getPodLogs('pod-789', 'prod', 'sidecar');
+      await workflowsService.getPodLogs('prod', 'pod-789', 'sidecar');
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/api/v1/namespaces/prod/pods/pod-789/log?tailLines=1000&container=sidecar',
@@ -259,6 +309,7 @@ describe('workflowsService', () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
       const result = await workflowsService.getWorkflowLogs(
+        'default',
         'my-workflow',
         'node-id-123'
       );
@@ -280,9 +331,9 @@ describe('workflowsService', () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockLogs);
 
       await workflowsService.getWorkflowLogs(
+        'staging',
         'test-workflow',
-        'node-456',
-        'staging'
+        'node-456'
       );
 
       expect(apiClient.get).toHaveBeenCalledWith(
@@ -437,3 +488,149 @@ describe('workflow utility functions', () => {
   });
 });
 
+describe('expandCompressedNodes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function gzipBase64(value: string): Promise<string> {
+    const bytes = new TextEncoder().encode(value);
+    const compressed = new ReadableStream<BufferSource>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    }).pipeThrough(new CompressionStream('gzip'));
+
+    const buffer = new Uint8Array(await new Response(compressed).arrayBuffer());
+    let binary = '';
+    for (const byte of buffer) {
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+  }
+
+  const nodes: Record<string, ArgoNodeStatus> = {
+    'wf-1': {
+      id: 'wf-1',
+      name: 'wf-1',
+      displayName: 'wf-1',
+      type: 'Steps',
+      phase: 'Succeeded',
+    } as ArgoNodeStatus,
+  };
+
+  it('should restore nodes from compressedNodes when nodes is absent', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: {
+        phase: 'Succeeded',
+        compressedNodes: await gzipBase64(JSON.stringify(nodes)),
+      },
+    } as unknown as ArgoWorkflow;
+
+    const result = await expandCompressedNodes(workflow);
+
+    expect(result.status?.nodes).toEqual(nodes);
+  });
+
+  it('should not mutate the original workflow', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: {
+        phase: 'Succeeded',
+        compressedNodes: await gzipBase64(JSON.stringify(nodes)),
+      },
+    } as unknown as ArgoWorkflow;
+
+    await expandCompressedNodes(workflow);
+
+    expect(workflow.status?.nodes).toBeUndefined();
+  });
+
+  it('should return the workflow unchanged when nodes are already present', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: { phase: 'Succeeded', nodes },
+    } as unknown as ArgoWorkflow;
+
+    const result = await expandCompressedNodes(workflow);
+
+    expect(result).toBe(workflow);
+  });
+
+  it('should return the workflow unchanged when there is nothing to decompress', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: { phase: 'Running' },
+    } as unknown as ArgoWorkflow;
+
+    const result = await expandCompressedNodes(workflow);
+
+    expect(result).toBe(workflow);
+  });
+
+  it('should return the workflow unchanged when compressedNodes is invalid', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: { phase: 'Succeeded', compressedNodes: 'not-gzip' },
+    } as unknown as ArgoWorkflow;
+
+    const result = await expandCompressedNodes(workflow);
+
+    expect(result).toBe(workflow);
+    expect(result.status?.nodes).toBeUndefined();
+    expect(consoleError).toHaveBeenCalled();
+
+    consoleError.mockRestore();
+  });
+
+  it('should decompress nodes returned by get', async () => {
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: {
+        phase: 'Succeeded',
+        compressedNodes: await gzipBase64(JSON.stringify(nodes)),
+      },
+    } as unknown as ArgoWorkflow;
+
+    vi.mocked(apiClient.get).mockResolvedValue(workflow);
+
+    const result = await workflowsService.get('default', 'wf-1');
+
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/wf-1?namespace=default',
+    );
+    expect(result.status?.nodes).toEqual(nodes);
+  });
+
+  it('should decompress nodes for every workflow returned by list', async () => {
+    const compressedNodes = await gzipBase64(JSON.stringify(nodes));
+    const workflow = {
+      metadata: { name: 'wf-1', namespace: 'default' },
+      spec: {},
+      status: { phase: 'Succeeded', compressedNodes },
+    } as unknown as ArgoWorkflow;
+
+    vi.mocked(apiClient.get).mockResolvedValue({
+      items: [workflow, workflow],
+    } as ArgoWorkflowList);
+
+    const result = await workflowsService.list('default');
+
+    expect(result.items).toHaveLength(2);
+    for (const item of result.items) {
+      expect(item.status?.nodes).toEqual(nodes);
+    }
+  });
+});

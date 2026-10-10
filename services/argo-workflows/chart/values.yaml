@@ -1,6 +1,14 @@
 # Argo Workflows configuration. This is config for the actual Argo workflows
 # chart from Argo itself, which is a dependency of our own chart.
 argo-workflows:
+  # We ship a pinned, immutable Argo release tag, so IfNotPresent is the
+  # correct policy: the digest never changes, and cached (or prefetched)
+  # images start without a per-pod registry round-trip - which matters
+  # because the executor image runs in every workflow pod. Set this to
+  # Always only if you point the images at a mutable tag (e.g. latest).
+  images:
+    pullPolicy: IfNotPresent
+
   # Single namespace mode. Suitable for development and does not require
   # cluster roles.
   singleNamespace: false
@@ -51,6 +59,8 @@ argo-workflows:
 
   # Executor resources - these are the pods that execute steps.
   executor:
+    image:
+      tag: v3.7.2-nonroot
     resources:
       requests:
         memory: "128Mi"
@@ -76,6 +86,16 @@ roleBindings:
 # 'roleBindings' config is sufficient.
 ark-tenant:
   enabled: false
+  # This subchart provisions RBAC for a workflow-orchestration namespace, not
+  # a full conversational Ark tenant, so it should not require (or wait on) a
+  # broker Service the way `ark install ark-tenant` does.
+  #
+  # Inert at the ark-tenant version currently pinned in Chart.yaml, which has
+  # neither this value nor the preflight it disables. Set here so the bump that
+  # introduces the preflight does not break this chart; do not drop it when
+  # bumping the pin.
+  memory:
+    requireBroker: false
   serviceAccount:
     # No need to create this service account - the argo chart creates it.
     create: false

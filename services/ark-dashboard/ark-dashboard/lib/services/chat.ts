@@ -1,9 +1,10 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
+import { apiUrl } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
-import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { generateUUID } from '@/lib/utils/uuid';
+import { a2aTasksService } from '@/lib/services/a2a-tasks';
 
 interface AxiosError extends Error {
   response?: {
@@ -11,27 +12,23 @@ interface AxiosError extends Error {
   };
 }
 
+export type QueryParameter = components['schemas']['QueryParameter'];
 export type QueryResponse = components['schemas']['QueryResponse'];
 export type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
-export type QueryCreateRequest = Omit<
-  components['schemas']['QueryCreateRequest'],
-  'targets'
-> & {
-  target?: { name: string; type: string };
-};
-export type QueryUpdateRequest = Omit<
-  components['schemas']['QueryUpdateRequest'],
-  'targets'
-> & {
-  target?: { name: string; type: string };
-};
+export type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
+export type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
 
 // Define terminal status phases
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
 
 // Define non-terminal status phases
-type NonTerminalQueryStatusPhase = 'pending' | 'provisioning' | 'running';
+type NonTerminalQueryStatusPhase =
+  | 'pending'
+  | 'provisioning'
+  | 'running'
+  | 'queued'
+  | 'input-required';
 
 // Combined query status phase type
 type QueryStatusPhase = TerminalQueryStatusPhase | NonTerminalQueryStatusPhase;
@@ -43,12 +40,15 @@ const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   'canceled',
   'unknown',
 ] as const;
-const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
-  ['pending', 'provisioning', 'running'] as const;
+export const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
+  ['pending', 'provisioning', 'running', 'queued', 'input-required'] as const;
 const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...TERMINAL_QUERY_STATUS_PHASES,
   ...NON_TERMINAL_QUERY_STATUS_PHASES,
 ] as const;
+
+const MEMORY_NOTICE_POLL_ATTEMPTS = 6;
+const MEMORY_NOTICE_POLL_INTERVAL_MS = 500;
 
 type QueryStatusWithPhase = {
   phase: string;
@@ -58,9 +58,101 @@ type QueryStatusWithPhase = {
   };
   conditions?: Array<{
     type?: string;
+    status?: string;
     message?: string;
   }>;
 };
+
+// The controller writes both memory conditions on every query whose dispatch
+// completes, carrying Status "False" and a reassuring message on the healthy
+// path. Their presence therefore says nothing; only Status "True" reports a
+// problem. A query that failed before dispatch carries neither.
+export const MEMORY_CONDITION_TYPES = [
+  'MemoryUnavailable',
+  'MemoryDegraded',
+] as const;
+
+export type MemoryConditionType = (typeof MEMORY_CONDITION_TYPES)[number];
+
+export type MemoryNotice = {
+  type: MemoryConditionType;
+  message: string;
+};
+
+/**
+ * The outcome of asking a query what it recorded about memory. `settled` false
+ * means the question could not be answered — never that the answer was "no
+ * problem". Callers must leave what they are showing untouched in that case,
+ * or a slow status write silently clears a notice that is still true.
+ */
+export type MemoryNoticeLookup = {
+  settled: boolean;
+  notice: MemoryNotice | null;
+};
+
+const MEMORY_LOOKUP_UNSETTLED: MemoryNoticeLookup = {
+  settled: false,
+  notice: null,
+};
+
+const MEMORY_NOTICE_FALLBACK_MESSAGE: Record<MemoryConditionType, string> = {
+  MemoryUnavailable:
+    'No memory backend was reachable, so this query ran without conversation history.',
+  MemoryDegraded:
+    'Reading conversation history from the memory backend failed, so this query ran without prior context.',
+};
+
+/**
+ * Whether a query's status carries the controller's memory verdict at all.
+ *
+ * Both conditions are written by the same update that writes the terminal
+ * phase, so their presence — not the phase string — is the precise signal that
+ * there is an answer to read. A query that failed before dispatch is terminal
+ * and carries neither, and that says nothing about memory: reporting it as
+ * healthy would clear a notice that is still true.
+ */
+export function hasMemoryCondition(status: unknown): boolean {
+  if (!status || typeof status !== 'object') {
+    return false;
+  }
+  const conditions = (status as QueryStatusWithPhase).conditions;
+  if (!Array.isArray(conditions)) {
+    return false;
+  }
+  return conditions.some(
+    c =>
+      c?.type !== undefined &&
+      (MEMORY_CONDITION_TYPES as readonly string[]).includes(c.type),
+  );
+}
+
+/**
+ * Extract the memory problem a query's status reports, or null when it reports
+ * none. MemoryUnavailable wins over MemoryDegraded: losing the backend
+ * outright is the more useful thing to say. Only meaningful when
+ * hasMemoryCondition is true.
+ */
+export function extractMemoryNotice(status: unknown): MemoryNotice | null {
+  if (!status || typeof status !== 'object') {
+    return null;
+  }
+  const conditions = (status as QueryStatusWithPhase).conditions;
+  if (!Array.isArray(conditions)) {
+    return null;
+  }
+  for (const type of MEMORY_CONDITION_TYPES) {
+    const condition = conditions.find(c => c?.type === type);
+    if (condition?.status !== 'True') {
+      continue;
+    }
+    return {
+      type,
+      message:
+        condition.message?.trim() || MEMORY_NOTICE_FALLBACK_MESSAGE[type],
+    };
+  }
+  return null;
+}
 
 // Type guard for checking if a phase is terminal
 function isTerminalPhase(
@@ -74,10 +166,26 @@ function isValidQueryStatusPhase(phase: string): phase is QueryStatusPhase {
   return (QUERY_STATUS_PHASES as readonly string[]).includes(phase);
 }
 
+// Returns the query's terminal phase if it has reached one, else null. Keeps
+// streamQueryStatus's poll loop flat.
+function detectTerminalPhase(
+  status: QueryDetailResponse['status'],
+): QueryStatusPhase | null {
+  if (!status || typeof status !== 'object' || !('phase' in status)) {
+    return null;
+  }
+  const phase = (status as QueryStatusWithPhase).phase;
+  const validatedPhase: QueryStatusPhase = isValidQueryStatusPhase(phase)
+    ? phase
+    : 'unknown';
+  return isTerminalPhase(validatedPhase) ? validatedPhase : null;
+}
+
 export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
   response?: string;
+  memoryLookup?: MemoryNoticeLookup;
   messages?: Array<{
     role: string;
     content?: string;
@@ -108,7 +216,10 @@ export type ChatSession = {
 };
 
 export const chatService = {
-  async createQuery(query: QueryCreateRequest): Promise<QueryDetailResponse> {
+  async createQuery(
+    namespace: string,
+    query: QueryCreateRequest,
+  ): Promise<QueryDetailResponse> {
     // Normalize target type to lowercase
     const normalizedQuery = {
       ...query,
@@ -123,6 +234,7 @@ export const chatService = {
     const response = await apiClient.post<QueryDetailResponse>(
       `/api/v1/queries/`,
       normalizedQuery,
+      { params: { namespace } },
     );
 
     const inputContent =
@@ -144,10 +256,14 @@ export const chatService = {
     return response;
   },
 
-  async getQuery(queryName: string): Promise<QueryDetailResponse | null> {
+  async getQuery(
+    namespace: string,
+    queryName: string,
+  ): Promise<QueryDetailResponse | null> {
     try {
       return await apiClient.get<QueryDetailResponse>(
         `/api/v1/queries/${queryName}`,
+        { params: { namespace } },
       );
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {
@@ -157,12 +273,20 @@ export const chatService = {
     }
   },
 
-  async listQueries(): Promise<QueryListResponse> {
-    const response = await apiClient.get<QueryListResponse>(`/api/v1/queries/`);
+  async getA2ATask(namespace: string, taskId: string) {
+    return await a2aTasksService.get(namespace, taskId);
+  },
+
+  async listQueries(namespace: string): Promise<QueryListResponse> {
+    const response = await apiClient.get<QueryListResponse>(
+      `/api/v1/queries/`,
+      { params: { namespace } },
+    );
     return response;
   },
 
   async updateQuery(
+    namespace: string,
     queryName: string,
     updates: QueryUpdateRequest,
   ): Promise<QueryDetailResponse | null> {
@@ -170,6 +294,7 @@ export const chatService = {
       const response = await apiClient.put<QueryDetailResponse>(
         `/api/v1/queries/${queryName}`,
         updates,
+        { params: { namespace } },
       );
       return response;
     } catch (error) {
@@ -180,9 +305,11 @@ export const chatService = {
     }
   },
 
-  async deleteQuery(queryName: string): Promise<boolean> {
+  async deleteQuery(namespace: string, queryName: string): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/queries/${queryName}`);
+      await apiClient.delete(`/api/v1/queries/${queryName}`, {
+        params: { namespace },
+      });
       return true;
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {
@@ -193,13 +320,14 @@ export const chatService = {
   },
 
   async submitChatQuery(
+    namespace: string,
     input: string,
     targetType: string,
     targetName: string,
     sessionId?: string,
     conversationId?: string,
-    enableStreaming?: boolean,
     timeout?: string,
+    parameters?: QueryParameter[],
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
@@ -212,21 +340,17 @@ export const chatService = {
       sessionId,
       conversationId,
       timeout,
+      ...(parameters && parameters.length > 0 ? { parameters } : {}),
     };
 
-    if (enableStreaming) {
-      queryRequest.metadata = {
-        annotations: {
-          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
-        },
-      };
-    }
-
-    return await this.createQuery(queryRequest);
+    return await this.createQuery(namespace, queryRequest);
   },
 
-  async getChatHistory(sessionId: string): Promise<QueryDetailResponse[]> {
-    const response = await this.listQueries();
+  async getChatHistory(
+    namespace: string,
+    sessionId: string,
+  ): Promise<QueryDetailResponse[]> {
+    const response = await this.listQueries(namespace);
 
     return response.items
       .filter(item => item.name.startsWith('chat-query-'))
@@ -251,9 +375,12 @@ export const chatService = {
       });
   },
 
-  async getQueryResult(queryName: string): Promise<ChatResponse> {
+  async getQueryResult(
+    namespace: string,
+    queryName: string,
+  ): Promise<ChatResponse> {
     try {
-      const query = await this.getQuery(queryName);
+      const query = await this.getQuery(namespace, queryName);
 
       if (!query || !query.status) {
         return { status: 'unknown', terminal: false };
@@ -296,6 +423,17 @@ export const chatService = {
           status: validatedPhase,
           response: response,
           messages: messages,
+          // Only when the controller's verdict is actually on the object. An
+          // absent key means "nothing to say", which the caller must not read
+          // as "nothing wrong".
+          ...(hasMemoryCondition(status)
+            ? {
+                memoryLookup: {
+                  settled: true,
+                  notice: extractMemoryNotice(status),
+                },
+              }
+            : {}),
         };
       }
 
@@ -305,36 +443,65 @@ export const chatService = {
     }
   },
 
+  /**
+   * Poll a query until its memory verdict appears, then report it. The
+   * streaming path needs this rather than reading the query once: the executor
+   * closes the stream before the controller writes the terminal status, so the
+   * conditions are not on the resource yet when the last chunk arrives. The
+   * paths that already hold a terminal response read `memoryLookup` off it
+   * instead.
+   *
+   * Returns an unsettled lookup when the budget runs out, when every read
+   * failed, or when the query settled without a verdict. A transient error does
+   * not end the attempts — one bad response inside the window must not be
+   * reported as a clean bill of health.
+   */
+  async resolveMemoryNotice(
+    namespace: string,
+    queryName: string,
+    attempts: number = MEMORY_NOTICE_POLL_ATTEMPTS,
+    delayMs: number = MEMORY_NOTICE_POLL_INTERVAL_MS,
+  ): Promise<MemoryNoticeLookup> {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+      let status: QueryDetailResponse['status'];
+      try {
+        status = (await this.getQuery(namespace, queryName))?.status;
+      } catch {
+        continue;
+      }
+      if (hasMemoryCondition(status)) {
+        return {settled: true, notice: extractMemoryNotice(status)};
+      }
+    }
+    return MEMORY_LOOKUP_UNSETTLED;
+  },
+
   async streamQueryStatus(
+    namespace: string,
     queryName: string,
     onUpdate: (status: QueryDetailResponse['status']) => void,
     pollInterval: number = 1000,
+    onTerminal?: (phase: QueryStatusPhase) => void,
   ): Promise<() => void> {
     let stopped = false;
 
     const poll = async () => {
       while (!stopped) {
         try {
-          const query = await this.getQuery(queryName);
-          if (query && query.status) {
+          const query = await this.getQuery(namespace, queryName);
+          // stop() may have fired while this poll was in flight; don't emit a
+          // straggler update/terminal callback after the caller tore down.
+          if (stopped) return;
+          if (query?.status) {
             onUpdate(query.status);
-
-            if (
-              query.status &&
-              typeof query.status === 'object' &&
-              'phase' in query.status
-            ) {
-              const statusWithPhase = query.status as QueryStatusWithPhase;
-              const phase = statusWithPhase.phase;
-              const validatedPhase: QueryStatusPhase = isValidQueryStatusPhase(
-                phase,
-              )
-                ? phase
-                : 'unknown';
-              if (isTerminalPhase(validatedPhase)) {
-                stopped = true;
-                break;
-              }
+            const terminalPhase = detectTerminalPhase(query.status);
+            if (terminalPhase) {
+              stopped = true;
+              onTerminal?.(terminalPhase);
+              break;
             }
           }
         } catch (error) {
@@ -383,6 +550,7 @@ export const chatService = {
   },
 
   async startStreamChatResponse(
+    namespace: string,
     input: string,
     targetType: string,
     targetName: string,
@@ -390,26 +558,32 @@ export const chatService = {
     conversationId?: string,
     timeout?: string,
     abortSignal?: AbortSignal,
+    parameters?: QueryParameter[],
   ): Promise<{
     queryName: string;
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
   }> {
     const query = await this.submitChatQuery(
+      namespace,
       input,
       targetType,
       targetName,
       sessionId,
       conversationId,
-      true,
       timeout,
+      parameters,
     );
 
     const queryName = query.name;
     const self = this;
 
-    async function* generateChunks(): AsyncGenerator<Record<string, unknown>, void, unknown> {
+    async function* generateChunks(): AsyncGenerator<
+      Record<string, unknown>,
+      void,
+      unknown
+    > {
       const response = await fetch(
-        `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
+        apiUrl(`/api/v1/broker/chunks?watch=true&query-id=${queryName}`),
         {
           signal: abortSignal,
         },
@@ -446,7 +620,9 @@ export const chatService = {
           }
         }
       } finally {
-        reader.releaseLock();
+        // cancel() releases the lock and aborts the transfer, so an early break
+        // stops the SSE download instead of leaking a streaming connection.
+        await reader.cancel().catch(() => {});
       }
     }
 
@@ -454,6 +630,7 @@ export const chatService = {
   },
 
   async *streamChatResponse(
+    namespace: string,
     input: string,
     targetType: string,
     targetName: string,
@@ -463,6 +640,7 @@ export const chatService = {
     abortSignal?: AbortSignal,
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     const { chunks } = await this.startStreamChatResponse(
+      namespace,
       input,
       targetType,
       targetName,
@@ -474,7 +652,14 @@ export const chatService = {
     yield* chunks;
   },
 
-  async cancelQuery(queryName: string): Promise<QueryDetailResponse> {
-    return await apiClient.patch(`/api/v1/queries/${queryName}/cancel`)
-  }
+  async cancelQuery(
+    namespace: string,
+    queryName: string,
+  ): Promise<QueryDetailResponse> {
+    return await apiClient.patch(
+      `/api/v1/queries/${queryName}/cancel`,
+      undefined,
+      { params: { namespace } },
+    );
+  },
 };

@@ -1,0 +1,454 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: argo-ark-query
+spec:
+  description: >-
+    End-to-end test for the ark-query WorkflowTemplate shipped in the
+    argo-workflows chart. Runs it against an agent target, a team target and a
+    tool target asserting outputs on success, and forces a query error
+    asserting the node is Failed with outputs still readable.
+  timeouts:
+    apply: 60s
+    assert: 120s
+    exec: 300s
+  steps:
+  - name: install-argo
+    try:
+    - script:
+        timeout: 300s
+        # The argo-workflows subchart ships its CRDs as regular templates
+        # (templates/crds/*.yaml), not Helm's special top-level crds/
+        # directory - so they're subject to the normal release-ownership
+        # check. A plain `helm install` then fails with "invalid ownership
+        # metadata" the moment any other release, or an unowned `kubectl
+        # apply` of the same CRDs (e.g. workflow-pagination-performance,
+        # which applies them this way on purpose since it only needs the
+        # Workflow CRD registered), has already created them. Apply the CRDs
+        # ourselves first - idempotent, ownership-agnostic - then install the
+        # rest of the chart with crds.install=false so it never tries to
+        # adopt them.
+        content: |
+          helm dependency update ../../services/argo-workflows/chart >/dev/null
+          helm template argo-workflows ../../services/argo-workflows/chart \
+            --namespace "$NAMESPACE" \
+            --set argo-workflows.singleNamespace=true \
+            --set httpRoute.argo.enabled=false \
+            --set minio.enabled=false \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflows.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowtemplates.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_clusterworkflowtemplates.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_cronworkflows.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowtaskresults.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowtasksets.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workfloweventbindings.yaml \
+            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowartifactgctasks.yaml \
+            | kubectl apply -f -
+          helm install argo ../../services/argo-workflows/chart \
+            --namespace "$NAMESPACE" \
+            --set argo-workflows.singleNamespace=true \
+            --set argo-workflows.crds.install=false \
+            --set httpRoute.argo.enabled=false \
+            --set minio.enabled=false \
+            --wait --timeout=300s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: argoproj.io/v1alpha1
+          kind: WorkflowTemplate
+          metadata:
+            name: ark-query
+    - script:
+        timeout: 30s
+        content: |
+          set -eu
+          deployment=$(kubectl -n "$NAMESPACE" get deployment \
+            -l app.kubernetes.io/component=workflow-controller -o json)
+          controller_image=$(echo "$deployment" | jq -r \
+            '.items[0].spec.template.spec.containers[0].image')
+          executor_image=$(echo "$deployment" | jq -r '
+            .items[0].spec.template.spec.containers[0].args as $args
+            | ($args | index("--executor-image")) as $i
+            | if $i != null then $args[$i + 1]
+              else (first($args[] | select(startswith("--executor-image="))) // "")
+                   | sub("^--executor-image=";"")
+              end')
+          controller_tag=${controller_image##*:}
+          executor_tag=${executor_image##*:}
+          if [ "$executor_tag" != "${controller_tag}-nonroot" ]; then
+            echo "workflow pods must use the non-root argoexec image pinned to the controller version" >&2
+            echo "  controller: $controller_image" >&2
+            echo "  executor:   ${executor_image:-<unset>}" >&2
+            echo "  want executor tag: ${controller_tag}-nonroot" >&2
+            exit 1
+          fi
+          echo "executor image ${executor_image} matches controller tag ${controller_tag}"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall argo --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: setup-ark-resources
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-team.yaml
+    - apply:
+        file: manifests/a03-broken-agent.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: success-cases
+    try:
+    - apply:
+        file: ../shared/mock-geocoding-api.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: mock-geocoding-api
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: mock-geocoding-api
+    - script:
+        timeout: 30s
+        content: |
+          MOCK_URL="http://mock-geocoding-api.$NAMESPACE.svc.cluster.local"
+          kubectl run test-geocoding-ready --image=curlimages/curl --rm -i --restart=Never -n "$NAMESPACE" -- \
+            curl -f -s --retry 5 --retry-connrefused --retry-delay 1 "${MOCK_URL}/v1/search?name=New+York&count=1"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          MOCK_URL="http://mock-geocoding-api.$NAMESPACE.svc.cluster.local"
+
+          kubectl apply -f - <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: geocoder
+            namespace: $NAMESPACE
+          spec:
+            type: http
+            description: "Returns coordinates for the given city name."
+            inputSchema:
+              type: object
+              properties:
+                city:
+                  type: string
+                  description: City name to get coordinates for
+              required: ["city"]
+            http:
+              url: $MOCK_URL/v1/search?name={city}&count=1
+          EOF
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: geocoder
+    - apply:
+        file: manifests/wf-agent.yaml
+    - apply:
+        file: manifests/wf-team.yaml
+    - apply:
+        file: manifests/wf-tool.yaml
+    - apply:
+        file: manifests/wf-optional-spec.yaml
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-agent
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-team
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-tool
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-optional-spec
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - script:
+        timeout: 60s
+        content: |
+          set -u
+          failed=0
+
+          fetch() {
+            kubectl -n "$NAMESPACE" get workflow "$1" -o json > "/tmp/$1.json"
+          }
+          jp() {
+            jq -r "first(.status.nodes[] | select(.type==\"Pod\") | .outputs.parameters[]? | select(.name==\"$2\") | .value)" "/tmp/$1.json"
+          }
+          qj() {
+            jq -r "first(.status.nodes[] | select(.type==\"Pod\") | .outputs.parameters[]? | select(.name==\"query-json\") | .value | fromjson | $2)" "/tmp/$1.json"
+          }
+          wf_phase() {
+            jq -r '.status.phase' "/tmp/$1.json"
+          }
+
+          check_success_response() {
+            local wf=$1 needle=$2
+            fetch "$wf"
+            local phase query_phase response
+            phase=$(wf_phase "$wf")
+            query_phase=$(jp "$wf" phase)
+            response=$(jp "$wf" response)
+            echo "[$wf] wf_phase=$phase query_phase=$query_phase"
+            echo "[$wf] response=$response"
+            [ "$phase" = "Succeeded" ] || { echo "  FAIL: expected wf Succeeded"; failed=1; }
+            [ "$query_phase" = "done" ] || { echo "  FAIL: expected query phase done"; failed=1; }
+            echo "$response" | grep -q "$needle" || { echo "  FAIL: response missing \"$needle\""; failed=1; }
+          }
+
+          check_success_response ark-query-agent WEATHER:
+          check_success_response ark-query-team  FINAL:
+          check_success_response ark-query-tool  "New York"
+
+          # agent: default sessionId is wf-<workflow-name> when none supplied.
+          agent_sid=$(qj ark-query-agent '.spec.sessionId')
+          echo "[ark-query-agent] sessionId=$agent_sid"
+          [ "$agent_sid" = "wf-ark-query-agent" ] || { echo "  FAIL: expected sessionId wf-ark-query-agent, got $agent_sid"; failed=1; }
+
+          # tool: verify the query targeted a tool.
+          tool_target_type=$(qj ark-query-tool '.spec.target.type')
+          echo "[ark-query-tool] target_type=$tool_target_type"
+          [ "$tool_target_type" = "tool" ] || { echo "  FAIL: expected target type tool, got $tool_target_type"; failed=1; }
+
+          # optional-spec: verify custom query metadata was applied.
+          fetch ark-query-optional-spec
+          phase=$(wf_phase ark-query-optional-spec)
+          query_phase=$(jp ark-query-optional-spec phase)
+          echo "[ark-query-optional-spec] wf_phase=$phase query_phase=$query_phase"
+          [ "$phase" = "Succeeded" ] || { echo "  FAIL: expected wf Succeeded"; failed=1; }
+          [ "$query_phase" = "done" ] || { echo "  FAIL: expected query phase done"; failed=1; }
+          name=$(qj ark-query-optional-spec '.metadata.name')
+          ttl=$(qj ark-query-optional-spec '.spec.ttl')
+          sid=$(qj ark-query-optional-spec '.spec.sessionId')
+          [ "$name" = "ark-query-custom-name" ]      || { echo "  FAIL: expected custom query name, got $name"; failed=1; }
+          # The user-supplied ttl ("60s") is not guaranteed to be rewritten into
+          # Go's canonical Duration string ("1m0s") - that only ever happened as
+          # a side effect of the controller's own full-object Update(), not a
+          # documented contract of the mutating webhook. Accept either form;
+          # the controller parses both identically via metav1.Duration.
+          [ "$ttl" = "60s" ] || [ "$ttl" = "1m0s" ]   || { echo "  FAIL: expected ttl 60s or 1m0s, got $ttl"; failed=1; }
+          [ "$sid"  = "argo-ark-query-session" ]      || { echo "  FAIL: expected sessionId argo-ark-query-session, got $sid"; failed=1; }
+
+          exit $failed
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          for wf in ark-query-agent ark-query-team ark-query-tool ark-query-optional-spec; do
+            echo "=== $wf ==="; kubectl -n "$NAMESPACE" describe workflow "$wf" || true
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: failure-cases
+    try:
+    - apply:
+        file: manifests/wf-error.yaml
+    - apply:
+        file: manifests/wf-bad-target-noslash.yaml
+    - apply:
+        file: manifests/wf-bad-target-type.yaml
+    - apply:
+        file: manifests/wf-bad-target-empty.yaml
+    - apply:
+        file: manifests/wf-bad-params-nonjson.yaml
+    - apply:
+        file: manifests/wf-bad-params-nonlist.yaml
+    - apply:
+        file: manifests/wf-apply-fail.yaml
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-error
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-target-noslash
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-target-type
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-target-empty
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-params-nonjson
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-bad-params-nonlist
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Workflow
+        name: ark-query-apply-fail
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - script:
+        timeout: 60s
+        content: |
+          set -u
+          failed=0
+
+          fetch() {
+            kubectl -n "$NAMESPACE" get workflow "$1" -o json > "/tmp/$1.json"
+          }
+          jp() {
+            jq -r "first(.status.nodes[] | select(.type==\"Pod\") | .outputs.parameters[]? | select(.name==\"$2\") | .value)" "/tmp/$1.json"
+          }
+          node_phase() {
+            jq -r '.status.nodes[] | select(.type=="Pod") | .phase' "/tmp/$1.json" | head -1
+          }
+
+          # error-target-node-failed: Query itself errors; Argo node fails but outputs are readable.
+          fetch ark-query-error
+          np=$(node_phase ark-query-error)
+          qp=$(jp ark-query-error phase)
+          qj=$(jp ark-query-error query-json)
+          echo "[ark-query-error] node_phase=$np query_phase=$qp"
+          [ "$np" = "Failed" ] || { echo "  FAIL: expected node Failed"; failed=1; }
+          [ "$qp" = "error" ] || { echo "  FAIL: expected query phase error"; failed=1; }
+          [ -n "$qj" ]        || { echo "  FAIL: expected query-json to be readable"; failed=1; }
+
+          # bad-* / apply-fail: ark-query.py exits non-zero; check response mentions the expected error.
+          check_response() {
+            local wf=$1 needle=$2
+            fetch "$wf"
+            local np resp
+            np=$(node_phase "$wf")
+            resp=$(jp "$wf" response)
+            echo "[$wf] node_phase=$np response=$resp"
+            [ "$np" = "Failed" ] || { echo "  FAIL: expected node Failed"; failed=1; }
+            echo "$resp" | grep -q "$needle" || { echo "  FAIL: response missing \"$needle\""; failed=1; }
+          }
+
+          check_response ark-query-bad-target-noslash "expected type/name"
+          check_response ark-query-bad-target-type    "invalid target type"
+          check_response ark-query-bad-target-empty   "name is empty"
+          check_response ark-query-bad-params-nonjson "invalid parameters"
+          check_response ark-query-bad-params-nonlist "invalid parameters"
+          check_response ark-query-apply-fail         "failed to create Query"
+
+          exit $failed
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          for wf in ark-query-error ark-query-bad-target-noslash ark-query-bad-target-type \
+                    ark-query-bad-target-empty ark-query-bad-params-nonjson \
+                    ark-query-bad-params-nonlist ark-query-apply-fail; do
+            echo "=== $wf ==="; kubectl -n "$NAMESPACE" describe workflow "$wf" || true
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -1,12 +1,14 @@
 """Pydantic models for marketplace sources and the items aggregator."""
 import re
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, field_validator
 
 # ConfigMap data keys must be valid Kubernetes ConfigMap keys.
 _KEY_PATTERN = re.compile(r"^[-._a-zA-Z0-9]+$")
+
+AuthScheme = Literal["bearer", "basic"]
 
 
 def _validate_https_url(value: str) -> str:
@@ -24,12 +26,34 @@ def _validate_source_name(value: str) -> str:
     return value
 
 
+class MarketplaceSourceAuthInput(BaseModel):
+    """Auth config supplied on create/update.
+
+    ``credential`` is write-only (stored in a Secret, never returned). It has no
+    length constraint on purpose: a failed constraint would echo the token into the
+    422 body. Emptiness is checked in the endpoint, returning a clean 400.
+    """
+
+    scheme: AuthScheme
+    # Optional so a metadata-only update (e.g. displayName) can keep the
+    # existing Secret without re-sending the token. The endpoint requires it on
+    # create, on URL change, and on scheme change.
+    credential: Optional[str] = None
+
+
+class MarketplaceSourceAuthInfo(BaseModel):
+    """Non-secret auth metadata returned to clients (never the credential)."""
+
+    scheme: AuthScheme
+
+
 class MarketplaceSourceCreate(BaseModel):
     """Request body for creating a marketplace source."""
 
     name: str
     url: str
     displayName: Optional[str] = None
+    auth: Optional[MarketplaceSourceAuthInput] = None
 
     @field_validator("name")
     @classmethod
@@ -47,6 +71,7 @@ class MarketplaceSourceUpdate(BaseModel):
 
     url: str
     displayName: Optional[str] = None
+    auth: Optional[MarketplaceSourceAuthInput] = None
 
     @field_validator("url")
     @classmethod
@@ -55,11 +80,27 @@ class MarketplaceSourceUpdate(BaseModel):
 
 
 class MarketplaceSourceResponse(BaseModel):
-    """A single marketplace source entry."""
+    """A single marketplace source entry. Never carries the credential value."""
 
     name: str
     url: str
     displayName: Optional[str] = None
+    auth: Optional[MarketplaceSourceAuthInfo] = None
+    hasCredential: bool = False
+
+
+class MarketplaceSourceParsed(BaseModel):
+    """Internal: a fully-parsed source with non-secret auth routing metadata.
+
+    ``scheme`` and ``secretRef`` come from the ConfigMap; the credential value lives
+    only in the referenced Secret.
+    """
+
+    name: str
+    url: str
+    displayName: Optional[str] = None
+    scheme: Optional[AuthScheme] = None
+    secretRef: Optional[str] = None
 
 
 class MarketplaceItemError(BaseModel):

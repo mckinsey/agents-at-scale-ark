@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: get-deployment-status
+spec:
+  type: builtin
+  description: Get current status of application deployments (read-only operation)
+  inputSchema:
+    type: object
+    properties:
+      appName:
+        type: string
+        description: Application name (optional)
+  builtin:
+    name: noop

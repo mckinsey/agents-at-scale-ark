@@ -1,0 +1,56 @@
+CREATE TABLE IF NOT EXISTS sessions (
+  session_id    TEXT        PRIMARY KEY,
+  name          TEXT        NOT NULL,
+  -- Elected by recalculateSessionStatus, which only ever produces these three.
+  status        TEXT        NOT NULL DEFAULT 'idle'
+                            CHECK (status IN ('active', 'idle', 'error')),
+  error_count   INTEGER     NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_activity TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at    TIMESTAMPTZ NOT NULL,
+  -- Participants are one per conversation and derived from this on read, so
+  -- they are not stored: nothing filters or sorts on them in SQL.
+  conversations JSONB       NOT NULL DEFAULT '[]'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS sessions_status_idx        ON sessions (status);
+CREATE INDEX IF NOT EXISTS sessions_last_activity_idx ON sessions (last_activity);
+CREATE INDEX IF NOT EXISTS sessions_expires_at_idx    ON sessions (expires_at);
+-- paginate can sort by name.
+CREATE INDEX IF NOT EXISTS sessions_name_idx          ON sessions (name);
+
+-- One row per query, so an event/message for one query upserts one small row
+-- instead of rewriting every other query in the same session.
+CREATE TABLE IF NOT EXISTS session_queries (
+  session_id                    TEXT        NOT NULL REFERENCES sessions (session_id) ON DELETE CASCADE,
+  query_id                      TEXT        NOT NULL,
+  namespace                     TEXT,
+  conversation_id               TEXT,
+  agent                         TEXT,
+  team                          TEXT,
+  tool                          TEXT,
+  -- Mirrors the Query CRD's own enum (query_types.go: Enum=agent;team;model;tool).
+  -- 'model' is absent from ParticipantType and from everything the aggregate
+  -- branches on, but it is a valid target, so it has to be accepted here.
+  target_type                   TEXT        NOT NULL DEFAULT 'agent'
+                                CHECK (target_type IN ('agent', 'team', 'model', 'tool')),
+  -- Mirrors the QueryPhase union. 'unknown' has no producer today and is listed
+  -- so the constraint stays no narrower than the type it guards.
+  phase                         TEXT        NOT NULL
+                                CHECK (phase IN ('pending', 'running', 'done', 'error', 'canceled', 'unknown')),
+  error                         TEXT,
+  created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at                  TIMESTAMPTZ,
+  last_activity                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_applied_event_sequence   BIGINT      NOT NULL DEFAULT 0,
+  last_applied_message_sequence BIGINT      NOT NULL DEFAULT 0,
+  PRIMARY KEY (session_id, query_id)
+);
+
+-- applyMessage looks up by query_id alone; the primary key is session_id-first
+-- so it can't serve that.
+CREATE INDEX IF NOT EXISTS session_queries_query_id_idx ON session_queries (query_id);
+
+CREATE INDEX IF NOT EXISTS session_queries_conversation_id_idx
+  ON session_queries (conversation_id)
+  WHERE conversation_id IS NOT NULL;

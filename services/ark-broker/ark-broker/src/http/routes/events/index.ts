@@ -4,6 +4,7 @@ import {SessionsBroker} from '@ark-broker/brokers/sessions-broker.js';
 import {
   sendValidationError,
   sendInternalError,
+  sendMissingQueryIdError,
 } from '@ark-broker/http/routes/errors.js';
 import {
   getEventsQuerySchema,
@@ -81,18 +82,24 @@ export function createEventsRouter(
         sendValidationError(res, parse.error, req.id);
         return;
       }
-      const event: PostEventBody = parse.data;
+      const {ttl_seconds: ttlSeconds, ...event}: PostEventBody = parse.data;
 
       try {
-        await events.addEvent(event as unknown as EventData);
+        const persisted = await events.addEvent(
+          event as unknown as EventData,
+          ttlSeconds
+        );
         await events.save();
 
-        sessions.applyEvent({
-          ...event.data,
-          _reason: (event as Record<string, unknown>)['reason'] as
-            | string
-            | undefined,
-        });
+        await sessions.applyEvent(
+          {
+            ...event.data,
+            _reason: (event as Record<string, unknown>)['reason'] as
+              | string
+              | undefined,
+          },
+          persisted.sequenceNumber
+        );
 
         res.status(201).json({status: 'success'});
       } catch (error) {
@@ -102,12 +109,23 @@ export function createEventsRouter(
     }
   );
 
-  router.delete('/', async (req, res) => {
+  router.delete<{query_id: string}>('/:query_id', async (req, res) => {
+    const {query_id: queryId} = req.params;
+
+    if (!queryId) {
+      sendMissingQueryIdError(res, req.id);
+      return;
+    }
+
     try {
-      await events.delete();
-      res.json({status: 'success', message: 'Event data purged'});
+      req.log.info({queryId}, 'deleting events for query');
+      await events.deleteByQuery(queryId);
+      res.json({
+        status: 'success',
+        message: `Query ${queryId} events deleted`,
+      });
     } catch (error) {
-      req.log.error({err: error}, 'event purge failed');
+      req.log.error({err: error}, 'failed to delete query events');
       sendInternalError(res, req.id);
     }
   });

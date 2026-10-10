@@ -1,0 +1,125 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: apiserver-auth
+  labels:
+    postgresql: "true"
+spec:
+  steps:
+    - name: setup-curl-pod
+      try:
+      - apply:
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              name: authcheck
+            spec:
+              containers:
+                - name: curl
+                  image: curlimages/curl:8.11.1
+                  command: ["sleep", "300"]
+              restartPolicy: Never
+              terminationGracePeriodSeconds: 0
+      - wait:
+          apiVersion: v1
+          kind: Pod
+          name: authcheck
+          timeout: 120s
+          for:
+            condition:
+              name: Ready
+              value: 'True'
+
+    - name: anonymous-direct-access-denied
+      try:
+      - script:
+          content: |
+            set -eu
+            URL="https://ark-apiserver.ark-system.svc.cluster.local:6443/apis/ark.mckinsey.com/v1alpha1/namespaces/${NAMESPACE}/agents"
+            CODE=$(kubectl exec authcheck -n $NAMESPACE -- curl -sk -o /dev/null -w '%{http_code}' "$URL")
+            echo "anonymous request returned HTTP $CODE"
+            case "$CODE" in
+              401|403) echo "OK direct unauthenticated access is rejected" ;;
+              *) echo "FAIL expected 401 or 403, got $CODE"; exit 1 ;;
+            esac
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 60s
+
+    - name: authenticated-without-rbac-denied
+      try:
+      - script:
+          content: |
+            set -eu
+            TOKEN=$(kubectl create token default -n $NAMESPACE)
+            URL="https://ark-apiserver.ark-system.svc.cluster.local:6443/apis/ark.mckinsey.com/v1alpha1/namespaces/${NAMESPACE}/agents"
+            CODE=$(kubectl exec authcheck -n $NAMESPACE -- curl -sk -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$URL")
+            echo "authenticated request without RBAC returned HTTP $CODE"
+            if [ "$CODE" = "403" ]; then
+              echo "OK authenticated but unauthorized access is denied by delegated RBAC"
+            else
+              echo "FAIL expected 403, got $CODE"
+              exit 1
+            fi
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 60s
+
+    - name: rbac-granted-direct-access-allowed
+      try:
+      - apply:
+          resource:
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: apiserver-auth-reader
+            rules:
+              - apiGroups: ["ark.mckinsey.com"]
+                resources: ["agents"]
+                verbs: ["get", "list"]
+      - apply:
+          resource:
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: apiserver-auth-reader
+            subjects:
+              - kind: ServiceAccount
+                name: default
+                namespace: ($namespace)
+            roleRef:
+              kind: Role
+              name: apiserver-auth-reader
+              apiGroup: rbac.authorization.k8s.io
+      - script:
+          content: |
+            set -eu
+            TOKEN=$(kubectl create token default -n $NAMESPACE)
+            URL="https://ark-apiserver.ark-system.svc.cluster.local:6443/apis/ark.mckinsey.com/v1alpha1/namespaces/${NAMESPACE}/agents"
+            CODE=$(kubectl exec authcheck -n $NAMESPACE -- curl -sk -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$URL")
+            echo "authorized request returned HTTP $CODE"
+            if [ "$CODE" = "200" ]; then
+              echo "OK delegated RBAC allows the granted service account"
+            else
+              echo "FAIL expected 200, got $CODE"
+              exit 1
+            fi
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 60s
+
+    - name: aggregation-path-still-works
+      try:
+      - script:
+          content: |
+            set -eu
+            kubectl get agents -n $NAMESPACE
+            echo "OK kubectl via the aggregation layer works under delegated auth"
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 60s

@@ -24,7 +24,6 @@ from ark_api.services.mcp_auth_persistence import (
     TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS,
     TOKEN_SECRET_LABEL,
     _decode_b64,
-    annotate_mcpserver_authorized,
     clear_token_secret,
     compute_expires_at,
     delete_token_secret,
@@ -129,7 +128,7 @@ class TestFlowState(unittest.TestCase):
         flow = FlowState(
             auth_id="a", state_param="s", verifier="v",
             status="pending", message="", expires_at="2020-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="",
+            token_expires_at="",
             server_name="srv", namespace="ns",
             client_id="cid", client_secret="csec",
         )
@@ -139,7 +138,7 @@ class TestFlowState(unittest.TestCase):
         flow = FlowState(
             auth_id="a", state_param="s", verifier="v",
             status="pending", message="", expires_at="2099-01-01T00:00:00Z",
-            caller_identity="cli", token_expires_at="",
+            token_expires_at="",
             server_name="srv", namespace="ns",
             client_id="cid", client_secret="csec",
         )
@@ -149,7 +148,7 @@ class TestFlowState(unittest.TestCase):
         flow = FlowState(
             auth_id="a", state_param="s", verifier="v",
             status="pending", message="", expires_at="",
-            caller_identity="cli", token_expires_at="",
+            token_expires_at="",
             server_name="srv", namespace="ns",
             client_id="cid", client_secret="csec",
         )
@@ -453,24 +452,6 @@ def _ark_client_with_mcp(mcp_dict: dict):
     return ark_client
 
 
-class TestAnnotateMcpServerAuthorized(unittest.TestCase):
-    def test_adds_both_annotations_when_metadata_absent(self):
-        mcp_dict = {"spec": {}, "status": {}}
-        ark_client = _ark_client_with_mcp(mcp_dict)
-
-        with patch(
-            "ark_sdk.models.mcp_server_v1alpha1.MCPServerV1alpha1",
-            new=lambda **kw: kw,
-        ):
-            asyncio.run(annotate_mcpserver_authorized(ark_client, "notion", "cli"))
-
-        ark_client.mcpservers.a_update.assert_awaited_once()
-        updated = ark_client.mcpservers.a_update.await_args.args[0]
-        annotations = updated["metadata"]["annotations"]
-        self.assertEqual(annotations[ANNOTATION_AUTHORIZED_BY], "cli")
-        self.assertIn(ANNOTATION_AUTHORIZED_AT, annotations)
-
-
 class TestStripMcpServerAuthAnnotations(unittest.TestCase):
     def test_removes_both_annotations(self):
         mcp_dict = {
@@ -487,7 +468,7 @@ class TestStripMcpServerAuthAnnotations(unittest.TestCase):
         ark_client = _ark_client_with_mcp(mcp_dict)
 
         with patch(
-            "ark_sdk.models.mcp_server_v1alpha1.MCPServerV1alpha1",
+            "ark_api.services.mcp_auth_persistence.MCPServerV1alpha1",
             new=lambda **kw: kw,
         ):
             asyncio.run(strip_mcpserver_auth_annotations(ark_client, "notion"))

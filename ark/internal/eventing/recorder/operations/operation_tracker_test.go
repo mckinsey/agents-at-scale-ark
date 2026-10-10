@@ -61,6 +61,82 @@ func TestOperationTracker_InitializeQueryContext_NoSessionID(t *testing.T) {
 	assert.Equal(t, "test-uid", qd.SessionID)
 }
 
+func TestOperationTracker_InitializeQueryContext_ConversationIDFromSpec(t *testing.T) {
+	emitter := mock.NewMockEventEmitter()
+	ot := NewOperationTracker(emitter)
+
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-query",
+			Namespace: "test-ns",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: arkv1alpha1.QuerySpec{
+			SessionId:      "session-123",
+			ConversationId: "conv-from-spec",
+		},
+	}
+
+	ctx := ot.InitializeQueryContext(context.Background(), query)
+
+	qd := ot.GetQueryDetails(ctx)
+	assert.NotNil(t, qd)
+	assert.Equal(t, "conv-from-spec", qd.ConversationID)
+}
+
+func TestOperationTracker_InitializeQueryContext_ConversationIDStatusPrecedence(t *testing.T) {
+	emitter := mock.NewMockEventEmitter()
+	ot := NewOperationTracker(emitter)
+
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-query",
+			Namespace: "test-ns",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: arkv1alpha1.QuerySpec{
+			ConversationId: "conv-from-spec",
+		},
+		Status: arkv1alpha1.QueryStatus{
+			ConversationId: "conv-from-status",
+		},
+	}
+
+	ctx := ot.InitializeQueryContext(context.Background(), query)
+
+	qd := ot.GetQueryDetails(ctx)
+	assert.NotNil(t, qd)
+	assert.Equal(t, "conv-from-status", qd.ConversationID)
+}
+
+func TestOperationTracker_Start_ConversationIDFromSpecInEventData(t *testing.T) {
+	emitter := mock.NewMockEventEmitter()
+	ot := NewOperationTracker(emitter)
+
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-query",
+			Namespace: "test-ns",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: arkv1alpha1.QuerySpec{
+			SessionId:      "session-123",
+			ConversationId: "conv-from-spec",
+		},
+	}
+
+	ctx := ot.InitializeQueryContext(context.Background(), query)
+	_ = ot.Start(ctx, "TestOperation", "Starting test operation", nil)
+
+	events := emitter.GetEvents()
+	assert.Equal(t, 1, len(events))
+
+	data, ok := (*events[0].Data).(map[string]string)
+	assert.True(t, ok)
+	assert.Equal(t, "session-123", data["sessionId"])
+	assert.Equal(t, "conv-from-spec", data["conversationId"])
+}
+
 func TestOperationTracker_GetQueryDetails_NoContext(t *testing.T) {
 	emitter := mock.NewMockEventEmitter()
 	ot := NewOperationTracker(emitter)

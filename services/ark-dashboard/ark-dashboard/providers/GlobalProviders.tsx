@@ -1,10 +1,10 @@
 import { Provider as JotaiProvider } from 'jotai';
 import { Suspense } from 'react';
 import type { PropsWithChildren } from 'react';
-import { Toaster } from 'sonner';
 
 import { NavigationTracker } from '@/components/navigation-tracker';
 import { SettingsKeyboardShortcut } from '@/components/settings/settings-keyboard-shortcut';
+import { Toaster } from '@/components/ui/sonner';
 import { AnalyticsProvider } from '@/lib/analytics/provider';
 import { ContextProvider } from '@/providers/ContextProvider';
 import { NamespaceProvider } from '@/providers/NamespaceProvider';
@@ -37,8 +37,10 @@ export function GlobalProviders({ children }: PropsWithChildren) {
           </QueryClientProvider>
         </AuthProvider>
         <SettingsKeyboardShortcut />
-        <NavigationTracker />
-        <Toaster richColors closeButton visibleToasts={5} />
+        <Suspense fallback={null}>
+          <NavigationTracker />
+        </Suspense>
+        <Toaster visibleToasts={5} position="top-right" />
       </ThemeProvider>
     </JotaiProvider>
   );

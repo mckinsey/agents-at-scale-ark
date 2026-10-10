@@ -8,6 +8,6 @@ metadata:
     target: {{ .Values.targetType }}
 spec:
   input: "{{ .Values.inputMessage }}"
-  targets:
-    - type: {{ .Values.targetType }}
-      name: {{ .Values.targetName }}-{{ .Values.targetType }}
+  target:
+    type: {{ .Values.targetType }}
+    name: {{ .Values.targetName }}-{{ .Values.targetType }}

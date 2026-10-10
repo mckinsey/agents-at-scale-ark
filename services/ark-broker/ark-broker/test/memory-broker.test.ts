@@ -1,7 +1,6 @@
 import {createLogger} from '../src/logging/logger.js';
 import {MemoryBroker} from '../src/brokers/memory-broker.js';
-import {InMemoryStream} from '../src/brokers/stream/in-memory-stream.js';
-import type {MessageData} from '../src/brokers/memory-broker.js';
+import {InMemoryMessageStream} from '../src/brokers/stream/in-memory-message-stream.js';
 
 const silentLogger = createLogger({level: 'silent', pretty: false});
 
@@ -10,7 +9,7 @@ describe('MemoryBroker', () => {
 
   beforeEach(() => {
     broker = new MemoryBroker(
-      new InMemoryStream<MessageData>(silentLogger, 'Memory')
+      new InMemoryMessageStream(silentLogger, 'Memory')
     );
   });
 
@@ -48,6 +47,18 @@ describe('MemoryBroker', () => {
       expect(items[0].sequenceNumber).toBe(1);
       expect(items[1].sequenceNumber).toBe(2);
       expect(items[2].sequenceNumber).toBe(3);
+    });
+
+    test('should return items in the same order as the input messages', async () => {
+      const messages = ['first', 'second', 'third', 'fourth'];
+      const items = await broker.addMessages('conv1', 'query1', messages);
+
+      expect(items.map((item) => item.data.message)).toEqual(messages);
+    });
+
+    test('should return [] for an empty messages array', async () => {
+      const items = await broker.addMessages('conv1', 'query1', []);
+      expect(items).toEqual([]);
     });
   });
 
@@ -98,6 +109,35 @@ describe('MemoryBroker', () => {
     });
   });
 
+  describe('getConversationStats', () => {
+    test('should return message and query counts per conversation', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+      await broker.addMessage('conv1', 'query1', 'message2');
+      await broker.addMessage('conv1', 'query2', 'message3');
+      await broker.addMessage('conv2', 'query3', 'message4');
+
+      const stats = await broker.getConversationStats();
+      const byConversation = new Map(
+        stats.map((stat) => [stat.conversationId, stat])
+      );
+
+      expect(byConversation.get('conv1')).toEqual({
+        conversationId: 'conv1',
+        messageCount: 3,
+        queryCount: 2,
+      });
+      expect(byConversation.get('conv2')).toEqual({
+        conversationId: 'conv2',
+        messageCount: 1,
+        queryCount: 1,
+      });
+    });
+
+    test('should return empty array when there are no messages', async () => {
+      expect(await broker.getConversationStats()).toEqual([]);
+    });
+  });
+
   describe('all', () => {
     test('should return all messages', async () => {
       await broker.addMessage('conv1', 'query1', 'message1');
@@ -134,6 +174,40 @@ describe('MemoryBroker', () => {
       const allMessages = await broker.all();
       expect(allMessages).toHaveLength(1);
       expect(allMessages[0].data.queryId).toBe('query2');
+    });
+
+    test('should leave the same query untouched in other conversations', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+      await broker.addMessage('conv2', 'query1', 'message2');
+
+      await broker.deleteQuery('conv1', 'query1');
+
+      const allMessages = await broker.all();
+      expect(allMessages).toHaveLength(1);
+      expect(allMessages[0].data.conversationId).toBe('conv2');
+      expect(allMessages[0].data.queryId).toBe('query1');
+    });
+  });
+
+  describe('deleteByQuery', () => {
+    test('should delete all messages for a query regardless of conversation', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+      await broker.addMessage('conv2', 'query1', 'message2');
+      await broker.addMessage('conv1', 'query2', 'message3');
+
+      await broker.deleteByQuery('query1');
+
+      const allMessages = await broker.all();
+      expect(allMessages).toHaveLength(1);
+      expect(allMessages[0].data.queryId).toBe('query2');
+    });
+
+    test('should be a no-op when the query has no messages', async () => {
+      await broker.addMessage('conv1', 'query1', 'message1');
+
+      await broker.deleteByQuery('nonexistent');
+
+      expect(await broker.all()).toHaveLength(1);
     });
   });
 

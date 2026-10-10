@@ -1,5 +1,16 @@
 import type { WorkflowSpec } from '@/lib/services/workflow-templates';
 
+export function buildWorkflowRunsUrl(
+  templateName: string,
+  status?: string,
+): string {
+  const params = new URLSearchParams({ workflowTemplateName: templateName });
+  if (status) {
+    params.set('status', status);
+  }
+  return `/workflow-runs?${params}`;
+}
+
 export function countWorkflowTasks(spec: WorkflowSpec | undefined): number {
   if (!spec?.templates) {
     return 0;

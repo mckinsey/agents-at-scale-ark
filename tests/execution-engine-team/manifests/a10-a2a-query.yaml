@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: a2a-team-query
+spec:
+  input: Hello from an a2a team!
+  target:
+    type: team
+    name: a2a-team

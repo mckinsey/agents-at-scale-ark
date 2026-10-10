@@ -1,0 +1,69 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: memory-selfheal
+  labels:
+    standard: "true"
+spec:
+  description: >
+    Regression for #2658. A Memory referencing a not-yet-existing Secret must not be
+    permanently stranded in the error phase; once the Secret is created it must self-heal
+    to ready without deleting or editing the resource. This exercises the live Secret
+    watch and requeue wiring in the controller.
+  steps:
+    - name: memory-references-missing-secret
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Memory
+              metadata:
+                name: selfheal-memory
+              spec:
+                address:
+                  valueFrom:
+                    secretKeyRef:
+                      name: selfheal-memory-secret
+                      key: addr
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Memory
+              metadata:
+                name: selfheal-memory
+              status:
+                phase: error
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Memory
+            name: selfheal-memory
+
+    - name: memory-self-heals-when-secret-appears
+      try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: selfheal-memory-secret
+              stringData:
+                addr: http://selfheal-memory-service:8080
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Memory
+              metadata:
+                name: selfheal-memory
+              status:
+                phase: ready
+                lastResolvedAddress: http://selfheal-memory-service:8080
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Memory
+            name: selfheal-memory

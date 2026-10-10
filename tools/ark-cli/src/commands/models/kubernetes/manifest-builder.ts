@@ -124,36 +124,48 @@ export class KubernetesModelManifestBuilder implements ModelManifestBuilder {
         region: {
           value: config.region,
         },
-        accessKeyId: {
-          valueFrom: {
-            secretKeyRef: {
-              name: config.secretName,
-              key: 'access-key-id',
-            },
-          },
-        },
-        secretAccessKey: {
-          valueFrom: {
-            secretKeyRef: {
-              name: config.secretName,
-              key: 'secret-access-key',
-            },
-          },
-        },
       },
     };
 
     const bedrock = bedrockConfig.bedrock as Record<string, unknown>;
 
-    if (config.sessionToken) {
-      bedrock.sessionToken = {
+    if (config.authMethod === 'api-key') {
+      bedrock.apiKey = {
         valueFrom: {
           secretKeyRef: {
             name: config.secretName,
-            key: 'session-token',
+            key: 'bedrock-api-key',
           },
         },
       };
+    } else {
+      bedrock.accessKeyId = {
+        valueFrom: {
+          secretKeyRef: {
+            name: config.secretName,
+            key: 'access-key-id',
+          },
+        },
+      };
+      bedrock.secretAccessKey = {
+        valueFrom: {
+          secretKeyRef: {
+            name: config.secretName,
+            key: 'secret-access-key',
+          },
+        },
+      };
+
+      if (config.sessionToken) {
+        bedrock.sessionToken = {
+          valueFrom: {
+            secretKeyRef: {
+              name: config.secretName,
+              key: 'session-token',
+            },
+          },
+        };
+      }
     }
 
     if (config.modelArn) {

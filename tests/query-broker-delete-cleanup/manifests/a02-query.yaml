@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: delete-cleanup-query
+spec:
+  input: What is 2+2?
+  target:
+    type: agent
+    name: delete-cleanup-agent
+  memory:
+    name: delete-cleanup-memory

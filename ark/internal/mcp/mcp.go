@@ -25,13 +25,36 @@ type MCPSettings struct {
 }
 
 type MCPClient struct {
-	URL     string
-	Headers map[string]string
-	Client  *mcpsdk.ClientSession
+	URL             string
+	Headers         map[string]string
+	Client          *mcpsdk.ClientSession
+	retry           RetryConfig
+	toolCallTimeout time.Duration
+	serverName      string
+}
+
+type Option func(*MCPClient)
+
+func WithToolCallRetry(cfg RetryConfig) Option {
+	return func(c *MCPClient) {
+		c.retry = cfg
+	}
+}
+
+func WithToolCallTimeout(timeout time.Duration) Option {
+	return func(c *MCPClient) {
+		c.toolCallTimeout = timeout
+	}
+}
+
+func WithServerName(name string) Option {
+	return func(c *MCPClient) {
+		c.serverName = name
+	}
 }
 
 const (
-	connectMaxReties = 5
+	connectMaxRetries = 5
 
 	sseTransport  = "sse"
 	httpTransport = "http"
@@ -41,6 +64,8 @@ var (
 	ErrConnectionRetryFailed = "context timeout while retrying MCP client creation for server"
 	ErrUnsupportedTransport  = "unsupported transport type"
 )
+
+var ErrToolCallTimeout = errors.New("mcp tool call timeout")
 
 // UnauthorizedError indicates the MCP server responded with HTTP 401. It
 // carries the WWW-Authenticate header so callers can perform RFC 9728
@@ -67,19 +92,23 @@ func IsUnauthorizedError(err error) (*UnauthorizedError, bool) {
 	return nil, false
 }
 
-func NewMCPClient(ctx context.Context, url string, headers map[string]string, transportType string, timeout time.Duration, mcpSetting MCPSettings) (*MCPClient, error) {
+func NewMCPClient(ctx context.Context, url string, headers map[string]string, transportType string, timeout time.Duration, mcpSetting MCPSettings, opts ...Option) (*MCPClient, error) {
 	mergedHeaders := make(map[string]string)
 	maps.Copy(mergedHeaders, headers)
 	maps.Copy(mergedHeaders, mcpSetting.Headers)
 
-	mcpClient, err := createMCPClientWithRetry(ctx, url, mergedHeaders, transportType, timeout, connectMaxReties)
+	mcpClient, err := createMCPClientWithRetry(ctx, url, mergedHeaders, transportType, timeout, connectMaxRetries)
 	if err != nil {
 		return nil, err
 	}
 
+	for _, opt := range opts {
+		opt(mcpClient)
+	}
+
 	if len(mcpSetting.ToolCalls) > 0 {
 		for _, setting := range mcpSetting.ToolCalls {
-			if _, err := mcpClient.Client.CallTool(ctx, &setting); err != nil {
+			if _, err := mcpClient.CallTool(ctx, &setting); err != nil {
 				return nil, fmt.Errorf("failed to execute MCP setting tool call %s: %w", setting.Name, err)
 			}
 		}
@@ -171,6 +200,12 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		t.mu.Unlock()
 	}
+	if err == nil && resp != nil && isTransientHTTPStatus(resp.StatusCode) {
+		if capture := transientCaptureFrom(req.Context()); capture != nil {
+			retryAfter, _ := parseRetryAfter(resp.Header.Get("Retry-After"))
+			capture.record(resp.StatusCode, retryAfter)
+		}
+	}
 	return resp, err
 }
 
@@ -205,6 +240,25 @@ func attemptMCPConnection(ctx context.Context, mcpClient *mcpsdk.Client, url str
 	return session, nil
 }
 
+// attemptMCPConnectionWithin bounds connection establishment by deadlineCtx
+// without tying the resulting session's lifetime to it. Passing deadlineCtx
+// straight to Connect would break SSE: SSEClientTransport binds its long-lived
+// hanging GET to the connect context, so cancelling it severs an established
+// session. Only cancel the connect context when the handshake fails.
+func attemptMCPConnectionWithin(ctx, deadlineCtx context.Context, mcpClient *mcpsdk.Client, url string, headers map[string]string, transportType string) (*mcpsdk.ClientSession, error) {
+	connectCtx, cancelConnect := context.WithCancel(ctx)
+	stopDeadlineWatch := context.AfterFunc(deadlineCtx, cancelConnect)
+
+	session, err := attemptMCPConnection(connectCtx, mcpClient, url, headers, transportType)
+	stopDeadlineWatch()
+	if err != nil {
+		cancelConnect()
+		return nil, err
+	}
+
+	return session, nil
+}
+
 func createMCPClientWithRetry(ctx context.Context, url string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int) (*MCPClient, error) {
 	mcpClient := createHTTPClient()
 
@@ -220,7 +274,7 @@ func createMCPClientWithRetry(ctx context.Context, url string, headers map[strin
 			}
 		}
 
-		session, err := attemptMCPConnection(ctx, mcpClient, url, headers, transportType)
+		session, err := attemptMCPConnectionWithin(ctx, retryCtx, mcpClient, url, headers, transportType)
 		if err == nil {
 			return &MCPClient{
 				URL:     url,

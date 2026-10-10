@@ -1,0 +1,26 @@
+{{- if .Values.marketplaceSourceEditorRole.create }}
+# Edit access to the marketplace-sources ConfigMap + per-source credential Secrets.
+# Namespaced, never a ClusterRole: `create` on secrets can't be scoped by name, so
+# the namespace bounds the blast radius. Bound to no one by default — platform teams
+# add a RoleBinding per namespace (see samples/marketplace/marketplace-source-editor-binding.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: marketplace-source-editor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+  annotations:
+    {{- with .Values.global.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["marketplace-sources"]
+    verbs: ["get", "update", "patch"]
+  # `create` can't be scoped by name; namespace scoping bounds it.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "get", "update", "patch", "delete"]
+{{- end }}

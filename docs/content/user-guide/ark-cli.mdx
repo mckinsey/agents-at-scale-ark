@@ -137,7 +137,7 @@ ark query agent/my-agent "Remember my name is Alice." --conversation-id chat-1
 ark query agent/my-agent "What's my name?"  --conversation-id chat-1
 ```
 
-`-o` accepts `yaml`, `json`, `name`, or `events` (structured event stream). `--timeout`, `--session-id`, and `--conversation-id` are also available.
+`-o` accepts `yaml`, `json`, `name`, `events` (structured event stream), or `events-pretty` (human-readable event stream with color-coded reasons and expanded detail). `--timeout`, `--session-id`, and `--conversation-id` are also available.
 
 `ark agents query <name> <message>`, `ark teams query <name> <message>`, and `ark models query <name> <message>` are equivalent shorthands for the respective target type.
 
@@ -168,7 +168,7 @@ Flags: `--type` (`openai`, `azure`, `bedrock`), `--model`, `--base-url`, `--api-
 | --- | --- |
 | `ark generate <kind> [name]` | Scaffold a resource from a template (interactive by default; `--no-interactive` for defaults). See the generators below. |
 | `ark export` | Export resources to a YAML file. `-n` namespace, `-t` types, `-l` label selector, `-o` output path. |
-| `ark import <file>` | Apply resources from a YAML file. |
+| `ark import <file>` | Create resources from a YAML file. Errors if a resource already exists; use `--upsert` to create or update instead. |
 
 `ark generate` (alias `ark g`) scaffolds files on disk:
 
@@ -188,12 +188,15 @@ ark g team research-team           # a team with a chosen strategy
 
 ark export -o backup.yaml                       # everything in the namespace
 ark export -t agents,teams -o agents-teams.yaml # only some types
-ark import backup.yaml
+ark import backup.yaml                           # create; errors on existing resources
+ark import backup.yaml --upsert                  # create or update (kubectl apply)
 ```
 
 <Callout type="warning">
-`ark export` includes `Secret` resources with their data (base64-encoded, not encrypted). Treat export files as sensitive and don't commit them.
+`ark export` includes application `Secret` resources with their data (base64-encoded, not encrypted). It omits Helm release records and service account token Secrets. Treat export files as sensitive and don't commit them.
 </Callout>
+
+Exported YAML contains desired state only. Ark removes Kubernetes runtime metadata, status, ownership references, and finalizers so the file can be applied to another cluster. Controller-generated Tools and Agents are omitted; imported MCPServer and A2AServer resources regenerate them with ownership from the destination cluster.
 
 ### Marketplace
 

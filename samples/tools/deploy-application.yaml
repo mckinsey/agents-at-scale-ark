@@ -1,0 +1,25 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: deploy-application
+spec:
+  type: builtin
+  description: Deploy an application to production environment
+  inputSchema:
+    type: object
+    properties:
+      appName:
+        type: string
+        description: Name of the application to deploy
+      version:
+        type: string
+        description: Version tag to deploy
+      environment:
+        type: string
+        description: Target environment (staging/production)
+    required:
+      - appName
+      - version
+      - environment
+  builtin:
+    name: noop

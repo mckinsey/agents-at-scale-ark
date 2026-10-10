@@ -125,8 +125,12 @@ function validateHelmInputs(
 /**
  * Fetch and validate marketplace item exists
  */
-async function fetchAndValidateMarketplaceItem(id: string, namespace: string) {
-  const item = await getRawMarketplaceItemById(id, namespace);
+async function fetchAndValidateMarketplaceItem(
+  request: NextRequest,
+  id: string,
+  namespace: string,
+) {
+  const item = await getRawMarketplaceItemById(request, id, namespace);
 
   if (!item) {
     return {
@@ -184,7 +188,7 @@ export async function POST(
       );
     }
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(id, namespace);
+    const { item, error } = await fetchAndValidateMarketplaceItem(request, id, namespace);
     if (error) return error;
 
     if (!item!.ark?.chartPath || !item!.ark?.helmReleaseName) {
@@ -245,7 +249,7 @@ export async function DELETE(
       );
     }
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(id, namespace);
+    const { item, error } = await fetchAndValidateMarketplaceItem(request, id, namespace);
     if (error) return error;
 
     if (!item!.ark?.helmReleaseName) {
@@ -272,32 +276,14 @@ export async function DELETE(
     }
 
     const helmCommand = `helm ${helmArgs.join(' ')}`;
-    console.log('Executing:', helmCommand);
 
-    try {
-      const { stdout, stderr } = await executeHelmCommand('helm', helmArgs);
-
-      logHelmStderr(stderr);
-      console.log('Helm stdout:', stdout);
-
-      return NextResponse.json({
-        message: `Successfully uninstalled ${item!.name}`,
-        status: 'uninstalled',
-        output: stdout,
-      });
-    } catch (error) {
-      console.error('Helm uninstallation failed:', error);
-
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      return NextResponse.json(
-        {
-          error: 'Uninstallation failed',
-          details: errorMessage,
-        },
-        { status: 500 },
-      );
-    }
+    return NextResponse.json({
+      status: 'command',
+      name: item!.name,
+      helmCommand,
+      namespace: ark.namespace,
+      message: 'Run this command in your terminal to uninstall',
+    });
   } catch (error) {
     console.error('Error uninstalling marketplace item:', error);
     return NextResponse.json(

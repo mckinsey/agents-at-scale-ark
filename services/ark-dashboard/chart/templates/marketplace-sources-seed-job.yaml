@@ -6,6 +6,8 @@
 {{- $data := index $byNs $ns | default (dict) }}
 {{- $val := dict "url" .url }}
 {{- if .displayName }}{{- $_ := set $val "displayName" .displayName }}{{- end }}
+{{- /* auth carries only non-secret routing metadata; the credential Secret is pre-existing. */}}
+{{- if .auth }}{{- $_ := set $val "auth" (dict "scheme" .auth.scheme "secretRef" .auth.secretRef) }}{{- end }}
 {{- $_ := set $data .name ($val | toJson) }}
 {{- $_ := set $byNs $ns $data }}
 {{- end }}

@@ -22,9 +22,9 @@ import type { ExecutionEngine, ExecutionEnginePhase } from '@/lib/services';
 import type { AgentFormValues } from '../types';
 
 const PHASE_COLORS: Record<ExecutionEnginePhase, string> = {
-  ready: 'bg-green-500',
-  running: 'bg-yellow-500',
-  error: 'bg-red-500',
+  ready: 'bg-status-success',
+  running: 'bg-status-warning',
+  error: 'bg-status-error',
 };
 
 interface ModelConfigSectionProps {
@@ -55,13 +55,13 @@ export function ModelConfigSection({
               value={field.value}
               disabled={disabled}>
               <FormControl>
-                <SelectTrigger className="border-border">
+                <SelectTrigger className="border-stroke-divider">
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
                 <SelectItem value="__none__">
-                  <span className="text-muted-foreground">None (Unset)</span>
+                  <span className="text-fg-secondary">None (Unset)</span>
                 </SelectItem>
                 {models.map(model => (
                   <SelectItem key={model.name} value={model.name}>
@@ -87,13 +87,13 @@ export function ModelConfigSection({
                 value={field.value || '__none__'}
                 disabled={disabled}>
                 <FormControl>
-                  <SelectTrigger className="border-border">
+                  <SelectTrigger className="border-stroke-divider">
                     <SelectValue placeholder="Select an execution engine" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="__none__">
-                    <span className="text-muted-foreground">None (Unset)</span>
+                    <span className="text-fg-secondary">None (Unset)</span>
                   </SelectItem>
                   {executionEngines.map(engine => (
                     <SelectItem key={engine.name} value={engine.name}>
@@ -102,7 +102,7 @@ export function ModelConfigSection({
                           className={`inline-block h-2 w-2 rounded-full ${PHASE_COLORS[engine.phase]}`}
                         />
                         <span>{engine.name}</span>
-                        <span className="text-muted-foreground text-xs">
+                        <span className="text-fg-tertiary text-xs">
                           {engine.phase}
                         </span>
                       </span>

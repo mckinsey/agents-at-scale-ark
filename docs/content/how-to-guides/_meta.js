@@ -22,13 +22,17 @@ export default {
     title: 'Add tools and MCP servers',
     href: '/user-guide/tools'
   },
+  configurations: {
+    title: 'Parametrize resources per environment',
+    href: '/user-guide/configurations'
+  },
   'ark-cli': {
     title: 'Use the Ark CLI',
     href: '/user-guide/ark-cli'
   },
   samples: {
     title: 'Sample patterns',
-    href: '/user-guide/samples/teams/team-selector-strategy'
+    href: '/user-guide/samples/teams/github-team'
   },
   
   '---extend': { type: 'separator', title: 'Advanced use' },
@@ -66,39 +70,35 @@ export default {
     title: 'End to end testing',
     href: '/developer-guide/testing'
   },
+  pipelines: {
+    title: 'Build pipelines',
+    href: '/operations-guide/build-pipelines'
+  },
 
   '---operate': { type: 'separator', title: 'Operate ARK (operators / SRE)' },
-  provisioning: {
-    title: 'Cloud infrastructure',
-    href: '/operations-guide/provisioning'
-  },
   deploying: {
     title: 'Deploy ARK',
     href: '/operations-guide/deploying-ark'
+  },
+  authentication: {
+    title: 'Configure authentication and SSO',
+    href: '/developer-guide/authentication'
   },
   'multi-tenant-dashboard': {
     title: 'Host the dashboard for multiple namespaces',
     href: '/operations-guide/multi-tenant-dashboard-hosting'
   },
+  'tenant-namespaces': {
+    title: 'Manage tenants and namespaces',
+    href: '/operations-guide/tenant-namespace-management'
+  },
   'operate-marketplace': {
     title: 'Marketplace',
     href: '/operations-guide/marketplace'
   },
-  pipelines: {
-    title: 'Build pipelines',
-    href: '/operations-guide/build-pipelines'
-  },
-  'pen-testing': {
-    title: 'Penetration testing',
-    href: '/operations-guide/penetration-testing-reports'
-  },
-  'code-analysis': {
-    title: 'Code analysis',
-    href: '/operations-guide/code-analysis-reports'
-  },
-  'artifact-analysis': {
-    title: 'Artifact analysis',
-    href: '/operations-guide/artifact-analysis-reports'
+  provisioning: {
+    title: 'Cloud deployments',
+    href: '/operations-guide/provisioning'
   }
 }
 

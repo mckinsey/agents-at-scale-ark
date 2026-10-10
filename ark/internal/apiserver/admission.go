@@ -15,14 +15,21 @@ import (
 type AdmissionStorage struct {
 	*registry.GenericStorage
 	validator *validation.Validator
+	lookup    validation.DefaultsLookup
 }
 
-func NewAdmissionStorage(inner *registry.GenericStorage, validator *validation.Validator) *AdmissionStorage {
-	return &AdmissionStorage{GenericStorage: inner, validator: validator}
+func NewAdmissionStorage(inner *registry.GenericStorage, validator *validation.Validator, lookup validation.DefaultsLookup) *AdmissionStorage {
+	return &AdmissionStorage{GenericStorage: inner, validator: validator, lookup: lookup}
 }
 
-func (s *AdmissionStorage) Create(ctx context.Context, obj runtime.Object, _ rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
-	validation.ApplyDefaults(ctx, obj, nil)
+// Create order matters: PrepareForCreate, then Ark defaulting/validation, then the generic
+// admission callback inside GenericStorage.Create. Ark validators resolve valueFrom refs
+// against obj.GetNamespace(), so the object must be formed before they run.
+func (s *AdmissionStorage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
+	if err := registry.PrepareForCreate(ctx, obj); err != nil {
+		return nil, err
+	}
+	validation.ApplyDefaults(ctx, obj, s.lookup)
 	warnings, err := s.validator.Validate(ctx, obj)
 	if err != nil {
 		return nil, err
@@ -30,25 +37,41 @@ func (s *AdmissionStorage) Create(ctx context.Context, obj runtime.Object, _ res
 	for _, w := range warnings {
 		warning.AddWarning(ctx, "", w)
 	}
-	return s.GenericStorage.Create(ctx, obj, nil, options)
+	// Dropping createValidation silently disables all admission-chain policy.
+	return s.GenericStorage.Create(ctx, obj, createValidation, options)
 }
 
-func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc, _ rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
+func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
+	// Each closure runs Ark's defaulting/validation, then chains to the generic
+	// validating-admission callback.
 	admissionCreate := func(ctx context.Context, obj runtime.Object) error {
-		validation.ApplyDefaults(ctx, obj, nil)
+		validation.ApplyDefaults(ctx, obj, s.lookup)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		if createValidation != nil {
+			return createValidation(ctx, obj)
+		}
+		return nil
 	}
-	admissionUpdate := func(ctx context.Context, obj, _ runtime.Object) error {
-		validation.ApplyDefaults(ctx, obj, nil)
+	admissionUpdate := func(ctx context.Context, obj, old runtime.Object) error {
+		validation.ApplyDefaults(ctx, obj, s.lookup)
+		ctx = validation.ServiceAccountAuthzContextForUpdate(ctx, old, obj)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		if updateValidation != nil {
+			return updateValidation(ctx, obj, old)
+		}
+		return nil
 	}
 	return s.GenericStorage.Update(ctx, name, objInfo, admissionCreate, admissionUpdate, forceAllowCreate, options)
 }

@@ -1,12 +1,13 @@
+---
+title: Memory
+description: Memory CRD reference — spec, status, and the HTTP backend contract
+---
+
 # Memory
 
-The `Memory` resource represents persistent storage for converations with agents. It is designed to be agnostic of the backend implementation, meaning that a database, queue or other system can be used.
+A `Memory` points Ark at an HTTP service that stores conversation history keyed by `conversationId` / `queryId`. The CRD is backend-agnostic — any service that implements the [Memory HTTP API](#memory-http-api) can back it (a database, queue, or other store). The in-cluster [ark-broker](/reference/broker) is the reference implementation. Queries reference a `Memory` via `spec.memory.name`. When unset, the mutating webhook fills it in from `ArkConfig/default.spec.defaultMemory` if that names a `Memory` that exists in the query namespace; otherwise resolution falls back at execution time to a `Memory` named `default` in the same namespace.
 
-The backend for a memory resource is an HTTP server that implements the [Memory API Specification](#memory-api-specification).
-
-In time, this resource will also configure how operations such as compaction can be performed. A reference implementation [ARK Broker](#ark-broker) is available.
-
-## Specification
+## Spec
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -14,22 +15,79 @@ kind: Memory
 metadata:
   name: ark-broker
 spec:
-  # The address of the service that handles memory API calls.
-  address:
-    # A 'value' can be provided to give a specific URL, or a service ref to
-    # point to a specific service in the cluster.
+  # --- Required ----------------------------------------------------------
+  address:                                    # the memory service endpoint (ValueSource)
     valueFrom:
-      # In this example, we point to a deployment of the "ARK Broker".
-      serviceRef:
+      serviceRef:                             # point at an in-cluster service
         name: ark-broker
-        port: 8080
+        port: "8080"
+    # value: http://memory.example.com:8080   # OR a direct URL
+
+  # --- Optional ----------------------------------------------------------
+  headers:                                    # HTTP headers sent on every backend request
+    - name: Authorization
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: memory-credentials
+            key: token
 ```
 
-## Usage
+## Fields
 
-Memory can be specified in a query resource. If a Memory resource named `default` exists in the namespace, it will be automatically selected for queries that don't explicitly specify a memory.
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.address` | `ValueSource` | yes | The memory service endpoint. Supply a direct `value` (URL) or a `valueFrom` source — `serviceRef` (in-cluster service), `configMapKeyRef`, `secretKeyRef`, or `queryParameterRef`. The resolved value is written back to `status.lastResolvedAddress`. |
+| `spec.headers[]` | list of `Header` | no | HTTP headers included in every request to the backend. Each entry has a `name` and a `value` that is either a direct `value` or a `valueFrom` source (`configMapKeyRef`, `secretKeyRef`, `queryParameterRef`). Use for auth tokens or routing headers. |
 
-Memory works with all query target types — agents, models, and tools. When a `conversationId` is provided, messages are persisted to the memory chain regardless of the target type.
+## Address resolution
+
+`spec.address` is a `ValueSource`, so the backend endpoint can be a literal URL or resolved from cluster state:
+
+```yaml
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: ark-broker      # resolves to the in-cluster service address
+        port: "8080"
+```
+
+```yaml
+spec:
+  address:
+    value: http://memory.example.com:8080   # direct URL
+```
+
+The controller resolves the address and records the result in `status.lastResolvedAddress`. Consumers (the completions executor, the Query cleanup finalizer) read the resolved address, falling back to `spec.address` if the status field is empty.
+
+## Using memory from a query
+
+A query selects a `Memory` via `spec.memory.name`. If a `Memory` named `default` exists in the namespace, it is used automatically for queries that don't name one — unless `ArkConfig` names a different one (see below). Memory works with all query target types — agents, models, and tools. When a `conversationId` is provided, messages are persisted to the memory chain regardless of the target type.
+
+### Declaring the default for the whole cluster
+
+Set `spec.defaultMemory` on the cluster-scoped `ArkConfig` singleton, and the mutating webhook writes `spec.memory` onto each new query that doesn't name one:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: ArkConfig
+metadata:
+  name: default
+spec:
+  defaultMemory:
+    name: default
+```
+
+Only `name` is accepted — the `Memory` is always resolved in the namespace of the query being defaulted. A namespace here would point every tenant at one backend and mix their conversation history, so the validating webhook rejects it.
+
+Three conditions bound the injection:
+
+- **The `Memory` must already exist in the query namespace and carry a `status.lastResolvedAddress`.** Naming one that has not resolved makes queries fail outright, so the webhook skips those namespaces. This is not a safety net for the name `default`: the executor's own fallback also resolves that name by existence alone, so an unresolved `Memory/default` fails the namespace's queries whether or not the field was injected — fix the `Memory`, don't rely on the default being skipped. The webhook reads through a cache, so a `Memory` and a query applied in the same instant can miss each other; the next query picks it up.
+- **The field is injected at creation only.** Updating an older query never back-fills it, so `spec.memory` records what that query actually ran with, and changing `ArkConfig` affects new queries only.
+- **The PostgreSQL storage backend does not serve `ArkConfig`.** No default is injected there; resolution falls back to the `Memory` named `default`.
+
+With the field injected, `kubectl get query <name> -o jsonpath='{.spec.memory}'` answers which memory a query used without reading executor logs.
 
 Memory in a query to a tool:
 
@@ -46,7 +104,7 @@ spec:
   conversationId: "my-conversation"
 ```
 
-A follow-up query to an agent on the same conversation ID will have access to the tool query's messages:
+A follow-up query to an agent on the same conversation ID has access to the tool query's messages:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -68,19 +126,44 @@ Memory can also be specified via the CLIs:
 fark query --input "Start our conversation" --conversation-id "my-conversation" my-agent
 
 # Using ark
-ark query tool/noop "Remember this message for later" --conversation-id "my-conversation" 
+ark query tool/noop "Remember this message for later" --conversation-id "my-conversation"
 ark query agent/my-agent "What was the last message?" --conversation-id "my-conversation"
 ```
 
 **Session ID vs Conversation ID:**
-- **sessionId**: Groups related queries for tracking and telemetry purposes
+- **sessionId**: Groups related queries for tracking and telemetry purposes.
 - **conversationId**: Conversation threading identifier sent to all execution engines as A2A `contextId`. The completions engine uses it for memory continuity; named engines can use it for their own session management.
 
-When creating a query in the dashboard it is also possible to specify the memory resource. Note that in the dashbhoard 'chat' window, no memory is used, messages are simply stored client-side as is common for chat applications.
+When creating a query in the dashboard it is also possible to specify the memory resource. The dashboard chat window keeps its transcript client-side, and every turn also carries a `conversationId`: the chat does not set one, but the A2A layer generates a context ID at dispatch and the executor uses that, so a query has one even on a brand-new conversation in a namespace with no memory backend at all.
 
-## Memory API Specification
+## Telling when memory is not working
 
-Memory is implemented as a simple HTTP server:
+A namespace with **no** `Memory` degrades rather than failing: resolution falls back to a no-op and queries run without conversation history. A namespace with a `Memory` that never resolved an address is the harsher case — `NewHTTPMemory` errors, so those queries **fail**. The two are worth telling apart, because only the first one is reported on the `Query`:
+
+| Condition | `status: "True"` means |
+| --- | --- |
+| `MemoryUnavailable` | The query carried a `conversationId` but no memory backend was reachable, so history was dropped. |
+| `MemoryDegraded` | A backend was reachable but reading the history from it failed, so the query ran without prior context. |
+
+Both conditions are written on every query whose dispatch completes, carrying `status: "False"` and a reassuring message on the healthy path. Read the `status` field — the presence of the condition says nothing.
+
+```bash
+kubectl get query <name> -o jsonpath='{.status.conditions[?(@.type=="MemoryUnavailable")]}'
+```
+
+Two limits on that signal, both of which the `ark status` check below exists to cover:
+
+- A query that **failed to dispatch** carries neither condition. An unresolved `Memory` is exactly that case: the query errors with `failed to create memory client`, and no memory condition is written.
+- `MemoryUnavailable` requires a `conversationId`, since it means "continuity was expected and not delivered". Every dashboard chat turn has one — the A2A layer generates a context ID at dispatch even when the chat supplies none — so this covers a namespace that never had a memory backend as well as one that lost it.
+
+Two surfaces read this for you:
+
+- **Dashboard chat** shows a notice at the top of the conversation when the last turn reported either condition as `True`, quoting the condition's own message.
+- **`ark status`** prints a `default memory` line for the kubeconfig's current namespace, and it asks the namespace directly rather than reading conditions. It reports the namespace as broken when it has a broker but no `Memory`, and when a `Memory` exists but never resolved an address. A broker counts when it has published an enabled `ark-config-broker` / `ark-config-streaming` ConfigMap, or failing that when a Service carrying the broker chart's label is present — those ConfigMaps are optional, so their absence alone is not proof there is no broker. A namespace with no broker is reported as unconfigured rather than broken. What it cannot read, it does not guess at: an unlistable ConfigMap is always undetermined, and a forbidden cluster-scoped `ArkConfig` downgrades a *broken* verdict to undetermined rather than accusing the namespace of a fault that a default it cannot see may already rule out. The line is informational: it does not change the command's exit code.
+
+## Memory HTTP API
+
+A memory backend is an HTTP server implementing the following endpoints. The [ark-broker](/reference/broker) is the reference implementation; the [Ark API](/reference/ark-apis) gateway proxies the same contract.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -90,6 +173,7 @@ Memory is implemented as a simple HTTP server:
 | DELETE | `/conversations/{id}` | Delete a specific conversation |
 | POST | `/messages` | Store messages (requires conversation_id) |
 | GET | `/messages` | Retrieve messages with optional filtering |
+| DELETE | `/queries/{queryId}/messages` | Delete all messages for a query across all conversations |
 | GET | `/health` | Health check |
 
 ### Create Conversation
@@ -115,6 +199,7 @@ Stores messages for an existing conversation. The `conversation_id` is required.
 {
   "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
   "query_id": "query-uuid",
+  "ttl_seconds": 2592000,
   "messages": [
     {
       "role": "user",
@@ -127,6 +212,8 @@ Stores messages for an existing conversation. The `conversation_id` is required.
   ]
 }
 ```
+
+`ttl_seconds` (optional) sets a per-message expiry: each stored message is stamped with an `expires_at` snapshot and filtered out on read once it elapses. This **expires** messages on a timer — it does not delete them; see [Delete Query Messages](#delete-query-messages) for explicit removal. When omitted, the backend applies its default visibility TTL.
 
 ### Get Conversation
 
@@ -189,3 +276,47 @@ Returns object with conversation IDs:
 ```json
 {"conversations": ["conv-1", "conv-2", "conv-3"]}
 ```
+
+### Delete Query Messages
+
+**DELETE** `/queries/{queryId}/messages`
+
+Hard-deletes all messages for a query across every conversation. The Ark controller calls this to clean up broker state when a `Query` is deleted — see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup). The operation is idempotent.
+
+Response:
+
+```json
+{
+  "status": "success",
+  "message": "Query <queryId> messages deleted"
+}
+```
+
+A backend that does not implement this endpoint should return `404` or `405`; the controller treats both as "not supported" and skips cleanup.
+
+## Status
+
+```yaml
+status:
+  phase: ready
+  lastResolvedAddress: http://ark-broker.default.svc.cluster.local:8080
+  message: Memory backend reachable
+```
+
+### Status fields
+
+| Field | Description |
+| --- | --- |
+| `status.phase` | One of `running`, `ready`, `error`. |
+| `status.lastResolvedAddress` | Last resolved value of `spec.address`, kept for reference. Consumers read this first, falling back to `spec.address`. |
+| `status.message` | Additional information about the current status (e.g. a resolution or reachability error). |
+
+### Print columns
+
+`kubectl get memories` prints `NAME`, `PHASE` (`.status.phase`), `ADDRESS` (`.status.lastResolvedAddress`), and `AGE`.
+
+## Related
+
+- [Query](/reference/resources/query) — references a `Memory` via `spec.memory`.
+- [Broker Service](/reference/broker) — the reference memory backend and its HTTP API.
+- [Ark API](/reference/ark-apis) — gateway that proxies the memory contract.

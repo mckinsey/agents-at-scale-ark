@@ -102,4 +102,4 @@ def generate_secret_client_addition() -> str:
     """Generate secret client addition for versioned clients."""
     return '''        # Add secret client
         from .k8s import SecretClient
-        self.secrets = SecretClient(namespace)'''
+        self.secrets = SecretClient(namespace, default_headers=self.default_headers)'''

@@ -16,11 +16,39 @@ type QueryConditionType string
 const (
 	// QueryCompleted indicates that the query has finished (regardless of outcome)
 	QueryCompleted QueryConditionType = "Completed"
+	// QueryMemoryUnavailable indicates that the query carried a conversationId
+	// but no Memory backend was reachable, so conversation history was dropped.
+	QueryMemoryUnavailable QueryConditionType = "MemoryUnavailable"
+	// QueryMemoryDegraded indicates that a Memory backend was reachable but
+	// reading the conversation history failed, so the query ran without it.
+	QueryMemoryDegraded QueryConditionType = "MemoryDegraded"
 )
 
 const (
 	QueryTypeUser = "user"
 )
+
+// Query status phases, mirroring the status.phase enum.
+const (
+	QueryPhasePending       = "pending"
+	QueryPhaseProvisioning  = "provisioning"
+	QueryPhaseRunning       = "running"
+	QueryPhaseQueued        = "queued"
+	QueryPhaseInputRequired = "input-required"
+	QueryPhaseDone          = "done"
+	QueryPhaseError         = "error"
+	QueryPhaseCanceled      = "canceled"
+)
+
+// IsTerminalPhase reports whether a Query phase is terminal: the reconcile has
+// finished and no further status write is expected.
+func IsTerminalPhase(phase string) bool {
+	switch phase {
+	case QueryPhaseDone, QueryPhaseError, QueryPhaseCanceled:
+		return true
+	}
+	return false
+}
 
 type QueryTarget struct {
 	// +kubebuilder:validation:Required
@@ -76,12 +104,17 @@ type QuerySpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// ConversationId is sent as A2A ContextID when dispatching to execution engines.
 	// Engines use it for conversation threading (e.g., memory lookup, session management).
+	// Deliberately unconstrained beyond MinLength: status.conversationId accepts
+	// arbitrary engine-generated IDs and those are reused here for follow-up queries,
+	// so any character-set or length rule added here breaks that round-trip.
+	// Engines that map it to a filesystem path must validate it at the path join.
 	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
+	// Time to retain Query after completion.
 	// Default is resolved by the mutating webhook from ArkConfig/default
 	// (spec.queryTTL), falling back to 720h when ArkConfig is absent.
 	TTL *metav1.Duration `json:"ttl,omitempty"`
-	// +kubebuilder:default="5m"
+	// +kubebuilder:default="30m"
 	// Timeout for query execution (e.g., "30s", "5m", "1h")
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 	// +kubebuilder:validation:Optional
@@ -133,11 +166,12 @@ type TokenUsage struct {
 	PromptTokens     int64 `json:"promptTokens,omitempty"`
 	CompletionTokens int64 `json:"completionTokens,omitempty"`
 	TotalTokens      int64 `json:"totalTokens,omitempty"`
+	CachedTokens     int64 `json:"cachedTokens,omitempty"`
 }
 
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
-	// +kubebuilder:validation:Enum=pending;provisioning;running;error;done;canceled
+	// +kubebuilder:validation:Enum=pending;provisioning;running;queued;input-required;error;done;canceled
 	Phase string `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Conditions represent the latest available observations of a query's state
@@ -185,8 +219,4 @@ func (q *QuerySpec) SetInputString(input string) error {
 	}
 	q.Input.Raw = inputBytes
 	return nil
-}
-
-func init() {
-	SchemeBuilder.Register(&Query{}, &QueryList{})
 }

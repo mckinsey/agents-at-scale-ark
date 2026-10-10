@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ark-redis-dev
+description: Redis backend for Ark development
+type: application
+version: 0.1.0
+appVersion: "7"

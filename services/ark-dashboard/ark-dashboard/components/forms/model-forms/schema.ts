@@ -2,80 +2,126 @@ import { z } from 'zod';
 
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
-const openaiSchema = z.object({
-  name: kubernetesNameSchema,
-  provider: z.literal('openai'),
-  model: z.string().min(1, { message: 'Model is required' }),
-  secret: z.string().min(1, { message: 'API Key is required' }),
-  baseUrl: z.string().min(1, { message: 'Base URL is required' }),
-});
+function requiredBaseUrl(hasLiteralBaseUrl: boolean) {
+  return hasLiteralBaseUrl
+    ? z.string()
+    : z.string().min(1, { message: 'Base URL is required' });
+}
 
-const azureSchema = z
+function createOpenaiSchema(hasLiteralBaseUrl: boolean) {
+  return z.object({
+    name: kubernetesNameSchema,
+    provider: z.literal('openai'),
+    model: z.string().min(1, { message: 'Model is required' }),
+    secret: z.string().min(1, { message: 'API Key is required' }),
+    baseUrl: requiredBaseUrl(hasLiteralBaseUrl),
+  });
+}
+
+function createAzureSchema(hasLiteralBaseUrl: boolean) {
+  return z
+    .object({
+      name: kubernetesNameSchema,
+      provider: z.literal('azure'),
+      model: z.string().min(1, { message: 'Model is required' }),
+      azureAuthMethod: z.enum([
+        'apiKey',
+        'managedIdentity',
+        'workloadIdentity',
+      ]),
+      secret: z.string(),
+      baseUrl: requiredBaseUrl(hasLiteralBaseUrl),
+      azureApiVersion: z.string().nullish(),
+      azureClientId: z.string(),
+      azureTenantId: z.string(),
+    })
+    .superRefine((data, ctx) => {
+      if (data.azureAuthMethod === 'apiKey' && !data.secret) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['secret'],
+          message: 'API Key is required when using API Key auth',
+        });
+      }
+      if (data.azureAuthMethod === 'workloadIdentity') {
+        if (!data.azureClientId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['azureClientId'],
+            message: 'Client ID is required for Workload Identity',
+          });
+        }
+        if (!data.azureTenantId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['azureTenantId'],
+            message: 'Tenant ID is required for Workload Identity',
+          });
+        }
+      }
+    });
+}
+
+const bedrockSchema = z
   .object({
     name: kubernetesNameSchema,
-    provider: z.literal('azure'),
+    provider: z.literal('bedrock'),
     model: z.string().min(1, { message: 'Model is required' }),
-    azureAuthMethod: z.enum(['apiKey', 'managedIdentity', 'workloadIdentity']),
-    secret: z.string(),
-    baseUrl: z.string().min(1, { message: 'Base URL is required' }),
-    azureApiVersion: z.string().nullish(),
-    azureClientId: z.string(),
-    azureTenantId: z.string(),
+    bedrockAuthMethod: z.enum(['apiKey', 'iam']),
+    bedrockApiKeySecretName: z.string(),
+    bedrockAccessKeyIdSecretName: z.string(),
+    bedrockSecretAccessKeySecretName: z.string(),
+    baseUrl: z.string().nullish(),
+    region: z.string().nullish(),
+    modelARN: z.string().nullish(),
   })
   .superRefine((data, ctx) => {
-    if (data.azureAuthMethod === 'apiKey' && !data.secret) {
+    if (data.bedrockAuthMethod === 'apiKey') {
+      if (!data.bedrockApiKeySecretName) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['bedrockApiKeySecretName'],
+          message: 'API Key Secret is required',
+        });
+      }
+      return;
+    }
+    if (!data.bedrockAccessKeyIdSecretName) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['secret'],
-        message: 'API Key is required when using API Key auth',
+        path: ['bedrockAccessKeyIdSecretName'],
+        message: 'Access Key ID Secret is required',
       });
     }
-    if (data.azureAuthMethod === 'workloadIdentity') {
-      if (!data.azureClientId) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['azureClientId'],
-          message: 'Client ID is required for Workload Identity',
-        });
-      }
-      if (!data.azureTenantId) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['azureTenantId'],
-          message: 'Tenant ID is required for Workload Identity',
-        });
-      }
+    if (!data.bedrockSecretAccessKeySecretName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bedrockSecretAccessKeySecretName'],
+        message: 'Secret Access Key Secret is required',
+      });
     }
   });
 
-const bedrockSchema = z.object({
-  name: kubernetesNameSchema,
-  provider: z.literal('bedrock'),
-  model: z.string().min(1, { message: 'Model is required' }),
-  bedrockAccessKeyIdSecretName: z
-    .string()
-    .min(1, { message: 'Access Key ID Secret is required' }),
-  bedrockSecretAccessKeySecretName: z
-    .string()
-    .min(1, { message: 'Secret Access Key Secret is required' }),
-  region: z.string().nullish(),
-  modelARN: z.string().nullish(),
-});
+function createAnthropicSchema(hasLiteralBaseUrl: boolean) {
+  return z.object({
+    name: kubernetesNameSchema,
+    provider: z.literal('anthropic'),
+    model: z.string().min(1, { message: 'Model is required' }),
+    secret: z.string().min(1, { message: 'API Key is required' }),
+    baseUrl: requiredBaseUrl(hasLiteralBaseUrl),
+    anthropicVersion: z.string().nullish(),
+  });
+}
 
-const anthropicSchema = z.object({
-  name: kubernetesNameSchema,
-  provider: z.literal('anthropic'),
-  model: z.string().min(1, { message: 'Model is required' }),
-  secret: z.string().min(1, { message: 'API Key is required' }),
-  baseUrl: z.string().min(1, { message: 'Base URL is required' }),
-  anthropicVersion: z.string().nullish(),
-});
+export function createSchema(hasLiteralBaseUrl = false) {
+  return z.discriminatedUnion('provider', [
+    createOpenaiSchema(hasLiteralBaseUrl),
+    createAzureSchema(hasLiteralBaseUrl),
+    bedrockSchema,
+    createAnthropicSchema(hasLiteralBaseUrl),
+  ]);
+}
 
-export const schema = z.discriminatedUnion('provider', [
-  openaiSchema,
-  azureSchema,
-  bedrockSchema,
-  anthropicSchema,
-]);
+export const schema = createSchema(false);
 
 export type FormValues = z.infer<typeof schema>;

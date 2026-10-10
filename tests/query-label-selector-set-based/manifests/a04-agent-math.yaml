@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: test-agent-math
+  labels:
+    category: math
+    environment: production
+    type: specialist
+spec:
+  modelRef:
+    name: test-model-mock
+  prompt: |
+    You are a mathematics specialist agent.
+    Solve mathematical problems and provide detailed explanations.

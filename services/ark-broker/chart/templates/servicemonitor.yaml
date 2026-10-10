@@ -1,0 +1,18 @@
+{{- if .Values.prometheus.enable }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "ark-broker.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+spec:
+  endpoints:
+    - path: /metrics
+      port: http
+      scheme: http
+      interval: {{ .Values.prometheus.interval }}
+  selector:
+    matchLabels:
+      {{- include "ark-broker.selectorLabels" . | nindent 6 }}
+{{- end }}

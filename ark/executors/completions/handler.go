@@ -3,12 +3,15 @@ package completions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/shared/constant"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
@@ -16,6 +19,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -24,24 +28,25 @@ type Handler struct {
 	k8sClient client.Client
 	telemetry telemetry.Provider
 	eventing  eventing.Provider
+
+	// withShutdown links a request context to the server lifetime, returning a context that is
+	// cancelled when either the request ends or the server begins finalizing shutdown — so
+	// long-running executions (streams) stop and run their finalize path instead of being
+	// severed on process exit. Injected by NewServer (capturing the server context); when nil
+	// (e.g. a bare Handler in tests) the request context is used unchanged.
+	withShutdown func(context.Context) (context.Context, context.CancelFunc)
 }
 
-type arkMetadata struct {
-	Agent   json.RawMessage `json:"agent"`
-	Tools   json.RawMessage `json:"tools"`
-	History json.RawMessage `json:"history"`
-	Query   queryRef        `json:"query"`
-	Target  *metadataTarget `json:"target,omitempty"`
-}
-
-type metadataTarget struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
-}
-
-type queryRef struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
+// mergeShutdown returns a child of reqCtx that is also cancelled when serverCtx is done,
+// so an in-flight execution reacts to server shutdown as well as client disconnect. The
+// returned cancel must be called to release resources.
+func mergeShutdown(reqCtx, serverCtx context.Context) (context.Context, context.CancelFunc) {
+	if serverCtx == nil {
+		return context.WithCancel(reqCtx)
+	}
+	ctx, cancel := context.WithCancel(reqCtx)
+	stop := context.AfterFunc(serverCtx, cancel)
+	return ctx, func() { stop(); cancel() }
 }
 
 type executionState struct {
@@ -55,6 +60,14 @@ type executionState struct {
 	eventStream    EventStreamInterface
 	querySpan      telemetry.Span
 	targetSpan     telemetry.Span
+	isResumption   bool
+	// memoryUnavailable is true when the query carried a conversationId but no
+	// Memory backend was reachable, so history was silently dropped.
+	memoryUnavailable bool
+	// memoryDegraded is true when a Memory backend was reachable but reading the
+	// conversation history from it failed, so the query ran without prior context.
+	memoryDegraded bool
+	isSubTarget    bool
 }
 
 func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
@@ -87,15 +100,31 @@ func (s *executionState) finalizeStream(ctx context.Context, responseMessages []
 	}
 }
 
+//nolint:gocognit // TODO: Refactor to reduce cognitive complexity
 func (h *Handler) ProcessMessage(
 	ctx context.Context,
 	message protocol.Message,
 	options taskmanager.ProcessOptions,
 	handler taskmanager.TaskHandler,
 ) (*taskmanager.MessageProcessingResult, error) {
-	query, target, err := h.resolveQueryAndTarget(ctx, message)
+	// Link the request to the server lifetime so a shutdown finalizes in-flight work. Fall
+	// back to a plain cancellable context when no linker is injected (bare Handler in tests).
+	merge := h.withShutdown
+	if merge == nil {
+		merge = func(reqCtx context.Context) (context.Context, context.CancelFunc) {
+			return mergeShutdown(reqCtx, nil)
+		}
+	}
+	ctx, cancel := merge(ctx)
+	defer cancel()
+
+	query, target, subTargetAgentName, err := h.resolveQueryAndTarget(ctx, message)
 	if err != nil {
 		return nil, err
+	}
+
+	if subTargetAgentName != "" {
+		ctx = WithSubTargetAgent(ctx, subTargetAgentName)
 	}
 
 	var a2aContextId string
@@ -103,25 +132,83 @@ func (h *Handler) ProcessMessage(
 		a2aContextId = *message.ContextID
 	}
 
-	ctx, state, err := h.setupExecution(ctx, query, target, a2aContextId)
+	ctx, state, err := h.setupExecution(ctx, query, target, a2aContextId, arka2a.ExtractTextFromParts(message.Parts))
 	if err != nil {
 		return nil, err
 	}
 	defer state.querySpan.End()
 	defer state.targetSpan.End()
 
+	log := logf.FromContext(ctx)
+
+	//nolint:nestif // TODO: Refactor to reduce nesting complexity
+	if isResumption, a2aTask := h.checkResumptionForState(ctx, state, query); isResumption {
+		state.isResumption = true
+		decision := "approved"
+		if a2aTask.Status.Phase == arka2a.PhaseFailed {
+			decision = "rejected"
+		}
+		log.Info("Detected resumption from HITL decision, handling completion",
+			"queryName", query.Name,
+			"taskId", a2aTask.Spec.TaskID,
+			"decision", decision)
+		execResult, responseMessages, err := h.handleResumption(ctx, state, a2aTask)
+		if err != nil {
+			// Check if this is another approval required error (cascading approval)
+			var approvalErr *ApprovalRequiredError
+			if errors.As(err, &approvalErr) {
+				// Save any messages that were generated before the approval was required
+				// For cascading approvals, only save responseMessages (no input) since the conversation
+				// history already contains the original input from the first turn
+				if state.memory != nil && len(responseMessages) > 0 {
+					log.Info("Saving intermediate messages to memory before cascading approval", "messageCount", len(responseMessages), "queryName", state.query.Name)
+					for i, msg := range responseMessages {
+						msgUnion := openai.ChatCompletionMessageParamUnion(msg)
+						role := RoleUnknown
+						switch {
+						case msgUnion.OfUser != nil:
+							role = RoleUser
+						case msgUnion.OfAssistant != nil:
+							role = RoleAssistant
+						case msgUnion.OfTool != nil:
+							role = RoleTool
+						}
+						log.Info("Intermediate message to save", "index", i, "role", role)
+					}
+					if saveErr := state.memory.AddMessages(ctx, state.query.Name, responseMessages); saveErr != nil {
+						log.Error(saveErr, "failed to save intermediate messages to memory")
+					} else {
+						log.Info("Successfully saved intermediate messages to memory")
+					}
+				}
+				return h.handleApprovalRequired(ctx, state, approvalErr), nil
+			}
+			log.Error(err, "resumption failed")
+			state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
+			return nil, fmt.Errorf("resumption failed: %w", err)
+		}
+		// Clear A2A metadata from result to prevent re-processing the same completed task
+		// The old taskID should not persist in the Query status after successful resumption
+		if execResult != nil {
+			execResult.A2AResponse = nil
+		}
+		return h.buildA2AResponse(ctx, state, responseMessages, execResult), nil
+	}
+
 	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
-		// Save error messages to memory before returning
-		// This ensures failed queries appear in conversation history with error context
-		if state.memory != nil && len(state.inputMessages) > 0 {
-			errorMessage := NewAssistantMessage(fmt.Sprintf("Error: %v", err))
-			errorMessages := PrepareNewMessagesForMemory(state.inputMessages, []Message{errorMessage})
-			if saveErr := state.memory.AddMessages(ctx, state.query.Name, errorMessages); saveErr != nil {
-				log.Error(saveErr, "failed to save error messages to memory")
+		// Check if this is an approval required error
+		var approvalErr *ApprovalRequiredError
+		if errors.As(err, &approvalErr) {
+			if state.isSubTarget {
+				return nil, subTargetApprovalError(state.target.Name, approvalErr)
 			}
+			h.saveInputMessagesToMemory(ctx, state)
+			return h.handleApprovalRequired(ctx, state, approvalErr), nil
 		}
 
+		// Save error messages to memory before returning
+		h.saveErrorMessagesToMemory(ctx, state, err)
 		state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
@@ -129,46 +216,111 @@ func (h *Handler) ProcessMessage(
 	return h.buildA2AResponse(ctx, state, responseMessages, execResult), nil
 }
 
-func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, error) {
-	meta, err := extractArkMetadata(message)
+func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, string, error) {
+	ref, err := extractQueryRef(message)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to extract ark metadata: %w", err)
+		return nil, nil, "", fmt.Errorf("failed to extract ark metadata: %w", err)
 	}
 
-	if meta.Query.Name == "" || meta.Query.Namespace == "" {
-		return nil, nil, fmt.Errorf("query reference is required in ark metadata")
+	if ref.Name == "" || ref.Namespace == "" {
+		return nil, nil, "", fmt.Errorf("query reference is required in ark metadata")
 	}
 
 	var query arkv1alpha1.Query
 	if err := h.k8sClient.Get(ctx, types.NamespacedName{
-		Name:      meta.Query.Name,
-		Namespace: meta.Query.Namespace,
+		Name:      ref.Name,
+		Namespace: ref.Namespace,
 	}, &query); err != nil {
-		return nil, nil, fmt.Errorf("failed to get query %s/%s: %w", meta.Query.Namespace, meta.Query.Name, err)
+		return nil, nil, "", fmt.Errorf("failed to get query %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
-	target := query.Spec.Target
-	if target == nil && meta.Target != nil {
-		target = &arkv1alpha1.QueryTarget{
-			Type: meta.Target.Type,
-			Name: meta.Target.Name,
-		}
-	}
-	if target == nil && query.Spec.Selector != nil {
+	declared := query.Spec.Target
+	if declared == nil && query.Spec.Selector != nil {
 		resolved, err := h.resolveSelector(ctx, &query)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to resolve selector for query %s/%s: %w", meta.Query.Namespace, meta.Query.Name, err)
+			return nil, nil, "", fmt.Errorf("failed to resolve selector for query %s/%s: %w", ref.Namespace, ref.Name, err)
 		}
-		target = resolved
-	}
-	if target == nil {
-		return nil, nil, fmt.Errorf("query %s/%s has no target", meta.Query.Namespace, meta.Query.Name)
+		declared = resolved
 	}
 
-	return &query, target, nil
+	if ref.Target != nil {
+		override := &arkv1alpha1.QueryTarget{Type: ref.Target.Type, Name: ref.Target.Name}
+		if err := h.validateTargetOverride(ctx, &query, declared, override); err != nil {
+			return nil, nil, "", err
+		}
+		return &query, override, override.Name, nil
+	}
+
+	if declared == nil {
+		return nil, nil, "", fmt.Errorf("query %s/%s has no target", ref.Namespace, ref.Name)
+	}
+
+	return &query, declared, "", nil
 }
 
-func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, target *arkv1alpha1.QueryTarget, a2aContextId string) (context.Context, *executionState, error) {
+func (h *Handler) validateTargetOverride(ctx context.Context, query *arkv1alpha1.Query, declared, override *arkv1alpha1.QueryTarget) error {
+	if override.Type != ToolTypeAgent {
+		return fmt.Errorf("query ref target type %q is not supported: only %q targets may be overridden", override.Type, ToolTypeAgent)
+	}
+
+	if declared == nil {
+		return fmt.Errorf("query %s/%s has no target, so agent %q cannot be authorised as a sub-target", query.Namespace, query.Name, override.Name)
+	}
+
+	if declared.Type != ToolTypeTeam {
+		return fmt.Errorf("query %s/%s targets %s %q, so agent %q cannot be executed as a sub-target: only team targets may delegate", query.Namespace, query.Name, declared.Type, declared.Name, override.Name)
+	}
+
+	reachable, err := h.teamReachesAgent(ctx, query.Namespace, declared.Name, override.Name)
+	if err != nil {
+		return err
+	}
+	if !reachable {
+		return fmt.Errorf("agent %q is not a member or selector of team %q targeted by query %s/%s", override.Name, declared.Name, query.Namespace, query.Name)
+	}
+
+	return nil
+}
+
+func (h *Handler) teamReachesAgent(ctx context.Context, namespace, teamName, agentName string) (bool, error) {
+	visited := map[string]bool{}
+	pending := []string{teamName}
+
+	for len(pending) > 0 {
+		name := pending[0]
+		pending = pending[1:]
+		if visited[name] {
+			continue
+		}
+		visited[name] = true
+
+		var team arkv1alpha1.Team
+		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &team); err != nil {
+			return false, fmt.Errorf("failed to get team %s/%s while authorising sub-target %q: %w", namespace, name, agentName, err)
+		}
+
+		if team.Spec.Selector != nil && team.Spec.Selector.Agent == agentName {
+			return true, nil
+		}
+
+		for _, member := range team.Spec.Members {
+			switch member.Type {
+			case ToolTypeAgent:
+				if member.Name == agentName {
+					return true, nil
+				}
+			case ToolTypeTeam:
+				pending = append(pending, member.Name)
+			}
+		}
+	}
+
+	return false, nil
+}
+
+func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, target *arkv1alpha1.QueryTarget, a2aContextId, inboundText string) (context.Context, *executionState, error) {
+	isSubTarget := GetSubTargetAgent(ctx) != ""
+
 	ctx = context.WithValue(ctx, QueryContextKey, query)
 	ctx = h.eventing.QueryRecorder().InitializeQueryContext(ctx, query)
 	ctx = h.eventing.QueryRecorder().StartTokenCollection(ctx)
@@ -184,35 +336,59 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		ctx = WithA2AContextID(ctx, a2aContextID)
 	}
 
-	inputMessages, err := GetQueryInputMessages(ctx, *query, h.k8sClient)
-	if err != nil {
-		querySpan.End()
-		return ctx, nil, fmt.Errorf("failed to get input messages: %w", err)
+	var inputMessages []Message
+	if isSubTarget {
+		inputMessages = []Message{NewUserMessage(inboundText)}
+	} else {
+		var err error
+		inputMessages, err = GetQueryInputMessages(ctx, *query, h.k8sClient)
+		if err != nil {
+			querySpan.End()
+			return ctx, nil, fmt.Errorf("failed to get input messages: %w", err)
+		}
 	}
 
 	conversationId := a2aContextId
 	if conversationId == "" {
 		conversationId = query.Spec.ConversationId
 	}
-	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, ttlSecondsFromQuery(query), h.eventing.MemoryRecorder())
-	if err != nil {
-		querySpan.End()
-		return ctx, nil, fmt.Errorf("failed to create memory client: %w", err)
+	var memory MemoryInterface
+	if isSubTarget {
+		memory = NewNoopMemory()
+	} else {
+		var err error
+		memory, err = NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, common.TtlSecondsFromQuery(query), h.eventing.MemoryRecorder())
+		if err != nil {
+			querySpan.End()
+			return ctx, nil, fmt.Errorf("failed to create memory client: %w", err)
+		}
 	}
 
 	if httpMemory, ok := memory.(*HTTPMemory); ok {
 		conversationId = httpMemory.GetConversationID()
 	}
 
+	ctx = WithParentConversationID(ctx, conversationId)
+
+	_, isNoop := memory.(*NoopMemory)
+	memoryUnavailable := isNoop && conversationId != "" && !isSubTarget
+
 	memoryMessages, err := memory.GetMessages(ctx)
+	memoryDegraded := false
 	if err != nil {
-		log.Error(err, "failed to load memory messages, continuing without history")
+		log.Error(err, "failed to load memory messages, continuing without history",
+			"queryName", query.Name, "namespace", query.Namespace, "conversationId", conversationId)
 		memoryMessages = nil
+		memoryDegraded = true
 	}
 
-	eventStream, err := NewEventStreamForQuery(ctx, h.k8sClient, query.Namespace, sessionId, query.Name)
-	if err != nil {
-		log.Error(err, "failed to create event stream, continuing without streaming")
+	var eventStream EventStreamInterface
+	if !isSubTarget {
+		var err error
+		eventStream, err = NewEventStreamForQuery(ctx, h.k8sClient, query.Namespace, sessionId, query.Name)
+		if err != nil {
+			log.Error(err, "failed to create event stream, continuing without streaming")
+		}
 	}
 
 	userContent := ExtractUserMessageContent(inputMessages)
@@ -232,6 +408,10 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		eventStream:    eventStream,
 		querySpan:      querySpan,
 		targetSpan:     targetSpan,
+
+		memoryUnavailable: memoryUnavailable,
+		memoryDegraded:    memoryDegraded,
+		isSubTarget:       isSubTarget,
 	}
 
 	return ctx, state, nil
@@ -254,9 +434,13 @@ func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) (*E
 	}
 
 	if err != nil {
-		h.telemetry.QueryRecorder().RecordError(state.targetSpan, err)
-		h.telemetry.QueryRecorder().RecordError(state.querySpan, err)
-		StreamError(ctx, state.eventStream, err, "execution_failed", state.target.Name)
+		// Don't stream error for approval required - it will be handled separately
+		var approvalErr *ApprovalRequiredError
+		if !errors.As(err, &approvalErr) {
+			h.telemetry.QueryRecorder().RecordError(state.targetSpan, err)
+			h.telemetry.QueryRecorder().RecordError(state.querySpan, err)
+			StreamError(ctx, state.eventStream, err, "execution_failed", state.target.Name)
+		}
 		return nil, nil, err
 	}
 
@@ -270,12 +454,7 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	h.telemetry.QueryRecorder().RecordSuccess(state.targetSpan)
 	h.telemetry.QueryRecorder().RecordSuccess(state.querySpan)
 
-	if state.memory != nil && len(responseMessages) > 0 {
-		newMessages := PrepareNewMessagesForMemory(state.inputMessages, responseMessages)
-		if saveErr := state.memory.AddMessages(ctx, state.query.Name, newMessages); saveErr != nil {
-			log.Error(saveErr, "failed to save messages to memory")
-		}
-	}
+	h.saveFinalMessagesToMemory(ctx, state, responseMessages)
 
 	tokenSummary := h.eventing.QueryRecorder().GetTokenSummary(ctx)
 	if tokenSummary.TotalTokens > 0 {
@@ -450,10 +629,17 @@ func buildResponseMeta(state *executionState, execResult *ExecutionResult, respo
 			"prompt_tokens":     tokenSummary.PromptTokens,
 			"completion_tokens": tokenSummary.CompletionTokens,
 			"total_tokens":      tokenSummary.TotalTokens,
+			"cached_tokens":     tokenSummary.CachedTokens,
 		}
 	}
 	if state.conversationId != "" {
 		responseMeta["conversationId"] = state.conversationId
+	}
+	if state.memoryUnavailable {
+		responseMeta["memoryUnavailable"] = true
+	}
+	if state.memoryDegraded {
+		responseMeta["memoryDegraded"] = true
 	}
 	if execResult != nil && execResult.A2AResponse != nil {
 		a2aMeta := map[string]string{}
@@ -519,7 +705,7 @@ func firstItemName[T any, PT interface {
 }
 
 // Query extension spec: ark/api/extensions/query/v1/
-func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
+func extractQueryRef(message protocol.Message) (*arka2a.QueryExtensionRef, error) {
 	if message.Metadata == nil {
 		return nil, fmt.Errorf("message has no metadata")
 	}
@@ -534,14 +720,16 @@ func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
 		return nil, fmt.Errorf("failed to marshal query ref: %w", err)
 	}
 
-	var ref queryRef
+	var ref arka2a.QueryExtensionRef
 	if err := json.Unmarshal(raw, &ref); err != nil {
 		return nil, fmt.Errorf("failed to parse query ref: %w", err)
 	}
 
-	meta := arkMetadata{Query: ref}
+	if ref.Target != nil && (ref.Target.Type == "" || ref.Target.Name == "") {
+		return nil, fmt.Errorf("query ref target must contain 'type' and 'name'")
+	}
 
-	return &meta, nil
+	return &ref, nil
 }
 
 func extractAssistantText(messages []Message) string {
@@ -578,4 +766,367 @@ func serializeResponseMessages(messages []Message) string {
 		return "[]"
 	}
 	return string(data)
+}
+
+// handleApprovalRequired handles the approval required error by creating an A2A task
+func (h *Handler) handleApprovalRequired(
+	ctx context.Context,
+	state *executionState,
+	approvalErr *ApprovalRequiredError,
+) *taskmanager.MessageProcessingResult {
+	// Generate task ID
+	taskID := protocol.GenerateRPCID()
+
+	// Serialize tool calls for metadata
+	toolCallsJSON, err := json.Marshal(approvalErr.ToolCalls)
+	if err != nil {
+		log.Error(err, "failed to serialize tool calls")
+		toolCallsJSON = []byte("[]")
+	}
+
+	// Serialize context for metadata
+	contextJSON, err := json.Marshal(approvalErr.Context)
+	if err != nil {
+		log.Error(err, "failed to serialize context")
+		contextJSON = []byte("{}")
+	}
+
+	// Timeout is optional, so an Agent stored before it had a default can leave it nil.
+	timeoutStr := ""
+	if approvalErr.Config.Timeout != nil {
+		timeoutStr = approvalErr.Config.Timeout.Duration.String()
+	}
+
+	// Build task metadata with approval details (all values as strings or primitive types)
+	metadata := map[string]interface{}{
+		"toolCalls": string(toolCallsJSON),
+		"timeout":   timeoutStr,
+		"onTimeout": approvalErr.Config.OnTimeout,
+		"context":   string(contextJSON),
+	}
+
+	// Create task with input-required state
+	task := &protocol.Task{
+		ID:        taskID,
+		ContextID: state.conversationId,
+		Kind:      "task",
+		Status: protocol.TaskStatus{
+			State: protocol.TaskStateInputRequired,
+		},
+		Metadata: metadata,
+	}
+
+	// Emit streaming event for approval request
+	if state.eventStream != nil {
+		StreamApprovalRequest(ctx, state.eventStream, taskID, approvalErr.ToolCalls,
+			approvalErr.Config, approvalErr.Context.AgentName)
+
+		// Close stream without setting phase to "done" (query will transition to input-required)
+		if completionErr := state.eventStream.NotifyCompletion(ctx); completionErr != nil {
+			log.Error(completionErr, "failed to notify stream completion for approval")
+		}
+		if closeErr := state.eventStream.Close(); closeErr != nil {
+			log.Error(closeErr, "failed to close event stream for approval")
+		}
+	}
+
+	h.telemetry.QueryRecorder().RecordSuccess(state.targetSpan)
+	h.telemetry.QueryRecorder().RecordSuccess(state.querySpan)
+
+	return &taskmanager.MessageProcessingResult{
+		Result: task,
+	}
+}
+
+// checkResumption checks if this query execution is a resumption from HITL approval or rejection
+func (h *Handler) checkResumptionForState(ctx context.Context, state *executionState, query *arkv1alpha1.Query) (bool, *arkv1alpha1.A2ATask) {
+	if state.isSubTarget {
+		return false, nil
+	}
+	return h.checkResumption(ctx, query)
+}
+
+func (h *Handler) checkResumption(ctx context.Context, query *arkv1alpha1.Query) (bool, *arkv1alpha1.A2ATask) {
+	log := logf.FromContext(ctx)
+
+	log.Info("checkResumption called", "queryName", query.Name, "queryPhase", query.Status.Phase)
+
+	// Check if query has A2A metadata with taskID
+	if query.Status.Response == nil || query.Status.Response.A2A == nil || query.Status.Response.A2A.TaskID == "" {
+		log.Info("No A2A taskID found, not a resumption", "hasResponse", query.Status.Response != nil)
+		return false, nil
+	}
+
+	taskID := query.Status.Response.A2A.TaskID
+	taskName := fmt.Sprintf("a2a-task-%s", taskID)
+	log.Info("Found A2A taskID, checking task status", "taskId", taskID, "taskName", taskName)
+
+	var a2aTask arkv1alpha1.A2ATask
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: query.Namespace}, &a2aTask); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "failed to get A2ATask for resumption check")
+		}
+		log.Info("A2ATask not found or error fetching", "error", err)
+		return false, nil
+	}
+
+	log.Info("A2ATask status", "taskId", taskID, "phase", a2aTask.Status.Phase)
+
+	// Only HITL approval tasks are resumable. External A2A agent tasks (blocking or
+	// streaming) also reach PhaseCompleted and record their TaskID in query status, but
+	// they carry no approval metadata; resuming them fails with "no toolCalls in
+	// protocolMetadata". Distinguish by A2AServerRef, which approval tasks never set.
+	if !arka2a.IsHITLApprovalTask(&a2aTask) {
+		log.Info("A2ATask is an external A2A agent task, not a HITL resumption", "taskId", taskID)
+		return false, nil
+	}
+
+	// Check if task is completed (approval) or denied in a way the agent can react to
+	if a2aTask.Status.Phase == arka2a.PhaseCompleted {
+		log.Info("A2ATask completed, resuming", "taskId", taskID)
+		return true, &a2aTask
+	}
+
+	if arka2a.IsResumableDenial(&a2aTask) {
+		log.Info("Detected resumable denial, will resume to let agent handle gracefully", "taskId", taskID)
+		return true, &a2aTask
+	}
+
+	log.Info("A2ATask not completed/denied, not resuming", "taskId", taskID, "phase", a2aTask.Status.Phase)
+	return false, nil
+}
+
+// handleResumption handles query resumption after HITL approval or rejection
+//
+//nolint:gocognit // TODO: Refactor to reduce cognitive complexity
+func (h *Handler) handleResumption(ctx context.Context, state *executionState, a2aTask *arkv1alpha1.A2ATask) (*ExecutionResult, []Message, error) {
+	log := logf.FromContext(ctx)
+
+	// Get conversation ID from A2ATask
+	conversationID := a2aTask.Spec.ContextID
+	if conversationID == "" {
+		return nil, nil, fmt.Errorf("A2ATask has no contextId for memory retrieval")
+	}
+
+	log.Info("Fetching conversation history from memory service", "conversationId", conversationID)
+
+	// Parse tool calls from A2ATask metadata
+	toolCallsJSON, ok := a2aTask.Status.ProtocolMetadata["toolCalls"]
+	if !ok {
+		return nil, nil, fmt.Errorf("A2ATask has no toolCalls in protocolMetadata")
+	}
+
+	var toolCallsData []struct {
+		ID       string `json:"id"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(toolCallsJSON), &toolCallsData); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse toolCalls from A2ATask: %w", err)
+	}
+
+	// Check if this is approval or rejection
+	isApproved := a2aTask.Status.Phase == arka2a.PhaseCompleted
+	isRejected := a2aTask.Status.Phase == arka2a.PhaseFailed
+	rejectionError := "Tool execution rejected by user"
+	if isRejected && arka2a.IsTimeoutRejection(a2aTask) {
+		rejectionError = "Tool execution rejected: approval timeout exceeded"
+	}
+
+	if isApproved {
+		log.Info("Executing approved tool calls", "count", len(toolCallsData))
+	} else if isRejected {
+		log.Info("Handling rejected tool calls - will return error results", "count", len(toolCallsData), "reason", rejectionError)
+	}
+
+	// Resolve the agent that requested approval. For team targets the query
+	// target names the team, not the agent, so prefer the agent captured in the
+	// approval context; fall back to the target for direct agent queries.
+	agentName, agentNamespace := resolveResumptionAgent(state, a2aTask)
+	var agentCRD arkv1alpha1.Agent
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: agentName, Namespace: agentNamespace}, &agentCRD); err != nil {
+		return nil, nil, fmt.Errorf("failed to get agent %s: %w", agentName, err)
+	}
+
+	// Create agent instance - needed for resuming execution with results (approval or rejection)
+	agent, err := MakeAgent(ctx, h.k8sClient, &agentCRD, h.telemetry, h.eventing)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to make agent %s: %w", agentName, err)
+	}
+
+	// Convert parsed tool calls to openai format
+	toolCalls := make([]openai.ChatCompletionMessageToolCall, len(toolCallsData))
+	approvedResults := []ToolResult{}
+
+	for i, tcData := range toolCallsData {
+		tc := openai.ChatCompletionMessageToolCall{
+			ID:   tcData.ID,
+			Type: constant.Function(tcData.Type),
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      tcData.Function.Name,
+				Arguments: tcData.Function.Arguments,
+			},
+		}
+		toolCalls[i] = tc
+
+		//nolint:nestif // TODO: Refactor to reduce nesting complexity
+		if isApproved {
+			// APPROVED: Execute the tool
+			result, err := agent.executeToolCall(ctx, tc)
+			if err != nil {
+				log.Error(err, "failed to execute approved tool call", "toolName", tc.Function.Name)
+				// Create error result
+				approvedResults = append(approvedResults, ToolResult{
+					ID:      tc.ID,
+					Content: fmt.Sprintf("Error executing tool: %v", err),
+				})
+			} else {
+				// Extract message content - result is a Message type (tool message)
+				// Convert to string content for tool result
+				if toolMsg := result.OfTool; toolMsg != nil {
+					if content := toolMsg.Content.OfString; content.Value != "" {
+						approvedResults = append(approvedResults, ToolResult{
+							ID:      tc.ID,
+							Content: content.Value,
+						})
+					} else {
+						approvedResults = append(approvedResults, ToolResult{
+							ID:      tc.ID,
+							Content: fmt.Sprintf("%v", toolMsg.Content),
+						})
+					}
+				} else {
+					approvedResults = append(approvedResults, ToolResult{
+						ID:      tc.ID,
+						Content: fmt.Sprintf("%v", result),
+					})
+				}
+			}
+		} else if isRejected {
+			// REJECTED: Return error result without executing
+			approvedResults = append(approvedResults, ToolResult{
+				ID:      tc.ID,
+				Name:    tc.Function.Name,
+				Error:   rejectionError,
+				Content: "",
+			})
+		}
+	}
+
+	// Resume agent execution with tool results (may include approval successes or rejection errors)
+	log.Info("Resuming agent execution with tool results", "results", len(approvedResults), "decision", map[bool]string{true: "approved", false: "rejected"}[isApproved])
+	result, err := agent.ResumeFromApproval(ctx, toolCalls, approvedResults, state.memory, state.eventStream, state.inputMessages)
+	if err != nil {
+		// Check if this is another approval required error (cascading approval)
+		var approvalErr *ApprovalRequiredError
+		if errors.As(err, &approvalErr) {
+			log.Info("Detected cascading approval required, returning partial result with messages")
+			// Return the partial result and messages before the approval error
+			// The caller will stream these messages first, then handle the approval
+			return result, result.Messages, err
+		}
+		log.Info("Error is not ApprovalRequiredError, wrapping", "errorType", fmt.Sprintf("%T", err))
+		return nil, nil, fmt.Errorf("failed to resume agent execution: %w", err)
+	}
+
+	return result, result.Messages, nil
+}
+
+// resolveResumptionAgent determines which agent to resume after approval. The
+// approval context records the agent that actually requested approval (a team
+// member when the query targets a team); fall back to the query target for
+// direct agent queries or when no context was persisted.
+func resolveResumptionAgent(state *executionState, a2aTask *arkv1alpha1.A2ATask) (string, string) {
+	name := state.target.Name
+	namespace := state.query.Namespace
+
+	ctxJSON, ok := a2aTask.Status.ProtocolMetadata["context"]
+	if !ok {
+		return name, namespace
+	}
+
+	var execCtx ExecutionContext
+	if err := json.Unmarshal([]byte(ctxJSON), &execCtx); err != nil {
+		return name, namespace
+	}
+
+	if execCtx.AgentName != "" {
+		name = execCtx.AgentName
+	}
+	if execCtx.AgentNamespace != "" {
+		namespace = execCtx.AgentNamespace
+	}
+	return name, namespace
+}
+
+// saveInputMessagesToMemory saves input messages to memory before first approval
+func (h *Handler) saveInputMessagesToMemory(ctx context.Context, state *executionState) {
+	if state.memory == nil || len(state.inputMessages) == 0 {
+		return
+	}
+
+	log := logf.FromContext(ctx)
+	log.Info("Saving input messages to memory before first approval", "messageCount", len(state.inputMessages), "queryName", state.query.Name)
+
+	if err := state.memory.AddMessages(ctx, state.query.Name, state.inputMessages); err != nil {
+		log.Error(err, "failed to save input messages to memory before approval")
+	} else {
+		log.Info("Successfully saved input messages to memory before first approval")
+	}
+}
+
+// saveErrorMessagesToMemory saves error messages to memory
+func (h *Handler) saveErrorMessagesToMemory(ctx context.Context, state *executionState, err error) {
+	if state.memory == nil || len(state.inputMessages) == 0 {
+		return
+	}
+
+	log := logf.FromContext(ctx)
+	errorMessage := NewAssistantMessage(fmt.Sprintf("Error: %v", err))
+	errorMessages := PrepareNewMessagesForMemory(state.inputMessages, []Message{errorMessage})
+
+	if saveErr := state.memory.AddMessages(ctx, state.query.Name, errorMessages); saveErr != nil {
+		log.Error(saveErr, "failed to save error messages to memory")
+	}
+}
+
+// saveFinalMessagesToMemory saves final messages to memory after successful execution
+func (h *Handler) saveFinalMessagesToMemory(ctx context.Context, state *executionState, responseMessages []Message) {
+	if state.memory == nil || len(responseMessages) == 0 || state.isSubTarget {
+		return
+	}
+
+	log := logf.FromContext(ctx)
+	var messagesToSave []Message
+
+	if state.isResumption {
+		messagesToSave = responseMessages
+		log.Info("Saving final messages (resumption)", "messageCount", len(messagesToSave), "queryName", state.query.Name)
+	} else {
+		messagesToSave = PrepareNewMessagesForMemory(state.inputMessages, responseMessages)
+		log.Info("Saving final messages (first execution)", "messageCount", len(messagesToSave), "inputCount", len(state.inputMessages), "responseCount", len(responseMessages), "queryName", state.query.Name)
+	}
+
+	for i, msg := range messagesToSave {
+		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
+		role := RoleUnknown
+		switch {
+		case msgUnion.OfUser != nil:
+			role = RoleUser
+		case msgUnion.OfAssistant != nil:
+			role = RoleAssistant
+		case msgUnion.OfTool != nil:
+			role = RoleTool
+		}
+		log.Info("Final message to save", "index", i, "role", role)
+	}
+
+	if err := state.memory.AddMessages(ctx, state.query.Name, messagesToSave); err != nil {
+		log.Error(err, "failed to save messages to memory")
+	} else {
+		log.Info("Successfully saved final messages to memory")
+	}
 }

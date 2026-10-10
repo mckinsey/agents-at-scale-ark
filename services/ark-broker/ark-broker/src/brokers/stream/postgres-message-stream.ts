@@ -1,15 +1,15 @@
-import {EventEmitter} from 'events';
 import type postgres from 'postgres';
 import type {Logger} from '@ark-broker/logging/logger.js';
 import type {Db} from '@ark-broker/db/db.js';
 import type {MessageData} from '../memory-broker.js';
 import {BrokerItem} from './broker-item.js';
-import {
-  DEFAULT_LIMIT,
-  type PaginatedList,
-  type PaginationParams,
-} from '../pagination.js';
-import type {Stream, Predicate} from './stream.js';
+import type {Predicate} from './stream.js';
+import type {
+  ConversationStats,
+  MessageFilter,
+  MessageStream,
+} from './message-stream.js';
+import {NOTIFY_CHUNK_SIZE, PostgresStreamBase} from './postgres-stream-base.js';
 
 type MessageRow = {
   sequence_number: string;
@@ -31,14 +31,34 @@ function rowToBrokerItem(row: MessageRow): BrokerItem<MessageData> {
   };
 }
 
-export class PostgresMessageStream implements Stream<MessageData> {
-  private readonly emitter = new EventEmitter();
+export class PostgresMessageStream
+  extends PostgresStreamBase<MessageData, MessageFilter>
+  implements MessageStream
+{
+  protected readonly tableName = 'messages';
+  protected readonly selectColumns = [
+    'sequence_number',
+    'conversation_id',
+    'query_id',
+    'message',
+    'created_at',
+  ];
+  protected readonly notifyChannel = 'ark_broker_messages';
 
-  constructor(
-    private readonly logger: Logger,
-    private readonly db: Db,
-    private readonly ttlSeconds: number
-  ) {}
+  constructor(logger: Logger, db: Db, ttlSeconds: number) {
+    super(logger, db, ttlSeconds);
+  }
+
+  protected rowToItem(row: postgres.Row): BrokerItem<MessageData> {
+    return rowToBrokerItem(row as unknown as MessageRow);
+  }
+
+  protected whereFor(filter: MessageFilter): postgres.Fragment {
+    return this.db`
+      ${filter.conversationId ? this.db`AND conversation_id = ${filter.conversationId}` : this.db``}
+      ${filter.queryId ? this.db`AND query_id = ${filter.queryId}` : this.db``}
+    `;
+  }
 
   async append(
     data: MessageData,
@@ -46,60 +66,63 @@ export class PostgresMessageStream implements Stream<MessageData> {
   ): Promise<BrokerItem<MessageData>> {
     const effectiveTtl = ttlSeconds ?? this.ttlSeconds;
     const rows = await this.db<MessageRow[]>`
-      INSERT INTO messages (conversation_id, query_id, message, expires_at)
-      VALUES (
-        ${data.conversationId},
-        ${data.queryId},
-        ${this.db.json(data.message as unknown as postgres.JSONValue)},
-        now() + make_interval(secs => ${effectiveTtl})
+      WITH inserted AS (
+        INSERT INTO messages (conversation_id, query_id, message, expires_at)
+        VALUES (
+          ${data.conversationId},
+          ${data.queryId},
+          ${this.db.json(data.message as postgres.JSONValue)},
+          now() + make_interval(secs => ${effectiveTtl})
+        )
+        RETURNING sequence_number, conversation_id, query_id, message, created_at
+      ), notified AS (
+        SELECT ${this.notifyFragment(this.db`array_agg(sequence_number ORDER BY sequence_number)`)}
+        FROM inserted
       )
-      RETURNING sequence_number, conversation_id, query_id, message, created_at
+      SELECT inserted.* FROM inserted, notified
     `;
     const item = rowToBrokerItem(rows[0]!);
+    this.markSeen(item.sequenceNumber);
     this.emitter.emit('item', item);
     return item;
   }
 
-  async all(): Promise<BrokerItem<MessageData>[]> {
-    const rows = await this.db<MessageRow[]>`
-      SELECT sequence_number, conversation_id, query_id, message, created_at
-      FROM messages
-      WHERE expires_at > now()
-      ORDER BY sequence_number ASC
-    `;
-    return rows.map(rowToBrokerItem);
-  }
-
-  async filter(
-    predicate: Predicate<MessageData>
+  async appendMany(
+    dataList: MessageData[],
+    ttlSeconds?: number
   ): Promise<BrokerItem<MessageData>[]> {
-    return (await this.all()).filter(predicate);
-  }
-
-  async paginate(
-    params: PaginationParams,
-    predicate?: Predicate<MessageData>
-  ): Promise<PaginatedList<BrokerItem<MessageData>>> {
-    const limit = params.limit ?? DEFAULT_LIMIT;
-    const cursor = params.cursor;
-
-    const all = await this.all();
-    let filtered = predicate ? all.filter(predicate) : all;
-    const total = filtered.length;
-
-    if (cursor !== undefined) {
-      filtered = filtered.filter((item) => item.sequenceNumber > cursor);
+    if (dataList.length === 0) return [];
+    const effectiveTtl = ttlSeconds ?? this.ttlSeconds;
+    const valueRows = dataList.map((data) => [
+      data.conversationId,
+      data.queryId,
+      JSON.stringify(data.message),
+    ]);
+    const inserted = await this.db<MessageRow[]>`
+      WITH inserted AS (
+        INSERT INTO messages (conversation_id, query_id, message, expires_at)
+        SELECT v.conversation_id, v.query_id, v.message::jsonb, now() + make_interval(secs => ${effectiveTtl})
+        FROM (VALUES ${this.db(valueRows)}) AS v(conversation_id, query_id, message)
+        RETURNING sequence_number, conversation_id, query_id, message, created_at
+      ), notified AS (
+        SELECT ${this.notifyFragment(this.db`(array_agg(sequence_number ORDER BY sequence_number))[1:${NOTIFY_CHUNK_SIZE}]`)}
+        FROM inserted
+      )
+      SELECT inserted.* FROM inserted, notified
+    `;
+    const items = inserted
+      .map(rowToBrokerItem)
+      .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+    for (const item of items) {
+      this.markSeen(item.sequenceNumber);
+      this.emitter.emit('item', item);
     }
-
-    const items = filtered.slice(0, limit);
-    const hasMore = filtered.length > limit;
-
-    return {
-      items,
-      total,
-      hasMore,
-      nextCursor: hasMore ? items.at(-1)!.sequenceNumber : undefined,
-    };
+    if (items.length > NOTIFY_CHUNK_SIZE) {
+      await this.notifyOverflow(
+        items.slice(NOTIFY_CHUNK_SIZE).map((item) => item.sequenceNumber)
+      );
+    }
+    return items;
   }
 
   async delete(predicate?: Predicate<MessageData>): Promise<void> {
@@ -115,7 +138,10 @@ export class PostgresMessageStream implements Stream<MessageData> {
       .db`DELETE FROM messages WHERE sequence_number = ANY(${toDelete})`;
   }
 
-  async save(): Promise<void> {}
+  async deleteByQuery(queryId: string): Promise<void> {
+    this.logger.info({queryId}, 'deleting messages by query');
+    await this.db`DELETE FROM messages WHERE query_id = ${queryId}`;
+  }
 
   async getCurrentSequence(): Promise<number> {
     const [{seq}] = await this.db<[{seq: string | null}]>`
@@ -124,10 +150,29 @@ export class PostgresMessageStream implements Stream<MessageData> {
     return seq === null ? 0 : Number(seq);
   }
 
-  subscribe(callback: (item: BrokerItem<MessageData>) => void): () => void {
-    this.emitter.on('item', callback);
-    return (): void => {
-      this.emitter.off('item', callback);
-    };
+  async distinctConversationIds(): Promise<string[]> {
+    const rows = await this.db<{conversation_id: string}[]>`
+      SELECT DISTINCT conversation_id FROM messages WHERE expires_at > now()
+    `;
+    return rows.map((row) => row.conversation_id);
+  }
+
+  async conversationStats(): Promise<ConversationStats[]> {
+    const rows = await this.db<
+      {conversation_id: string; message_count: number; query_count: number}[]
+    >`
+      SELECT
+        conversation_id,
+        count(*)::int AS message_count,
+        count(DISTINCT query_id)::int AS query_count
+      FROM messages
+      WHERE expires_at > now()
+      GROUP BY conversation_id
+    `;
+    return rows.map((row) => ({
+      conversationId: row.conversation_id,
+      messageCount: row.message_count,
+      queryCount: row.query_count,
+    }));
   }
 }

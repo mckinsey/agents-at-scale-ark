@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
@@ -27,6 +29,8 @@ import (
 
 const defaultA2ADiscoveryTimeoutSeconds = 30
 
+const a2aSendBackstopTimeout = 30 * time.Minute
+
 var sharedA2ABaseTransport = &http.Transport{
 	MaxIdleConns:        100,
 	MaxIdleConnsPerHost: 10,
@@ -34,17 +38,60 @@ var sharedA2ABaseTransport = &http.Transport{
 }
 
 var (
-	sharedA2ASendTransport = otelhttp.NewTransport(sharedA2ABaseTransport,
+	sharedA2ASendTransport = otelhttp.NewTransport(
+		sharedA2ABaseTransport,
 		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string { return "a2a.send" }),
 	)
-	sharedA2ADiscoverTransport = otelhttp.NewTransport(sharedA2ABaseTransport,
+	sharedA2ADiscoverTransport = otelhttp.NewTransport(
+		sharedA2ABaseTransport,
 		otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string { return "a2a.discover" }),
 	)
 	sharedA2ASendClient = &http.Client{
-		Timeout:   5 * time.Minute,
-		Transport: sharedA2ASendTransport,
+		Transport: &backstopTransport{
+			base:     sharedA2ASendTransport,
+			backstop: a2aSendBackstopTimeout,
+		},
 	}
 )
+
+// backstopTransport bounds requests that carry no deadline of their own. It is
+// deliberately not an http.Client.Timeout: that bounds every exchange
+// regardless of context, so it would cap a caller that asked for longer via
+// Query.spec.timeout or A2AServer.spec.timeout instead of backstopping one that
+// asked for nothing.
+type backstopTransport struct {
+	base     http.RoundTripper
+	backstop time.Duration
+}
+
+func (t *backstopTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if _, hasDeadline := req.Context().Deadline(); hasDeadline {
+		return t.base.RoundTrip(req)
+	}
+
+	ctx, cancel := context.WithTimeout(req.Context(), t.backstop)
+	resp, err := t.base.RoundTrip(req.WithContext(ctx))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	// The deadline must outlive RoundTrip to cover the body read, so ownership
+	// of cancel transfers to the body.
+	resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
+}
+
+type cancelOnCloseBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *cancelOnCloseBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
 
 func getA2ADiscoveryTimeout() time.Duration {
 	if timeoutStr := os.Getenv("ARK_A2A_DISCOVERY_TIMEOUT"); timeoutStr != "" {
@@ -69,6 +116,7 @@ const (
 
 type A2AResponse struct {
 	Content   string
+	Messages  []string
 	ContextID string
 	TaskID    string
 }
@@ -177,7 +225,7 @@ func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aCli
 		return nil, fmt.Errorf("A2A server call failed: %w", err)
 	}
 
-	response, err := extractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, obj)
+	response, err := ExtractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, obj)
 	if err != nil {
 		if a2aRecorder != nil {
 			a2aRecorder.A2AResponseParseError(ctx, fmt.Sprintf("Failed to parse A2A response: %v", err))
@@ -199,7 +247,7 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 	return httpClient.Do(req)
 }
 
-func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, obj client.Object) (*A2AResponse, error) {
+func ExtractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, obj client.Object) (*A2AResponse, error) {
 	log := logf.FromContext(ctx)
 	if result == nil {
 		return nil, fmt.Errorf("result is nil")
@@ -210,6 +258,9 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 		text := ExtractTextFromParts(r.Parts)
 		response := &A2AResponse{
 			Content: text,
+		}
+		if text != "" {
+			response.Messages = []string{text}
 		}
 		if r.ContextID != nil && *r.ContextID != "" {
 			response.ContextID = *r.ContextID
@@ -230,6 +281,7 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 
 		response := &A2AResponse{
 			Content:   text,
+			Messages:  TaskReplyTexts(r),
 			ContextID: r.ContextID,
 			TaskID:    r.ID,
 		}
@@ -247,7 +299,7 @@ func ExtractTextFromTask(task *protocol.Task) (string, error) {
 
 	switch task.Status.State {
 	case TaskStateCompleted:
-		return extractAgentTextFromHistory(task.History), nil
+		return strings.Join(TaskReplyTexts(task), "\n"), nil
 
 	case TaskStateFailed:
 		errorMsg := "task failed"
@@ -255,6 +307,9 @@ func ExtractTextFromTask(task *protocol.Task) (string, error) {
 			errorMsg = ExtractTextFromParts(task.Status.Message.Parts)
 		}
 		return "", fmt.Errorf("%s", errorMsg)
+
+	case TaskStateInputRequired:
+		return "", fmt.Errorf("task %s is in state '%s': human-in-the-loop approval is not supported for an agent invoked over A2A by the executor, which cannot forward the approval request", task.ID, TaskStateInputRequired)
 
 	default:
 		return "", fmt.Errorf("task in state '%s' (expected %s or %s)", task.Status.State, TaskStateCompleted, TaskStateFailed)
@@ -275,6 +330,49 @@ func extractAgentTextFromHistory(history []protocol.Message) string {
 		}
 	}
 	return text.String()
+}
+
+func TaskReplyTexts(task *protocol.Task) []string {
+	if texts := ArtifactTexts(task.Artifacts); len(texts) > 0 {
+		return texts
+	}
+	if task.Status.Message != nil {
+		if text := ExtractTextFromParts(task.Status.Message.Parts); text != "" {
+			return []string{text}
+		}
+	}
+	if text := extractAgentTextFromHistory(task.History); text != "" {
+		return []string{text}
+	}
+	return nil
+}
+
+func ArtifactTexts(artifacts []protocol.Artifact) []string {
+	order := make([]string, 0, len(artifacts))
+	byKey := make(map[string]string)
+	for i := range artifacts {
+		text := ExtractTextFromParts(artifacts[i].Parts)
+		if text == "" {
+			continue
+		}
+		key := artifactKey(artifacts[i])
+		if _, seen := byKey[key]; !seen {
+			order = append(order, key)
+		}
+		byKey[key] = text
+	}
+	texts := make([]string, 0, len(order))
+	for _, key := range order {
+		texts = append(texts, byKey[key])
+	}
+	return texts
+}
+
+func artifactKey(artifact protocol.Artifact) string {
+	if artifact.Name != nil && *artifact.Name != "" {
+		return "name:" + *artifact.Name
+	}
+	return "id:" + artifact.ArtifactID
 }
 
 func ExtractTextFromParts(parts []protocol.Part) string {
@@ -379,9 +477,12 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 		return fmt.Errorf("unable to determine A2A Task originating query")
 	}
 
-	var a2aServerName string
+	var a2aServerRef *arkv1alpha1.A2AServerRef
 	if a2aServer, ok := obj.(*arkv1prealpha1.A2AServer); ok {
-		a2aServerName = a2aServer.Name
+		a2aServerRef = &arkv1alpha1.A2AServerRef{
+			Name:      a2aServer.Name,
+			Namespace: namespace,
+		}
 	}
 
 	a2aTask := &arkv1alpha1.A2ATask{
@@ -396,10 +497,7 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 				Name:      queryName,
 				Namespace: namespace,
 			},
-			A2AServerRef: arkv1alpha1.A2AServerRef{
-				Name:      a2aServerName,
-				Namespace: namespace,
-			},
+			A2AServerRef: a2aServerRef,
 			AgentRef: arkv1alpha1.AgentRef{
 				Name:      agentName,
 				Namespace: namespace,
@@ -410,15 +508,91 @@ func HandleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 		},
 	}
 
-	PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
+	// For HITL approval tasks the executor publishes the approval timeout in
+	// task metadata. Surface it on Spec.Timeout so the API does not return the
+	// misleading 12h polling default.
+	if approvalTimeout, ok := extractApprovalTimeout(task.Metadata); ok {
+		a2aTask.Spec.Timeout = &metav1.Duration{Duration: approvalTimeout}
+	}
 
+	// Populate status before creation (for informational purposes)
+	PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
 	now := metav1.NewTime(time.Now())
 	a2aTask.Status.StartTime = &now
 
+	// Create the resource (status will be ignored during create)
 	if err := k8sClient.Create(ctx, a2aTask); err != nil {
 		log.Error(err, "failed to create A2ATask resource", "taskId", task.ID)
 		return fmt.Errorf("failed to create A2ATask resource: %w", err)
 	}
 
-	return nil
+	// Refetch to get the latest resourceVersion before updating status
+	// Retry a few times in case the cache hasn't been updated yet
+	taskName := a2aTask.Name
+	var refetchErr error
+	for i := 0; i < 3; i++ {
+		refetchErr = k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: namespace}, a2aTask)
+		if refetchErr == nil {
+			break
+		}
+		if i < 2 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if refetchErr != nil {
+		log.Error(refetchErr, "failed to refetch A2ATask after creation", "taskId", task.ID)
+		return fmt.Errorf("failed to refetch A2ATask: %w", refetchErr)
+	}
+
+	// Repopulate status with fresh data and update
+	// Retry status update in case of conflicts with the A2ATask controller
+	var updateErr error
+	for i := 0; i < 3; i++ {
+		// Refetch before each update attempt to get latest resourceVersion
+		if i > 0 {
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: taskName, Namespace: namespace}, a2aTask); err != nil {
+				log.Error(err, "failed to refetch A2ATask before status update retry", "taskId", task.ID, "attempt", i+1)
+				updateErr = err
+				continue
+			}
+		}
+
+		PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
+		a2aTask.Status.StartTime = &now
+
+		updateErr = k8sClient.Status().Update(ctx, a2aTask)
+		if updateErr == nil {
+			return nil
+		}
+
+		if i < 2 {
+			log.Info("A2ATask status update conflict, retrying", "taskId", task.ID, "attempt", i+1, "error", updateErr.Error())
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	log.Error(updateErr, "failed to update A2ATask status after retries", "taskId", task.ID)
+	return fmt.Errorf("failed to update A2ATask status: %w", updateErr)
+}
+
+// extractApprovalTimeout reads the approval timeout (Go duration string) from
+// the protocol task metadata. The HITL approval flow publishes "timeout" via
+// task metadata; other tasks do not, so this is a no-op for them.
+func extractApprovalTimeout(metadata map[string]any) (time.Duration, bool) {
+	if metadata == nil {
+		return 0, false
+	}
+	raw, ok := metadata["timeout"]
+	if !ok {
+		return 0, false
+	}
+	str, ok := raw.(string)
+	if !ok || str == "" {
+		return 0, false
+	}
+	d, err := time.ParseDuration(str)
+	if err != nil {
+		return 0, false
+	}
+	return d, true
 }

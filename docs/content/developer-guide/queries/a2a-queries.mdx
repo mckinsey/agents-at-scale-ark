@@ -33,7 +33,7 @@ metadata:
   name: echo-example
 spec:
   target:
-  - name: echo-agent
+    name: echo-agent
     type: agent
   input: "Testing incoming messages"
 
@@ -54,11 +54,11 @@ Response:
 ```yaml
 status:
   phase: done
-  responses:
-    - content: "Testing incoming messages"
-      target:
-        name: echo-agent
-        type: agent
+  response:
+    content: "Testing incoming messages"
+    target:
+      name: echo-agent
+      type: agent
 ```
 
 View the A2ATask that was created for this query:
@@ -72,6 +72,57 @@ kubectl describe a2atask $(kubectl get a2atasks -l ark.mckinsey.com/query-name=e
 ```
 
 The A2ATask will show phase `completed` with the message history and artifacts from the A2A protocol interaction.
+
+## Artifacts
+
+An A2A agent can return multiple text artifacts from a single task. Ark preserves all of them, but `status.response.content` and `status.response.raw` expose them differently, and picking the wrong field is a common source of confusion.
+
+Ark turns each text artifact into its own assistant message, in artifact order, deduplicated by artifact name or ID. That message list is what you get in `status.response.raw`. `status.response.content` is the final assistant message, so for a multi-artifact reply it holds only the last artifact.
+
+Given an agent that returns three artifacts named `alpha`, `beta` and `gamma`:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: multi-artifact-example
+spec:
+  target:
+    name: multi-artifact-agent
+    type: agent
+  input: "return three sections"
+EOF
+
+kubectl wait --for=condition=Completed query/multi-artifact-example --timeout=60s
+```
+
+`content` carries the last artifact only:
+
+```bash
+kubectl get query multi-artifact-example -o jsonpath='{.status.response.content}'
+# SECTION_GAMMA
+```
+
+`raw` carries all three, in order:
+
+```bash
+kubectl get query multi-artifact-example -o jsonpath='{.status.response.raw}' | jq -r '.[].content'
+# SECTION_ALPHA
+# SECTION_BETA
+# SECTION_GAMMA
+```
+
+This is intended behavior, not truncation. `content` mirrors OpenAI chat-completions semantics, where the answer is the final assistant message, and many consumers rely on it being a single answer rather than a concatenation.
+
+Choose the field to match what you need:
+
+- **One canonical answer**: read `status.response.content`. Correct for single-artifact agents and for agents whose last artifact is the summary.
+- **Every artifact**: read `status.response.raw` and iterate the message array. Required for agents that split their output across artifacts.
+
+If your consumer needs a single string containing everything, join the `raw` messages yourself, or have the agent return one artifact whose text already combines the sections.
+
+See [issue #3180](https://github.com/mckinsey/agents-at-scale-ark/issues/3180) for the discussion behind this contract.
 
 ## Stateful Messages
 
@@ -92,7 +143,7 @@ metadata:
   name: count-messages
 spec:
   target:
-  - name: message-counter-agent
+    name: message-counter-agent
     type: agent
   input: "First message"
 ```
@@ -126,7 +177,7 @@ metadata:
     ark.mckinsey.com/a2a-context-id: "${CONTEXT_ID}"
 spec:
   target:
-  - name: message-counter-agent
+    name: message-counter-agent
     type: agent
   input: "Message ${i}"
 EOF
@@ -138,3 +189,4 @@ kubectl get query count-messages-10 -o jsonpath='{.status.response.content}'
 # 11 message(s) recieved
 ```
 
+Team members are the exception to the "conversation history is not hydrated" rule above. When an A2A agent runs as a member of a [Team](/user-guide/teams), Ark renders the accumulated team transcript into the message it sends, so the member sees earlier members' turns without relying on server-side retention. Member calls carry whatever `contextId` the query carries — none, unless the query sets `ark.mckinsey.com/a2a-context-id` — so if you do thread a context and the server retains history, those turns arrive both in the message and in the server's own state.

@@ -47,6 +47,35 @@ export const defaultDeps: LoginDeps = {
 const POLL_INTERVAL_MS = 2000;
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
+const LOOPBACK_LITERALS = new Set(['127.0.0.1', '::1', 'localhost']);
+
+function warnIfCallbackUnreachable(
+  authorizationUrl: string,
+  proxyBaseUrl: string
+): void {
+  let redirect: URL;
+  try {
+    const raw = new URL(authorizationUrl).searchParams.get('redirect_uri');
+    if (!raw) return;
+    redirect = new URL(raw);
+  } catch {
+    return;
+  }
+
+  const host = redirect.hostname.replace(/^\[|\]$/g, '');
+  if (!LOOPBACK_LITERALS.has(host)) return;
+
+  const proxyPort = new URL(proxyBaseUrl).port;
+  if (redirect.port && proxyPort && redirect.port !== proxyPort) {
+    output.warning(
+      `callback is configured for ${redirect.host} but the CLI port-forward is on ` +
+        `port ${proxyPort}; the browser redirect will not reach ark-api. Set ` +
+        `ARK_API_PUBLIC_CALLBACK_URL to use port ${proxyPort}, or port-forward ` +
+        `ark-api on port ${redirect.port}.`
+    );
+  }
+}
+
 export async function runLogin(
   serverName: string,
   options: LoginOptions,
@@ -84,6 +113,8 @@ export async function runLogin(
       }
       return 1;
     }
+
+    warnIfCallbackUnreachable(startResponse.authorization_url, proxy.baseUrl);
 
     console.log(`Authorization URL: ${startResponse.authorization_url}`);
     if (options.open !== false) {

@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useForm } from 'react-hook-form';
+import { type UseFormReturn, useForm } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
 import * as z from 'zod';
 
@@ -18,25 +18,36 @@ const schema = z.object({
   selectorPrompt: z.string().optional(),
 });
 
+type FormValues = z.infer<typeof schema>;
+
+interface WrapperProps {
+  defaultStrategy?: string;
+  defaultLoops?: boolean;
+  defaultMaxTurns?: string;
+  disabled?: boolean;
+  onForm?: (form: UseFormReturn<FormValues>) => void;
+}
+
 function Wrapper({
   defaultStrategy = 'sequential',
+  defaultLoops = false,
+  defaultMaxTurns = '',
   disabled = false,
-}: {
-  defaultStrategy?: string;
-  disabled?: boolean;
-}) {
-  const form = useForm({
+  onForm,
+}: WrapperProps) {
+  const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: '',
       description: '',
       strategy: defaultStrategy,
-      loops: false,
-      maxTurns: '',
+      loops: defaultLoops,
+      maxTurns: defaultMaxTurns,
       selectorAgent: '',
       selectorPrompt: '',
     },
   });
+  onForm?.(form);
 
   return (
     <Form {...form}>
@@ -46,11 +57,6 @@ function Wrapper({
 }
 
 describe('StrategySection', () => {
-  it('should render strategy heading', () => {
-    render(<Wrapper />);
-    expect(screen.getByText('Strategy Configuration')).toBeInTheDocument();
-  });
-
   it('should render strategy select', () => {
     render(<Wrapper />);
     expect(screen.getByRole('combobox')).toBeInTheDocument();
@@ -99,9 +105,7 @@ describe('StrategySection', () => {
 
   it('should show required indicator on max turns for selector strategy', () => {
     render(<Wrapper defaultStrategy="selector" />);
-    expect(
-      screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Max Turns').textContent).toContain('*');
   });
 
   it('should show required indicator on max turns for sequential strategy with loops enabled', async () => {
@@ -111,9 +115,7 @@ describe('StrategySection', () => {
     await user.click(screen.getByRole('checkbox'));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Max Turns').textContent).toContain('*');
     });
   });
 
@@ -122,7 +124,7 @@ describe('StrategySection', () => {
     render(<Wrapper />);
 
     await user.click(screen.getByRole('combobox'));
-    await user.click(screen.getByRole('option', { name: 'Sequential' }));
+    await user.click(await screen.findByRole('option', { name: 'Sequential' }));
 
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toHaveTextContent('Sequential');
@@ -134,10 +136,79 @@ describe('StrategySection', () => {
     render(<Wrapper />);
 
     await user.click(screen.getByRole('combobox'));
-    await user.click(screen.getByRole('option', { name: 'Selector' }));
+    await user.click(await screen.findByRole('option', { name: 'Selector' }));
 
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toHaveTextContent('Selector');
     });
+  });
+
+  it('should clear max turns when switching from selector to sequential', async () => {
+    const user = userEvent.setup();
+    let form: UseFormReturn<FormValues> | undefined;
+    render(
+      <Wrapper
+        defaultStrategy="selector"
+        defaultMaxTurns="5"
+        onForm={f => {
+          form = f;
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'Sequential' }));
+
+    await waitFor(() => {
+      expect(form?.getValues('maxTurns')).toBe('');
+    });
+    expect(form?.getValues('loops')).toBe(false);
+  });
+
+  it('should require max turns again when enabling loops after switching to sequential', async () => {
+    const user = userEvent.setup();
+    let form: UseFormReturn<FormValues> | undefined;
+    render(
+      <Wrapper
+        defaultStrategy="selector"
+        defaultMaxTurns="5"
+        onForm={f => {
+          form = f;
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'Sequential' }));
+    await user.click(screen.getByRole('checkbox'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Max Turns')).toBeInTheDocument();
+    });
+    expect(form?.getValues('maxTurns')).toBe('');
+  });
+
+  it('should keep max turns for sequential with loops when strategy is reselected', async () => {
+    const user = userEvent.setup();
+    let form: UseFormReturn<FormValues> | undefined;
+    render(
+      <Wrapper
+        defaultStrategy="sequential"
+        defaultLoops
+        defaultMaxTurns="7"
+        onForm={f => {
+          form = f;
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'Sequential' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toHaveTextContent('Sequential');
+    });
+    expect(form?.getValues('loops')).toBe(true);
+    expect(form?.getValues('maxTurns')).toBe('7');
   });
 });

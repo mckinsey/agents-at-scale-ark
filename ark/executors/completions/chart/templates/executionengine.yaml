@@ -1,0 +1,21 @@
+{{- if .Values.executionEngine.create }}
+# Registers this completions deployment as a namespace-local ExecutionEngine.
+# The controller's dispatch prefers an ExecutionEngine named "ark-completions"
+# in the Agent's namespace over the central --completions-addr, so creating this
+# is what routes a tenant's built-in-Agent traffic to its own engine.
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: {{ .Values.executionEngine.name }}
+  namespace: {{ include "ark-completions.namespace" . }}
+  labels:
+    app: ark-completions
+  {{- if .Values.executionEngine.streamingSupported }}
+  annotations:
+    ark.mckinsey.com/streaming-supported: "true"
+  {{- end }}
+spec:
+  description: "Built-in completions execution engine (per-tenant deployment)"
+  address:
+    value: "http://{{ include "ark-completions.fullname" . }}.{{ include "ark-completions.namespace" . }}:{{ .Values.port }}"
+{{- end }}

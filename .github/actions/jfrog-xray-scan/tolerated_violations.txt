@@ -9,3 +9,45 @@ XRAY-97724 - CVE-2018-20225
 - NOT EXPLOITABLE in Ark: Ark uses uv (not pip) for Python dependency management in all production services (ark-api, ark-mcp, simple-agent, retrieval-service, tool templates).
 - Evidence: All Python Dockerfiles use "uv sync --frozen" for dependency installation. pip is only present in base images and used to bootstrap uv itself ("pip install uv"), never for --extra-index-url operations.
 - No fix available: This is considered intended pip functionality per official response. Using uv eliminates the attack vector entirely.
+
+XRAY-1051070 - CVE-2026-73086 / GHSA-xwg4-73v4-xw9w (nanoid integer overflow)
+- nanoid(size) coerced size to a signed 32-bit int; 2147483648 wrapped to -2147483648 and corrupted the CSPRNG poolOffset, making tokens the deterministic string "uuuuuuuuuuuuuuuuuuuuu" until restart. Fixed on the 3.x line in 3.3.12 and on the 5.x line in 5.1.11.
+- FALSE POSITIVE: Ark ships patched nanoid — 3.3.17 (docs) and 3.3.18 (tools/ark-cli, services/ark-landing-page, services/ark-dashboard), both above the 3.3.12 fix. Xray's "fixed" metadata lists only 5.1.11 and omits 3.3.12, so it flags the patched 3.3.x releases anyway.
+- Verified at source, not just advisory data: nanoid 3.3.18 fillPool() still guards "if (bytes < 0) throw new RangeError", and nanoid()/random() feed it "(size |= 0)". The exploit input wraps to a negative value and is rejected before poolOffset is touched. Guard is unchanged since 3.3.12 (3.3.12->3.3.18 only relaxed the upper 1024 cap in the ESM build); not a regression. Matches OSV: affected = 3.3.0-3.3.11 and 4.0.0-5.1.10; 3.3.12-3.3.18 not affected.
+- Cannot upgrade to 5.1.11: nanoid is transitive, pulled only by postcss, which pins nanoid ^3.3.x (3.x line) even at its latest 8.5.26. nanoid 5.x is ESM-only and would break postcss's CommonJS require() and every Next.js/CLI build.
+- Remove this entry if Xray corrects its fixed-version metadata, or if nanoid moves onto a genuinely affected line.
+
+XRAY-1090872 - CVE-2026-93687 (braces@3.0.3)
+- Stack overflow in braces' recursive AST walkers, which lack depth guards: a deeply nested brace pattern under the character limit exhausts the call stack and crashes the process with an uncaught RangeError.
+- No fix available: 3.0.3 is the latest published release (https://github.com/micromatch/braces/issues/73 — upstream confirms no patched version exists yet).
+- ark-broker / ark-dashboard / ark-landing-page: braces is dev-only, pulled in transitively via micromatch/chokidar (file-watching and glob matching for Vite/Jest/ESLint), never invoked on attacker-controlled input in any deployed service.
+- docs: braces IS reachable from a production dependency here (nextra → fast-glob → micromatch → braces; nextra is listed under docs/package.json "dependencies", not devDependencies) — not exploitable for a different reason: docs/next.config.mjs sets `output: 'export'`, so docs ships as a fully static site with no Node.js server at request time. The glob only runs at build time over trusted repo content, never against external input.
+- Verified absent from ark-dashboard's actual runtime bundle: `find .next/standalone -path "*braces*"` returns nothing against a `output: 'standalone'` build, while it's present in the full build node_modules (control check passes) — Next.js's standalone trace only includes what the server entrypoint actually requires.
+- Remove this entry once micromatch/chokidar/nextra ship a release depending on a patched braces, or braces itself patches the recursion guard.
+
+XRAY-1092077 - CVE-2026-93690 (uri-js@4.4.1)
+- DoS in uri-js's removeDotSegments(): loops infinitely on a path segment starting with a Unicode line/paragraph separator, blocking the Node.js event loop until heap exhaustion.
+- No fix available: 4.4.1 is the latest published release.
+- Not runtime-exploitable in Ark: uri-js is pulled in transitively via ajv (JSON schema validation used by ESLint's own config validation and other build tooling — ajv/eslint are devDependencies in every package here), not invoked on attacker-controlled input by any deployed service. ark-broker's Dockerfile runs `npm ci --only=production` for its runtime image, excluding this chain entirely.
+- Verified absent from ark-dashboard's actual runtime bundle: `find .next/standalone -path "*uri-js*"` returns nothing against a `output: 'standalone'` build, while it's present in the full build node_modules (control check passes).
+- Remove this entry once ajv depends on a patched uri-js release, or uri-js itself patches removeDotSegments.
+
+XRAY-1092096 - CVE-2026-93753 (deepmerge@4.3.1)
+- Prototype-poisoning in deepmerge's mergeObject(): fails to validate keys being written to the target object, letting a malicious source object in a merge operation inject properties onto the result's prototype.
+- No fix available: 4.3.1 is the latest published release.
+- Not runtime-exploitable in Ark: deepmerge is pulled in transitively via jest-config (test-runner configuration merging), a dev/test-only dependency. It isn't present in ark-dashboard's dependency tree at all; in ark-broker and ark-landing-page it's a devDependency-only path, and ark-broker's Dockerfile runs `npm ci --only=production` for its runtime image, excluding it from the deployed container.
+- Remove this entry once jest-config depends on a patched deepmerge release, or deepmerge itself validates merge keys.
+
+XRAY-1100109 - CVE-2023-54404 (zod@4.4.3)
+- Uncontrolled resource consumption in Zod's $ZodArray: validating a large array against a schema with no length limit collects every element's validation issue with no cap, exhausting memory. Affects zod through 4.6.5.
+- No fix available: 4.6.5 is the latest published release and is itself affected.
+- Not exploitable in ark-broker, the only deployed service that validates external input with Zod: its single array schema is `messages: z.array(z.unknown())` (src/http/routes/memory/schemas.ts). z.unknown() accepts every element, so no validation issues are ever collected, and request bodies are capped at 10mb (express.json limit in src/server.ts).
+- Verified against zod@4.4.3: parsing a 5,000,000-element array with the broker's schema succeeds with 0 issues and about 43MB heap growth; the control (z.array(z.string()) with failing elements) collects 2,500,000 issues and about 1.8GB heap growth.
+- ark-dashboard uses Zod only for client-side form validation and a marketplace install route; ark-cli and docs pull Zod transitively (MCP SDK, nextra) and do not validate attacker-controlled arrays.
+- Remove this entry once a patched Zod is released, or if any ark-broker schema gains an array with a validated element type.
+
+XRAY-1104189 - CVE-2026-104056 (authlib@1.8.0)
+- OIDC discovery metadata is cached without issuer-origin validation, so a poisoned discovery response can redirect the auth endpoints to attacker-controlled values. The advisory states Authlib "1.7.2 and below" is affected.
+- FALSE POSITIVE: Ark ships authlib 1.8.0 (services/ark-mcp), the patched release. authlib is transitive via fastmcp; pyproject pins constraint-dependencies = ["authlib>=1.8.0"] so the floor cannot regress. Xray's "fixed" metadata omits 1.8.0 and flags it anyway, the same defect as nanoid XRAY-1051070.
+- Verified independently of the advisory text: OSV reports zero known vulnerabilities for authlib 1.8.0, and 1.8.0 (released 2026-08-30) is the latest version on PyPI — there is no higher release to upgrade to.
+- Remove this entry once Xray corrects its fixed-version metadata, or a newer patched authlib is published.

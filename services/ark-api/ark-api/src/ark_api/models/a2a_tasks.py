@@ -1,8 +1,11 @@
 """A2ATask CRD response models."""
+from enum import Enum
 from typing import List, Dict, Optional, Any, Literal
 from datetime import datetime
 
 from pydantic import BaseModel
+
+from .common import PaginatedListResponse
 
 
 class A2AServerRef(BaseModel):
@@ -78,10 +81,9 @@ class A2ATaskResponse(BaseModel):
     creationTimestamp: Optional[datetime] = None
 
 
-class A2ATaskListResponse(BaseModel):
+class A2ATaskListResponse(PaginatedListResponse):
     """List of A2ATasks response model."""
     items: List[A2ATaskResponse]
-    count: int
 
 
 class A2ATaskDetailResponse(BaseModel):
@@ -89,7 +91,7 @@ class A2ATaskDetailResponse(BaseModel):
     name: str
     namespace: str
     taskId: str
-    a2aServerRef: A2AServerRef
+    a2aServerRef: Optional[A2AServerRef] = None
     agentRef: AgentRef
     queryRef: QueryRef
     contextId: Optional[str] = None
@@ -101,3 +103,22 @@ class A2ATaskDetailResponse(BaseModel):
     ttl: Optional[str] = None
     status: Optional[A2ATaskStatus] = None
     metadata: Optional[Dict[str, Any]] = None
+
+
+class ApprovalDecision(str, Enum):
+    """Approval decision for a HITL tool call."""
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ApprovalSubmissionRequest(BaseModel):
+    """Request body to approve or reject an A2ATask's pending tool calls."""
+    decision: ApprovalDecision
+
+
+class ApprovalSubmissionResponse(BaseModel):
+    """Response after submitting an approval decision."""
+    name: str
+    namespace: str
+    taskId: str
+    decision: ApprovalDecision

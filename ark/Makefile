@@ -93,7 +93,7 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 ##@ Build
 
 .PHONY: build
-build: validate-chart-crds validate-chart-webhooks manifests generate fmt vet ## Build manager binary.
+build: validate-chart-crds validate-chart-webhooks validate-chart-values manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
 
 .PHONY: build-completions
@@ -142,6 +142,10 @@ validate-chart-crds: ## Validate that CRDs in Helm chart match source CRDs
 .PHONY: validate-chart-webhooks
 validate-chart-webhooks: ## Validate that webhooks in Helm chart match source webhooks
 	@./scripts/validate-chart-webhooks.sh
+
+.PHONY: validate-chart-values
+validate-chart-values: ## Validate that key chart values render into the manager Deployment as expected
+	@./scripts/validate-chart-values.sh
 
 .PHONY: build-container
 build-container: ## Build the ark-controller

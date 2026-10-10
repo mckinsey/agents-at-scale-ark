@@ -13,13 +13,16 @@ export type ServerConfig = Readonly<{
   port: number;
   host: string;
   requestTimeoutMs: number;
+  shutdownDrainTimeoutMs: number;
+  streamIdleTimeoutMs: number;
 }>;
 
 export type LimitsConfig = Readonly<{
-  maxMessages: number;
-  maxChunks: number;
-  maxSpans: number;
-  maxEvents: number;
+  messageMaxBytes: number;
+  eventMaxBytes: number;
+  chunkMaxBytes: number;
+  traceMaxBytes: number;
+  chunkTtlSeconds: number;
 }>;
 
 export type PersistenceConfig = Readonly<{
@@ -32,9 +35,20 @@ export type PersistenceConfig = Readonly<{
 
 export type MessageBackend = 'memory' | 'postgres';
 
+export type EventBackend = 'memory' | 'postgres';
+
+export type ChunkBackend = 'memory' | 'redis';
+
+export type SessionsBackend = 'memory' | 'postgres';
+
 export type BackendsConfig = Readonly<{
   message: MessageBackend;
   messageVisibilityTtlSeconds: number;
+  event: EventBackend;
+  eventVisibilityTtlSeconds: number;
+  chunk: ChunkBackend;
+  sessions: SessionsBackend;
+  sessionsVisibilityTtlSeconds: number;
 }>;
 
 export type DatabaseConfig = Readonly<{
@@ -44,6 +58,19 @@ export type DatabaseConfig = Readonly<{
   statementTimeoutMs: number;
   debugQueries: boolean;
   sslRootCertPath?: string;
+  reapIntervalSeconds: number;
+  reapBatchSize: number;
+}>;
+
+export type RedisConfig = Readonly<{
+  url?: string;
+  username?: string;
+  password?: string;
+  tlsCaCertPath?: string;
+  keyPrefix: string;
+  streamTtlSeconds: number;
+  connectTimeoutMs: number;
+  debugCommands: boolean;
 }>;
 
 export type AppConfig = Readonly<{
@@ -54,4 +81,5 @@ export type AppConfig = Readonly<{
   persistence: PersistenceConfig;
   backends: BackendsConfig;
   database: DatabaseConfig;
+  redis: RedisConfig;
 }>;

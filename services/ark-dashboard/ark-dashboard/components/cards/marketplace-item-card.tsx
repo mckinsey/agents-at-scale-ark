@@ -1,35 +1,22 @@
 'use client';
 
-import copyToClipboard from 'copy-to-clipboard';
-import {
-  Bot,
-  Check,
-  Copy,
-  ExternalLink,
-  Loader2,
-  Server,
-  Terminal,
-} from 'lucide-react';
+import type { ComponentType, SVGProps } from 'react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
+import {
+  AutoReadPlay,
+  Check,
+  Dns,
+  OpenInNew,
+  SmartToy,
+} from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Card } from '@/components/ui/card';
+import { IconShell } from '@/components/ui/icon-shell';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Tooltip,
   TooltipContent,
@@ -39,11 +26,31 @@ import {
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
 import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
-import { getOriginIcon } from '@/lib/utils/origin-icon';
+
+const VISIBLE_TAGS = 3;
 
 interface MarketplaceItemCardProps {
   item: MarketplaceItem;
   className?: string;
+}
+
+interface TypeBadge {
+  readonly label: string;
+  readonly icon?: ComponentType<SVGProps<SVGSVGElement>>;
+}
+
+function typeBadge(item: MarketplaceItem): TypeBadge {
+  if (item.category === 'agents') {
+    return { label: 'Agent', icon: SmartToy };
+  }
+  const label = item.type.charAt(0).toUpperCase() + item.type.slice(1);
+  if (item.type === 'service') {
+    return { label, icon: Dns };
+  }
+  if (item.type === 'demo') {
+    return { label, icon: AutoReadPlay };
+  }
+  return { label };
 }
 
 export function MarketplaceItemCard({
@@ -51,7 +58,7 @@ export function MarketplaceItemCard({
   className,
 }: MarketplaceItemCardProps) {
   const [isInstalling, setIsInstalling] = useState(false);
-  const [localStatus, setLocalStatus] = useState(item.status);
+  const [justInstalled, setJustInstalled] = useState(false);
   const [showCommandDialog, setShowCommandDialog] = useState(false);
   const [installCommand, setInstallCommand] = useState<{
     helmCommand?: string;
@@ -77,12 +84,12 @@ export function MarketplaceItemCard({
           });
           setShowCommandDialog(true);
         } else if (data.status === 'installed') {
-          setLocalStatus('installed');
+          setJustInstalled(true);
           toast.success(`${item.name} installed successfully`);
         }
       } else {
         // Assume success if no specific status
-        setLocalStatus('installed');
+        setJustInstalled(true);
         toast.success(`${item.name} installed successfully`);
       }
     } catch (error) {
@@ -133,248 +140,153 @@ export function MarketplaceItemCard({
     }
   };
 
-  const getTypeIcon = (type: string) => {
-    if (type === 'service') {
-      return <Server className="h-4 w-4" />;
-    } else if (item.category === 'agents') {
-      return <Bot className="h-4 w-4" />;
-    }
-    return null;
-  };
-
-  const originIcon = getOriginIcon(item.repository, 'repository');
+  const isInstalled = justInstalled || item.status === 'installed';
+  const { label: typeLabel, icon: TypeIcon } = typeBadge(item);
+  const hiddenTagCount = item.tags.length - VISIBLE_TAGS;
 
   return (
-    <Card
-      className={cn(
-        'group relative flex h-full flex-col transition-all',
-        className,
-      )}>
-      <CardHeader className="flex-none space-y-3">
-        {/* Type Badge */}
-        <div className="flex items-center justify-between">
-          <div
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium',
-              item.type === 'service'
-                ? 'border-blue-500/30 bg-blue-500/10 text-blue-500 dark:text-blue-400'
-                : item.category === 'agents'
-                  ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
-                  : 'border-border bg-muted text-muted-foreground',
-            )}>
-            {getTypeIcon(item.type)}
-            <span className="capitalize">
-              {item.category === 'agents' ? 'Agent' : item.type}
-            </span>
+    <TooltipProvider>
+      <Card
+        className={cn(
+          'bg-surface-secondary flex h-full flex-col justify-between gap-4 border-0 p-5',
+          className,
+        )}>
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center justify-between">
+            <Badge
+              format="pill"
+              size="sm"
+              variant="alternative"
+              withIcon={Boolean(TypeIcon)}>
+              {TypeIcon && (
+                <IconShell size="sm" variant="secondary">
+                  <TypeIcon />
+                </IconShell>
+              )}
+              {typeLabel}
+            </Badge>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <p className="text-fg-primary headings-h3-regular">{item.name}</p>
+            <div className="flex flex-col gap-2">
+              <p className="text-fg-primary paragraph-regular-primary line-clamp-2 min-h-10">
+                {item.shortDescription}
+              </p>
+              {item.source && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-fg-secondary paragraph-small-primary cursor-default truncate">
+                      Source: {item.source}
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-md">
+                    <p className="break-all">{item.source}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Title and Description */}
-        <div>
-          <CardTitle className="text-xl font-semibold">{item.name}</CardTitle>
-          <CardDescription className="mt-2 line-clamp-2">
-            {item.shortDescription}
-          </CardDescription>
-        </div>
-      </CardHeader>
-
-      <CardContent className="flex-1 space-y-4">
-        {/* Source */}
-        {item.source && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="text-muted-foreground cursor-default text-xs">
-                  <span>Source: </span>
-                  <span className="inline-block max-w-[calc(100%-60px)] truncate align-bottom">
-                    {item.source}
-                  </span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-md">
-                <p className="break-all">{item.source}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-
-        {/* Tags */}
         {item.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {item.tags.slice(0, 4).map(tag => (
-              <Badge
-                key={tag}
-                variant="secondary"
-                className="px-2 py-0.5 text-xs">
+          <div className="flex flex-wrap gap-1">
+            {item.tags.slice(0, VISIBLE_TAGS).map(tag => (
+              <Badge key={tag} format="pill" size="sm" variant="alternative">
                 {tag}
               </Badge>
             ))}
-            {item.tags.length > 4 && (
-              <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                +{item.tags.length - 4}
-              </Badge>
+            {hiddenTagCount > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    format="pill"
+                    size="sm"
+                    variant="alternative"
+                    tabIndex={0}
+                    aria-label={`${hiddenTagCount} more tags`}
+                    className="cursor-default">
+                    +{hiddenTagCount}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p>{item.tags.slice(VISIBLE_TAGS).join(', ')}</p>
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         )}
-      </CardContent>
 
-      <CardFooter className="flex-none pt-4">
-        <div className="flex w-full flex-col gap-3">
-          {/* UI URLs */}
-          {localStatus === 'installed' && item.uis && item.uis.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {isInstalled && item.uis && item.uis.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {item.uis.map(ui => (
                 <Button
                   key={ui.url}
                   variant="secondary"
                   size="sm"
-                  className="h-8"
                   onClick={() => window.open(ui.url, '_blank')}>
                   {ui.label}
-                  <ExternalLink className="ml-1 h-3 w-3" />
+                  <IconShell size="sm" variant="secondary">
+                    <OpenInNew />
+                  </IconShell>
                 </Button>
               ))}
             </div>
           )}
 
-          {/* Version and Install/View Button */}
-          <div className="flex w-full items-center justify-between">
-            <div className="flex items-center gap-x-1.5">
-              <p className="text-muted-foreground text-xs">v{item.version}</p>
-              <span>{originIcon}</span>
-            </div>
+          <div className="flex w-full items-center justify-between pl-1">
+            <p className="text-fg-secondary paragraph-small-primary">
+              v{item.version}
+            </p>
 
             {item.type === 'demo' ? (
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8"
                 onClick={() =>
                   item.repository && window.open(item.repository, '_blank')
                 }
                 disabled={!item.repository}>
                 View
-                <ExternalLink className="ml-1 h-3 w-3" />
+                <IconShell size="sm" variant="secondary">
+                  <OpenInNew />
+                </IconShell>
               </Button>
             ) : (
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8"
                 onClick={handleInstall}
-                disabled={isInstalling || localStatus === 'installed'}>
-                {localStatus === 'installed' && (
+                disabled={isInstalling || isInstalled}>
+                {isInstalled && (
                   <>
                     Installed
-                    <Check className="ml-1 h-3 w-3" />
+                    <IconShell size="sm" variant="secondary">
+                      <Check />
+                    </IconShell>
                   </>
                 )}
-                {isInstalling && localStatus !== 'installed' && (
+                {isInstalling && !isInstalled && (
                   <>
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    <Spinner className="mr-1 h-3 w-3" />
                     Loading...
                   </>
                 )}
-                {!isInstalling && localStatus !== 'installed' && 'Get'}
+                {!isInstalling && !isInstalled && 'Get'}
               </Button>
             )}
           </div>
         </div>
-      </CardFooter>
 
-      <InstallCommandDialog
-        open={showCommandDialog}
-        onOpenChange={setShowCommandDialog}
-        installCommand={installCommand}
-        itemName={item.name}
-      />
-    </Card>
-  );
-}
-
-function InstallCommandDialog({
-  open,
-  onOpenChange,
-  installCommand,
-  itemName,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  installCommand: {
-    helmCommand?: string;
-    arkCommand?: string;
-    name?: string;
-  };
-  itemName: string;
-}) {
-  const handleCopy = (text: string) => {
-    const success = copyToClipboard(text);
-    if (success) {
-      toast.success('Command copied to clipboard');
-    } else {
-      toast.error('Failed to copy to clipboard');
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5" />
-            Install {installCommand.name || itemName}
-          </DialogTitle>
-          <DialogDescription>
-            Run one of these commands in your terminal to install the
-            marketplace item:
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {installCommand.arkCommand && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Using Ark CLI (Recommended)
-              </label>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm">
-                  {installCommand.arkCommand}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopy(installCommand.arkCommand!)}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {installCommand.helmCommand && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Using Helm directly</label>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm break-all">
-                  {installCommand.helmCommand}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopy(installCommand.helmCommand!)}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              💡 Make sure you have kubectl configured to the correct cluster
-              before running these commands.
-            </p>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        <MarketplaceCommandDialog
+          open={showCommandDialog}
+          onOpenChange={setShowCommandDialog}
+          command={installCommand}
+          itemName={item.name}
+          action="install"
+        />
+      </Card>
+    </TooltipProvider>
   );
 }

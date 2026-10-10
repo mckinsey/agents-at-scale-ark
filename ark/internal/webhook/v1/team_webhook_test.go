@@ -20,7 +20,7 @@ var _ = Describe("Team Webhook", func() {
 	var (
 		obj       *arkv1alpha1.Team
 		oldObj    *arkv1alpha1.Team
-		validator *validation.WebhookValidator
+		validator *validation.WebhookValidator[*arkv1alpha1.Team]
 		ctx       context.Context
 	)
 
@@ -84,7 +84,7 @@ var _ = Describe("Team Webhook", func() {
 		// Create fake client with all agents
 		fakeClient := fake.NewClientBuilder().WithScheme(s).WithObjects(objects...).Build()
 
-		validator = &validation.WebhookValidator{
+		validator = &validation.WebhookValidator[*arkv1alpha1.Team]{
 			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
 		}
 
@@ -126,8 +126,8 @@ var _ = Describe("Team Webhook", func() {
 			Expect(err).ToNot(HaveOccurred(), "selector strategy with graph should allow multiple edges from same source")
 		})
 
-		It("Should reject graph edges with invalid member names for selector strategy", func() {
-			By("creating a selector team with graph referencing non-existent members")
+		It("Should reject a graph edge whose 'to' member is not in the team", func() {
+			By("creating a selector team with a graph edge pointing at a non-existent member")
 			maxTurns := 10
 			obj.Spec.Strategy = validation.StrategySelector
 			obj.Spec.MaxTurns = &maxTurns
@@ -139,13 +139,35 @@ var _ = Describe("Team Webhook", func() {
 			}
 			obj.Spec.Graph = &arkv1alpha1.TeamGraphSpec{
 				Edges: []arkv1alpha1.TeamGraphEdge{
-					{From: "researcher", To: "nonexistent"}, // Invalid member name
+					{From: "researcher", To: "nonexistent"},
 				},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred(), "should reject graph edges with invalid member names")
-			Expect(err.Error()).To(ContainSubstring("not found in team members"))
+			Expect(err.Error()).To(ContainSubstring("'to' member 'nonexistent' not found in team members"))
+		})
+
+		It("Should reject a graph edge whose 'from' member is not in the team", func() {
+			By("creating a selector team with a graph edge originating from a non-existent member")
+			maxTurns := 10
+			obj.Spec.Strategy = validation.StrategySelector
+			obj.Spec.MaxTurns = &maxTurns
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+			}
+			obj.Spec.Selector = &arkv1alpha1.TeamSelectorSpec{
+				Agent: "coordinator",
+			}
+			obj.Spec.Graph = &arkv1alpha1.TeamGraphSpec{
+				Edges: []arkv1alpha1.TeamGraphEdge{
+					{From: "nonexistent", To: "researcher"},
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred(), "should reject graph edges with invalid member names")
+			Expect(err.Error()).To(ContainSubstring("'from' member 'nonexistent' not found in team members"))
 		})
 
 		It("Should require graph to have at least one edge when provided for selector strategy", func() {
@@ -243,10 +265,10 @@ var _ = Describe("Team Webhook", func() {
 	})
 
 	Context("Round-robin migration via defaulter", func() {
-		var defaulter *validation.WebhookDefaulter
+		var defaulter *validation.WebhookDefaulter[*arkv1alpha1.Team]
 
 		BeforeEach(func() {
-			defaulter = &validation.WebhookDefaulter{}
+			defaulter = &validation.WebhookDefaulter[*arkv1alpha1.Team]{}
 		})
 
 		It("Should migrate round-robin with maxTurns to sequential with loops", func() {
@@ -324,10 +346,10 @@ var _ = Describe("Team Webhook", func() {
 	})
 
 	Context("Selector prompt migration warning", func() {
-		var selectorDefaulter *validation.WebhookDefaulter
+		var selectorDefaulter *validation.WebhookDefaulter[*arkv1alpha1.Team]
 
 		BeforeEach(func() {
-			selectorDefaulter = &validation.WebhookDefaulter{}
+			selectorDefaulter = &validation.WebhookDefaulter[*arkv1alpha1.Team]{}
 		})
 
 		It("Should warn when custom selectorPrompt does not reference select-next-speaker", func() {

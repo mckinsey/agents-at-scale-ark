@@ -1,6 +1,7 @@
 import request from 'supertest';
 import express from 'express';
 import {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker';
+import {InMemoryChunkStream} from '@ark-broker/brokers/stream/in-memory-chunk-stream';
 import {createLogger} from '@ark-broker/logging/logger';
 import {createHttpLogger} from '@ark-broker/http/middleware/http-logger';
 import {requestId} from '@ark-broker/http/middleware/request-id';
@@ -15,14 +16,22 @@ describe('Streaming API', () => {
   let app: express.Application;
   let chunks: CompletionChunkBroker;
 
-  beforeEach(() => {
+  // Build an app whose stream router uses the given idle timeout. Default is
+  // large so the existing behavioural tests never hit it; the idle-timeout suite
+  // rebuilds with a short value.
+  const buildStreamApp = (idleTimeoutMs = 300000): express.Application => {
     const logger = createLogger({level: 'silent', pretty: false});
-    chunks = new CompletionChunkBroker(logger);
-    app = express();
-    app.use(express.json() as express.RequestHandler);
-    app.use(requestId);
-    app.use(createHttpLogger(logger));
-    app.use('/stream', createStreamRouter(chunks));
+    chunks = new CompletionChunkBroker(new InMemoryChunkStream(logger));
+    const a = express();
+    a.use(express.json() as express.RequestHandler);
+    a.use(requestId);
+    a.use(createHttpLogger(logger));
+    a.use('/stream', createStreamRouter(chunks, idleTimeoutMs));
+    return a;
+  };
+
+  beforeEach(() => {
+    app = buildStreamApp();
   });
 
   // Helper to send chunks to stream endpoint
@@ -233,6 +242,81 @@ describe('Streaming API', () => {
       expect(JSON.parse(events[0]).choices[0].delta.content).toBe(
         'New message'
       );
+    });
+  });
+
+  describe('A2A status passthrough', () => {
+    it('forwards a2a_status chunks verbatim without terminating the stream', async () => {
+      const queryId = 'test-query-a2a';
+      const statusChunk = {
+        type: 'a2a_status',
+        taskId: 'task-1',
+        state: 'working',
+        message: 'Analyzing your request',
+        agentName: 'weather-agent',
+      };
+      const chunks = [
+        statusChunk,
+        createTextChunk('The answer'),
+        createFinishChunk(),
+      ];
+
+      const streamPromise = consumeStream(queryId);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sendChunks(queryId, chunks);
+      await request(app).post(`/stream/${queryId}/complete`);
+
+      const events = await streamPromise;
+
+      expect(events.length).toBe(4);
+      expect(JSON.parse(events[0])).toEqual(statusChunk);
+      expect(JSON.parse(events[1]).choices[0].delta.content).toBe('The answer');
+      expect(JSON.parse(events[2]).choices[0].finish_reason).toBe('stop');
+      expect(events[3]).toBe('[DONE]');
+    });
+  });
+
+  describe('Completion with no chunks', () => {
+    it('stores [DONE] and terminates a consumer even when nothing streamed', async () => {
+      // Every chunk write failed mid-query, so no chunk ever reached the broker,
+      // but the executor still sends the completion. The broker must terminate
+      // the stream so a consumer that connected does not hang.
+      const queryId = 'never-streamed';
+
+      const res = await request(app).post(`/stream/${queryId}/complete`);
+      expect(res.status).toBe(200);
+
+      const events = await consumeStream(queryId, {fromBeginning: true});
+      expect(events).toContain('[DONE]');
+    });
+  });
+
+  describe('Idle timeout', () => {
+    it('re-arms on each live chunk, then closes when truly idle', async () => {
+      // idle window = 200ms. Two live chunks: A before the initial arm elapses,
+      // B after it would have (but within the window A re-armed to). B is only
+      // delivered if A re-armed the timer — so this bites if the per-chunk
+      // re-arm in handleIncomingItem is removed. Then, with no more chunks, the
+      // idle timeout must still terminate the subscriber.
+      app = buildStreamApp(200);
+      const queryId = 'live-rearm';
+
+      const streamPromise = consumeStream(queryId, {timeout: 1500});
+
+      await new Promise((r) => setTimeout(r, 100)); // t~100 (< 200 initial arm)
+      await sendChunks(queryId, [createTextChunk('AAA')]); // re-arms to ~t+200
+      await new Promise((r) => setTimeout(r, 150)); // t~250 (past initial 200)
+      await sendChunks(queryId, [createTextChunk('BBB')]);
+
+      const events = await streamPromise;
+
+      expect(events.some((e) => e.includes('AAA'))).toBe(true);
+      // Delivered only because chunk A re-armed the idle timer past t=200.
+      expect(events.some((e) => e.includes('BBB'))).toBe(true);
+      // No further chunks -> idle timeout closes the stream cleanly.
+      expect(events.some((e) => e.includes('stream_idle_timeout'))).toBe(true);
+      expect(events).toContain('[DONE]');
     });
   });
 });

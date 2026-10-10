@@ -84,6 +84,8 @@ type BedrockModelConfig struct {
 	// +kubebuilder:validation:Optional
 	SessionToken *ValueSource `json:"sessionToken,omitempty"`
 	// +kubebuilder:validation:Optional
+	APIKey *ValueSource `json:"apiKey,omitempty"`
+	// +kubebuilder:validation:Optional
 	ModelArn *ValueSource `json:"modelArn,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=1
@@ -160,8 +162,4 @@ type ModelList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Model `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Model{}, &ModelList{})
 }

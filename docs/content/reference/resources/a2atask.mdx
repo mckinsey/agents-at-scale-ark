@@ -1,251 +1,229 @@
 ---
 title: A2ATask
-description: Agent-to-Agent protocol tasks for external agent execution
+description: A2ATask CRD reference — fields, dual lifecycle, protocol state, artifacts, and history
 ---
+
 # A2ATask
 
-A2ATask represents tasks executed by external agents through the Agent-to-Agent (A2A) protocol. These tasks enable ARK to integrate with external agent frameworks and provide structured task execution with progress tracking.
+An `A2ATask` tracks a single unit of work executed by a remote agent over the [Agent-to-Agent (A2A) protocol](https://a2a-protocol.org). Ark creates one automatically whenever a `Query` targets an agent backed by an [A2AServer](/reference/resources/a2aserver): the controller submits the task to the remote server, then polls it until the task reaches a terminal state, mirroring the remote agent's progress into the A2ATask's status.
 
-A2ATasks are created automatically by the ARK controller when queries target agents hosted via A2A servers. They provide a bridge between ARK's native query system and external agent implementations.
+The resource carries **two independent lifecycles** that this page documents separately:
 
-## Example YAML
+- `status.phase` — the Kubernetes lifecycle Ark manages (`pending` → `running` → `completed` / `failed` / …).
+- `status.protocolState` — the raw A2A protocol state reported by the remote agent (`submitted`, `working`, `completed`, …).
+
+Ark derives `phase` from `protocolState`, but they are distinct enums with different values; read both when debugging a stuck task.
+
+## Spec
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: A2ATask
 metadata:
-  name: task-example-12345
+  name: task-weather-12345
   namespace: default
 spec:
-  queryRef:
+  # --- Required ----------------------------------------------------------
+  queryRef:                       # originating Query
     name: weather-query
     namespace: default
-  taskId: "task-12345"
-  contextId: "context-67890"
-  input: "What is the weather like in New York today?"
-  parameters:
+  a2aServerRef:                   # A2AServer to poll for status updates
+    name: langchain-agents
+    namespace: default
+  agentRef:                       # Agent assigned to execute the task
+    name: weather-agent
+    namespace: default
+  taskId: "task-12345"            # A2A protocol task id (minLength 1)
+
+  # --- Optional ----------------------------------------------------------
+  contextId: "context-67890"      # A2A conversation context for stateful turns
+  input: "What's the weather in New York today?"
+  parameters:                     # extra key/value parameters for execution
     location: "New York"
-    format: "detailed"
-  priority: 0
-  timeout: "5m"
+    format: detailed
+  priority: 0                     # higher values execute first; default 0
+  timeout: 12h                    # polling timeout; default '12h'
+  ttl: 720h                       # retention after completion; default '720h'
+  pollInterval: 5s                # how often to poll the server; default '5s'
+```
+
+## Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.queryRef` | object (`{name, namespace}`) | yes | The `Query` that created this task. The Query's `status.response.a2a.taskId` points back at this A2ATask. `name` is required; `namespace` defaults to the A2ATask's namespace. |
+| `spec.a2aServerRef` | object (`{name, namespace}`) | yes | The [A2AServer](/reference/resources/a2aserver) the controller polls for task status. `name` is required; `namespace` defaults to the A2ATask's namespace. |
+| `spec.agentRef` | object (`{name, namespace}`) | yes | The [Agent](/reference/resources/agent) assigned to execute the task. `name` and `namespace` are both optional within the ref, but the `agentRef` object itself is required. |
+| `spec.taskId` | string | yes | A2A protocol task identifier. `minLength: 1`. |
+| `spec.contextId` | string | no | A2A conversation context id, linking related tasks into a stateful interaction. Mirrors the Query's `status.response.a2a.contextId`. |
+| `spec.input` | string | no | The user input that initiated the task. |
+| `spec.parameters` | map[string]string | no | Additional key/value parameters passed to the remote agent. |
+| `spec.priority` | int32 | no | Execution order hint — higher values execute first. Default `0`. |
+| `spec.timeout` | duration | no | How long the controller polls for a terminal state before marking the task `failed`. Default `12h`. |
+| `spec.ttl` | duration | no | How long the A2ATask resource lingers after completion before it may be garbage-collected. Default `720h`. |
+| `spec.pollInterval` | duration | no | How frequently the controller polls the A2A server for status updates. Default `5s`. |
+
+## Dual lifecycle: phase vs protocol state
+
+An A2ATask exposes the remote agent's progress through two status fields. `status.phase` is Ark's Kubernetes-native view and drives the `Completed` condition and print columns. `status.protocolState` is the verbatim A2A protocol state as reported by the server. The controller maps one to the other, but the value sets differ — for example, the protocol's `canceled` (one `l`) maps to Ark's `cancelled` (two `l`s), and protocol `working` maps to phase `running`.
+
+| A2A `protocolState` | Ark `status.phase` |
+| --- | --- |
+| `submitted` | `assigned` |
+| `working` | `running` |
+| `input-required` | `input-required` |
+| `auth-required` | `auth-required` |
+| `completed` | `completed` |
+| `failed` | `failed` |
+| `rejected` | `failed` |
+| `canceled` | `cancelled` |
+| `unknown` | `unknown` |
+
+## Parts
+
+Both artifacts and history messages carry content as typed **parts** (`A2ATaskPart`):
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | enum (`text`, `file`, `data`) | yes | Content type of the part. |
+| `text` | string | no | Text content, used when `kind: text`. |
+| `data` | string | no | Base64-encoded binary content, used when `kind: data`. |
+| `mimeType` | string | no | Content type, e.g. `text/plain`, `application/json`. |
+| `uri` | string | no | External resource reference, used when `kind: file`. |
+| `metadata` | map[string]string | no | Additional key/value pairs for the part. |
+
+```yaml
+parts:
+  - kind: text
+    text: "Temperature: 72°F, Conditions: Sunny"
+  - kind: file
+    uri: "https://weather.example.com/report.json"
+    mimeType: "application/json"
+  - kind: data
+    data: "eyJkYXRhIjoiYmFzZTY0In0="          # base64-encoded bytes
+    mimeType: "application/octet-stream"
+```
+
+## Artifacts
+
+Artifacts (`status.artifacts[]`) are structured outputs the remote agent produced during execution — reports, files, datasets, or media.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `artifactId` | string | yes | Unique identifier for the artifact within the task. `minLength: 1`. |
+| `name` | string | no | Human-readable name. |
+| `description` | string | no | Additional context about the artifact. |
+| `parts[]` | list of `A2ATaskPart` | yes | The artifact content (see [Parts](#parts)). |
+| `metadata` | map[string]string | no | Additional key/value pairs for the artifact. |
+
+## History
+
+History (`status.history[]`) is the complete conversation captured from the A2A protocol (`A2ATaskMessage`).
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `messageId` | string | no | Protocol message id, used for deduplication. |
+| `role` | enum (`user`, `agent`, `system`) | yes | Message sender. |
+| `parts[]` | list of `A2ATaskPart` | yes | Message content (see [Parts](#parts)). |
+| `metadata` | map[string]string | no | Additional key/value pairs for the message. |
+
+## Status
+
+```yaml
 status:
-  phase: "running"
-  assignedAgent:
-    name: "weather-agent"
-    namespace: "default"
+  phase: running                              # Ark lifecycle (see Phases)
+  protocolState: working                      # A2A protocol state
+  conditions:
+    - type: Completed
+      status: "False"                         # False while still in progress
+      reason: TaskRunning
+      message: Task is being executed
   startTime: "2025-01-15T10:30:00Z"
-  task:
-    id: "task-12345"
-    sessionId: "context-67890"
-    status:
-      state: "working"
-      timestamp: "2025-01-15T10:32:30Z"
-    artifacts:
-      - artifactId: "weather-data-001"
-        name: "Weather Report"
-        description: "Current weather conditions for New York City"
-        parts:
-          - kind: "text"
-            text: "Current temperature: 72°F, Humidity: 65%, Wind: 8 mph"
-          - kind: "file"
-            uri: "https://api.weather.com/v1/reports/nyc-20250115.json"
-            mimeType: "application/json"
-        metadata:
-          location: "New York, NY"
-          source: "WeatherAPI"
-          timestamp: "2025-01-15T10:32:00Z"
-    history:
-      - messageId: "msg-001"
-        role: "user"
-        parts:
-          - kind: "text"
-            text: "What is the weather like in New York today?"
-      - messageId: "msg-002"
-        role: "agent"
-        parts:
-          - kind: "text"
-            text: "I'll check the current weather conditions for New York..."
-      - messageId: "msg-003"
-        role: "agent"
-        parts:
-          - kind: "text"
-            text: "The current weather in New York is 72°F with sunny conditions."
+  completionTime: null
+  contextId: "context-67890"
+  artifacts:
+    - artifactId: weather-data-001
+      name: Weather Report
+      description: Current weather conditions for New York City
+      parts:
+        - kind: text
+          text: "Current temperature: 72°F, Humidity: 65%, Wind: 8 mph"
+      metadata:
+        source: WeatherAPI
+  history:
+    - messageId: msg-001
+      role: user
+      parts:
+        - kind: text
+          text: "What is the weather like in New York today?"
+    - messageId: msg-002
+      role: agent
+      parts:
+        - kind: text
+          text: "The current weather in New York is 72°F with sunny conditions."
+  protocolMetadata:
+    session: sess-42
+  lastStatusMessage:
+    role: agent
+    parts:
+      - kind: text
+        text: "Fetching current conditions…"
+  lastStatusTimestamp: "2025-01-15T10:32:30Z"
 ```
 
-## Specification Fields
+### Status fields
 
-### Spec
+| Field | Description |
+| --- | --- |
+| `status.phase` | Ark Kubernetes lifecycle stage (see [Phases](#phases)). Default `pending`. |
+| `status.protocolState` | Raw A2A protocol state: `submitted`, `working`, `input-required`, `completed`, `canceled`, `failed`, `rejected`, `auth-required`, `unknown`. |
+| `status.conditions[]` | Standard Kubernetes conditions. The `Completed` condition flips to `True` once the task is no longer running (regardless of outcome); `False` means still in progress. |
+| `status.startTime` | When task execution began. |
+| `status.completionTime` | When task execution finished (success or failure). |
+| `status.error` | Error message if the task failed. |
+| `status.contextId` | A2A conversation context this task belongs to. |
+| `status.artifacts[]` | Outputs produced during execution — see [Artifacts](#artifacts). |
+| `status.history[]` | Full conversation from the A2A protocol — see [History](#history). |
+| `status.protocolMetadata` | Additional key/value pairs from the A2A protocol. |
+| `status.lastStatusMessage` | Most recent status message (`A2ATaskMessage`) from the protocol. |
+| `status.lastStatusTimestamp` | When the protocol status was last updated (RFC3339 string). |
 
-- **queryRef** (required, Ark): Reference to the originating Query resource. The Query's `status.a2a.taskId` field references this A2ATask.
-  - **name**: Name of the Query resource
-  - **namespace**: Namespace of the Query resource (optional)
-  - **responseTarget**: Target name to match against query responses (optional)
-- **taskId** (required, A2A protocol): Unique identifier for the task
-- **contextId** (optional, A2A protocol): Context or session identifier for grouped tasks. Matches the Query's `status.a2a.contextId` field.
-- **input** (optional, A2A protocol): Input text or prompt for the task
-- **parameters** (optional, A2A protocol): Key-value parameters for task execution
-- **priority** (optional, A2A protocol): Task priority (default: 0)
-- **timeout** (optional, Ark): Maximum execution time (default: "5m")
+### Phases
 
-### Status
+`status.phase` values (enum):
 
-- **phase** (Ark): Current task phase derived from A2A protocol state
-  - `pending`: Task created but not yet assigned
-  - `assigned`: Task assigned to an agent
-  - `running`: Task is actively being executed
-  - `completed`: Task execution finished successfully
-  - `failed`: Task execution failed
-  - `cancelled`: Task was cancelled
-- **assignedAgent** (Ark): Reference to the agent executing the task
-- **startTime** (Ark): When task execution began, set from A2A protocol timestamp
-- **completionTime** (Ark): When task execution finished, set from A2A protocol timestamp
-- **error** (Ark): Error message if task failed
-- **task** (A2A protocol): Full A2A protocol task structure with execution details
-  - **id** (A2A protocol): Task identifier
-  - **sessionId** (A2A protocol): Session or context identifier
-  - **artifacts** (A2A protocol): Array of task artifacts produced during execution, each with artifactId
-  - **history** (A2A protocol): Complete message history, each message includes messageId from A2A protocol for deduplication
-  - **status** (A2A protocol): Current task status with state and timestamps
+| Phase | Meaning |
+| --- | --- |
+| `pending` | Task created but not yet assigned. Default. |
+| `assigned` | Task assigned to an agent (protocol `submitted`). |
+| `running` | Remote agent is actively executing (protocol `working`). |
+| `input-required` | Task is paused waiting for additional user input. |
+| `auth-required` | Task is paused waiting for authentication. |
+| `completed` | Execution finished successfully. |
+| `failed` | Execution failed, was rejected, or the polling timeout elapsed. Details in `status.error`. |
+| `cancelled` | Task was cancelled (protocol `canceled`). |
+| `unknown` | State could not be determined. |
 
-## A2A Protocol Integration
+### Print columns
 
-A2ATasks implement the Agent-to-Agent protocol specification, providing structured communication between ARK and external agent frameworks.
+`kubectl get a2atasks` prints:
 
-### Task Parts
-
-Content is structured using typed parts:
-
-- **text**: Plain text content
-- **file**: File references with URI or embedded bytes
-- **data**: Structured data content
-
-### Message History
-
-Tasks maintain a complete history of interactions:
-
-- **user**: Messages from the user or system
-- **agent**: Responses from the executing agent
-- **system**: System-generated messages
-
-### Artifacts
-
-Artifacts represent structured outputs produced by agents during task execution. Each artifact contains multiple parts and metadata describing the content.
-
-#### Artifact Structure
-
-```yaml
-artifacts:
-  - artifactId: "weather-report-001"          # Required: Unique artifact identifier
-    name: "NYC Weather Report"               # Optional: Human-readable name
-    description: "Current weather conditions for New York City"  # Optional: Artifact description
-    parts:                                   # Required: Array of content parts
-      - kind: "text"                        # Part type: text, file, or data
-        text: "Temperature: 72°F, Conditions: Sunny"
-      - kind: "file"
-        uri: "https://weather.example.com/report.json"
-        mimeType: "application/json"
-      - kind: "data"
-        data: "eyJkYXRhIjoiYmFzZTY0In0="      # Base64-encoded binary data
-        mimeType: "application/octet-stream"
-    metadata:                               # Optional: Additional key-value metadata
-      category: "weather"
-      timestamp: "2025-01-15T10:35:00Z"
-```
-
-#### Artifact Fields
-
-- **artifactId** (required): Unique identifier for the artifact within the task
-- **name** (optional): Human-readable name for the artifact
-- **description** (optional): Detailed description of the artifact content
-- **parts** (required): Array of content parts that make up the artifact
-- **metadata** (optional): Additional key-value pairs for artifact classification
-
-#### Part Types
-
-Each artifact part specifies its content type:
-
-- **text**: Plain text content stored in the `text` field
-- **file**: File references with either:
-  - `uri`: External file location
-  - `data`: Base64-encoded file content
-  - `mimeType`: File content type (optional)
-- **data**: Raw binary data encoded in base64 format
-
-#### Use Cases
-
-Artifacts enable agents to produce structured outputs such as:
-
-- **Reports**: Generated documents, summaries, or analysis results
-- **Files**: Created or modified files (code, configurations, documents)
-- **Data**: Structured datasets, API responses, or computed results
-- **Media**: Images, audio, or video content produced by the agent
-
-## Usage with A2A Servers
-
-A2ATasks work in conjunction with A2AServer resources:
-
-**A2AServer** → **Agent** → **Query** → **A2ATask**
-
-```yaml
-# A2AServer configuration
-apiVersion: ark.mckinsey.com/v1prealpha1
-kind: A2AServer
-metadata:
-  name: langchain-agents
-spec:
-  address:
-    valueFrom:
-      serviceRef:
-        name: langchain-service
-        port: "8080"
-        path: "/a2a"
-
----
-# Agent using A2A server
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: weather-agent
-spec:
-  description: "Weather forecasting via LangChain"
-  executionEngine:
-    type: a2a
-    a2aServerRef:
-      name: langchain-agents
-```
-
-## Task Lifecycle
-
-1. **Creation**: A2ATask created when Query targets A2A-hosted agent
-2. **Assignment**: Task assigned to appropriate A2A server agent
-3. **Execution**: External agent processes the task
-4. **Monitoring**: Progress and status updates tracked in real-time
-5. **Completion**: Final results and artifacts captured in task status
-
-## Key Features
-
-- **Protocol Compliance**: Full A2A protocol implementation
-- **Progress Tracking**: Real-time execution monitoring
-- **Artifact Management**: Structured output handling
-- **History Preservation**: Complete interaction timeline
-- **Error Handling**: Detailed failure information
-- **Timeout Management**: Configurable execution limits
-
-## Status Tracking
-
-Monitor task execution using standard Kubernetes tools:
+| Column | Source |
+| --- | --- |
+| `NAME` | `.metadata.name` |
+| `QUERY` | `.spec.queryRef.name` |
+| `AGENT` | `.spec.agentRef.name` |
+| `PHASE` | `.status.phase` |
+| `AGE` | `.metadata.creationTimestamp` |
 
 ```bash
-# List all A2A tasks
 kubectl get a2atasks
-
-# Watch task progress
-kubectl get a2atask task-example-12345 -w
-
-# View detailed task status
-kubectl describe a2atask task-example-12345
+kubectl get a2atask task-weather-12345 -w      # watch progress
+kubectl describe a2atask task-weather-12345    # full status, artifacts, history
 ```
 
----
+## Related
 
-**Next**: Learn about [A2A Servers](/reference/crds#a2a-servers) for hosting external agents.
+- [A2AServer](/reference/resources/a2aserver) — discovers remote agents and is polled for task status via `spec.a2aServerRef`.
+- [Query](/reference/resources/query) — originating request; its `status.response.a2a.taskId` references this A2ATask.
+- [Agent](/reference/resources/agent) — the target agent assigned via `spec.agentRef`, backed by the `a2a` execution engine.

@@ -1,0 +1,186 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-broker-chunks-redis
+  labels:
+    requires-images: "true"
+spec:
+  description: Completion chunks stored in Redis Streams; cross-replica fan-out verified with 2 replicas
+  steps:
+  - name: setup-redis-and-broker
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-redis-dev ../../charts/ark-redis-dev \
+            --namespace $NAMESPACE \
+            --wait --timeout=120s
+
+          helm upgrade --install ark-broker ../../services/ark-broker/chart \
+            --namespace $NAMESPACE \
+            ${ARK_BROKER_IMAGE:+--set app.image.repository=${ARK_BROKER_IMAGE}} \
+            ${ARK_BROKER_IMAGE_TAG:+--set app.image.tag=${ARK_BROKER_IMAGE_TAG}} \
+            --set replicaCount=2 \
+            --set backends.chunk=redis \
+            --set "redis.url=redis://:arkredisdev123@ark-redis-dev:6379" \
+            --set restartController.enabled=false \
+            --set otelEndpoint.enabled=false \
+            --set persistence.enabled=false \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          echo "=== Pods ==="
+          kubectl -n $NAMESPACE get pods -o wide
+          echo "=== Events ==="
+          kubectl -n $NAMESPACE get events --sort-by='.lastTimestamp'
+          echo "=== ark-broker logs ==="
+          kubectl -n $NAMESPACE logs -l app.kubernetes.io/name=ark-broker --tail=100 || true
+          echo "=== ark-redis-dev logs ==="
+          kubectl -n $NAMESPACE logs -l app=ark-redis-dev --tail=50 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Memory
+        name: default
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.lastResolvedAddress}'
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: redis-chunks-query
+        timeout: 4m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: redis-chunks-query
+          status:
+            phase: done
+            (response != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: redis-chunks-query
+
+  - name: verify-chunks-served
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          BROKER_POD=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | head -1)
+          RESULT=$(kubectl exec -n $NAMESPACE $BROKER_POD -- sh -c \
+            'wget -O- "http://127.0.0.1:8080/stream/redis-chunks-query?from-beginning=true" 2>&1')
+          echo "chunk response: $RESULT"
+          [ -n "$RESULT" ] || { echo "empty response from chunk endpoint"; exit 1; }
+          echo "$RESULT" | grep -qF '[DONE]' || { echo "no [DONE] marker in chunk stream"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+  - name: verify-cross-replica
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          POD_A=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | awk 'NR==1')
+          POD_B=$(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=ark-broker \
+            --no-headers -o custom-columns=NAME:.metadata.name | awk 'NR==2')
+
+          if [ -z "$POD_A" ] || [ -z "$POD_B" ]; then
+            echo "Need 2 broker pods, got A='$POD_A' B='$POD_B'"
+            exit 1
+          fi
+          echo "Writing to $POD_A, reading from $POD_B"
+
+          cat > /tmp/xreplica-write.mjs << 'NODEEOF'
+          import http from 'http';
+          const post = (path, body, ct) => new Promise((ok, err) => {
+            const h = {'Content-Length': String(Buffer.byteLength(body))};
+            if (ct) h['Content-Type'] = ct;
+            const r = http.request(
+              {hostname: 'localhost', port: 8080, path, method: 'POST', headers: h},
+              res => { res.resume(); res.on('end', ok); }
+            );
+            r.on('error', err);
+            r.end(body);
+          });
+          const chunk = JSON.stringify({choices: [{delta: {content: 'xreplica'}}]}) + '\n';
+          await post('/stream/xreplica-q', chunk, 'application/x-ndjson');
+          await post('/stream/xreplica-q/complete', '');
+          console.log('wrote chunk+complete to replica A');
+          NODEEOF
+
+          kubectl cp /tmp/xreplica-write.mjs $NAMESPACE/$POD_A:/tmp/xreplica-write.mjs
+          kubectl exec -n $NAMESPACE $POD_A -- node /tmp/xreplica-write.mjs
+
+          RESULT=$(kubectl exec -n $NAMESPACE $POD_B -- sh -c \
+            'wget -O- "http://127.0.0.1:8080/stream/xreplica-q?from-beginning=true" 2>&1')
+          echo "Read from replica B ($POD_B): $RESULT"
+          [ -n "$RESULT" ] || { echo "empty response from replica B"; exit 1; }
+          echo "$RESULT" | grep -qF '[DONE]' || { echo "no [DONE] marker on replica B"; exit 1; }
+          echo "Cross-replica verified: written to $POD_A, read from $POD_B"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall ark-broker --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall ark-redis-dev --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

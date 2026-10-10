@@ -2,6 +2,8 @@ package completions
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/openai/openai-go"
 )
@@ -11,7 +13,7 @@ func extractMessageContent(msg Message) (string, string) {
 
 	if systemMsg := openaiMsg.OfSystem; systemMsg != nil {
 		if content := systemMsg.Content.OfString; content.Value != "" {
-			return content.Value, "system"
+			return content.Value, RoleSystem
 		}
 	}
 
@@ -23,29 +25,50 @@ func extractMessageContent(msg Message) (string, string) {
 
 	if assistantMsg := openaiMsg.OfAssistant; assistantMsg != nil {
 		if content := assistantMsg.Content.OfString; content.Value != "" {
-			return content.Value, "assistant"
+			return content.Value, RoleAssistant
 		}
 	}
 
 	if toolMsg := openaiMsg.OfTool; toolMsg != nil {
 		if content := toolMsg.Content.OfString; content.Value != "" {
-			return content.Value, "tool"
+			return content.Value, RoleTool
 		}
 	}
 
 	return "", ""
 }
 
+type anthropicCacheControl struct {
+	Type string `json:"type"`
+}
+
+type anthropicSystemBlock struct {
+	Type         string                 `json:"type"`
+	Text         string                 `json:"text"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
+}
+
+type anthropicMessageContent struct {
+	Type         string                 `json:"type"`
+	Text         string                 `json:"text,omitempty"`
+	ID           string                 `json:"id,omitempty"`
+	Name         string                 `json:"name,omitempty"`
+	Input        json.RawMessage        `json:"input,omitempty"`
+	ToolUseID    string                 `json:"tool_use_id,omitempty"`
+	Content      string                 `json:"content,omitempty"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
+}
+
 type anthropicMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
 }
 
 type anthropicRequest struct {
 	Messages         []anthropicMessage     `json:"messages"`
 	MaxTokens        int                    `json:"max_tokens"`
 	Temperature      float64                `json:"temperature"`
-	SystemPrompt     string                 `json:"system,omitempty"`
+	SystemPrompt     []anthropicSystemBlock `json:"system,omitempty"`
 	AnthropicVersion string                 `json:"anthropic_version,omitempty"`
 	Tools            []anthropicTool        `json:"tools,omitempty"`
 	ToolChoice       map[string]interface{} `json:"tool_choice,omitempty"`
@@ -53,9 +76,10 @@ type anthropicRequest struct {
 }
 
 type anthropicTool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	InputSchema map[string]interface{} `json:"input_schema"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	InputSchema  map[string]interface{} `json:"input_schema"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
 type anthropicResponse struct {
@@ -64,8 +88,10 @@ type anthropicResponse struct {
 	Model      string             `json:"model"`
 	StopReason string             `json:"stop_reason"`
 	Usage      struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens              int `json:"input_tokens"`
+		OutputTokens             int `json:"output_tokens"`
+		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 	} `json:"usage"`
 }
 
@@ -77,11 +103,210 @@ type anthropicContent struct {
 	Input map[string]interface{} `json:"input,omitempty"`
 }
 
-func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, string) {
-	var result []anthropicMessage
-	var systemPrompt string
+func assistantMessageName(msg Message) string {
+	openaiMsg := openai.ChatCompletionMessageParamUnion(msg)
+	if assistantMsg := openaiMsg.OfAssistant; assistantMsg != nil {
+		return assistantMsg.Name.Value
+	}
+	return ""
+}
 
-	for _, msg := range messages {
+type collectedMessage struct {
+	role   string
+	text   string
+	blocks []anthropicMessageContent
+	merged bool
+}
+
+func (m collectedMessage) contentBlocks() []anthropicMessageContent {
+	blocks := make([]anthropicMessageContent, 0, len(m.blocks)+1)
+	textBlock := anthropicMessageContent{Type: "text", Text: m.text}
+
+	if len(m.blocks) == 0 {
+		return append(blocks, textBlock)
+	}
+
+	if m.role == RoleUser {
+		blocks = append(blocks, m.blocks...)
+		if m.text != "" {
+			blocks = append(blocks, textBlock)
+		}
+		return blocks
+	}
+
+	if m.text != "" {
+		blocks = append(blocks, textBlock)
+	}
+	return append(blocks, m.blocks...)
+}
+
+func anthropicTurnFor(msg Message, content, role string) collectedMessage {
+	msgRole := role
+	if role == RoleTool {
+		msgRole = RoleUser
+	}
+
+	text := content
+	if role == RoleAssistant {
+		if name := assistantMessageName(msg); name != "" {
+			text = fmt.Sprintf("%s: %s", name, content)
+		}
+	}
+
+	return collectedMessage{role: msgRole, text: text}
+}
+
+func joinTurnText(first, second string) string {
+	switch {
+	case first == "":
+		return second
+	case second == "":
+		return first
+	default:
+		return first + "\n\n" + second
+	}
+}
+
+func mergeConsecutiveRoles(collected []collectedMessage) []collectedMessage {
+	merged := make([]collectedMessage, 0, len(collected))
+	for _, m := range collected {
+		if n := len(merged); n > 0 && merged[n-1].role == m.role {
+			merged[n-1].text = joinTurnText(merged[n-1].text, m.text)
+			merged[n-1].blocks = append(merged[n-1].blocks, m.blocks...)
+			merged[n-1].merged = true
+			continue
+		}
+		merged = append(merged, m)
+	}
+	return merged
+}
+
+func availableToolNames(tools []openai.ChatCompletionToolParam) map[string]bool {
+	names := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		if tool.Type == "function" && tool.Function.Name != "" {
+			names[tool.Function.Name] = true
+		}
+	}
+	return names
+}
+
+type toolPairing struct {
+	calls   map[int]map[int]bool
+	results map[int]bool
+}
+
+func pairToolCalls(messages []Message, available map[string]bool) toolPairing {
+	pairing := toolPairing{calls: make(map[int]map[int]bool), results: make(map[int]bool)}
+	if len(available) == 0 {
+		return pairing
+	}
+
+	used := make(map[string]bool)
+	for i := len(messages) - 1; i >= 0; i-- {
+		assistant := messages[i].OfAssistant
+		if assistant == nil || len(assistant.ToolCalls) == 0 {
+			continue
+		}
+
+		resultIndex := make(map[string]int)
+		for j := i + 1; j < len(messages) && messages[j].OfTool != nil; j++ {
+			if _, seen := resultIndex[messages[j].OfTool.ToolCallID]; !seen {
+				resultIndex[messages[j].OfTool.ToolCallID] = j
+			}
+		}
+
+		for k, call := range assistant.ToolCalls {
+			j, hasResult := resultIndex[call.ID]
+			if call.ID == "" || used[call.ID] || !available[call.Function.Name] || !hasResult {
+				continue
+			}
+			used[call.ID] = true
+			if pairing.calls[i] == nil {
+				pairing.calls[i] = make(map[int]bool)
+			}
+			pairing.calls[i][k] = true
+			pairing.results[j] = true
+		}
+	}
+
+	return pairing
+}
+
+func toolUseInput(arguments string) json.RawMessage {
+	var input map[string]interface{}
+	if err := json.Unmarshal([]byte(arguments), &input); err != nil || input == nil {
+		return json.RawMessage(`{}`)
+	}
+	return mustMarshalRaw(input)
+}
+
+func toolResultText(tool *openai.ChatCompletionToolMessageParam) string {
+	if content := tool.Content.OfString.Value; content != "" {
+		return content
+	}
+
+	parts := make([]string, 0, len(tool.Content.OfArrayOfContentParts))
+	for _, part := range tool.Content.OfArrayOfContentParts {
+		if part.Text != "" {
+			parts = append(parts, part.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func pairedToolTurn(index int, msg Message, pairing toolPairing) (collectedMessage, bool) {
+	if tool := msg.OfTool; tool != nil && pairing.results[index] {
+		return collectedMessage{
+			role: RoleUser,
+			blocks: []anthropicMessageContent{{
+				Type:      "tool_result",
+				ToolUseID: tool.ToolCallID,
+				Content:   toolResultText(tool),
+			}},
+		}, true
+	}
+
+	assistant := msg.OfAssistant
+	if assistant == nil {
+		return collectedMessage{}, false
+	}
+
+	blocks := make([]anthropicMessageContent, 0, len(assistant.ToolCalls))
+	for k, call := range assistant.ToolCalls {
+		if !pairing.calls[index][k] {
+			continue
+		}
+		blocks = append(blocks, anthropicMessageContent{
+			Type:  "tool_use",
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Input: toolUseInput(call.Function.Arguments),
+		})
+	}
+	if len(blocks) == 0 {
+		return collectedMessage{}, false
+	}
+
+	turn := collectedMessage{role: RoleAssistant, blocks: blocks}
+	if content, _ := extractMessageContent(msg); content != "" {
+		turn.text = anthropicTurnFor(msg, content, RoleAssistant).text
+	}
+	return turn, true
+}
+
+func collectAnthropicTurns(messages []Message, tools []openai.ChatCompletionToolParam) ([]collectedMessage, []anthropicSystemBlock) {
+	var collected []collectedMessage
+	var systemBlocks []anthropicSystemBlock
+
+	pairing := pairToolCalls(messages, availableToolNames(tools))
+
+	for i, msg := range messages {
+		if turn, ok := pairedToolTurn(i, msg, pairing); ok {
+			collected = append(collected, turn)
+			continue
+		}
+
 		content, role := extractMessageContent(msg)
 		if content == "" {
 			continue
@@ -89,20 +314,44 @@ func convertMessagesToAnthropic(messages []Message) ([]anthropicMessage, string)
 
 		switch role {
 		case RoleSystem:
-			systemPrompt = content
-		case RoleUser, RoleAssistant, RoleTool:
-			msgRole := role
-			if role == RoleTool {
-				msgRole = RoleUser
+			systemBlocks = []anthropicSystemBlock{
+				{
+					Type:         "text",
+					Text:         content,
+					CacheControl: &anthropicCacheControl{Type: "ephemeral"},
+				},
 			}
-			result = append(result, anthropicMessage{
-				Role:    msgRole,
-				Content: content,
-			})
+		case RoleUser, RoleAssistant, RoleTool:
+			collected = append(collected, anthropicTurnFor(msg, content, role))
 		}
 	}
 
-	return result, systemPrompt
+	return mergeConsecutiveRoles(collected), systemBlocks
+}
+
+func convertMessagesToAnthropic(messages []Message, tools []openai.ChatCompletionToolParam) ([]anthropicMessage, []anthropicSystemBlock) {
+	collected, systemBlocks := collectAnthropicTurns(messages, tools)
+
+	cacheIndex := -1
+	if len(collected) >= 2 && !collected[len(collected)-2].merged {
+		cacheIndex = len(collected) - 2
+	}
+
+	result := make([]anthropicMessage, len(collected))
+	for i, m := range collected {
+		switch {
+		case i == cacheIndex:
+			blocks := m.contentBlocks()
+			blocks[len(blocks)-1].CacheControl = &anthropicCacheControl{Type: "ephemeral"}
+			result[i] = anthropicMessage{Role: m.role, Content: mustMarshalRaw(blocks)}
+		case len(m.blocks) > 0:
+			result[i] = anthropicMessage{Role: m.role, Content: mustMarshalRaw(m.contentBlocks())}
+		default:
+			result[i] = anthropicMessage{Role: m.role, Content: mustMarshalRaw(m.text)}
+		}
+	}
+
+	return result, systemBlocks
 }
 
 func convertAnthropicResponse(response anthropicResponse) *openai.ChatCompletion {
@@ -135,13 +384,17 @@ func convertAnthropicResponse(response anthropicResponse) *openai.ChatCompletion
 	}
 
 	message := openai.ChatCompletionMessage{
-		Role:    "assistant",
+		Role:    RoleAssistant,
 		Content: content,
 	}
 
 	if len(toolCalls) > 0 {
 		message.ToolCalls = toolCalls
 	}
+
+	promptTokens := int64(response.Usage.InputTokens +
+		response.Usage.CacheCreationInputTokens +
+		response.Usage.CacheReadInputTokens)
 
 	return &openai.ChatCompletion{
 		ID:     response.ID,
@@ -155,9 +408,12 @@ func convertAnthropicResponse(response anthropicResponse) *openai.ChatCompletion
 			},
 		},
 		Usage: openai.CompletionUsage{
-			PromptTokens:     int64(response.Usage.InputTokens),
+			PromptTokens:     promptTokens,
 			CompletionTokens: int64(response.Usage.OutputTokens),
-			TotalTokens:      int64(response.Usage.InputTokens + response.Usage.OutputTokens),
+			TotalTokens:      promptTokens + int64(response.Usage.OutputTokens),
+			PromptTokensDetails: openai.CompletionUsagePromptTokensDetails{
+				CachedTokens: int64(response.Usage.CacheReadInputTokens),
+			},
 		},
 	}
 }
@@ -183,10 +439,14 @@ func convertToolsToAnthropic(tools []openai.ChatCompletionToolParam) []anthropic
 		}
 	}
 
+	if len(result) > 0 {
+		result[len(result)-1].CacheControl = &anthropicCacheControl{Type: "ephemeral"}
+	}
+
 	return result
 }
 
-func buildAnthropicRequest(messages []anthropicMessage, systemPrompt string, tools []anthropicTool, toolChoice ToolChoice, properties map[string]string) anthropicRequest {
+func buildAnthropicRequest(messages []anthropicMessage, systemPrompt []anthropicSystemBlock, tools []anthropicTool, toolChoice ToolChoice, properties map[string]string) anthropicRequest {
 	temperature := getFloatProperty(properties, "temperature", 1.0)
 	maxTokens := getIntProperty(properties, "max_tokens", 4096)
 
@@ -225,7 +485,7 @@ func streamCompletionAsChunks(completion *openai.ChatCompletion, streamFunc func
 					Index: choice.Index,
 					Delta: openai.ChatCompletionChunkChoiceDelta{
 						Content: choice.Message.Content,
-						Role:    "assistant",
+						Role:    RoleAssistant,
 					},
 					FinishReason: choice.FinishReason,
 				},
@@ -248,4 +508,12 @@ func mustMarshalJSON(v interface{}) string {
 		return "{}"
 	}
 	return string(data)
+}
+
+func mustMarshalRaw(v interface{}) json.RawMessage {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`""`)
+	}
+	return json.RawMessage(data)
 }

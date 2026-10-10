@@ -5,6 +5,7 @@ import {SessionsBroker} from '@ark-broker/brokers/sessions-broker.js';
 import {
   sendValidationError,
   sendInternalError,
+  sendMissingQueryIdError,
 } from '@ark-broker/http/routes/errors.js';
 import {
   postMessagesBodySchema,
@@ -82,7 +83,7 @@ export function createMemoryRouter(
           'received messages'
         );
 
-        await memory.addMessages(
+        const persisted = await memory.addMessages(
           conversation_id,
           query_id,
           messages,
@@ -91,7 +92,11 @@ export function createMemoryRouter(
         await memory.save();
 
         if (sessions && conversation_id) {
-          sessions.applyMessage(conversation_id, query_id);
+          await sessions.applyMessage(
+            conversation_id,
+            query_id,
+            persisted.at(-1)?.sequenceNumber
+          );
         }
 
         res.status(200).send();
@@ -133,29 +138,25 @@ export function createMemoryRouter(
 
   router.get('/memory-status', async (req, res) => {
     try {
-      const conversationIds = await memory.getConversationIds();
-      const allItems = await memory.all();
+      const stats = await memory.getConversationStats();
 
-      const conversationStats: Record<
+      const conversations: Record<
         string,
         {message_count: number; query_count: number}
       > = {};
-      for (const conversationId of conversationIds) {
-        const convItems = allItems.filter(
-          (i) => i.data.conversationId === conversationId
-        );
-        const queryIds = new Set(convItems.map((i) => i.data.queryId));
-
-        conversationStats[conversationId] = {
-          message_count: convItems.length,
-          query_count: queryIds.size,
+      let totalMessages = 0;
+      for (const stat of stats) {
+        conversations[stat.conversationId] = {
+          message_count: stat.messageCount,
+          query_count: stat.queryCount,
         };
+        totalMessages += stat.messageCount;
       }
 
       res.json({
-        total_conversations: conversationIds.length,
-        total_messages: allItems.length,
-        conversations: conversationStats,
+        total_conversations: stats.length,
+        total_messages: totalMessages,
+        conversations,
       });
     } catch (error) {
       req.log.error({err: error}, 'failed to get memory status');
@@ -171,36 +172,6 @@ export function createMemoryRouter(
       req.log.error({err: error}, 'failed to get conversations');
       sendInternalError(res, req.id);
     }
-  });
-
-  /**
-   * @swagger
-   * /messages:
-   *   delete:
-   *     summary: Purge all memory data
-   *     description: Clears all stored messages and saves empty state to disk
-   *     tags:
-   *       - Memory
-   *     responses:
-   *       200:
-   *         description: Memory purged successfully
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 status:
-   *                   type: string
-   *                   example: success
-   *                 message:
-   *                   type: string
-   *                   example: Memory purged
-   *       500:
-   *         description: Failed to purge memory
-   */
-  router.delete('/messages', async (_req, res) => {
-    await memory.delete();
-    res.json({status: 'success', message: 'Memory purged'});
   });
 
   /**
@@ -318,13 +289,7 @@ export function createMemoryRouter(
       }
 
       if (!queryId) {
-        res.status(400).json({
-          error: {
-            code: 'BAD_REQUEST',
-            message: 'Query ID is required',
-            requestId: req.id === undefined ? undefined : String(req.id),
-          },
-        });
+        sendMissingQueryIdError(res, req.id);
         return;
       }
 
@@ -333,6 +298,53 @@ export function createMemoryRouter(
         status: 'success',
         message: `Query ${queryId} messages deleted from conversation ${conversationId}`,
       });
+    }
+  );
+
+  /**
+   * @swagger
+   * /queries/{queryId}/messages:
+   *   delete:
+   *     summary: Delete all messages for a specific query
+   *     description: Removes all messages for a specific query across all conversations
+   *     tags:
+   *       - Memory
+   *     parameters:
+   *       - in: path
+   *         name: queryId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Query ID to delete messages for
+   *     responses:
+   *       200:
+   *         description: Query messages deleted successfully
+   *       400:
+   *         description: Invalid query ID
+   *       500:
+   *         description: Failed to delete query messages
+   */
+  router.delete<{queryId: string}>(
+    '/queries/:queryId/messages',
+    async (req, res) => {
+      const {queryId} = req.params;
+
+      if (!queryId) {
+        sendMissingQueryIdError(res, req.id);
+        return;
+      }
+
+      try {
+        req.log.info({queryId}, 'deleting messages for query');
+        await memory.deleteByQuery(queryId);
+        res.json({
+          status: 'success',
+          message: `Query ${queryId} messages deleted`,
+        });
+      } catch (error) {
+        req.log.error({err: error}, 'failed to delete query messages');
+        sendInternalError(res, req.id);
+      }
     }
   );
 

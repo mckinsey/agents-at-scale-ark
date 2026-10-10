@@ -26,6 +26,10 @@ app:
       value: https://mydomain.com/namespace1/api/auth
     - name: AUTH_MODE
       value: open
+    # NOTE: if you front these tenants with a separate ark-landing-page login
+    # hub on a DIFFERENT origin, that hub must set AUTH_ALLOWED_CALLBACK_ORIGINS
+    # to include this tenant's origin (see the ark-landing-page chart values),
+    # or the post-login redirect back to the tenant is silently dropped.
 
 # The dashboard chart installs a per-tenant Ingress that captures only this
 # tenant's prefix. The cluster operator is responsible for installing the
@@ -40,6 +44,13 @@ app:
 ingress:
   enabled: true
   className: nginx
+  annotations:
+    # SSO dashboards emit a large response header after login (the chunked
+    # NextAuth session Set-Cookie). nginx-ingress's default proxy buffer
+    # (4k/8k) is too small and the tenant returns 502 "upstream sent too big
+    # header" on the post-login request. Enlarge the buffer. 16k is enough for
+    # a chunked session cookie; raise further if you add large custom claims.
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
   hosts:
     - host: mydomain.com
       paths:

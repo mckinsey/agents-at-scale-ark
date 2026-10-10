@@ -7,19 +7,33 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"runtime/debug"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"go.opentelemetry.io/otel/baggage"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -27,18 +41,76 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/common"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	otelimpl "mckinsey.com/ark/internal/telemetry/otel"
+	"mckinsey.com/ark/internal/telemetry/routing"
 )
+
+// maxApprovalCascades caps the number of times the agent can be resumed after
+// an approval denial. Without a cap, an LLM that ignores rejection (e.g. when
+// the user prompt strongly insists on the tool) can spin a new approval task
+// after every denial, never terminating.
+const maxApprovalCascades = 3
+
+// defaultMaxImpersonatedClients bounds the impersonated-client cache so it
+// cannot grow without limit across many distinct service accounts. It is an
+// internal safety bound, not an operational tuning knob.
+const defaultMaxImpersonatedClients = 256
 
 const (
 	targetTypeAgent = "agent"
 	targetTypeTeam  = "team"
 	targetTypeModel = "model"
 	targetTypeTool  = "tool"
+
+	messageCleanupGracePeriod   = 5 * time.Minute
+	messageCleanupRetryInterval = 15 * time.Second
+
+	// queryExecutionFailedMsg is the log message emitted on every query error
+	// path; the stage field distinguishes where in dispatch the failure occurred.
+	queryExecutionFailedMsg = "query execution failed"
+
+	stageGetClient              = "get-client"
+	stageResolveTarget          = "resolve-target"
+	stageResolveDispatchAddress = "resolve-dispatch-address"
+	stageDispatch               = "dispatch"
+
+	// defaultCompletionsEngineName is the well-known name of the per-tenant
+	// completions ExecutionEngine. When a query has no explicitly named engine,
+	// the controller prefers an ExecutionEngine of this name in the query's
+	// namespace (a per-tenant deployment) over the central --completions-addr.
+	defaultCompletionsEngineName = "ark-completions"
+	// queryCapacityRequeueDelay is how long Reconcile waits before retrying
+	// when MaxConcurrentQueries is reached. Short enough to be responsive,
+	// long enough to avoid a busy-loop while in-flight queries drain.
+	queryCapacityRequeueDelay = 250 * time.Millisecond
+	// queryFairnessWaitWindow is how long a namespace denied a slot stays in
+	// the fair-share divisor after its last attempt. A few requeue cycles, so
+	// a still-competing tenant keeps its share while one that stops requeuing
+	// ages out and lets the remaining tenants expand.
+	queryFairnessWaitWindow = 4 * queryCapacityRequeueDelay
+	// queryRunningSafetyRequeue re-reconciles a running Query whose execution
+	// goroutine died so it converges to a terminal phase instead of stranding.
+	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
+	queryRunningSafetyRequeue = 30 * time.Second
+	// requeueChannelBufferSize sizes the async-goroutine self-requeue channel.
+	requeueChannelBufferSize = 64
+
+	// Condition reasons for QueryCompleted when spec.timeout elapses.
+	// spec.timeout is a wall-clock budget from metadata.creationTimestamp; the
+	// reason records which side of the semaphore the deadline was hit on.
+	reasonTimedOutInQueue     = "TimedOutInQueue"
+	reasonTimedOutInExecution = "TimedOutInExecution"
+
+	// defaultQueryTimeout mirrors the CRD default on Query.spec.timeout so
+	// callers without an explicit value get the same budget the apiserver's
+	// mutating admission would compute.
+	defaultQueryTimeout = 30 * time.Minute
 )
 
 type QueryReconciler struct {
@@ -47,7 +119,46 @@ type QueryReconciler struct {
 	Telemetry       *telemetryconfig.Provider
 	Eventing        *eventingconfig.Provider
 	CompletionsAddr string
-	operations      sync.Map
+
+	// MaxConcurrentQueries caps the number of Query executions running in
+	// goroutines at once. When the cap is reached, Reconcile() requeues so
+	// the workqueue (cheap, object keys only) holds the backlog instead of
+	// the controller heap. Set to 0 to disable enforcement.
+	MaxConcurrentQueries int
+
+	// MaxConcurrentReconciles sets how many Query keys can be reconciled in
+	// parallel. The controller-runtime workqueue dedupes per-key, so concurrent
+	// reconciles only run for different Query objects — Reconcile() for the
+	// same key is still serialized. Set to 0 to use the controller-runtime
+	// default (1).
+	MaxConcurrentReconciles int
+
+	// APIReader bypasses the informer cache. signalRequeue's trigger is a local
+	// channel, not a watch event, so the reconcile it causes can otherwise race
+	// the cache still catching up to the write that triggered it. fetchQuery
+	// only falls back to it when pendingFreshReads says the cache is still
+	// behind; the common watch-driven path stays on the cached Client.
+	APIReader client.Reader
+
+	sched         *fairScheduler
+	operations    sync.Map
+	saClients     *impersonatedClientCache
+	saClientsOnce sync.Once
+
+	// pendingFreshReads maps a Query's namespaced name to the minimum
+	// resourceVersion signalRequeue's caller observed, so fetchQuery knows to
+	// bypass the cache until it has caught up. Entries are removed by
+	// fetchQuery once consumed (LoadAndDelete) or once the Get for that name
+	// fails, so a deleted Query can't strand a marker forever.
+	pendingFreshReads sync.Map
+
+	// requeueCh lets an async goroutine self-requeue on completion (see signalRequeue).
+	requeueCh chan event.GenericEvent
+
+	// brokerEndpoint resolves the broker endpoint for a namespace, used by the
+	// finalizer's broker cleanups. Defaults to routing.ResolveBrokerEndpoint
+	// when nil; tests override it to avoid depending on real cluster DNS.
+	brokerEndpoint func(ctx context.Context, namespace string) (string, error)
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;create;update;patch;delete
@@ -56,9 +167,12 @@ type QueryReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=teams,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list
+// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=memories,verbs=get
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=arkconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;list;watch;patch
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch;update
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
+// +kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=create
 
 func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -71,16 +185,19 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Check TTL expiry if TTL is set.
-	// TTL may be nil when using aggregated API server (non-CRD storage)
-	// because the field is omitempty and may not be initialized.
-	if obj.Spec.TTL != nil {
-		expiry := obj.CreationTimestamp.Add(obj.Spec.TTL.Duration)
-		if time.Now().After(expiry) {
-			if err := r.Delete(ctx, &obj); err != nil {
-				log.Error(err, "unable to delete object")
-				return ctrl.Result{}, err
-			}
+	// Garbage-collect the Query once it has been in a terminal phase for
+	// longer than its TTL. TTL is measured from completion, not creation,
+	// so long-running or queued queries are never reaped mid-flight.
+	// TTL may be nil when using aggregated API server (non-CRD storage).
+	if ttlRemaining(&obj) < 0 && isTerminalPhase(obj.Status.Phase) && obj.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, &obj); err != nil {
+			log.Error(err, "unable to delete object")
+			return ctrl.Result{}, err
+		}
+		// Refetch so handleFinalizer below sees the DeletionTimestamp
+		// and clears the finalizer in this same reconcile (#2828).
+		if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 	}
 
@@ -90,7 +207,10 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	if len(obj.Status.Conditions) == 0 {
 		r.setConditionCompleted(&obj, metav1.ConditionFalse, "QueryNotStarted", "The query has not been started yet")
-		return ctrl.Result{}, r.Status().Update(ctx, &obj)
+		// Requeue explicitly: the update predicate drops the watch event this
+		// status write would otherwise trigger, and handleQueryExecution still
+		// needs to run to actually start the query.
+		return ctrl.Result{Requeue: true}, r.Status().Update(ctx, &obj)
 	}
 
 	return r.handleQueryExecution(ctx, req, obj)
@@ -98,120 +218,360 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 func (r *QueryReconciler) fetchQuery(ctx context.Context, namespacedName types.NamespacedName) (arkv1alpha1.Query, error) {
 	var obj arkv1alpha1.Query
-	err := r.Get(ctx, namespacedName, &obj)
-	return obj, err
+	if err := r.Get(ctx, namespacedName, &obj); err != nil {
+		r.pendingFreshReads.Delete(namespacedName) // don't strand a marker for a gone object
+		return obj, err
+	}
+
+	if minRV, ok := r.pendingFreshReads.LoadAndDelete(namespacedName); ok && !resourceVersionAtLeast(obj.ResourceVersion, minRV.(string)) {
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		if err := reader.Get(ctx, namespacedName, &obj); err != nil {
+			return obj, err
+		}
+	}
+
+	return obj, nil
+}
+
+// resourceVersionAtLeast assumes a globally monotonic numeric resourceVersion,
+// true for etcd revisions and for the PostgreSQL apiserver backend (RVs come
+// from a single BIGSERIAL sequence, see internal/storage/postgresql). The
+// comparison is always same-object (cached RV vs. that object's own write
+// RV), so cross-object commit ordering doesn't apply. Falls back to string
+// equality for any backend whose RVs aren't numeric.
+func resourceVersionAtLeast(actual, min string) bool {
+	a, errA := strconv.ParseInt(actual, 10, 64)
+	m, errM := strconv.ParseInt(min, 10, 64)
+	if errA != nil || errM != nil {
+		return actual == min
+	}
+	return a >= m
 }
 
 func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.Query) (*ctrl.Result, error) {
 	if obj.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(obj, finalizer) {
 			controllerutil.AddFinalizer(obj, finalizer)
-			return &ctrl.Result{}, r.Update(ctx, obj)
+			return &ctrl.Result{}, r.patchFinalizers(ctx, obj)
 		}
 		return nil, nil
 	}
 
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
-		r.finalize(ctx, obj)
+		if err := r.finalize(ctx, obj); err != nil {
+			log := logf.FromContext(ctx)
+			if time.Since(obj.DeletionTimestamp.Time) > messageCleanupGracePeriod {
+				log.Error(err, "giving up on broker message cleanup after grace period", "query", obj.Name)
+				controllerutil.RemoveFinalizer(obj, finalizer)
+				return &ctrl.Result{}, r.patchFinalizers(ctx, obj)
+			}
+			log.Error(err, "broker message cleanup failed, will retry", "query", obj.Name)
+			return &ctrl.Result{RequeueAfter: messageCleanupRetryInterval}, nil
+		}
 		controllerutil.RemoveFinalizer(obj, finalizer)
-		return &ctrl.Result{}, r.Update(ctx, obj)
+		return &ctrl.Result{}, r.patchFinalizers(ctx, obj)
 	}
 
 	return &ctrl.Result{}, nil
 }
 
-func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
-	// Calculate expiry time for requeue. Use 1 hour default if TTL is not set.
-	// TTL may be nil when using aggregated API server (non-CRD storage).
-	ttl := time.Hour
-	if obj.Spec.TTL != nil {
-		ttl = obj.Spec.TTL.Duration
+// patchFinalizers writes only metadata.finalizers via a merge patch. A plain
+// Update would send the whole object, including the status; when the object
+// came from a cache that stripped status.response.content (see cachetransform),
+// that empty status overwrites the stored one on backends without a status
+// subresource (aggregated API server / non-CRD storage). Patching just the
+// finalizers list carries no status at all.
+func (r *QueryReconciler) patchFinalizers(ctx context.Context, obj *arkv1alpha1.Query) error {
+	body, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{
+			"finalizers": obj.GetFinalizers(),
+		},
+	})
+	if err != nil {
+		return err
 	}
-	expiry := obj.CreationTimestamp.Add(ttl)
+	return r.Patch(ctx, obj, client.RawPatch(types.MergePatchType, body))
+}
 
-	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
+func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
+	if obj.Spec.Cancel && !isTerminalPhase(obj.Status.Phase) {
 		r.cleanupExistingOperation(req.NamespacedName)
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
-			return ctrl.Result{
-				RequeueAfter: time.Until(expiry),
-			}, err
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		// Requeue explicitly so the terminal-phase branch below runs and
+		// computes the TTL-based GC requeue; the update predicate drops the
+		// watch event this status write would otherwise trigger.
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Enforces per-round pre-execution wall-SLO.
+	if isPreExecutionPhase(obj.Status.Phase) && remainingBudget(&obj) <= 0 {
+		r.cleanupExistingOperation(req.NamespacedName)
+		if err := r.failQueryOnTimeout(ctx, &obj, reasonTimedOutInQueue, preExecutionTimeoutMessage(obj.Status.Phase)); err != nil {
+			return ctrl.Result{}, err
+		}
+		// Same as above: requeue explicitly for the TTL/GC follow-up.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	switch obj.Status.Phase {
 	case statusDone, statusError, statusCanceled:
-		return ctrl.Result{
-			RequeueAfter: time.Until(expiry),
-		}, nil
-	case statusProvisioning, statusRunning:
+		remaining := ttlRemaining(&obj)
+		if remaining == 0 {
+			return ctrl.Result{}, nil
+		}
+		if remaining < 0 {
+			// RequeueAfter requires a positive time: 1ns means it will be
+			// requeued for GC almost immediately
+			remaining = time.Nanosecond
+		}
+		return ctrl.Result{RequeueAfter: remaining}, nil
+	case statusInputRequired:
+		// Query is awaiting approval/input, check if A2ATask has completed
+		return r.handleInputRequiredPhase(ctx, &obj)
+	case statusProvisioning, statusRunning, statusQueued:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
-		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
-			return ctrl.Result{
-				RequeueAfter: time.Until(expiry),
-			}, err
-		}
-		return ctrl.Result{}, nil
+		return r.handleRunningPhase(ctx, req, obj)
 	}
+}
+
+// ttlRemaining returns the time left until the Query's post-completion TTL
+// elapses: zero means TTL is not configured, negative means TTL has already
+// elapsed, positive means time left until expiry. The anchor is the
+// QueryCompleted condition's LastTransitionTime; if that condition is
+// missing on a terminal-phase Query (a corrupt state our updater should
+// not produce), the anchor falls back to CreationTimestamp so GC still
+// fires eventually instead of stranding the object.
+func ttlRemaining(obj *arkv1alpha1.Query) time.Duration {
+	if obj.Spec.TTL == nil {
+		return 0
+	}
+	anchor := obj.CreationTimestamp.Time
+	if completedAt := queryCompletedAt(obj); completedAt != nil {
+		anchor = *completedAt
+	}
+	return time.Until(anchor.Add(obj.Spec.TTL.Duration))
+}
+
+// remainingBudget is spec.timeout minus wall time since the current round's
+// anchor. The anchor is metadata.creationTimestamp for the initial round and
+// re-stamped via annotations.RoundAnchor on each HITL resumption, so a
+// resumed query gets a fresh budget for its pre-execution gap.
+func remainingBudget(obj *arkv1alpha1.Query) time.Duration {
+	timeout := defaultQueryTimeout
+	if obj.Spec.Timeout != nil {
+		timeout = obj.Spec.Timeout.Duration
+	}
+	anchor := obj.CreationTimestamp.Time
+	if s, ok := obj.Annotations[annotations.RoundAnchor]; ok {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			anchor = t
+		}
+	}
+	return time.Until(anchor.Add(timeout))
+}
+
+func (r *QueryReconciler) stampRoundAnchor(ctx context.Context, obj *arkv1alpha1.Query) error {
+	patch := client.RawPatch(types.MergePatchType, []byte(fmt.Sprintf(
+		`{"metadata":{"annotations":{%q:%q}}}`,
+		annotations.RoundAnchor,
+		time.Now().UTC().Format(time.RFC3339Nano),
+	)))
+	return r.Patch(ctx, obj, patch)
+}
+
+func preExecutionTimeoutMessage(phase string) string {
+	if phase == statusQueued {
+		return "Query timed out waiting for controller capacity"
+	}
+	return "Query timed out before execution began"
 }
 
 func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
 	if _, exists := r.operations.Load(req.NamespacedName); exists {
-		log.Info("Exists")
-		return ctrl.Result{}, nil
+		// Genuinely in-flight: don't spawn a second goroutine. Re-arm the safety
+		// net so that if this goroutine dies without reaching a terminal phase,
+		// a later reconcile finds no tracked op and recovers it.
+		return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 	}
 
-	queryTimeout := time.Hour
-	if obj.Spec.TTL != nil {
-		queryTimeout = obj.Spec.TTL.Duration
-	}
-	remaining := time.Until(obj.CreationTimestamp.Add(queryTimeout))
-	if remaining <= 0 {
-		return ctrl.Result{}, nil
+	if r.sched != nil && !r.sched.tryAcquire(req.Namespace) {
+		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
+		if obj.Status.Phase != statusQueued {
+			if err := r.updateStatus(ctx, &obj, statusQueued); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		// Clamp the requeue to the spec.timeout deadline so a saturated
+		// queue can't stall past the SLO — the next reconcile then hits the
+		// pre-flight timeout check in handleQueryExecution.
+		requeue := queryCapacityRequeueDelay
+		if budget := remainingBudget(&obj); budget > 0 && budget < requeue {
+			requeue = budget
+		}
+		return ctrl.Result{RequeueAfter: requeue}, nil
 	}
 
-	opCtx, cancel := context.WithTimeout(ctx, remaining)
+	if obj.Status.Phase != statusRunning {
+		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
+			if r.sched != nil {
+				r.sched.release(req.Namespace)
+			}
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Execution deadline is governed by Spec.Timeout, applied per-A2A-call in
+	// sendQueryA2A. The cancel handle is stored so Spec.Cancel can interrupt
+	// the goroutine via cleanupExistingOperation.
+	opCtx, cancel := context.WithCancel(ctx)
 	r.operations.Store(req.NamespacedName, cancel)
 
 	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
-	return ctrl.Result{}, nil
+	// Fallback if the goroutine dies before signalRequeue runs.
+	return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
+}
+
+func (r *QueryReconciler) handleInputRequiredPhase(ctx context.Context, obj *arkv1alpha1.Query) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
+	// Check if there's an associated A2ATask
+	if obj.Status.Response == nil || obj.Status.Response.A2A == nil || obj.Status.Response.A2A.TaskID == "" {
+		log.Info("Query in input-required phase but no A2ATask found, waiting")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	taskID := obj.Status.Response.A2A.TaskID
+	taskName := fmt.Sprintf("a2a-task-%s", taskID)
+
+	var a2aTask arkv1alpha1.A2ATask
+	if err := r.Get(ctx, types.NamespacedName{Name: taskName, Namespace: obj.Namespace}, &a2aTask); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "failed to get A2ATask")
+			return ctrl.Result{}, err
+		}
+		// Task not found yet, wait
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	// Check task phase
+	switch a2aTask.Status.Phase {
+	case arka2a.PhaseCompleted:
+		return r.handleApprovedTask(ctx, obj, taskID)
+	case arka2a.PhaseFailed, arka2a.PhaseCancelled:
+		return r.handleDeniedOrFailedTask(ctx, obj, &a2aTask, taskID)
+	default:
+		// Task still pending, keep waiting
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+}
+
+// handleApprovedTask resumes query execution after an approval was granted.
+func (r *QueryReconciler) handleApprovedTask(ctx context.Context, obj *arkv1alpha1.Query, taskID string) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	log.Info("A2ATask completed, resuming query execution", "taskId", taskID)
+	// Note: Don't clear taskID here - executor needs it to detect resumption;
+	// the executor clears it after processing.
+
+	// Approval was granted: reset the cascade counter so legitimate multi-step
+	// flows aren't penalised by earlier denials in the chain.
+	if err := r.resetApprovalCascadeCount(ctx, obj); err != nil {
+		log.Error(err, "failed to reset approval cascade counter")
+	}
+
+	if err := r.stampRoundAnchor(ctx, obj); err != nil {
+		log.Error(err, "failed to stamp round anchor for resumed round")
+		return ctrl.Result{}, err
+	}
+
+	r.clearOperationCacheForResumption(ctx, obj, "task completed")
+
+	if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
+		return ctrl.Result{}, err
+	}
+	// Immediately requeue to trigger executor resumption
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// handleDeniedOrFailedTask resumes the agent on a resumable denial, otherwise
+// marks the query as errored.
+func (r *QueryReconciler) handleDeniedOrFailedTask(ctx context.Context, obj *arkv1alpha1.Query, a2aTask *arkv1alpha1.A2ATask, taskID string) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
+	// A denial the agent can react to (explicit reject or timeout-reject) resumes
+	// execution so the agent produces a final response. Only true failures land
+	// the query in error.
+	if arka2a.IsResumableDenial(a2aTask) {
+		return r.handleResumableDenial(ctx, obj, taskID)
+	}
+
+	log.Info("A2ATask failed or cancelled, marking query as error", "taskId", taskID, "phase", a2aTask.Status.Phase, "error", a2aTask.Status.Error)
+	if a2aTask.Status.Error != "" {
+		var target arkv1alpha1.QueryTarget
+		if obj.Status.Response != nil {
+			target = obj.Status.Response.Target
+		}
+		obj.Status.Response = &arkv1alpha1.Response{
+			Target:  target,
+			Content: a2aTask.Status.Error,
+			Phase:   statusError,
+		}
+	}
+	if err := r.updateStatus(ctx, obj, statusError); err != nil {
+		return ctrl.Result{}, err
+	}
+	// Requeue explicitly so the terminal-phase case computes the TTL-based
+	// requeue for garbage collection; the update predicate drops the watch
+	// event this status write would otherwise trigger.
+	return ctrl.Result{Requeue: true}, nil
+}
+
+func logQueryError(ctx context.Context, err error, obj *arkv1alpha1.Query, stage string) {
+	logf.FromContext(ctx).Error(err, queryExecutionFailedMsg,
+		"query", obj.Name, "namespace", obj.Namespace, "stage", stage)
 }
 
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
-	cleanupCache := true
-	startTime := time.Now()
 
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error(fmt.Errorf("query execution goroutine panic: %v", r), "Query execution goroutine panicked")
-		}
-		if cleanupCache {
-			r.operations.Delete(namespacedName)
-		}
-	}()
+	defer r.finishExecuteQueryAsync(opCtx, namespacedName, &obj)
 
-	opCtx = r.Eventing.QueryRecorder().InitializeQueryContext(opCtx, &obj)
-	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
-	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
+	// Re-fetch query to get latest status (may have been updated with A2A taskID for resumption)
+	if err := r.Get(opCtx, namespacedName, &obj); err != nil {
+		log.Error(err, "failed to re-fetch query for execution")
+		_ = r.updateStatus(opCtx, &obj, statusError)
+		return
+	}
 
-	opCtx = otelimpl.SetQueryInContext(opCtx, &obj)
+	// Debug: Log query status after re-fetch to verify taskID is present for resumptions
+	log.Info("Query status after re-fetch in executeQueryAsync",
+		"queryName", obj.Name,
+		"queryPhase", obj.Status.Phase,
+		"hasResponse", obj.Status.Response != nil,
+		"hasA2A", obj.Status.Response != nil && obj.Status.Response.A2A != nil,
+		"taskId", func() string {
+			if obj.Status.Response != nil && obj.Status.Response.A2A != nil {
+				return obj.Status.Response.A2A.TaskID
+			}
+			return "none"
+		}())
+
+	opCtx = r.initializeQueryExecutionContext(opCtx, &obj)
+
 	sessionId := obj.Spec.SessionId
 	if sessionId == "" {
 		sessionId = string(obj.UID)
 	}
-	if member, err := baggage.NewMember("ark.session.id", sessionId); err == nil {
-		if bag, err := baggage.New(member); err == nil {
-			opCtx = baggage.ContextWithBaggage(opCtx, bag)
-		}
-	}
 
-	queryInput := extractUserInput(opCtx, obj, r.Client)
-
-	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
+	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(
+		opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
 		telemetry.WithSpanKind(telemetry.SpanKindChain),
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrQueryName, obj.Name),
@@ -223,66 +583,57 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	impersonatedClient, err := r.getClientForQuery(obj)
 	if err != nil {
+		logQueryError(opCtx, err, &obj, stageGetClient)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
 
-	target, err := r.resolveTarget(opCtx, obj, impersonatedClient)
-	if err != nil {
-		dispatchSpan.RecordError(err)
-		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve target: %v", err), err, nil)
-		_ = r.updateStatus(opCtx, &obj, statusError)
-		return
-	}
-	dispatchSpan.SetAttributes(
-		telemetry.String(telemetry.AttrTargetType, target.Type),
-		telemetry.String(telemetry.AttrTargetName, target.Name),
-	)
-
-	address, err := r.resolveDispatchAddress(opCtx, *target, obj.Namespace)
-	if err != nil {
-		dispatchSpan.RecordError(err)
-		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve dispatch address: %v", err), err, nil)
-		_ = r.updateStatus(opCtx, &obj, statusError)
-		return
-	}
-	dispatchSpan.SetAttributes(telemetry.String("dispatch.address", address))
-
-	response, engineMeta, err := r.sendQueryA2A(opCtx, address, obj, *target)
-	if err != nil {
-		if stderrors.Is(err, context.Canceled) {
-			dispatchSpan.SetStatus(telemetry.StatusOk, "canceled")
-			r.Eventing.QueryRecorder().Cancel(opCtx, "QueryExecution", "Query execution canceled", nil)
-			return
+	if err := r.handleQueryDispatch(opCtx, &obj, dispatchSpan, impersonatedClient); err != nil {
+		// Executor-context deadline → TimedOutInExecution; anything else →
+		// generic QueryErrored via the normal error path.
+		if stderrors.Is(err, context.DeadlineExceeded) {
+			_ = r.failQueryOnTimeout(opCtx, &obj, reasonTimedOutInExecution, "Query timed out during execution")
+		} else {
+			_ = r.updateStatus(opCtx, &obj, statusError)
 		}
-		dispatchSpan.RecordError(err)
-		dispatchSpan.SetStatus(telemetry.StatusError, err.Error())
-		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
-		obj.Status.Response = createErrorResponse(*target, err)
-		_ = r.updateStatus(opCtx, &obj, statusError)
-		return
 	}
-	dispatchSpan.SetStatus(telemetry.StatusOk, "success")
+}
 
-	obj.Status.Response = response
-
-	if engineMeta.TokenUsage != nil {
-		obj.Status.TokenUsage = *engineMeta.TokenUsage
+func (r *QueryReconciler) finishExecuteQueryAsync(ctx context.Context, namespacedName types.NamespacedName, obj *arkv1alpha1.Query) {
+	resourceVersion := obj.ResourceVersion
+	if rec := recover(); rec != nil {
+		logf.FromContext(ctx).Error(
+			fmt.Errorf("query execution goroutine panic: %v", rec),
+			"Query execution goroutine panicked",
+			"stack", string(debug.Stack()),
+		)
+		resourceVersion = r.markQueryErroredAfterPanic(ctx, namespacedName, rec)
 	}
-	if engineMeta.ConversationId != "" {
-		obj.Status.ConversationId = engineMeta.ConversationId
-	} else if engineMeta.A2AContextID != "" {
-		obj.Status.ConversationId = engineMeta.A2AContextID
+	r.operations.Delete(namespacedName)
+	if r.sched != nil {
+		r.sched.release(namespacedName.Namespace)
 	}
+	r.signalRequeue(namespacedName, resourceVersion)
+}
 
-	queryStatus := r.determineQueryStatus(response)
-	duration := &metav1.Duration{Duration: time.Since(startTime)}
-	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
-
-	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
-
-	operationData := buildOperationData(target, queryInput)
-	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+// markQueryErroredAfterPanic sets the query status to error so it converges
+// instead of relying on the safety-net requeue to retry the panicking dispatch.
+func (r *QueryReconciler) markQueryErroredAfterPanic(ctx context.Context, namespacedName types.NamespacedName, rec any) string {
+	var q arkv1alpha1.Query
+	if err := r.Get(ctx, namespacedName, &q); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to fetch query after panic; leaving to safety-net requeue")
+		return ""
+	}
+	if q.Status.Response == nil {
+		q.Status.Response = &arkv1alpha1.Response{}
+	}
+	q.Status.Response.Phase = statusError
+	q.Status.Response.Content = fmt.Sprintf("query execution goroutine panicked: %v", rec)
+	if err := r.updateStatus(ctx, &q, statusError); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to mark query errored after panic; leaving to safety-net requeue")
+		return ""
+	}
+	return q.ResourceVersion
 }
 
 func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[string]string {
@@ -312,93 +663,105 @@ func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[
 
 func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target arkv1alpha1.QueryTarget, namespace string) (string, error) {
 	if target.Type != targetTypeAgent {
-		return r.CompletionsAddr, nil
+		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
 	var agentCRD arkv1alpha1.Agent
 	err := r.Get(ctx, types.NamespacedName{Name: target.Name, Namespace: namespace}, &agentCRD)
 	if err != nil {
-		return r.CompletionsAddr, nil
+		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
-	if agentCRD.Spec.ExecutionEngine == nil {
-		return r.CompletionsAddr, nil
+	if !arka2a.IsNamedEngine(agentCRD.Spec.ExecutionEngine) {
+		return r.resolveDefaultEngineAddress(ctx, namespace), nil
 	}
 
-	if agentCRD.Spec.ExecutionEngine.Name == arka2a.ExecutionEngineA2A {
-		return r.CompletionsAddr, nil
+	address, _, err := arka2a.ResolveExecutionEngineAddress(ctx, r.Client, agentCRD.Spec.ExecutionEngine, namespace)
+	if err != nil {
+		return "", err
 	}
 
-	engineName := agentCRD.Spec.ExecutionEngine.Name
-	engineNamespace := agentCRD.Spec.ExecutionEngine.Namespace
-	if engineNamespace == "" {
-		engineNamespace = namespace
-	}
+	return address, nil
+}
 
+// resolveDefaultEngineAddress returns the dispatch address for queries with no
+// named engine: a namespace-local "ark-completions" ExecutionEngine if present,
+// else the central --completions-addr.
+func (r *QueryReconciler) resolveDefaultEngineAddress(ctx context.Context, namespace string) string {
 	var engineCRD arkv1prealpha1.ExecutionEngine
-	if err := r.Get(ctx, types.NamespacedName{Name: engineName, Namespace: engineNamespace}, &engineCRD); err != nil {
-		return "", fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, engineNamespace, err)
+	key := types.NamespacedName{Name: defaultCompletionsEngineName, Namespace: namespace}
+	if err := r.Get(ctx, key, &engineCRD); err != nil {
+		if !errors.IsNotFound(err) {
+			logf.FromContext(ctx).Error(err, "failed to get default completions ExecutionEngine, falling back to central completions address",
+				"engine", defaultCompletionsEngineName, "namespace", namespace)
+		}
+		return r.CompletionsAddr
 	}
 
 	if engineCRD.Status.LastResolvedAddress == "" {
-		return "", fmt.Errorf("execution engine %s address not yet resolved", engineName)
+		return r.CompletionsAddr
 	}
 
-	return engineCRD.Status.LastResolvedAddress, nil
+	return engineCRD.Status.LastResolvedAddress
 }
 
 func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (*arkv1alpha1.Response, engineResponseMeta, error) {
 	log := logf.FromContext(ctx)
 
-	metadata := map[string]any{
-		arka2a.QueryExtensionMetadataKey: map[string]string{
-			"name":      query.Name,
-			"namespace": query.Namespace,
-		},
+	// Use conversationId from spec (user-provided) or status (from previous execution/resumption)
+	// This ensures we maintain the same conversation across approvals and resumptions
+	conversationId := query.Spec.ConversationId
+	if conversationId == "" {
+		conversationId = query.Status.ConversationId
 	}
 
-	userText := extractUserInput(ctx, query, r.Client)
-	var message protocol.Message
-	if query.Spec.ConversationId != "" {
-		conversationId := query.Spec.ConversationId
-		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(userText),
-		}, nil, &conversationId)
-	} else {
-		message = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(userText),
-		})
-	}
-	message.Metadata = metadata
-	message.Extensions = []string{arka2a.QueryExtensionURI}
+	message := arka2a.NewQueryExtensionMessage(
+		extractUserInput(ctx, query, r.Client),
+		conversationId,
+		arka2a.QueryExtensionRef{Name: query.Name, Namespace: query.Namespace},
+	)
 
-	timeout := 5 * time.Minute
+	timeout := defaultQueryTimeout
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
-
-	a2aClient, err := arka2a.CreateA2AClient(execCtx, r.Client, address, nil, query.Namespace, query.Name, nil)
-	if err != nil {
-		cancel()
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
-	}
 	defer cancel()
 
-	blocking := true
-	params := protocol.SendMessageParams{
-		RPCID:   protocol.GenerateRPCID(),
-		Message: message,
-		Configuration: &protocol.SendMessageConfiguration{
-			Blocking: &blocking,
-		},
-	}
-
-	result, err := a2aClient.SendMessage(execCtx, params)
+	result, err := arka2a.SendQueryExtensionMessage(execCtx, r.Client, address, nil, query.Namespace, query.Name, message, nil)
 	if err != nil {
 		return nil, engineResponseMeta{}, fmt.Errorf("query execution failed: %w", err)
 	}
 
+	// Check if result is a Task (approval required)
+	if task, ok := result.Result.(*protocol.Task); ok {
+		// Create A2ATask CRD for tracking
+		agentName := target.Name
+		if err := arka2a.HandleA2ATaskResponse(ctx, r.Client, task, agentName, query.Namespace, query.Name, nil); err != nil {
+			log.Error(err, "failed to create A2ATask resource")
+			return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2ATask: %w", err)
+		}
+
+		log.Info("A2A task created, query awaiting input", "taskId", task.ID, "state", task.Status.State)
+
+		// Extract any text from the task status or artifacts
+		responseText, _ := extractA2AResponseText(result)
+
+		response := &arkv1alpha1.Response{
+			Target:  target,
+			Content: responseText,
+			Raw:     "{}",
+			Phase:   statusInputRequired,
+			A2A: &arkv1alpha1.A2AMetadata{
+				ContextID: task.ContextID,
+				TaskID:    task.ID,
+			},
+		}
+
+		return response, engineResponseMeta{A2AContextID: task.ContextID, A2ATaskID: task.ID}, nil
+	}
+
+	// Normal message response path
 	responseText, err := extractA2AResponseText(result)
 	if err != nil {
 		return nil, engineResponseMeta{}, fmt.Errorf("failed to extract response: %w", err)
@@ -475,11 +838,13 @@ func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
 }
 
 type engineResponseMeta struct {
-	TokenUsage     *arkv1alpha1.TokenUsage
-	ConversationId string
-	MessagesRaw    string
-	A2AContextID   string
-	A2ATaskID      string
+	TokenUsage        *arkv1alpha1.TokenUsage
+	ConversationId    string
+	MessagesRaw       string
+	A2AContextID      string
+	A2ATaskID         string
+	MemoryUnavailable bool
+	MemoryDegraded    bool
 }
 
 func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
@@ -516,6 +881,14 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 
 	if convId, ok := arkMap["conversationId"].(string); ok {
 		responseMeta.ConversationId = convId
+	}
+
+	if memoryUnavailable, ok := arkMap["memoryUnavailable"].(bool); ok {
+		responseMeta.MemoryUnavailable = memoryUnavailable
+	}
+
+	if memoryDegraded, ok := arkMap["memoryDegraded"].(bool); ok {
+		responseMeta.MemoryDegraded = memoryDegraded
 	}
 
 	if messagesRaw, ok := arkMap["messages"]; ok {
@@ -557,6 +930,9 @@ func extractTokenUsage(arkMap map[string]any, responseMeta *engineResponseMeta) 
 	}
 	if v, ok := tokenData["total_tokens"].(float64); ok {
 		usage.TotalTokens = int64(v)
+	}
+	if v, ok := tokenData["cached_tokens"].(float64); ok {
+		usage.CachedTokens = int64(v)
 	}
 	if usage.TotalTokens > 0 {
 		responseMeta.TokenUsage = usage
@@ -648,9 +1024,77 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 	return nil, fmt.Errorf("no matching resources found for selector")
 }
 
+func isTerminalPhase(phase string) bool {
+	return arkv1alpha1.IsTerminalPhase(phase)
+}
+
+// isPreExecutionPhase reports whether a Query is still waiting for Ark to
+// dispatch work. spec.timeout is a wall-SLO on these phases; running is
+// bounded per-round by the executor context, and input-required by the
+// A2ATask approval timeout — neither counted here.
+func isPreExecutionPhase(phase string) bool {
+	switch phase {
+	case "", statusPending, statusProvisioning, statusQueued:
+		return true
+	}
+	return false
+}
+
+// queryCompletedAt returns the timestamp when the Query reached a terminal
+// phase, or nil if it has not. The QueryCompleted condition flips to
+// Status=True only on terminal phases (Done/Error/Canceled), and
+// setConditionCompleted writes LastTransitionTime explicitly each time, so
+// the field is a reliable post-terminal anchor for TTL retention.
+func queryCompletedAt(obj *arkv1alpha1.Query) *time.Time {
+	cond := meta.FindStatusCondition(obj.Status.Conditions, string(arkv1alpha1.QueryCompleted))
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		return nil
+	}
+	t := cond.LastTransitionTime.Time
+	return &t
+}
+
 func (r *QueryReconciler) setConditionCompleted(query *arkv1alpha1.Query, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
 		Type:               string(arkv1alpha1.QueryCompleted),
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: query.Generation,
+	})
+}
+
+func (r *QueryReconciler) setConditionMemoryUnavailable(query *arkv1alpha1.Query, unavailable bool) {
+	status := metav1.ConditionFalse
+	reason := "MemoryReachable"
+	message := "Conversation history was available for this query"
+	if unavailable {
+		status = metav1.ConditionTrue
+		reason = "NoMemoryBackend"
+		message = "conversationId was set but no Memory backend was reachable; conversation history was disabled for this query"
+	}
+	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
+		Type:               string(arkv1alpha1.QueryMemoryUnavailable),
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: query.Generation,
+	})
+}
+
+func (r *QueryReconciler) setConditionMemoryDegraded(query *arkv1alpha1.Query, degraded bool) {
+	status := metav1.ConditionFalse
+	reason := "MemoryHealthy"
+	message := "Conversation history was read from memory for this query"
+	if degraded {
+		status = metav1.ConditionTrue
+		reason = "GetMessagesFailed"
+		message = "failed to read conversation history from the memory backend; the query ran without prior context. See the MemoryGetMessagesError event for the underlying error"
+	}
+	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
+		Type:               string(arkv1alpha1.QueryMemoryDegraded),
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
@@ -667,6 +1111,8 @@ func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status 
 	switch status {
 	case statusRunning:
 		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
+	case statusQueued:
+		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryQueued", "Query is queued waiting for controller capacity")
 	case statusDone:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
 	case statusError:
@@ -680,10 +1126,30 @@ func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status 
 	}
 }
 
+// memoryConditionTypes are set on the in-memory Query by the dispatch path and
+// must survive the refetch inside mutateStatus. They are the only conditions
+// this reconcile knows more about than the API server does; every other
+// condition is authored inside the mutator against the refetched object.
+var memoryConditionTypes = []arkv1alpha1.QueryConditionType{
+	arkv1alpha1.QueryMemoryUnavailable,
+	arkv1alpha1.QueryMemoryDegraded,
+}
+
+func memoryConditionsFrom(query *arkv1alpha1.Query) []metav1.Condition {
+	var conditions []metav1.Condition
+	for _, condType := range memoryConditionTypes {
+		if cond := meta.FindStatusCondition(query.Status.Conditions, string(condType)); cond != nil {
+			conditions = append(conditions, *cond)
+		}
+	}
+	return conditions
+}
+
 type savedQueryStatus struct {
-	response       *arkv1alpha1.Response
-	tokenUsage     arkv1alpha1.TokenUsage
-	conversationId string
+	response         *arkv1alpha1.Response
+	tokenUsage       arkv1alpha1.TokenUsage
+	conversationId   string
+	memoryConditions []metav1.Condition
 }
 
 func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
@@ -694,42 +1160,132 @@ func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
 	if s.conversationId != "" {
 		query.Status.ConversationId = s.conversationId
 	}
+	for _, cond := range s.memoryConditions {
+		meta.SetStatusCondition(&query.Status.Conditions, cond)
+	}
 }
 
 func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
-	if ctx.Err() != nil {
-		return nil
-	}
+	// This reconcile holds the freshest Response/TokenUsage/ConversationId and
+	// memory conditions in memory; the refetch inside mutateStatus would drop
+	// them, so re-apply the snapshot onto the refetched object before writing.
 	saved := savedQueryStatus{
-		response:       query.Status.Response,
-		tokenUsage:     query.Status.TokenUsage,
-		conversationId: query.Status.ConversationId,
+		response:         query.Status.Response,
+		tokenUsage:       query.Status.TokenUsage,
+		conversationId:   query.Status.ConversationId,
+		memoryConditions: memoryConditionsFrom(query),
 	}
+	// Do NOT clear A2A taskID when transitioning from input-required to running.
+	// The executor needs the taskID to detect this is a resumption after approval
+	// and clears it after processing (handler.go).
+	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
+		if status == statusCanceled && isTerminalPhase(q.Status.Phase) {
+			return false
+		}
+		saved.restoreOnto(q)
+		q.Status.Phase = status
+		r.setConditionForPhase(q, status)
+		if duration != nil {
+			q.Status.Duration = duration
+		}
+		return true
+	}, "status="+status)
+}
+
+// failQueryOnTimeout transitions a Query to phase: error with a specific
+// TimedOutIn{Queue,Execution} condition reason, and mirrors the message
+// into Status.Response.Content so it renders in the same slot as executor
+// errors (chat UI, dashboard, kubectl describe). Idempotent on terminal.
+func (r *QueryReconciler) failQueryOnTimeout(ctx context.Context, query *arkv1alpha1.Query, reason, message string) error {
+	return r.mutateStatus(ctx, query, func(q *arkv1alpha1.Query) bool {
+		if isTerminalPhase(q.Status.Phase) {
+			// A completing executor won the race. Decline the write entirely so
+			// mutateStatus does not persist a snapshot that would regress the
+			// done query's Response/TokenUsage.
+			return false
+		}
+		q.Status.Phase = statusError
+		r.setConditionCompleted(q, metav1.ConditionTrue, reason, message)
+
+		// Overwrite Content/Phase with the timeout signal; preserve Target,
+		// Raw, and A2A metadata so the A2ATask correlation (taskID/contextID)
+		// and raw payload survive. Read from the refetched object: it holds the
+		// last persisted status, whereas the caller's Response may be an
+		// in-memory, unpersisted A2A-less error scratch value set by the
+		// dispatch error path that would drop the correlation. The cache strips
+		// Raw only in terminal phases, and this arm runs only on a non-terminal
+		// Query, so the refetched Raw is intact here.
+		target := arkv1alpha1.QueryTarget{}
+		var raw string
+		var a2a *arkv1alpha1.A2AMetadata
+		switch {
+		case q.Status.Response != nil:
+			target = q.Status.Response.Target
+			raw = q.Status.Response.Raw
+			a2a = q.Status.Response.A2A
+		case q.Spec.Target != nil:
+			target = *q.Spec.Target
+		}
+		q.Status.Response = &arkv1alpha1.Response{
+			Target:  target,
+			Content: message,
+			Raw:     raw,
+			Phase:   statusError,
+			A2A:     a2a,
+		}
+		return true
+	}, "timeout reason="+reason)
+}
+
+// mutateStatus is the shared retry-and-fetch shell used by updateStatus and
+// failQueryOnTimeout. It fetches the latest Query, runs the caller-supplied
+// mutator against the refetched object, then persists via Status().Update with
+// retry-on-conflict semantics. The mutator returns false to decline the write,
+// leaving the refetched object untouched (used to skip clobbering a query that
+// a concurrent writer already moved to a terminal phase). Callers own which
+// fields to preserve across the refetch. logCtx identifies the writer in logs.
+func (r *QueryReconciler) mutateStatus(ctx context.Context, query *arkv1alpha1.Query, mutate func(*arkv1alpha1.Query) bool, logCtx string) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, query); err != nil {
-		if errors.IsNotFound(err) {
+	return retry.OnError(retry.DefaultBackoff, isRetriableStatusUpdateErr, func() error {
+		if ctx.Err() != nil {
 			return nil
+		}
+		if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, query); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		if !mutate(query) {
+			return nil
+		}
+		err := r.Status().Update(ctx, query)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if !isRetriableStatusUpdateErr(err) {
+				logf.FromContext(ctx).Error(err, "failed to update query status", "context", logCtx)
+			}
 		}
 		return err
-	}
-	query.Status.Phase = status
-	saved.restoreOnto(query)
-	r.setConditionForPhase(query, status)
-	if duration != nil {
-		query.Status.Duration = duration
-	}
-	err := r.Status().Update(ctx, query)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		if !errors.IsConflict(err) {
-			logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
-		}
-	}
-	return err
+	})
+}
+
+// isRetriableStatusUpdateErr reports whether a status write should be retried.
+// Beyond optimistic-lock conflicts, it covers the transient API-server errors
+// that arise under load (rolling upgrades, etcd leader election, API Priority &
+// Fairness throttling) — exactly when a dropped terminal write would silently
+// lose a query result.
+func isRetriableStatusUpdateErr(err error) bool {
+	return errors.IsConflict(err) ||
+		errors.IsServerTimeout(err) ||
+		errors.IsTimeout(err) ||
+		errors.IsTooManyRequests(err) ||
+		errors.IsInternalError(err) ||
+		errors.IsServiceUnavailable(err)
 }
 
 func createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1.Response {
@@ -748,13 +1304,18 @@ func createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1
 }
 
 func (r *QueryReconciler) determineQueryStatus(response *arkv1alpha1.Response) string {
-	if response != nil && response.Phase == statusError {
-		return statusError
+	if response != nil {
+		if response.Phase == statusError {
+			return statusError
+		}
+		if response.Phase == statusInputRequired {
+			return statusInputRequired
+		}
 	}
 	return statusDone
 }
 
-func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) {
+func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) error {
 	log := logf.FromContext(ctx)
 	log.Info("finalizing query", "name", query.Name, "namespace", query.Namespace)
 
@@ -766,6 +1327,137 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 		r.operations.Delete(nsName)
 		log.Info("cancelled running operation for query", "name", query.Name, "namespace", query.Namespace)
 	}
+
+	return stderrors.Join(
+		r.deleteBrokerMessages(ctx, query),
+		r.deleteBrokerEvents(ctx, query),
+		r.deleteBrokerSessionQuery(ctx, query),
+	)
+}
+
+func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1alpha1.Query) error {
+	log := logf.FromContext(ctx)
+
+	var memoryName, memoryNamespace string
+	if query.Spec.Memory != nil {
+		memoryName = query.Spec.Memory.Name
+		memoryNamespace = query.Spec.Memory.Namespace
+		if memoryNamespace == "" {
+			memoryNamespace = query.Namespace
+		}
+	} else {
+		memoryName = "default" //nolint:goconst
+		memoryNamespace = query.Namespace
+	}
+
+	var memory arkv1alpha1.Memory
+	if err := r.Get(ctx, client.ObjectKey{Name: memoryName, Namespace: memoryNamespace}, &memory); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			log.Info("memory not found, skipping broker message cleanup", "memory", memoryName, "query", query.Name)
+			return nil
+		}
+		return fmt.Errorf("failed to get memory %s/%s: %w", memoryNamespace, memoryName, err)
+	}
+
+	var baseURL string
+	if memory.Status.LastResolvedAddress != nil && *memory.Status.LastResolvedAddress != "" {
+		baseURL = strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/")
+	} else {
+		resolver := common.NewValueSourceResolver(r.Client)
+		resolved, err := resolver.ResolveValueSource(ctx, memory.Spec.Address, memoryNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to resolve memory address: %w", err)
+		}
+		baseURL = strings.TrimSuffix(resolved, "/")
+	}
+
+	path := fmt.Sprintf(common.QueryMessagesEndpointFmt, url.PathEscape(query.Name))
+	return deleteBrokerResource(ctx, baseURL, path, "messages", query.Name)
+}
+
+// deleteBrokerResource issues a DELETE for path against baseURL and interprets
+// the response the way every broker cleanup call needs to: 404/405 means the
+// broker doesn't support this delete (skip, not an error), any other non-2xx
+// is a real failure the finalizer should retry. resource is used only for
+// logging (e.g. "messages", "events").
+func deleteBrokerResource(ctx context.Context, baseURL, path, resource, queryName string) error {
+	log := logf.FromContext(ctx)
+
+	requestURL := strings.TrimSuffix(baseURL, "/") + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %w", err)
+	}
+	req.Header.Set("User-Agent", "ark-controller/1.0")
+
+	httpClient := common.NewHTTPClientWithLogging()
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		log.Info("broker does not support delete request, skipping", "resource", resource, "query", queryName, "status", resp.StatusCode)
+		return nil
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("broker at %s returned HTTP %d deleting %s for query %s", baseURL, resp.StatusCode, resource, queryName)
+	}
+
+	log.Info("deleted broker resource for query", "resource", resource, "query", queryName)
+	return nil
+}
+
+// resolveBrokerEndpoint resolves the broker endpoint for namespace, returning
+// "" when no broker is configured there.
+func (r *QueryReconciler) resolveBrokerEndpoint(ctx context.Context, namespace string) (string, error) {
+	if r.brokerEndpoint != nil {
+		return r.brokerEndpoint(ctx, namespace)
+	}
+	return routing.ResolveBrokerEndpoint(ctx, r.Client, namespace)
+}
+
+// deleteBrokerQueryResource removes one query-scoped resource from the broker
+// serving query's namespace. Unlike deleteBrokerMessages this does not go
+// through the Memory contract: events and sessions are broker concerns, reached
+// at the endpoint discovered via the ark-config-broker ConfigMap (see
+// internal/eventing/broker). key is what the broker files the resource under,
+// and it is the one thing that differs between the callers.
+func (r *QueryReconciler) deleteBrokerQueryResource(ctx context.Context, query *arkv1alpha1.Query, pathFmt, resource, key string) error {
+	log := logf.FromContext(ctx)
+
+	endpoint, err := r.resolveBrokerEndpoint(ctx, query.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to resolve broker endpoint: %w", err)
+	}
+	if endpoint == "" {
+		log.Info("no broker configured for namespace, skipping broker cleanup", "namespace", query.Namespace, "resource", resource, "query", query.Name)
+		return nil
+	}
+
+	path := fmt.Sprintf(pathFmt, url.PathEscape(key))
+	return deleteBrokerResource(ctx, endpoint, path, resource, query.Name)
+}
+
+// deleteBrokerEvents removes the broker's operation events for query, keyed by
+// the Query UID rather than its name (see operation_tracker.go).
+func (r *QueryReconciler) deleteBrokerEvents(ctx context.Context, query *arkv1alpha1.Query) error {
+	return r.deleteBrokerQueryResource(ctx, query, common.QueryEventsEndpointFmt, "events", string(query.UID))
+}
+
+// deleteBrokerSessionQuery removes query's row from the broker's sessions read
+// model, keyed by the Query NAME and not the UID: session_queries.query_id is
+// written from the event's queryName field, and the sessions payload carries no
+// UID at all, so keying this on query.UID would match no rows and still get a
+// 200 back - the cleanup would silently do nothing.
+func (r *QueryReconciler) deleteBrokerSessionQuery(ctx context.Context, query *arkv1alpha1.Query) error {
+	return r.deleteBrokerQueryResource(ctx, query, common.QuerySessionsEndpointFmt, "session query", query.Name)
+}
+
+func (r *QueryReconciler) initImpersonatedClientCache() {
+	r.saClients = newImpersonatedClientCache(defaultMaxImpersonatedClients, r.buildImpersonatedClient)
 }
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
@@ -773,14 +1465,27 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 	if serviceAccount == "" {
 		return r.Client, nil
 	}
+	r.saClientsOnce.Do(r.initImpersonatedClientCache)
+	return r.saClients.get(query.Namespace, serviceAccount)
+}
 
+// buildImpersonatedClient returns a direct (non-cached) client for the identity.
+// Reads hit the API server rather than a per-identity informer cache: caching
+// would need a list+watch per service account, and under the cache's entry
+// bound that is a memory hazard, so we trade a live read for bounded memory.
+func (r *QueryReconciler) buildImpersonatedClient(namespace, serviceAccount string) (client.Client, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
 
+	// Disable the client-side rate limiter (InClusterConfig would default it to
+	// 5 QPS) and rely on server-side API Priority and Fairness, as
+	// ctrl.GetConfigOrDie does; this client is now shared across queries.
+	cfg.QPS = -1
+
 	cfg.Impersonate = rest.ImpersonationConfig{
-		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", query.Namespace, serviceAccount),
+		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, serviceAccount),
 	}
 
 	impersonatedClient, err := client.New(cfg, client.Options{
@@ -788,10 +1493,135 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 		Mapper: r.RESTMapper(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", query.Namespace, serviceAccount, err)
+		return nil, fmt.Errorf("failed to create impersonated client for service account %s/%s: %w", namespace, serviceAccount, err)
 	}
 
 	return impersonatedClient, nil
+}
+
+// handleResumableDenial runs the resumption path for a denial the agent can
+// react to (explicit reject or timeout-reject). It enforces the cascade cap to
+// stop an LLM that keeps retrying a denied tool from spinning forever.
+func (r *QueryReconciler) handleResumableDenial(ctx context.Context, obj *arkv1alpha1.Query, taskID string) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	count := readApprovalCascadeCount(obj)
+	if count >= maxApprovalCascades {
+		log.Info("approval cascade cap reached, ending query", "taskId", taskID, "count", count, "cap", maxApprovalCascades)
+		target := arkv1alpha1.QueryTarget{}
+		if obj.Status.Response != nil {
+			target = obj.Status.Response.Target
+		}
+		obj.Status.Response = &arkv1alpha1.Response{
+			Target:  target,
+			Content: fmt.Sprintf("Approval cascade limit reached (%d). The agent kept retrying a denied tool; aborting.", maxApprovalCascades),
+			Phase:   statusError,
+		}
+		if err := r.updateStatus(ctx, obj, statusError); err != nil {
+			return ctrl.Result{}, err
+		}
+		// Requeue explicitly so the terminal-phase case computes the
+		// TTL-based requeue for GC; the update predicate drops the watch
+		// event this status write would otherwise trigger.
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	log.Info("A2ATask denied (resumable), resuming query execution for graceful handling", "taskId", taskID, "cascadeCount", count)
+	if err := r.incrementApprovalCascadeCount(ctx, obj, count); err != nil {
+		log.Error(err, "failed to increment approval cascade counter")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.stampRoundAnchor(ctx, obj); err != nil {
+		log.Error(err, "failed to stamp round anchor for resumed round")
+		return ctrl.Result{}, err
+	}
+
+	r.clearOperationCacheForResumption(ctx, obj, "approval denial")
+	if err := r.updateStatus(ctx, obj, statusRunning); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// readApprovalCascadeCount returns the number of times the agent has been
+// resumed after an approval denial on this query. Unparseable annotations
+// are treated as zero so the cap re-engages from scratch.
+func readApprovalCascadeCount(query *arkv1alpha1.Query) int {
+	if query.Annotations == nil {
+		return 0
+	}
+	value, ok := query.Annotations[annotations.ApprovalCascadeCount]
+	if !ok {
+		return 0
+	}
+	count, err := strconv.Atoi(value)
+	if err != nil || count < 0 {
+		return 0
+	}
+	return count
+}
+
+// incrementApprovalCascadeCount persists count+1 to the query annotations.
+// Uses retry-on-conflict so concurrent reconciles don't drop the increment.
+func (r *QueryReconciler) incrementApprovalCascadeCount(ctx context.Context, query *arkv1alpha1.Query, current int) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &arkv1alpha1.Query{}
+		if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, latest); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		if latest.Annotations == nil {
+			latest.Annotations = map[string]string{}
+		}
+		latest.Annotations[annotations.ApprovalCascadeCount] = strconv.Itoa(current + 1)
+		if err := r.Update(ctx, latest); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		query.Annotations = latest.Annotations
+		query.ResourceVersion = latest.ResourceVersion
+		return nil
+	})
+}
+
+// resetApprovalCascadeCount removes the cascade annotation after a successful
+// approval so the cap doesn't penalise later legitimate denials.
+func (r *QueryReconciler) resetApprovalCascadeCount(ctx context.Context, query *arkv1alpha1.Query) error {
+	if query.Annotations == nil {
+		return nil
+	}
+	if _, present := query.Annotations[annotations.ApprovalCascadeCount]; !present {
+		return nil
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return r.removeApprovalCascadeAnnotation(ctx, query)
+	})
+}
+
+// removeApprovalCascadeAnnotation deletes the cascade annotation from the latest
+// version of the query. A deleted query is treated as success (nothing to reset).
+func (r *QueryReconciler) removeApprovalCascadeAnnotation(ctx context.Context, query *arkv1alpha1.Query) error {
+	latest := &arkv1alpha1.Query{}
+	if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, latest); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if latest.Annotations == nil {
+		return nil
+	}
+	if _, present := latest.Annotations[annotations.ApprovalCascadeCount]; !present {
+		return nil
+	}
+	delete(latest.Annotations, annotations.ApprovalCascadeCount)
+	if err := r.Update(ctx, latest); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	query.Annotations = latest.Annotations
+	query.ResourceVersion = latest.ResourceVersion
+	return nil
 }
 
 func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.NamespacedName) {
@@ -807,8 +1637,211 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 }
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.initSemaphore()
+	return setupQueryController(mgr, r, r)
+}
+
+// setupQueryController takes the reconciler to complete with separately from
+// r so a test can wrap it (e.g. to count Reconcile invocations) while still
+// using r for the mapper function and controller options.
+func setupQueryController(mgr ctrl.Manager, r *QueryReconciler, rec reconcile.Reconciler) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&arkv1alpha1.Query{}).
+		For(&arkv1alpha1.Query{}, builder.WithPredicates(queryUpdatePredicate())).
+		WatchesRawSource(source.Channel(r.requeueCh, &handler.EnqueueRequestForObject{})).
+		Watches(
+			&arkv1alpha1.A2ATask{},
+			handler.EnqueueRequestsFromMapFunc(r.findQueriesForA2ATask),
+		).
 		Named("query").
-		Complete(r)
+		WithOptions(r.buildControllerOptions()).
+		Complete(rec)
+}
+
+// queryUpdatePredicate drops Update events that only changed Status
+func queryUpdatePredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldQuery, okOld := e.ObjectOld.(*arkv1alpha1.Query)
+			newQuery, okNew := e.ObjectNew.(*arkv1alpha1.Query)
+			if !okOld || !okNew {
+				return true
+			}
+			old := oldQuery.DeepCopy()
+			newQ := newQuery.DeepCopy()
+			old.Status = arkv1alpha1.QueryStatus{}
+			newQ.Status = arkv1alpha1.QueryStatus{}
+			old.ResourceVersion = ""
+			newQ.ResourceVersion = ""
+			old.ManagedFields = nil
+			newQ.ManagedFields = nil
+			return !equality.Semantic.DeepEqual(old, newQ)
+		},
+	}
+}
+
+// findQueriesForA2ATask maps an A2ATask to its associated Query for reconciliation
+func (r *QueryReconciler) findQueriesForA2ATask(ctx context.Context, obj client.Object) []ctrl.Request {
+	task := obj.(*arkv1alpha1.A2ATask)
+
+	if task.Spec.QueryRef.Name == "" {
+		return nil
+	}
+
+	return []ctrl.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Name:      task.Spec.QueryRef.Name,
+				Namespace: task.Spec.QueryRef.Namespace,
+			},
+		},
+	}
+}
+
+// clearOperationCacheForResumption clears the operation cache to allow new execution goroutine for resumption
+func (r *QueryReconciler) clearOperationCacheForResumption(ctx context.Context, obj *arkv1alpha1.Query, reason string) {
+	log := logf.FromContext(ctx)
+	nsName := types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}
+	if cancel, ok := r.operations.LoadAndDelete(nsName); ok {
+		if cancelFunc, ok := cancel.(context.CancelFunc); ok {
+			cancelFunc()
+		}
+		log.Info("Cleared cached operation for resumption", "query", obj.Name, "reason", reason)
+	}
+}
+
+// initializeQueryExecutionContext sets up the execution context with tracing and baggage
+func (r *QueryReconciler) initializeQueryExecutionContext(ctx context.Context, obj *arkv1alpha1.Query) context.Context {
+	ctx = r.Eventing.QueryRecorder().InitializeQueryContext(ctx, obj)
+	ctx = r.Eventing.QueryRecorder().StartTokenCollection(ctx)
+	ctx = r.Eventing.QueryRecorder().Start(ctx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
+	ctx = otelimpl.SetQueryInContext(ctx, obj)
+
+	sessionId := obj.Spec.SessionId
+	if sessionId == "" {
+		sessionId = string(obj.UID)
+	}
+
+	if member, err := baggage.NewMember("ark.session.id", sessionId); err == nil {
+		if bag, err := baggage.New(member); err == nil {
+			ctx = baggage.ContextWithBaggage(ctx, bag)
+		}
+	}
+
+	return ctx
+}
+
+// handleQueryDispatch resolves target and address, sends the query, and processes the response
+func (r *QueryReconciler) handleQueryDispatch(
+	opCtx context.Context,
+	obj *arkv1alpha1.Query,
+	dispatchSpan telemetry.Span,
+	impersonatedClient client.Client,
+) error {
+	log := logf.FromContext(opCtx)
+	startTime := time.Now()
+
+	target, err := r.resolveTarget(opCtx, *obj, impersonatedClient)
+	if err != nil {
+		logQueryError(opCtx, err, obj, stageResolveTarget)
+		dispatchSpan.RecordError(err)
+		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve target: %v", err), err, nil)
+		return err
+	}
+	dispatchSpan.SetAttributes(
+		telemetry.String(telemetry.AttrTargetType, target.Type),
+		telemetry.String(telemetry.AttrTargetName, target.Name),
+	)
+
+	address, err := r.resolveDispatchAddress(opCtx, *target, obj.Namespace)
+	if err != nil {
+		logQueryError(opCtx, err, obj, stageResolveDispatchAddress)
+		dispatchSpan.RecordError(err)
+		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve dispatch address: %v", err), err, nil)
+		return err
+	}
+	dispatchSpan.SetAttributes(telemetry.String("dispatch.address", address))
+
+	response, engineMeta, err := r.sendQueryA2A(opCtx, address, *obj, *target)
+	if err != nil {
+		if stderrors.Is(err, context.Canceled) {
+			dispatchSpan.SetStatus(telemetry.StatusOk, "canceled")
+			r.Eventing.QueryRecorder().Cancel(opCtx, "QueryExecution", "Query execution canceled", nil)
+			return err
+		}
+		logQueryError(opCtx, err, obj, stageDispatch)
+		dispatchSpan.RecordError(err)
+		dispatchSpan.SetStatus(telemetry.StatusError, err.Error())
+		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
+		obj.Status.Response = createErrorResponse(*target, err)
+		return err
+	}
+	dispatchSpan.SetStatus(telemetry.StatusOk, "success")
+
+	obj.Status.Response = response
+
+	if engineMeta.TokenUsage != nil {
+		obj.Status.TokenUsage = *engineMeta.TokenUsage
+	}
+	if engineMeta.ConversationId != "" {
+		obj.Status.ConversationId = engineMeta.ConversationId
+	} else if engineMeta.A2AContextID != "" {
+		obj.Status.ConversationId = engineMeta.A2AContextID
+	}
+
+	r.setConditionMemoryUnavailable(obj, engineMeta.MemoryUnavailable)
+	r.setConditionMemoryDegraded(obj, engineMeta.MemoryDegraded)
+
+	queryStatus := r.determineQueryStatus(response)
+	duration := &metav1.Duration{Duration: time.Since(startTime)}
+
+	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
+
+	queryInput := extractUserInput(opCtx, *obj, r.Client)
+	operationData := buildOperationData(target, queryInput)
+	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+
+	// Persist the terminal result. This is the only place .status.response,
+	// .status.tokenUsage and .status.duration are written, so a dropped error
+	// here silently loses the result. We surface it (the write itself already
+	// retries transient failures); we must not return it, or executeQueryAsync
+	// would flip this successful query to error.
+	if err := r.updateStatusWithDuration(opCtx, obj, queryStatus, duration); err != nil {
+		log.Error(err, "failed to persist terminal query status; query will be re-reconciled",
+			"query", obj.Name, "status", queryStatus)
+	}
+
+	return nil
+}
+
+func (r *QueryReconciler) initSemaphore() {
+	if r.MaxConcurrentQueries > 0 {
+		r.sched = newFairScheduler(r.MaxConcurrentQueries, queryFairnessWaitWindow)
+	}
+	r.requeueCh = make(chan event.GenericEvent, requeueChannelBufferSize)
+}
+
+// signalRequeue enqueues an immediate reconcile for namespacedName. Non-blocking:
+// a full buffer just falls back to the safety-net requeue.
+func (r *QueryReconciler) signalRequeue(namespacedName types.NamespacedName, resourceVersion string) {
+	if r.requeueCh == nil {
+		return
+	}
+	if resourceVersion != "" {
+		r.pendingFreshReads.Store(namespacedName, resourceVersion)
+	}
+	obj := &arkv1alpha1.Query{}
+	obj.Name = namespacedName.Name
+	obj.Namespace = namespacedName.Namespace
+	select {
+	case r.requeueCh <- event.GenericEvent{Object: obj}:
+	default:
+	}
+}
+
+func (r *QueryReconciler) buildControllerOptions() controller.Options {
+	opts := controller.Options{}
+	if r.MaxConcurrentReconciles > 0 {
+		opts.MaxConcurrentReconciles = r.MaxConcurrentReconciles
+	}
+	return opts
 }

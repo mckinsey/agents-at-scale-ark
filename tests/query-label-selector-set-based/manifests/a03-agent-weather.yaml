@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: test-agent-weather
+  labels:
+    category: weather
+    environment: production
+    type: specialist
+spec:
+  modelRef:
+    name: test-model-mock
+  prompt: |
+    You are a weather specialist agent.
+    Provide accurate weather information and forecasts.

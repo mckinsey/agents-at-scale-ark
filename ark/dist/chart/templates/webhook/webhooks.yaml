@@ -1,4 +1,4 @@
-{{- if .Values.webhook.enable }}
+{{- if eq (include "chart.arkWebhooksEnabled" .) "true" }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
@@ -17,6 +17,7 @@ webhooks:
       - key: "ark.mckinsey.com/skip-webhook-validation"
         operator: "NotIn"
         values: ["true"]
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -41,6 +42,7 @@ webhooks:
         resources:
           - agents
   - name: mmodel-v1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -65,6 +67,7 @@ webhooks:
         resources:
           - models
   - name: mquery-v1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -89,6 +92,7 @@ webhooks:
         resources:
           - queries
   - name: mteam-v1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -131,6 +135,7 @@ webhooks:
       - key: "ark.mckinsey.com/skip-webhook-validation"
         operator: "NotIn"
         values: ["true"]
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -155,6 +160,7 @@ webhooks:
         resources:
           - agents
   - name: varkconfig-v1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -179,6 +185,7 @@ webhooks:
         resources:
           - arkconfigs
   - name: vmcpserver-v1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -201,8 +208,9 @@ webhooks:
         apiVersions:
           - v1alpha1
         resources:
-          - mcpserver
+          - mcpservers
   - name: vmodel-v1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -227,6 +235,7 @@ webhooks:
         resources:
           - models
   - name: vquery-v1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -251,6 +260,7 @@ webhooks:
         resources:
           - queries
   - name: vteam-v1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -280,6 +290,7 @@ webhooks:
       - key: "ark.mckinsey.com/skip-webhook-validation"
         operator: "NotIn"
         values: ["true"]
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -304,6 +315,7 @@ webhooks:
         resources:
           - tools
   - name: va2aserver-v1prealpha1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"
@@ -328,6 +340,7 @@ webhooks:
         resources:
           - a2aservers
   - name: vexecutionengine-v1prealpha1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
     - name: not-being-deleted
       expression: "!has(object.metadata.deletionTimestamp)"

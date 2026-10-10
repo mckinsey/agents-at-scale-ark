@@ -8,11 +8,15 @@ import {
 /**
  * Configuration for AWS Bedrock models.
  */
+export type BedrockAuthMethod = 'api-key' | 'iam';
+
 export interface BedrockConfig extends BaseProviderConfig {
   type: 'bedrock';
   region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
+  authMethod: BedrockAuthMethod;
+  apiKey?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
   sessionToken?: string;
   modelArn?: string;
 }
@@ -22,6 +26,8 @@ export interface BedrockConfig extends BaseProviderConfig {
  */
 export interface BedrockCollectorOptions extends BaseCollectorOptions {
   region?: string;
+  authMethod?: BedrockAuthMethod;
+  apiKey?: string;
   accessKeyId?: string;
   secretAccessKey?: string;
   sessionToken?: string;
@@ -61,58 +67,107 @@ export class BedrockConfigCollector implements ProviderConfigCollector {
       throw new Error('region is required');
     }
 
-    let accessKeyId = bedrockOptions.accessKeyId;
-    if (!accessKeyId) {
+    let authMethod = bedrockOptions.authMethod;
+    if (!authMethod) {
       const answer = await inquirer.prompt([
         {
-          type: 'input',
-          name: 'accessKeyId',
-          message: 'AWS access key ID:',
-          validate: (input) => {
-            if (!input) return 'access key ID is required';
-            return true;
+          type: 'list',
+          name: 'authMethod',
+          message: 'Authentication method:',
+          choices: [
+            {name: 'API key (bearer token)', value: 'api-key'},
+            {name: 'IAM credentials', value: 'iam'},
+          ],
+          default: 'iam',
+        },
+      ]);
+      authMethod = answer.authMethod;
+    }
+
+    if (!authMethod) {
+      throw new Error('authentication method is required');
+    }
+
+    let apiKey: string | undefined;
+    let accessKeyId: string | undefined;
+    let secretAccessKey: string | undefined;
+    let sessionToken: string | undefined;
+
+    if (authMethod === 'api-key') {
+      apiKey = bedrockOptions.apiKey;
+      if (!apiKey) {
+        const answer = await inquirer.prompt([
+          {
+            type: 'password',
+            name: 'apiKey',
+            message: 'Bedrock API key:',
+            mask: '*',
+            validate: (input) => {
+              if (!input) return 'API key is required';
+              return true;
+            },
           },
-        },
-      ]);
-      accessKeyId = answer.accessKeyId;
-    }
+        ]);
+        apiKey = answer.apiKey;
+      }
 
-    if (!accessKeyId) {
-      throw new Error('access key ID is required');
-    }
-
-    let secretAccessKey = bedrockOptions.secretAccessKey;
-    if (!secretAccessKey) {
-      const answer = await inquirer.prompt([
-        {
-          type: 'password',
-          name: 'secretAccessKey',
-          message: 'AWS secret access key:',
-          mask: '*',
-          validate: (input) => {
-            if (!input) return 'secret access key is required';
-            return true;
+      if (!apiKey) {
+        throw new Error('API key is required');
+      }
+    } else {
+      accessKeyId = bedrockOptions.accessKeyId;
+      if (!accessKeyId) {
+        const answer = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'accessKeyId',
+            message: 'AWS access key ID:',
+            validate: (input) => {
+              if (!input) return 'access key ID is required';
+              return true;
+            },
           },
-        },
-      ]);
-      secretAccessKey = answer.secretAccessKey;
-    }
+        ]);
+        accessKeyId = answer.accessKeyId;
+      }
 
-    if (!secretAccessKey) {
-      throw new Error('secret access key is required');
-    }
+      if (!accessKeyId) {
+        throw new Error('access key ID is required');
+      }
 
-    let sessionToken = bedrockOptions.sessionToken;
-    if (!sessionToken) {
-      const answer = await inquirer.prompt([
-        {
-          type: 'password',
-          name: 'sessionToken',
-          message: 'AWS session token (optional, press enter to skip):',
-          mask: '*',
-        },
-      ]);
-      sessionToken = answer.sessionToken;
+      secretAccessKey = bedrockOptions.secretAccessKey;
+      if (!secretAccessKey) {
+        const answer = await inquirer.prompt([
+          {
+            type: 'password',
+            name: 'secretAccessKey',
+            message: 'AWS secret access key:',
+            mask: '*',
+            validate: (input) => {
+              if (!input) return 'secret access key is required';
+              return true;
+            },
+          },
+        ]);
+        secretAccessKey = answer.secretAccessKey;
+      }
+
+      if (!secretAccessKey) {
+        throw new Error('secret access key is required');
+      }
+
+      sessionToken = bedrockOptions.sessionToken;
+      if (!sessionToken) {
+        const answer = await inquirer.prompt([
+          {
+            type: 'password',
+            name: 'sessionToken',
+            message: 'AWS session token (optional, press enter to skip):',
+            mask: '*',
+          },
+        ]);
+        sessionToken = answer.sessionToken;
+      }
     }
 
     let modelArn = bedrockOptions.modelArn;
@@ -132,6 +187,8 @@ export class BedrockConfigCollector implements ProviderConfigCollector {
       modelValue: options.model!,
       secretName: '',
       region,
+      authMethod,
+      apiKey,
       accessKeyId,
       secretAccessKey,
       sessionToken: sessionToken || undefined,

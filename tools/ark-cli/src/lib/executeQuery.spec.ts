@@ -28,7 +28,10 @@ let mockSendMessage = vi.fn();
 
 const mockChatClient = vi.fn() as MockedClass<typeof ChatClient>;
 
-let mockArkApiProxyInstance: {start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>} = {
+let mockArkApiProxyInstance: {
+  start: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+} = {
   start: vi.fn(),
   stop: vi.fn(),
 };
@@ -41,6 +44,11 @@ vi.mock('./arkApiProxy.js', () => ({
 
 vi.mock('./chatClient.js', () => ({
   ChatClient: mockChatClient,
+}));
+
+const mockWatchEventsLive = vi.fn();
+vi.mock('./kubectl.js', () => ({
+  watchEventsLive: mockWatchEventsLive,
 }));
 
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
@@ -56,7 +64,8 @@ const mockStdoutWrite = vi
   .spyOn(process.stdout, 'write')
   .mockImplementation(() => true);
 
-const {executeQuery, parseTarget} = await import('./executeQuery.js');
+const {executeQuery, parseTarget, parseParameters} =
+  await import('./executeQuery.js');
 const {ExitCodes} = await import('./errors.js');
 
 describe('executeQuery', () => {
@@ -100,6 +109,44 @@ describe('executeQuery', () => {
       expect(parseTarget('invalid')).toBeNull();
       expect(parseTarget('')).toBeNull();
       expect(parseTarget('model/default/extra')).toBeNull();
+    });
+  });
+
+  describe('parseParameters', () => {
+    it('returns an empty array for no parameters', () => {
+      expect(parseParameters([])).toEqual([]);
+    });
+
+    it('parses multiple pairs preserving order', () => {
+      expect(parseParameters(['a=1', 'b=2'])).toEqual([
+        {name: 'a', value: '1'},
+        {name: 'b', value: '2'},
+      ]);
+    });
+
+    it('splits only on the first = so values may contain =', () => {
+      expect(parseParameters(['token=ab=cd'])).toEqual([
+        {name: 'token', value: 'ab=cd'},
+      ]);
+    });
+
+    it('trims whitespace and allows an empty value', () => {
+      expect(parseParameters([' name = value '])).toEqual([
+        {name: 'name', value: 'value'},
+      ]);
+      expect(parseParameters(['empty='])).toEqual([{name: 'empty', value: ''}]);
+    });
+
+    it('throws when there is no =', () => {
+      expect(() => parseParameters(['bad'])).toThrow(
+        'parameter must be in name=value format, got: bad'
+      );
+    });
+
+    it('throws when the name is empty', () => {
+      expect(() => parseParameters(['=value'])).toThrow(
+        'parameter name cannot be empty in: =value'
+      );
     });
   });
 
@@ -333,7 +380,9 @@ describe('executeQuery', () => {
 
     it('should handle errors and exit with CliError', async () => {
       mockSpinner.isSpinning = true;
-      const startMock = vi.fn().mockRejectedValue(new Error('Connection failed'));
+      const startMock = vi
+        .fn()
+        .mockRejectedValue(new Error('Connection failed'));
       mockArkApiProxyInstance.start = startMock;
 
       await expect(
@@ -381,6 +430,41 @@ describe('executeQuery', () => {
   });
 
   describe('executeQuery with output format', () => {
+    it('routes the events format to the live watcher (backward-compatible, non-pretty)', async () => {
+      mockExeca.mockResolvedValue({stdout: '', stderr: '', exitCode: 0});
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events',
+      });
+
+      expect(mockWatchEventsLive).toHaveBeenCalledTimes(1);
+      expect(mockWatchEventsLive).toHaveBeenCalledWith(
+        expect.stringMatching(/cli-query-\d+/)
+      );
+      // Default events path must NOT enable pretty mode.
+      expect(mockWatchEventsLive.mock.calls[0]).toHaveLength(1);
+    });
+
+    it('routes the events-pretty format to the live watcher with pretty enabled', async () => {
+      mockExeca.mockResolvedValue({stdout: '', stderr: '', exitCode: 0});
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events-pretty',
+      });
+
+      expect(mockWatchEventsLive).toHaveBeenCalledTimes(1);
+      expect(mockWatchEventsLive).toHaveBeenCalledWith(
+        expect.stringMatching(/cli-query-\d+/),
+        true
+      );
+    });
+
     it('should create query and output name format', async () => {
       mockExeca.mockImplementation(async (command: string, args: string[]) => {
         if (args.includes('apply')) {

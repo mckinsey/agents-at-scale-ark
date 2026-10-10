@@ -1,0 +1,180 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: execution-engine-team
+spec:
+  description: Test sequential teams with engine-backed members - all-engine, mixed with a local member, and a local member paired with an a2a-engine member
+  steps:
+  - name: step-1
+    try:
+    # Install mock-llm with A2A agents enabled - the echo agent stands in for an
+    # execution engine at the transport level.
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-echo
+          status:
+            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
+    # The mixed team's local member runs the built-in completions loop, so it
+    # needs the mock Model the chart creates.
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: step-2
+    try:
+    # Point an ExecutionEngine at the echo A2A endpoint. Reading the resolved
+    # address is more robust than hardcoding the service URL.
+    - script:
+        timeout: 60s
+        content: |
+          set -e
+          ENGINE_ADDRESS=$(kubectl get a2aserver mock-llm-echo -n "$NAMESPACE" \
+            -o jsonpath='{.status.lastResolvedAddress}')
+          if [ -z "$ENGINE_ADDRESS" ]; then
+            echo "mock-llm-echo has no resolved address" >&2
+            exit 1
+          fi
+          kubectl apply -n "$NAMESPACE" -f - <<EOF
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: ExecutionEngine
+          metadata:
+            name: mock-engine
+          spec:
+            description: Mock execution engine backed by the mock-llm echo A2A agent
+            address:
+              value: "${ENGINE_ADDRESS}"
+          EOF
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - wait:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: ExecutionEngine
+        name: mock-engine
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.lastResolvedAddress}'
+
+  - name: step-3
+    try:
+    # Agents declare no modelRef: an engine-backed agent never runs the local
+    # agentic loop, so it must not require a Model.
+    - apply:
+        file: manifests/*.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: engine-team-query
+        timeout: 120s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: engine-team-query
+          status:
+            phase: done
+            (response != null): true
+            (length(response.content) > `0`): true
+    # The mixed team pairs an engine-backed member with a local one. Waiting on
+    # the response content rather than Completed=True keeps the contains() below
+    # from erroring on a nil response.
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: mixed-team-query
+        timeout: 120s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: mixed-team-query
+          status:
+            phase: done
+            (contains(response.content, 'transcript contained the engine member turn')): true
+    # The a2a team's second member runs on the built-in a2a engine and echoes
+    # what it was sent, so the response content is the input that reached it.
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: a2a-team-query
+        timeout: 120s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-team-query
+          status:
+            phase: done
+            (contains(response.content, 'A2A-TRANSCRIPT-MARKER')): true
+            (contains(response.content, '# a2a-writer:')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: ExecutionEngine
+        name: mock-engine
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: engine-team-query
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Team
+        name: engine-team
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: mixed-team-query
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Team
+        name: mixed-team
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: a2a-team-query
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Team
+        name: a2a-team
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

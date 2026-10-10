@@ -4,13 +4,15 @@ from __future__ import annotations
 import html
 import logging
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ark_sdk.client import with_ark_client
+from ark_sdk.impersonation import ImpersonationConfig
 
+from ...auth.dependencies import get_impersonation_config
 from ...core.mcp_auth_config import McpAuthConfigError, get_mcp_auth_config
 from ...models.mcp_auth import (
     AuthLogoutRequest,
@@ -22,10 +24,10 @@ from ...models.mcp_auth import (
 from ...services.mcp_auth_persistence import (
     SecretKeys,
     SecretPatchPayload,
-    annotate_mcpserver_authorized,
     clear_token_secret,
     compute_expires_at,
     delete_token_secret,
+    ensure_mcpserver_token_secret_ref,
     flow_deadline_rfc3339,
     mark_flow_authorized,
     mark_flow_failed,
@@ -44,16 +46,16 @@ from ...services.pkce import (
     generate_state,
     generate_verifier,
 )
-from ...services.mcp_auth_log_filter import SensitiveDataFilter
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
-logger.addFilter(SensitiveDataFilter())
 
 router = APIRouter(tags=["mcp-auth"])
 
 VERSION = "v1alpha1"
-DEFAULT_AUTHORIZED_BY = "cli"
+MAX_AUTH_ERROR_DESC = 200
+TOKEN_EXCHANGE_FAILED_CODE = "token_exchange_failed"
+INVALID_REQUEST_CODE = "invalid_request"
 
 
 def _get_config_or_503():
@@ -81,6 +83,16 @@ def _read_token_secret_ref(mcp_server):
     if not spec or not spec.authorization:
         return None
     return spec.authorization.token_secret_ref
+
+
+def _is_machine_managed(mcp_dict: dict) -> bool:
+    """Whether the controller mints this server's token itself.
+
+    Read from the raw dict rather than the typed model so this keeps
+    working before the generated SDK picks up clientCredentials.
+    """
+    authorization = (mcp_dict.get("spec") or {}).get("authorization") or {}
+    return bool(authorization.get("clientCredentials"))
 
 
 def _get_available_condition_message(mcp_server) -> Optional[str]:
@@ -129,15 +141,26 @@ async def start_mcp_auth(
     namespace: Optional[str] = Query(
         None, description="Namespace for this request (defaults to current context)"
     ),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> AuthStartResponse:
     cfg = _get_config_or_503()
     redirect_uri = cfg.public_callback_url
     force = bool(body.force)
 
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
         mcp_dict = mcp_server.to_dict()
         ns = (mcp_dict.get("metadata") or {}).get("namespace") or namespace
+
+        if _is_machine_managed(mcp_dict):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "MCPServer uses spec.authorization.clientCredentials; the "
+                    "controller mints and renews its token directly. There is "
+                    "no interactive flow to start."
+                ),
+            )
 
         authorization = _read_authorization_status(mcp_server)
         if not authorization:
@@ -177,11 +200,15 @@ async def start_mcp_auth(
 
         token_ref = _read_token_secret_ref(mcp_server)
         if not token_ref or not token_ref.name:
+            await ensure_mcpserver_token_secret_ref(ark_client, mcp_server_name)
+            mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
+            token_ref = _read_token_secret_ref(mcp_server)
+        if not token_ref or not token_ref.name:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    f"set spec.authorization.tokenSecretRef.name on the MCPServer "
-                    f"(e.g. {mcp_server_name}-oauth) and re-run auth login"
+                    f"could not provision spec.authorization.tokenSecretRef.name "
+                    f"on MCPServer {mcp_server_name!r}"
                 ),
             )
         secret_name = token_ref.name
@@ -237,11 +264,11 @@ async def start_mcp_auth(
             state_param=state_random,
             verifier=verifier,
             expires_at=flow_expires,
-            caller_identity=DEFAULT_AUTHORIZED_BY,
             server_name=mcp_server_name,
             client_id=client_id,
             client_secret=client_secret,
             keys=keys,
+            redirect_on_complete=bool(body.redirect_on_complete),
         )
 
         authorization_url = _build_authorization_url(
@@ -273,6 +300,45 @@ def _html_response(*, title: str, body: str, status_code: int = 200) -> HTMLResp
     return HTMLResponse(content=page, status_code=status_code)
 
 
+def _dashboard_redirect(cfg, params: list[tuple[str, str]]) -> RedirectResponse:
+    """Build a 302 to the dashboard /mcp page.
+
+    The host and path come solely from ARK_API_DASHBOARD_URL; only the query
+    params (built from trusted cache values) vary, so this is not an
+    open-redirect vector. Values are URL-encoded with %20 for spaces.
+    """
+    base = cfg.dashboard_mcp_url()
+    location = f"{base}?{urlencode(params, quote_via=quote)}"
+    return RedirectResponse(url=location, status_code=302)
+
+
+def _dashboard_success_redirect(cfg, *, name: str, namespace: str, auth_id: str) -> RedirectResponse:
+    return _dashboard_redirect(
+        cfg,
+        [("authorized", name), ("namespace", namespace), ("auth_id", auth_id)],
+    )
+
+
+def _dashboard_error_redirect(
+    cfg, *, name: str, namespace: str, code: str, desc: Optional[str]
+) -> RedirectResponse:
+    params = [("authorized", name), ("namespace", namespace), ("auth_error", code)]
+    if desc:
+        params.append(("auth_error_desc", desc[:MAX_AUTH_ERROR_DESC]))
+    return _dashboard_redirect(cfg, params)
+
+
+def _cache_miss_response(cfg) -> Response:
+    """Response when the flow's client is unknown (missing/expired/replayed state)."""
+    if cfg.is_dashboard_url_set:
+        return _dashboard_redirect(cfg, [("auth_error", "expired")])
+    return _html_response(
+        title="Authorization failed",
+        body="Unknown or expired state",
+        status_code=400,
+    )
+
+
 @router.get("/mcp/auth/callback")
 async def mcp_auth_callback(
     request: Request,
@@ -280,7 +346,8 @@ async def mcp_auth_callback(
     code: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
     error_description: Optional[str] = Query(None),
-) -> HTMLResponse:
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> Response:
     cfg = _get_config_or_503()
 
     if not state:
@@ -292,28 +359,27 @@ async def mcp_auth_callback(
 
     dot = state.find(".")
     if dot < 1:
-        return _html_response(
-            title="Authorization failed",
-            body="Unknown or expired state",
-            status_code=400,
-        )
+        return _cache_miss_response(cfg)
     cb_namespace = state[:dot]
     state_random = state[dot + 1:]
 
     flow = await read_flow_state_by_state_param(cb_namespace, state_random)
     if flow is None or flow.is_expired or not flow.secret_name:
-        return _html_response(
-            title="Authorization failed",
-            body="Unknown or expired state",
-            status_code=400,
-        )
+        return _cache_miss_response(cfg)
 
     secret_ns = flow.namespace
     secret_name_for_flow = flow.secret_name
+    use_redirect = flow.redirect_on_complete and cfg.is_dashboard_url_set
+    name = flow.server_name
+    ns = flow.namespace
 
     if error:
         message = f"{error}: {error_description}" if error_description else error
         await mark_flow_failed(secret_ns, secret_name_for_flow, message)
+        if use_redirect:
+            return _dashboard_error_redirect(
+                cfg, name=name, namespace=ns, code=error, desc=error_description
+            )
         return _html_response(
             title="Authorization failed",
             body=message,
@@ -322,13 +388,21 @@ async def mcp_auth_callback(
 
     if not code:
         await mark_flow_failed(secret_ns, secret_name_for_flow, "missing authorization code")
+        if use_redirect:
+            return _dashboard_error_redirect(
+                cfg,
+                name=name,
+                namespace=ns,
+                code=INVALID_REQUEST_CODE,
+                desc="Missing authorization code",
+            )
         return _html_response(
             title="Authorization failed",
             body="Missing authorization code",
             status_code=400,
         )
 
-    async with with_ark_client(secret_ns, VERSION) as ark_client:
+    async with with_ark_client(secret_ns, VERSION, impersonation=impersonation) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(flow.server_name)
         authorization = _read_authorization_status(mcp_server)
         token_ref = _read_token_secret_ref(mcp_server)
@@ -341,6 +415,14 @@ async def mcp_auth_callback(
             or not token_ref.name
         ):
             await mark_flow_failed(secret_ns, secret_name_for_flow, "MCPServer authorization metadata went missing")
+            if use_redirect:
+                return _dashboard_error_redirect(
+                    cfg,
+                    name=name,
+                    namespace=ns,
+                    code=INVALID_REQUEST_CODE,
+                    desc="MCPServer authorization metadata went missing",
+                )
             return _html_response(
                 title="Authorization failed",
                 body="MCPServer authorization metadata went missing",
@@ -362,6 +444,14 @@ async def mcp_auth_callback(
             )
         except TokenExchangeError as exc:
             await mark_flow_failed(secret_ns, secret_name_for_flow, str(exc))
+            if use_redirect:
+                return _dashboard_error_redirect(
+                    cfg,
+                    name=name,
+                    namespace=ns,
+                    code=TOKEN_EXCHANGE_FAILED_CODE,
+                    desc=str(exc),
+                )
             return _html_response(
                 title="Authorization failed",
                 body=str(exc),
@@ -381,11 +471,13 @@ async def mcp_auth_callback(
                 client_secret=flow.client_secret,
             ),
         )
-        await annotate_mcpserver_authorized(
-            ark_client, flow.server_name, flow.caller_identity
-        )
         await mark_flow_authorized(secret_ns, secret_name_for_flow, expires_at)
+        await strip_mcpserver_auth_annotations(ark_client, flow.server_name)
 
+    if use_redirect:
+        return _dashboard_success_redirect(
+            cfg, name=name, namespace=ns, auth_id=flow.auth_id
+        )
     return _html_response(
         title="Authorization complete",
         body=f"Authorization for {flow.server_name} succeeded.",
@@ -403,10 +495,11 @@ async def get_mcp_auth_status(
     namespace: Optional[str] = Query(
         None, description="Namespace for this request (defaults to current context)"
     ),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> AuthStatusResponse:
     _get_config_or_503()
 
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
         authorization = _read_authorization_status(mcp_server)
         server_state = authorization.state if authorization else None
@@ -482,6 +575,7 @@ async def logout_mcp_auth(
     namespace: Optional[str] = Query(
         None, description="Namespace for this request (defaults to current context)"
     ),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> AuthLogoutResponse:
     keep_client = bool(body.keep_client)
     delete_secret = bool(body.delete_secret)
@@ -491,10 +585,25 @@ async def logout_mcp_auth(
             detail="keep_client and delete_secret are mutually exclusive",
         )
 
-    async with with_ark_client(namespace, VERSION) as ark_client:
+    async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
         mcp_dict = mcp_server.to_dict()
         ns = (mcp_dict.get("metadata") or {}).get("namespace") or namespace
+
+        # There is no session to end for a machine identity — the
+        # controller simply mints again. Worse, delete_secret would remove
+        # the Secret the controller owns; until the next reconcile,
+        # discovery 401s and every Tool for this server is deleted.
+        if _is_machine_managed(mcp_dict):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "MCPServer uses spec.authorization.clientCredentials; the "
+                    "controller owns its token Secret and will mint again. "
+                    "There is no interactive session to sign out of."
+                ),
+            )
+
         token_ref = _read_token_secret_ref(mcp_server)
         if not token_ref or not token_ref.name:
             await strip_mcpserver_auth_annotations(ark_client, mcp_server_name)

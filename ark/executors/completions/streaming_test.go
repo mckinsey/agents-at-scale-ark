@@ -4,10 +4,15 @@ package completions
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -332,4 +337,38 @@ func TestSendFinalToolCallChunk_StreamFunctionError(t *testing.T) {
 	err := SendFinalToolCallChunk(fullResponse, toolCalls, streamFunc)
 	assert.Error(t, err)
 	assert.Equal(t, expectedError, err)
+}
+
+// TestNotifyCompletionUsesFreshContext verifies the terminal completion POST is sent even
+// when the request context is already cancelled — the drain-deadline shutdown path. It
+// must reach the broker rather than failing immediately with "context canceled".
+func TestNotifyCompletionUsesFreshContext(t *testing.T) {
+	var gotPath string
+	done := make(chan struct{})
+	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		close(done)
+	}))
+	defer broker.Close()
+
+	stream := &HTTPEventStream{
+		baseURL:   broker.URL,
+		queryName: "test-query",
+		client:    &http.Client{Timeout: 5 * time.Second},
+	}
+
+	// Cancelled context, as on the drain-deadline path.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := stream.NotifyCompletion(ctx)
+	require.NoError(t, err, "completion must succeed despite a cancelled request context")
+
+	select {
+	case <-done:
+		assert.True(t, strings.HasSuffix(gotPath, "/stream/test-query/complete"), "unexpected path %q", gotPath)
+	case <-time.After(2 * time.Second):
+		t.Fatal("broker never received the completion POST")
+	}
 }

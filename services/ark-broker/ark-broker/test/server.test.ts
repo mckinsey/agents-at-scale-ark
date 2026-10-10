@@ -3,6 +3,9 @@ import {loadConfig} from '../src/config/index.js';
 import {createLogger} from '../src/logging/logger.js';
 import {buildApp} from '../src/server.js';
 import {createMessageStream} from '../src/brokers/stream/message-stream-factory.js';
+import {createChunkStream} from '../src/brokers/stream/chunk-stream-factory.js';
+import {createEventStream} from '../src/brokers/stream/event-stream-factory.js';
+import {createSessionsStorage} from '../src/brokers/sessions/sessions-storage-factory.js';
 
 const config = loadConfig({});
 const logger = createLogger({level: 'silent', pretty: false});
@@ -11,13 +14,16 @@ const {app} = buildApp({
   logger,
   version: 'test',
   messageStream: createMessageStream(config, logger),
+  chunkStream: createChunkStream(config, logger),
+  eventStream: createEventStream(config, logger),
+  sessionsStorage: createSessionsStorage(config, logger),
 });
 
 describe('ARK Broker API', () => {
   afterEach(async () => {
-    const getResponse = await request(app).delete('/messages');
+    const getResponse = await request(app).delete('/conversations');
     expect(getResponse.status).toBe(200);
-    expect(getResponse.body.message).toEqual('Memory purged');
+    expect(getResponse.body.message).toEqual('All conversations deleted');
   });
 
   describe('Health Check', () => {
@@ -208,6 +214,57 @@ describe('ARK Broker API', () => {
     });
   });
 
+  describe('GET /memory-status', () => {
+    test('returns aggregated per-conversation message and query counts', async () => {
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'status-conv-1',
+          query_id: 'status-q1',
+          messages: [{role: 'user', content: 'one'}],
+        });
+
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'status-conv-1',
+          query_id: 'status-q2',
+          messages: [{role: 'user', content: 'two'}],
+        });
+
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'status-conv-2',
+          query_id: 'status-q3',
+          messages: [{role: 'user', content: 'three'}],
+        });
+
+      const response = await request(app).get('/memory-status');
+
+      expect(response.status).toBe(200);
+      expect(response.body.total_conversations).toBe(2);
+      expect(response.body.total_messages).toBe(3);
+      expect(response.body.conversations['status-conv-1']).toEqual({
+        message_count: 2,
+        query_count: 2,
+      });
+      expect(response.body.conversations['status-conv-2']).toEqual({
+        message_count: 1,
+        query_count: 1,
+      });
+    });
+
+    test('returns zero totals when memory is empty', async () => {
+      const response = await request(app).get('/memory-status');
+
+      expect(response.status).toBe(200);
+      expect(response.body.total_conversations).toBe(0);
+      expect(response.body.total_messages).toBe(0);
+      expect(response.body.conversations).toEqual({});
+    });
+  });
+
   describe('Multiple Messages Endpoints', () => {
     test('should add and retrieve multiple messages at once', async () => {
       const messages = [
@@ -353,6 +410,32 @@ describe('ARK Broker API', () => {
       expect(response.body.items[0].sequence).toBe(1);
       expect(response.body.items[1].sequence).toBe(2);
       expect(response.body.items[2].sequence).toBe(3);
+    });
+  });
+
+  describe('DELETE /queries/:queryId/messages', () => {
+    test('should delete all messages for a query across conversations', async () => {
+      await request(app)
+        .post('/messages')
+        .send({conversation_id: 'conv-a', query_id: 'q-del', messages: ['m1']});
+      await request(app)
+        .post('/messages')
+        .send({conversation_id: 'conv-b', query_id: 'q-del', messages: ['m2']});
+      await request(app)
+        .post('/messages')
+        .send({
+          conversation_id: 'conv-a',
+          query_id: 'q-keep',
+          messages: ['m3'],
+        });
+
+      const delRes = await request(app).delete('/queries/q-del/messages');
+      expect(delRes.status).toBe(200);
+      expect(delRes.body.status).toBe('success');
+
+      const remaining = await request(app).get('/messages');
+      expect(remaining.body.items).toHaveLength(1);
+      expect(remaining.body.items[0].query_id).toBe('q-keep');
     });
   });
 

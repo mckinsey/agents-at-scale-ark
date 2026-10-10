@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: hitl-file-write
+spec:
+  type: user
+  input: "Create a new file at /tmp/test.txt with the content: Hello from HITL approval flow!"
+  target:
+    name: hitl-agent
+    type: agent
+  sessionId: hitl-file-session
+  conversationId: hitl-file-conv

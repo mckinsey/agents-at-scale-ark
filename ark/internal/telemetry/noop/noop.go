@@ -137,7 +137,7 @@ func (r *noopTeamRecorder) StartTurn(ctx context.Context, turn int, memberName, 
 	return ctx, &noopSpan{}
 }
 
-func (r *noopTeamRecorder) RecordTurnOutput(span telemetry.Span, messages any, messageCount int) {
+func (r *noopTeamRecorder) RecordTurnOutput(span telemetry.Span, output string, messageCount int) {
 } //nolint:revive
 func (r *noopTeamRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 }                                                                      //nolint:revive

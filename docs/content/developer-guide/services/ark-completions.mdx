@@ -5,7 +5,7 @@ Execution engine that runs the LLM turn loop, tool execution, team orchestration
 - Deployed as a standalone service in `ark-system`
 - Communicates with the controller via A2A protocol over K8s service
 - Handles built-in agent, team, model, and tool execution (agents with an `executionEngine` are dispatched directly by the controller)
-- Streams chunks directly to ark-broker
+- Streams chunks directly to ark-broker, which holds them in memory or, when configured, in Redis Streams
 
 ## Architecture
 

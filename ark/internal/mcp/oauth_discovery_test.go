@@ -83,7 +83,7 @@ func TestParseResourceMetadataURL(t *testing.T) {
 	}
 }
 
-func TestBuildAuthServerMetadataURL(t *testing.T) {
+func TestLegacyAuthServerMetadataURL(t *testing.T) {
 	tests := []struct {
 		name   string
 		issuer string
@@ -92,13 +92,33 @@ func TestBuildAuthServerMetadataURL(t *testing.T) {
 		{"bare authority", "https://mcp.notion.com", "https://mcp.notion.com/.well-known/oauth-authorization-server"},
 		{"trailing slash is trimmed", "https://example.com/", "https://example.com/.well-known/oauth-authorization-server"},
 		{"multiple trailing slashes are trimmed", "https://example.com//", "https://example.com/.well-known/oauth-authorization-server"},
+		{"path is kept in front of the suffix", "https://github.com/login/oauth", "https://github.com/login/oauth/.well-known/oauth-authorization-server"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildAuthServerMetadataURL(tt.issuer)
+			got := legacyAuthServerMetadataURL(tt.issuer)
 			if got != tt.want {
-				t.Errorf("buildAuthServerMetadataURL(%q) = %q, want %q", tt.issuer, got, tt.want)
+				t.Errorf("legacyAuthServerMetadataURL(%q) = %q, want %q", tt.issuer, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIssuerHasPath(t *testing.T) {
+	tests := []struct {
+		issuer string
+		want   bool
+	}{
+		{"https://mcp.notion.com", false},
+		{"https://example.com/", true},
+		{"https://github.com/login/oauth", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.issuer, func(t *testing.T) {
+			if got := issuerHasPath(tt.issuer); got != tt.want {
+				t.Errorf("issuerHasPath(%q) = %v, want %v", tt.issuer, got, tt.want)
 			}
 		})
 	}
@@ -204,5 +224,94 @@ func TestFetchAuthorizationServerMetadata(t *testing.T) {
 	}
 	if asm.RegistrationEndpoint != srv.URL+"/register" {
 		t.Errorf("RegistrationEndpoint = %q, want %q", asm.RegistrationEndpoint, srv.URL+"/register")
+	}
+}
+
+func authServerMetadataDocument(issuer string) map[string]any {
+	return map[string]any{
+		"issuer":                           issuer,
+		"authorization_endpoint":           issuer + "/authorize",
+		"token_endpoint":                   issuer + "/access_token",
+		"response_types_supported":         []string{"code"},
+		"grant_types_supported":            []string{"authorization_code", "refresh_token"},
+		"code_challenge_methods_supported": []string{"S256"},
+	}
+}
+
+func fakeIssuerWithPath(t *testing.T, issuerPath string, metadataPath func(issuerPath string) string) (srv *httptest.Server, issuer string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc(metadataPath(issuerPath), func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(authServerMetadataDocument("http://" + r.Host + "/" + issuerPath))
+	})
+	srv = httptest.NewServer(mux)
+	return srv, srv.URL + "/" + issuerPath
+}
+
+func TestFetchAuthorizationServerMetadata_PathInsertion(t *testing.T) {
+	srv, issuer := fakeIssuerWithPath(t, "login/oauth", func(p string) string {
+		return "/.well-known/oauth-authorization-server/" + p
+	})
+	defer srv.Close()
+
+	asm, err := FetchAuthorizationServerMetadata(context.Background(), issuer, testDiscoveryTimeout)
+	if err != nil {
+		t.Fatalf("FetchAuthorizationServerMetadata returned error: %v", err)
+	}
+	if asm == nil {
+		t.Fatal("expected metadata for a path-inserted well-known document, got nil")
+	}
+	if asm.AuthorizationEndpoint != issuer+"/authorize" {
+		t.Errorf("AuthorizationEndpoint = %q, want %q", asm.AuthorizationEndpoint, issuer+"/authorize")
+	}
+	if asm.TokenEndpoint != issuer+"/access_token" {
+		t.Errorf("TokenEndpoint = %q, want %q", asm.TokenEndpoint, issuer+"/access_token")
+	}
+}
+
+func TestFetchAuthorizationServerMetadata_LegacyPathAppend(t *testing.T) {
+	srv, issuer := fakeIssuerWithPath(t, "login/oauth", func(p string) string {
+		return "/" + p + "/.well-known/oauth-authorization-server"
+	})
+	defer srv.Close()
+
+	asm, err := FetchAuthorizationServerMetadata(context.Background(), issuer, testDiscoveryTimeout)
+	if err != nil {
+		t.Fatalf("FetchAuthorizationServerMetadata returned error: %v", err)
+	}
+	if asm == nil {
+		t.Fatal("expected metadata from the legacy path-appended document, got nil")
+	}
+	if asm.TokenEndpoint != issuer+"/access_token" {
+		t.Errorf("TokenEndpoint = %q, want %q", asm.TokenEndpoint, issuer+"/access_token")
+	}
+}
+
+func TestFetchAuthorizationServerMetadata_NotPublished(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+
+	asm, err := FetchAuthorizationServerMetadata(context.Background(), srv.URL+"/login/oauth", testDiscoveryTimeout)
+	if err != nil {
+		t.Fatalf("expected nil error when no candidate is published, got %v", err)
+	}
+	if asm != nil {
+		t.Errorf("expected nil metadata when no candidate is published, got %+v", asm)
+	}
+}
+
+func TestFetchAuthorizationServerMetadata_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := FetchAuthorizationServerMetadata(context.Background(), srv.URL, testDiscoveryTimeout)
+	if err == nil {
+		t.Fatal("expected error for a 5xx metadata endpoint, got nil")
+	}
+	if !strings.Contains(err.Error(), "fetch authorization server metadata") {
+		t.Errorf("error should be wrapped with function context, got %q", err.Error())
 	}
 }

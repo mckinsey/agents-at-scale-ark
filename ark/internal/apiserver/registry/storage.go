@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +31,11 @@ const (
 	columnTypeDate          = "date"
 	defaultNamespace        = "default"
 	maxGenerateNameAttempts = 100
+	// Delete stamps deletionTimestamp using the resourceVersion from the read that preceded it,
+	// and admission now runs inside that window — policy matching plus CEL, where the callback
+	// used to be a no-op. Delete gets no server-side conflict retry the way patch does, so a
+	// resource under active reconciliation would surface a 409 it never used to.
+	maxDeleteConflictAttempts = 5
 )
 
 func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -37,11 +43,19 @@ func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 type ResourceConfig struct {
-	Kind         string
-	Resource     string
-	SingularName string
-	NewFunc      func() runtime.Object
-	NewListFunc  func() runtime.Object
+	Kind          string
+	Resource      string
+	SingularName  string
+	ClusterScoped bool
+	NewFunc       func() runtime.Object
+	NewListFunc   func() runtime.Object
+}
+
+func (c ResourceConfig) namespace(ctx context.Context) string {
+	if c.ClusterScoped {
+		return ""
+	}
+	return getNamespace(ctx)
 }
 
 type GenericStorage struct {
@@ -82,7 +96,7 @@ func (s *GenericStorage) NewList() runtime.Object {
 }
 
 func (s *GenericStorage) NamespaceScoped() bool {
-	return true
+	return !s.config.ClusterScoped
 }
 
 func (s *GenericStorage) GetSingularName() string {
@@ -91,7 +105,7 @@ func (s *GenericStorage) GetSingularName() string {
 
 func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	start := time.Now()
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
@@ -107,7 +121,7 @@ func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.G
 
 func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	start := time.Now()
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 	opts := storage.ListOptions{}
 	if options != nil {
 		if options.LabelSelector != nil {
@@ -122,15 +136,18 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
-	objects, continueToken, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
+	objects, continueToken, listRV, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
 	if err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
+		if errors.Is(err, storage.ErrInvalidRequest) {
+			return nil, apierrors.NewBadRequest(err.Error())
+		}
 		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
 	}
 
 	list := s.config.NewListFunc()
-	if err := setListItems(list, objects, continueToken); err != nil {
+	if err := setListItems(list, objects, continueToken, listRV); err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
 		return nil, err
@@ -141,61 +158,66 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	return list, nil
 }
 
+// PrepareForCreate populates server-owned metadata (namespace, uid, creationTimestamp) so
+// that both Ark's referential validation and the generic admission chain see a formed
+// object. Idempotent. Name generation is excluded: it belongs in Create's retry loop.
+func PrepareForCreate(ctx context.Context, obj runtime.Object) error {
+	accessor, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("failed to access object metadata: %w", err)
+	}
+	if accessor.GetNamespace() == "" {
+		accessor.SetNamespace(getNamespace(ctx))
+	}
+	if accessor.GetUID() == "" {
+		accessor.SetUID(types.UID(uuid.New().String()))
+	}
+	if ts := accessor.GetCreationTimestamp(); ts.IsZero() {
+		accessor.SetCreationTimestamp(metav1.Now())
+	}
+	return nil
+}
+
 func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	start := time.Now()
-	if createValidation != nil {
-		if err := createValidation(ctx, obj); err != nil {
-			metrics.RecordStorageOperation("create", s.config.Kind, "validation_error")
-			return nil, err
-		}
-	}
 
-	namespace := getNamespace(ctx)
+	// Mirrors upstream registry.Store.Create, which runs rest.BeforeCreate before
+	// createValidation so admission sees a fully formed object.
+	if err := PrepareForCreate(ctx, obj); err != nil {
+		metrics.RecordStorageOperation("create", s.config.Kind, "error")
+		return nil, err
+	}
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
 		metrics.RecordStorageOperation("create", s.config.Kind, "error")
 		return nil, fmt.Errorf("failed to access object metadata: %w", err)
 	}
+	if s.config.ClusterScoped {
+		accessor.SetNamespace("")
+	}
 
-	if accessor.GetNamespace() == "" {
-		accessor.SetNamespace(namespace)
-	}
-	if accessor.GetUID() == "" {
-		accessor.SetUID(types.UID(uuid.New().String()))
-	}
-	ts := accessor.GetCreationTimestamp()
-	if ts.IsZero() {
-		accessor.SetCreationTimestamp(metav1.Now())
+	// `obj` is passed live, not copied: AdmissionStorage may run Ark's defaulting inside this
+	// callback and relies on mutating what gets persisted. See the matching note in Update.
+	admit := func() error {
+		if createValidation == nil {
+			return nil
+		}
+		if err := createValidation(ctx, obj); err != nil {
+			metrics.RecordStorageOperation("create", s.config.Kind, "validation_error")
+			return err
+		}
+		return nil
 	}
 
 	// Handle generateName: if name is empty but generateName is set, generate a unique name
 	// Retry on name collisions up to maxGenerateNameAttempts
 	if accessor.GetName() == "" && accessor.GetGenerateName() != "" {
-		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
-		for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
-			generatedName := names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName())
-			accessor.SetName(generatedName)
+		return s.createWithGeneratedName(ctx, obj, accessor, admit, start)
+	}
 
-			sctx, cancel := storageContext(ctx)
-			err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj)
-			cancel()
-
-			if err == nil {
-				metrics.RecordStorageOperation("create", s.config.Kind, "success")
-				metrics.RecordStorageLatency("create", s.config.Kind, start)
-				return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
-			}
-
-			if !errors.Is(err, storage.ErrAlreadyExists) {
-				metrics.RecordStorageLatency("create", s.config.Kind, start)
-				metrics.RecordStorageOperation("create", s.config.Kind, "error")
-				return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
-			}
-		}
-
-		metrics.RecordStorageOperation("create", s.config.Kind, "generate_name_exhausted")
+	if err := admit(); err != nil {
 		metrics.RecordStorageLatency("create", s.config.Kind, start)
-		return nil, apierrors.NewServerTimeout(gr, "create", 1)
+		return nil, err
 	}
 
 	sctx, cancel := storageContext(ctx)
@@ -216,9 +238,42 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 	return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
 }
 
+// createWithGeneratedName resolves a generateName request. Each attempt picks a fresh name and
+// re-runs admission for it, since policy may key on the name; only a collision is retried.
+func (s *GenericStorage) createWithGeneratedName(ctx context.Context, obj runtime.Object, accessor metav1.Object, admit func() error, start time.Time) (runtime.Object, error) {
+	for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
+		accessor.SetName(names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName()))
+
+		if err := admit(); err != nil {
+			metrics.RecordStorageLatency("create", s.config.Kind, start)
+			return nil, err
+		}
+
+		sctx, cancel := storageContext(ctx)
+		err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj)
+		cancel()
+
+		switch {
+		case err == nil:
+			metrics.RecordStorageOperation("create", s.config.Kind, "success")
+			metrics.RecordStorageLatency("create", s.config.Kind, start)
+			return s.Get(ctx, accessor.GetName(), &metav1.GetOptions{})
+		case !errors.Is(err, storage.ErrAlreadyExists):
+			metrics.RecordStorageLatency("create", s.config.Kind, start)
+			metrics.RecordStorageOperation("create", s.config.Kind, "error")
+			return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
+		}
+	}
+
+	metrics.RecordStorageOperation("create", s.config.Kind, "generate_name_exhausted")
+	metrics.RecordStorageLatency("create", s.config.Kind, start)
+	gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+	return nil, apierrors.NewServerTimeout(gr, "create", 1)
+}
+
 func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	start := time.Now()
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
@@ -251,6 +306,23 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		updatedAccessor.SetResourceVersion(existingAccessor.GetResourceVersion())
 	}
 
+	// Carry over server-owned identity the client cannot change; a PUT body omitting these
+	// would blank them, and hand admission below an object with empty uid/creationTimestamp.
+	// Mirrors upstream rest.BeforeUpdate. The namespace is always taken from the stored
+	// object: for namespaced kinds it is the request namespace the object was fetched under,
+	// for cluster-scoped kinds it is empty, so a stray metadata.namespace in the body is
+	// normalized away on update just as Create clears it.
+	if updatedAccessor.GetUID() == "" {
+		updatedAccessor.SetUID(existingAccessor.GetUID())
+	}
+	if ts := updatedAccessor.GetCreationTimestamp(); ts.IsZero() {
+		updatedAccessor.SetCreationTimestamp(existingAccessor.GetCreationTimestamp())
+	}
+	updatedAccessor.SetNamespace(existingAccessor.GetNamespace())
+
+	// `updated` is passed live, not copied: AdmissionStorage runs Ark's defaulting inside this
+	// callback, so copying would silently drop those defaults. Upstream can copy because its
+	// defaulting lives in a separate Strategy.PrepareForUpdate step; decoupling is a follow-up.
 	if updateValidation != nil {
 		if err := updateValidation(ctx, updated, existing); err != nil {
 			metrics.RecordStorageOperation("update", s.config.Kind, "validation_error")
@@ -281,7 +353,7 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 
 func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	start := time.Now()
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
@@ -303,21 +375,39 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 		return nil, false, fmt.Errorf("failed to access object metadata: %w", err)
 	}
 
+	if options != nil && options.Preconditions != nil {
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		pc := options.Preconditions
+		if pc.UID != nil && *pc.UID != accessor.GetUID() {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "conflict")
+			return nil, false, apierrors.NewConflict(gr, name,
+				fmt.Errorf("the UID in the precondition (%v) does not match the UID in record (%v)", *pc.UID, accessor.GetUID()))
+		}
+		if pc.ResourceVersion != nil && *pc.ResourceVersion != accessor.GetResourceVersion() {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "conflict")
+			return nil, false, apierrors.NewConflict(gr, name,
+				fmt.Errorf("the ResourceVersion in the precondition (%v) does not match the ResourceVersion in record (%v)", *pc.ResourceVersion, accessor.GetResourceVersion()))
+		}
+	}
+
 	// Graceful deletion: an object with finalizers is not removed yet. Mark it by
 	// setting deletionTimestamp so controllers can run their finalizers; the actual
 	// removal happens in Update once the last finalizer is gone. This mirrors the
 	// behavior of the upstream Kubernetes API server.
 	if len(accessor.GetFinalizers()) > 0 {
-		if accessor.GetDeletionTimestamp() == nil {
-			now := metav1.NewTime(time.Now())
-			accessor.SetDeletionTimestamp(&now)
-			if err := s.backend.Update(sctx, s.config.Kind, namespace, name, existing); err != nil {
-				return nil, false, handleUpdateError(err, s.config, "delete", name, start)
-			}
+		// A caller that supplied preconditions asked to be told about the conflict rather than
+		// have it resolved, and those were checked against the first read only.
+		attempts := maxDeleteConflictAttempts
+		if options != nil && options.Preconditions != nil {
+			attempts = 1
+		}
+		marked, err := s.markForDeletion(ctx, sctx, namespace, name, existing, deleteValidation, attempts, start)
+		if err != nil {
+			return nil, false, err
 		}
 		metrics.RecordStorageOperation("delete", s.config.Kind, "pending_finalizers")
 		metrics.RecordStorageLatency("delete", s.config.Kind, start)
-		return existing, false, nil
+		return marked, false, nil
 	}
 
 	if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
@@ -329,8 +419,73 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 	return existing, true, nil
 }
 
+// markForDeletion stamps deletionTimestamp so finalizers can run, retrying on a lost race. On
+// conflict it re-reads and re-runs admission before re-stamping, since the object changed and
+// policy must evaluate the version actually being marked. ctx carries the request (admission),
+// sctx the storage deadline.
+func (s *GenericStorage) markForDeletion(ctx, sctx context.Context, namespace, name string, obj runtime.Object, deleteValidation rest.ValidateObjectFunc, attempts int, start time.Time) (runtime.Object, error) {
+	for attempt := 0; ; attempt++ {
+		accessor, err := meta.Accessor(obj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to access object metadata: %w", err)
+		}
+		// Already marked, either by the caller's earlier read or by whoever won the race; the
+		// first timestamp is the one that counts, so leave it alone.
+		if accessor.GetDeletionTimestamp() != nil {
+			return obj, nil
+		}
+
+		// Stamp a copy: a write that conflicts must not leave a deletionTimestamp behind on an
+		// object that was never persisted, since the next attempt would read it as already marked.
+		marked := obj.DeepCopyObject()
+		markedAccessor, err := meta.Accessor(marked)
+		if err != nil {
+			return nil, fmt.Errorf("failed to access object metadata: %w", err)
+		}
+		now := metav1.NewTime(time.Now())
+		markedAccessor.SetDeletionTimestamp(&now)
+
+		err = s.backend.Update(sctx, s.config.Kind, namespace, name, marked)
+		if err == nil {
+			return marked, nil
+		}
+		if !errors.Is(err, storage.ErrConflict) || attempt >= attempts-1 {
+			return nil, handleUpdateError(err, s.config, "delete", name, start)
+		}
+
+		if obj, err = s.refreshForDeletion(ctx, sctx, namespace, name, deleteValidation); err != nil {
+			return nil, err
+		}
+	}
+}
+
+// refreshForDeletion re-reads an object after a delete conflict and re-runs admission on it.
+func (s *GenericStorage) refreshForDeletion(ctx, sctx context.Context, namespace, name string, deleteValidation rest.ValidateObjectFunc) (runtime.Object, error) {
+	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
+	if err != nil {
+		// Only a genuine miss means the winner of the race finished the delete outright.
+		// Reporting NotFound for anything else — a timeout on the shared sctx budget, a
+		// dropped connection — tells the client the object is gone when it is still there
+		// with finalizers and no deletionTimestamp, since 404 reads as success for a delete.
+		if !errors.Is(err, storage.ErrNotFound) {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "error")
+			return nil, fmt.Errorf("failed to re-read %s during delete: %w", s.config.SingularName, err)
+		}
+		metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		return nil, apierrors.NewNotFound(gr, name)
+	}
+	if deleteValidation != nil {
+		if err := deleteValidation(ctx, obj); err != nil {
+			metrics.RecordStorageOperation("delete", s.config.Kind, "validation_error")
+			return nil, err
+		}
+	}
+	return obj, nil
+}
+
 func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
-	namespace := getNamespace(ctx)
+	namespace := s.config.namespace(ctx)
 	opts := storage.WatchOptions{}
 	if options != nil {
 		if options.LabelSelector != nil {
@@ -340,9 +495,21 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 			opts.FieldSelector = options.FieldSelector.String()
 		}
 		opts.ResourceVersion = options.ResourceVersion
+		opts.AllowWatchBookmarks = options.AllowWatchBookmarks
+		opts.SendInitialEvents = options.SendInitialEvents != nil && *options.SendInitialEvents
 	}
 
-	return s.backend.Watch(ctx, s.config.Kind, namespace, opts)
+	watcher, err := s.backend.Watch(ctx, s.config.Kind, namespace, opts)
+	if err != nil {
+		if errors.Is(err, storage.ErrInvalidRequest) {
+			return nil, apierrors.NewBadRequest(err.Error())
+		}
+		if errors.Is(err, storage.ErrResourceExpired) {
+			return nil, apierrors.NewResourceExpired(err.Error())
+		}
+		return nil, err
+	}
+	return watcher, nil
 }
 
 func (s *GenericStorage) ConvertToTable(ctx context.Context, obj, tableOptions runtime.Object) (*metav1.Table, error) {
@@ -355,9 +522,19 @@ func (s *GenericStorage) ConvertToTable(ctx context.Context, obj, tableOptions r
 		for _, item := range items {
 			table.Rows = append(table.Rows, s.objectToTableRow(item))
 		}
+		// Propagate list metadata so paginating clients (kubectl defaults to
+		// Table output) can read metadata.continue and fetch subsequent pages.
+		if listMeta, err := meta.ListAccessor(obj); err == nil {
+			table.ResourceVersion = listMeta.GetResourceVersion()
+			table.Continue = listMeta.GetContinue()
+			table.RemainingItemCount = listMeta.GetRemainingItemCount()
+		}
 		return table, nil
 	}
 
+	if objMeta, err := meta.Accessor(obj); err == nil {
+		table.ResourceVersion = objMeta.GetResourceVersion()
+	}
 	table.Rows = append(table.Rows, s.objectToTableRow(obj))
 	return table, nil
 }
@@ -424,7 +601,7 @@ func handleUpdateError(err error, cfg ResourceConfig, operation, name string, st
 	return fmt.Errorf("failed to %s %s: %w", operation, cfg.SingularName, err)
 }
 
-func setListItems(list runtime.Object, objects []runtime.Object, continueToken string) error {
+func setListItems(list runtime.Object, objects []runtime.Object, continueToken string, listRV int64) error {
 	if err := meta.SetList(list, objects); err != nil {
 		return fmt.Errorf("failed to set list items: %w", err)
 	}
@@ -432,15 +609,13 @@ func setListItems(list runtime.Object, objects []runtime.Object, continueToken s
 	if err != nil {
 		return fmt.Errorf("failed to access list metadata: %w", err)
 	}
-	var maxRV string
-	for _, obj := range objects {
-		if objMeta, err := meta.Accessor(obj); err == nil {
-			if rv := objMeta.GetResourceVersion(); rv > maxRV {
-				maxRV = rv
-			}
-		}
+	// listRV is the backend's store head revision: always at or above the purge
+	// floor, so the list→watch handoff never resumes below the floor, and set
+	// even for an empty kind so a watch can still resume. Zero means the store
+	// is empty (nothing ever written); leave the RV unset in that case.
+	if listRV > 0 {
+		accessor.SetResourceVersion(strconv.FormatInt(listRV, 10))
 	}
-	accessor.SetResourceVersion(maxRV)
 	if continueToken != "" {
 		accessor.SetContinue(continueToken)
 	}

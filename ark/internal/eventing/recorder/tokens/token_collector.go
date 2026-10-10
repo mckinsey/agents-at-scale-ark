@@ -22,7 +22,7 @@ func (tc *TokenCollector) StartTokenCollection(ctx context.Context) context.Cont
 	return context.WithValue(ctx, tokenUsageKey, usage)
 }
 
-func (tc *TokenCollector) AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens int64) {
+func (tc *TokenCollector) AddTokens(ctx context.Context, promptTokens, completionTokens, totalTokens, cachedTokens int64) {
 	usage, ok := ctx.Value(tokenUsageKey).(*arkv1alpha1.TokenUsage)
 	if !ok || usage == nil {
 		return
@@ -31,14 +31,15 @@ func (tc *TokenCollector) AddTokens(ctx context.Context, promptTokens, completio
 	usage.PromptTokens += promptTokens
 	usage.CompletionTokens += completionTokens
 	usage.TotalTokens += totalTokens
+	usage.CachedTokens += cachedTokens
 }
 
 func (tc *TokenCollector) AddTokenUsage(ctx context.Context, usage arkv1alpha1.TokenUsage) {
-	tc.AddTokens(ctx, usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
+	tc.AddTokens(ctx, usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens, usage.CachedTokens)
 }
 
 func (tc *TokenCollector) AddCompletionUsage(ctx context.Context, usage openai.CompletionUsage) {
-	tc.AddTokens(ctx, usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
+	tc.AddTokens(ctx, usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens, usage.PromptTokensDetails.CachedTokens)
 }
 
 func (tc *TokenCollector) GetTokenSummary(ctx context.Context) arkv1alpha1.TokenUsage {

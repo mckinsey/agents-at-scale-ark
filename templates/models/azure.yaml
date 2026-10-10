@@ -17,17 +17,18 @@ kind: Model
 metadata:
   name: {{ .Values.modelName }}
 spec:
-  type: azure
+  provider: azure
   model:
     value: gpt-4.1-mini
   config:
     azure:
       baseUrl:
         value: ${AZURE_BASE_URL}
-      apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: {{ .Values.modelName }}-model-token
-            key: token
+      auth:
+        apiKey:
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.modelName }}-model-token
+              key: token
       apiVersion:
         value: ${AZURE_API_VERSION}

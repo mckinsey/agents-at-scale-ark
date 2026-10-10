@@ -1,29 +1,32 @@
 ---
 title: A2AServer
-description: Agent-to-Agent protocol servers for hosting external agent frameworks
+description: A2AServer CRD reference — fields, agent discovery, status, and the v1prealpha1 API version
 ---
 
 # A2AServer
 
-A2AServer enables hosting external agent frameworks within ARK using the Agent-to-Agent (A2A) protocol.
+An `A2AServer` connects Ark to a remote [Agent-to-Agent (A2A) protocol](https://a2a-protocol.org) server. Ark connects to the server, discovers the agents it hosts, and creates an [Agent](/reference/resources/agent) resource for each one — wired to the `a2a` execution engine so ordinary [queries](/reference/resources/query) can target them. Each dispatched query then produces an [A2ATask](/reference/resources/a2atask) that Ark polls until the remote agent finishes.
 
-## Specification
+> **API version:** `A2AServer` is served under **`ark.mckinsey.com/v1prealpha1`** — not the `v1alpha1` group used by most Ark resources (Agent, Query, Model, …). Set `apiVersion: ark.mckinsey.com/v1prealpha1` on every A2AServer manifest.
+
+## Spec
 
 ```yaml
-apiVersion: ark.mckinsey.com/v1prealpha1
+apiVersion: ark.mckinsey.com/v1prealpha1     # note: v1prealpha1, not v1alpha1
 kind: A2AServer
 metadata:
   name: aws-operator-agent
 spec:
-  # Required. Service address for the A2A server. Supports an inline `value`,
-  # or `valueFrom` with serviceRef, configMapKeyRef, or secretKeyRef.
+  # --- Required ----------------------------------------------------------
+  # Endpoint of the A2A server. Inline 'value', or 'valueFrom' with
+  # serviceRef / configMapKeyRef / secretKeyRef.
   address:
-    value: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
-  # Optional. Human-readable description of the A2A server.
+    value: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent
+
+  # --- Optional ----------------------------------------------------------
   description: AWS operations agent with read-only access to AWS services
-  # Optional. HTTP headers sent on every request to the server, e.g. for
-  # authentication. Each value may be inline or sourced from a Secret or
-  # ConfigMap via valueFrom.
+  # HTTP headers sent on every request, e.g. for authentication. Each value
+  # is inline or sourced from a Secret/ConfigMap via valueFrom.
   headers:
     - name: Authorization
       value:
@@ -31,31 +34,41 @@ spec:
           secretKeyRef:
             name: a2a-credentials
             key: token
-  # Optional. How often to poll the server for updates (default: 1m).
-  pollInterval: 1m
-  # Optional. Timeout for A2A agent execution (default: 5m).
-  timeout: 5m
-status:
-  conditions:
-    # Ready: A2AServer is reachable and operational
-    - type: Ready
-      status: "True"
-      reason: AgentDiscovered
-      message: Successfully discovered agent
-    # Discovering: Agent discovery is in progress
-    - type: Discovering
-      status: "False"
-      reason: DiscoveryComplete
-      message: Agent discovery completed
-  # Last successfully resolved server address
-  lastResolvedAddress: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
+  pollInterval: 1m                            # how often to poll the server; default '1m'
+  timeout: 5m                                 # A2A agent execution timeout; inherits Query.spec.timeout when unset
+  # Which URL Ark calls for A2A requests: 'address' (default), 'cardPath', or
+  # 'cardUrl'. See "Endpoint resolution" below.
+  endpointResolution: cardPath
+  # Hosts the agent card may redirect requests to, used only when
+  # endpointResolution is 'cardUrl'. '*.' matches one level of subdomain,
+  # an optional ':port' restricts the entry to that port.
+  allowedEndpointHosts:
+    - agents.example.com
+    - agents-internal.example.com:8443
+    - '*.a2a.example.com'
 ```
 
-## Examples
+## Fields
 
-### Created Agent Example
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec.address` | `ValueSource` | yes | Endpoint of the A2A server. Supports an inline `value`, or `valueFrom` with `serviceRef` (`name`, plus optional `namespace`, `port`, `path`), `configMapKeyRef`, or `secretKeyRef`. |
+| `spec.headers[]` | list of `Header` | no | HTTP headers sent on every request to the server, typically for authentication. Each entry has a `name` and a `value` that is inline or sourced via `valueFrom` (`secretKeyRef`, `configMapKeyRef`, or `queryParameterRef`). |
+| `spec.description` | string | no | Human-readable description of the server. Propagated onto the Agent resources Ark creates. |
+| `spec.pollInterval` | duration | no | How often the controller polls the server for updates. Default `1m`. |
+| `spec.timeout` | duration | no | Timeout for A2A agent execution (`30s`, `5m`, `1h`). When unset, execution inherits the deadline from [`Query.spec.timeout`](/reference/resources/query#timeout), falling back to `5m` if the caller set no deadline. |
+| `spec.endpointResolution` | string | no | Which URL Ark calls for A2A requests. `address` (default) uses `spec.address` unchanged. `cardPath` keeps the scheme, host and port from `spec.address` and takes only the path from the agent card. `cardUrl` uses the agent card URL as written. See [Endpoint resolution](#endpoint-resolution). |
+| `spec.allowedEndpointHosts[]` | list of string | no | Hosts the agent card may redirect requests to when `endpointResolution` is `cardUrl`. The origin of `spec.address` is always allowed. Entries are hostnames, optionally prefixed with `*.` to match one level of subdomain and optionally suffixed with `:port`. An entry without a port matches any port on that host. Ignored in the other modes, and the admission webhook warns when it is set there. |
 
-When the A2AServer above is created, the controller automatically creates an Agent:
+## Discovery and created agents
+
+When an A2AServer is created, the controller:
+
+1. **Discovers agents.** It connects to `spec.address` and fetches the server's agent card, trying `/.well-known/agent-card.json` (A2A v0.3+) first, then falling back to `/.well-known/agent.json` (A2A v0.2.x).
+2. **Creates an Agent per discovered agent.** Each generated [Agent](/reference/resources/agent) has an owner reference to the A2AServer, `executionEngine.name: a2a`, and annotations recording the source server, resolved address, and discovered skills. A2A agents carry no `modelRef` — the remote server owns the model.
+3. **Monitors health.** The controller re-polls on `spec.pollInterval` and keeps the `Ready` and `Discovering` conditions current.
+
+Example Agent generated from the A2AServer above:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -63,27 +76,109 @@ kind: Agent
 metadata:
   name: aws-operator-agent
   annotations:
-    # A2A server that created this agent
     ark.mckinsey.com/a2a-server-name: aws-operator-agent
-    # Resolved address of the A2A server
-    ark.mckinsey.com/a2a-server-address: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
-    # Skills discovered from the A2A server
+    ark.mckinsey.com/a2a-server-address: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent
     ark.mckinsey.com/a2a-server-skills: '[{"name":"describe_ec2_instances","description":"List and describe EC2 instances in the account"}]'
 spec:
   description: AWS operations agent with read-only access to AWS services
   prompt: You are aws_operator_agent. AWS operations agent with read-only access to AWS services
   executionEngine:
-    name: a2a
-  # No modelRef - A2A agents don't require models
+    name: a2a                                 # no modelRef — the remote A2A server owns the model
 ```
 
-## Behavior
+## Endpoint resolution
 
-When an A2AServer is created:
+The agent card the server returns carries its own `url` field, the endpoint the A2A spec says clients should send requests to. By default Ark ignores it and keeps calling `spec.address`, because a server's card commonly advertises a URL that is not reachable from inside the cluster (`http://localhost:8000`, a public ingress hostname, or a placeholder). `spec.endpointResolution` opts a single A2AServer into trusting the card:
 
-1. **Discovery**: Controller connects to the server and discovers available agents. Tries `/.well-known/agent-card.json` (A2A v0.3+), then `/.well-known/agent.json` (A2A v0.2.x).
-2. **Agent Creation**: For each discovered agent, an Agent resource is created with:
-   - Owner reference to the A2AServer
-   - `executionEngine.name: a2a`
-   - Annotations identifying the A2AServer
-3. **Status Updates**: Controller continuously monitors server health
+| Mode | Behaviour |
+| --- | --- |
+| `address` (default) | Requests go to `spec.address` unchanged. The card `url` is never read. |
+| `cardPath` | Scheme, host and port come from `spec.address`, the path comes from the card. Use this when the server is correct about *where* its RPC endpoint sits but wrong about the hostname, which is the usual Kubernetes case. The path is normalized (dot segments and repeated slashes collapsed, trailing slash dropped), and query strings and fragments are dropped. The server chooses which path on your configured host Ark calls. |
+| `cardUrl` | The card URL is used as written. Allowed only when its origin (scheme, host and port) matches `spec.address`, or its host is listed in `spec.allowedEndpointHosts`. A card that downgrades an `https` `spec.address` to `http` is always refused, even for an allowlisted host. |
+
+In both card modes the card URL must be an absolute `http` or `https` URL without userinfo. Anything else (a relative path, another scheme, `user:password@host`) is rejected with reason `InvalidAgentCardURL`.
+
+`cardUrl` is the only mode that can move requests to a different host or port, and it is gated because `spec.headers` travel with the request: a card that repoints the endpoint would send your Secret-sourced credentials to whatever host it names. The card is refetched on every `spec.pollInterval`, so this is a standing delegation, not a one-time decision. `spec.allowedEndpointHosts` is therefore per-resource, so trusting one server does not trust the others.
+
+Rejected overrides never break a working server. Ark falls back to `spec.address`, sets the `EndpointOverride` condition to `False` with the reason (`CrossOriginNotAllowed`, `SchemeDowngrade`, `InvalidAgentCardURL`, `NoAgentCardURL`, `InvalidAddress`, or `UnsupportedTransport`), records the rejected URL in `status.rejectedEndpoint` when there is one, and emits an `EndpointOverrideRejected` warning event whenever the reason or the rejected URL changes. When an override is applied, `EndpointOverride` is `True` with reason `AgentCardEndpointApplied`.
+
+A rejected override looks like this in status:
+
+```yaml
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: AgentDiscovered
+    - type: EndpointOverride
+      status: "False"
+      reason: CrossOriginNotAllowed
+      message: Agent card URL points at weather.example.com:443, which is not the origin of spec.address and is not in spec.allowedEndpointHosts, using spec.address
+  lastResolvedAddress: http://weather.default.svc.cluster.local:8000
+  lastResolvedEndpoint: http://weather.default.svc.cluster.local:8000
+  rejectedEndpoint: https://weather.example.com/a2a/v1
+```
+
+### Transport
+
+Ark speaks JSON-RPC only. In `cardPath` and `cardUrl` mode the endpoint it picks is the card's JSON-RPC interface: `url` when `preferredTransport` is `JSONRPC` or unset, otherwise the first `JSONRPC` entry in `additionalInterfaces`. A card that declares no JSON-RPC interface is treated like any other rejected override: requests keep going to `spec.address`, `EndpointOverride` is `False` with reason `UnsupportedTransport`, and an `UnsupportedTransport` warning event names the transports the card does declare. Agents are still created and `Ready` is unaffected. In `address` mode the card transport is not inspected.
+
+## Conversation context
+
+Ark does not hydrate conversation history into the message it sends a discovered agent: a query targeting one sends only that query's current input, even when memory is active. Threading is opt-in — set the `ark.mckinsey.com/a2a-context-id` annotation on the query and Ark forwards that value as the A2A `contextId`, so a server that keys state on it links successive calls. Without the annotation Ark sends no `contextId` and each call stands alone. `spec.conversationId` threads the completions executor and named execution engines; it does not reach A2AServer agents. See [A2A Queries → Stateful Messages](/developer-guide/queries/a2a-queries#stateful-messages) for a worked example.
+
+An agent running as a [Team](/reference/resources/team) member is the exception: Ark renders the accumulated team transcript into the message, so the member sees earlier members' turns without depending on server-side retention.
+
+## Status
+
+```yaml
+status:
+  conditions:
+    - type: Ready                             # server reachable and operational
+      status: "True"
+      reason: AgentDiscovered
+      message: Successfully discovered agent
+    - type: Discovering                       # agent discovery in progress
+      status: "False"
+      reason: DiscoveryComplete
+      message: Agent discovery completed
+    - type: EndpointOverride                  # only present when endpointResolution != 'address'
+      status: "True"
+      reason: AgentCardEndpointApplied
+      message: Using agent card endpoint http://ark-agentcore-bridge.default.svc.cluster.local:80/rpc
+  lastResolvedAddress: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent
+  lastResolvedEndpoint: http://ark-agentcore-bridge.default.svc.cluster.local:80/rpc
+```
+
+### Status fields
+
+| Field | Description |
+| --- | --- |
+| `status.lastResolvedAddress` | The most recently resolved server address (after `spec.address` `valueFrom` resolution). |
+| `status.lastResolvedEndpoint` | The endpoint Ark actually sends A2A requests to. Equal to `lastResolvedAddress` in the default `address` mode. |
+| `status.rejectedEndpoint` | The agent card URL Ark refused to use, set when an override is rejected because of that URL and cleared otherwise. |
+| `status.conditions[]` | Standard Kubernetes conditions. `Ready` indicates the server is reachable and operational; `Discovering` indicates agent discovery is in progress; `EndpointOverride` reports whether the agent card endpoint was applied, and appears only when `spec.endpointResolution` is not `address`. |
+
+### Print columns
+
+`kubectl get a2aservers` prints:
+
+| Column | Source |
+| --- | --- |
+| `NAME` | `.metadata.name` |
+| `READY` | `Ready` condition status |
+| `DISCOVERING` | `Discovering` condition status |
+| `ADDRESS` | `.status.lastResolvedAddress` |
+| `ENDPOINT` | `.status.lastResolvedEndpoint` |
+| `AGE` | `.metadata.creationTimestamp` |
+
+```bash
+kubectl get a2aservers
+kubectl describe a2aserver aws-operator-agent
+```
+
+## Related
+
+- [Agent](/reference/resources/agent) — Ark creates one per discovered agent, wired to the `a2a` execution engine.
+- [A2ATask](/reference/resources/a2atask) — created per query and polled against this server via `spec.a2aServerRef`.
+- [Query](/reference/resources/query) — targets a discovered agent to run remote work.

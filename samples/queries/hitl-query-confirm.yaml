@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: hitl-query-confirm
+spec:
+  type: user
+  input: "Yes, I approve. Please deploy api-service version v2.1.0 to production now."
+  target:
+    name: hitl-agent
+    type: agent
+  sessionId: hitl-demo-session
+  conversationId: hitl-demo-conv-001
+  memory:
+    name: default

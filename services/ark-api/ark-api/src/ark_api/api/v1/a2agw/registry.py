@@ -1,3 +1,4 @@
+import contextvars
 import functools
 import logging
 import os
@@ -20,9 +21,56 @@ def _get_agent_card_url_components():
     logger.info(f"Agent cards will advertise URL: {scheme}://{host}:{port}{path}")
     return scheme, host, port, path
 
+def _agent_suffix(agent_name):
+    return f"/a2a/agent/{agent_name}/"
+
 def get_external(agent_name):
     scheme, host, port, path = _get_agent_card_url_components()
-    return f"{scheme}://{host}:{port}{path}/a2a/agent/{agent_name}/"
+    return f"{scheme}://{host}:{port}{path}{_agent_suffix(agent_name)}"
+
+# External base URL (scheme://host{prefix}) derived from the incoming request's
+# X-Forwarded-* headers and published by the A2A ProxyApp. Empty when the
+# request carries no forwarding prefix, in which case the static
+# ARK_A2A_AGENT_CARD_* env values are used instead.
+forwarded_base_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "a2a_forwarded_base", default=""
+)
+
+def external_forwarded_base_from_headers(headers):
+    """Base URL (scheme://host{prefix}) for the FORWARDED-PREFIX case only.
+
+    This is not a general "what is my base URL" helper: it returns a non-empty
+    value only when the request carries X-Forwarded-Prefix, which is the signal
+    that an external gateway is path-routing this deployment (mirrors the OpenAPI
+    server-URL logic). It returns "" in every other case — meaning "no external
+    prefix, fall back to the static ARK_A2A_AGENT_CARD_* env / a relative link" —
+    which callers compose directly (see list_agents), so "" is deliberate rather
+    than None.
+    """
+    prefix = headers.get("x-forwarded-prefix", "")
+    if not prefix:
+        return ""
+    proto = headers.get("x-forwarded-proto", "http")
+    host = headers.get("x-forwarded-host") or headers.get("host", "localhost")
+    return f"{proto}://{host}{prefix}"
+
+def apply_forwarded_url(card: AgentCard) -> AgentCard:
+    """Card modifier: advertise a URL built from the request's forwarding prefix
+    when present, so path-based multi-tenant deployments serve a card whose URL
+    carries the tenant prefix.
+
+    Returns a copy, never mutating the input. The DynamicManager is a single
+    shared instance whose cached AgentCard objects are reused for every request;
+    the prefix, by contrast, is request-scoped (from X-Forwarded-Prefix), so
+    concurrent requests for the same agent can carry different prefixes. Mutating
+    the shared card in place would race across those requests.
+    """
+    forwarded_base = forwarded_base_ctx.get()
+    if not forwarded_base:
+        return card
+    return card.model_copy(
+        update={"url": f"{forwarded_base}{_agent_suffix(card.name)}"}
+    )
 
 def ark_to_agent_card(ark_agent) -> AgentCard:
     metadata = ark_agent.metadata

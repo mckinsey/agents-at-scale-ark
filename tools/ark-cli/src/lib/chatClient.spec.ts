@@ -197,41 +197,6 @@ describe('ChatClient', () => {
       ).rejects.toThrow('Query creation did not return a name');
     });
 
-    it('should include streaming annotation when streaming enabled with onChunk', async () => {
-      const client = new ChatClient(mockArkApiClient);
-      mockCreateQuery.mockResolvedValue({name: 'test-query-stream'});
-
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        body: {
-          getReader: () => ({
-            read: vi.fn().mockResolvedValue({done: true, value: undefined}),
-            releaseLock: vi.fn(),
-          }),
-        },
-      });
-      vi.stubGlobal('fetch', mockFetch);
-
-      await client.sendMessage(
-        'agent/test-agent',
-        [{role: 'user', content: 'Hello'}],
-        {streamingEnabled: true},
-        vi.fn()
-      );
-
-      expect(mockCreateQuery).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            annotations: expect.objectContaining({
-              'ark.mckinsey.com/streaming-enabled': 'true',
-            }),
-          }),
-        })
-      );
-
-      vi.unstubAllGlobals();
-    });
-
     it('should include conversationId when provided', async () => {
       const client = new ChatClient(mockArkApiClient);
       mockCreateQuery.mockResolvedValue({name: 'test-query-conv'});
@@ -428,6 +393,41 @@ describe('ChatClient', () => {
       expect(lastToolCallInvocation).toBeDefined();
       expect(lastToolCallInvocation![1][0].function.arguments).toBe('{"q":"test"}');
 
+      vi.unstubAllGlobals();
+    });
+
+    it('should surface the query error when the stream closes with no content', async () => {
+      const client = new ChatClient(mockArkApiClient);
+      mockCreateQuery.mockResolvedValue({name: 'err-stream-q'});
+      mockGetQuery.mockResolvedValue({
+        status: {
+          phase: 'error',
+          conditions: [
+            {
+              type: 'Completed',
+              status: 'True',
+              message: "query parameter 'weather' not found",
+            },
+          ],
+        },
+      });
+
+      // Stream produces no content and no tool calls, then closes.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(mockSSEResponse(['data: [DONE]\n\n']))
+      );
+
+      await expect(
+        client.sendMessage(
+          'agent/a',
+          [{role: 'user', content: 'Hi'}],
+          {streamingEnabled: true},
+          vi.fn()
+        )
+      ).rejects.toThrow("query parameter 'weather' not found");
+
+      expect(mockGetQuery).toHaveBeenCalledWith('err-stream-q');
       vi.unstubAllGlobals();
     });
 

@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: ark-query-agent
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+  templates:
+    - name: main
+      steps:
+        - - name: run
+            templateRef:
+              name: ark-query
+              template: query
+            arguments:
+              parameters:
+                - name: target
+                  value: "agent/weather"
+                - name: input
+                  value: "What is the weather in Paris?"
+                - name: timeout
+                  value: "2m"
+      outputs:
+        parameters:
+          - name: response
+            valueFrom:
+              parameter: "{{steps.run.outputs.parameters.response}}"
+          - name: phase
+            valueFrom:
+              parameter: "{{steps.run.outputs.parameters.phase}}"
+          - name: conversation-id
+            valueFrom:
+              parameter: "{{steps.run.outputs.parameters.conversation-id}}"
+          - name: query-json
+            valueFrom:
+              parameter: "{{steps.run.outputs.parameters.query-json}}"

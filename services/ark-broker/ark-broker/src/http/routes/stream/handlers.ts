@@ -1,8 +1,6 @@
 import type {Request, Response} from 'express';
-import {
-  CompletionChunkBroker,
-  CompletionChunkData,
-} from '@ark-broker/brokers/chunks-broker.js';
+import type {CompletionChunkBroker} from '@ark-broker/brokers/chunks-broker.js';
+import type {CompletionChunkData} from '@ark-broker/brokers/stream/chunk-stream.js';
 import {BrokerItem} from '@ark-broker/brokers/stream/broker-item.js';
 import {writeSSEEvent} from '@ark-broker/http/sse.js';
 import {sendInternalError} from '@ark-broker/http/routes/errors.js';
@@ -24,8 +22,8 @@ interface StreamCounters {
 
 interface QueryStreamState {
   caughtUp: boolean;
-  hasReceivedChunks: boolean;
   timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  rearmIdleTimeout: () => void;
   buffer: BrokerItem<CompletionChunkData>[];
   counters: StreamCounters;
 }
@@ -111,11 +109,10 @@ function handleIncomingItem(
   queryName: string,
   cleanup: () => void
 ): void {
-  state.hasReceivedChunks = true;
-  if (state.timeoutHandle) {
-    clearTimeout(state.timeoutHandle);
-    state.timeoutHandle = undefined;
-  }
+  // Re-arm the idle timeout on every chunk: the bound is inter-chunk silence,
+  // not time-to-first-chunk, so a stream that stalls after some chunks (e.g. the
+  // executor dies before [DONE]) still terminates.
+  state.rearmIdleTimeout();
   if (!state.caughtUp) {
     state.buffer.push(item);
     return;
@@ -130,10 +127,16 @@ function flushBuffer(
   buffer: BrokerItem<CompletionChunkData>[],
   maxReplayedSeq: number,
   counters: StreamCounters,
-  cleanup: () => void
+  cleanup: () => void,
+  onComplete: () => void,
+  rearmIdleTimeout: () => void
 ): boolean {
   for (const bufferedItem of buffer) {
     if (bufferedItem.sequenceNumber <= maxReplayedSeq) continue;
+    if (bufferedItem.data.complete) {
+      onComplete();
+      return false;
+    }
     const chunk = bufferedItem.data.chunk as ChunkPayload | string;
     if (typeof chunk === 'string') continue;
 
@@ -161,6 +164,9 @@ function flushBuffer(
       return false;
     }
 
+    // Re-arm per chunk so the idle bound holds across the flush, not just from
+    // stream open (matters for a large backlog to a slow client).
+    rearmIdleTimeout();
     counters.outboundChunkCount++;
     classifyChunk(chunk, counters.chunkTypeCounts);
   }
@@ -173,7 +179,8 @@ async function replayChunks(
   chunks: CompletionChunkBroker,
   queryName: string,
   state: QueryStreamState,
-  cleanup: () => void
+  cleanup: () => void,
+  onComplete: () => void
 ): Promise<boolean> {
   const existingItems = await chunks.getByQuery(queryName);
   req.log.info(
@@ -183,19 +190,23 @@ async function replayChunks(
 
   let maxReplayedSeq = -1;
   for (const item of existingItems) {
-    const chunk = item.data.chunk as ChunkPayload | string;
-    if (chunk === '[DONE]') {
-      req.log.info({queryName}, 'found [DONE] during replay, closing stream');
+    if (item.data.complete) {
+      req.log.info({queryName}, 'found complete during replay, closing stream');
       res.write('data: [DONE]\n\n');
       res.end();
       cleanup();
       return false;
     }
+    const chunk = item.data.chunk as ChunkPayload | string;
+    if (typeof chunk === 'string') continue;
     if (!writeSSEEvent(res, chunk, req.log)) {
       req.log.warn({queryName}, 'error writing existing chunk');
       cleanup();
       return false;
     }
+    // Re-arm per replayed chunk: the idle bound is inter-chunk silence, so a
+    // large backlog must not run the whole clock from stream open.
+    state.rearmIdleTimeout();
     if (item.sequenceNumber > maxReplayedSeq) {
       maxReplayedSeq = item.sequenceNumber;
     }
@@ -208,32 +219,40 @@ async function replayChunks(
     state.buffer,
     maxReplayedSeq,
     state.counters,
-    cleanup
+    cleanup,
+    onComplete,
+    state.rearmIdleTimeout
   );
 }
 
-function onQueryTimeout(
+function onIdleTimeout(
   res: Response,
   req: Request,
   queryName: string,
   timeout: number,
-  state: QueryStreamState,
   cleanup: () => void
 ): void {
-  if (!state.hasReceivedChunks) {
-    req.log.error({queryName, timeout}, 'timeout waiting for chunks');
-    const errorEvent = {
-      error: {
-        message: 'Request timeout waiting for streaming query response',
-        type: 'timeout_error',
-        code: 'timeout',
-      },
-    };
-    res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-    cleanup();
-  }
+  // Fires when no chunk (or terminal [DONE]) arrives within the idle window,
+  // whether or not any chunk was seen. Terminates the subscriber cleanly with a
+  // terminal [DONE] so it never hangs on a stream that lost its completion.
+  req.log.warn({queryName, timeout}, 'stream idle timeout; terminating');
+  // Distinct code so consumers can tell a broker-side idle bound from a real
+  // query failure: the Query CR is authoritative and may still be running. Until
+  // the Query-phase bound lands (#2862), downstream should treat this as
+  // "stream ended, check query status", not "query failed".
+  const errorEvent = {
+    error: {
+      message:
+        `Stream closed after ${timeout}ms of inactivity; ` +
+        'the query may still be running — check its status',
+      type: 'timeout_error',
+      code: 'stream_idle_timeout',
+    },
+  };
+  res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+  res.write('data: [DONE]\n\n');
+  res.end();
+  cleanup();
 }
 
 function onStreamClose(
@@ -269,17 +288,11 @@ export async function handleQueryStream(
   chunks: CompletionChunkBroker,
   queryName: string,
   fromBeginning: boolean,
-  waitForQuerySeconds: number | undefined,
-  maxChunkSize: number
+  maxChunkSize: number,
+  idleTimeoutMs: number
 ): Promise<void> {
-  const waitForQuery = waitForQuerySeconds !== undefined;
-  const timeout =
-    waitForQuerySeconds === undefined
-      ? 30000
-      : Math.max(1000, Math.min(waitForQuerySeconds * 1000, 300000));
-
   req.log.info(
-    {queryName, fromBeginning, waitForQuery, timeout, maxChunkSize},
+    {queryName, fromBeginning, idleTimeoutMs, maxChunkSize},
     'starting query stream'
   );
 
@@ -290,8 +303,8 @@ export async function handleQueryStream(
 
   const state: QueryStreamState = {
     caughtUp: false,
-    hasReceivedChunks: false,
     timeoutHandle: undefined,
+    rearmIdleTimeout: (): void => {},
     buffer: [],
     counters: {
       outboundChunkCount: 0,
@@ -300,15 +313,20 @@ export async function handleQueryStream(
     },
   };
 
-  const unsubHandles = {chunks: (): void => {}, complete: (): void => {}};
+  const unsubHandles = {chunks: (): void => {}};
   const cleanup = (): void => {
+    if (state.timeoutHandle) clearTimeout(state.timeoutHandle);
     unsubHandles.chunks();
-    unsubHandles.complete();
   };
 
-  unsubHandles.chunks = chunks.subscribeToQuery(queryName, (item) =>
-    handleIncomingItem(item, state, res, req, queryName, cleanup)
-  );
+  const armIdleTimeout = (ms: number): void => {
+    if (state.timeoutHandle) clearTimeout(state.timeoutHandle);
+    state.timeoutHandle = setTimeout(
+      () => onIdleTimeout(res, req, queryName, ms, cleanup),
+      ms
+    );
+  };
+  state.rearmIdleTimeout = (): void => armIdleTimeout(idleTimeoutMs);
 
   const completeHandler = (): void => {
     req.log.info(
@@ -323,20 +341,29 @@ export async function handleQueryStream(
     res.end();
     cleanup();
   };
-  unsubHandles.complete = (): void => {
-    chunks.eventEmitter.off(`complete:${queryName}`, completeHandler);
-  };
-  chunks.eventEmitter.on(`complete:${queryName}`, completeHandler);
 
-  if (waitForQuery) {
-    state.timeoutHandle = setTimeout(
-      () => onQueryTimeout(res, req, queryName, timeout, state, cleanup),
-      timeout
-    );
-  }
+  unsubHandles.chunks = chunks.subscribeToQuery(queryName, (item) => {
+    if (item.data.complete) {
+      completeHandler();
+      return;
+    }
+    handleIncomingItem(item, state, res, req, queryName, cleanup);
+  });
+
+  // Always arm an idle timeout so every subscriber is bounded. Re-armed on each
+  // chunk in handleIncomingItem, so the bound is inter-chunk silence.
+  armIdleTimeout(idleTimeoutMs);
 
   if (fromBeginning) {
-    const ok = await replayChunks(res, req, chunks, queryName, state, cleanup);
+    const ok = await replayChunks(
+      res,
+      req,
+      chunks,
+      queryName,
+      state,
+      cleanup,
+      completeHandler
+    );
     if (!ok) return;
   }
   state.caughtUp = true;

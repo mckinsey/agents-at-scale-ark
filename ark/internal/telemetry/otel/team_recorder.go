@@ -51,20 +51,11 @@ func (r *teamRecorder) StartTurn(ctx context.Context, turn int, memberName, memb
 	)
 }
 
-func (r *teamRecorder) RecordTurnOutput(span telemetry.Span, messages any, messageCount int) {
-	if messages == nil {
-		return
-	}
-
+func (r *teamRecorder) RecordTurnOutput(span telemetry.Span, output string, messageCount int) {
 	span.SetAttributes(telemetry.Int("turn.output_message_count", messageCount))
 
-	if slice, ok := messages.([]interface{}); ok && len(slice) > 0 {
-		lastMessage := slice[len(slice)-1]
-		if msgMap, ok := lastMessage.(map[string]interface{}); ok {
-			if content, ok := msgMap["content"].(string); ok && content != "" {
-				span.SetAttributes(telemetry.String("turn.output", content))
-			}
-		}
+	if output != "" {
+		span.SetAttributes(telemetry.String("turn.output", output))
 	}
 }
 

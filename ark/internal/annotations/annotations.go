@@ -34,10 +34,15 @@ const (
 
 // Query annotations
 const (
-	Query           = ARKPrefix + "query"
-	Auto            = ARKPrefix + "auto"
-	QueryGeneration = ARKPrefix + "query-generation"
-	QueryPhase      = ARKPrefix + "query-phase"
+	Query                = ARKPrefix + "query"
+	Auto                 = ARKPrefix + "auto"
+	QueryGeneration      = ARKPrefix + "query-generation"
+	QueryPhase           = ARKPrefix + "query-phase"
+	ApprovalCascadeCount = ARKPrefix + "approval-cascade-count"
+	// RoundAnchor stamps the start of the current pre-execution round used by
+	// remainingBudget. Re-stamped on HITL resumption so each round is bounded
+	// by a fresh spec.timeout.
+	RoundAnchor = ARKPrefix + "round-anchor"
 )
 
 // General annotations
@@ -47,6 +52,12 @@ const (
 	LocalhostGatewayPort = ARKPrefix + "localhost-gateway-port"
 )
 
+// Defaulting annotations - record fields the mutating webhook populated so
+// controllers can tell an injected value from one the user supplied.
+const (
+	DefaultedModelRef = ARKPrefix + "defaulted-model-ref"
+)
+
 // Event annotations
 const (
 	EventData = ARKPrefix + "event-data"
@@ -54,7 +65,6 @@ const (
 
 // Streaming annotations
 const (
-	StreamingEnabled   = ARKPrefix + "streaming-enabled"
 	StreamingURL       = ARKPrefix + "streaming-url"
 	StreamingSupported = ARKPrefix + "streaming-supported"
 )

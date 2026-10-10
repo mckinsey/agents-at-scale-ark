@@ -3,7 +3,7 @@ from typing import List, Dict, Optional, Any
 
 from pydantic import BaseModel
 
-from .common import AvailabilityStatus
+from .common import AvailabilityStatus, PaginatedListResponse
 
 
 class ExecutionEngineRef(BaseModel):
@@ -116,12 +116,12 @@ class AgentResponse(BaseModel):
     prompt: Optional[str] = None
     available: Optional[AvailabilityStatus] = None
     annotations: Optional[Dict[str, str]] = None
+    tool_names: Optional[List[str]] = None
 
 
-class AgentListResponse(BaseModel):
+class AgentListResponse(PaginatedListResponse):
     """List of agents response model."""
     items: List[AgentResponse]
-    count: int
 
 
 class AgentCreateRequest(BaseModel):

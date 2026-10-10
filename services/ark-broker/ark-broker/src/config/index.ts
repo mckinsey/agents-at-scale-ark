@@ -6,4 +6,6 @@ export type {
   PersistenceConfig,
   NodeEnv,
   LogLevel,
+  ChunkBackend,
+  RedisConfig,
 } from './types.js';

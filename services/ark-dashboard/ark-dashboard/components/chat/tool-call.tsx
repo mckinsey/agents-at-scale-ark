@@ -1,7 +1,10 @@
 'use client';
 
-import { ChevronDown, ChevronRight, Wrench } from 'lucide-react';
 import { useState } from 'react';
+
+import { ChevronDown, ChevronRight, Build } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
+import { cn } from '@/lib/utils';
 
 export interface ToolCallData {
   id: string;
@@ -42,25 +45,20 @@ function ExpandableSection({
     <>
       <button
         onClick={onToggle}
-        className={`hover:bg-muted/50 flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors ${additionalClasses}`}>
-        {isExpanded ? (
-          <ChevronDown className="h-3 w-3 flex-shrink-0" />
-        ) : (
-          <ChevronRight className="h-3 w-3 flex-shrink-0" />
-        )}
-        <span className="text-muted-foreground text-xs font-medium">
-          {label}
-        </span>
+        className={cn(
+          'hover:bg-stateslayer-overlay-hover flex w-full items-center gap-2 px-2 py-1 text-left transition-colors',
+          additionalClasses,
+        )}>
+        <IconShell size="sm">
+          {isExpanded ? <ChevronDown /> : <ChevronRight />}
+        </IconShell>
+        <span className="text-fg-secondary text-xs font-medium">{label}</span>
       </button>
       {isExpanded && (
         <div className="mt-1 pl-5">
-          {hasError ? (
-            <pre className="overflow-x-auto p-2 text-xs">{rawContent}</pre>
-          ) : (
-            <pre className="overflow-x-auto p-2 text-xs">
-              {JSON.stringify(parsedContent, null, 2)}
-            </pre>
-          )}
+          <pre className="text-fg-tertiary overflow-hidden p-2 text-xs break-words whitespace-pre-wrap">
+            {hasError ? rawContent : JSON.stringify(parsedContent, null, 2)}
+          </pre>
         </div>
       )}
     </>
@@ -74,6 +72,7 @@ interface VariantProps {
   parsedResult: Record<string, unknown> | null;
   parseArgsError: boolean;
   parseResultError: boolean;
+  isFailed: boolean;
 }
 
 function TreeVariant({
@@ -83,23 +82,31 @@ function TreeVariant({
   parsedResult,
   parseArgsError,
   parseResultError,
-}: VariantProps) {
+  isFailed,
+}: Readonly<VariantProps>) {
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isOutputExpanded, setIsOutputExpanded] = useState(false);
 
+  const lineColor = isFailed ? 'bg-stroke-status-error' : 'bg-stroke-divider';
+  const containerBg = isFailed ? 'bg-status-error/10 rounded-md px-2 py-1' : '';
+
   return (
-    <div className={`relative pl-6 text-sm ${className || ''}`}>
-      <div className="absolute left-0 top-0 h-[18px] w-[2px] bg-border/50"></div>
-      <div className="absolute left-0 top-[18px] w-4 h-[2px] bg-border/50"></div>
+    <div className={cn('relative min-w-0 pl-6 text-sm', containerBg, className)}>
+      <div className={cn('absolute left-0 top-0 h-[18px] w-px', lineColor)}></div>
+      <div className={cn('absolute left-0 top-[18px] h-px w-4', lineColor)}></div>
       <div className="flex items-center gap-2 py-1.5 pl-2">
-        <Wrench className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-        <span className="font-semibold">{toolCall.function.name}</span>
+        <IconShell size="sm" className="text-viz-categorical-08">
+          <Build />
+        </IconShell>
+        <span className="text-fg-primary font-medium">
+          {toolCall.function.name}
+        </span>
       </div>
 
       <div className="mt-1 space-y-1 pl-2">
         <div className="relative">
-          <div className="absolute left-0 top-0 h-[14px] w-[2px] bg-border/50"></div>
-          <div className="absolute left-0 top-[14px] w-3 h-[2px] bg-border/50"></div>
+          <div className={cn('absolute left-0 top-0 h-[14px] w-px', lineColor)}></div>
+          <div className={cn('absolute left-0 top-[14px] h-px w-3', lineColor)}></div>
           <ExpandableSection
             label="Input"
             isExpanded={isInputExpanded}
@@ -113,8 +120,8 @@ function TreeVariant({
 
         {toolCall.result && (
           <div className="relative">
-            <div className="absolute left-0 top-0 h-[14px] w-[2px] bg-border/50"></div>
-            <div className="absolute left-0 top-[14px] w-3 h-[2px] bg-border/50"></div>
+            <div className={cn('absolute left-0 top-0 h-[14px] w-px', lineColor)}></div>
+            <div className={cn('absolute left-0 top-[14px] h-px w-3', lineColor)}></div>
             <ExpandableSection
               label="Output"
               isExpanded={isOutputExpanded}
@@ -138,43 +145,46 @@ function CardVariant({
   parsedResult,
   parseArgsError,
   parseResultError,
-}: VariantProps) {
+  isFailed,
+}: Readonly<VariantProps>) {
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isOutputExpanded, setIsOutputExpanded] = useState(false);
 
   return (
     <div
-      className={`bg-card border-border rounded-lg border p-3 text-sm shadow-sm ${className || ''}`}>
+      className={cn(
+        'min-w-0 border p-3 text-sm',
+        isFailed
+          ? 'bg-status-error/10 border-stroke-status-error'
+          : 'bg-surface-bg-secondary border-stroke-divider',
+        className,
+      )}>
       <div className="flex items-center gap-2 px-2 py-1.5">
-        <Wrench className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-        <span className="font-semibold">{toolCall.function.name}</span>
+        <IconShell size="sm" className="text-viz-categorical-08">
+          <Build />
+        </IconShell>
+        <span className="text-fg-primary font-medium">
+          {toolCall.function.name}
+        </span>
       </div>
 
       <div className="mt-2 space-y-2">
         <div>
           <button
             onClick={() => setIsInputExpanded(!isInputExpanded)}
-            className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors">
-            {isInputExpanded ? (
-              <ChevronDown className="h-3 w-3 flex-shrink-0" />
-            ) : (
-              <ChevronRight className="h-3 w-3 flex-shrink-0" />
-            )}
-            <span className="text-muted-foreground text-xs font-medium">
-              Input
-            </span>
+            className="hover:bg-stateslayer-overlay-hover flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors">
+            <IconShell size="sm">
+              {isInputExpanded ? <ChevronDown /> : <ChevronRight />}
+            </IconShell>
+            <span className="text-fg-secondary text-xs font-medium">Input</span>
           </button>
           {isInputExpanded && (
             <div className="mt-1 px-2">
-              {parseArgsError ? (
-                <pre className="bg-muted overflow-x-auto rounded-md p-2 text-xs">
-                  {toolCall.function.arguments}
-                </pre>
-              ) : (
-                <pre className="bg-muted overflow-x-auto rounded-md p-2 text-xs">
-                  {JSON.stringify(parsedArgs, null, 2)}
-                </pre>
-              )}
+              <pre className="bg-surface-bg-tertiary text-fg-tertiary overflow-hidden p-2 text-xs break-words whitespace-pre-wrap">
+                {parseArgsError
+                  ? toolCall.function.arguments
+                  : JSON.stringify(parsedArgs, null, 2)}
+              </pre>
             </div>
           )}
         </div>
@@ -183,27 +193,21 @@ function CardVariant({
           <div>
             <button
               onClick={() => setIsOutputExpanded(!isOutputExpanded)}
-              className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors">
-              {isOutputExpanded ? (
-                <ChevronDown className="h-3 w-3 flex-shrink-0" />
-              ) : (
-                <ChevronRight className="h-3 w-3 flex-shrink-0" />
-              )}
-              <span className="text-muted-foreground text-xs font-medium">
+              className="hover:bg-stateslayer-overlay-hover flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors">
+              <IconShell size="sm">
+                {isOutputExpanded ? <ChevronDown /> : <ChevronRight />}
+              </IconShell>
+              <span className="text-fg-secondary text-xs font-medium">
                 Output
               </span>
             </button>
             {isOutputExpanded && (
               <div className="mt-1 px-2">
-                {parseResultError ? (
-                  <pre className="bg-muted overflow-x-auto rounded-md p-2 text-xs">
-                    {toolCall.result}
-                  </pre>
-                ) : (
-                  <pre className="bg-muted overflow-x-auto rounded-md p-2 text-xs">
-                    {JSON.stringify(parsedResult, null, 2)}
-                  </pre>
-                )}
+                <pre className="bg-surface-bg-tertiary text-fg-tertiary overflow-hidden p-2 text-xs break-words whitespace-pre-wrap">
+                  {parseResultError
+                    ? toolCall.result
+                    : JSON.stringify(parsedResult, null, 2)}
+                </pre>
               </div>
             )}
           </div>
@@ -213,7 +217,11 @@ function CardVariant({
   );
 }
 
-export function ToolCall({ toolCall, variant = 'card', className }: Readonly<ToolCallProps>) {
+export function ToolCall({
+  toolCall,
+  variant = 'card',
+  className,
+}: Readonly<ToolCallProps>) {
   let parsedArgs: Record<string, unknown> | null = null;
   let parseArgsError = false;
 
@@ -237,6 +245,11 @@ export function ToolCall({ toolCall, variant = 'card', className }: Readonly<Too
     }
   }
 
+  // A tool call is failed if its result indicates rejection or an error.
+  const isFailed =
+    toolCall.result != null &&
+    /error|failed|exception|rejected/i.test(toolCall.result);
+
   const variantProps: VariantProps = {
     toolCall,
     className,
@@ -244,6 +257,7 @@ export function ToolCall({ toolCall, variant = 'card', className }: Readonly<Too
     parsedResult,
     parseArgsError,
     parseResultError,
+    isFailed,
   };
 
   if (variant === 'tree') {

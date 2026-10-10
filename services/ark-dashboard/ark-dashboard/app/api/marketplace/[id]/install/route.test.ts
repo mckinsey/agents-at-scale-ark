@@ -323,9 +323,8 @@ describe('DELETE /api/marketplace/[id]/install', () => {
     expect(data.error).toBe('Item does not have uninstallation configuration');
   });
 
-  it('should execute helm uninstall and return success', async () => {
+  it('should return the uninstall command and not spawn helm', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnSuccess({ stdout: 'release "phoenix" uninstalled', stderr: '' });
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'DELETE',
@@ -334,16 +333,16 @@ describe('DELETE /api/marketplace/[id]/install', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.status).toBe('uninstalled');
-    expect(data.message).toBe('Successfully uninstalled Phoenix');
+    expect(data.status).toBe('command');
+    expect(data.helmCommand).toBe('helm uninstall phoenix');
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
-  it('should include --namespace when namespace is set', async () => {
+  it('should include --namespace in the uninstall command when namespace is set', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({
       ...baseItem,
       ark: { ...baseItem.ark, namespace: 'monitoring' },
     });
-    mockSpawnSuccess({ stdout: 'uninstalled', stderr: '' });
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'DELETE',
@@ -351,27 +350,9 @@ describe('DELETE /api/marketplace/[id]/install', () => {
     const response = await DELETE(request, { params: Promise.resolve({ id: 'phoenix' }) });
     const data = await response.json();
 
-    expect(data.status).toBe('uninstalled');
-    expect(mockSpawn).toHaveBeenCalledWith(
-      'helm',
-      ['uninstall', 'phoenix', '--namespace', 'monitoring'],
-      { shell: false, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-  });
-
-  it('should return 500 with error details when helm fails', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnFailure(new Error('release not found'));
-
-    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
-      method: 'DELETE',
-    });
-    const response = await DELETE(request, { params: Promise.resolve({ id: 'phoenix' }) });
-    const data = await response.json();
-
-    expect(response.status).toBe(500);
-    expect(data.error).toBe('Uninstallation failed');
-    expect(data.details).toBe('Failed to execute Helm command: release not found');
+    expect(data.status).toBe('command');
+    expect(data.helmCommand).toContain('--namespace monitoring');
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
   it('should return 500 when params rejects', async () => {
@@ -383,45 +364,5 @@ describe('DELETE /api/marketplace/[id]/install', () => {
 
     expect(response.status).toBe(500);
     expect(data.error).toBe('Failed to uninstall marketplace item');
-  });
-
-  it('should handle helm uninstall errors', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnFailure(new Error('uninstall error'));
-
-    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
-      method: 'DELETE',
-    });
-    const response = await DELETE(request, { params: Promise.resolve({ id: 'phoenix' }) });
-    const data = await response.json();
-
-    expect(response.status).toBe(500);
-    expect(data.error).toBe('Uninstallation failed');
-  });
-
-  it('should not log stderr when it contains WARNING', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnSuccess({ stdout: 'uninstalled', stderr: 'WARNING: something' });
-
-    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
-      method: 'DELETE',
-    });
-    const response = await DELETE(request, { params: Promise.resolve({ id: 'phoenix' }) });
-    const data = await response.json();
-
-    expect(data.status).toBe('uninstalled');
-  });
-
-  it('should log stderr when it contains non-WARNING content', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnSuccess({ stdout: 'uninstalled', stderr: 'actual error' });
-
-    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
-      method: 'DELETE',
-    });
-    const response = await DELETE(request, { params: Promise.resolve({ id: 'phoenix' }) });
-    const data = await response.json();
-
-    expect(data.status).toBe('uninstalled');
   });
 });

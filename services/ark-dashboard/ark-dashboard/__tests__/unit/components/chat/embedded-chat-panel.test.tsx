@@ -9,6 +9,15 @@ import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { chatService } from '@/lib/services/chat';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 vi.mock('@/lib/services/chat', () => ({
   chatService: {
     streamChatResponse: vi.fn(),
@@ -17,6 +26,12 @@ vi.mock('@/lib/services/chat', () => ({
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
     getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
+  },
+}));
+
+vi.mock('@/lib/services/agents', () => ({
+  agentsService: {
+    getByName: vi.fn().mockResolvedValue({ parameters: [] }),
   },
 }));
 
@@ -87,7 +102,11 @@ beforeEach(() => {
   vi.mocked(chatService.startStreamChatResponse).mockImplementation(
     async (...args: unknown[]) => ({
       queryName: 'test-query',
-      chunks: (chatService.streamChatResponse as (...a: unknown[]) => AsyncGenerator<Record<string, unknown>>)(...args),
+      chunks: (
+        chatService.streamChatResponse as (
+          ...a: unknown[]
+        ) => AsyncGenerator<Record<string, unknown>>
+      )(...args),
     }),
   );
   vi.mocked(chatService.streamQueryStatus).mockResolvedValue(() => {});
@@ -126,7 +145,7 @@ describe('EmbeddedChatPanel', () => {
   it('should persist new sessionId to atom on new chat creation', async () => {
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
 
-    const newChatButton = screen.getByText(/New Chat/i);
+    const newChatButton = screen.getByRole('button', { name: /new chat/i });
     expect(newChatButton).toBeInTheDocument();
   });
 
@@ -190,7 +209,9 @@ describe('EmbeddedChatPanel', () => {
     const chatTab = screen.getByRole('tab', { name: /Chat/i });
     await user.click(chatTab);
 
-    const newChatButton = await screen.findByText(/New Chat/i);
+    const newChatButton = await screen.findByRole('button', {
+      name: /new chat/i,
+    });
     expect(newChatButton).not.toBeDisabled();
 
     await user.click(newChatButton);

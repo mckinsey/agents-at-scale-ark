@@ -4,12 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FilesPage from '@/app/(dashboard)/files/page';
 
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: vi.fn(() => (
-    <div data-testid="page-header">Page Header</div>
-  )),
-}));
-
 vi.mock('@/components/sections/files-section', () => {
   const React = require('react');
   return {
@@ -56,7 +50,7 @@ describe('FilesPage', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <FilesPage />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
 
     expect(screen.getByTestId('files-section')).toBeInTheDocument();
@@ -69,7 +63,7 @@ describe('FilesPage', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <FilesPage />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
 
     expect(screen.queryByTestId('files-section')).not.toBeInTheDocument();
@@ -77,7 +71,7 @@ describe('FilesPage', () => {
       screen.getByText(/File Gateway Service Not Configured/i),
     ).toBeInTheDocument();
 
-    const link = screen.getByRole('link', { name: /File Gateway Service/i });
+    const link = screen.getByRole('link', { name: /Learn more/i });
     expect(link).toHaveAttribute(
       'href',
       'https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/',

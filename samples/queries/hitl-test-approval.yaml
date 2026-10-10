@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: hitl-test-approval
+spec:
+  type: user
+  input: "Write 'Testing HITL approval flow' to /tmp/approval-test.txt"
+  target:
+    name: hitl-agent
+    type: agent
+  sessionId: hitl-test-session
+  conversationId: hitl-test-conv

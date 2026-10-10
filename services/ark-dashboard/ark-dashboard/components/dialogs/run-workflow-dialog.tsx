@@ -1,7 +1,6 @@
 'use client';
 
-import { Play } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -24,7 +23,10 @@ interface RunWorkflowDialogProps {
     parameters?: Record<string, string>,
     workflowName?: string,
   ) => Promise<void>;
+  /** Element that opens the dialog. Omit it when driving `open` directly. */
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function RunWorkflowDialog({
@@ -32,18 +34,31 @@ export function RunWorkflowDialog({
   parameters = [],
   onRun,
   trigger,
-}: RunWorkflowDialogProps) {
-  const [open, setOpen] = useState(false);
+  open: controlledOpen,
+  onOpenChange,
+}: Readonly<RunWorkflowDialogProps>) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) {
+      setUncontrolledOpen(next);
+    }
+    onOpenChange?.(next);
+  };
   const [workflowName, setWorkflowName] = useState('');
   const [workflowNameError, setWorkflowNameError] = useState<string>('');
-  const [paramValues, setParamValues] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    parameters.forEach(param => {
-      initial[param.name] = '';
-    });
-    return initial;
-  });
+  const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setWorkflowName('');
+    setWorkflowNameError('');
+    setParamValues({});
+  }, [open]);
 
   const validateWorkflowName = (name: string): string => {
     if (!name) {
@@ -98,30 +113,12 @@ export function RunWorkflowDialog({
   const handleOpenChange = (newOpen: boolean) => {
     if (!isSubmitting) {
       setOpen(newOpen);
-      if (newOpen) {
-        setWorkflowName('');
-        setWorkflowNameError('');
-        const initial: Record<string, string> = {};
-        parameters.forEach(param => {
-          initial[param.name] = '';
-        });
-        setParamValues(initial);
-      }
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 cursor-pointer p-0">
-            <Play className="h-4 w-4" />
-          </Button>
-        )}
-      </DialogTrigger>
+      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
@@ -130,19 +127,26 @@ export function RunWorkflowDialog({
               Configure and run {templateName}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid max-h-[60vh] gap-4 overflow-y-auto py-4">
+          <div className="-mx-1 grid max-h-[60vh] gap-4 overflow-y-auto px-1 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="workflow-name">Workflow Name </Label>
+              <Label htmlFor="workflow-name">Workflow name</Label>
               <Input
                 id="workflow-name"
                 value={workflowName}
                 onChange={e => handleWorkflowNameChange(e.target.value)}
                 placeholder="Auto-generated if not specified"
-                className={workflowNameError ? 'border-destructive' : ''}
+                aria-invalid={workflowNameError ? true : undefined}
+                aria-describedby={
+                  workflowNameError ? 'workflow-name-error' : undefined
+                }
                 disabled={isSubmitting}
               />
               {workflowNameError && (
-                <p className="text-destructive text-xs">{workflowNameError}</p>
+                <p
+                  id="workflow-name-error"
+                  className="text-status-error text-sm">
+                  {workflowNameError}
+                </p>
               )}
             </div>
             {parameters.length > 0 && (
@@ -151,6 +155,11 @@ export function RunWorkflowDialog({
                 {parameters.map(param => (
                   <div key={param.name} className="grid gap-2">
                     <Label htmlFor={param.name}>{param.name}</Label>
+                    {param.description && (
+                      <p className="text-fg-secondary text-xs">
+                        {param.description}
+                      </p>
+                    )}
                     <Input
                       id={param.name}
                       value={paramValues[param.name] || ''}

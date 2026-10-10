@@ -78,9 +78,17 @@ export interface MarketplaceFilters {
   featured?: boolean;
 }
 
+export interface MarketplaceSourceError {
+  source: string;
+  displayName: string;
+  message: string;
+  code: string;
+}
+
 export interface MarketplaceResponse {
   items: MarketplaceItem[];
   total: number;
   page: number;
   pageSize: number;
+  sourceErrors?: MarketplaceSourceError[];
 }

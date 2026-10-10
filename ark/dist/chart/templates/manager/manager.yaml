@@ -33,15 +33,31 @@ spec:
             - {{ . }}
             {{- end }}
             - "--completions-addr={{ .Values.completions.addr }}"
+            - "--max-concurrent-queries={{ .Values.controllerManager.maxConcurrentQueries }}"
+            - "--max-concurrent-reconciles={{ .Values.controllerManager.maxConcurrentReconciles }}"
+            {{- if and .Values.metrics.enable .Values.certmanager.enable }}
+            - "--metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs"
+            {{- end }}
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.controllerManager.container.image.pullPolicy | default "IfNotPresent" }}
           env:
+          # client-go 0.37 enables WatchListClient by default, but the PG aggregated
+          # apiserver does not yet satisfy the WatchList contract (#3575). Disable it
+          # so reflectors use classic LIST+WATCH until server-side support lands.
+          - name: KUBE_FEATURE_WatchListClient
+            value: "false"
           - name: OTEL_SERVICE_NAME
             value: "ark-controller"
           - name: ARK_MEMORY_HTTP_TIMEOUT_SECONDS
             value: "30"
+          {{- with .Values.controllerManager.watchNamespaces }}
+          - name: ARK_WATCH_NAMESPACES
+            value: {{ join "," . | quote }}
+          {{- end }}
+          - name: ARK_DEFAULT_MEMORY_AUTO_PROVISION
+            value: {{ .Values.defaultMemory.autoProvision | quote }}
           {{- if .Values.telemetry.tenantRouting.otelDiscovery }}
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"

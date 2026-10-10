@@ -24,6 +24,8 @@ const (
 	MaxRetries            = 3
 	RetryDelay            = 100 * time.Millisecond
 	UserAgent             = "ark-memory-client/1.0"
+	MessagesPageLimit     = 1000
+	MessagesMaxPages      = 1000
 )
 
 // getMemoryTimeout reads ARK_MEMORY_HTTP_TIMEOUT_SECONDS env var or returns default
@@ -40,6 +42,7 @@ func getMemoryTimeout() time.Duration {
 type MemoryInterface interface {
 	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
+	DeleteQuery(ctx context.Context, queryID string) error
 	Close() error
 }
 
@@ -71,7 +74,7 @@ type MessagesResponse struct {
 	Items      []MessageRecord `json:"items"`
 	Total      int             `json:"total"`
 	HasMore    bool            `json:"hasMore"`
-	NextCursor *string         `json:"nextCursor,omitempty"`
+	NextCursor *int64          `json:"nextCursor,omitempty"`
 }
 
 func DefaultConfig() Config {
@@ -80,14 +83,6 @@ func DefaultConfig() Config {
 		MaxRetries: MaxRetries,
 		RetryDelay: RetryDelay,
 	}
-}
-
-func ttlSecondsFromQuery(query *arkv1alpha1.Query) *int64 {
-	if query.Spec.TTL == nil {
-		return nil
-	}
-	secs := int64(query.Spec.TTL.Seconds())
-	return &secs
 }
 
 func NewMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
@@ -110,7 +105,13 @@ func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *
 		// Try to load "default" memory from the same namespace
 		_, err := getMemoryResource(ctx, k8sClient, "default", namespace)
 		if err != nil {
-			// If default memory doesn't exist, use noop memory
+			// If default memory doesn't exist, use noop memory. When the query
+			// carries a conversationId the caller expected continuity, so warn
+			// at default verbosity instead of hiding it behind V(2).
+			if conversationId != "" {
+				logf.FromContext(ctx).Info("conversationId set but no Memory backend reachable in namespace; conversation history disabled for this query",
+					"conversationId", conversationId, "queryName", queryName, "namespace", namespace)
+			}
 			return NewNoopMemory(), nil
 		}
 		memoryName, memoryNamespace = "default", namespace //nolint:goconst // "default" here is memory name, not model

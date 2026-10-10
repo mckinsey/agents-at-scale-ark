@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # Fixed name, not .Release.Name: the issuer URL embeds this DNS name.
+  name: {{ .Values.service.name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  selector:
+    app: {{ .Release.Name }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}

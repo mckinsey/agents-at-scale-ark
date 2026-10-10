@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: ark-query-optional-spec
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+  templates:
+    - name: main
+      steps:
+        - - name: run
+            templateRef:
+              name: ark-query
+              template: query
+            arguments:
+              parameters:
+                - name: target
+                  value: "agent/weather"
+                - name: input
+                  value: "What is the weather in Paris?"
+                - name: timeout
+                  value: "2m"
+                - name: query-name
+                  value: "ark-query-custom-name"
+                - name: ttl
+                  value: "60s"
+                - name: session-id
+                  value: "argo-ark-query-session"
+                - name: parameters
+                  value: '[{"name":"city","value":"Paris"}]'

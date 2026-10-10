@@ -77,6 +77,25 @@ spec:
         {{- end }}
         resources:
           {{- toYaml .Values.app.resources | nindent 10 }}
+        startupProbe:
+          httpGet:
+            path: {{ .Values.app.config.basePath | default "" }}/healthz
+            port: {{ .Values.service.targetPort }}
+          failureThreshold: 30
+          periodSeconds: 2
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.app.config.basePath | default "" }}/healthz
+            port: {{ .Values.service.targetPort }}
+          periodSeconds: 10
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.app.config.basePath | default "" }}/healthz
+            port: {{ .Values.service.targetPort }}
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
         {{- with .Values.extraVolumeMounts }}
         volumeMounts:
           {{- toYaml . | nindent 10 }}

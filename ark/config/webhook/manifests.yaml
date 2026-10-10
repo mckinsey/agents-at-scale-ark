@@ -169,7 +169,7 @@ webhooks:
     - CREATE
     - UPDATE
     resources:
-    - mcpserver
+    - mcpservers
   sideEffects: None
 - admissionReviewVersions:
   - v1

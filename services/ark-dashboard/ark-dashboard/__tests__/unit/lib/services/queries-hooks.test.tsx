@@ -1,14 +1,25 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { components } from '@/lib/api/generated/types';
 import { queriesService } from '@/lib/services/queries';
-import { useListQueries } from '@/lib/services/queries-hooks';
+import { useGetQuery, useListQueries } from '@/lib/services/queries-hooks';
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
 
 vi.mock('@/lib/services/queries', () => ({
   queriesService: {
     list: vi.fn(),
+    get: vi.fn(),
   },
 }));
 
@@ -43,7 +54,7 @@ describe('useListQueries', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(queriesService.list).toHaveBeenCalledWith({});
+    expect(queriesService.list).toHaveBeenCalledWith('default', {});
   });
 
   it('passes pagination and search params through to the service', async () => {
@@ -62,7 +73,7 @@ describe('useListQueries', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(queriesService.list).toHaveBeenCalledWith({
+    expect(queriesService.list).toHaveBeenCalledWith('default', {
       page: 2,
       pageSize: 15,
       search: 'hello',
@@ -125,7 +136,129 @@ describe('useListQueries', () => {
     await waitFor(() => expect(r2.current.isSuccess).toBe(true));
 
     expect(queriesService.list).toHaveBeenCalledTimes(2);
-    expect(queriesService.list).toHaveBeenNthCalledWith(1, { page: 1 });
-    expect(queriesService.list).toHaveBeenNthCalledWith(2, { page: 2 });
+    expect(queriesService.list).toHaveBeenNthCalledWith(1, 'default', { page: 1 });
+    expect(queriesService.list).toHaveBeenNthCalledWith(2, 'default', { page: 2 });
+  });
+});
+
+const listPage = (
+  phases: (string | undefined)[],
+): components['schemas']['QueryListResponse'] => ({
+  items: phases.map((phase, index) => ({
+    name: `q-${index}`,
+    namespace: 'default',
+    input: 'hi',
+    type: 'user',
+    status: phase === undefined ? undefined : { phase },
+  })),
+  count: phases.length,
+  total: phases.length,
+  page: 1,
+  page_size: 25,
+});
+
+describe('useListQueries polling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('polls while a query is running and stops once every query is terminal', async () => {
+    vi.mocked(queriesService.list)
+      .mockResolvedValueOnce(listPage(['running', 'done']))
+      .mockResolvedValue(listPage(['done', 'done']));
+
+    const { result } = renderHook(() => useListQueries(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queriesService.list).toHaveBeenCalledTimes(1);
+
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    await waitFor(() => expect(queriesService.list).toHaveBeenCalledTimes(2));
+
+    await act(() => vi.advanceTimersByTimeAsync(15000));
+    expect(queriesService.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('polls while a query has no phase yet', async () => {
+    vi.mocked(queriesService.list).mockResolvedValue(listPage([undefined]));
+
+    const { result } = renderHook(() => useListQueries(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    await waitFor(() => expect(queriesService.list).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not poll when every query is terminal', async () => {
+    vi.mocked(queriesService.list).mockResolvedValue(
+      listPage(['done', 'error', 'canceled']),
+    );
+
+    const { result } = renderHook(() => useListQueries(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await act(() => vi.advanceTimersByTimeAsync(15000));
+    expect(queriesService.list).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useGetQuery', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fetches a query by name and returns the data', async () => {
+    const mockQuery = { name: 'q-1', namespace: 'default', status: { phase: 'done' } };
+    vi.mocked(queriesService.get).mockResolvedValue(mockQuery as any);
+
+    const { result } = renderHook(() => useGetQuery('q-1'), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queriesService.get).toHaveBeenCalledWith('default', 'q-1');
+    expect(result.current.data).toEqual(mockQuery);
+  });
+
+  it('does not fetch when query name is null', () => {
+    const { result } = renderHook(() => useGetQuery(null), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(queriesService.get).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch when disabled', () => {
+    const { result } = renderHook(() => useGetQuery('q-1', false), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(queriesService.get).not.toHaveBeenCalled();
+  });
+
+  it('surfaces errors from the service', async () => {
+    vi.mocked(queriesService.get).mockRejectedValue(new Error('boom'));
+
+    const { result } = renderHook(() => useGetQuery('q-1'), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });

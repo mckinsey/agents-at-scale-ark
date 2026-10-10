@@ -22,6 +22,10 @@ func (n *NoopMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	return []Message{}, nil
 }
 
+func (n *NoopMemory) DeleteQuery(_ context.Context, _ string) error {
+	return nil
+}
+
 func (n *NoopMemory) Close() error {
 	logf.Log.V(2).Info("NoopMemory: Close called - no cleanup needed")
 	return nil

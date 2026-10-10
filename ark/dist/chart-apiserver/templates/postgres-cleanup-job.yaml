@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ark-apiserver-postgres-cleanup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-delete
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "ark-apiserver.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+        {{- if .Values.postgresql.sslSecretName }}
+        fsGroup: {{ .Values.containerSecurityContext.runAsGroup | default .Values.postgresql.sslFsGroup }}
+        {{- end }}
+      containers:
+        - name: postgres-cleanup
+          image: {{ include "ark-apiserver.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --role=postgres-cleanup
+          env:
+            {{- include "ark-apiserver.postgresEnv" . | nindent 12 }}
+          {{- if .Values.postgresql.sslSecretName }}
+          volumeMounts:
+            - name: postgres-tls
+              mountPath: /etc/ark/postgres-tls
+              readOnly: true
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+      {{- if .Values.postgresql.sslSecretName }}
+      volumes:
+        - name: postgres-tls
+          secret:
+            secretName: {{ .Values.postgresql.sslSecretName }}
+            defaultMode: 0640
+      {{- end }}

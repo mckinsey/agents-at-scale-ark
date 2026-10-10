@@ -8,19 +8,28 @@ import {
 } from './http/middleware/error-handler.js';
 import {createHttpLogger} from './http/middleware/http-logger.js';
 import {requestId} from './http/middleware/request-id.js';
-import {MemoryBroker, type MessageData} from './brokers/memory-broker.js';
-import type {Stream} from './brokers/stream/stream.js';
+import {MemoryBroker} from './brokers/memory-broker.js';
+import type {MessageStream} from './brokers/stream/message-stream.js';
+import type {EventStream} from './brokers/event-broker.js';
 import {type Db, pingDb} from './db/db.js';
+import type {RedisClient} from './redis/redis.js';
+import {pingRedis} from './redis/redis.js';
 import {CompletionChunkBroker} from './brokers/chunks-broker.js';
+import type {ChunkStream} from './brokers/stream/chunk-stream.js';
 import {TraceBroker} from './brokers/trace-broker.js';
 import {EventBroker} from './brokers/event-broker.js';
-import {SessionsBroker} from './brokers/sessions-broker.js';
+import {
+  SessionsBroker,
+  type SessionsStorage,
+} from './brokers/sessions-broker.js';
 import {createMemoryRouter} from './http/routes/memory/index.js';
 import {createStreamRouter} from './http/routes/stream/index.js';
 import {createTracesRouter} from './http/routes/traces/index.js';
 import {createEventsRouter} from './http/routes/events/index.js';
 import {createSessionsRouter} from './http/routes/sessions/index.js';
 import {createOTLPRouter} from './http/routes/otlp.js';
+import {createMetricsRouter} from './http/routes/metrics/index.js';
+import {createMetricsRegistry} from './metrics/registry.js';
 import {setupSwagger} from './http/swagger.js';
 
 export type Brokers = {
@@ -40,32 +49,43 @@ export function buildApp(deps: {
   config: AppConfig;
   logger: Logger;
   version: string;
-  messageStream: Stream<MessageData>;
+  messageStream: MessageStream;
+  chunkStream: ChunkStream;
+  eventStream: EventStream;
+  sessionsStorage: SessionsStorage;
   db?: Db;
+  redis?: RedisClient;
 }): AppBundle {
-  const {config, logger, version, messageStream, db} = deps;
+  const {
+    config,
+    logger,
+    version,
+    messageStream,
+    chunkStream,
+    eventStream,
+    sessionsStorage,
+    db,
+    redis,
+  } = deps;
   const app = express();
 
   const memory = new MemoryBroker(messageStream);
-  const chunks = new CompletionChunkBroker(
-    logger.child({broker: 'chunks'}),
-    config.persistence.streamFilePath,
-    config.limits.maxChunks
-  );
-  const traces = new TraceBroker(
-    logger.child({broker: 'traces'}),
-    config.persistence.traceFilePath,
-    config.limits.maxSpans
-  );
-  const events = new EventBroker(
-    logger.child({broker: 'events'}),
-    config.persistence.eventFilePath,
-    config.limits.maxEvents
-  );
-  const sessions = new SessionsBroker(
-    logger.child({broker: 'sessions'}),
-    config.persistence.sessionsFilePath
-  );
+  const chunks = new CompletionChunkBroker(chunkStream);
+  const traces = new TraceBroker(logger.child({broker: 'traces'}), {
+    path: config.persistence.traceFilePath,
+    maxBytes: config.limits.traceMaxBytes,
+  });
+  const events = new EventBroker(eventStream);
+  const sessions = new SessionsBroker(sessionsStorage);
+
+  const metricsRegistry = createMetricsRegistry({
+    messages: messageStream.cachedItemCount?.bind(messageStream),
+    chunks: chunkStream.cachedItemCount?.bind(chunkStream),
+    spans: traces.cachedItemCount.bind(traces),
+    events: eventStream.cachedItemCount?.bind(eventStream),
+    sessions: sessionsStorage.cachedItemCount?.bind(sessionsStorage),
+    sessionQueries: sessionsStorage.cachedQueryCount?.bind(sessionsStorage),
+  });
 
   logger.info('brokers initialized');
 
@@ -79,12 +99,11 @@ export function buildApp(deps: {
   });
 
   app.get('/readyz', async (_req, res) => {
-    if (!db) {
-      res.status(200).send('OK');
-      return;
-    }
     try {
-      await pingDb(db);
+      await Promise.all([
+        db ? pingDb(db) : Promise.resolve(),
+        redis ? pingRedis(redis) : Promise.resolve(),
+      ]);
       res.status(200).send('OK');
     } catch (err) {
       logger.warn({err}, 'readyz ping failed');
@@ -92,8 +111,12 @@ export function buildApp(deps: {
     }
   });
 
+  app.use('/metrics', createMetricsRouter(metricsRegistry));
   app.use('/', createMemoryRouter(memory, sessions));
-  app.use('/stream', createStreamRouter(chunks));
+  app.use(
+    '/stream',
+    createStreamRouter(chunks, config.server.streamIdleTimeoutMs)
+  );
   app.use('/traces', createTracesRouter(traces));
   app.use('/events', createEventsRouter(events, sessions));
   app.use('/sessions', createSessionsRouter(sessions));

@@ -87,6 +87,15 @@ spec:
         
         return False, "Query timed out waiting for completion"
     
+    def wait_for_completion(self, name: str, timeout: int = 90) -> Tuple[bool, str]:
+        success, _, stderr = self._run_cmd(
+            ["kubectl", "wait", "--for=condition=Completed", f"query/{name}",
+             "-n", self.namespace, f"--timeout={timeout}s"],
+            timeout=timeout + 10,
+            check=False,
+        )
+        return success, stderr
+
     def get_query(self, name: str) -> Tuple[bool, Optional[Dict]]:
         success, stdout, stderr = self._run_cmd(
             ["kubectl", "get", "query", name, "-n", self.namespace, "-o", "json"],

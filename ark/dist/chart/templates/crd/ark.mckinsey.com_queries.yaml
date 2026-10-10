@@ -63,6 +63,10 @@ spec:
                 description: |-
                   ConversationId is sent as A2A ContextID when dispatching to execution engines.
                   Engines use it for conversation threading (e.g., memory lookup, session management).
+                  Deliberately unconstrained beyond MinLength: status.conversationId accepts
+                  arbitrary engine-generated IDs and those are reused here for follow-up queries,
+                  so any character-set or length rule added here breaks that round-trip.
+                  Engines that map it to a filesystem path must validate it at the path join.
                 minLength: 1
                 type: string
               input:
@@ -96,7 +100,9 @@ spec:
                                     description: Selects a key from a ConfigMap.
                                     properties:
                                       key:
-                                        description: The key to select.
+                                        description: |-
+                                          The key to select from the ConfigMap's Data field.
+                                          Keys in the BinaryData field are not currently propagated to container env vars.
                                         type: string
                                       name:
                                         default: ""
@@ -235,7 +241,9 @@ spec:
                           description: Selects a key from a ConfigMap.
                           properties:
                             key:
-                              description: The key to select.
+                              description: |-
+                                The key to select from the ConfigMap's Data field.
+                                Keys in the BinaryData field are not currently propagated to container env vars.
                               type: string
                             name:
                               default: ""
@@ -386,11 +394,12 @@ spec:
                 - type
                 type: object
               timeout:
-                default: 5m
+                default: 30m
                 description: Timeout for query execution (e.g., "30s", "5m", "1h")
                 type: string
               ttl:
                 description: |-
+                  Time to retain Query after completion.
                   Default is resolved by the mutating webhook from ArkConfig/default
                   (spec.queryTTL), falling back to 720h when ArkConfig is absent.
                 type: string
@@ -473,6 +482,8 @@ spec:
                 - pending
                 - provisioning
                 - running
+                - queued
+                - input-required
                 - error
                 - done
                 - canceled
@@ -520,6 +531,9 @@ spec:
                 type: object
               tokenUsage:
                 properties:
+                  cachedTokens:
+                    format: int64
+                    type: integer
                   completionTokens:
                     format: int64
                     type: integer

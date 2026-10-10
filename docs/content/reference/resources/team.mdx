@@ -178,7 +178,6 @@ The admission webhook (`ark/internal/validation/team.go`) enforces these rules a
 - `members[]` not empty.
 - Each `members[i].name` references an existing Agent or Team in the same namespace.
 - `members[i].name != metadata.name` (no self-reference).
-- No mixed teams — all member agents must share an execution-engine kind (all internal or all external; not mixed).
 - `strategy` is one of the supported values (or a deprecated one — see [Deprecated strategies and migration](#deprecated-strategies-and-migration)).
 - `sequential`: `maxTurns` required iff `loops: true`.
 - `selector`: `selector.agent` required and resolvable; `maxTurns` required; `loops` not allowed; if `graph` is set, every edge endpoint must be a member.
@@ -212,8 +211,11 @@ The `Available` condition flips to `False` when validation fails or a referenced
 
 `maxTurns` reached during execution does **not** emit a Kubernetes event. Instead the runtime appends a system message to the conversation (`Team conversation reached maximum turns limit (N)`), the Query completes with `phase: done` (not an error), and the dashboard surfaces a `Maximum turns reached (N)` badge in the chat panel. To detect a maxTurns hit programmatically, parse `query.status.response.raw` (a JSON array of messages) and look for the marker string.
 
+### Print columns
+
+`kubectl get teams` prints `Strategy`, `Available`, `Age`.
+
 ## Related
 
-- [User Guide → Teams](/user-guide/teams) — task-oriented walkthrough.
-- [User Guide → Samples → Team Selector Strategy](/user-guide/samples/teams/team-selector-strategy) — deeper dive on selector prompts.
+- [User Guide → Teams](/user-guide/teams) — task-oriented walkthrough, including selector-prompt customisation.
 - [Reference → Agents](/reference/resources/agent) — team members.
