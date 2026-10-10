@@ -7,6 +7,7 @@ import {
   HomepageMemoryCard,
   HomepageModelsCard,
   HomepageTeamsCard,
+  HomepageWorkflowTemplatesCard,
 } from '@/components/cards';
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Dashboard } from '@/components/icons';
@@ -39,10 +40,11 @@ export default function HomePage() {
 
           <NoDefaultModelAlert />
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <HomepageModelsCard />
             <HomepageAgentsCard />
             <HomepageTeamsCard />
+            <HomepageWorkflowTemplatesCard />
             <HomepageMcpServersCard />
             <HomepageMemoryCard />
           </div>
