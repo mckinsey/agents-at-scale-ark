@@ -20,6 +20,8 @@ export interface ArgoWorkflowSpec {
   workflowTemplateRef?: {
     name: string;
   };
+  suspend?: boolean;
+  shutdown?: 'Stop' | 'Terminate';
 }
 
 export interface ArgoNodeStatus {
