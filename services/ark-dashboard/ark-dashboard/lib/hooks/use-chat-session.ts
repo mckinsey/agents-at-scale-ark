@@ -37,8 +37,8 @@ import type {
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
 import {
-  OUTPUT_SCHEMA_ANNOTATION,
   supportsOutputSchema as engineSupportsOutputSchema,
+  toOutputSchemaAnnotations,
   validateOutputSchema,
 } from '@/lib/utils/output-schema';
 
@@ -379,6 +379,16 @@ export function useChatSession({
   const [outputSchemaOverride, setOutputSchemaOverride] = useState('');
   const isOutputSchemaOverrideValid =
     validateOutputSchema(outputSchemaOverride) === null;
+  const outputSchemaAnnotations = useMemo(
+    () =>
+      supportsOutputSchema
+        ? toOutputSchemaAnnotations(outputSchemaOverride)
+        : undefined,
+    [supportsOutputSchema, outputSchemaOverride],
+  );
+  const isSendBlocked =
+    missingParameters.length > 0 ||
+    (supportsOutputSchema && !isOutputSchemaOverrideValid);
 
   useEffect(() => {
     setOutputSchemaOverride('');
@@ -480,11 +490,7 @@ export function useChatSession({
   } | null>(null);
 
   const handleStreamChatResponse = useCallback(
-    async (
-      userMessage: string,
-      apiParameters?: ApiQueryParameter[],
-      annotations?: Record<string, string>,
-    ) => {
+    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
       chatStreamAbortControllerRef.current = new AbortController();
 
       const messageArray = buildChatMessages(chatMessages, userMessage);
@@ -566,7 +572,7 @@ export function useChatSession({
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
           apiParameters,
-          annotations,
+          outputSchemaAnnotations,
         );
 
       queryName = streamQueryName;
@@ -985,6 +991,7 @@ export function useChatSession({
       name,
       namespace,
       queryTimeout,
+      outputSchemaAnnotations,
       sessionId,
       setChatHistory,
       type,
@@ -995,11 +1002,7 @@ export function useChatSession({
   );
 
   const handlePollChatResponse = useCallback(
-    async (
-      userMessage: string,
-      apiParameters?: ApiQueryParameter[],
-      annotations?: Record<string, string>,
-    ) => {
+    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
@@ -1011,7 +1014,7 @@ export function useChatSession({
         conversationId,
         queryTimeout,
         apiParameters,
-        annotations,
+        outputSchemaAnnotations,
       );
 
       lastQueryName.current = query.name;
@@ -1166,6 +1169,7 @@ export function useChatSession({
       invalidateQueriesList,
       name,
       namespace,
+      outputSchemaAnnotations,
       queryTimeout,
       sessionId,
       type,
@@ -1178,19 +1182,11 @@ export function useChatSession({
       setError(null);
       resumeAutoScroll();
 
-      if (missingParameters.length > 0) {
-        return;
-      }
-
-      if (supportsOutputSchema && !isOutputSchemaOverrideValid) {
+      if (isSendBlocked) {
         return;
       }
 
       const apiParameters = toApiParameters();
-      const annotations =
-        supportsOutputSchema && outputSchemaOverride.trim()
-          ? { [OUTPUT_SCHEMA_ANNOTATION]: outputSchemaOverride }
-          : undefined;
 
       trackEvent({
         name: 'chat_message_sent',
@@ -1214,14 +1210,10 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(
-            userMessage,
-            apiParameters,
-            annotations,
-          );
+          await handleStreamChatResponse(userMessage, apiParameters);
           await ensureConversationId();
         } else {
-          await handlePollChatResponse(userMessage, apiParameters, annotations);
+          await handlePollChatResponse(userMessage, apiParameters);
         }
       } catch (err) {
         console.error('Error sending message:', err);
@@ -1284,13 +1276,10 @@ export function useChatSession({
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
-      isOutputSchemaOverrideValid,
-      missingParameters,
+      isSendBlocked,
       name,
-      outputSchemaOverride,
       refreshMemoryNotice,
       resumeAutoScroll,
-      supportsOutputSchema,
       toApiParameters,
       type,
       updateChatMessages,

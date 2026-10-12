@@ -30,7 +30,7 @@ import {
 } from '@/lib/services/agents-hooks';
 import {
   OUTPUT_SCHEMA_ANNOTATION,
-  supportsOutputSchema,
+  buildOutputSchemaAnnotationUpdate,
 } from '@/lib/utils/output-schema';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -240,14 +240,10 @@ export function useAgentForm({
             prompt: agent.isA2A ? undefined : values.prompt || null,
             tools: agent.isA2A ? undefined : selectedTools,
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
-            annotations:
-              !agent.isA2A && supportsOutputSchema(values.executionEngineName)
-                ? {
-                    [OUTPUT_SCHEMA_ANNOTATION]: values.outputSchema?.trim()
-                      ? values.outputSchema
-                      : null,
-                  }
-                : undefined,
+            annotations: buildOutputSchemaAnnotationUpdate(
+              values.executionEngineName,
+              values.outputSchema,
+            ),
           };
 
           const updated = await agentsService.update(

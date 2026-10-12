@@ -47,3 +47,19 @@ export function formatOutputSchema(value: string): string {
   }
   return JSON.stringify(JSON.parse(value), null, 2);
 }
+
+export function toOutputSchemaAnnotations(
+  value: string,
+): Record<string, string> | undefined {
+  return value.trim() ? { [OUTPUT_SCHEMA_ANNOTATION]: value } : undefined;
+}
+
+export function buildOutputSchemaAnnotationUpdate(
+  executionEngineName: string | null | undefined,
+  value: string | undefined,
+): Record<string, string | null> | undefined {
+  if (!supportsOutputSchema(executionEngineName)) {
+    return undefined;
+  }
+  return { [OUTPUT_SCHEMA_ANNOTATION]: value?.trim() ? value : null };
+}

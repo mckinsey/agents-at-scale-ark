@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  OUTPUT_SCHEMA_ANNOTATION,
   OUTPUT_SCHEMA_INVALID_JSON_MESSAGE,
   OUTPUT_SCHEMA_NOT_OBJECT_MESSAGE,
+  buildOutputSchemaAnnotationUpdate,
   formatOutputSchema,
   supportsOutputSchema,
+  toOutputSchemaAnnotations,
   validateOutputSchema,
 } from '@/lib/utils/output-schema';
 
@@ -57,5 +60,44 @@ describe('formatOutputSchema', () => {
   it('returns invalid or empty input unchanged', () => {
     expect(formatOutputSchema('{"type":')).toBe('{"type":');
     expect(formatOutputSchema('')).toBe('');
+  });
+});
+
+describe('toOutputSchemaAnnotations', () => {
+  it('maps a schema to the output-schema annotation', () => {
+    expect(toOutputSchemaAnnotations('{"type":"object"}')).toEqual({
+      [OUTPUT_SCHEMA_ANNOTATION]: '{"type":"object"}',
+    });
+  });
+
+  it('returns undefined for a blank value', () => {
+    expect(toOutputSchemaAnnotations('  ')).toBeUndefined();
+  });
+});
+
+describe('buildOutputSchemaAnnotationUpdate', () => {
+  it('sets the annotation for openai-responses engines', () => {
+    expect(
+      buildOutputSchemaAnnotationUpdate(
+        'executor-openai-responses',
+        '{"type":"object"}',
+      ),
+    ).toEqual({ [OUTPUT_SCHEMA_ANNOTATION]: '{"type":"object"}' });
+  });
+
+  it('removes the annotation when the schema is blank', () => {
+    expect(
+      buildOutputSchemaAnnotationUpdate('executor-openai-responses', ' '),
+    ).toEqual({ [OUTPUT_SCHEMA_ANNOTATION]: null });
+    expect(
+      buildOutputSchemaAnnotationUpdate('executor-openai-responses', undefined),
+    ).toEqual({ [OUTPUT_SCHEMA_ANNOTATION]: null });
+  });
+
+  it('leaves annotations untouched for other engines', () => {
+    expect(
+      buildOutputSchemaAnnotationUpdate('a2a', '{"type":"object"}'),
+    ).toBeUndefined();
+    expect(buildOutputSchemaAnnotationUpdate('', '{}')).toBeUndefined();
   });
 });
