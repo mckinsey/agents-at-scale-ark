@@ -28,6 +28,10 @@ import {
   GET_AGENT_BY_NAME_QUERY_KEY,
   GET_ALL_AGENTS_QUERY_KEY,
 } from '@/lib/services/agents-hooks';
+import {
+  OUTPUT_SCHEMA_ANNOTATION,
+  supportsOutputSchema,
+} from '@/lib/utils/output-schema';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
@@ -88,6 +92,7 @@ export function useAgentForm({
       selectedModelNamespace: '',
       executionEngineName: '',
       prompt: '',
+      outputSchema: '',
     },
   });
 
@@ -145,6 +150,8 @@ export function useAgentForm({
             selectedModelNamespace: agentData.modelRef?.namespace || '',
             executionEngineName: agentData.executionEngine?.name || '',
             prompt: agentData.prompt || '',
+            outputSchema:
+              agentData.annotations?.[OUTPUT_SCHEMA_ANNOTATION] || '',
           });
         } else {
           const [modelsData, toolsData, enginesData] = await Promise.all([
@@ -233,6 +240,14 @@ export function useAgentForm({
             prompt: agent.isA2A ? undefined : values.prompt || null,
             tools: agent.isA2A ? undefined : selectedTools,
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
+            annotations:
+              !agent.isA2A && supportsOutputSchema(values.executionEngineName)
+                ? {
+                    [OUTPUT_SCHEMA_ANNOTATION]: values.outputSchema?.trim()
+                      ? values.outputSchema
+                      : null,
+                  }
+                : undefined,
           };
 
           const updated = await agentsService.update(

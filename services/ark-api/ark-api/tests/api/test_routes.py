@@ -1455,6 +1455,44 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["description"], "desc")
 
     @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_annotations_merged(self, mock_ark_client):
+        """Annotations are merged: sent keys are set, null keys removed, others kept."""
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+        mock_client.agents.a_get.return_value.to_dict.return_value["metadata"][
+            "annotations"
+        ] = {"keep": "kept", "remove": "gone", "replace": "old"}
+
+        response = self.client.put(
+            "/v1/agents/test-agent?namespace=default",
+            json={"annotations": {"remove": None, "replace": "new", "add": "added"}},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        persisted = mock_client.agents.a_update.call_args.args[0].to_dict()
+        self.assertEqual(
+            persisted["metadata"]["annotations"],
+            {"keep": "kept", "replace": "new", "add": "added"},
+        )
+        self.assertNotIn("annotations", persisted["spec"])
+        self.assertEqual(persisted["spec"]["prompt"], "prompt")
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_omit_annotations_preserved(self, mock_ark_client):
+        """Omitting annotations leaves existing annotations untouched."""
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+        mock_client.agents.a_get.return_value.to_dict.return_value["metadata"][
+            "annotations"
+        ] = {"keep": "kept"}
+
+        response = self.client.put(
+            "/v1/agents/test-agent?namespace=default",
+            json={"description": "new desc"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["annotations"], {"keep": "kept"})
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
     def test_delete_agent_success(self, mock_ark_client):
         """Test successful agent deletion."""
         # Setup async context manager mock

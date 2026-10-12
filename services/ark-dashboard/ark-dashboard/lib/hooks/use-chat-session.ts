@@ -36,6 +36,11 @@ import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
+import {
+  OUTPUT_SCHEMA_ANNOTATION,
+  supportsOutputSchema as engineSupportsOutputSchema,
+  validateOutputSchema,
+} from '@/lib/utils/output-schema';
 
 type ResultMessage = NonNullable<ChatResponse['messages']>[number];
 
@@ -190,6 +195,10 @@ interface UseChatSessionReturn {
   canAddParameterRow: boolean;
   missingParameters: string[];
   engineToolWarning: string | null;
+  supportsOutputSchema: boolean;
+  outputSchemaOverride: string;
+  setOutputSchemaOverride: (value: string) => void;
+  isOutputSchemaOverrideValid: boolean;
 }
 
 export function useChatSession({
@@ -362,7 +371,18 @@ export function useChatSession({
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    executionEngineName,
   } = useAgentQueryParameters(name, type);
+
+  const supportsOutputSchema =
+    type === 'agent' && engineSupportsOutputSchema(executionEngineName);
+  const [outputSchemaOverride, setOutputSchemaOverride] = useState('');
+  const isOutputSchemaOverrideValid =
+    validateOutputSchema(outputSchemaOverride) === null;
+
+  useEffect(() => {
+    setOutputSchemaOverride('');
+  }, [name, type]);
 
   useEffect(() => {
     return () => {
@@ -460,7 +480,11 @@ export function useChatSession({
   } | null>(null);
 
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+    async (
+      userMessage: string,
+      apiParameters?: ApiQueryParameter[],
+      annotations?: Record<string, string>,
+    ) => {
       chatStreamAbortControllerRef.current = new AbortController();
 
       const messageArray = buildChatMessages(chatMessages, userMessage);
@@ -542,6 +566,7 @@ export function useChatSession({
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
           apiParameters,
+          annotations,
         );
 
       queryName = streamQueryName;
@@ -970,7 +995,11 @@ export function useChatSession({
   );
 
   const handlePollChatResponse = useCallback(
-    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+    async (
+      userMessage: string,
+      apiParameters?: ApiQueryParameter[],
+      annotations?: Record<string, string>,
+    ) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
@@ -982,6 +1011,7 @@ export function useChatSession({
         conversationId,
         queryTimeout,
         apiParameters,
+        annotations,
       );
 
       lastQueryName.current = query.name;
@@ -1152,7 +1182,15 @@ export function useChatSession({
         return;
       }
 
+      if (supportsOutputSchema && !isOutputSchemaOverrideValid) {
+        return;
+      }
+
       const apiParameters = toApiParameters();
+      const annotations =
+        supportsOutputSchema && outputSchemaOverride.trim()
+          ? { [OUTPUT_SCHEMA_ANNOTATION]: outputSchemaOverride }
+          : undefined;
 
       trackEvent({
         name: 'chat_message_sent',
@@ -1176,10 +1214,14 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage, apiParameters);
+          await handleStreamChatResponse(
+            userMessage,
+            apiParameters,
+            annotations,
+          );
           await ensureConversationId();
         } else {
-          await handlePollChatResponse(userMessage, apiParameters);
+          await handlePollChatResponse(userMessage, apiParameters, annotations);
         }
       } catch (err) {
         console.error('Error sending message:', err);
@@ -1242,10 +1284,13 @@ export function useChatSession({
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
+      isOutputSchemaOverrideValid,
       missingParameters,
       name,
+      outputSchemaOverride,
       refreshMemoryNotice,
       resumeAutoScroll,
+      supportsOutputSchema,
       toApiParameters,
       type,
       updateChatMessages,
@@ -1456,5 +1501,9 @@ export function useChatSession({
     canAddParameterRow,
     missingParameters,
     engineToolWarning,
+    supportsOutputSchema,
+    outputSchemaOverride,
+    setOutputSchemaOverride,
+    isOutputSchemaOverrideValid,
   };
 }

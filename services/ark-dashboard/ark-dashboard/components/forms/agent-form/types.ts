@@ -4,6 +4,7 @@ import * as z from 'zod';
 import type { Parameter } from '@/components/ui/parameter-editor';
 import type { Agent, AgentTool, Model, Skill, Tool } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+import { validateOutputSchema } from '@/lib/utils/output-schema';
 
 export const agentFormSchema = z.object({
   name: kubernetesNameSchema,
@@ -12,6 +13,12 @@ export const agentFormSchema = z.object({
   selectedModelNamespace: z.string().optional(),
   executionEngineName: z.string().optional(),
   prompt: z.string().optional(),
+  outputSchema: z
+    .string()
+    .optional()
+    .refine(value => !validateOutputSchema(value ?? ''), {
+      message: 'Invalid output schema',
+    }),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;

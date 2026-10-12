@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { ChatNotice } from '@/components/chat/chat-notice';
 import { MemoryChatNotice } from '@/components/chat/memory-chat-notice';
-import { Autorenew, Build, Info, Send, Stop } from '@/components/icons';
+import { OutputSchemaField } from '@/components/common/output-schema-field';
+import { Autorenew, Build, Code, Info, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -71,10 +72,16 @@ export function ChatPanel({
     canAddParameterRow,
     missingParameters,
     engineToolWarning,
+    supportsOutputSchema,
+    outputSchemaOverride,
+    setOutputSchemaOverride,
+    isOutputSchemaOverrideValid,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
   const [debugMode, setDebugMode] = useState(true);
+  const [showOutputSchema, setShowOutputSchema] = useState(false);
+  const isOutputSchemaOverrideActive = outputSchemaOverride.trim().length > 0;
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const toolCallCount = messages.reduce(
@@ -95,6 +102,7 @@ export function ChatPanel({
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isProcessing) return;
+    if (supportsOutputSchema && !isOutputSchemaOverrideValid) return;
     const userMessage = currentMessage.trim();
     setCurrentMessage('');
     inputRef.current?.focus();
@@ -187,6 +195,16 @@ export function ChatPanel({
             )}
           </div>
         )}
+        {supportsOutputSchema && showOutputSchema && (
+          <div className="px-4 pt-4">
+            <OutputSchemaField
+              value={outputSchemaOverride}
+              onChange={setOutputSchemaOverride}
+              disabled={isProcessing}
+              description="Overrides the output schema for messages sent from this chat."
+            />
+          </div>
+        )}
         <div className="flex flex-col gap-2 px-4 py-3">
           <Textarea
             ref={inputRef}
@@ -260,6 +278,28 @@ export function ChatPanel({
                   </TooltipContent>
                 </Tooltip>
 
+                {supportsOutputSchema && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-pressed={showOutputSchema}
+                        aria-label="Output schema override"
+                        onClick={() => setShowOutputSchema(!showOutputSchema)}
+                        className="relative">
+                        <IconShell size="sm" variant="secondary">
+                          <Code />
+                        </IconShell>
+                        {isOutputSchemaOverrideActive && (
+                          <span className="bg-status-success absolute -top-0.5 -right-0.5 size-2 rounded-full" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Output schema override</TooltipContent>
+                  </Tooltip>
+                )}
+
                 {toolCallCount > 0 && (
                   <span className="text-fg-tertiary ml-1 font-mono text-xs">
                     {toolCallCount.toLocaleString()} tool{' '}
@@ -315,7 +355,9 @@ export function ChatPanel({
                 <Button
                   onClick={handleSendMessage}
                   disabled={
-                    !currentMessage.trim() || missingParameters.length > 0
+                    !currentMessage.trim() ||
+                    missingParameters.length > 0 ||
+                    (supportsOutputSchema && !isOutputSchemaOverrideValid)
                   }
                   variant="ghost"
                   size="icon-sm"

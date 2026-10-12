@@ -42,6 +42,7 @@ interface UseAgentQueryParametersResult {
   missingParameters: string[];
   toApiParameters: () => ApiQueryParameter[] | undefined;
   engineToolWarning: string | null;
+  executionEngineName: string | null;
 }
 
 function stripPrefix(name: string): string {
@@ -118,6 +119,9 @@ export function useAgentQueryParameters(
   const [engineToolWarning, setEngineToolWarning] = useState<string | null>(
     null,
   );
+  const [executionEngineName, setExecutionEngineName] = useState<string | null>(
+    null,
+  );
   const rowIdCounter = useRef(0);
 
   const createRowId = useCallback(() => {
@@ -134,8 +138,11 @@ export function useAgentQueryParameters(
       setTeamAgents([]);
       setRows([]);
       setEngineToolWarning(null);
+      setExecutionEngineName(null);
       return;
     }
+
+    setExecutionEngineName(null);
 
     let cancelled = false;
 
@@ -179,6 +186,7 @@ export function useAgentQueryParameters(
         setAvailableParameters(extractAgentRequiredParams(agent?.parameters));
         setTeamAgents([]);
         setRows([]);
+        setExecutionEngineName(agent?.executionEngine?.name ?? null);
         const warning = await deriveEngineToolWarning(namespace, agent);
         if (cancelled) return;
         setEngineToolWarning(warning);
@@ -282,5 +290,6 @@ export function useAgentQueryParameters(
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    executionEngineName,
   };
 }
