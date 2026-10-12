@@ -181,7 +181,49 @@ describe('useTeamForm', () => {
     expect(mockTeamsService.updateById).toHaveBeenCalledWith(
       'default',
       'team-123',
-      expect.objectContaining({ loops: true }),
+      expect.objectContaining({ loops: true, maxTurns: 3 }),
+    );
+  });
+
+  it('should send maxTurns=null when a selector team is saved as non-looping sequential', async () => {
+    const selectorTeam: Team = {
+      id: 'team-123',
+      name: 'selector-team',
+      namespace: mockNamespace,
+      strategy: 'selector',
+      loops: false,
+      maxTurns: 5,
+      members: [],
+    };
+    mockTeamsService.getByName.mockResolvedValue(selectorTeam);
+    mockTeamsService.updateById.mockResolvedValue(selectorTeam);
+
+    const { result } = renderUseTeamForm({
+      mode: TeamFormMode.VIEW,
+      teamName: 'selector-team',
+    });
+
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.form.setValue('strategy', 'sequential');
+      result.current.form.setValue('maxTurns', '');
+    });
+
+    await act(async () => {
+      await result.current.actions.onSubmit(result.current.form.getValues());
+    });
+
+    expect(mockTeamsService.updateById).toHaveBeenCalledWith(
+      'default',
+      'team-123',
+      expect.objectContaining({
+        strategy: 'sequential',
+        loops: false,
+        maxTurns: null,
+      }),
     );
   });
 

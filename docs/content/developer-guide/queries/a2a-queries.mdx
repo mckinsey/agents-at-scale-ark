@@ -33,7 +33,7 @@ metadata:
   name: echo-example
 spec:
   target:
-  - name: echo-agent
+    name: echo-agent
     type: agent
   input: "Testing incoming messages"
 
@@ -54,11 +54,11 @@ Response:
 ```yaml
 status:
   phase: done
-  responses:
-    - content: "Testing incoming messages"
-      target:
-        name: echo-agent
-        type: agent
+  response:
+    content: "Testing incoming messages"
+    target:
+      name: echo-agent
+      type: agent
 ```
 
 View the A2ATask that was created for this query:
@@ -89,7 +89,7 @@ metadata:
   name: multi-artifact-example
 spec:
   target:
-  - name: multi-artifact-agent
+    name: multi-artifact-agent
     type: agent
   input: "return three sections"
 EOF
@@ -143,7 +143,7 @@ metadata:
   name: count-messages
 spec:
   target:
-  - name: message-counter-agent
+    name: message-counter-agent
     type: agent
   input: "First message"
 ```
@@ -177,7 +177,7 @@ metadata:
     ark.mckinsey.com/a2a-context-id: "${CONTEXT_ID}"
 spec:
   target:
-  - name: message-counter-agent
+    name: message-counter-agent
     type: agent
   input: "Message ${i}"
 EOF

@@ -4,12 +4,20 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
+from kubernetes_asyncio.client import V1ObjectMeta, V1Pod
 from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 
 os.environ["AUTH_MODE"] = "open"
 
 from ark_api.api.v1.pagination import MAX_PAGE_LIMIT
+
+WORKFLOW_POD_LABEL = "workflows.argoproj.io/workflow"
+
+
+def workflow_pod(name, workflow):
+    """A pod as the Argo controller creates it for a step of the given workflow."""
+    return V1Pod(metadata=V1ObjectMeta(name=name, labels={WORKFLOW_POD_LABEL: workflow}))
 
 
 def make_awaitable(return_value):
@@ -30,36 +38,6 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
-    def test_get_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """Test successful retrieval of a core Kubernetes resource."""
-        mock_get_context.return_value = {"namespace": "default"}
-
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-
-        mock_dynamic_client_instance = AsyncMock()
-        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
-
-        mock_api_resource = AsyncMock()
-        mock_resource = Mock()
-        mock_resource.to_dict.return_value = {
-            "apiVersion": "v1",
-            "kind": "Pod",
-            "metadata": {"name": "test-pod", "namespace": "default"}
-        }
-        mock_api_resource.get = AsyncMock(return_value=mock_resource)
-        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
-
-        response = self.client.get("/v1/resources/api/v1/Pod/test-pod")
-
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["kind"], "Pod")
-        self.assertEqual(data["metadata"]["name"], "test-pod")
-
-    @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
-    @patch('ark_api.api.v1.resources.get_context')
     def test_list_core_resources_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful listing of core Kubernetes resources."""
         mock_get_context.return_value = {"namespace": "default"}
@@ -74,20 +52,20 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_resources = Mock()
         mock_resources.to_dict.return_value = {
             "apiVersion": "v1",
-            "kind": "PodList",
+            "kind": "ServiceList",
             "items": [
-                {"metadata": {"name": "pod-1"}},
-                {"metadata": {"name": "pod-2"}}
+                {"metadata": {"name": "svc-1"}},
+                {"metadata": {"name": "svc-2"}}
             ]
         }
         mock_api_resource.get = AsyncMock(return_value=mock_resources)
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
-        response = self.client.get("/v1/resources/api/v1/Pod")
+        response = self.client.get("/v1/resources/api/v1/Service")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["kind"], "PodList")
+        self.assertEqual(data["kind"], "ServiceList")
         self.assertEqual(len(data["items"]), 2)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
@@ -169,19 +147,19 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource = AsyncMock()
         mock_resource = Mock()
         mock_resource.to_dict.return_value = {
-            "apiVersion": "v1",
-            "kind": "Pod",
-            "metadata": {"name": "test-pod", "namespace": "custom-namespace"}
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
+            "metadata": {"name": "test-wt", "namespace": "custom-namespace"}
         }
         mock_api_resource.get = AsyncMock(return_value=mock_resource)
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
-        response = self.client.get("/v1/resources/api/v1/Pod/test-pod?namespace=custom-namespace")
+        response = self.client.get("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/test-wt?namespace=custom-namespace")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["metadata"]["namespace"], "custom-namespace")
-        mock_api_resource.get.assert_called_once_with(name="test-pod", namespace="custom-namespace")
+        mock_api_resource.get.assert_called_once_with(name="test-wt", namespace="custom-namespace")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
@@ -197,46 +175,12 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
 
         mock_api_resource = AsyncMock()
-        mock_api_resource.get = AsyncMock(side_effect=Exception("Namespace not applicable for cluster-scoped resource"))
+        mock_api_resource.get = AsyncMock(side_effect=Exception("Unexpected failure"))
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
-        response = self.client.get("/v1/resources/api/v1/Node/test-node")
+        response = self.client.get("/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf")
 
         self.assertEqual(response.status_code, 500)
-
-    @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
-    @patch('ark_api.api.v1.resources.get_context')
-    def test_get_core_resource_yaml_response(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """Test core resource retrieval returns YAML when requested."""
-        mock_get_context.return_value = {"namespace": "default"}
-
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-
-        mock_dynamic_client_instance = AsyncMock()
-        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
-
-        mock_api_resource = AsyncMock()
-        mock_resource = Mock()
-        mock_resource.to_dict.return_value = {
-            "apiVersion": "v1",
-            "kind": "Pod",
-            "metadata": {"name": "test-pod", "namespace": "default"}
-        }
-        mock_api_resource.get = AsyncMock(return_value=mock_resource)
-        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
-
-        response = self.client.get(
-            "/v1/resources/api/v1/Pod/test-pod",
-            headers={"Accept": "application/yaml"}
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("application/yaml", response.headers["content-type"])
-        self.assertIn("apiVersion: v1", response.text)
-        self.assertIn("kind: Pod", response.text)
-        self.assertIn("name: test-pod", response.text)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
@@ -255,7 +199,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_resources = Mock()
         mock_resources.to_dict.return_value = {
             "apiVersion": "v1",
-            "kind": "PodList",
+            "kind": "ServiceList",
             "items": [
                 {"metadata": {"name": "pod-1"}},
                 {"metadata": {"name": "pod-2"}}
@@ -265,13 +209,13 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
         response = self.client.get(
-            "/v1/resources/api/v1/Pod",
+            "/v1/resources/api/v1/Service",
             headers={"Accept": "text/yaml"}
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("application/yaml", response.headers["content-type"])
-        self.assertIn("kind: PodList", response.text)
+        self.assertIn("kind: ServiceList", response.text)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
@@ -343,25 +287,6 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
-    def test_get_core_resource_api_lookup_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """Test error handling when API resource lookup fails."""
-        mock_get_context.return_value = {"namespace": "default"}
-
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-
-        mock_dynamic_client_instance = AsyncMock()
-        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
-
-        mock_dynamic_client_instance.resources.get = AsyncMock(side_effect=Exception("API resource not found"))
-
-        response = self.client.get("/v1/resources/api/v1/InvalidKind/test-resource")
-
-        self.assertEqual(response.status_code, 500)
-
-    @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
-    @patch('ark_api.api.v1.resources.get_context')
     def test_get_grouped_resource_api_lookup_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test error handling when grouped API resource lookup fails."""
         mock_get_context.return_value = {"namespace": "default"}
@@ -374,7 +299,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         mock_dynamic_client_instance.resources.get = AsyncMock(side_effect=Exception("API resource not found"))
 
-        response = self.client.get("/v1/resources/apis/invalid.group/v1/InvalidKind/test-resource")
+        response = self.client.get("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/test-resource")
 
         self.assertEqual(response.status_code, 500)
 
@@ -447,28 +372,6 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
-    def test_delete_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """Test successful deletion of a core Kubernetes resource."""
-        mock_get_context.return_value = {"namespace": "default"}
-
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-
-        mock_dynamic_client_instance = AsyncMock()
-        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
-
-        mock_api_resource = AsyncMock()
-        mock_api_resource.delete = AsyncMock(return_value=None)
-        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
-
-        response = self.client.delete("/v1/resources/api/v1/Pod/test-pod")
-
-        self.assertEqual(response.status_code, 204)
-        mock_api_resource.delete.assert_called_once_with(name="test-pod", namespace="default")
-
-    @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
-    @patch('ark_api.api.v1.resources.get_context')
     def test_delete_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful deletion of a grouped Kubernetes resource."""
         mock_get_context.return_value = {"namespace": "default"}
@@ -491,28 +394,6 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
-    def test_delete_core_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """Test deletion of a core resource with explicit namespace parameter."""
-        mock_get_context.return_value = {"namespace": "default"}
-
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-
-        mock_dynamic_client_instance = AsyncMock()
-        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
-
-        mock_api_resource = AsyncMock()
-        mock_api_resource.delete = AsyncMock(return_value=None)
-        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
-
-        response = self.client.delete("/v1/resources/api/v1/Pod/test-pod?namespace=custom-namespace")
-
-        self.assertEqual(response.status_code, 204)
-        mock_api_resource.delete.assert_called_once_with(name="test-pod", namespace="custom-namespace")
-
-    @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
-    @patch('ark_api.api.v1.resources.get_context')
     def test_delete_grouped_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test deletion of a grouped resource with explicit namespace parameter."""
         mock_get_context.return_value = {"namespace": "default"}
@@ -531,27 +412,6 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 204)
         mock_api_resource.delete.assert_called_once_with(name="test-workflow", namespace="custom-namespace")
-
-    @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
-    @patch('ark_api.api.v1.resources.get_context')
-    def test_delete_core_resource_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """Test core resource deletion returns error when operation fails."""
-        mock_get_context.return_value = {"namespace": "default"}
-
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-
-        mock_dynamic_client_instance = AsyncMock()
-        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
-
-        mock_api_resource = AsyncMock()
-        mock_api_resource.delete = AsyncMock(side_effect=Exception("Resource not found"))
-        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
-
-        response = self.client.delete("/v1/resources/api/v1/Pod/nonexistent")
-
-        self.assertEqual(response.status_code, 500)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
@@ -1010,67 +870,6 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
-    def test_create_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """Test successful creation of a core Kubernetes resource."""
-        mock_get_context.return_value = {"namespace": "default"}
-
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-
-        mock_dynamic_client_instance = AsyncMock()
-        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
-
-        mock_api_resource = AsyncMock()
-        mock_resource = Mock()
-        resource_body = {
-            "apiVersion": "v1",
-            "kind": "Pod",
-            "metadata": {"name": "test-pod"}
-        }
-        mock_resource.to_dict.return_value = resource_body
-        mock_api_resource.create = AsyncMock(return_value=mock_resource)
-        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
-
-        response = self.client.post(
-            "/v1/resources/api/v1/Pod",
-            json=resource_body
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), resource_body)
-        mock_api_resource.create.assert_called_once()
-
-    @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
-    @patch('ark_api.api.v1.resources.get_context')
-    def test_create_core_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """Test creation of core resource with explicit namespace."""
-        mock_get_context.return_value = {"namespace": "default"}
-
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-
-        mock_dynamic_client_instance = AsyncMock()
-        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
-
-        mock_api_resource = AsyncMock()
-        mock_resource = Mock()
-        resource_body = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "test-cm"}}
-        mock_resource.to_dict.return_value = resource_body
-        mock_api_resource.create = AsyncMock(return_value=mock_resource)
-        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
-
-        response = self.client.post(
-            "/v1/resources/api/v1/ConfigMap?namespace=custom-ns",
-            json=resource_body
-        )
-
-        self.assertEqual(response.status_code, 200)
-        mock_api_resource.create.assert_called_once_with(body=resource_body, namespace="custom-ns")
-
-    @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
-    @patch('ark_api.api.v1.resources.get_context')
     def test_create_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful creation of a grouped Kubernetes resource."""
         mock_get_context.return_value = {"namespace": "default"}
@@ -1117,16 +916,16 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource = AsyncMock()
         mock_resource = Mock()
         resource_body = {
-            "apiVersion": "apps/v1",
-            "kind": "Deployment",
-            "metadata": {"name": "test-deploy"}
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "Workflow",
+            "metadata": {"name": "test-wf"}
         }
         mock_resource.to_dict.return_value = resource_body
         mock_api_resource.create = AsyncMock(return_value=mock_resource)
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
         response = self.client.post(
-            "/v1/resources/apis/apps/v1/Deployment?namespace=prod",
+            "/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=prod",
             json=resource_body
         )
 
@@ -1141,6 +940,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value="Log line 1\nLog line 2\n")
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -1158,6 +958,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value="Recent logs\n")
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -1184,6 +985,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(side_effect=Exception("Pod not found"))
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -1200,6 +1002,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("node-id-123", "test-workflow"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value="Workflow log output\n")
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -1209,7 +1012,10 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.text, "Workflow log output\n")
-        mock_core_v1.read_namespaced_pod_log.assert_called_once()
+        mock_core_v1.read_namespaced_pod_log.assert_called_once_with(
+            name="node-id-123", namespace="default", container="main", tail_lines=1000
+        )
+        mock_core_v1.list_namespaced_pod.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
@@ -1219,17 +1025,13 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
-        mock_core_v1.read_namespaced_pod_log = AsyncMock(
-            side_effect=[
-                Exception("Direct lookup failed"),
-                "Fallback log output\n"
-            ]
-        )
+        mock_core_v1.read_namespaced_pod = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
+        mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value="Fallback log output\n")
 
         mock_pod_list = Mock()
         mock_pod_list.items = [
-            Mock(metadata=Mock(name="test-workflow-step-abc")),
-            Mock(metadata=Mock(name="test-workflow-other-xyz"))
+            workflow_pod("test-workflow-step-abc", "test-workflow"),
+            workflow_pod("test-workflow-other-xyz", "test-workflow"),
         ]
         mock_core_v1.list_namespaced_pod = AsyncMock(return_value=mock_pod_list)
         mock_core_v1_cls.return_value = mock_core_v1
@@ -1240,8 +1042,12 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.text, "Fallback log output\n")
-        self.assertEqual(mock_core_v1.read_namespaced_pod_log.call_count, 2)
-        mock_core_v1.list_namespaced_pod.assert_called_once()
+        mock_core_v1.read_namespaced_pod_log.assert_called_once_with(
+            name="test-workflow-step-abc", namespace="default", container="main", tail_lines=1000
+        )
+        mock_core_v1.list_namespaced_pod.assert_called_once_with(
+            namespace="default", label_selector=f"{WORKFLOW_POD_LABEL}=test-workflow"
+        )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
@@ -1251,6 +1057,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
 
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("node-id", "test-workflow"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value=None)
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -1425,18 +1232,18 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource = AsyncMock()
         mock_resources = Mock()
         mock_resources.to_dict.return_value = {
-            "apiVersion": "apps/v1",
-            "kind": "DeploymentList",
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplateList",
             "items": [
                 {
                     "metadata": {
-                        "name": "phoenix-deployment",
+                        "name": "phoenix-template",
                         "labels": {"app.kubernetes.io/instance": "phoenix", "app": "phoenix"}
                     }
                 },
                 {
                     "metadata": {
-                        "name": "other-deployment",
+                        "name": "other-template",
                         "labels": {"app": "other"}
                     }
                 }
@@ -1446,12 +1253,12 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
         response = self.client.get(
-            "/v1/resources/apis/apps/v1/Deployment?labelSelector=app.kubernetes.io/instance=phoenix"
+            "/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate?labelSelector=app.kubernetes.io/instance=phoenix"
         )
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["kind"], "DeploymentList")
+        self.assertEqual(data["kind"], "WorkflowTemplateList")
         mock_api_resource.get.assert_called_once_with(
             namespace="default",
             label_selector="app.kubernetes.io/instance=phoenix",
@@ -1493,7 +1300,7 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
-    def test_update_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+    def test_update_resource_honours_resource_version(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test replace respects a caller-supplied resourceVersion (optimistic concurrency)."""
         mock_get_context.return_value = {"namespace": "default"}
 
@@ -1509,10 +1316,10 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource = AsyncMock()
         mock_resource = Mock()
         resource_body = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
-            "metadata": {"name": "test-cm", "resourceVersion": "111"},
-            "data": {"key": "value"},
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
+            "metadata": {"name": "test-wt", "resourceVersion": "111"},
+            "spec": {"entrypoint": "main"},
         }
         mock_resource.to_dict.return_value = resource_body
         mock_api_resource.get = AsyncMock(return_value=mock_existing)
@@ -1520,17 +1327,17 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
         submitted = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
-            "metadata": {"name": "test-cm", "resourceVersion": "111"},
-            "data": {"key": "value"},
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
+            "metadata": {"name": "test-wt", "resourceVersion": "111"},
+            "spec": {"entrypoint": "main"},
         }
-        response = self.client.put("/v1/resources/api/v1/ConfigMap/test-cm", json=submitted)
+        response = self.client.put("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/test-wt", json=submitted)
 
         self.assertEqual(response.status_code, 200)
         expected_body = dict(submitted)
-        expected_body["metadata"] = {"name": "test-cm", "resourceVersion": "111"}
-        mock_api_resource.replace.assert_called_once_with(name="test-cm", body=expected_body, namespace="default")
+        expected_body["metadata"] = {"name": "test-wt", "resourceVersion": "111"}
+        mock_api_resource.replace.assert_called_once_with(name="test-wt", body=expected_body, namespace="default")
         mock_api_resource.get.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
@@ -1597,20 +1404,20 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource = AsyncMock()
         mock_resource = Mock()
         mock_resource.to_dict.return_value = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
-            "metadata": {"name": "test-cm", "resourceVersion": "12345"},
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
+            "metadata": {"name": "test-wt", "resourceVersion": "12345"},
         }
         mock_api_resource.get = AsyncMock(return_value=mock_existing)
         mock_api_resource.replace = AsyncMock(return_value=mock_resource)
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
         submitted = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
-            "metadata": {"name": "test-cm"},
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
+            "metadata": {"name": "test-wt"},
         }
-        response = self.client.put("/v1/resources/api/v1/ConfigMap/test-cm", json=submitted)
+        response = self.client.put("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/test-wt", json=submitted)
 
         self.assertEqual(response.status_code, 200)
         called_body = mock_api_resource.replace.call_args.kwargs["body"]
@@ -1635,22 +1442,22 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource = AsyncMock()
         mock_resource = Mock()
         mock_resource.to_dict.return_value = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
-            "metadata": {"name": "test-cm", "namespace": "custom-ns", "resourceVersion": "7"},
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
+            "metadata": {"name": "test-wt", "namespace": "custom-ns", "resourceVersion": "7"},
         }
         mock_api_resource.get = AsyncMock(return_value=mock_existing)
         mock_api_resource.replace = AsyncMock(return_value=mock_resource)
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
-        submitted = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "test-cm"}}
+        submitted = {"apiVersion": "argoproj.io/v1alpha1", "kind": "WorkflowTemplate", "metadata": {"name": "test-wt"}}
         response = self.client.put(
-            "/v1/resources/api/v1/ConfigMap/test-cm?namespace=custom-ns",
+            "/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/test-wt?namespace=custom-ns",
             json=submitted,
         )
 
         self.assertEqual(response.status_code, 200)
-        mock_api_resource.get.assert_called_once_with(name="test-cm", namespace="custom-ns")
+        mock_api_resource.get.assert_called_once_with(name="test-wt", namespace="custom-ns")
         called_kwargs = mock_api_resource.replace.call_args.kwargs
         self.assertEqual(called_kwargs["namespace"], "custom-ns")
 
@@ -1673,8 +1480,8 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource = AsyncMock()
         mock_resource = Mock()
         mock_resource.to_dict.return_value = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
             "metadata": {"name": "body-name", "resourceVersion": "42"},
         }
         mock_api_resource.get = AsyncMock(return_value=mock_existing)
@@ -1682,11 +1489,11 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
 
         submitted = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowTemplate",
             "metadata": {"name": "body-name"},
         }
-        response = self.client.put("/v1/resources/api/v1/ConfigMap/path-name", json=submitted)
+        response = self.client.put("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/path-name", json=submitted)
 
         self.assertEqual(response.status_code, 200)
         mock_api_resource.get.assert_called_once_with(name="path-name", namespace="default")
@@ -1915,6 +1722,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
     def _mock_core_v1(self, mock_core_v1_cls, total_lines, line_bytes=0, texts=None):
         streams = []
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("node", "wf"))
         mock_core_v1.read_namespaced_pod_log = make_log_stream_reader(total_lines, streams, line_bytes, texts)
         mock_core_v1_cls.return_value = mock_core_v1
         return mock_core_v1, streams
@@ -2007,6 +1815,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
             for index in range(4)
         ]
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = make_chunked_log_stream_reader(lines, [])
         mock_core_v1_cls.return_value = mock_core_v1
 
@@ -2177,6 +1986,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         streams = []
         lines = build_recent_log_lines(total_lines, datetime.now(timezone.utc))
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = make_recent_log_stream_reader(lines, streams)
         mock_core_v1_cls.return_value = mock_core_v1
         return lines, streams
@@ -2270,10 +2080,8 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         mock_core_v1.read_namespaced_pod = AsyncMock(
             side_effect=ApiException(status=404, reason="Not Found")
         )
-        pod = Mock()
-        pod.metadata.name = "test-workflow-step-abc123"
         pod_list = Mock()
-        pod_list.items = [pod]
+        pod_list.items = [workflow_pod("test-workflow-step-abc123", "test-workflow")]
         mock_core_v1.list_namespaced_pod = AsyncMock(return_value=pod_list)
 
         response = self.client.get(
@@ -2425,7 +2233,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         """A denied log read keeps its own status instead of becoming archive guidance."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
         mock_core_v1 = AsyncMock()
-        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=Mock())
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("node", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(
             side_effect=ApiException(status=403, reason="Forbidden")
         )
@@ -2617,6 +2425,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
         stream = FakeLogStream(b"container sidecar is not valid", status=400)
         mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(return_value=workflow_pod("test-pod", "wf"))
         mock_core_v1.read_namespaced_pod_log = AsyncMock(return_value=stream)
         mock_core_v1_cls.return_value = mock_core_v1
 

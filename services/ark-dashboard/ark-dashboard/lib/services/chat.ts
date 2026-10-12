@@ -16,18 +16,8 @@ export type QueryParameter = components['schemas']['QueryParameter'];
 export type QueryResponse = components['schemas']['QueryResponse'];
 export type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
-export type QueryCreateRequest = Omit<
-  components['schemas']['QueryCreateRequest'],
-  'targets'
-> & {
-  target?: { name: string; type: string };
-};
-export type QueryUpdateRequest = Omit<
-  components['schemas']['QueryUpdateRequest'],
-  'targets'
-> & {
-  target?: { name: string; type: string };
-};
+export type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
+export type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
 
 // Define terminal status phases
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';

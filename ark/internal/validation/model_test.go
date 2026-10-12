@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -844,6 +845,194 @@ func TestMatchDomainPattern(t *testing.T) {
 			got := matchDomainPattern(tt.hostname, tt.pattern)
 			if got != tt.want {
 				t.Errorf("matchDomainPattern(%s, %s) = %v, want %v", tt.hostname, tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateBedrockBaseURL(t *testing.T) {
+	bedrockModel := func(baseURL *arkv1alpha1.ValueSource) *arkv1alpha1.Model {
+		return &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "claude"},
+				Provider: ProviderBedrock,
+				Config: arkv1alpha1.ModelConfig{
+					Bedrock: &arkv1alpha1.BedrockModelConfig{
+						Region:  &arkv1alpha1.ValueSource{Value: "us-east-1"},
+						BaseURL: baseURL,
+					},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		baseURL *arkv1alpha1.ValueSource
+		wantErr string
+	}{
+		{
+			name:    "direct https value is accepted",
+			baseURL: &arkv1alpha1.ValueSource{Value: "https://bedrock-runtime.us-east-1.amazonaws.com"},
+		},
+		{
+			name:    "value resolved from a secret is accepted",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "bedrock-secret"}, Key: "baseUrl"}}},
+		},
+		{
+			name:    "value resolved from a configmap is accepted",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "bedrock-config"}, Key: "baseUrl"}}},
+		},
+		{
+			name:    "missing secret key is rejected",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "bedrock-secret"}, Key: "absent"}}},
+			wantErr: "spec.config.bedrock.baseUrl",
+		},
+		{
+			name:    "empty valueFrom is rejected as unresolvable",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{}},
+			wantErr: "failed to resolve Bedrock BaseURL",
+		},
+		{
+			name:    "plain http is rejected",
+			baseURL: &arkv1alpha1.ValueSource{Value: "http://bedrock-runtime.us-east-1.amazonaws.com"},
+			wantErr: "spec.config.bedrock.baseUrl validation failed",
+		},
+		{
+			name:    "loopback host is rejected",
+			baseURL: &arkv1alpha1.ValueSource{Value: "https://127.0.0.1/v1"},
+			wantErr: "spec.config.bedrock.baseUrl validation failed",
+		},
+		{
+			name:    "private IP resolved from a secret is rejected",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "bedrock-secret"}, Key: "privateUrl"}}},
+			wantErr: "spec.config.bedrock.baseUrl validation failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lookup := newMockLookup()
+			lookup.addSecret("default", "bedrock-secret", map[string][]byte{
+				"baseUrl":    []byte("https://bedrock-runtime.us-east-1.amazonaws.com"),
+				"privateUrl": []byte("https://10.0.0.1/v1"),
+			})
+			lookup.addConfigMap("default", "bedrock-config", map[string]string{
+				"baseUrl": "https://bedrock-runtime.eu-west-1.amazonaws.com",
+			})
+
+			_, err := NewValidator(lookup).ValidateModel(context.Background(), bedrockModel(tt.baseURL))
+
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %q", tt.wantErr, err.Error())
+			}
+		})
+	}
+}
+
+func TestMatchWildcard(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostname string
+		pattern  string
+		want     bool
+	}{
+		{"pattern without wildcard matches exactly", "api.openai.com", "api.openai.com", true},
+		{"pattern without wildcard rejects subdomain", "evil.api.openai.com", "api.openai.com", false},
+		{"embedded wildcard matches", "api-eu.example.com", "api-*.example.com", true},
+		{"embedded wildcard rejects wrong prefix", "web-eu.example.com", "api-*.example.com", false},
+		{"embedded wildcard rejects wrong suffix", "api-eu.evil.com", "api-*.example.com", false},
+		{"embedded wildcard rejects suffix appended to another domain", "api-eu.example.com.evil.com", "api-*.example.com", false},
+		{"leading wildcard matches", "eu-prod.example.com", "*-prod.example.com", true},
+		{"multiple wildcards never match", "api.eu.example.com", "api.*.*.example.com", false},
+		{"overlapping prefix and suffix require distinct spans", "example.com", "example.com*example.com", false},
+		{"wildcard spans label separators", "api-eu.internal.example.com", "api-*.example.com", true},
+		{"bare wildcard matches any hostname", "evil.com", "*", true},
+		{"trailing wildcard matches any parent domain", "api.example.com.evil.com", "api.example.*", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchWildcard(tt.hostname, tt.pattern)
+			if got != tt.want {
+				t.Errorf("matchWildcard(%s, %s) = %v, want %v", tt.hostname, tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchDomainPatternDispatchesEmbeddedWildcard(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostname string
+		pattern  string
+		want     bool
+	}{
+		{"embedded wildcard match", "api-eu.example.com", "api-*.example.com", true},
+		{"embedded wildcard no match", "api-eu.evil.com", "api-*.example.com", false},
+		{"uppercase pattern is lowered before matching", "api-eu.example.com", "API-*.EXAMPLE.COM", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchDomainPattern(tt.hostname, tt.pattern)
+			if got != tt.want {
+				t.Errorf("matchDomainPattern(%s, %s) = %v, want %v", tt.hostname, tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateBaseURLWithEmbeddedWildcardWhitelist(t *testing.T) {
+	t.Setenv("WHITELISTED_MODEL_DOMAINS", "api-*.example.com")
+
+	tests := []struct {
+		name      string
+		url       string
+		wantError bool
+	}{
+		{"allowed host", "https://api-eu.example.com/v1", false},
+		{"host outside pattern", "https://api-eu.evil.com/v1", true},
+		{"pattern suffix appended to attacker domain", "https://api-eu.example.com.evil.com/v1", true},
+		{"uppercase host is lowered before matching", "https://API-EU.EXAMPLE.COM/v1", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateBaseURL(tt.url)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateBaseURL(%s) error = %v, wantError %v", tt.url, err, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestValidateBaseURLBareWildcardStillBlocksIPTargets(t *testing.T) {
+	t.Setenv("WHITELISTED_MODEL_DOMAINS", "*")
+
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{"metadata service", "https://169.254.169.254/latest/meta-data"},
+		{"loopback", "https://127.0.0.1/v1"},
+		{"private range", "https://10.0.0.1/v1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := ValidateBaseURL(tt.url); err == nil {
+				t.Errorf("ValidateBaseURL(%s) = nil, want error even with a bare wildcard whitelist", tt.url)
 			}
 		})
 	}

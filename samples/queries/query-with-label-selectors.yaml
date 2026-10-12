@@ -4,20 +4,12 @@ metadata:
   name: query-with-label-selectors
 spec:
   input: "What is the weather forecast for today?"
-  selectors:
-    - type: agent
-      labelSelector:
-        matchLabels:
-          category: weather
-          tier: production
-    - type: team
-      labelSelector:
-        matchExpressions:
-          - key: department
-            operator: In
-            values: ["meteorology", "climate"]
-          - key: active
-            operator: Exists
-  targets:
-    - type: agent
-      name: weather-agent-backup
+  selector:
+    matchLabels:
+      category: weather
+    matchExpressions:
+      - key: tier
+        operator: In
+        values: ["production", "staging"]
+      - key: active
+        operator: Exists

@@ -495,6 +495,8 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 			opts.FieldSelector = options.FieldSelector.String()
 		}
 		opts.ResourceVersion = options.ResourceVersion
+		opts.AllowWatchBookmarks = options.AllowWatchBookmarks
+		opts.SendInitialEvents = options.SendInitialEvents != nil && *options.SendInitialEvents
 	}
 
 	watcher, err := s.backend.Watch(ctx, s.config.Kind, namespace, opts)

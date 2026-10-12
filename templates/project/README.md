@@ -96,9 +96,9 @@ metadata:
   name: sample-query
 spec:
   input: 'Hello! Can you help me understand what you can do?'
-  targets:
-    - type: agent
-      name: sample-agent
+  target:
+    type: agent
+    name: sample-agent
 ```
 
 ## Prerequisites

@@ -61,8 +61,6 @@
     "openai": "^6.1.0",
     "react": "^19.2.5",
     "react-day-picker": "^9.14.0",
-    "react-dnd": "^16.0.1",
-    "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^19.2.5",
     "react-hook-form": "^7.63.0",
     "react-markdown": "^9.1.0",
@@ -126,7 +124,7 @@
     "brace-expansion": "^5.0.12",
     "esbuild": "^0.28.1",
     "form-data": "^4.0.6",
-    "vite": "^8.0.16",
+    "vite": "^8.3.3",
     "sharp": "^0.35.5",
     "source-map-js": "^1.2.2"
   },

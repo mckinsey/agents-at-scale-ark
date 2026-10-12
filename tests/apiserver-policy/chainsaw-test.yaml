@@ -57,7 +57,7 @@ spec:
             content: |
               set -eu
               for i in $(seq 1 45); do
-                if OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+                if OUTPUT=$(kubectl create --dry-run=server -f - --namespace $NAMESPACE 2>&1 <<EOF
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Agent
               metadata:
@@ -66,9 +66,8 @@ spec:
                 prompt: You are a helpful assistant.
               EOF
               ); then
-                  # Accepted — policy not enforcing yet. Clean up and retry.
-                  kubectl delete agent policy-bad-agent -n $NAMESPACE --ignore-not-found >/dev/null 2>&1 || true
-                  sleep 2
+                  # Accepted — policy not enforcing yet.
+                  sleep 0.5
                   continue
                 fi
                 if echo "$OUTPUT" | grep -q "example.com/reviewed"; then
@@ -76,7 +75,7 @@ spec:
                   exit 0
                 fi
                 echo "rejected, but not by our policy yet: $OUTPUT"
-                sleep 2
+                sleep 0.5
               done
               echo "FAIL: non-conforming agent was not rejected by the CEL policy"
               exit 1
@@ -156,7 +155,7 @@ spec:
             content: |
               set -eu
               for i in $(seq 1 45); do
-                if OUTPUT=$(kubectl create -f - --namespace $NAMESPACE 2>&1 <<EOF
+                if OUTPUT=$(kubectl create --dry-run=server -f - --namespace $NAMESPACE 2>&1 <<EOF
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Agent
               metadata:
@@ -170,7 +169,7 @@ spec:
                   # Accepted. Either the policy has not propagated yet, or admission is
                   # seeing an empty metadata.name and the check cannot bite. Retry, then
                   # fail — the distinction is settled by the timeout below.
-                  sleep 2
+                  sleep 0.5
                   continue
                 fi
                 if echo "$OUTPUT" | grep -q "must start with approved-"; then
@@ -183,7 +182,7 @@ spec:
                   exit 1
                 fi
                 echo "rejected, but not by our policy yet: $OUTPUT"
-                sleep 2
+                sleep 0.5
               done
               echo "FAIL: generateName create was never rejected — policy cannot see metadata.name"
               exit 1
@@ -224,14 +223,15 @@ spec:
     - name: remove-name-policy
       try:
         - script:
+            timeout: 180s
             content: |
               set -eu
               kubectl delete validatingadmissionpolicybinding apiserver-policy-name-prefix --ignore-not-found
               kubectl delete validatingadmissionpolicy apiserver-policy-name-prefix --ignore-not-found
               # Wait for the removal to reach the apiserver's informers, so the next step
               # is not racing a policy that is still briefly enforcing.
-              for i in $(seq 1 30); do
-                if kubectl create -f - --namespace $NAMESPACE >/dev/null 2>&1 <<EOF
+              for i in $(seq 1 60); do
+                if kubectl create --dry-run=server -f - --namespace $NAMESPACE >/dev/null 2>&1 <<EOF
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Agent
               metadata:
@@ -245,7 +245,7 @@ spec:
                   echo "name policy no longer enforcing"
                   exit 0
                 fi
-                sleep 2
+                sleep 0.5
               done
               echo "FAIL: name policy still enforcing after deletion"
               exit 1

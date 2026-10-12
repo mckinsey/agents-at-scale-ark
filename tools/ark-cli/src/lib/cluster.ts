@@ -1,4 +1,5 @@
 import {execa} from 'execa';
+import {classifyFailure} from './readinessChecks.js';
 
 export interface ClusterInfo {
   type: 'minikube' | 'kind' | 'k3s' | 'docker-desktop' | 'cloud' | 'unknown';
@@ -38,7 +39,70 @@ export async function detectClusterType(): Promise<ClusterInfo> {
   }
 }
 
+const NODE_INTERNAL_IP_JSONPATH =
+  'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}';
+
+const NODE_EXTERNAL_IP_JSONPATH =
+  'jsonpath={.items[0].status.addresses[?(@.type=="ExternalIP")].address}';
+
+async function getNodeIp(jsonpath: string): Promise<string> {
+  const {stdout} = await execa('kubectl', ['get', 'nodes', '-o', jsonpath]);
+  return stdout.trim();
+}
+
+async function getIstioGatewayAddress(field: 'ip' | 'hostname') {
+  const {stdout} = await execa('kubectl', [
+    'get',
+    'svc',
+    '-n',
+    'istio-system',
+    'istio-ingressgateway',
+    '-o',
+    `jsonpath={.status.loadBalancer.ingress[0].${field}}`,
+  ]);
+  return stdout.trim();
+}
+
+async function resolveClusterIp(
+  type: ClusterInfo['type']
+): Promise<string | undefined> {
+  switch (type) {
+    case 'minikube':
+      try {
+        const {stdout} = await execa('minikube', ['ip']);
+        return stdout.trim();
+      } catch {
+        return getNodeIp(NODE_INTERNAL_IP_JSONPATH);
+      }
+
+    case 'docker-desktop':
+      return 'localhost';
+
+    case 'cloud':
+      try {
+        const ip = await getIstioGatewayAddress('ip');
+        return ip || (await getIstioGatewayAddress('hostname'));
+      } catch {
+        return getNodeIp(NODE_EXTERNAL_IP_JSONPATH);
+      }
+
+    default:
+      return getNodeIp(NODE_INTERNAL_IP_JSONPATH);
+  }
+}
+
+function isForbiddenError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const stderr = (error as Error & {stderr?: unknown}).stderr;
+  const text = typeof stderr === 'string' && stderr ? stderr : error.message;
+  return classifyFailure(text) === 'forbidden';
+}
+
 export async function getClusterInfo(context?: string): Promise<ClusterInfo> {
+  let resolvedContext: string | undefined;
+  let resolvedNamespace: string | undefined;
   try {
     // If context is provided, use it
     const contextArgs = context ? ['--context', context] : [];
@@ -65,6 +129,8 @@ export async function getClusterInfo(context?: string): Promise<ClusterInfo> {
       (c: ContextConfig) => c.name === currentContext
     );
     const namespace = contextData?.context?.namespace || 'default';
+    resolvedContext = currentContext;
+    resolvedNamespace = namespace;
 
     // Detect cluster type from context name
     const clusterInfo = await detectClusterType();
@@ -76,103 +142,21 @@ export async function getClusterInfo(context?: string): Promise<ClusterInfo> {
     }
 
     let ip: string | undefined;
-
-    switch (clusterInfo.type) {
-      case 'minikube':
-        try {
-          const {stdout} = await execa('minikube', ['ip']);
-          ip = stdout.trim();
-        } catch {
-          // Fallback to kubectl if minikube command fails
-          const {stdout} = await execa('kubectl', [
-            'get',
-            'nodes',
-            '-o',
-            'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}',
-          ]);
-          ip = stdout.trim();
-        }
-        break;
-
-      case 'kind': {
-        const {stdout: kindOutput} = await execa('kubectl', [
-          'get',
-          'nodes',
-          '-o',
-          'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}',
-        ]);
-        ip = kindOutput.trim();
-        break;
+    try {
+      ip = await resolveClusterIp(clusterInfo.type);
+    } catch (error) {
+      if (!isForbiddenError(error)) {
+        throw error;
       }
-
-      case 'docker-desktop':
-        ip = 'localhost';
-        break;
-
-      case 'k3s': {
-        const {stdout: k3sOutput} = await execa('kubectl', [
-          'get',
-          'nodes',
-          '-o',
-          'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}',
-        ]);
-        ip = k3sOutput.trim();
-        break;
-      }
-
-      case 'cloud':
-        // For cloud clusters, try to get the external IP or load balancer IP
-        try {
-          const {stdout: lbOutput} = await execa('kubectl', [
-            'get',
-            'svc',
-            '-n',
-            'istio-system',
-            'istio-ingressgateway',
-            '-o',
-            'jsonpath={.status.loadBalancer.ingress[0].ip}',
-          ]);
-          ip = lbOutput.trim();
-          if (!ip) {
-            const {stdout: hostnameOutput} = await execa('kubectl', [
-              'get',
-              'svc',
-              '-n',
-              'istio-system',
-              'istio-ingressgateway',
-              '-o',
-              'jsonpath={.status.loadBalancer.ingress[0].hostname}',
-            ]);
-            ip = hostnameOutput.trim();
-          }
-        } catch {
-          // Fallback to node IP
-          const {stdout: nodeOutput} = await execa('kubectl', [
-            'get',
-            'nodes',
-            '-o',
-            'jsonpath={.items[0].status.addresses[?(@.type=="ExternalIP")].address}',
-          ]);
-          ip = nodeOutput.trim();
-        }
-        break;
-
-      default: {
-        const {stdout: defaultOutput} = await execa('kubectl', [
-          'get',
-          'nodes',
-          '-o',
-          'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}',
-        ]);
-        ip = defaultOutput.trim();
-        break;
-      }
+      ip = undefined;
     }
 
     return {...clusterInfo, ip};
   } catch (error) {
     return {
       type: 'unknown',
+      ...(resolvedContext !== undefined && {context: resolvedContext}),
+      ...(resolvedNamespace !== undefined && {namespace: resolvedNamespace}),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
