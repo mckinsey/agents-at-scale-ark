@@ -46,6 +46,8 @@ WORKFLOW_STATUS_LABEL_SELECTORS = {
     "pending": f"{WORKFLOW_PHASE_LABEL} notin (Running,Succeeded,Failed,Error)",
 }
 
+WORKFLOW_POD_LABEL = "workflows.argoproj.io/workflow"
+
 
 def _create_resource_response(data: dict, request: Request) -> Response:
     accept_header = request.headers.get("accept", "application/json")
@@ -470,7 +472,9 @@ async def get_pod_logs(
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> PlainTextResponse:
     """
-    Get logs from a pod.
+    Get logs from a pod that belongs to an Argo workflow.
+
+    Pods without the workflows.argoproj.io/workflow label return 404.
 
     Args:
         pod_name: Name of the pod
@@ -488,7 +492,8 @@ async def get_pod_logs(
     """
     async with get_impersonating_api_client(impersonation) as api:
         core_v1 = CoreV1Api(api)
-        
+        await _require_workflow_pod(core_v1, namespace, pod_name)
+
         try:
             logs = await core_v1.read_namespaced_pod_log(
                 name=pod_name,
@@ -513,12 +518,12 @@ async def get_workflow_logs(
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ) -> PlainTextResponse:
     """
-    Get logs for a workflow node by fetching directly from the pod.
-    The node_id corresponds to the pod name in most cases.
+    Get logs for a workflow node from the pod that runs it.
+    The node is resolved only among the pods labelled with this workflow's name.
 
     Args:
         workflow_name: Name of the workflow
-        node_id: Node ID within the workflow (typically the pod name)
+        node_id: Node ID within the workflow
         namespace: Namespace of the workflow
         container: Container name (defaults to 'main')
         tail_lines: Number of lines to tail from the end
@@ -533,46 +538,15 @@ async def get_workflow_logs(
         core_v1 = CoreV1Api(api)
         
         try:
-            # First, try the node ID directly as the pod name
-            try:
-                logs = await core_v1.read_namespaced_pod_log(
-                    name=node_id,
-                    namespace=namespace,
-                    container=container,
-                    tail_lines=tail_lines,
-                )
-                return PlainTextResponse(content=logs if logs else "No logs available.")
-            except Exception:
-                pass  # Try alternative lookup method
-            
-            # If direct lookup fails, search for pods by workflow label and node ID suffix
-            # The node ID might not be the exact pod name - Argo sometimes inserts the template name
-            node_id_suffix = node_id.split('-')[-1]
-            
-            pods = await core_v1.list_namespaced_pod(
-                namespace=namespace,
-                label_selector=f"workflows.argoproj.io/workflow={workflow_name}"
-            )
-            
-            # Find pod whose name ends with the node ID suffix
-            matching_pod = None
-            for pod in pods.items:
-                if pod.metadata.name.endswith(node_id_suffix):
-                    matching_pod = pod.metadata.name
-                    break
-            
-            if not matching_pod:
-                logger.error(f"No pod found matching node ID {node_id} (suffix: {node_id_suffix})")
-                raise Exception(f"No pod found for node {node_id}")
-            
+            pod_name = await _resolve_workflow_pod_name(core_v1, namespace, workflow_name, node_id)
             logs = await core_v1.read_namespaced_pod_log(
-                name=matching_pod,
+                name=pod_name,
                 namespace=namespace,
                 container=container,
                 tail_lines=tail_lines,
             )
             return PlainTextResponse(content=logs if logs else "No logs available.")
-            
+
         except Exception as e:
             logger.error(f"Failed to fetch logs for node {node_id}: {e}")
             
@@ -1100,27 +1074,53 @@ async def _read_skip_history_window(
     return collector.build(expect_more_before=True)
 
 
+def _pod_workflow_name(pod) -> Optional[str]:
+    labels = (pod.metadata.labels if pod.metadata else None) or {}
+    workflow = labels.get(WORKFLOW_POD_LABEL)
+    return workflow if isinstance(workflow, str) else None
+
+
+async def _read_pod(core_v1: CoreV1Api, namespace: str, name: str):
+    try:
+        return await core_v1.read_namespaced_pod(name=name, namespace=namespace)
+    except ApiException as e:
+        if e.status != 404:
+            raise
+        return None
+
+
+async def _require_workflow_pod(core_v1: CoreV1Api, namespace: str, pod_name: str) -> None:
+    """Refuse pods that do not belong to an Argo workflow, without telling them apart from missing ones."""
+    pod = await _read_pod(core_v1, namespace, pod_name)
+    if pod is None or not _pod_workflow_name(pod):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No workflow pod named {pod_name} in namespace {namespace}",
+        )
+
+
 async def _resolve_workflow_pod_name(
     core_v1: CoreV1Api,
     namespace: str,
     workflow_name: str,
     node_id: str,
 ) -> str:
-    """Resolve an Argo node ID to the pod holding its logs."""
+    """Resolve an Argo node ID to the pod of that workflow holding its logs."""
     try:
-        await core_v1.read_namespaced_pod(name=node_id, namespace=namespace)
-        return node_id
+        pod = await _read_pod(core_v1, namespace, node_id)
     except ApiException:
-        pass
+        pod = None
+    if pod is not None and _pod_workflow_name(pod) == workflow_name:
+        return node_id
 
     node_id_suffix = node_id.split("-")[-1]
     pods = await core_v1.list_namespaced_pod(
         namespace=namespace,
-        label_selector=f"workflows.argoproj.io/workflow={workflow_name}",
+        label_selector=f"{WORKFLOW_POD_LABEL}={workflow_name}",
     )
-    for pod in pods.items:
-        if pod.metadata.name.endswith(node_id_suffix):
-            return pod.metadata.name
+    for candidate in pods.items:
+        if _pod_workflow_name(candidate) == workflow_name and candidate.metadata.name.endswith(node_id_suffix):
+            return candidate.metadata.name
 
     raise HTTPException(status_code=404, detail=f"No pod found for node {node_id}")
 
@@ -1173,6 +1173,9 @@ async def get_pod_log_window(
     """
     Get a bounded window of a pod's logs.
 
+    Only pods that belong to an Argo workflow are served; any other pod
+    returns 404.
+
     Pages are anchored at the end of the log. Omit skip_tail_lines for the
     tail, raise it by the returned line_count to walk backwards, or pass
     since_timestamp to fetch only lines newer than an earlier page.
@@ -1184,6 +1187,7 @@ async def get_pod_log_window(
     _validate_log_window_cursors(since_timestamp, before_timestamp)
     async with get_impersonating_api_client(impersonation) as api:
         core_v1 = CoreV1Api(api)
+        await _require_workflow_pod(core_v1, namespace, pod_name)
         return await _read_log_window(
             core_v1,
             namespace,
@@ -1214,8 +1218,9 @@ async def get_workflow_log_window(
     """
     Get a bounded window of an Argo workflow node's logs.
 
-    Resolves the node to its pod, then pages exactly like the pod log window
-    endpoint. Returns 404 with guidance when the pod is already gone.
+    Resolves the node to a pod labelled with this workflow's name, then pages
+    exactly like the pod log window endpoint. Returns 404 with guidance when
+    the pod is already gone.
 
     Examples:
         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log/window

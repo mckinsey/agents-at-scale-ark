@@ -1641,7 +1641,9 @@ export interface paths {
         };
         /**
          * Get Pod Logs
-         * @description Get logs from a pod.
+         * @description Get logs from a pod that belongs to an Argo workflow.
+         *
+         *     Pods without the workflows.argoproj.io/workflow label return 404.
          *
          *     Args:
          *         pod_name: Name of the pod
@@ -1676,6 +1678,9 @@ export interface paths {
         /**
          * Get Pod Log Window
          * @description Get a bounded window of a pod's logs.
+         *
+         *     Only pods that belong to an Argo workflow are served; any other pod
+         *     returns 404.
          *
          *     Pages are anchored at the end of the log. Omit skip_tail_lines for the
          *     tail, raise it by the returned line_count to walk backwards, or pass
@@ -1739,12 +1744,12 @@ export interface paths {
         };
         /**
          * Get Workflow Logs
-         * @description Get logs for a workflow node by fetching directly from the pod.
-         *     The node_id corresponds to the pod name in most cases.
+         * @description Get logs for a workflow node from the pod that runs it.
+         *     The node is resolved only among the pods labelled with this workflow's name.
          *
          *     Args:
          *         workflow_name: Name of the workflow
-         *         node_id: Node ID within the workflow (typically the pod name)
+         *         node_id: Node ID within the workflow
          *         namespace: Namespace of the workflow
          *         container: Container name (defaults to 'main')
          *         tail_lines: Number of lines to tail from the end
@@ -1775,8 +1780,9 @@ export interface paths {
          * Get Workflow Log Window
          * @description Get a bounded window of an Argo workflow node's logs.
          *
-         *     Resolves the node to its pod, then pages exactly like the pod log window
-         *     endpoint. Returns 404 with guidance when the pod is already gone.
+         *     Resolves the node to a pod labelled with this workflow's name, then pages
+         *     exactly like the pod log window endpoint. Returns 404 with guidance when
+         *     the pod is already gone.
          *
          *     Examples:
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log/window
