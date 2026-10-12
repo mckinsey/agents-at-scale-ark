@@ -100,12 +100,14 @@ export function useWorkflows(
         }
         const pinned = pinnedWorkflowRef.current;
         pinnedWorkflowRef.current = null;
-        const pinnedName = pinned?.metadata.name;
         setWorkflows(
-          pinned &&
-            targetPage === 0 &&
-            !result.items.some(item => item.metadata.name === pinnedName)
-            ? [pinned, ...result.items]
+          pinned && targetPage === 0
+            ? [
+                pinned,
+                ...result.items.filter(
+                  item => item.metadata.name !== pinned.metadata.name,
+                ),
+              ]
             : result.items,
         );
         setHasNext(result.hasMore);

@@ -598,12 +598,12 @@ describe('SessionsSection', () => {
       );
     });
 
-    it('should show Pausing and keep Resume disabled while running steps finish', () => {
+    it('should show Pausing and keep Resume available while running steps finish', () => {
       renderWithRunningWorkflowSpec({ suspend: true }, 'pausing');
 
       const card = getRunningCard();
       expect(card.getByText('Pausing')).toBeInTheDocument();
-      expect(card.getByRole('button', { name: 'Resume' })).toBeDisabled();
+      expect(card.getByRole('button', { name: 'Resume' })).toBeEnabled();
       expect(card.getByRole('button', { name: 'Stop' })).toBeEnabled();
       expect(card.getByRole('button', { name: 'Cancel' })).toBeEnabled();
     });

@@ -142,10 +142,13 @@ def _reset_retry_status(status: dict, now: str) -> None:
 def _retried_node(
     node_id: str, node: dict, nodes: dict, onexit_name: str, now: str
 ) -> tuple[Optional[dict], list[str]]:
+    node_name = node.get("name") or ""
+    if node_name == onexit_name:
+        return None, [node_id, *_descendant_node_ids(node_id, nodes)]
+    if node_name.startswith(onexit_name):
+        return None, [node_id]
     node_type = node.get("type")
     if node.get("phase") in KEEP_NODE_PHASES:
-        if node.get("name") == onexit_name:
-            return None, [node_id, *_descendant_node_ids(node_id, nodes)]
         return deepcopy(node), []
     if node_type in GROUP_NODE_TYPES:
         return _reset_node(node, now), []

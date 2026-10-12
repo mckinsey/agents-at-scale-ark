@@ -194,6 +194,27 @@ class TestRetryWorkflow(unittest.TestCase):
         self.assertEqual(pods.count("retry-test-abc-exit-pod"), 1)
         self.assertNotIn("retry-test-abc-onexit", pods)
 
+    def test_failed_onexit_group_is_dropped_not_reset(self):
+        wf = _failed_workflow()
+        nodes = wf["status"]["nodes"]
+        nodes["retry-test-abc-onexit"] = {
+            "id": "retry-test-abc-onexit",
+            "name": "retry-test-abc.onExit",
+            "type": "Steps",
+            "phase": "Failed",
+            "children": ["retry-test-abc-exit-pod"],
+        }
+        nodes["retry-test-abc-exit-pod"] = {
+            "id": "retry-test-abc-exit-pod",
+            "name": "retry-test-abc.onExit[0].notify",
+            "type": "Pod",
+            "phase": "Failed",
+        }
+        new_wf, pods = formulate_retry_workflow(wf)
+        self.assertNotIn("retry-test-abc-onexit", new_wf["status"]["nodes"])
+        self.assertNotIn("retry-test-abc-exit-pod", new_wf["status"]["nodes"])
+        self.assertIn("retry-test-abc-exit-pod", pods)
+
     def test_failed_node_with_deeper_succeeded_descendant_is_kept(self):
         wf = _failed_workflow()
         nodes = wf["status"]["nodes"]

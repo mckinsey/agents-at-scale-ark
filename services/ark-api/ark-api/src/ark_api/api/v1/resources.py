@@ -1602,13 +1602,14 @@ async def stop_workflow(
     """
     Stop a workflow: kill running pods, mark it Failed, but still run onExit handlers.
 
-    Sets spec.shutdown=Stop.
+    Sets spec.shutdown=Stop and clears spec.suspend, since the controller does
+    not process a shutdown while the workflow is suspended.
 
     Examples:
         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/stop
     """
     return await _patch_workflow_spec(
-        request, workflow_name, namespace, {"shutdown": "Stop"}, validate_stoppable, impersonation=impersonation
+        request, workflow_name, namespace, {"shutdown": "Stop", "suspend": None}, validate_stoppable, impersonation=impersonation
     )
 
 
@@ -1623,13 +1624,14 @@ async def terminate_workflow(
     """
     Terminate a workflow: kill running pods and mark it Failed, skipping onExit handlers.
 
-    Sets spec.shutdown=Terminate.
+    Sets spec.shutdown=Terminate and clears spec.suspend, since the controller
+    does not process a shutdown while the workflow is suspended.
 
     Examples:
         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/terminate
     """
     return await _patch_workflow_spec(
-        request, workflow_name, namespace, {"shutdown": "Terminate"}, validate_stoppable, impersonation=impersonation
+        request, workflow_name, namespace, {"shutdown": "Terminate", "suspend": None}, validate_stoppable, impersonation=impersonation
     )
 
 

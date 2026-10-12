@@ -829,7 +829,6 @@ const RUN_CONTROL_STATUSES = new Set<StepStatus>([
 interface WorkflowRunControlsProps {
   readonly status: StepStatus;
   readonly suspended: boolean;
-  readonly pauseState?: PauseState;
   readonly disabled: boolean;
   readonly onAction: (action: WorkflowLifecycleAction) => void;
   readonly className?: string;
@@ -888,7 +887,6 @@ function getRunControls(status: StepStatus, suspended: boolean): RunControl[] {
 function WorkflowRunControls({
   status,
   suspended,
-  pauseState,
   disabled,
   onAction,
   className,
@@ -927,9 +925,7 @@ function WorkflowRunControls({
             tooltip={tooltip}
             variant="outline"
             size="icon-xs"
-            disabled={
-              disabled || (action === 'resume' && pauseState === 'pausing')
-            }
+            disabled={disabled}
             onClick={() => onAction(action)}>
             <Icon />
           </IconActionButton>
@@ -1002,7 +998,6 @@ function SessionListItem({
         <WorkflowRunControls
           status={session.status}
           suspended={Boolean(session.suspended)}
-          pauseState={session.pauseState}
           disabled={isRunActionPending || shutdownInProgress}
           onAction={onRunAction}
           className="absolute right-3 bottom-2"

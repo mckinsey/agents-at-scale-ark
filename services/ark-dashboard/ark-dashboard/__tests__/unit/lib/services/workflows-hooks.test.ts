@@ -418,10 +418,7 @@ describe('useWorkflows lifecycle updates', () => {
 
   it('should replace a single workflow by name', async () => {
     vi.mocked(workflowsService.list).mockResolvedValue(
-      makePage([
-        runningWorkflow('wf-1'),
-        runningWorkflow('wf-2'),
-      ]),
+      makePage([runningWorkflow('wf-1'), runningWorkflow('wf-2')]),
     );
     const { result } = renderHook(() => useWorkflows('default'));
     await waitFor(() => expect(result.current.workflows).toHaveLength(2));
@@ -485,11 +482,15 @@ describe('useWorkflows lifecycle updates', () => {
     ]);
   });
 
-  it('should not duplicate a created workflow the first page already contains', async () => {
+  it('should move a created workflow the first page already contains to the top', async () => {
     vi.mocked(workflowsService.list)
       .mockResolvedValueOnce(makePage([runningWorkflow('wf-1')]))
       .mockResolvedValueOnce(
-        makePage([runningWorkflow('wf-1'), runningWorkflow('wf-new')]),
+        makePage([
+          runningWorkflow('wf-1'),
+          runningWorkflow('wf-new'),
+          runningWorkflow('wf-3'),
+        ]),
       );
     const { result } = renderHook(() => useWorkflows('default'));
     await waitFor(() => expect(result.current.workflows).toHaveLength(1));
@@ -498,12 +499,12 @@ describe('useWorkflows lifecycle updates', () => {
       result.current.showCreatedWorkflow(runningWorkflow('wf-new'));
     });
 
-    await waitFor(() =>
-      expect(result.current.workflows.map(w => w.metadata.name)).toEqual([
-        'wf-1',
-        'wf-new',
-      ]),
-    );
+    await waitFor(() => expect(result.current.workflows).toHaveLength(3));
+    expect(result.current.workflows.map(w => w.metadata.name)).toEqual([
+      'wf-new',
+      'wf-1',
+      'wf-3',
+    ]);
   });
 
   it('should ignore a created workflow from a namespace the list no longer shows', async () => {
@@ -654,9 +655,7 @@ describe('useWorkflows lifecycle updates', () => {
   it('should not poll when no shutdown is in progress', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.mocked(workflowsService.list).mockResolvedValue(
-      makePage([
-        runningWorkflow('wf-1'),
-      ]),
+      makePage([runningWorkflow('wf-1')]),
     );
     const { result } = renderHook(() => useWorkflows('default'));
     await waitFor(() => expect(result.current.workflows).toHaveLength(1));

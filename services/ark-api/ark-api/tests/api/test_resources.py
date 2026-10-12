@@ -2849,7 +2849,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         response = self.client.put(f"{self.BASE}/stop")
         self.assertEqual(response.status_code, 200)
         _, kwargs = resource.patch.call_args
-        self.assertEqual(kwargs["body"], {"spec": {"shutdown": "Stop"}})
+        self.assertEqual(kwargs["body"], {"spec": {"shutdown": "Stop", "suspend": None}})
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
@@ -2858,7 +2858,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         response = self.client.put(f"{self.BASE}/terminate")
         self.assertEqual(response.status_code, 200)
         _, kwargs = resource.patch.call_args
-        self.assertEqual(kwargs["body"], {"spec": {"shutdown": "Terminate"}})
+        self.assertEqual(kwargs["body"], {"spec": {"shutdown": "Terminate", "suspend": None}})
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.DynamicClient')
