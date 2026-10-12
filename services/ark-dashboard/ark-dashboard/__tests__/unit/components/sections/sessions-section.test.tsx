@@ -1500,9 +1500,9 @@ describe('SessionsSection', () => {
       );
       expect(useWorkflows).not.toHaveBeenCalledWith(
         'default',
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
+        expect.any(Object),
+        undefined,
+        expect.any(Function),
       );
     });
 
