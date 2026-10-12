@@ -1299,6 +1299,35 @@ async def _patch_workflow_spec(
         return _create_resource_response(patched.to_dict(), request)
 
 
+def _apply_lifecycle_mutation(workflow: dict, mutate) -> tuple[dict, list[str]]:
+    """Run a pure CR mutation on a workflow, handling compressed node status.
+
+    Returns the workflow to write and the node IDs whose pods must be deleted.
+    Precondition failures become a 409.
+    """
+    try:
+        expanded, was_compressed = expand_node_status(workflow)
+        result = mutate(expanded)
+    except LifecyclePreconditionError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+    new_workflow, pod_node_ids = result if isinstance(result, tuple) else (result, [])
+    if was_compressed:
+        new_workflow = compress_node_status(new_workflow)
+    return new_workflow, pod_node_ids
+
+
+async def _replace_unless_conflict(workflow_resource, workflow_name: str, namespace: str, body: dict):
+    """Replace a Workflow, returning None when it changed since it was read."""
+    try:
+        return await workflow_resource.replace(name=workflow_name, namespace=namespace, body=body)
+    except ApiException as e:
+        if e.status != 409:
+            raise
+        logger.info(f"Workflow {workflow_name} changed during update, retrying: {e.reason}")
+        return None
+
+
 async def _replace_workflow(
     request: Request,
     workflow_name: str,
@@ -1321,37 +1350,14 @@ async def _replace_workflow(
         workflow_resource = await _get_workflow_resource(dynamic_client)
         for _ in range(WORKFLOW_REPLACE_MAX_ATTEMPTS):
             existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
-            workflow = existing.to_dict()
-
-            try:
-                expanded, was_compressed = expand_node_status(workflow)
-                result = mutate(expanded)
-            except LifecyclePreconditionError as e:
-                raise HTTPException(status_code=409, detail=str(e)) from e
-
-            pod_node_ids: list[str] = []
-            if isinstance(result, tuple):
-                new_workflow, pod_node_ids = result
-            else:
-                new_workflow = result
-            if was_compressed:
-                new_workflow = compress_node_status(new_workflow)
+            new_workflow, pod_node_ids = _apply_lifecycle_mutation(existing.to_dict(), mutate)
 
             if delete_pods and pod_node_ids:
                 await _delete_workflow_pods(api, namespace, workflow_name, pod_node_ids)
 
-            try:
-                replaced = await workflow_resource.replace(
-                    name=workflow_name,
-                    namespace=namespace,
-                    body=new_workflow,
-                )
-            except ApiException as e:
-                if e.status != 409:
-                    raise
-                logger.info(f"Workflow {workflow_name} changed during update, retrying: {e.reason}")
-                continue
-            return _create_resource_response(replaced.to_dict(), request)
+            replaced = await _replace_unless_conflict(workflow_resource, workflow_name, namespace, new_workflow)
+            if replaced is not None:
+                return _create_resource_response(replaced.to_dict(), request)
 
     raise HTTPException(
         status_code=409,
