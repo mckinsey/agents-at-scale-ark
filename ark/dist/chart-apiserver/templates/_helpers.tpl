@@ -53,3 +53,41 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: /etc/ark/postgres-tls/{{ .Values.postgresql.sslClientKeyKey }}
 {{- end }}
 {{- end }}
+
+{{/*
+postgresMigrateEnv is the environment for the migration hook Job. It matches
+postgresEnv but overrides the user and password with the dedicated migration
+(owner) role when configured, falling back to the runtime credentials otherwise.
+*/}}
+{{- define "ark-apiserver.postgresMigrateEnv" -}}
+{{- $migUser := .Values.postgresql.migration.user | default .Values.postgresql.user -}}
+{{- $migSecret := .Values.postgresql.migration.passwordSecretName | default .Values.postgresql.passwordSecretName -}}
+{{- $migKey := .Values.postgresql.migration.passwordSecretKey | default .Values.postgresql.passwordSecretKey -}}
+- name: ARK_POSTGRES_HOST
+  value: {{ required "postgresql.host is required" .Values.postgresql.host | quote }}
+- name: ARK_POSTGRES_PORT
+  value: {{ .Values.postgresql.port | quote }}
+- name: ARK_POSTGRES_DATABASE
+  value: {{ .Values.postgresql.database | quote }}
+- name: ARK_POSTGRES_USER
+  value: {{ required "a migration user is required (postgresql.migration.user or postgresql.user)" $migUser | quote }}
+- name: ARK_POSTGRES_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ required "a migration password secret is required (postgresql.migration.passwordSecretName or postgresql.passwordSecretName)" $migSecret }}
+      key: {{ $migKey }}
+- name: ARK_POSTGRES_SSL_MODE
+  value: {{ .Values.postgresql.sslMode | quote }}
+{{- if and .Values.postgresql.sslSecretName .Values.postgresql.sslRootCertKey }}
+- name: ARK_POSTGRES_SSL_ROOT_CERT
+  value: /etc/ark/postgres-tls/{{ .Values.postgresql.sslRootCertKey }}
+{{- end }}
+{{- if and .Values.postgresql.sslSecretName .Values.postgresql.sslClientCertKey }}
+- name: ARK_POSTGRES_SSL_CERT
+  value: /etc/ark/postgres-tls/{{ .Values.postgresql.sslClientCertKey }}
+{{- end }}
+{{- if and .Values.postgresql.sslSecretName .Values.postgresql.sslClientKeyKey }}
+- name: ARK_POSTGRES_SSL_KEY
+  value: /etc/ark/postgres-tls/{{ .Values.postgresql.sslClientKeyKey }}
+{{- end }}
+{{- end }}

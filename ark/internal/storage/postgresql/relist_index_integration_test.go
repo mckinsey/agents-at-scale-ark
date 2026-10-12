@@ -43,7 +43,7 @@ func TestSchemaCreatesRelistIndexes_Integration(t *testing.T) {
 		err := backend.db.QueryRowContext(context.Background(),
 			"SELECT indexdef FROM pg_indexes WHERE tablename = 'resources' AND indexname = $1", tc.index).Scan(&def)
 		if err != nil {
-			t.Errorf("%s not created by initSchema: %v", tc.index, err)
+			t.Errorf("%s not created by migrations: %v", tc.index, err)
 			continue
 		}
 		if !strings.HasSuffix(def, tc.columns) {

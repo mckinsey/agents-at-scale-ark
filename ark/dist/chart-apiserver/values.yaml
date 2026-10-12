@@ -17,6 +17,16 @@ postgresql:
   user: ""
   passwordSecretName: ""
   passwordSecretKey: "password"
+  # Schema migrations run as a distinct pre-install/pre-upgrade hook Job with a
+  # privileged role so the runtime role above needs only DML + REPLICATION.
+  # Leave these empty to reuse the runtime credentials (requires that role to
+  # hold DDL/ownership privileges). Set them to a dedicated owner role for
+  # least-privilege operation.
+  migration:
+    enabled: true
+    user: ""
+    passwordSecretName: ""
+    passwordSecretKey: "password"
   # sslMode: disable | require | verify-ca | verify-full
   sslMode: "require"
   # Optional Secret holding PEM files for TLS verification and/or client auth.

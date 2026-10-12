@@ -6,8 +6,17 @@ ssl:
   enabled: false
 
 database: ark
+# Superuser; also used as the privileged migration (schema owner) role.
 user: postgres
 password: arkdev123
+
+# Least-privilege runtime role for the apiserver: DML + REPLICATION, no DDL.
+# Created on first cluster init; migrations (run by the superuser) create the
+# tables, and default privileges below grant this role row access to them.
+runtimeRole:
+  enabled: true
+  user: ark_runtime
+  password: arkruntime123
 
 resources:
   requests:

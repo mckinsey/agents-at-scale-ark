@@ -4,9 +4,11 @@ package postgresql
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/lib/pq"
 )
 
 func TestStartWALConsumer_ConsumesOnce(t *testing.T) {
@@ -24,53 +26,51 @@ func TestStartWALConsumer_ConsumesOnce(t *testing.T) {
 	}
 }
 
-func TestInitSchema_SerializesViaAdvisoryLock(t *testing.T) {
+func TestAssertSchemaCompatible_CompatibleVersion(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
 
-	mock.ExpectBegin()
-	mock.ExpectExec("pg_advisory_xact_lock").WithArgs(schemaInitLockKey).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS resources").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectCommit()
+	mock.ExpectQuery("SELECT max\\(version_id\\) FROM goose_db_version").
+		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(expectedSchemaVersion))
 
-	p := &PostgreSQLBackend{db: db}
-	if err := p.initSchema(); err != nil {
-		t.Fatalf("initSchema: %v", err)
+	if err := assertSchemaCompatible(context.Background(), db); err != nil {
+		t.Fatalf("assertSchemaCompatible: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestInitSchema_Errors(t *testing.T) {
+func TestAssertSchemaCompatible_Errors(t *testing.T) {
 	cases := []struct {
-		name   string
-		expect func(mock sqlmock.Sqlmock)
+		name      string
+		expect    func(mock sqlmock.Sqlmock)
+		wantUnmig bool
 	}{
 		{
-			name: "begin fails",
+			name: "missing version table",
 			expect: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin().WillReturnError(context.DeadlineExceeded)
+				mock.ExpectQuery("SELECT max\\(version_id\\) FROM goose_db_version").
+					WillReturnError(&pq.Error{Code: undefinedTableCode})
 			},
+			wantUnmig: true,
 		},
 		{
-			name: "advisory lock fails",
+			name: "no rows recorded",
 			expect: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin()
-				mock.ExpectExec("pg_advisory_xact_lock").WithArgs(schemaInitLockKey).WillReturnError(context.DeadlineExceeded)
-				mock.ExpectRollback()
+				mock.ExpectQuery("SELECT max\\(version_id\\) FROM goose_db_version").
+					WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(nil))
 			},
+			wantUnmig: true,
 		},
 		{
-			name: "schema exec fails",
+			name: "database too old",
 			expect: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin()
-				mock.ExpectExec("pg_advisory_xact_lock").WithArgs(schemaInitLockKey).WillReturnResult(sqlmock.NewResult(0, 0))
-				mock.ExpectExec("CREATE TABLE IF NOT EXISTS resources").WillReturnError(context.DeadlineExceeded)
-				mock.ExpectRollback()
+				mock.ExpectQuery("SELECT max\\(version_id\\) FROM goose_db_version").
+					WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(minCompatibleSchemaVersion - 1))
 			},
 		},
 	}
@@ -84,9 +84,12 @@ func TestInitSchema_Errors(t *testing.T) {
 			defer func() { _ = db.Close() }()
 			c.expect(mock)
 
-			p := &PostgreSQLBackend{db: db}
-			if err := p.initSchema(); err == nil {
+			err = assertSchemaCompatible(context.Background(), db)
+			if err == nil {
 				t.Fatal("expected error")
+			}
+			if c.wantUnmig && !errors.Is(err, ErrSchemaUnmigrated) {
+				t.Errorf("expected ErrSchemaUnmigrated, got %v", err)
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {
 				t.Error(err)

@@ -1,0 +1,21 @@
+{{- if .Values.runtimeRole.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-initdb
+  labels:
+    app: {{ .Release.Name }}
+data:
+  # Runs once on first cluster init (postgres image /docker-entrypoint-initdb.d).
+  # Creates the least-privilege runtime role. Tables are created later by the
+  # migration step (as the superuser), so default privileges grant this role
+  # row access to them without any DDL privilege of its own.
+  10-runtime-role.sql: |
+    CREATE ROLE {{ .Values.runtimeRole.user }} WITH LOGIN PASSWORD '{{ .Values.runtimeRole.password }}' REPLICATION;
+    GRANT CONNECT ON DATABASE {{ .Values.database }} TO {{ .Values.runtimeRole.user }};
+    GRANT USAGE ON SCHEMA public TO {{ .Values.runtimeRole.user }};
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {{ .Values.runtimeRole.user }};
+    GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO {{ .Values.runtimeRole.user }};
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ .Values.runtimeRole.user }};
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {{ .Values.runtimeRole.user }};
+{{- end }}

@@ -20,7 +20,7 @@ var (
 
 func cleanupConnString(cfg Config) string {
 	if cfg.SSLMode == "" {
-		cfg.SSLMode = "require"
+		cfg.SSLMode = defaultSSLMode
 	}
 	if cfg.Port == 0 {
 		cfg.Port = 5432
