@@ -631,6 +631,22 @@ describe('SessionsSection', () => {
       });
     });
 
+    it('should hide run controls in read-only mode', () => {
+      mockUseNamespace.mockReturnValue({
+        namespace: 'default',
+        isNamespaceResolved: true,
+        isPending: false,
+        readOnlyMode: true,
+      });
+      render(<SessionsSection />);
+
+      for (const label of ['Pause', 'Stop', 'Cancel', 'Retry', 'Resubmit']) {
+        expect(
+          screen.queryByRole('button', { name: label }),
+        ).not.toBeInTheDocument();
+      }
+    });
+
     it('should offer Resume instead of Pause for a suspended workflow', async () => {
       const user = userEvent.setup();
       renderWithRunningWorkflowSpec({ suspend: true });

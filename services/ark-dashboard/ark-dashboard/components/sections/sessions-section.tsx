@@ -945,11 +945,13 @@ function SessionListItem({
   readonly session: Session;
   readonly isSelected: boolean;
   readonly onClick: () => void;
-  readonly onRunAction: (action: WorkflowLifecycleAction) => void;
+  readonly onRunAction?: (action: WorkflowLifecycleAction) => void;
   readonly isRunActionPending: boolean;
 }) {
   const showRunControls =
-    session.type === 'workflow' && RUN_CONTROL_STATUSES.has(session.status);
+    onRunAction !== undefined &&
+    session.type === 'workflow' &&
+    RUN_CONTROL_STATUSES.has(session.status);
   const shutdownInProgress =
     session.type === 'workflow' &&
     session.status === 'running' &&
@@ -994,7 +996,7 @@ function SessionListItem({
           </div>
         </div>
       </button>
-      {showRunControls && (
+      {showRunControls && onRunAction && (
         <WorkflowRunControls
           status={session.status}
           suspended={Boolean(session.suspended)}
@@ -1089,7 +1091,7 @@ function SessionsBody({
   readonly hasActiveFilters: boolean;
   readonly hasNext: boolean;
   readonly onClearFilters: () => void;
-  readonly onRunAction: (
+  readonly onRunAction?: (
     sessionId: string,
     action: WorkflowLifecycleAction,
   ) => void;
@@ -1157,7 +1159,11 @@ function SessionsBody({
             session={session}
             isSelected={session.id === selectedSessionId}
             onClick={() => onSelectSession(session.id)}
-            onRunAction={action => onRunAction(session.id, action)}
+            onRunAction={
+              onRunAction
+                ? action => onRunAction(session.id, action)
+                : undefined
+            }
             isRunActionPending={isRunActionPending(session.id)}
           />
         ))}
@@ -1186,7 +1192,7 @@ export function SessionsSection({
 }: {
   readonly onCountChange?: (count: number) => void;
 }) {
-  const { namespace, isNamespaceResolved } = useNamespace();
+  const { namespace, isNamespaceResolved, readOnlyMode } = useNamespace();
   const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
 
   // Note: sourceFilter is currently unused but reserved for future support of Team sessions
@@ -1502,7 +1508,7 @@ export function SessionsSection({
           hasActiveFilters={Boolean(hasActiveFilters)}
           hasNext={hasNext}
           onClearFilters={clearFilters}
-          onRunAction={handleRunAction}
+          onRunAction={readOnlyMode ? undefined : handleRunAction}
           isRunActionPending={isRunActionPending}
         />
 
