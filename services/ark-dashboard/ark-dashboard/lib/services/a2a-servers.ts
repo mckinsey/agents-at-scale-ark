@@ -94,7 +94,11 @@ export function summarizeA2AServerStatus(
 
 function normalizedPath(url: string): string | undefined {
   try {
-    return new URL(url).pathname.replace(/\/+$/, '');
+    let path = new URL(url).pathname;
+    while (path.endsWith('/')) {
+      path = path.slice(0, -1);
+    }
+    return path;
   } catch {
     return undefined;
   }
