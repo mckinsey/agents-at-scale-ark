@@ -155,7 +155,7 @@ func discoverAgentCard(ctx context.Context, k8sClient client.Client, address str
 		{baseURL + AgentCardPathVersion2, "protocol version 0.2.x", ProtocolVersion2},
 	}
 
-	var errs []error
+	errs := make([]error, 0, len(endpoints))
 	for _, endpoint := range endpoints {
 		req, err := createA2ARequest(ctx, endpoint.url, headers, k8sClient, namespace)
 		if err != nil {
