@@ -17,6 +17,7 @@ import type {
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
     get: vi.fn(),
+    put: vi.fn(),
   },
 }));
 
@@ -203,6 +204,46 @@ describe('workflowsService', () => {
       expect(apiClient.get).toHaveBeenCalledWith(
         '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf?namespace=prod');
       expect(result).toEqual(mockWorkflow);
+    });
+  });
+
+  describe('runLifecycleAction', () => {
+    it.each([
+      'suspend',
+      'resume',
+      'stop',
+      'terminate',
+      'retry',
+      'resubmit',
+    ] as const)(
+      'should PUT the %s action to the namespaced workflow endpoint',
+      async action => {
+        const updated = {
+          metadata: { name: 'wf-1', namespace: 'team-a' },
+          spec: {},
+          status: { phase: 'Running' },
+        } as ArgoWorkflow;
+        vi.mocked(apiClient.put).mockResolvedValue(updated);
+
+        const result = await workflowsService.runLifecycleAction(
+          'team-a',
+          'wf-1',
+          action,
+        );
+
+        expect(apiClient.put).toHaveBeenCalledWith(
+          `/api/v1/resources/apis/argoproj.io/v1alpha1/namespaces/team-a/workflows/wf-1/${action}`,
+        );
+        expect(result).toEqual(updated);
+      },
+    );
+
+    it('should propagate API errors', async () => {
+      vi.mocked(apiClient.put).mockRejectedValue(new Error('conflict'));
+
+      await expect(
+        workflowsService.runLifecycleAction('team-a', 'wf-1', 'stop'),
+      ).rejects.toThrow('conflict');
     });
   });
 
