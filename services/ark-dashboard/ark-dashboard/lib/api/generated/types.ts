@@ -1968,9 +1968,10 @@ export interface paths {
          *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
          *         namespace: The namespace (defaults to current context)
          *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
-         *         workflowName: Filter by workflow name (partial match, case insensitive). Applied only
-         *             to the page returned by this call, not the whole collection — a page can come back
-         *             with few or no matches even though more exist further in the cursor sequence.
+         *         workflowName: Filter by workflow name (partial match, case insensitive). Applied by
+         *             Argo Server across the whole collection when it serves the list; otherwise applied
+         *             only to the page returned by this call, so a page can come back with few or no
+         *             matches even though more exist further in the cursor sequence.
          *         workflowTemplateName: Filter by workflow template name (exact match). Applied
          *             server-side via a label selector, so pagination stays correct across pages.
          *         status: Filter by workflow status. Same server-side label selector as
@@ -1986,6 +1987,11 @@ export interface paths {
          *         Response: List of raw Kubernetes resources as JSON. When the Kubernetes API has more
          *             items beyond this page, the response's metadata carries a "continue" token
          *             (pass it back as ?continue=... for the next page) and "remainingItemCount".
+         *
+         *     Workflows are listed through Argo Server when ARGO_SERVER_URL is set, sorted by start
+         *     time newest first, after a Kubernetes RBAC check for listing workflows in the namespace.
+         *     The continue token is then an item offset. The Kubernetes API is used when the variable
+         *     is unset, when the continue token is a Kubernetes one, or when Argo Server fails.
          *
          *     Note:
          *         This is Kubernetes' cursor-based pagination, not traditional offset pagination:
