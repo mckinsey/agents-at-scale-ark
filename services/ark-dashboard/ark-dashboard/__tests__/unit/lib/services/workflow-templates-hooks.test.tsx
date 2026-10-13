@@ -26,6 +26,7 @@ const createWrapper = () => {
     defaultOptions: {
       queries: {
         retry: false,
+        retryDelay: 0,
       },
     },
   });

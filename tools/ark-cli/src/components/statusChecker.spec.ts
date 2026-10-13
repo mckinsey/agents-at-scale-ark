@@ -202,5 +202,56 @@ describe('statusChecker', () => {
         expect(result.clusterAccess).toBe(false);
       });
     });
+
+    describe('forbidden access', () => {
+      const forbidden = (resource: string, ns: string) =>
+        new Error(
+          `Command failed with exit code 1: kubectl get ${resource}\n\nError from server (Forbidden): ${resource} is forbidden: User "tenant" cannot get resource in the namespace "${ns}"`
+        );
+
+      it('reports no access for deployment check when forbidden', async () => {
+        mockExeca.mockRejectedValue(
+          forbidden('deployments.apps', 'ark-system')
+        );
+
+        const result = await (checker as any).checkDeploymentStatus(
+          'ark-controller',
+          'ark-controller',
+          'ark-system'
+        );
+
+        expect(result.status).toBe('no access');
+        expect(result.namespace).toBe('ark-system');
+        expect(result.details).toBe(
+          "No permission to read namespace 'ark-system'"
+        );
+      });
+
+      it('reports no access for helm check when forbidden', async () => {
+        mockExeca.mockRejectedValue(forbidden('secrets', 'default'));
+
+        const result = await (checker as any).checkHelmStatus(
+          'ark-tenant',
+          'ark-tenant',
+          'default'
+        );
+
+        expect(result.status).toBe('no access');
+        expect(result.namespace).toBe('default');
+      });
+
+      it('keeps unhealthy for other deployment errors', async () => {
+        mockExeca.mockRejectedValue(new Error('connection refused'));
+
+        const result = await (checker as any).checkDeploymentStatus(
+          'ark-api',
+          'ark-api',
+          'tenant-a'
+        );
+
+        expect(result.status).toBe('unhealthy');
+        expect(result.details).toContain('connection refused');
+      });
+    });
   });
 });

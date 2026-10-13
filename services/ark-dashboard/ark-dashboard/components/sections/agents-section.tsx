@@ -3,7 +3,10 @@
 import { AgentsApiAccess } from '@/components/dialogs/agents-api-access';
 import { SmartToy } from '@/components/icons';
 import { AgentsTable } from '@/components/sections/agents-table';
-import { ResourceListSection } from '@/components/sections/resource-list-section';
+import {
+  ResourceListCreateButton,
+  ResourceListSection,
+} from '@/components/sections/resource-list-section';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDeleteAgent, useGetAllAgents } from '@/lib/services/agents-hooks';
@@ -24,8 +27,9 @@ export function AgentsSection() {
       icon={<SmartToy />}
       title="Agents"
       subtitle="Create and manage agents to automate tasks"
-      createHref="/agents/new"
-      createLabel="Create agent"
+      createAction={
+        <ResourceListCreateButton href="/agents/new" label="Create agent" />
+      }
       learnMoreUrl={DOCS_URLS.agents}
       entityLabel="Agent"
       entityPluralLabel="agents"
