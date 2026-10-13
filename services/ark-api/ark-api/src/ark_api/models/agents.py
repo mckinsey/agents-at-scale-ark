@@ -1,7 +1,7 @@
 """Agent CRD response models."""
 from typing import List, Dict, Optional, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .common import AvailabilityStatus, PaginatedListResponse
 
@@ -145,6 +145,10 @@ class AgentUpdateRequest(BaseModel):
     prompt: Optional[str] = None
     tools: Optional[List[AgentTool]] = None
     overrides: Optional[List[AgentOverride]] = None
+    annotations: Optional[Dict[str, Optional[str]]] = Field(
+        None,
+        description="Merged into the existing annotations; a null value removes the key.",
+    )
 
 
 class AgentDetailResponse(BaseModel):

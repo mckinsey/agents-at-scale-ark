@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ChatPanel } from '@/components/chat/chat-panel';
@@ -50,6 +51,10 @@ function chatSession(overrides: Partial<ChatSession> = {}): ChatSession {
     canAddParameterRow: false,
     missingParameters: [],
     engineToolWarning: null,
+    supportsOutputSchema: false,
+    outputSchemaOverride: '',
+    setOutputSchemaOverride: vi.fn(),
+    isOutputSchemaOverrideValid: true,
     ...overrides,
   };
 }
@@ -84,5 +89,46 @@ describe('ChatPanel engine tool notice', () => {
 
     expect(screen.queryByTestId('info-icon')).not.toBeInTheDocument();
     expect(screen.queryByTestId('warning-icon')).not.toBeInTheDocument();
+  });
+});
+
+describe('ChatPanel output schema override', () => {
+  it('hides the override toggle when the target does not support it', () => {
+    renderChatPanel({ supportsOutputSchema: false });
+
+    expect(
+      screen.queryByRole('button', { name: 'Output schema override' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens the schema editor from the toggle', async () => {
+    const user = userEvent.setup();
+    renderChatPanel({ supportsOutputSchema: true });
+
+    expect(screen.queryByLabelText('Output schema')).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', { name: 'Output schema override' }),
+    );
+
+    expect(screen.getByLabelText('Output schema')).toBeInTheDocument();
+  });
+
+  it('blocks sending while the override is invalid', async () => {
+    const user = userEvent.setup();
+    const sendMessage = vi.fn(async () => {});
+    renderChatPanel({
+      supportsOutputSchema: true,
+      outputSchemaOverride: '{"type":',
+      isOutputSchemaOverrideValid: false,
+      sendMessage,
+    });
+
+    await user.type(
+      screen.getByPlaceholderText('Type your message...'),
+      'Hello{Enter}',
+    );
+
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });

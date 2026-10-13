@@ -147,6 +147,23 @@ describe('ViewAgentForm', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders the Output Schema field for openai-responses agents', () => {
+    const hook = buildHook();
+    hook.form.watch = vi.fn((field?: string) =>
+      field === 'executionEngineName' ? 'executor-openai-responses' : '',
+    );
+    useAgentFormMock.mockReturnValue(hook);
+    render(<ViewAgentForm mode="view" agentName="a1" />);
+    expect(screen.getByText('Output Schema')).toBeInTheDocument();
+    expect(screen.getByLabelText('Output schema')).toBeInTheDocument();
+  });
+
+  it('hides the Output Schema field for other engines', () => {
+    useAgentFormMock.mockReturnValue(buildHook());
+    render(<ViewAgentForm mode="view" agentName="a1" />);
+    expect(screen.queryByText('Output Schema')).not.toBeInTheDocument();
+  });
+
   it('renders Skills section for A2A agents', () => {
     useAgentFormMock.mockReturnValue(
       buildHook({ agent: { name: 'a2a', isA2A: true, skills: [] } }),

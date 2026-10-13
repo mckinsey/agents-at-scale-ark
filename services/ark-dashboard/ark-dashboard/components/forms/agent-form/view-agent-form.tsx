@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import { OutputSchemaField } from '@/components/common/output-schema-field';
 import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 import { YamlViewer } from '@/components/common/yaml-viewer';
 import {
@@ -26,6 +27,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type AgentListItem, agentsService } from '@/lib/services';
 import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
+import { supportsOutputSchema } from '@/lib/utils/output-schema';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { PromptField } from './prompt-field';
@@ -87,6 +89,8 @@ export function ViewAgentForm({
 
   const promptValue = form.watch('prompt') || '';
   const isA2A = agent?.isA2A ?? false;
+  const showOutputSchema =
+    !isA2A && supportsOutputSchema(form.watch('executionEngineName'));
   const isDisabled = form.formState.isSubmitting;
 
   const fetchAgentYaml = useCallback(
@@ -295,6 +299,21 @@ export function ViewAgentForm({
                   </FieldDescription>
                 )}
               </FieldSet>
+            )}
+
+            {showOutputSchema && (
+              <FormField
+                control={form.control}
+                name="outputSchema"
+                render={({ field }) => (
+                  <OutputSchemaField
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    disabled={isDisabled}
+                    description="JSON schema the response must follow."
+                  />
+                )}
+              />
             )}
 
             {isA2A && <SkillsDisplaySection skills={agent?.skills || []} />}

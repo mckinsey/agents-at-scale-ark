@@ -257,10 +257,13 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
         existing_agent = await ark_client.agents.a_get(agent_name)
         existing_spec = existing_agent.to_dict()["spec"]
 
+        updates = body.model_dump(exclude_unset=True)
+        annotation_updates = updates.pop("annotations", None) or {}
+
         # exclude_unset keeps only the fields the client actually sent, so an
         # omitted field is left as-is while one explicitly set to null is
         # cleared. Conflating those two was the original bug.
-        for field, value in body.model_dump(exclude_unset=True).items():
+        for field, value in updates.items():
             if value is None:
                 existing_spec.pop(field, None)
             else:
@@ -270,6 +273,16 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
         # Get the full existing agent object and update its spec
         existing_agent_dict = existing_agent.to_dict()
         existing_agent_dict["spec"] = existing_spec
+
+        if annotation_updates:
+            metadata = existing_agent_dict.setdefault("metadata", {})
+            annotations = dict(metadata.get("annotations") or {})
+            for key, value in annotation_updates.items():
+                if value is None:
+                    annotations.pop(key, None)
+                else:
+                    annotations[key] = value
+            metadata["annotations"] = annotations
         
         # Create updated agent object
         updated_agent_obj = AgentV1alpha1(**existing_agent_dict)

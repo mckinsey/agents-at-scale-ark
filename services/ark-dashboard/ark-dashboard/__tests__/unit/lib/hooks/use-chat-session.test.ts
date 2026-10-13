@@ -1322,9 +1322,116 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.at(-1)).toEqual([
-        { name: 'muting', value: 'BANANAPHONE' },
-      ]);
+      expect(lastCall?.[8]).toEqual([{ name: 'muting', value: 'BANANAPHONE' }]);
+    });
+  });
+
+  describe('output schema override', () => {
+    const SCHEMA = '{"type":"object"}';
+
+    function streamReply() {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createContentChunk('{}'),
+          createStopChunk(),
+          createArkFinalChunk({}),
+        ]),
+      );
+    }
+
+    it('forwards the override as a query annotation for openai-responses agents', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+      streamReply();
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.supportsOutputSchema).toBe(true);
+      });
+
+      act(() => {
+        result.current.setOutputSchemaOverride(SCHEMA);
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
+      expect(lastCall?.[9]).toEqual({
+        'executor-openai-responses.ark.mckinsey.com/output-schema': SCHEMA,
+      });
+    });
+
+    it('sends no annotation when the override is empty', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+      streamReply();
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.supportsOutputSchema).toBe(true);
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
+      expect(lastCall?.[9]).toBeUndefined();
+    });
+
+    it('does not support the override for other engines', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-langchain' },
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'other-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(mockGetByName).toHaveBeenCalled();
+      });
+
+      expect(result.current.supportsOutputSchema).toBe(false);
+    });
+
+    it('does not send while the override is invalid', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.supportsOutputSchema).toBe(true);
+      });
+
+      act(() => {
+        result.current.setOutputSchemaOverride('{"type":');
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
     });
   });
 

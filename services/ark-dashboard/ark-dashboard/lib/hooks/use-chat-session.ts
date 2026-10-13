@@ -36,6 +36,11 @@ import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
+import {
+  supportsOutputSchema as engineSupportsOutputSchema,
+  toOutputSchemaAnnotations,
+  validateOutputSchema,
+} from '@/lib/utils/output-schema';
 
 type ResultMessage = NonNullable<ChatResponse['messages']>[number];
 
@@ -190,6 +195,10 @@ interface UseChatSessionReturn {
   canAddParameterRow: boolean;
   missingParameters: string[];
   engineToolWarning: string | null;
+  supportsOutputSchema: boolean;
+  outputSchemaOverride: string;
+  setOutputSchemaOverride: (value: string) => void;
+  isOutputSchemaOverrideValid: boolean;
 }
 
 export function useChatSession({
@@ -362,7 +371,28 @@ export function useChatSession({
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    executionEngineName,
   } = useAgentQueryParameters(name, type);
+
+  const supportsOutputSchema =
+    type === 'agent' && engineSupportsOutputSchema(executionEngineName);
+  const [outputSchemaOverride, setOutputSchemaOverride] = useState('');
+  const isOutputSchemaOverrideValid =
+    validateOutputSchema(outputSchemaOverride) === null;
+  const outputSchemaAnnotations = useMemo(
+    () =>
+      supportsOutputSchema
+        ? toOutputSchemaAnnotations(outputSchemaOverride)
+        : undefined,
+    [supportsOutputSchema, outputSchemaOverride],
+  );
+  const isSendBlocked =
+    missingParameters.length > 0 ||
+    (supportsOutputSchema && !isOutputSchemaOverrideValid);
+
+  useEffect(() => {
+    setOutputSchemaOverride('');
+  }, [name, type]);
 
   useEffect(() => {
     return () => {
@@ -542,6 +572,7 @@ export function useChatSession({
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
           apiParameters,
+          outputSchemaAnnotations,
         );
 
       queryName = streamQueryName;
@@ -960,6 +991,7 @@ export function useChatSession({
       name,
       namespace,
       queryTimeout,
+      outputSchemaAnnotations,
       sessionId,
       setChatHistory,
       type,
@@ -982,6 +1014,7 @@ export function useChatSession({
         conversationId,
         queryTimeout,
         apiParameters,
+        outputSchemaAnnotations,
       );
 
       lastQueryName.current = query.name;
@@ -1136,6 +1169,7 @@ export function useChatSession({
       invalidateQueriesList,
       name,
       namespace,
+      outputSchemaAnnotations,
       queryTimeout,
       sessionId,
       type,
@@ -1148,7 +1182,7 @@ export function useChatSession({
       setError(null);
       resumeAutoScroll();
 
-      if (missingParameters.length > 0) {
+      if (isSendBlocked) {
         return;
       }
 
@@ -1242,7 +1276,7 @@ export function useChatSession({
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
-      missingParameters,
+      isSendBlocked,
       name,
       refreshMemoryNotice,
       resumeAutoScroll,
@@ -1456,5 +1490,9 @@ export function useChatSession({
     canAddParameterRow,
     missingParameters,
     engineToolWarning,
+    supportsOutputSchema,
+    outputSchemaOverride,
+    setOutputSchemaOverride,
+    isOutputSchemaOverrideValid,
   };
 }

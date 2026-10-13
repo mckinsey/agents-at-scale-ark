@@ -1109,6 +1109,7 @@ describe('FloatingChat', () => {
           undefined, // conversationId
           '5m', // timeout
           undefined, // parameters
+          undefined, // annotations
         );
       });
 
@@ -1238,6 +1239,7 @@ describe('FloatingChat', () => {
           undefined,
           '5m',
           undefined, // parameters
+          undefined, // annotations
         );
       });
 
