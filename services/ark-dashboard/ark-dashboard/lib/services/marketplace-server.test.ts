@@ -59,4 +59,54 @@ describe('marketplace-server', () => {
       { headers: {} },
     );
   });
+
+  it('returns the source key separately from its display label', async () => {
+    vi.mocked(getArkApiAuthHeaders).mockResolvedValueOnce({});
+    mockGet.mockResolvedValueOnce([
+      { ...group, source: 'internal-mirror', displayName: 'Internal Mirror' },
+    ]);
+
+    const resolved = await getRawMarketplaceItemById(
+      createRequest(),
+      'phoenix',
+      'team-a',
+    );
+
+    expect(resolved).toEqual({
+      item: group.items[0],
+      source: 'internal-mirror',
+      sourceLabel: 'Internal Mirror',
+    });
+  });
+
+  it('returns the first matching source when an item exists in several', async () => {
+    vi.mocked(getArkApiAuthHeaders).mockResolvedValueOnce({});
+    mockGet.mockResolvedValueOnce([
+      { ...group, source: 'agents-at-scale-marketplace' },
+      { ...group, source: 'internal-mirror' },
+    ]);
+
+    const resolved = await getRawMarketplaceItemById(
+      createRequest(),
+      'phoenix',
+      'team-a',
+    );
+
+    expect(resolved?.source).toBe('agents-at-scale-marketplace');
+  });
+
+  it('labels the item with the source display name', async () => {
+    vi.mocked(getArkApiAuthHeaders).mockResolvedValueOnce({});
+    mockGet.mockResolvedValueOnce([
+      { ...group, source: 'internal-mirror', displayName: 'Internal Mirror' },
+    ]);
+
+    const item = await getMarketplaceItemById(
+      createRequest(),
+      'phoenix',
+      'team-a',
+    );
+
+    expect(item?.source).toBe('Internal Mirror');
+  });
 });

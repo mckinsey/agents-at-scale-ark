@@ -17,6 +17,7 @@ vi.mock('@/lib/services/marketplace-server', () => ({
 
 import { POST, DELETE } from './route';
 import { getRawMarketplaceItemById } from '@/lib/services/marketplace-server';
+import type { GitHubMarketplaceItem } from '@/lib/services/marketplace-transform';
 
 const mockGetRawMarketplaceItemById = vi.mocked(getRawMarketplaceItemById);
 
@@ -76,6 +77,19 @@ function createRequest(url: string, options?: RequestInit) {
   return new NextRequest(parsed, options);
 }
 
+const DEFAULT_SOURCE = 'agents-at-scale-marketplace';
+
+function mockResolvedItem(
+  item: GitHubMarketplaceItem,
+  source: string = DEFAULT_SOURCE,
+) {
+  mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+    item,
+    source,
+    sourceLabel: source,
+  });
+}
+
 const baseItem = {
   name: 'Phoenix',
   description: 'Observability platform',
@@ -106,7 +120,7 @@ describe('POST /api/marketplace/[id]/install', () => {
   });
 
   it('should return 400 when no ark config', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+    mockResolvedItem({
       name: 'No Config',
       description: 'No ark config',
     });
@@ -123,7 +137,7 @@ describe('POST /api/marketplace/[id]/install', () => {
   });
 
   it('should return helm and ark commands in command mode', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+    mockResolvedItem({ ...baseItem });
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'POST',
@@ -138,10 +152,13 @@ describe('POST /api/marketplace/[id]/install', () => {
       'helm upgrade --install phoenix oci://ghcr.io/mckinsey/agents-at-scale-marketplace/phoenix',
     );
     expect(data.arkCommand).toBe('ark install marketplace/services/phoenix');
+    expect(data.message).toBe(
+      'Run one of these commands in your terminal to install',
+    );
   });
 
   it('should include --namespace in helmCommand when namespace is set', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+    mockResolvedItem({
       ...baseItem,
       ark: { ...baseItem.ark, namespace: 'monitoring' },
     });
@@ -158,7 +175,7 @@ describe('POST /api/marketplace/[id]/install', () => {
   });
 
   it('should include extra args in helmCommand when installArgs present', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+    mockResolvedItem({
       ...baseItem,
       ark: { ...baseItem.ark, installArgs: ['--set', 'key=value'] },
     });
@@ -173,8 +190,8 @@ describe('POST /api/marketplace/[id]/install', () => {
     expect(data.helmCommand).toContain('--set key=value');
   });
 
-  it('should use agents in arkCommand for non-service type', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+  it('should use agents in arkCommand for agent type', async () => {
+    mockResolvedItem({
       ...baseItem,
       type: 'agent',
     });
@@ -190,7 +207,7 @@ describe('POST /api/marketplace/[id]/install', () => {
   });
 
   it('should use executors in arkCommand for executor type', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+    mockResolvedItem({
       ...baseItem,
       type: 'executor',
     });
@@ -205,8 +222,88 @@ describe('POST /api/marketplace/[id]/install', () => {
     expect(data.arkCommand).toBe('ark install marketplace/executors/my-executor');
   });
 
+  it('omits arkCommand for items from a non-default source', async () => {
+    mockResolvedItem({ ...baseItem }, 'internal-mirror');
+
+    const request = createRequest(
+      'http://localhost/api/marketplace/phoenix/install',
+      {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'command' }),
+      },
+    );
+    const response = await POST(request, {
+      params: Promise.resolve({ id: 'phoenix' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.arkCommand).toBeUndefined();
+    expect(data.helmCommand).toBe(
+      'helm upgrade --install phoenix oci://ghcr.io/mckinsey/agents-at-scale-marketplace/phoenix',
+    );
+    expect(data.message).toBe('Run this command in your terminal to install');
+  });
+
+  it.each(['demo', 'channel'])(
+    'omits arkCommand for %s items the Ark CLI cannot install',
+    async type => {
+      mockResolvedItem({ ...baseItem, type } as GitHubMarketplaceItem);
+
+      const request = createRequest(
+        'http://localhost/api/marketplace/item/install',
+        {
+          method: 'POST',
+          body: JSON.stringify({ mode: 'command' }),
+        },
+      );
+      const response = await POST(request, {
+        params: Promise.resolve({ id: 'item' }),
+      });
+      const data = await response.json();
+
+      expect(data.arkCommand).toBeUndefined();
+      expect(data.helmCommand).toContain('helm upgrade --install phoenix');
+    },
+  );
+
+  it('omits arkCommand when the item has no type', async () => {
+    const { type: _type, ...untyped } = baseItem;
+    mockResolvedItem(untyped);
+
+    const request = createRequest(
+      'http://localhost/api/marketplace/phoenix/install',
+      {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'command' }),
+      },
+    );
+    const response = await POST(request, {
+      params: Promise.resolve({ id: 'phoenix' }),
+    });
+    const data = await response.json();
+
+    expect(data.arkCommand).toBeUndefined();
+  });
+
+  it('looks the item up in the requested namespace', async () => {
+    mockResolvedItem({ ...baseItem });
+
+    const request = createRequest(
+      'http://localhost/api/marketplace/phoenix/install?namespace=team-b',
+      { method: 'POST', body: JSON.stringify({ mode: 'command' }) },
+    );
+    await POST(request, { params: Promise.resolve({ id: 'phoenix' }) });
+
+    expect(mockGetRawMarketplaceItemById).toHaveBeenCalledWith(
+      request,
+      'phoenix',
+      'team-b',
+    );
+  });
+
   it('always returns command mode and never spawns helm, even when mode is not command', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+    mockResolvedItem({ ...baseItem });
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'POST',
@@ -221,7 +318,7 @@ describe('POST /api/marketplace/[id]/install', () => {
   });
 
   it('should default to command mode when request body is invalid', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+    mockResolvedItem({ ...baseItem });
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'POST',
@@ -247,7 +344,7 @@ describe('POST /api/marketplace/[id]/install', () => {
   });
 
   it('should reject invalid helmReleaseName', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+    mockResolvedItem({
       ...baseItem,
       ark: {
         helmReleaseName: 'INVALID-NAME', // uppercase not allowed
@@ -267,7 +364,7 @@ describe('POST /api/marketplace/[id]/install', () => {
   });
 
   it('should reject invalid namespace', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+    mockResolvedItem({
       ...baseItem,
       ark: {
         helmReleaseName: 'phoenix',
@@ -307,7 +404,7 @@ describe('DELETE /api/marketplace/[id]/install', () => {
   });
 
   it('should return 400 when no helmReleaseName', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+    mockResolvedItem({
       name: 'No Release',
       description: 'No helm release',
       ark: { chartPath: 'some/path' },
@@ -324,7 +421,7 @@ describe('DELETE /api/marketplace/[id]/install', () => {
   });
 
   it('should return the uninstall command and not spawn helm', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+    mockResolvedItem({ ...baseItem });
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'DELETE',
@@ -339,7 +436,7 @@ describe('DELETE /api/marketplace/[id]/install', () => {
   });
 
   it('should include --namespace in the uninstall command when namespace is set', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+    mockResolvedItem({
       ...baseItem,
       ark: { ...baseItem.ark, namespace: 'monitoring' },
     });

@@ -3,7 +3,18 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { getRawMarketplaceItemById } from '@/lib/services/marketplace-server';
+import {
+  type ResolvedMarketplaceItem,
+  getRawMarketplaceItemById,
+} from '@/lib/services/marketplace-server';
+
+const ARK_CLI_MARKETPLACE_SOURCE = 'agents-at-scale-marketplace';
+
+const ARK_CLI_CATEGORY_PATHS: Record<string, string> = {
+  service: 'services',
+  agent: 'agents',
+  executor: 'executors',
+};
 
 /**
  * Helm release name validation (max 53 chars, RFC 1123)
@@ -88,14 +99,18 @@ async function executeHelmCommand(
 }
 
 /**
- * Maps source item type to marketplace installation path category.
+ * Builds the Ark CLI install command, or undefined when the CLI cannot resolve the item.
  */
-function getMarketplaceCategoryPath(
-  itemType?: 'service' | 'agent' | 'demo' | 'executor',
-): string {
-  if (itemType === 'service') return 'services';
-  if (itemType === 'executor') return 'executors';
-  return 'agents';
+function buildArkCommand(
+  id: string,
+  source: string,
+  itemType?: string,
+): string | undefined {
+  if (source !== ARK_CLI_MARKETPLACE_SOURCE || !itemType) return undefined;
+  const categoryPath = ARK_CLI_CATEGORY_PATHS[itemType];
+  return categoryPath
+    ? `ark install marketplace/${categoryPath}/${id}`
+    : undefined;
 }
 
 /**
@@ -130,11 +145,11 @@ async function fetchAndValidateMarketplaceItem(
   id: string,
   namespace: string,
 ) {
-  const item = await getRawMarketplaceItemById(request, id, namespace);
+  const resolved = await getRawMarketplaceItemById(request, id, namespace);
 
-  if (!item) {
+  if (!resolved) {
     return {
-      item: null,
+      resolved: null,
       error: NextResponse.json(
         { error: 'Marketplace item not found' },
         { status: 404 },
@@ -142,26 +157,28 @@ async function fetchAndValidateMarketplaceItem(
     };
   }
 
-  return { item, error: null };
+  return { resolved, error: null };
 }
 
 /**
  * Build command response for installation
  */
 function buildCommandResponse(
-  item: { name?: string; type?: 'service' | 'agent' | 'demo' | 'executor' },
+  { item, source }: ResolvedMarketplaceItem,
   id: string,
   helmCommand: string,
   namespace?: string,
-  message: string = 'Run one of these commands in your terminal to install',
 ) {
+  const arkCommand = buildArkCommand(id, source, item.type);
   return NextResponse.json({
     status: 'command',
     name: item.name || id,
     helmCommand,
-    arkCommand: `ark install marketplace/${getMarketplaceCategoryPath(item.type)}/${id}`,
+    arkCommand,
     namespace,
-    message,
+    message: arkCommand
+      ? 'Run one of these commands in your terminal to install'
+      : 'Run this command in your terminal to install',
   });
 }
 
@@ -188,17 +205,22 @@ export async function POST(
       );
     }
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(request, id, namespace);
+    const { resolved, error } = await fetchAndValidateMarketplaceItem(
+      request,
+      id,
+      namespace,
+    );
     if (error) return error;
+    const item = resolved!.item;
 
-    if (!item!.ark?.chartPath || !item!.ark?.helmReleaseName) {
+    if (!item.ark?.chartPath || !item.ark?.helmReleaseName) {
       return NextResponse.json(
         { error: 'Item does not have installation configuration' },
         { status: 400 },
       );
     }
 
-    const ark = item!.ark;
+    const ark = item.ark;
 
     const validationError = validateHelmInputs(
       ark.helmReleaseName!,
@@ -206,7 +228,7 @@ export async function POST(
     );
     if (validationError) return validationError;
 
-    console.log(`Installing ${item!.name} from ${ark.chartPath}`);
+    console.log(`Installing ${item.name} from ${ark.chartPath}`);
 
     const helmArgs: string[] = [
       'upgrade',
@@ -225,7 +247,7 @@ export async function POST(
 
     const helmCommand = `helm ${helmArgs.join(' ')}`;
 
-    return buildCommandResponse(item!, id, helmCommand, ark.namespace);
+    return buildCommandResponse(resolved!, id, helmCommand, ark.namespace);
   } catch (error) {
     console.error('Error installing marketplace item:', error);
     return NextResponse.json(
@@ -249,17 +271,22 @@ export async function DELETE(
       );
     }
 
-    const { item, error } = await fetchAndValidateMarketplaceItem(request, id, namespace);
+    const { resolved, error } = await fetchAndValidateMarketplaceItem(
+      request,
+      id,
+      namespace,
+    );
     if (error) return error;
+    const item = resolved!.item;
 
-    if (!item!.ark?.helmReleaseName) {
+    if (!item.ark?.helmReleaseName) {
       return NextResponse.json(
         { error: 'Item does not have uninstallation configuration' },
         { status: 400 },
       );
     }
 
-    const ark = item!.ark;
+    const ark = item.ark;
 
     const validationError = validateHelmInputs(
       ark.helmReleaseName!,
@@ -267,7 +294,7 @@ export async function DELETE(
     );
     if (validationError) return validationError;
 
-    console.log(`Uninstalling ${item!.name}`);
+    console.log(`Uninstalling ${item.name}`);
 
     const helmArgs: string[] = ['uninstall', ark.helmReleaseName!];
 
@@ -279,7 +306,7 @@ export async function DELETE(
 
     return NextResponse.json({
       status: 'command',
-      name: item!.name,
+      name: item.name,
       helmCommand,
       namespace: ark.namespace,
       message: 'Run this command in your terminal to uninstall',
