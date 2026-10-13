@@ -19,11 +19,27 @@ export interface A2AServerStatusSummary {
   discovering?: boolean;
   statusMessage?: string;
   address?: string;
+  endpoint?: string;
+  cardUrl?: string;
+  negotiatedProtocol?: string;
+  cardVersion?: string;
+  streamingSupported?: boolean;
+  skillCount?: number;
 }
 
 function readString(source: Record<string, unknown>, key: string) {
   const value = source[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+function readBoolean(source: Record<string, unknown>, key: string) {
+  const value = source[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readNumber(source: Record<string, unknown>, key: string) {
+  const value = source[key];
+  return typeof value === 'number' ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -44,6 +60,12 @@ export function summarizeA2AServerStatus(
 
   const summary: A2AServerStatusSummary = {
     address: readString(status, 'lastResolvedAddress'),
+    endpoint: readString(status, 'lastResolvedEndpoint'),
+    cardUrl: readString(status, 'cardUrl'),
+    negotiatedProtocol: readString(status, 'negotiatedProtocol'),
+    cardVersion: readString(status, 'cardVersion'),
+    streamingSupported: readBoolean(status, 'streamingSupported'),
+    skillCount: readNumber(status, 'skillCount'),
   };
 
   const conditions = status.conditions;
@@ -68,6 +90,31 @@ export function summarizeA2AServerStatus(
   }
 
   return summary;
+}
+
+function normalizedPath(url: string): string | undefined {
+  try {
+    return new URL(url).pathname.replace(/\/+$/, '');
+  } catch {
+    return undefined;
+  }
+}
+
+// Hosts are not compared: cards often advertise a host Ark cannot reach, so
+// only a differing path means Ark is calling a different route than the card.
+export function hasEndpointPathMismatch(
+  endpoint?: string,
+  cardUrl?: string,
+): boolean {
+  if (!endpoint || !cardUrl) {
+    return false;
+  }
+  const endpointPath = normalizedPath(endpoint);
+  const cardPath = normalizedPath(cardUrl);
+  if (endpointPath === undefined || cardPath === undefined) {
+    return false;
+  }
+  return endpointPath !== cardPath;
 }
 
 export type DirectHeader = {
