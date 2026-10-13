@@ -50,7 +50,7 @@ function mapTemplateToItem(
 
 export function WorkflowTemplatesSection() {
   const { namespace } = useNamespace();
-  const { canCreate } = useWorkflowTemplateAccess();
+  const { canCreate, canRun, canDelete } = useWorkflowTemplateAccess();
   const { push } = useNamespacedNavigation();
   const [showNameDialog, setShowNameDialog] = useState(false);
   const {
@@ -153,6 +153,8 @@ export function WorkflowTemplatesSection() {
             templates={rows}
             onDelete={onDelete}
             onRun={handleRun}
+            canRun={canRun}
+            canDelete={canDelete}
           />
         )}
       />

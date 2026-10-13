@@ -45,6 +45,8 @@ interface WorkflowTemplatesTableProps {
     parameters?: Record<string, string>,
     workflowName?: string,
   ) => Promise<void>;
+  readonly canRun?: boolean;
+  readonly canDelete?: boolean;
 }
 
 const COL = {
@@ -58,12 +60,16 @@ interface WorkflowTemplateTableRowProps {
   readonly template: WorkflowTemplateListItem;
   readonly onDelete: (id: string) => void;
   readonly onRequestRun: () => void;
+  readonly canRun: boolean;
+  readonly canDelete: boolean;
 }
 
 function WorkflowTemplateTableRow({
   template,
   onDelete,
   onRequestRun,
+  canRun,
+  canDelete,
 }: Readonly<WorkflowTemplateTableRowProps>) {
   const { namespace, readOnlyMode } = useNamespace();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -121,7 +127,7 @@ function WorkflowTemplateTableRow({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={onRequestRun}>
+                <DropdownMenuItem disabled={!canRun} onSelect={onRequestRun}>
                   <PlayArrow className="size-4" />
                   Run workflow
                 </DropdownMenuItem>
@@ -136,7 +142,7 @@ function WorkflowTemplateTableRow({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
-                  disabled={readOnlyMode}
+                  disabled={readOnlyMode || !canDelete}
                   onSelect={() => setDeleteConfirmOpen(true)}>
                   <Trash className="size-4" />
                   Delete
@@ -164,6 +170,8 @@ export function WorkflowTemplatesTable({
   templates,
   onDelete,
   onRun,
+  canRun = true,
+  canDelete = true,
 }: Readonly<WorkflowTemplatesTableProps>) {
   const [runTarget, setRunTarget] = useState<WorkflowTemplateListItem | null>(
     null,
@@ -198,6 +206,8 @@ export function WorkflowTemplatesTable({
               key={template.id}
               template={template}
               onDelete={onDelete}
+              canRun={canRun}
+              canDelete={canDelete}
               onRequestRun={() => {
                 setRunTarget(template);
                 setIsRunOpen(true);
