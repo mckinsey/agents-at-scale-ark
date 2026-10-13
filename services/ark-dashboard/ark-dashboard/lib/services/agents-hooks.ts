@@ -4,17 +4,11 @@ import { toast } from '@/components/ui/sonner';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { agentsService } from './agents';
+import { getErrorMessage } from './resource-error-message';
 
 export const GET_ALL_AGENTS_QUERY_KEY = 'get-all-agents';
 export const GET_AGENT_BY_NAME_QUERY_KEY = 'get-agent-by-name';
 export const DELETE_AGENT_MUTATION_KEY = 'delete-agent';
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'An unexpected error occurred';
-};
 
 export const useGetAllAgents = () => {
   const { namespace } = useNamespace();

@@ -35,7 +35,7 @@ spec:
             conditions:
             - type: Available
               status: "False"
-              reason: ModelNotFound
+              reason: ModelNotConfigured
     catch:
     - events: {}
     - describe:
