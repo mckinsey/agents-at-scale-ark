@@ -1,8 +1,3 @@
-"""Generic resource writes run as the signed-in user whenever authentication is enabled.
-
-Requests go through the real auth middleware, so the identity each test relies on
-is the one a JWT or an API key actually produces, not a stubbed dependency.
-"""
 import base64
 import os
 import unittest
@@ -96,8 +91,6 @@ def basic_key() -> dict:
 
 
 class KubernetesSpy:
-    """Records which identity each Kubernetes client was built for and serves canned results."""
-
     def __init__(self):
         self.identities = []
         self.result = Mock()

@@ -1,15 +1,9 @@
-"""Allowlist and identity rule for the generic resource routes.
+"""Allowlist for the generic resource routes.
 
 The generic routes forward a caller-chosen group, version and Kind to the
 Kubernetes dynamic client, so on their own they reach anything the identity in
 use can reach. Only the tuples the dashboard needs are exposed; everything else
 is refused before any Kubernetes call is made.
-
-Writes through these routes can make Argo run containers, so when
-authentication is enabled a signed-in user's write must reach Kubernetes as
-that user: it needs impersonation and is refused when no user identity is
-available. Requests authenticated with an API key, and every request in open
-mode, keep running as the service account.
 """
 
 import logging
