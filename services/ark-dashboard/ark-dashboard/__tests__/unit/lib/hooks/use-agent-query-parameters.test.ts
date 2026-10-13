@@ -506,4 +506,45 @@ describe('useAgentQueryParameters', () => {
       expect(result.current.engineToolWarning).toBeNull();
     });
   });
+
+  describe('executionEngineName', () => {
+    it('exposes the agent execution engine name', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+
+      const { result } = renderHook(() =>
+        useAgentQueryParameters('engine-agent', 'agent'),
+      );
+
+      await waitFor(() => {
+        expect(result.current.executionEngineName).toBe(
+          'executor-openai-responses',
+        );
+      });
+      expect(mockGetByName).toHaveBeenCalledWith('default', 'engine-agent');
+    });
+
+    it('resets to null when the target is no longer an agent', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+
+      const { result, rerender } = renderHook(
+        ({ type }: { type: string }) =>
+          useAgentQueryParameters('engine-agent', type),
+        { initialProps: { type: 'agent' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.executionEngineName).toBe(
+          'executor-openai-responses',
+        );
+      });
+
+      rerender({ type: 'model' });
+
+      expect(result.current.executionEngineName).toBeNull();
+    });
+  });
 });
