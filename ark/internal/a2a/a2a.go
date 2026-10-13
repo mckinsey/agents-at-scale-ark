@@ -5,6 +5,7 @@ package a2a
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -112,6 +113,9 @@ const (
 const (
 	AgentCardPathVersion2 = "/.well-known/agent.json"
 	AgentCardPathVersion3 = "/.well-known/agent-card.json"
+
+	ProtocolVersion2 = "v0.2.x"
+	ProtocolVersion3 = "v0.3.x"
 )
 
 type A2AResponse struct {
@@ -126,38 +130,48 @@ func DiscoverA2AAgents(ctx context.Context, k8sClient client.Client, address str
 }
 
 func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AAgentCard, error) {
+	agentCard, _, err := discoverAgentCard(ctx, k8sClient, address, headers, namespace, a2aRecorder)
+	return agentCard, err
+}
+
+// DiscoverA2AAgentCard returns the agent card and the protocol version of the endpoint that served it.
+func DiscoverA2AAgentCard(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string) (*A2AAgentCard, string, error) {
+	return discoverAgentCard(ctx, k8sClient, address, headers, namespace, nil)
+}
+
+func discoverAgentCard(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, a2aRecorder eventing.A2aRecorder) (*A2AAgentCard, string, error) {
 	baseURL := strings.TrimSuffix(address, "/")
 
 	if err := validateA2AClient(address, headers, ctx, k8sClient, namespace); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	endpoints := []struct {
-		url     string
-		version string
+		url      string
+		version  string
+		protocol string
 	}{
-		{baseURL + AgentCardPathVersion3, "protocol version 0.3.x"},
-		{baseURL + AgentCardPathVersion2, "protocol version 0.2.x"},
+		{baseURL + AgentCardPathVersion3, "protocol version 0.3.x", ProtocolVersion3},
+		{baseURL + AgentCardPathVersion2, "protocol version 0.2.x", ProtocolVersion2},
 	}
 
-	var lastErr error
+	var errs []error
 	for _, endpoint := range endpoints {
 		req, err := createA2ARequest(ctx, endpoint.url, headers, k8sClient, namespace)
 		if err != nil {
-			lastErr = err
+			errs = append(errs, fmt.Errorf("%s (%s): %w", endpoint.version, endpoint.url, err))
 			continue
 		}
 
 		agentCard, err := executeA2ARequest(ctx, req, a2aRecorder)
 		if err == nil {
-			return agentCard, nil
+			return agentCard, endpoint.protocol, nil
 		}
 
-		lastErr = err
+		errs = append(errs, fmt.Errorf("%s (%s): %w", endpoint.version, endpoint.url, err))
 	}
 
-	return nil, fmt.Errorf("failed to discover agent from all endpoints (%s, %s): %w",
-		AgentCardPathVersion3, AgentCardPathVersion2, lastErr)
+	return nil, "", fmt.Errorf("failed to discover agent from all endpoints: %w", errors.Join(errs...))
 }
 
 func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID string, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AResponse, error) {

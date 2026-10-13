@@ -107,12 +107,19 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 	// Use the already resolved address from status
 	resolvedAddress := a2aServer.Status.LastResolvedAddress
 	// Don't pass recorder - we handle events at controller level based on actual changes
-	agentCard, err := arka2a.DiscoverA2AAgents(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
+	agentCard, protocol, err := arka2a.DiscoverA2AAgentCard(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
 	if err != nil {
+		clearAgentCardStatus(&a2aServer.Status)
 		if err := r.reconcileConditionsDiscoveryFailed(ctx, &a2aServer, err, resolvedAddress); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
+	}
+
+	if applyAgentCardStatus(&a2aServer.Status, agentCard, protocol) {
+		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	if err := r.reconcileEndpoint(ctx, &a2aServer, r.resolveEndpoint(&a2aServer, resolvedAddress, agentCard)); err != nil {
@@ -129,6 +136,33 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 	}
 
 	return r.finalizeA2AServerProcessing(ctx, a2aServer, agentsChanged)
+}
+
+// applyAgentCardStatus copies agent card details into the status and returns true if any changed
+func applyAgentCardStatus(status *arkv1prealpha1.A2AServerStatus, agentCard *arka2a.A2AAgentCard, protocol string) bool {
+	skillCount := int32(len(agentCard.Skills))
+	streaming := agentCard.Capabilities.Streaming != nil && *agentCard.Capabilities.Streaming
+
+	changed := status.NegotiatedProtocol != protocol ||
+		status.CardURL != agentCard.URL ||
+		status.CardVersion != agentCard.Version ||
+		status.SkillCount == nil || *status.SkillCount != skillCount ||
+		status.StreamingSupported == nil || *status.StreamingSupported != streaming
+
+	status.NegotiatedProtocol = protocol
+	status.CardURL = agentCard.URL
+	status.CardVersion = agentCard.Version
+	status.SkillCount = &skillCount
+	status.StreamingSupported = &streaming
+	return changed
+}
+
+func clearAgentCardStatus(status *arkv1prealpha1.A2AServerStatus) {
+	status.NegotiatedProtocol = ""
+	status.CardURL = ""
+	status.CardVersion = ""
+	status.SkillCount = nil
+	status.StreamingSupported = nil
 }
 
 // reconcileCondition updates a condition on the A2AServer and returns true if it changed

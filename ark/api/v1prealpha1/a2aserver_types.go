@@ -68,6 +68,26 @@ type A2AServerStatus struct {
 	// +kubebuilder:validation:Optional
 	RejectedEndpoint string `json:"rejectedEndpoint,omitempty"`
 
+	// NegotiatedProtocol is the A2A protocol version of the agent card endpoint that answered discovery (v0.3.x or v0.2.x)
+	// +kubebuilder:validation:Optional
+	NegotiatedProtocol string `json:"negotiatedProtocol,omitempty"`
+
+	// CardURL is the URL the agent card declares for A2A requests
+	// +kubebuilder:validation:Optional
+	CardURL string `json:"cardUrl,omitempty"`
+
+	// CardVersion is the agent version declared in the agent card
+	// +kubebuilder:validation:Optional
+	CardVersion string `json:"cardVersion,omitempty"`
+
+	// SkillCount is the number of skills declared in the agent card
+	// +kubebuilder:validation:Optional
+	SkillCount *int32 `json:"skillCount,omitempty"`
+
+	// StreamingSupported reports whether the agent card declares streaming support
+	// +kubebuilder:validation:Optional
+	StreamingSupported *bool `json:"streamingSupported,omitempty"`
+
 	// Conditions represent the latest available observations of the A2A server's state
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -79,6 +99,10 @@ type A2AServerStatus struct {
 // +kubebuilder:printcolumn:name="Discovering",type="string",JSONPath=".status.conditions[?(@.type=='Discovering')].status",description="Discovery status"
 // +kubebuilder:printcolumn:name="Address",type="string",JSONPath=".status.lastResolvedAddress",description="Last resolved address"
 // +kubebuilder:printcolumn:name="Endpoint",type="string",JSONPath=".status.lastResolvedEndpoint",description="Endpoint used for A2A requests"
+// +kubebuilder:printcolumn:name="Protocol",type="string",JSONPath=".status.negotiatedProtocol",description="A2A protocol version negotiated during discovery"
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.cardVersion",description="Agent version declared in the agent card"
+// +kubebuilder:printcolumn:name="Streaming",type="boolean",JSONPath=".status.streamingSupported",description="Whether the agent card declares streaming support"
+// +kubebuilder:printcolumn:name="Skills",type="integer",JSONPath=".status.skillCount",description="Number of skills declared in the agent card"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age"
 type A2AServer struct {
 	metav1.TypeMeta   `json:",inline"`
