@@ -209,6 +209,7 @@ async def _is_access_allowed(
     group: str,
     resource: str,
     verb: str,
+    subresource: Optional[str] = None,
 ) -> bool:
     async with get_impersonating_api_client(impersonation) as api:
         review = client.V1SelfSubjectAccessReview(
@@ -218,6 +219,7 @@ async def _is_access_allowed(
                     verb=verb,
                     group=group,
                     resource=resource,
+                    subresource=subresource,
                 )
             )
         )
@@ -651,7 +653,7 @@ async def get_workflow_logs(
     """
     async with get_impersonating_api_client(impersonation) as api:
         core_v1 = CoreV1Api(api)
-        
+
         try:
             pod_name = await _resolve_workflow_pod_name(core_v1, namespace, workflow_name, node_id)
             logs = await core_v1.read_namespaced_pod_log(
@@ -661,46 +663,52 @@ async def get_workflow_logs(
                 tail_lines=tail_lines,
             )
             return PlainTextResponse(content=logs if logs else "No logs available.")
-
+        except ApiException as e:
+            # A Kubernetes 403 means the caller cannot read pods/log; never serve
+            # the archive in its place (this route has no handle_k8s_errors).
+            if e.status == 403:
+                return PlainTextResponse(content="Forbidden", status_code=403)
+            live_error: Exception = e
+        except HTTPException as e:
+            # _resolve_workflow_pod_name raises 404 once the pod is gone.
+            live_error = e
         except Exception as e:
-            logger.error(f"Failed to fetch logs for node {node_id}: {e}")
-            
-            # Try to determine if the pod was deleted
+            live_error = e
+
+        # Live logs are gone (pod deleted or its container logs were GC'd). Serve
+        # the archive if the node is a terminal Pod and the caller may read logs.
+        logger.info(f"No live logs for node {node_id}, trying the archive: {live_error}")
+        try:
+            dynamic_client = await DynamicClient(api)
+            workflow_resource = await dynamic_client.resources.get(
+                api_version=WORKFLOW_API_VERSION, kind=WORKFLOW_KIND
+            )
+            workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
+            node = (workflow.to_dict().get("status", {}).get("nodes") or {}).get(node_id)
+        except Exception as inner_e:
+            logger.error(f"Failed to query workflow for node info: {inner_e}")
+            return PlainTextResponse(content=f"Failed to fetch logs: {live_error}", status_code=500)
+
+        if not node:
+            return PlainTextResponse(
+                content=f"Node {node_id} not found in workflow {workflow_name}",
+                status_code=404,
+            )
+
+        if node.get("type") == "Pod" and node.get("phase") in ["Succeeded", "Failed", "Error"]:
             try:
-                dynamic_client = await DynamicClient(api)
-                workflow_resource = await dynamic_client.resources.get(
-                    api_version=WORKFLOW_API_VERSION,
-                    kind=WORKFLOW_KIND
+                archived = await _fetch_archived_log(
+                    impersonation, namespace, workflow_name, node_id, container
                 )
-                workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
-                workflow_dict = workflow.to_dict()
-                
-                nodes = workflow_dict.get("status", {}).get("nodes", {})
-                node = nodes.get(node_id)
-                
-                if not node:
-                    return PlainTextResponse(
-                        content=f"Node {node_id} not found in workflow {workflow_name}",
-                        status_code=404
-                    )
-                
-                if node.get("type") == "Pod" and node.get("phase") in ["Succeeded", "Failed", "Error"]:
-                    return PlainTextResponse(
-                        content="Pod has been deleted. Logs are no longer available.\n\nTo preserve logs, enable 'archiveLogs: true' in your workflow spec with artifact storage configured.",
-                        status_code=404
-                    )
-                
-                return PlainTextResponse(
-                    content=f"Failed to fetch logs: {str(e)}",
-                    status_code=500
-                )
-                
-            except Exception as inner_e:
-                logger.error(f"Failed to query workflow for node info: {inner_e}")
-                return PlainTextResponse(
-                    content=f"Failed to fetch logs: {str(e)}",
-                    status_code=500
-                )
+            except ApiException as e:
+                if e.status == 403:
+                    return PlainTextResponse(content="Forbidden", status_code=403)
+                raise
+            if archived:
+                return PlainTextResponse(content=_tail(archived, tail_lines))
+            return PlainTextResponse(content=POD_DELETED_MESSAGE, status_code=404)
+
+        return PlainTextResponse(content=f"Failed to fetch logs: {live_error}", status_code=500)
 
 
 LOG_STREAM_CHUNK_BYTES = 65536
@@ -1240,6 +1248,78 @@ async def _resolve_workflow_pod_name(
     raise HTTPException(status_code=404, detail=f"No pod found for node {node_id}")
 
 
+async def _fetch_archived_log(
+    impersonation: Optional[ImpersonationConfig],
+    namespace: str,
+    workflow_name: str,
+    node_id: str,
+    container: Optional[str],
+) -> Optional[str]:
+    """Archived node log via Argo Server, gated by a Kubernetes RBAC check.
+
+    Argo Server runs with ``--auth-mode=server`` and a cluster-wide service
+    account, so it would answer any caller; we must authorize first. The archive
+    is the same data the live pod-log read returns, so we require the same
+    permission — ``get`` on ``pods/log`` in the namespace — evaluated under the
+    caller's impersonated identity. Raises ``ApiException(403)`` on denial so the
+    usual forbidden response (and ``IMPERSONATION_FALLBACK``) applies. Returns
+    None when ``ARGO_SERVER_URL`` is unset or Argo Server has no archive.
+    """
+    base_url = argo_server.get_argo_server_url()
+    if not base_url:
+        return None
+    if not await _is_access_allowed(
+        impersonation, namespace, "", "pods", "get", subresource="log"
+    ):
+        raise ApiException(status=403, reason="Forbidden")
+    return await argo_server.get_workflow_log(
+        base_url, namespace, workflow_name, node_id, container=container or "main"
+    )
+
+
+def _tail(text: str, tail_lines: Optional[int]) -> str:
+    if tail_lines and tail_lines > 0:
+        lines = text.splitlines()
+        if len(lines) > tail_lines:
+            return "\n".join(lines[-tail_lines:])
+    return text
+
+
+def _build_archived_window(
+    text: str, max_lines: int, skip_tail_lines: int, max_bytes: int
+) -> LogWindow:
+    """Page the archived log blob from the end, mirroring the live window.
+
+    The archive is static, so timestamps are not parsed and ``has_more_before``
+    is exact rather than a best-effort hint.
+    """
+    all_lines = text.splitlines()
+    end = max(0, len(all_lines) - skip_tail_lines)
+    start = max(0, end - max_lines)
+    window_lines = all_lines[start:end]
+    content = "\n".join(window_lines)
+    truncated = False
+    encoded = content.encode("utf-8")
+    if len(encoded) > max_bytes:
+        content = encoded[-max_bytes:].decode("utf-8", errors="replace")
+        # The byte cut can split a line; drop the partial leading line and keep
+        # line_count consistent with what we actually return, so the dashboard's
+        # next "load older" page starts at the right offset.
+        if "\n" in content:
+            content = content.split("\n", 1)[1]
+        window_lines = content.split("\n") if content else []
+        truncated = True
+    return LogWindow(
+        content=content,
+        line_count=len(window_lines),
+        first_timestamp=None,
+        last_timestamp=None,
+        has_more_before=start > 0 or truncated,
+        truncated=truncated,
+        byte_count=len(content.encode("utf-8")),
+    )
+
+
 async def _workflow_node_unavailable_detail(
     api,
     namespace: str,
@@ -1358,9 +1438,18 @@ async def get_workflow_log_window(
             )
         except (ApiException, HTTPException) as e:
             status = e.status if isinstance(e, ApiException) else e.status_code
+            # Try the archive whenever the live read failed (pod gone OR its
+            # container logs were GC'd, which is not a 404). _fetch_archived_log
+            # runs the pods/log RBAC check and raises 403 on denial, which
+            # handle_k8s_errors turns into the usual forbidden response.
+            logger.info(f"No live logs for node {node_id}, trying the archive: {e}")
+            text = await _fetch_archived_log(
+                impersonation, namespace, workflow_name, node_id, container
+            )
+            if text:
+                return _build_archived_window(text, max_lines, skip_tail_lines, max_bytes)
             if status != 404:
                 raise
-            logger.info(f"No live logs for node {node_id}, explaining why: {e}")
             detail = await _workflow_node_unavailable_detail(api, namespace, workflow_name, node_id)
             raise HTTPException(status_code=404, detail=detail) from e
 
