@@ -167,5 +167,23 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
         return api_resource
 
 
+class TestFilterItemsByName(unittest.TestCase):
+    def test_keeps_partial_case_insensitive_matches(self):
+        from ark_api.api.v1.resources import _filter_items_by_name
+        resources = {"items": [workflow("Alpha-demo"), workflow("zeta-demo")]}
+
+        _filter_items_by_name(resources, "ALPHA")
+
+        self.assertEqual([i["metadata"]["name"] for i in resources["items"]], ["Alpha-demo"])
+
+    def test_leaves_response_without_items_untouched(self):
+        from ark_api.api.v1.resources import _filter_items_by_name
+        resources = {"metadata": {}}
+
+        _filter_items_by_name(resources, "alpha")
+
+        self.assertEqual(resources, {"metadata": {}})
+
+
 if __name__ == "__main__":
     unittest.main()

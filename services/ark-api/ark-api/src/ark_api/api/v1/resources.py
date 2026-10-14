@@ -171,6 +171,31 @@ async def get_grouped_resource(
         return _create_resource_response(resource.to_dict(), request)
 
 
+def _build_label_selector(
+    kind: str,
+    label_selector: Optional[str],
+    workflow_template_name: Optional[str],
+    status: Optional[str],
+) -> str:
+    selectors = [label_selector]
+    if kind == "Workflow":
+        if workflow_template_name:
+            selectors.append(f"{WORKFLOW_TEMPLATE_LABEL}={workflow_template_name}")
+        if status:
+            selectors.append(WORKFLOW_STATUS_LABEL_SELECTORS.get(status.lower()))
+    return ",".join(filter(None, selectors))
+
+
+def _filter_items_by_name(resources_dict: dict, name: str) -> None:
+    if "items" not in resources_dict:
+        return
+    resources_dict["items"] = [
+        item
+        for item in resources_dict["items"]
+        if name.lower() in item.get("metadata", {}).get("name", "").lower()
+    ]
+
+
 async def _is_access_allowed(
     impersonation: Optional[ImpersonationConfig],
     namespace: str,
@@ -290,15 +315,7 @@ async def list_grouped_resources(
 
     api_version = f"{group}/{version}"
 
-    workflow_label_selectors = []
-    if kind == "Workflow":
-        if workflowTemplateName:
-            workflow_label_selectors.append(f"{WORKFLOW_TEMPLATE_LABEL}={workflowTemplateName}")
-        if status:
-            status_selector = WORKFLOW_STATUS_LABEL_SELECTORS.get(status.lower())
-            if status_selector:
-                workflow_label_selectors.append(status_selector)
-    combined_label_selector = ",".join(filter(None, [label_selector, *workflow_label_selectors]))
+    combined_label_selector = _build_label_selector(kind, label_selector, workflowTemplateName, status)
 
     if api_version == WORKFLOW_API_VERSION and kind == WORKFLOW_KIND:
         workflow_list = await _list_workflows_from_argo_server(
@@ -325,12 +342,8 @@ async def list_grouped_resources(
 
         # workflowName stays a post-fetch partial match, applied only to the
         # page returned by this call, not the whole collection.
-        if kind == "Workflow" and workflowName and "items" in resources_dict:
-            resources_dict["items"] = [
-                item
-                for item in resources_dict["items"]
-                if workflowName.lower() in item.get("metadata", {}).get("name", "").lower()
-            ]
+        if kind == "Workflow" and workflowName:
+            _filter_items_by_name(resources_dict, workflowName)
 
         return _create_resource_response(resources_dict, request)
 
