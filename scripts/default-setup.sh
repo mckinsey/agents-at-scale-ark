@@ -74,7 +74,7 @@ echo "  API Key: ${api_key:0:20}..."
 echo "Creating/updating AIGW secret..."
 kubectl create secret generic aigw-secret \
     --from-literal=token="$api_key" \
-    --dry-run=client -o yaml | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml | kubectl apply -f -
+    --dry-run=client -o yaml | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml | kubectl apply --server-side --force-conflicts --field-manager=ark-default-setup -f -
 
 if [[ $? -eq 0 ]]; then
     echo -e "${green}✔${nc} AIGW secret created/updated successfully"
