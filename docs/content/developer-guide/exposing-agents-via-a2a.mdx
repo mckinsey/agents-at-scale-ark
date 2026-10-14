@@ -1,0 +1,118 @@
+---
+title: Exposing Agents via A2A
+description: Serve every Ark agent as an A2A server through the Ark API gateway
+---
+
+# Exposing Agents via A2A
+
+The Ark API service includes an A2A gateway that exposes every Ark `Agent` as an [A2A](https://a2a-protocol.org) server. External A2A clients can discover an agent's card and send it messages using the standard protocol, with no per-agent configuration.
+
+This is the reverse of [Building A2A Servers](/developer-guide/building-a2a-servers), which imports an external A2A agent into Ark. Here, Ark agents you already have are published outward.
+
+The gateway serves individual agents, not [teams](/reference/resources/team).
+
+## How it works
+
+The gateway is mounted by the Ark API at `/a2a/agent`. It polls the Ark API for `Agent` resources and, for each one, mounts a full A2A server at `/a2a/agent/{agent-name}/`:
+
+- **Discovery** — the gateway refreshes its agent list on an interval (every 30 seconds in-cluster) and swaps routes atomically, so agents added or removed in the cluster appear or disappear without a restart.
+- **Agent card** — each agent's card is served at `/a2a/agent/{agent-name}/.well-known/agent.json`. The card advertises `streaming` support; push notifications and state-transition history are not supported.
+- **Execution** — an inbound A2A message is turned into an Ark [Query](/reference/resources/query) against the target agent. The gateway streams task status back to the client as A2A `TaskStatusUpdateEvent`s (working → completed, or failed on error or timeout) and returns the agent's response as the final message.
+
+Because each request runs as a normal Query, the agent's `modelRef`, tools, and execution engine all apply exactly as they do for any other query.
+
+## List exposed agents
+
+`GET /agents` returns every agent the gateway exposes, with a link to each agent's card:
+
+```bash
+curl http://localhost:8000/agents | jq .
+```
+
+```json
+[
+  {
+    "name": "weather-agent",
+    "description": "Answers weather questions",
+    "capabilities": ["forecast"],
+    "agent-card": "http://localhost:8000/a2a/agent/weather-agent/.well-known/agent.json"
+  }
+]
+```
+
+## Fetch an agent card
+
+```bash
+curl http://localhost:8000/a2a/agent/weather-agent/.well-known/agent.json | jq .
+```
+
+## Send a message
+
+Send a message to the agent using the A2A `message/send` method:
+
+```bash
+curl -X POST http://localhost:8000/a2a/agent/weather-agent/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "msg-1",
+        "contextId": "ctx-1",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "What is the forecast for London?"}]
+      }
+    },
+    "id": 1
+  }' | jq .
+```
+
+You can also point the [A2A Inspector](https://github.com/a2aproject/a2a-inspector) at `http://localhost:8000/a2a/agent/weather-agent/` to browse the card and exchange messages interactively.
+
+## Declare skills
+
+By default an agent's card advertises a single `General` skill. To publish specific skills, add the `a2a.mckinsey.com/skills` annotation to the `Agent` resource. Each entry becomes an [A2A skill](https://a2a-protocol.org) on the card:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: weather-agent
+  annotations:
+    a2a.mckinsey.com/skills: |
+      - name: forecast
+        description: Provides multi-day weather forecasts
+        tags: [weather, forecast]
+spec:
+  description: Answers weather questions
+  modelRef:
+    name: default
+  prompt: You are a helpful weather assistant.
+```
+
+An `id` is generated for each skill if you do not set one.
+
+## Configure advertised URLs
+
+The host, port, protocol, and path in each agent card come from environment variables on the Ark API service:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ARK_A2A_AGENT_CARD_HOST` | Host advertised in agent cards. | `localhost` |
+| `ARK_A2A_AGENT_CARD_PORT` | Port advertised in agent cards. | Uses `PORT` (8000) |
+| `ARK_A2A_AGENT_CARD_PROTOCOL` | Protocol advertised in agent cards. | `http` |
+| `ARK_A2A_AGENT_CARD_PATH` | Optional path prefix for agent card URLs. | Empty (root path) |
+
+When a gateway path-routes the Ark API using `X-Forwarded-*` headers, the card URL is derived from the request's forwarding prefix instead, so multi-tenant deployments serve a card whose URL carries the tenant prefix.
+
+## Timeouts
+
+Each query runs with a default timeout of 300 seconds, configurable through the `A2A_DEFAULT_TIMEOUT` environment variable on the Ark API service. A query that exceeds the timeout returns a failed task with a timeout message.
+
+## Related
+
+- [Building A2A Servers](/developer-guide/building-a2a-servers) — import an external A2A agent into Ark.
+- [A2A Queries](/developer-guide/queries/a2a-queries) — how Ark translates queries into A2A messages.
+- [Ark API](/developer-guide/services/ark-api) — the service that hosts the gateway.
+- [Agent](/reference/resources/agent) — the full `Agent` resource specification.
