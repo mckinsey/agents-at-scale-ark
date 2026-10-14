@@ -38,26 +38,57 @@ export interface SecretManager {
   createSecret(config: ProviderConfig): Promise<void>;
 }
 
+type ExistingSecret = {
+  metadata: {labels?: Record<string, string>; managedFields?: unknown};
+  data?: Record<string, string>;
+};
+
+export function mergeIntoExisting(
+  existing: ExistingSecret,
+  config: ProviderConfig
+) {
+  const manifest = buildSecretManifest(config);
+  const data = {...existing.data};
+  for (const key of Object.keys(manifest.stringData)) {
+    delete data[key];
+  }
+  const metadata = {...existing.metadata};
+  delete metadata.managedFields;
+  return {
+    ...existing,
+    metadata: {...metadata, labels: {...metadata.labels, ...SECRET_LABELS}},
+    data,
+    stringData: manifest.stringData,
+  };
+}
+
 // Kubernetes secret manager implementation
 export class KubernetesSecretManager implements SecretManager {
   async createSecret(config: ProviderConfig): Promise<void> {
-    const secretExists = await this.secretExists(config.secretName);
+    const existing = await this.readSecret(config.secretName);
+    const manifest = existing
+      ? mergeIntoExisting(existing, config)
+      : buildSecretManifest(config);
 
-    await execa('kubectl', [secretExists ? 'replace' : 'create', '-f', '-'], {
-      input: JSON.stringify(buildSecretManifest(config)),
+    await execa('kubectl', [existing ? 'replace' : 'create', '-f', '-'], {
+      input: JSON.stringify(manifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     output.success(
-      `${secretExists ? 'updated' : 'created'} secret ${config.secretName}`
+      `${existing ? 'updated' : 'created'} secret ${config.secretName}`
     );
   }
 
-  private async secretExists(secretName: string): Promise<boolean> {
+  private async readSecret(secretName: string): Promise<ExistingSecret | null> {
     try {
-      await execa('kubectl', ['get', 'secret', secretName], {stdio: 'pipe'});
-      return true;
+      const {stdout} = await execa(
+        'kubectl',
+        ['get', 'secret', secretName, '-o', 'json'],
+        {stdio: 'pipe'}
+      );
+      return JSON.parse(stdout);
     } catch {
-      return false;
+      return null;
     }
   }
 }
