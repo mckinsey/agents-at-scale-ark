@@ -493,7 +493,8 @@ class SecretClient:
                 namespace=self.namespace,
                 body=client.V1DeleteOptions(
                     preconditions=client.V1Preconditions(
-                        uid=existing.metadata.uid
+                        uid=existing.metadata.uid,
+                        resource_version=existing.metadata.resource_version,
                     )
                 ),
             )
