@@ -685,10 +685,12 @@ async def get_workflow_logs(
                     )
                 
                 if node.get("type") == "Pod" and node.get("phase") in ["Succeeded", "Failed", "Error"]:
-                    return PlainTextResponse(
-                        content="Pod has been deleted. Logs are no longer available.\n\nTo preserve logs, enable 'archiveLogs: true' in your workflow spec with artifact storage configured.",
-                        status_code=404
+                    archived = await _archived_workflow_log(
+                        namespace, workflow_name, node_id, container, tail_lines
                     )
+                    if archived:
+                        return PlainTextResponse(content=archived)
+                    return PlainTextResponse(content=POD_DELETED_MESSAGE, status_code=404)
                 
                 return PlainTextResponse(
                     content=f"Failed to fetch logs: {str(e)}",
@@ -1240,6 +1242,83 @@ async def _resolve_workflow_pod_name(
     raise HTTPException(status_code=404, detail=f"No pod found for node {node_id}")
 
 
+async def _archived_workflow_log(
+    namespace: str,
+    workflow_name: str,
+    node_id: str,
+    container: Optional[str],
+    tail_lines: Optional[int],
+) -> Optional[str]:
+    """Archived node log via Argo Server, or None when disabled/unavailable.
+
+    Returns None (so the caller keeps the "pod deleted" message) when
+    ARGO_SERVER_URL is unset or Argo Server has no archived log for the node.
+    """
+    base_url = argo_server.get_argo_server_url()
+    if not base_url:
+        return None
+    text = await argo_server.get_workflow_log(
+        base_url, namespace, workflow_name, node_id, container=container or "main"
+    )
+    if not text:
+        return None
+    if tail_lines and tail_lines > 0:
+        lines = text.splitlines()
+        if len(lines) > tail_lines:
+            text = "\n".join(lines[-tail_lines:])
+    return text
+
+
+def _build_archived_window(
+    text: str, max_lines: int, skip_tail_lines: int, max_bytes: int
+) -> LogWindow:
+    """Page the archived log blob from the end, mirroring the live window.
+
+    The archive is static, so timestamps are not parsed and ``has_more_before``
+    is exact rather than a best-effort hint.
+    """
+    all_lines = text.split("\n")
+    end = max(0, len(all_lines) - skip_tail_lines)
+    start = max(0, end - max_lines)
+    window_lines = all_lines[start:end]
+    content = "\n".join(window_lines)
+    truncated = False
+    encoded = content.encode("utf-8")
+    if len(encoded) > max_bytes:
+        content = encoded[-max_bytes:].decode("utf-8", errors="replace")
+        truncated = True
+    return LogWindow(
+        content=content,
+        line_count=len(window_lines),
+        first_timestamp=None,
+        last_timestamp=None,
+        has_more_before=start > 0,
+        truncated=truncated,
+        byte_count=len(content.encode("utf-8")),
+    )
+
+
+async def _archived_log_window(
+    namespace: str,
+    workflow_name: str,
+    node_id: str,
+    container: Optional[str],
+    max_lines: int,
+    skip_tail_lines: int,
+    max_bytes: int,
+) -> Optional[LogWindow]:
+    """Build a log window from the archived node log, or None when unavailable."""
+    base_url = argo_server.get_argo_server_url()
+    if not base_url:
+        return None
+    text = await argo_server.get_workflow_log(
+        base_url, namespace, workflow_name, node_id, container=container or "main"
+    )
+    if not text:
+        return None
+    return _build_archived_window(text, max_lines, skip_tail_lines, max_bytes)
+
+
 async def _workflow_node_unavailable_detail(
     api,
     namespace: str,
@@ -1360,7 +1439,13 @@ async def get_workflow_log_window(
             status = e.status if isinstance(e, ApiException) else e.status_code
             if status != 404:
                 raise
-            logger.info(f"No live logs for node {node_id}, explaining why: {e}")
+            logger.info(f"No live logs for node {node_id}, trying the archive: {e}")
+            window = await _archived_log_window(
+                namespace, workflow_name, node_id, container,
+                max_lines, skip_tail_lines, max_bytes,
+            )
+            if window is not None:
+                return window
             detail = await _workflow_node_unavailable_detail(api, namespace, workflow_name, node_id)
             raise HTTPException(status_code=404, detail=detail) from e
 

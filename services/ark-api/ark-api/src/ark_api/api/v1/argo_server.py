@@ -91,3 +91,39 @@ async def list_workflows(
 
 def _started_at(workflow: dict) -> str:
     return (workflow.get("status") or {}).get("startedAt") or ""
+
+
+async def get_workflow_log(
+    base_url: str,
+    namespace: str,
+    workflow_name: str,
+    node_id: str,
+    container: str = "main",
+) -> Optional[str]:
+    """Fetch a workflow node's ARCHIVED log through Argo Server's artifact endpoint.
+
+    When the pod is gone, the live pod-log streaming endpoint serves nothing, so
+    we read the ``{container}-logs`` artifact (e.g. from S3) that ``archiveLogs:
+    true`` uploaded for the node. This is the durable fallback for the Kubernetes
+    pod-log API, which only sees logs the kubelet still retains on the node.
+
+    Returns the raw log text, or None when Argo Server has no archived log for
+    the node (so the caller can degrade to the "pod deleted" message).
+    """
+    artifact = f"{container}-logs"
+    url = (
+        f"{base_url}/artifact-files/{quote(namespace, safe='')}"
+        f"/workflows/{quote(workflow_name, safe='')}"
+        f"/{quote(node_id, safe='')}/outputs/{quote(artifact, safe='')}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=ARGO_SERVER_TIMEOUT_SECONDS) as http_client:
+            response = await http_client.get(url)
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.warning(
+            f"Argo Server archived-log fetch failed for {workflow_name}/{node_id}: {e}"
+        )
+        return None
+
+    return response.text
