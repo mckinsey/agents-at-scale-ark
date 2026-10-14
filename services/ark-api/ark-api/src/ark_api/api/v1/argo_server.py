@@ -120,6 +120,16 @@ async def get_workflow_log(
         async with httpx.AsyncClient(timeout=ARGO_SERVER_TIMEOUT_SECONDS) as http_client:
             response = await http_client.get(url)
         response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        # A 404 just means nothing was archived for this node — the normal case
+        # for workflows that ran before archiveLogs was enabled. Don't shout.
+        if e.response.status_code == 404:
+            logger.debug(f"No archived log for {workflow_name}/{node_id}")
+        else:
+            logger.warning(
+                f"Argo Server archived-log fetch failed for {workflow_name}/{node_id}: {e}"
+            )
+        return None
     except httpx.HTTPError as e:
         logger.warning(
             f"Argo Server archived-log fetch failed for {workflow_name}/{node_id}: {e}"
