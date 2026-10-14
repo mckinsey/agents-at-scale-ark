@@ -379,8 +379,9 @@ kubectl get events --field-selector involvedObject.name=word-count,reason=Inline
 | First call is slow, later calls are not | Cold start: the runner scales from zero, within the 60-second activation budget. It returns to zero 60 seconds after the last call. |
 | Tool error naming a missing package, or a connection failure | Runners are standard-library only with all egress denied. Move the tool to an [MCPServer](/reference/resources/mcpserver). |
 | Tool error with truncated stderr | Errors carry the last 4 KiB of stderr; stdout is capped at 256 KiB. Print less, or summarise in the script. |
+| Query fails with `calling "tools/call": context deadline exceeded`, instead of a tool error | The script ran into the 30-second execution limit. The caller reaches its own deadline at the same moment as the runner, so this fails the whole Query rather than returning a tool-visible error. Shorten the script or move it to an MCPServer. |
 
-A runner logs nothing but its own startup line, so a failing call leaves no trace in `kubectl logs`. The script's stderr is returned to the caller in the tool error instead. A runner that never gets that far — a revision mismatch or an image it cannot pull — shows the reason in its pod events:
+A runner logs nothing but its own startup line, so a failing call leaves no trace in `kubectl logs`. A script that exits with an error returns its stderr to the caller in the tool error; one that runs past the execution limit instead fails the Query itself (see above), with no stderr returned. A runner that never gets that far — a revision mismatch or an image it cannot pull — shows the reason in its pod events:
 
 ```bash
 kubectl describe pod -l ark.mckinsey.com/inline-tool=word-count

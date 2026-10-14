@@ -332,7 +332,7 @@ For any of these, write the `Tool` (or `Agent`) YAML directly. You can still ins
 
 **Inline tool never becomes `Available`.** `kubectl describe tool <name>` gives the condition reason — `RuntimeNotInstalled` (feature disabled), `ActivatorUnavailable` (activator not ready), `ConflictingNetworkPolicy` (another policy selects the runner pods; the message names it), or `ProvisioningFailed` (the error is in the message). The first three are administrator fixes.
 
-**Inline tool fails at run time.** The model sees the error with the last 4 KiB of stderr. Common causes: a third-party import (runners are standard-library only), an outbound call or file read (no network, no mounts), or exceeding the 30-second limit. Move any of those to an MCP server. Full reasons: [Reference → Tools → Troubleshooting](/reference/resources/tools#troubleshooting).
+**Inline tool fails at run time.** For a script that exits with an error — a third-party import (runners are standard-library only), an outbound call, or a file read (no network, no mounts) — the model sees the error with the last 4 KiB of stderr. Exceeding the 30-second execution limit is different: the whole Query fails instead, since the caller's own deadline is reached at the same moment as the runner's. Move any of these to an MCP server. Full reasons: [Reference → Tools → Troubleshooting](/reference/resources/tools#troubleshooting).
 
 ## Next steps
 
