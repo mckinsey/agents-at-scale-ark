@@ -28,9 +28,27 @@ const openai: ProviderConfig = {
   apiKey: 'sk-openai',
 };
 
-async function run(config: ProviderConfig, secretExists: boolean) {
+const EXISTING = {
+  apiVersion: 'v1',
+  kind: 'Secret',
+  metadata: {
+    name: 'm-model-secret',
+    resourceVersion: '42',
+    labels: {'ark.mckinsey.com/label.prod': 'true', app: 'gitops'},
+    annotations: {'ark.mckinsey.com/description': 'shared key'},
+    managedFields: [{manager: 'kubectl'}],
+  },
+  type: 'Opaque',
+  data: {token: 'b2xk', 'api-key': 'b2xk', extra: 'a2VlcA=='},
+};
+
+async function run(
+  config: ProviderConfig,
+  secretExists: boolean,
+  existing: object = EXISTING
+) {
   if (secretExists) {
-    mockExeca.mockResolvedValueOnce({});
+    mockExeca.mockResolvedValueOnce({stdout: JSON.stringify(existing)});
   } else {
     mockExeca.mockRejectedValueOnce(new Error('not found'));
   }
@@ -61,14 +79,47 @@ describe('KubernetesSecretManager', () => {
     );
   });
 
-  it('replaces an existing secret with the same manifest', async () => {
+  it('replaces an existing secret and keeps its metadata and other keys', async () => {
     const {args, manifest} = await run(openai, true);
 
     expect(args).toEqual(['replace', '-f', '-']);
-    expect(manifest.metadata.labels).toEqual(LABELS);
+    expect(manifest.metadata).toEqual({
+      name: 'm-model-secret',
+      resourceVersion: '42',
+      labels: {...EXISTING.metadata.labels, ...LABELS},
+      annotations: EXISTING.metadata.annotations,
+    });
+    expect(manifest.data).toEqual({extra: 'a2VlcA=='});
+    expect(manifest.stringData).toEqual({
+      'api-key': 'sk-openai',
+      token: 'sk-openai',
+    });
     expect(mockOutput.success).toHaveBeenCalledWith(
       'updated secret m-model-secret'
     );
+  });
+
+  it('drops a stale session token when the new config has none', async () => {
+    const {manifest} = await run(
+      {
+        type: 'bedrock',
+        modelValue: 'claude',
+        secretName: 's',
+        region: 'us-east-1',
+        authMethod: 'iam',
+        accessKeyId: 'AKIA',
+        secretAccessKey: 'secret',
+        sessionToken: '',
+      },
+      true,
+      {...EXISTING, data: {'session-token': 'b2xk', 'access-key-id': 'b2xk'}}
+    );
+
+    expect(manifest.data).toEqual({});
+    expect(manifest.stringData).toEqual({
+      'access-key-id': 'AKIA',
+      'secret-access-key': 'secret',
+    });
   });
 
   it('never puts secret values in argv or uses apply', async () => {
