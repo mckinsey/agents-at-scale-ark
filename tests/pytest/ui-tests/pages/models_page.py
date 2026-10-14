@@ -17,7 +17,6 @@ class ModelsPage(BasePage):
     MODEL_NAME_INPUT = "input[name='name'], input[placeholder*='name' i]"
     MODEL_TYPE_SELECT = "select, [role='combobox']"
     MODEL_INPUT = "input[name='model'], input[placeholder*='model' i]"
-    API_KEY_SELECT = "button:has-text('Select a secret'), [role='combobox']:has-text('Select')"
     BASE_URL_FIELDSET = "xpath=//*[contains(text(),'Base URL')]/parent::*"
     SAVE_BUTTON = "button:has-text('Add Model'), button:has-text('Create'), button:has-text('Save')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
@@ -102,7 +101,7 @@ class ModelsPage(BasePage):
         model_input.wait_for(state="visible", timeout=5000)
         model_input.fill(model)
         
-        self._select_from_combobox("[role='combobox'][placeholder^='Select a secret']", secret_name)
+        self._select_from_combobox("[role='combobox'][placeholder^='Select or type a secret']", secret_name)
         
         if base_url:
             try:
