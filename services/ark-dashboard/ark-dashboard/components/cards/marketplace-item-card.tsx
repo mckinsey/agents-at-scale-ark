@@ -1,8 +1,7 @@
 'use client';
 
 import type { ComponentType, SVGProps } from 'react';
-import { useState } from 'react';
-import { toast } from 'sonner';
+import { useMemo, useState } from 'react';
 
 import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
 import {
@@ -10,22 +9,36 @@ import {
   Check,
   Dns,
   OpenInNew,
+  SaveAlt,
   SmartToy,
 } from '@/components/icons';
+import { MarketplaceInstallDialog } from '@/components/marketplace/marketplace-install-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { IconShell } from '@/components/ui/icon-shell';
+import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
+import { StatusIndicator } from '@/components/ui/status-indicator';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
+import type {
+  MarketplaceInstallState,
+  MarketplaceItem,
+} from '@/lib/api/generated/marketplace-types';
+import { useMarketplaceInstallCapability } from '@/lib/hooks/use-marketplace-install-capability';
+import {
+  useMarketplaceInstallState,
+  useNamespaceInstallLock,
+} from '@/lib/hooks/use-marketplace-install-state';
 import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
+import { isSafeExternalUrl, openExternalUrl } from '@/lib/utils/external-url';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 const VISIBLE_TAGS = 3;
 
@@ -37,6 +50,102 @@ interface MarketplaceItemCardProps {
 interface TypeBadge {
   readonly label: string;
   readonly icon?: ComponentType<SVGProps<SVGSVGElement>>;
+}
+
+interface InstalledStateConfig {
+  readonly label: string;
+  readonly dotClass: string;
+  readonly tooltip: string;
+}
+
+const INSTALL_STATE_CONFIG: Readonly<
+  Record<Exclude<MarketplaceInstallState, 'installable'>, InstalledStateConfig>
+> = {
+  installing: {
+    label: 'Installing…',
+    dotClass: 'bg-status-information',
+    tooltip: 'This install is running. It continues if you navigate away.',
+  },
+  installed: {
+    label: 'Installed',
+    dotClass: 'bg-status-success',
+    tooltip:
+      'To uninstall or install a new version, contact the platform team.',
+  },
+  failed: {
+    label: 'Failed to install',
+    dotClass: 'bg-status-error',
+    tooltip: 'Installation failed. Contact the platform team.',
+  },
+  'timed-out': {
+    label: 'Timed out',
+    dotClass: 'bg-status-error',
+    tooltip: 'The install did not finish in time. Contact the platform team.',
+  },
+  'platform-managed': {
+    label: 'Platform managed',
+    dotClass: 'bg-fg-tertiary',
+    tooltip:
+      'This item is installed by the platform team. Contact them to request it.',
+  },
+};
+
+function InstallStatus({
+  state,
+}: Readonly<{ state: MarketplaceInstallState }>) {
+  if (state === 'installable') {
+    return null;
+  }
+
+  const config = INSTALL_STATE_CONFIG[state];
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} className="cursor-default">
+          <StatusIndicator label={config.label} dotClass={config.dotClass} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[320px] text-pretty">
+        {config.tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function InstallAction({
+  disabledReason,
+  onClick,
+}: Readonly<{ disabledReason?: string; onClick: () => void }>) {
+  const button = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onClick}
+      disabled={Boolean(disabledReason)}>
+      <IconShell size="sm" variant="secondary">
+        <SaveAlt />
+      </IconShell>
+      Install
+    </Button>
+  );
+
+  if (!disabledReason) {
+    return button;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} className="inline-flex">
+          {button}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[320px] text-pretty">
+        {disabledReason}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function typeBadge(item: MarketplaceItem): TypeBadge {
@@ -60,14 +169,23 @@ export function MarketplaceItemCard({
   const [isInstalling, setIsInstalling] = useState(false);
   const [justInstalled, setJustInstalled] = useState(false);
   const [showCommandDialog, setShowCommandDialog] = useState(false);
+  const [showInstallDialog, setShowInstallDialog] = useState(false);
   const [installCommand, setInstallCommand] = useState<{
     helmCommand?: string;
     arkCommand?: string;
     name?: string;
   }>({});
   const installMutation = useInstallMarketplaceItem();
+  const installEnabled = useMarketplaceInstallCapability();
+  const { state: installState } = useMarketplaceInstallState(item);
+  const lock = useNamespaceInstallLock();
+  const { readOnlyMode } = useNamespace();
+  const lockedByOther = Boolean(lock && lock.itemId !== item.id);
 
   const handleInstall = async () => {
+    if (readOnlyMode) {
+      return;
+    }
     setIsInstalling(true);
     try {
       const result = await installMutation.mutateAsync(item.id);
@@ -131,16 +249,24 @@ export function MarketplaceItemCard({
         errorMessage = error.message;
       }
 
-      toast.error(`Failed to install ${item.name}`, {
-        description: errorDetails || errorMessage,
-        duration: 8000,
-      });
+      toast.error(
+        `Failed to install ${item.name}: ${errorDetails || errorMessage}`,
+        { duration: 8000 },
+      );
     } finally {
       setIsInstalling(false);
     }
   };
 
   const isInstalled = justInstalled || item.status === 'installed';
+  const safeUis = useMemo(
+    () => (item.uis ?? []).filter(ui => isSafeExternalUrl(ui.url)),
+    [item.uis],
+  );
+  const repositoryIsSafe = isSafeExternalUrl(item.repository);
+  const showUiLinks = installEnabled
+    ? installState === 'installed'
+    : isInstalled;
   const { label: typeLabel, icon: TypeIcon } = typeBadge(item);
   const hiddenTagCount = item.tags.length - VISIBLE_TAGS;
 
@@ -218,14 +344,14 @@ export function MarketplaceItemCard({
         )}
 
         <div className="flex flex-col gap-3">
-          {isInstalled && item.uis && item.uis.length > 0 && (
+          {showUiLinks && safeUis.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {item.uis.map(ui => (
+              {safeUis.map(ui => (
                 <Button
                   key={ui.url}
                   variant="secondary"
                   size="sm"
-                  onClick={() => window.open(ui.url, '_blank')}>
+                  onClick={() => openExternalUrl(ui.url)}>
                   {ui.label}
                   <IconShell size="sm" variant="secondary">
                     <OpenInNew />
@@ -240,14 +366,27 @@ export function MarketplaceItemCard({
               v{item.version}
             </p>
 
-            {item.type === 'demo' ? (
+            {installEnabled ? (
+              installState === 'installable' ? (
+                <InstallAction
+                  disabledReason={
+                    readOnlyMode
+                      ? 'You do not have permission to install in this namespace.'
+                      : lockedByOther && lock
+                        ? `Installing ${lock.itemName}. One install runs at a time in a namespace.`
+                        : undefined
+                  }
+                  onClick={() => setShowInstallDialog(true)}
+                />
+              ) : (
+                <InstallStatus state={installState} />
+              )
+            ) : item.type === 'demo' ? (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  item.repository && window.open(item.repository, '_blank')
-                }
-                disabled={!item.repository}>
+                onClick={() => openExternalUrl(item.repository)}
+                disabled={!repositoryIsSafe}>
                 View
                 <IconShell size="sm" variant="secondary">
                   <OpenInNew />
@@ -258,7 +397,7 @@ export function MarketplaceItemCard({
                 variant="outline"
                 size="sm"
                 onClick={handleInstall}
-                disabled={isInstalling || isInstalled}>
+                disabled={isInstalling || isInstalled || readOnlyMode}>
                 {isInstalled && (
                   <>
                     Installed
@@ -278,6 +417,14 @@ export function MarketplaceItemCard({
             )}
           </div>
         </div>
+
+        {installEnabled && (
+          <MarketplaceInstallDialog
+            item={item}
+            open={showInstallDialog}
+            onOpenChange={setShowInstallDialog}
+          />
+        )}
 
         <MarketplaceCommandDialog
           open={showCommandDialog}
