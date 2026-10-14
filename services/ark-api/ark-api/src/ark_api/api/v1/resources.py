@@ -187,6 +187,7 @@ def _build_label_selector(
 
 
 def _filter_items_by_name(resources_dict: dict, name: str) -> None:
+    (resources_dict.get("metadata") or {}).pop("remainingItemCount", None)
     if "items" not in resources_dict:
         return
     resources_dict["items"] = [

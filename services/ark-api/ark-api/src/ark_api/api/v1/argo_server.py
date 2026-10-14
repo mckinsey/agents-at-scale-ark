@@ -23,8 +23,14 @@ def get_argo_server_url() -> str:
     return os.getenv(ARGO_SERVER_URL_ENV, "").rstrip("/")
 
 
-def _workflow_list(items: list, continue_token: Optional[str] = None) -> dict:
+def _workflow_list(
+    items: list,
+    continue_token: Optional[str] = None,
+    remaining_item_count: Optional[int] = None,
+) -> dict:
     metadata = {"continue": continue_token} if continue_token else {}
+    if remaining_item_count is not None:
+        metadata["remainingItemCount"] = remaining_item_count
     return {
         "apiVersion": "argoproj.io/v1alpha1",
         "kind": "WorkflowList",
@@ -44,7 +50,8 @@ async def list_workflows(
     """List workflows from Argo Server, newest first.
 
     Returns a WorkflowList shaped like the Kubernetes one, with
-    metadata.continue set to the next offset when more items exist. Returns
+    metadata.continue set to the next offset when more items exist and
+    metadata.remainingItemCount set when the list is paginated. Returns
     None when Argo Server cannot serve the request, so the caller can fall back
     to the Kubernetes API.
     """
@@ -55,7 +62,7 @@ async def list_workflows(
     if name_contains:
         name = name_contains.lower()
         if not WORKFLOW_NAME_FILTER_PATTERN.fullmatch(name):
-            return _workflow_list([])
+            return _workflow_list([], remaining_item_count=0 if limit else None)
         field_selectors.append(f"metadata.name={name}")
         params["nameFilter"] = "Contains"
     if limit:
@@ -76,8 +83,10 @@ async def list_workflows(
 
     items = sorted(body.get("items") or [], key=_started_at, reverse=True)
     remaining = int((body.get("metadata") or {}).get("remainingItemCount") or 0)
-    next_offset = str(offset + len(items)) if limit and remaining > 0 else None
-    return _workflow_list(items, next_offset)
+    if not limit:
+        return _workflow_list(items)
+    next_offset = str(offset + len(items)) if remaining > 0 else None
+    return _workflow_list(items, next_offset, remaining)
 
 
 def _started_at(workflow: dict) -> str:

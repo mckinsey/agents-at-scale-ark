@@ -1194,7 +1194,7 @@ function SessionsBody({
 export function SessionsSection({
   onCountChange,
 }: {
-  readonly onCountChange?: (count: number) => void;
+  readonly onCountChange?: (count: number | null) => void;
 }) {
   const { namespace, isNamespaceResolved, readOnlyMode } = useNamespace();
   const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
@@ -1252,6 +1252,7 @@ export function SessionsSection({
     loading,
     error,
     hasNext,
+    totalCount,
     hasPrevious,
     goToNextPage,
     goToPreviousPage,
@@ -1338,11 +1339,9 @@ export function SessionsSection({
     }
   }, [filteredSessions, selectedSessionId]);
 
-  const sessionCount = filteredSessions.length;
-
   useEffect(() => {
-    onCountChange?.(sessionCount);
-  }, [onCountChange, sessionCount]);
+    onCountChange?.(totalCount);
+  }, [onCountChange, totalCount]);
 
   const selectedSessionFromList = filteredSessions.find(
     s => s.id === selectedSessionId,

@@ -66,7 +66,7 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual([i["metadata"]["name"] for i in data["items"]], ["newer", "older"])
-        self.assertEqual(data["metadata"]["continue"], "6")
+        self.assertEqual(data["metadata"], {"continue": "6", "remainingItemCount": 5})
         mock_dynamic_client_cls.assert_not_called()
 
         request = self.requests[0]
@@ -100,8 +100,34 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
             response = self.client.get(f"{WORKFLOW_LIST_PATH}?limit=2")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["metadata"], {})
+        self.assertEqual(response.json()["metadata"], {"remainingItemCount": 0})
         self.assertEqual(self.requests[0].url.params["listOptions.continue"], "0")
+
+    @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
+    def test_unpaginated_list_has_no_remaining_count(self, mock_auth_api_cls, _ctx, _api):
+        mock_auth_api_cls.return_value = access_review(True)
+
+        with patch('ark_api.api.v1.argo_server.httpx.AsyncClient', argo_client_factory(self.argo_handler([workflow("only")]))):
+            response = self.client.get(WORKFLOW_LIST_PATH)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["metadata"], {})
+        self.assertNotIn("listOptions.limit", self.requests[0].url.params)
+
+    @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
+    def test_unsafe_name_filter_on_a_page_reports_no_remaining_items(self, mock_auth_api_cls, _ctx, _api):
+        mock_auth_api_cls.return_value = access_review(True)
+
+        with patch('ark_api.api.v1.argo_server.httpx.AsyncClient', argo_client_factory(self.argo_handler([workflow("x")]))):
+            response = self.client.get(f"{WORKFLOW_LIST_PATH}?limit=2&workflowName=a,b")
+
+        self.assertEqual(response.json(), {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "WorkflowList",
+            "metadata": {"remainingItemCount": 0},
+            "items": [],
+        })
+        self.assertEqual(self.requests, [])
 
     @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
     def test_denied_access_review_returns_403_without_calling_argo(self, mock_auth_api_cls, _ctx, _api):
@@ -175,6 +201,14 @@ class TestFilterItemsByName(unittest.TestCase):
         _filter_items_by_name(resources, "ALPHA")
 
         self.assertEqual([i["metadata"]["name"] for i in resources["items"]], ["Alpha-demo"])
+
+    def test_drops_remaining_count_that_ignores_the_page_filter(self):
+        from ark_api.api.v1.resources import _filter_items_by_name
+        resources = {"metadata": {"continue": "token", "remainingItemCount": 40}, "items": [workflow("alpha")]}
+
+        _filter_items_by_name(resources, "alpha")
+
+        self.assertEqual(resources["metadata"], {"continue": "token"})
 
     def test_leaves_response_without_items_untouched(self):
         from ark_api.api.v1.resources import _filter_items_by_name
