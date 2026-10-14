@@ -127,14 +127,16 @@ done
 
 ### Secrets Created by Ark Carry Ownership Labels
 
-Secrets created through the dashboard, `POST /v1/secrets` and `ark models create` now carry two labels:
+Secrets created through the dashboard, `POST /v1/secrets`, `ark models create` and the Python SDK's `SecretClient.create_secret` now carry two labels:
 
 ```yaml
 ark.mckinsey.com/resource-type: secret
 ark.mckinsey.com/scope: shared
 ```
 
-The samples, the `ark-tenant` chart's AI gateway Secret and the setup scripts create their Secrets with the same labels. `POST /v1/secrets` also rejects names that start with `u-`, sixteen lowercase hexadecimal digits and a hyphen, with a `422`.
+The samples, the `ark-tenant` chart's AI gateway Secret and the setup scripts create their Secrets with the same labels. `POST /v1/secrets` also rejects names that start with `u-`, sixteen lowercase hexadecimal digits and a hyphen, with a `422`, and `SecretClient.create_secret` raises `ValueError` for them.
+
+`ark models create` used to update an existing `<model>-model-secret` with `kubectl apply` and now uses `kubectl replace`. It reads the Secret first and keeps its labels, annotations and the keys it does not manage.
 
 Nothing else changes in this release. The dashboard **Secrets** page and `/v1/secrets` still serve every Secret in the namespace, and references from Ark resources resolve as before.
 
@@ -157,7 +159,8 @@ Ark does not label existing Secrets on upgrade, because only you know which Secr
   kubectl get models.ark.mckinsey.com,agents.ark.mckinsey.com,queries.ark.mckinsey.com,mcpservers.ark.mckinsey.com,a2aservers.ark.mckinsey.com,memories.ark.mckinsey.com,tools.ark.mckinsey.com,executionengines.ark.mckinsey.com \
     -n "$NAMESPACE" -o json \
     | jq -r '[.. | objects | .tokenSecretRef?.name // empty] as $tokens
-             | [.. | objects | .secretKeyRef?.name // empty] - $tokens | unique[]' \
+             | [.. | objects | .secretKeyRef?.name // empty] - $tokens | unique[]
+             | select(test("^u-[0-9a-f]{16}-") | not)' \
     > ark-secrets.txt
   ```
 
@@ -170,6 +173,7 @@ Ark does not label existing Secrets on upgrade, because only you know which Secr
   ```
 
   A Secret that no longer exists, for example one an old query referenced, prints a `NotFound` error and the others are still labelled.
+- Ark also reads some Secrets by a fixed name rather than through a reference, so the list above misses them. Label `otel-environment-variables` if you use [tenant trace routing](/developer-guide/observability#tenant-configuration).
 - Secrets you created in the dashboard before this release have no labels either. Label the ones that no resource references but you still want to see there.
 - Add the labels to Secret manifests in GitOps repositories and to scripts that run `kubectl create secret`. [Manage secrets](/user-guide/secrets) has examples.
 
