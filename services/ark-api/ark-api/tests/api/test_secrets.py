@@ -125,5 +125,49 @@ class TestSecretsAnnotationLeak(unittest.TestCase):
         _assert_response_has_no_leak(self, response)
 
 
+
+class TestSecretsScope(unittest.TestCase):
+    def setUp(self):
+        from ark_api.main import app
+        self.client = TestClient(app)
+
+    @patch('ark_api.api.v1.secrets.SecretClient')
+    def test_create_rejects_reserved_user_prefix(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.create_secret = AsyncMock()
+
+        response = self.client.post(
+            "/v1/secrets",
+            json={"name": "u-0123456789abcdef-x", "string_data": {"token": "test-token"}},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        mock_client.create_secret.assert_not_awaited()
+
+    @patch('ark_api.api.v1.secrets.SecretClient')
+    def test_every_route_passes_the_shared_scope(self, mock_client_cls):
+        from ark_sdk.secret_scope import SecretScope
+
+        detail = {"name": "s", "id": "uuid", "type": "Opaque", "secret_length": 1}
+        mock_client = mock_client_cls.return_value
+        mock_client.list_secrets = AsyncMock(return_value={"items": [], "count": 0})
+        mock_client.create_secret = AsyncMock(return_value=detail)
+        mock_client.get_secret = AsyncMock(return_value=detail)
+        mock_client.update_secret = AsyncMock(return_value=detail)
+        mock_client.delete_secret = AsyncMock(return_value=True)
+
+        requests = [
+            lambda: self.client.get("/v1/secrets"),
+            lambda: self.client.post("/v1/secrets", json={"name": "s", "string_data": {"token": "t"}}),
+            lambda: self.client.get("/v1/secrets/s"),
+            lambda: self.client.put("/v1/secrets/s", json={"string_data": {"token": "t"}}),
+            lambda: self.client.delete("/v1/secrets/s"),
+        ]
+        for send in requests:
+            mock_client_cls.reset_mock()
+            self.assertEqual(send().status_code, 200)
+            self.assertEqual(mock_client_cls.call_args.kwargs["scope"], SecretScope())
+
+
 if __name__ == '__main__':
     unittest.main()

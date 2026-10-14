@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query, Depends
 from typing import Optional
 from ark_sdk.k8s import SecretClient
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import SecretScope
 from ark_sdk.models.kubernetes import (
     SecretCreateRequest,
     SecretUpdateRequest,
@@ -12,6 +13,7 @@ from ark_sdk.models.kubernetes import (
 )
 from .exceptions import handle_k8s_errors
 from ...auth.dependencies import get_impersonation_config
+from ...auth.secret_scope import get_secret_scope
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -19,17 +21,17 @@ router = APIRouter(
 
 @router.get("", response_model=SecretListResponse)
 @handle_k8s_errors(operation="list", resource_type="secret")
-async def list_secrets(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> SecretListResponse:
+async def list_secrets(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), scope: SecretScope = Depends(get_secret_scope)) -> SecretListResponse:
     """List all secrets in namespace using ark-sdk."""
-    client = SecretClient(namespace=namespace, impersonation=impersonation)
+    client = SecretClient(namespace=namespace, impersonation=impersonation, scope=scope)
     result = await client.list_secrets()
     return SecretListResponse(**result)
 
 @router.post("", response_model=SecretDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="secret")
-async def create_secret(body: SecretCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> SecretDetailResponse:
+async def create_secret(body: SecretCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), scope: SecretScope = Depends(get_secret_scope)) -> SecretDetailResponse:
     """Create a new secret using ark-sdk."""
-    client = SecretClient(namespace=namespace, impersonation=impersonation)
+    client = SecretClient(namespace=namespace, impersonation=impersonation, scope=scope)
     result = await client.create_secret(
         name=body.name,
         string_data=body.string_data,
@@ -42,17 +44,17 @@ async def create_secret(body: SecretCreateRequest, namespace: Optional[str] = Qu
 
 @router.get("/{secret_name}", response_model=SecretDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="secret")
-async def get_secret(secret_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> SecretDetailResponse:
+async def get_secret(secret_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), scope: SecretScope = Depends(get_secret_scope)) -> SecretDetailResponse:
     """Get a specific secret using ark-sdk."""
-    client = SecretClient(namespace=namespace, impersonation=impersonation)
+    client = SecretClient(namespace=namespace, impersonation=impersonation, scope=scope)
     result = await client.get_secret(secret_name)
     return SecretDetailResponse(**result)
 
 @router.put("/{secret_name}", response_model=SecretDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="secret")
-async def update_secret(secret_name: str, body: SecretUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> SecretDetailResponse:
+async def update_secret(secret_name: str, body: SecretUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), scope: SecretScope = Depends(get_secret_scope)) -> SecretDetailResponse:
     """Update a secret using ark-sdk."""
-    client = SecretClient(namespace=namespace, impersonation=impersonation)
+    client = SecretClient(namespace=namespace, impersonation=impersonation, scope=scope)
     result = await client.update_secret(
         secret_name,
         string_data=body.string_data,
@@ -64,8 +66,8 @@ async def update_secret(secret_name: str, body: SecretUpdateRequest, namespace: 
 
 @router.delete("/{secret_name}")
 @handle_k8s_errors(operation="delete", resource_type="secret")
-async def delete_secret(secret_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)):
+async def delete_secret(secret_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), scope: SecretScope = Depends(get_secret_scope)):
     """Delete a secret using ark-sdk."""
-    client = SecretClient(namespace=namespace, impersonation=impersonation)
+    client = SecretClient(namespace=namespace, impersonation=impersonation, scope=scope)
     await client.delete_secret(secret_name)
     return {"message": "Secret deleted successfully"}
