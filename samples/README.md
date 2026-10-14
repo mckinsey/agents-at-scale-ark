@@ -136,6 +136,13 @@ Location services.
 - **Tool**: `get-coordinates` - Geocoding API
 - **Use case**: Location services
 
+#### `inline-tools.yaml` - Inline Scripts
+Tools that carry their own script, using only the standard library.
+- **Tools**: `csv-summarise` (python), `text-stats` (bash)
+- **Agent**: `csv-analyst` - uses both
+- **Prerequisites**: `inlineTools.enabled` and the `inline-tool-author-role` grant
+- **Use case**: Short logic with no file, network, or package dependency
+
 #### `label-selector-tools.yaml` - Label Selection
 Tool organization using labels.
 - **Tools**: Weather, news, stock, search APIs with labels

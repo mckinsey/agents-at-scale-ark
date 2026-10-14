@@ -37,6 +37,16 @@ SAMPLES_BLOCKED_BY_BUILTIN_NAME = (
     "tools/get-deployment-status.yaml",
 )
 
+# inlineTools.enabled defaults to false and only the dedicated e2e-tests-inline
+# job (.github/actions/setup-e2e --enable-inline-tools) turns it on; the
+# standard e2e-cli-tests cluster this helper runs against always has it off,
+# so an inline Tool is denied by the admission webhook regardless of content.
+INLINE_TOOLS_DISABLED_SKIP_REASON = (
+    "inline tool authoring is off on the standard e2e cluster; only the "
+    "dedicated inline e2e job enables it"
+)
+SAMPLES_BLOCKED_BY_INLINE_TOOLS_DISABLED = ("tools/inline-tools.yaml",)
+
 # Not Kubernetes manifests: chainsaw owns its Test files, kustomize owns
 # kustomization.yaml.
 NON_MANIFEST_API_GROUPS = ("chainsaw.kyverno.io/", "kustomize.config.k8s.io/")
@@ -139,6 +149,8 @@ def skip_reason(rel_path: str) -> Optional[str]:
         return CHAINSAW_SKIP_REASON
     if rel_path in SAMPLES_BLOCKED_BY_BUILTIN_NAME:
         return BUILTIN_NAME_SKIP_REASON
+    if rel_path in SAMPLES_BLOCKED_BY_INLINE_TOOLS_DISABLED:
+        return INLINE_TOOLS_DISABLED_SKIP_REASON
     return None
 
 

@@ -55,7 +55,7 @@
 
 ## 7. Release validation and operator guidance
 
-- [ ] 7.1 Add stdlib-only sample Tools and run the in-memory CSV example, including valid, empty/header-only, malformed-column, and non-finite-number cases; no example may depend on an unmounted file.
+- [x] 7.1 Add stdlib-only sample Tools and run the in-memory CSV example, including valid, empty/header-only, malformed-column, and non-finite-number cases; no example may depend on an unmounted file.
 - [ ] 7.2 Add Chainsaw end-to-end coverage on an enforcing CNI for create/attach/discover/call/idle/edit/delete and negative egress, plus both-backend admission coverage. Test the dashboard-first state separately from the completed runtime.
 - [ ] 7.3 Document author grants, user impersonation, the authorship annotations and event, existing execution permissions, internal endpoint access, the CNI-enforcement prerequisite and NetworkPolicy limitations, fixed limits, and troubleshooting with bounded stderr.
 - [ ] 7.4 Document PID exhaustion as a residual risk and recommend provider-supported finite per-pod PID limits sized and tested by administrators. Do not add an Ark PID setting, verified-node-pool requirement, or PID-based execution gate.
