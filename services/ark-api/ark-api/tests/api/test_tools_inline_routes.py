@@ -203,7 +203,13 @@ class TestTypedToolRoutes(InlineRouteTestCase):
 @patch("ark_api.api.v1.resources.DynamicClient")
 @patch("ark_api.api.v1.resources.get_context")
 class TestGenericResourceRoutes(InlineRouteTestCase):
-    """The generic routes must not be a way around the typed endpoint."""
+    """The generic routes must not be a way around the typed endpoint.
+
+    Tool and Agent writes are blocked here by the generic-resources allowlist
+    (`auth/generic_resources.py`) before the inline-authoring identity check
+    ever runs, so every write attempt through this path is denied regardless
+    of identity.
+    """
 
     TOOL_PATH = "/v1/resources/apis/ark.mckinsey.com/v1alpha1/Tool"
 
@@ -261,7 +267,7 @@ class TestGenericResourceRoutes(InlineRouteTestCase):
         self.assertEqual(response.status_code, 403)
         api_resource.replace.assert_not_awaited()
 
-    def test_update_with_identity_is_stored(self, get_ctx, dyn, api_client):
+    def test_update_with_identity_is_still_blocked_by_the_allowlist(self, get_ctx, dyn, api_client):
         api_resource = self.wire(get_ctx, dyn, api_client)
         self.as_user("alice")
 
@@ -270,10 +276,10 @@ class TestGenericResourceRoutes(InlineRouteTestCase):
             json={"metadata": {"name": "csv", "resourceVersion": "42"}, "spec": INLINE_SPEC},
         )
 
-        self.assertEqual(response.status_code, 200, response.text)
-        api_resource.replace.assert_awaited_once()
+        self.assertEqual(response.status_code, 403)
+        api_resource.replace.assert_not_awaited()
 
-    def test_non_tool_resources_are_unaffected(self, get_ctx, dyn, api_client):
+    def test_other_resources_are_also_blocked_by_the_allowlist(self, get_ctx, dyn, api_client):
         api_resource = self.wire(get_ctx, dyn, api_client, stored_spec=HTTP_SPEC)
         self.as_user(None)
 
@@ -282,8 +288,8 @@ class TestGenericResourceRoutes(InlineRouteTestCase):
             json={"metadata": {"name": "a1"}, "spec": {"prompt": "hi"}},
         )
 
-        self.assertEqual(response.status_code, 200, response.text)
-        api_resource.create.assert_awaited_once()
+        self.assertEqual(response.status_code, 403)
+        api_resource.create.assert_not_awaited()
 
 
 if __name__ == "__main__":
