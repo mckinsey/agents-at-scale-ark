@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import type { Control } from 'react-hook-form';
 import { useFormContext, useWatch } from 'react-hook-form';
 
+import { FormSecretNameField } from '@/components/forms/fields/secret-name-field';
 import { CreateResourceButton } from '@/components/forms/shared/create-resource-dialog';
 import { CustomHeadersField } from '@/components/forms/shared/custom-headers-field';
 import {
@@ -259,49 +260,14 @@ function SecretSelectorField({
   label: string;
   placeholder: string;
 }) {
-  const { setValue } = useFormContext<FormValues>();
-
   return (
-    <FormField
+    <FormSecretNameField
       control={control}
       name={fieldName}
-      render={({ field, fieldState }) => (
-        <FieldSet className="gap-2">
-          <FieldTitle>{label}</FieldTitle>
-          <Select
-            onValueChange={value => field.onChange(value ?? '')}
-            value={field.value as string}>
-            <div className="flex items-center gap-3">
-              <SelectTrigger className={cn(GHOST_TRIGGER, 'flex-1')}>
-                <SelectValue placeholder={placeholder} />
-              </SelectTrigger>
-              <CreateResourceButton
-                kind="secret"
-                onCreated={name =>
-                  setValue(fieldName, name, {
-                    shouldValidate: true,
-                    shouldDirty: true,
-                  })
-                }
-              />
-            </div>
-            <SelectContent className="bg-fill-onsurface-ui-2">
-              {isSecretsPending ? (
-                <Spinner size="sm" className="mx-auto my-2" />
-              ) : (
-                <>
-                  {secrets?.map(secret => (
-                    <SelectItem key={secret.name} value={secret.name}>
-                      <SelectItemText>{secret.name}</SelectItemText>
-                    </SelectItem>
-                  ))}
-                </>
-              )}
-            </SelectContent>
-          </Select>
-          <FieldError>{fieldState.error?.message}</FieldError>
-        </FieldSet>
-      )}
+      label={label}
+      secrets={secrets}
+      isPending={isSecretsPending}
+      placeholder={placeholder}
     />
   );
 }
