@@ -673,6 +673,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         
         existing_secret = Mock()
         existing_secret.metadata.uid = "uuid-12345"
+        existing_secret.metadata.resource_version = "42"
         existing_secret.metadata.labels = dict(SYSTEM_LABELS)
 
         mock_api_instance = mock_v1_api.return_value
@@ -686,6 +687,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["name"], "test-secret")
         self.assertEqual(kwargs["namespace"], "test-namespace")
         self.assertEqual(kwargs["body"].preconditions.uid, "uuid-12345")
+        self.assertEqual(kwargs["body"].preconditions.resource_version, "42")
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
