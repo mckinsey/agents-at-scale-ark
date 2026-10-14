@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ConditionalInputRow } from '@/components/ui/conditionalInputRow';
@@ -21,6 +22,31 @@ vi.mock('@/lib/services/secrets-hooks', () => ({
   }),
 }));
 
+type RowData = React.ComponentProps<typeof ConditionalInputRow>['data'];
+
+function StatefulRow({
+  initial,
+  secrets,
+  onChange,
+}: {
+  initial: RowData;
+  secrets: { id: string; name: string }[];
+  onChange: (update: Partial<RowData>) => void;
+}) {
+  const [data, setData] = useState(initial);
+  return (
+    <ConditionalInputRow
+      data={data}
+      onChange={update => {
+        onChange(update);
+        setData(current => ({ ...current, ...update }));
+      }}
+      secrets={secrets}
+      deleteRow={vi.fn()}
+    />
+  );
+}
+
 function renderRow(
   type: 'direct' | 'secret',
   data: Partial<{ value: string; secretKey: string }> = {},
@@ -32,8 +58,8 @@ function renderRow(
   const onChange = vi.fn();
   render(
     <QueryClientProvider client={client}>
-      <ConditionalInputRow
-        data={{
+      <StatefulRow
+        initial={{
           key: 'row-1',
           name: 'Authorization',
           type,
@@ -42,7 +68,6 @@ function renderRow(
         }}
         onChange={onChange}
         secrets={secrets}
-        deleteRow={vi.fn()}
       />
     </QueryClientProvider>,
   );
@@ -72,9 +97,13 @@ describe('ConditionalInputRow', () => {
       ],
     );
 
-    const [, secretSelect] = screen.getAllByRole('combobox');
-    await userEvent.click(secretSelect);
-    await userEvent.click(screen.getByRole('option', { name: 'secret-b' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Clear secret' }));
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Secret name' }),
+    );
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'secret-b' }),
+    );
 
     expect(onChange).toHaveBeenCalledWith({
       value: 'secret-b',
@@ -97,6 +126,32 @@ describe('ConditionalInputRow', () => {
     expect(onChange).toHaveBeenCalledWith({
       type: 'direct',
       value: '',
+      secretKey: undefined,
+    });
+  });
+
+  it('renders a stored name outside the list without touching secretKey', () => {
+    const { onChange } = renderRow('secret', {
+      value: 'kubectl-made',
+      secretKey: 'apiKey',
+    });
+
+    expect(screen.getByRole('combobox', { name: 'Secret name' })).toHaveValue(
+      'kubectl-made',
+    );
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('clears secretKey when a name is typed', async () => {
+    const { onChange } = renderRow('secret', {}, []);
+
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Secret name' }),
+    );
+    await userEvent.keyboard('kubectl-made');
+
+    expect(onChange).toHaveBeenLastCalledWith({
+      value: 'kubectl-made',
       secretKey: undefined,
     });
   });
