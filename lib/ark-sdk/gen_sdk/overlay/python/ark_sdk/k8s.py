@@ -305,15 +305,23 @@ class SecretClient:
                 total_length += len(str(value).encode('utf-8'))
         return total_length
     
+    async def _read_secret_in_scope(self, v1, name: str):
+        """Read a Secret, refusing any outside this client's scope."""
+        secret = await v1.read_namespaced_secret(name=name, namespace=self.namespace)
+        if not self.scope.contains(secret.metadata.labels):
+            raise ApiException(status=404, reason=f"Secret '{name}' not found")
+        return secret
+
     async def list_secrets(self, label_selector: Optional[str] = None):
-        """List all secrets in namespace."""
+        """List the secrets in namespace that fall within this client's scope."""
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
+            selectors = [self.scope.label_selector()] + ([label_selector] if label_selector else [])
             secrets = await v1.list_namespaced_secret(
                 namespace=self.namespace,
-                label_selector=label_selector
+                label_selector=",".join(selectors)
             )
             
             secret_list = []
@@ -383,10 +391,7 @@ class SecretClient:
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
-            secret = await v1.read_namespaced_secret(
-                name=name,
-                namespace=self.namespace
-            )
+            secret = await self._read_secret_in_scope(v1, name)
 
             return {
                 "name": secret.metadata.name,
@@ -399,7 +404,12 @@ class SecretClient:
             }
 
     async def get_secret_value(self, name: str, key: str):
-        """Get a specific secret."""
+        """Read one key of a secret, ignoring this client's scope.
+
+        Executors and MCP header resolution use this to follow secretKeyRef
+        references, which may point at secrets without Ark labels. Scoping it
+        would break those references, so only the /v1/secrets CRUD is scoped.
+        """
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
@@ -440,10 +450,7 @@ class SecretClient:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
 
-            existing_secret = await v1.read_namespaced_secret(
-                name=name,
-                namespace=self.namespace
-            )
+            existing_secret = await self._read_secret_in_scope(v1, name)
 
             if string_data is not None:
                 existing_secret.string_data = self.validate_and_encode_token(string_data)
@@ -480,9 +487,15 @@ class SecretClient:
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
+            existing = await self._read_secret_in_scope(v1, name)
             await v1.delete_namespaced_secret(
                 name=name,
-                namespace=self.namespace
+                namespace=self.namespace,
+                body=client.V1DeleteOptions(
+                    preconditions=client.V1Preconditions(
+                        uid=existing.metadata.uid
+                    )
+                ),
             )
             return True
 
