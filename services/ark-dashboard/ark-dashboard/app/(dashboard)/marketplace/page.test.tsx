@@ -1,15 +1,29 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type {
+  MarketplaceItem,
+  MarketplaceResponse,
+} from '@/lib/api/generated/marketplace-types';
+import { useMarketplaceInstallCapability } from '@/lib/hooks/use-marketplace-install-capability';
 import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
-import type { MarketplaceItem, MarketplaceResponse } from '@/lib/api/generated/marketplace-types';
 
 import MarketplacePage from './page';
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'test-namespace',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+
 // Mock the hooks and services
 vi.mock('@/lib/services/marketplace-hooks');
+vi.mock('@/lib/hooks/use-marketplace-install-capability');
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({
     push: vi.fn(),
@@ -23,9 +37,7 @@ vi.mock('next/navigation', () => ({
 // Mock the PageHeader component to avoid SidebarProvider dependency
 vi.mock('@/components/common/page-header', () => ({
   PageHeader: vi.fn(({ actions }) => (
-    <div data-testid="page-header">
-      {actions}
-    </div>
+    <div data-testid="page-header">{actions}</div>
   )),
 }));
 
@@ -40,58 +52,68 @@ vi.mock('@/components/cards/marketplace-item-card', () => ({
 }));
 
 const mockUseGetMarketplaceItems = vi.mocked(useGetMarketplaceItems);
+const mockUseMarketplaceInstallCapability = vi.mocked(
+  useMarketplaceInstallCapability,
+);
+
+type MarketplaceItemsQuery = ReturnType<typeof useGetMarketplaceItems>;
+
+function makeItem(overrides: Partial<MarketplaceItem>): MarketplaceItem {
+  return {
+    id: 'item',
+    name: 'Item',
+    description: 'An item',
+    shortDescription: 'An item',
+    category: 'tools',
+    type: 'component',
+    version: '1.0.0',
+    author: 'Test Author',
+    status: 'available',
+    installable: true,
+    featured: false,
+    downloads: 0,
+    tags: [],
+    createdAt: '2024-01-01',
+    updatedAt: '2024-01-01',
+    ...overrides,
+  };
+}
 
 const mockMarketplaceData: MarketplaceResponse = {
   items: [
-    {
+    makeItem({
       id: 'agent-1',
       name: 'Test Agent',
       description: 'A test agent item',
+      shortDescription: 'A test agent item',
       category: 'agents',
       type: 'template',
-      version: '1.0.0',
-      status: 'available',
-      author: 'Test Author',
-      icon: '🤖',
-      featured: false,
-    },
-    {
+    }),
+    makeItem({
       id: 'mcp-1',
       name: 'Test MCP',
       description: 'A test MCP server item',
+      shortDescription: 'A test MCP server item',
       category: 'mcp-servers',
       type: 'component',
-      version: '1.0.0',
-      status: 'available',
-      author: 'Test Author',
-      icon: '🔌',
-      featured: false,
-    },
-    {
+    }),
+    makeItem({
       id: 'demo-1',
       name: 'Test Demo',
       description: 'A test demo item',
+      shortDescription: 'A test demo item',
       category: 'demos',
       type: 'demo',
-      version: '1.0.0',
-      status: 'available',
-      author: 'Test Author',
-      icon: '▶️',
-      featured: false,
-    },
-    {
+    }),
+    makeItem({
       id: 'service-1',
       name: 'Test Service',
       description: 'A test service item',
+      shortDescription: 'A test service item',
       category: 'services',
       type: 'service',
-      version: '1.0.0',
-      status: 'installed',
-      author: 'Test Author',
-      icon: '⚙️',
-      featured: true,
-    },
-  ] as MarketplaceItem[],
+    }),
+  ],
   total: 4,
   page: 1,
   pageSize: 10,
@@ -105,7 +127,7 @@ function renderWithProviders(ui: React.ReactElement) {
     },
   });
   return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
   );
 }
 
@@ -121,9 +143,12 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
-    localStorage.setItem('marketplace-sources', JSON.stringify([{ url: 'https://x' }]));
+    localStorage.setItem(
+      'marketplace-sources',
+      JSON.stringify([{ url: 'https://x' }]),
+    );
     renderWithProviders(<MarketplacePage />);
     expect(localStorage.getItem('marketplace-sources')).toBeNull();
   });
@@ -135,7 +160,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -156,7 +181,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -173,7 +198,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -182,7 +207,9 @@ describe('MarketplacePage', () => {
     expect(screen.getByRole('button', { name: /Agents/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /MCPs/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Demos/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Services/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Services/i }),
+    ).toBeInTheDocument();
   });
 
   it('should filter items when category button is clicked', async () => {
@@ -193,7 +220,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: refetchMock,
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -206,7 +233,7 @@ describe('MarketplacePage', () => {
       expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
         expect.objectContaining({
           category: 'agents',
-        })
+        }),
       );
     });
   });
@@ -218,7 +245,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -231,7 +258,7 @@ describe('MarketplacePage', () => {
       expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
         expect.objectContaining({
           search: 'test query',
-        })
+        }),
       );
     });
   });
@@ -243,7 +270,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -259,7 +286,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -291,7 +318,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -300,9 +327,9 @@ describe('MarketplacePage', () => {
     expect(screen.getByText('Showing 1-6 of 15 items')).toBeInTheDocument();
 
     // Click next page
-    const nextButton = screen.getAllByRole('button').find(
-      btn => btn.querySelector('.lucide-chevron-right')
-    );
+    const nextButton = screen
+      .getAllByRole('button')
+      .find(btn => btn.querySelector('.lucide-chevron-right'));
 
     if (nextButton) {
       await userEvent.click(nextButton);
@@ -319,7 +346,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -333,7 +360,7 @@ describe('MarketplacePage', () => {
       expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
         expect.objectContaining({
           search: 'search term',
-        })
+        }),
       );
     });
   });
@@ -345,7 +372,7 @@ describe('MarketplacePage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as MarketplaceItemsQuery);
 
     renderWithProviders(<MarketplacePage />);
 
@@ -358,8 +385,44 @@ describe('MarketplacePage', () => {
       expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'service',
-        })
+        }),
       );
+    });
+  });
+
+  describe('with the install capability on', () => {
+    it('stops sending status to the service and filters Installed locally', async () => {
+      mockUseMarketplaceInstallCapability.mockReturnValue(true);
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: mockMarketplaceData,
+        isPending: false,
+      } as ReturnType<typeof useGetMarketplaceItems>);
+
+      render(<MarketplacePage />);
+
+      await userEvent.click(screen.getByRole('button', { name: /installed/i }));
+
+      // The resolved install state drives the filter, so the request must not
+      // carry the stale `status` filter the service would apply server-side.
+      const lastCall = mockUseGetMarketplaceItems.mock.calls.at(-1);
+      expect(lastCall?.[0]).toMatchObject({ status: undefined });
+    });
+
+    it('surfaces an error state instead of a blank page', () => {
+      mockUseMarketplaceInstallCapability.mockReturnValue(false);
+      mockUseGetMarketplaceItems.mockReturnValue({
+        data: undefined,
+        isPending: false,
+        isError: true,
+        refetch: vi.fn(),
+      } as unknown as ReturnType<typeof useGetMarketplaceItems>);
+
+      render(<MarketplacePage />);
+
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(
+        screen.getByText(/could not load the marketplace/i),
+      ).toBeInTheDocument();
     });
   });
 });

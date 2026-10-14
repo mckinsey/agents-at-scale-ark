@@ -2,19 +2,37 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import copy from 'copy-to-clipboard';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
+import { useMarketplaceInstallCapability } from '@/lib/hooks/use-marketplace-install-capability';
 import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 
 import { MarketplaceItemCard } from './marketplace-item-card';
 
+const namespaceState = { readOnlyMode: false };
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'test-namespace',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: namespaceState.readOnlyMode,
+  }),
+}));
+vi.mock('@/lib/hooks/use-marketplace-install-capability');
+vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
+  useNamespacedNavigation: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
 vi.mock('@/lib/services/marketplace-hooks');
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('copy-to-clipboard');
 
 const mockMutateAsync = vi.fn();
 const mockUseInstallMarketplaceItem = vi.mocked(useInstallMarketplaceItem);
+const mockUseMarketplaceInstallCapability = vi.mocked(
+  useMarketplaceInstallCapability,
+);
 const mockCopy = vi.mocked(copy);
 
 function makeItem(overrides?: Partial<MarketplaceItem>): MarketplaceItem {
@@ -28,6 +46,7 @@ function makeItem(overrides?: Partial<MarketplaceItem>): MarketplaceItem {
     version: '1.0.0',
     author: 'Test',
     status: 'available',
+    installable: true,
     featured: false,
     downloads: 0,
     tags: [],
@@ -52,17 +71,19 @@ function renderWithProviders(ui: React.ReactElement) {
 
 describe('MarketplaceItemCard', () => {
   beforeEach(() => {
+    // atomWithStorage reads localStorage on init, and jsdom keeps it between
+    // tests — so records would leak from one test into the next.
+    localStorage.clear();
+    namespaceState.readOnlyMode = false;
     vi.clearAllMocks();
     mockUseInstallMarketplaceItem.mockReturnValue({
       mutateAsync: mockMutateAsync,
       isPending: false,
-    } as any);
+    } as unknown as ReturnType<typeof useInstallMarketplaceItem>);
   });
 
   it('renders item name and shortDescription', () => {
-    renderWithProviders(
-      <MarketplaceItemCard item={makeItem()} />,
-    );
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
 
     expect(screen.getByText('Test Item')).toBeInTheDocument();
     expect(screen.getByText('A test')).toBeInTheDocument();
@@ -110,16 +131,14 @@ describe('MarketplaceItemCard', () => {
 
     fireEvent.click(viewButton);
 
-    expect(spy).toHaveBeenCalledWith(demoUrl, '_blank');
+    expect(spy).toHaveBeenCalledWith(demoUrl, '_blank', 'noopener,noreferrer');
 
     spy.mockRestore();
   });
 
   it('renders up to 4 tags', () => {
     renderWithProviders(
-      <MarketplaceItemCard
-        item={makeItem({ tags: ['a', 'b', 'c', 'd'] })}
-      />,
+      <MarketplaceItemCard item={makeItem({ tags: ['a', 'b', 'c', 'd'] })} />,
     );
 
     expect(screen.getByText('a')).toBeInTheDocument();
@@ -146,9 +165,7 @@ describe('MarketplaceItemCard', () => {
     mockMutateAsync.mockResolvedValue({});
     const user = userEvent.setup();
 
-    renderWithProviders(
-      <MarketplaceItemCard item={makeItem()} />,
-    );
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
 
     await user.click(screen.getByRole('button', { name: /get/i }));
 
@@ -164,9 +181,7 @@ describe('MarketplaceItemCard', () => {
     );
     const user = userEvent.setup();
 
-    renderWithProviders(
-      <MarketplaceItemCard item={makeItem()} />,
-    );
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
 
     await user.click(screen.getByRole('button', { name: /get/i }));
 
@@ -183,9 +198,7 @@ describe('MarketplaceItemCard', () => {
     const user = userEvent.setup();
     const { toast } = await import('sonner');
 
-    renderWithProviders(
-      <MarketplaceItemCard item={makeItem()} />,
-    );
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
 
     await user.click(screen.getByRole('button', { name: /get/i }));
 
@@ -193,7 +206,9 @@ describe('MarketplaceItemCard', () => {
       expect(screen.getByText('Installed')).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /installed/i })).toBeDisabled();
-    expect(toast.success).toHaveBeenCalledWith('Test Item installed successfully');
+    expect(toast.success).toHaveBeenCalledWith(
+      'Test Item installed successfully',
+    );
   });
 
   it('opens command dialog on command response', async () => {
@@ -204,9 +219,7 @@ describe('MarketplaceItemCard', () => {
     });
     const user = userEvent.setup();
 
-    renderWithProviders(
-      <MarketplaceItemCard item={makeItem()} />,
-    );
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
 
     await user.click(screen.getByRole('button', { name: /get/i }));
 
@@ -226,9 +239,7 @@ describe('MarketplaceItemCard', () => {
     });
     const user = userEvent.setup();
 
-    renderWithProviders(
-      <MarketplaceItemCard item={makeItem()} />,
-    );
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
 
     await user.click(screen.getByRole('button', { name: /get/i }));
 
@@ -248,18 +259,16 @@ describe('MarketplaceItemCard', () => {
     const user = userEvent.setup();
     const { toast } = await import('sonner');
 
-    renderWithProviders(
-      <MarketplaceItemCard item={makeItem()} />,
-    );
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
 
     await user.click(screen.getByRole('button', { name: /get/i }));
 
     await waitFor(() => {
+      // The sonner wrapper drops `description`, so the detail is folded into
+      // the message or it would never be shown.
       expect(toast.error).toHaveBeenCalledWith(
-        'Failed to install Test Item',
-        expect.objectContaining({
-          description: 'Missing namespace',
-        }),
+        'Failed to install Test Item: Missing namespace',
+        expect.objectContaining({ duration: 8000 }),
       );
     });
   });
@@ -269,18 +278,16 @@ describe('MarketplaceItemCard', () => {
     const user = userEvent.setup();
     const { toast } = await import('sonner');
 
-    renderWithProviders(
-      <MarketplaceItemCard item={makeItem()} />,
-    );
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
 
     await user.click(screen.getByRole('button', { name: /get/i }));
 
     await waitFor(() => {
+      // The sonner wrapper drops `description`, so the detail is folded into
+      // the message or it would never be shown.
       expect(toast.error).toHaveBeenCalledWith(
-        'Failed to install Test Item',
-        expect.objectContaining({
-          description: 'Network error',
-        }),
+        'Failed to install Test Item: Network error',
+        expect.objectContaining({ duration: 8000 }),
       );
     });
   });
@@ -294,17 +301,26 @@ describe('MarketplaceItemCard', () => {
           item={makeItem({
             status: 'installed',
             uis: [
-              { url: 'https://phoenix.example.com', label: 'Phoenix Dashboard' },
+              {
+                url: 'https://phoenix.example.com',
+                label: 'Phoenix Dashboard',
+              },
             ],
           })}
         />,
       );
 
-      const uiButton = screen.getByRole('button', { name: /phoenix dashboard/i });
+      const uiButton = screen.getByRole('button', {
+        name: /phoenix dashboard/i,
+      });
       expect(uiButton).toBeInTheDocument();
 
       fireEvent.click(uiButton);
-      expect(spy).toHaveBeenCalledWith('https://phoenix.example.com', '_blank');
+      expect(spy).toHaveBeenCalledWith(
+        'https://phoenix.example.com',
+        '_blank',
+        'noopener,noreferrer',
+      );
 
       spy.mockRestore();
     });
@@ -322,8 +338,12 @@ describe('MarketplaceItemCard', () => {
         />,
       );
 
-      expect(screen.getByRole('button', { name: /phoenix/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /minio/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /phoenix/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /minio/i }),
+      ).toBeInTheDocument();
     });
 
     it('does not render UI buttons when item is not installed', () => {
@@ -331,14 +351,14 @@ describe('MarketplaceItemCard', () => {
         <MarketplaceItemCard
           item={makeItem({
             status: 'available',
-            uis: [
-              { url: 'https://phoenix.example.com', label: 'Phoenix' },
-            ],
+            uis: [{ url: 'https://phoenix.example.com', label: 'Phoenix' }],
           })}
         />,
       );
 
-      expect(screen.queryByRole('button', { name: /phoenix/i })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /phoenix/i }),
+      ).not.toBeInTheDocument();
     });
 
     it('does not render UI buttons when uis array is empty', () => {
@@ -373,9 +393,7 @@ describe('MarketplaceItemCard', () => {
         <MarketplaceItemCard
           item={makeItem({
             status: 'installed',
-            uis: [
-              { url: 'https://test.example.com', label: 'Test UI' },
-            ],
+            uis: [{ url: 'https://test.example.com', label: 'Test UI' }],
           })}
         />,
       );
@@ -383,7 +401,11 @@ describe('MarketplaceItemCard', () => {
       const uiButton = screen.getByRole('button', { name: /test ui/i });
       fireEvent.click(uiButton);
 
-      expect(spy).toHaveBeenCalledWith('https://test.example.com', '_blank');
+      expect(spy).toHaveBeenCalledWith(
+        'https://test.example.com',
+        '_blank',
+        'noopener,noreferrer',
+      );
       spy.mockRestore();
     });
   });
@@ -395,12 +417,13 @@ describe('InstallCommandDialog', () => {
     mockUseInstallMarketplaceItem.mockReturnValue({
       mutateAsync: mockMutateAsync,
       isPending: false,
-    } as any);
+    } as unknown as ReturnType<typeof useInstallMarketplaceItem>);
   });
 
-  async function openDialogWithCommands(
-    commands: { helmCommand?: string; arkCommand?: string },
-  ) {
+  async function openDialogWithCommands(commands: {
+    helmCommand?: string;
+    arkCommand?: string;
+  }) {
     const user = userEvent.setup();
     mockMutateAsync.mockResolvedValue({ status: 'command', ...commands });
 
@@ -417,7 +440,9 @@ describe('InstallCommandDialog', () => {
 
   function getCopyButtonsInDialog(): HTMLElement[] {
     const dialog = screen.getByRole('dialog');
-    const allButtons = Array.from(dialog.querySelectorAll('button')) as HTMLElement[];
+    const allButtons = Array.from(
+      dialog.querySelectorAll('button'),
+    ) as HTMLElement[];
     const closeBtn = dialog.querySelector('[data-slot="dialog-close"]');
     return allButtons.filter(b => b !== closeBtn);
   }
@@ -469,7 +494,9 @@ describe('InstallCommandDialog', () => {
 
     expect(screen.getByText('Using Ark CLI (Recommended)')).toBeInTheDocument();
     expect(screen.getByText('Using Helm directly')).toBeInTheDocument();
-    expect(screen.getByText('ark marketplace install my-item')).toBeInTheDocument();
+    expect(
+      screen.getByText('ark marketplace install my-item'),
+    ).toBeInTheDocument();
     expect(screen.getByText('helm install my-chart')).toBeInTheDocument();
   });
 
@@ -479,5 +506,201 @@ describe('InstallCommandDialog', () => {
     expect(
       screen.getByText(/Make sure you have kubectl configured/),
     ).toBeInTheDocument();
+  });
+});
+
+describe('MarketplaceItemCard install states', () => {
+  beforeEach(() => {
+    mockUseInstallMarketplaceItem.mockReturnValue({
+      mutateAsync: mockMutateAsync,
+    } as unknown as ReturnType<typeof useInstallMarketplaceItem>);
+  });
+
+  it('renders Get when the install capability is off', () => {
+    mockUseMarketplaceInstallCapability.mockReturnValue(false);
+
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
+
+    expect(screen.getByRole('button', { name: /get/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^install$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders Install when the install capability is on', () => {
+    mockUseMarketplaceInstallCapability.mockReturnValue(true);
+
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
+
+    expect(
+      screen.getByRole('button', { name: /^install$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /get/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders the installed status instead of an action', () => {
+    mockUseMarketplaceInstallCapability.mockReturnValue(true);
+
+    renderWithProviders(
+      <MarketplaceItemCard item={makeItem({ status: 'installed' })} />,
+    );
+
+    expect(screen.getByText('Installed')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^install$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders the platform managed status for a non-installable item', () => {
+    mockUseMarketplaceInstallCapability.mockReturnValue(true);
+
+    renderWithProviders(
+      <MarketplaceItemCard item={makeItem({ installable: false })} />,
+    );
+
+    expect(screen.getByText('Platform managed')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^install$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders the platform managed status for a platform managed fixture', () => {
+    mockUseMarketplaceInstallCapability.mockReturnValue(true);
+
+    renderWithProviders(
+      <MarketplaceItemCard
+        item={makeItem({ id: 'phoenix', name: 'Phoenix' })}
+      />,
+    );
+
+    expect(screen.getByText('Platform managed')).toBeInTheDocument();
+  });
+
+  it('gives the status a focusable trigger rather than a disabled control', () => {
+    mockUseMarketplaceInstallCapability.mockReturnValue(true);
+
+    renderWithProviders(
+      <MarketplaceItemCard item={makeItem({ status: 'installed' })} />,
+    );
+
+    const trigger = screen.getByText('Installed').closest('[tabindex="0"]');
+    expect(trigger).not.toBeNull();
+    expect(trigger).not.toBeDisabled();
+  });
+
+  it('opens the install dialog from the Install button', async () => {
+    mockUseMarketplaceInstallCapability.mockReturnValue(true);
+    const user = userEvent.setup();
+
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
+    await user.click(screen.getByRole('button', { name: /^install$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Install Test Item')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('MarketplaceItemCard background install', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mockUseMarketplaceInstallCapability.mockReturnValue(true);
+    mockUseInstallMarketplaceItem.mockReturnValue({
+      mutateAsync: mockMutateAsync,
+    } as unknown as ReturnType<typeof useInstallMarketplaceItem>);
+  });
+
+  function seedRecord(itemId: string, record: Record<string, unknown>) {
+    localStorage.setItem(
+      'marketplace-install-records',
+      JSON.stringify({ [`test-namespace/${itemId}`]: record }),
+    );
+  }
+
+  it('shows a live Installing state for an in-flight item', () => {
+    seedRecord('test-item', {
+      state: 'installing',
+      startedAt: new Date().toISOString(),
+      itemName: 'Test Item',
+    });
+
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
+
+    expect(screen.getByText('Installing…')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^install$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('disables Install on other items while one is installing', async () => {
+    seedRecord('other-item', {
+      state: 'installing',
+      startedAt: new Date().toISOString(),
+      itemName: 'Other Item',
+    });
+
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
+
+    const installButton = screen.getByRole('button', { name: /^install$/i });
+    expect(installButton).toBeDisabled();
+
+    await userEvent.hover(installButton.parentElement as HTMLElement);
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/installing other item/i).length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it('surfaces a timed-out install distinctly from a failure', () => {
+    seedRecord('test-item', {
+      state: 'timed-out',
+      startedAt: new Date().toISOString(),
+      itemName: 'Test Item',
+    });
+
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
+
+    expect(screen.getByText('Timed out')).toBeInTheDocument();
+  });
+});
+
+describe('MarketplaceItemCard read-only mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mockUseInstallMarketplaceItem.mockReturnValue({
+      mutateAsync: mockMutateAsync,
+    } as unknown as ReturnType<typeof useInstallMarketplaceItem>);
+  });
+
+  afterEach(() => {
+    namespaceState.readOnlyMode = false;
+  });
+
+  it('disables Install for a user without write access', () => {
+    namespaceState.readOnlyMode = true;
+    mockUseMarketplaceInstallCapability.mockReturnValue(true);
+
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
+
+    expect(screen.getByRole('button', { name: /^install$/i })).toBeDisabled();
+  });
+
+  it('disables the legacy Get button too, and refuses the handler', async () => {
+    namespaceState.readOnlyMode = true;
+    mockUseMarketplaceInstallCapability.mockReturnValue(false);
+
+    renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
+
+    const getButton = screen.getByRole('button', { name: /get/i });
+    expect(getButton).toBeDisabled();
+
+    // Driving it programmatically must not reach the mutation either.
+    getButton.click();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 });

@@ -28,6 +28,7 @@ import {
   useInstallMarketplaceItem,
   useUninstallMarketplaceItem,
 } from '@/lib/services/marketplace-hooks';
+import { isSafeExternalUrl, openExternalUrl } from '@/lib/utils/external-url';
 
 export default function MarketplaceDetailPage() {
   const params = useParams();
@@ -336,7 +337,7 @@ export default function MarketplaceDetailPage() {
                               key={ui.url}
                               variant="outline"
                               className="w-full justify-start"
-                              onClick={() => window.open(ui.url, '_blank')}>
+                              onClick={() => openExternalUrl(ui.url)}>
                               <ExternalLink className="mr-2 h-4 w-4" />
                               {ui.label}
                               <ExternalLink className="ml-auto h-3 w-3" />
@@ -376,11 +377,12 @@ export default function MarketplaceDetailPage() {
                     </div>
                   </div>
 
-                  {(item.repository || item.documentation) && (
+                  {(isSafeExternalUrl(item.repository) ||
+                    isSafeExternalUrl(item.documentation)) && (
                     <>
                       <Separator />
                       <div className="space-y-2">
-                        {item.repository && (
+                        {isSafeExternalUrl(item.repository) && (
                           <Link
                             href={item.repository}
                             target="_blank"
@@ -394,7 +396,7 @@ export default function MarketplaceDetailPage() {
                             </Button>
                           </Link>
                         )}
-                        {item.documentation && (
+                        {isSafeExternalUrl(item.documentation) && (
                           <Link
                             href={item.documentation}
                             target="_blank"

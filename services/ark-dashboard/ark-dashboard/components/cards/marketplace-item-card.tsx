@@ -1,10 +1,11 @@
 'use client';
 
-import { Bot, Check, ExternalLink, Loader2, Server } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { MarketplaceCommandDialog } from '@/components/cards/marketplace-command-dialog';
+import { Check, Dns, OpenInNew, SaveAlt, SmartToy } from '@/components/icons';
+import { MarketplaceInstallDialog } from '@/components/marketplace/marketplace-install-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,46 +16,181 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { IconShell } from '@/components/ui/icon-shell';
+import { Spinner } from '@/components/ui/spinner';
+import { StatusIndicator } from '@/components/ui/status-indicator';
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
+import type {
+  MarketplaceInstallState,
+  MarketplaceItem,
+} from '@/lib/api/generated/marketplace-types';
+import { useMarketplaceInstallCapability } from '@/lib/hooks/use-marketplace-install-capability';
+import {
+  useMarketplaceInstallState,
+  useNamespaceInstallLock,
+} from '@/lib/hooks/use-marketplace-install-state';
 import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
+import { isSafeExternalUrl, openExternalUrl } from '@/lib/utils/external-url';
 import { getOriginIcon } from '@/lib/utils/origin-icon';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface MarketplaceItemCardProps {
-  item: MarketplaceItem;
-  className?: string;
+  readonly item: MarketplaceItem;
+  readonly className?: string;
 }
 
-export function MarketplaceItemCard({
+interface InstalledStateConfig {
+  readonly label: string;
+  readonly dotClass: string;
+  readonly tooltip: string;
+}
+
+const INSTALL_STATE_CONFIG: Readonly<
+  Record<Exclude<MarketplaceInstallState, 'installable'>, InstalledStateConfig>
+> = {
+  installing: {
+    label: 'Installing…',
+    dotClass: 'bg-status-information',
+    tooltip: 'This install is running. It continues if you navigate away.',
+  },
+  'timed-out': {
+    label: 'Timed out',
+    dotClass: 'bg-status-error',
+    tooltip: 'The install did not finish in time. Contact the platform team.',
+  },
+  installed: {
+    label: 'Installed',
+    dotClass: 'bg-status-success',
+    tooltip: 'Contact the platform team to upgrade or uninstall.',
+  },
+  failed: {
+    label: 'Failed to install',
+    dotClass: 'bg-status-error',
+    tooltip: 'Installation failed. Contact the platform team.',
+  },
+  'platform-managed': {
+    label: 'Platform managed',
+    dotClass: 'bg-fg-tertiary',
+    tooltip: 'Only the platform team can install this.',
+  },
+};
+
+function InstallAction({
+  disabledReason,
+  onClick,
+}: Readonly<{ disabledReason?: string; onClick: () => void }>) {
+  const button = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onClick}
+      disabled={Boolean(disabledReason)}>
+      <IconShell size="sm">
+        <SaveAlt />
+      </IconShell>
+      Install
+    </Button>
+  );
+
+  if (!disabledReason) {
+    return button;
+  }
+
+  // QBDS forbids attaching a tooltip to a disabled element, so the trigger is a
+  // focusable wrapper rather than the button itself.
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} className="inline-flex">
+          {button}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[320px] text-pretty">
+        {disabledReason}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function TypeIcon({ item }: Readonly<{ item: MarketplaceItem }>) {
+  if (item.category === 'agents') {
+    return (
+      <IconShell size="sm">
+        <SmartToy />
+      </IconShell>
+    );
+  }
+
+  if (item.type === 'service') {
+    return (
+      <IconShell size="sm">
+        <Dns />
+      </IconShell>
+    );
+  }
+
+  return null;
+}
+
+function InstallStatus({
+  state,
+}: Readonly<{ state: MarketplaceInstallState }>) {
+  if (state === 'installable') {
+    return null;
+  }
+
+  const config = INSTALL_STATE_CONFIG[state];
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} className="cursor-default">
+          <StatusIndicator label={config.label} dotClass={config.dotClass} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[320px] text-pretty">
+        {config.tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function MarketplaceItemCardComponent({
   item,
   className,
-}: MarketplaceItemCardProps) {
+}: Readonly<MarketplaceItemCardProps>) {
   const [isInstalling, setIsInstalling] = useState(false);
-  const [localStatus, setLocalStatus] = useState(item.status);
+  const [installedByMutation, setInstalledByMutation] = useState(false);
   const [showCommandDialog, setShowCommandDialog] = useState(false);
+  const [showInstallDialog, setShowInstallDialog] = useState(false);
   const [installCommand, setInstallCommand] = useState<{
     helmCommand?: string;
     arkCommand?: string;
     name?: string;
   }>({});
   const installMutation = useInstallMarketplaceItem();
+  const installEnabled = useMarketplaceInstallCapability();
+  const { state: installState } = useMarketplaceInstallState(item);
+  const lock = useNamespaceInstallLock();
+  const { readOnlyMode } = useNamespace();
+  const lockedByOther = Boolean(lock && lock.itemId !== item.id);
 
-  const handleInstall = async () => {
+  const handleGet = async () => {
+    if (readOnlyMode) {
+      return;
+    }
     setIsInstalling(true);
     try {
       const result = await installMutation.mutateAsync(item.id);
 
-      // Check if we got a command back instead of a successful installation
       if (result && typeof result === 'object' && 'status' in result) {
         const data = result as Record<string, unknown>;
         if (data.status === 'command') {
-          // Show command dialog
           setInstallCommand({
             helmCommand: data.helmCommand as string | undefined,
             arkCommand: data.arkCommand as string | undefined,
@@ -62,28 +198,24 @@ export function MarketplaceItemCard({
           });
           setShowCommandDialog(true);
         } else if (data.status === 'installed') {
-          setLocalStatus('installed');
+          setInstalledByMutation(true);
           toast.success(`${item.name} installed successfully`);
         }
       } else {
-        // Assume success if no specific status
-        setLocalStatus('installed');
+        setInstalledByMutation(true);
         toast.success(`${item.name} installed successfully`);
       }
     } catch (error) {
       console.error('Installation error:', error);
 
-      // Extract error details from APIError
       let errorMessage = 'Unknown error occurred';
       let errorDetails = '';
 
       if (error && typeof error === 'object' && 'data' in error) {
-        // Check if it's actually a command response
         const data = error.data;
         if (typeof data === 'object' && data !== null) {
           const errorData = data as Record<string, unknown>;
 
-          // Check if this is actually a command response, not an error
           if (errorData.status === 'command') {
             setInstallCommand({
               helmCommand: errorData.helmCommand as string,
@@ -109,25 +241,28 @@ export function MarketplaceItemCard({
         errorMessage = error.message;
       }
 
-      toast.error(`Failed to install ${item.name}`, {
-        description: errorDetails || errorMessage,
-        duration: 8000,
-      });
+      toast.error(
+        `Failed to install ${item.name}: ${errorDetails || errorMessage}`,
+        { duration: 8000 },
+      );
     } finally {
       setIsInstalling(false);
     }
   };
 
-  const getTypeIcon = (type: string) => {
-    if (type === 'service') {
-      return <Server className="h-4 w-4" />;
-    } else if (item.category === 'agents') {
-      return <Bot className="h-4 w-4" />;
-    }
-    return null;
-  };
+  const safeUis = useMemo(
+    () => (item.uis ?? []).filter(ui => isSafeExternalUrl(ui.url)),
+    [item.uis],
+  );
+  const repositoryIsSafe = isSafeExternalUrl(item.repository);
+
+  const legacyInstalled = installedByMutation || item.status === 'installed';
+  const showUiLinks = installEnabled
+    ? installState === 'installed'
+    : legacyInstalled;
 
   const originIcon = getOriginIcon(item.repository, 'repository');
+  const typeLabel = item.category === 'agents' ? 'Agent' : item.type;
 
   return (
     <Card
@@ -136,68 +271,53 @@ export function MarketplaceItemCard({
         className,
       )}>
       <CardHeader className="flex-none space-y-3">
-        {/* Type Badge */}
         <div className="flex items-center justify-between">
-          <div
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium',
-              item.type === 'service'
-                ? 'border-blue-500/30 bg-blue-500/10 text-blue-500 dark:text-blue-400'
-                : item.category === 'agents'
-                  ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
-                  : 'border-border bg-muted text-muted-foreground',
-            )}>
-            {getTypeIcon(item.type)}
-            <span className="capitalize">
-              {item.category === 'agents' ? 'Agent' : item.type}
-            </span>
-          </div>
+          <Badge
+            variant={
+              item.category === 'agents' ? 'brand-accent' : 'alternative'
+            }
+            size="sm"
+            withIcon
+            outline>
+            <TypeIcon item={item} />
+            <span className="capitalize">{typeLabel}</span>
+          </Badge>
         </div>
 
-        {/* Title and Description */}
         <div>
-          <CardTitle className="text-xl font-semibold">{item.name}</CardTitle>
-          <CardDescription className="mt-2 line-clamp-2">
+          <CardTitle className="headings-h3-semibold">{item.name}</CardTitle>
+          <CardDescription className="paragraph-small-primary mt-2 line-clamp-2">
             {item.shortDescription}
           </CardDescription>
         </div>
       </CardHeader>
 
       <CardContent className="flex-1 space-y-4">
-        {/* Source */}
         {item.source && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="text-muted-foreground cursor-default text-xs">
-                  <span>Source: </span>
-                  <span className="inline-block max-w-[calc(100%-60px)] truncate align-bottom">
-                    {item.source}
-                  </span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-md">
-                <p className="break-all">{item.source}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="label-small-primary text-fg-secondary cursor-default">
+                <span>Source: </span>
+                <span className="inline-block max-w-[calc(100%-60px)] truncate align-bottom">
+                  {item.source}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-md">
+              <p className="break-all">{item.source}</p>
+            </TooltipContent>
+          </Tooltip>
         )}
 
-        {/* Tags */}
         {item.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {item.tags.slice(0, 4).map(tag => (
-              <Badge
-                key={tag}
-                variant="alternative"
-                className="px-2 py-0.5 text-xs">
+              <Badge key={tag} variant="alternative" size="sm">
                 {tag}
               </Badge>
             ))}
             {item.tags.length > 4 && (
-              <Badge
-                variant="alternative"
-                className="px-2 py-0.5 text-xs">
+              <Badge variant="alternative" size="sm">
                 +{item.tags.length - 4}
               </Badge>
             )}
@@ -207,62 +327,78 @@ export function MarketplaceItemCard({
 
       <CardFooter className="flex-none pt-4">
         <div className="flex w-full flex-col gap-3">
-          {/* UI URLs */}
-          {localStatus === 'installed' && item.uis && item.uis.length > 0 && (
+          {showUiLinks && safeUis.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {item.uis.map(ui => (
+              {safeUis.map(ui => (
                 <Button
                   key={ui.url}
                   variant="secondary"
                   size="sm"
-                  className="h-8"
-                  onClick={() => window.open(ui.url, '_blank')}>
+                  onClick={() => openExternalUrl(ui.url)}>
                   {ui.label}
-                  <ExternalLink className="ml-1 h-3 w-3" />
+                  <IconShell size="sm">
+                    <OpenInNew />
+                  </IconShell>
                 </Button>
               ))}
             </div>
           )}
 
-          {/* Version and Install/View Button */}
-          <div className="flex w-full items-center justify-between">
+          <div className="flex w-full items-center justify-between gap-3">
             <div className="flex items-center gap-x-1.5">
-              <p className="text-muted-foreground text-xs">v{item.version}</p>
+              <p className="label-small-primary text-fg-secondary">
+                v{item.version}
+              </p>
               <span>{originIcon}</span>
             </div>
 
-            {item.type === 'demo' ? (
+            {installEnabled ? (
+              installState === 'installable' ? (
+                <InstallAction
+                  disabledReason={
+                    readOnlyMode
+                      ? 'You do not have permission to install in this namespace.'
+                      : lockedByOther && lock
+                        ? `Installing ${lock.itemName}. One install runs at a time in a namespace.`
+                        : undefined
+                  }
+                  onClick={() => setShowInstallDialog(true)}
+                />
+              ) : (
+                <InstallStatus state={installState} />
+              )
+            ) : item.type === 'demo' ? (
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8"
-                onClick={() =>
-                  item.repository && window.open(item.repository, '_blank')
-                }
-                disabled={!item.repository}>
+                onClick={() => openExternalUrl(item.repository)}
+                disabled={!repositoryIsSafe}>
                 View
-                <ExternalLink className="ml-1 h-3 w-3" />
+                <IconShell size="sm">
+                  <OpenInNew />
+                </IconShell>
               </Button>
             ) : (
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8"
-                onClick={handleInstall}
-                disabled={isInstalling || localStatus === 'installed'}>
-                {localStatus === 'installed' && (
+                onClick={handleGet}
+                disabled={isInstalling || legacyInstalled || readOnlyMode}>
+                {legacyInstalled && (
                   <>
                     Installed
-                    <Check className="ml-1 h-3 w-3" />
+                    <IconShell size="sm">
+                      <Check />
+                    </IconShell>
                   </>
                 )}
-                {isInstalling && localStatus !== 'installed' && (
+                {isInstalling && !legacyInstalled && (
                   <>
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    <Spinner size="sm" />
                     Loading...
                   </>
                 )}
-                {!isInstalling && localStatus !== 'installed' && 'Get'}
+                {!isInstalling && !legacyInstalled && 'Get'}
               </Button>
             )}
           </div>
@@ -276,6 +412,16 @@ export function MarketplaceItemCard({
         itemName={item.name}
         action="install"
       />
+
+      {installEnabled && (
+        <MarketplaceInstallDialog
+          item={item}
+          open={showInstallDialog}
+          onOpenChange={setShowInstallDialog}
+        />
+      )}
     </Card>
   );
 }
+
+export const MarketplaceItemCard = memo(MarketplaceItemCardComponent);
