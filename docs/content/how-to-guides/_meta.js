@@ -26,6 +26,10 @@ export default {
     title: 'Parametrize resources per environment',
     href: '/user-guide/configurations'
   },
+  secrets: {
+    title: 'Manage secrets',
+    href: '/user-guide/secrets'
+  },
   'ark-cli': {
     title: 'Use the Ark CLI',
     href: '/user-guide/ark-cli'

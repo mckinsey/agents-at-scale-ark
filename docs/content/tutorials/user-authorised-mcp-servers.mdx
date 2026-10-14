@@ -38,6 +38,8 @@ The MCP controller connects to the server, discovers its tools, and creates a `T
 # Registration token: used for tool discovery, and for any call without an override.
 kubectl create secret generic github-registration-token \
   --from-literal=token="Bearer $(gh auth token)"
+kubectl label secret github-registration-token \
+  ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
 ```
 
 ```yaml
@@ -108,6 +110,8 @@ Give each user a Secret holding their personal token (value formatted as a beare
 kubectl create secret generic alice-github-token \
   --from-literal=token="Bearer ghp_alice_personal_access_token"
 ```
+
+The registration token carries the [Ark secret labels](/user-guide/secrets) because the whole namespace shares it. Leave the personal tokens without them: each belongs to one user, and the query override reads it by name either way. Once `/v1/secrets` serves only labelled Secrets, the personal tokens also stay off the dashboard **Secrets** page.
 
 ## Step 4 — Query as the user
 

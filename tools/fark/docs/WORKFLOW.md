@@ -220,8 +220,9 @@ The weather agent uses two tools that are essentially URL fetch wrappers. Here's
 
 First, create a secret for the API key:
 ```bash
-# Create a secret containing the API key
+# Create a secret containing the API key, labelled as an Ark secret
 kubectl create secret generic newsapi-secret --from-literal=api-key="your-actual-api-key-here"
+kubectl label secret newsapi-secret ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
 ```
 
 Then create the tool that references the secret:
@@ -433,6 +434,10 @@ kubectl create secret generic my-api-secret --from-literal=api-key="sk-your-key-
 kubectl create secret generic service-creds \
   --from-literal=api-key="your-api-key" \
   --from-literal=bearer-token="Bearer your-token"
+
+# Label both as Ark secrets so the dashboard and the Ark API manage them
+kubectl label secret my-api-secret service-creds \
+  ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
 ```
 
 2. **Reference Secrets in Tools**:
