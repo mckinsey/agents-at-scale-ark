@@ -64,7 +64,7 @@ export function SecretNameField({
           mode="list"
           openOnInputClick
           disabled={disabled}>
-          <ComboboxAnchor className="flex-1">
+          <ComboboxAnchor className="min-w-0 flex-1">
             <InputGroup className={FILLED_TRIGGER_CLASS}>
               <ComboboxInput
                 id={id}

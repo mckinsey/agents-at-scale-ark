@@ -87,7 +87,7 @@ export function ConditionalInputRow({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex-1">
+      <div className={data.type === 'secret' ? 'min-w-0 flex-[2]' : 'flex-1'}>
         {data.type === 'direct' ? (
           <>
             <Input
