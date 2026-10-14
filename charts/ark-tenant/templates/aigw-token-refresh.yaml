@@ -19,6 +19,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "ark-tenant.labels" . | nindent 4 }}
+    ark.mckinsey.com/resource-type: secret
+    ark.mckinsey.com/scope: shared
 type: Opaque
 stringData:
   api-key: "{{ .Values.aigwTokenRefresh.clientId }}:{{ .Values.aigwTokenRefresh.clientSecret }}"
@@ -83,7 +85,9 @@ spec:
 
                   kubectl create secret generic {{ .Values.aigwTokenRefresh.aigwSecret }} \
                     --from-file=api-key=/scratch/api-key \
-                    --dry-run=client -o yaml | kubectl apply -f -
+                    --dry-run=client -o yaml \
+                    | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml \
+                    | kubectl apply -f -
               volumeMounts:
                 - name: aigw
                   mountPath: /etc/aigw
