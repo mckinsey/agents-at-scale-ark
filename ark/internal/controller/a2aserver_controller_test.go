@@ -110,6 +110,15 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 		Expect(findCondition(server, A2AServerEndpointOverride)).To(BeNil())
 	})
 
+	It("keeps a trailing slash on the address in address mode", func() {
+		server := createServer("endpoint-address-mode-trailing-slash", arkv1prealpha1.A2AServerSpec{})
+		reconciler := newReconciler()
+
+		Expect(reconciler.reconcileEndpoint(ctx, server, reconciler.resolveEndpoint(server, address+"/", nil))).To(Succeed())
+
+		Expect(server.Status.LastResolvedEndpoint).To(Equal(address + "/"))
+	})
+
 	It("clears an override condition left over from a previous mode", func() {
 		server := createServer("endpoint-address-mode-clears", arkv1prealpha1.A2AServerSpec{})
 		reconciler := newReconciler()
