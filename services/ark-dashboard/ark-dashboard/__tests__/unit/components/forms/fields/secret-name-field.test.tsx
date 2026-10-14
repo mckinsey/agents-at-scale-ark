@@ -106,6 +106,16 @@ describe('SecretNameField', () => {
     expect(input()).toHaveValue('new-secret');
   });
 
+  it('trims whitespace around a pasted name', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField();
+
+    await user.click(input());
+    await user.paste('  pasted-secret \n');
+
+    expect(onChange).toHaveBeenLastCalledWith('pasted-secret');
+  });
+
   it('commits a name picked from the list', async () => {
     const user = userEvent.setup();
     const { onChange } = renderField();
