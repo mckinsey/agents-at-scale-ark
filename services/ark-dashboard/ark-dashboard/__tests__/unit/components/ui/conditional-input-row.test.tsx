@@ -99,7 +99,7 @@ describe('ConditionalInputRow', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear secret' }));
     await userEvent.click(
-      screen.getByRole('combobox', { name: 'Secret name' }),
+      screen.getByRole('combobox', { name: 'Secret for Authorization' }),
     );
     await userEvent.click(
       await screen.findByRole('option', { name: 'secret-b' }),
@@ -136,9 +136,9 @@ describe('ConditionalInputRow', () => {
       secretKey: 'apiKey',
     });
 
-    expect(screen.getByRole('combobox', { name: 'Secret name' })).toHaveValue(
-      'kubectl-made',
-    );
+    expect(
+      screen.getByRole('combobox', { name: 'Secret for Authorization' }),
+    ).toHaveValue('kubectl-made');
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -146,7 +146,7 @@ describe('ConditionalInputRow', () => {
     const { onChange } = renderRow('secret', {}, []);
 
     await userEvent.click(
-      screen.getByRole('combobox', { name: 'Secret name' }),
+      screen.getByRole('combobox', { name: 'Secret for Authorization' }),
     );
     await userEvent.keyboard('kubectl-made');
 

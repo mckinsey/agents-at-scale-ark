@@ -30,6 +30,8 @@ interface ConditionalInputRowProps {
   data: RowData;
   onChange: (data: Partial<RowData>) => void;
   secrets: Secret[];
+  isSecretsPending?: boolean;
+  isSecretsError?: boolean;
   deleteRow: (key: string) => void;
   nameError?: string;
   valueError?: string;
@@ -41,6 +43,8 @@ export function ConditionalInputRow({
   data,
   onChange,
   secrets,
+  isSecretsPending,
+  isSecretsError,
   deleteRow,
   nameError,
   valueError,
@@ -105,21 +109,16 @@ export function ConditionalInputRow({
             )}
           </>
         ) : (
-          <>
-            <SecretNameField
-              id="thirdValue"
-              aria-label="Secret name"
-              value={data.value}
-              onChange={value => onChange({ value, secretKey: undefined })}
-              secrets={secrets}
-              invalid={!!valueError}
-            />
-            {valueError && (
-              <p className="text-status-error mt-1 text-sm font-normal">
-                {valueError}
-              </p>
-            )}
-          </>
+          <SecretNameField
+            aria-label={data.name ? `Secret for ${data.name}` : 'Secret name'}
+            value={data.value}
+            onChange={value => onChange({ value, secretKey: undefined })}
+            secrets={secrets}
+            isPending={isSecretsPending}
+            isError={isSecretsError}
+            invalid={!!valueError}
+            error={valueError}
+          />
         )}
       </div>
       <Button

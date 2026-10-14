@@ -260,6 +260,8 @@ function SecretSelectorField({
   label: string;
   placeholder: string;
 }) {
+  const { isError } = useGetAllSecrets();
+
   return (
     <FormSecretNameField
       control={control}
@@ -267,6 +269,7 @@ function SecretSelectorField({
       label={label}
       secrets={secrets}
       isPending={isSecretsPending}
+      isError={isError}
       placeholder={placeholder}
     />
   );
@@ -394,7 +397,7 @@ function OpenAISpecificFields({
         secrets={secrets}
         fieldName="secret"
         label="API Key"
-        placeholder="Select a secret"
+        placeholder="Select or type a secret name"
       />
       <BaseUrlField
         control={control}
@@ -465,7 +468,7 @@ function AzureSpecificFields({
           secrets={secrets}
           fieldName="secret"
           label="API Key"
-          placeholder="Select a secret"
+          placeholder="Select or type a secret name"
         />
       ) : (
         <>
@@ -599,7 +602,7 @@ function AWSBedrockSpecificFields({
           secrets={secrets}
           fieldName="bedrockApiKeySecretName"
           label="API Key Secret"
-          placeholder="Select a secret for the API key"
+          placeholder="Select or type a secret for the API key"
         />
       ) : (
         <>
@@ -609,7 +612,7 @@ function AWSBedrockSpecificFields({
             secrets={secrets}
             fieldName="bedrockAccessKeyIdSecretName"
             label="Access Key ID Secret"
-            placeholder="Select a secret for Access Key ID"
+            placeholder="Select or type a secret for Access Key ID"
           />
           <SecretSelectorField
             control={control}
@@ -617,7 +620,7 @@ function AWSBedrockSpecificFields({
             secrets={secrets}
             fieldName="bedrockSecretAccessKeySecretName"
             label="Secret Access Key Secret"
-            placeholder="Select a secret for Secret Access Key"
+            placeholder="Select or type a secret for Secret Access Key"
           />
         </>
       )}
@@ -683,7 +686,7 @@ function AnthropicSpecificFields({
         secrets={secrets}
         fieldName="secret"
         label="API Key"
-        placeholder="Select a secret"
+        placeholder="Select or type a secret name"
       />
       <BaseUrlField
         control={control}

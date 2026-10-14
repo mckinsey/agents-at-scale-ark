@@ -378,7 +378,7 @@ describe('A2AEditor', () => {
       await user.click(typeSelect);
       await user.click(await screen.findByRole('option', { name: 'secret' }));
       await user.type(
-        screen.getByRole('combobox', { name: 'Secret name' }),
+        screen.getByRole('combobox', { name: 'Secret for Authorization' }),
         'kubectl-made',
       );
       expect(
@@ -403,6 +403,37 @@ describe('A2AEditor', () => {
           },
         },
       ]);
+    });
+
+    it('should close the secret list on Escape before closing the dialog', async () => {
+      const user = userEvent.setup();
+      const onOpenChange = vi.fn();
+      render(<A2AEditor {...defaultProps} onOpenChange={onOpenChange} />);
+
+      await user.type(
+        screen.getByPlaceholderText('e.g., Authorization'),
+        'Authorization',
+      );
+      const [typeSelect] = screen.getAllByRole('combobox');
+      await user.click(typeSelect);
+      await user.click(await screen.findByRole('option', { name: 'secret' }));
+      await user.click(
+        screen.getByRole('combobox', { name: 'Secret for Authorization' }),
+      );
+      await screen.findByText(/No Ark secrets in this namespace/);
+
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText(/No Ark secrets in this namespace/),
+        ).not.toBeInTheDocument();
+      });
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      await user.keyboard('{Escape}');
+
+      expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
     it('should map direct and secret rows onto the spec shape', () => {
