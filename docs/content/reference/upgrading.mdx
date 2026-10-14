@@ -143,8 +143,6 @@ Ark does not label existing Secrets on upgrade, because only you know which Secr
 - Secrets you created in the dashboard before this release have no labels either. Label the ones that no resource references but you still want to see there.
 - Add the labels to Secret manifests in GitOps repositories and to scripts that run `kubectl create secret`. [Manage secrets](/user-guide/secrets) has examples.
 
-## v0.1.71
-
 ### Generic Resources API Limited to an Allowlist
 
 The generic resources API under `/v1/resources` now serves only the resources and verbs the dashboard uses. Any other combination of group, version, Kind and verb returns `403`.
