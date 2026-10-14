@@ -108,9 +108,7 @@ The samples, the `ark-tenant` chart's AI gateway Secret and the setup scripts cr
 
 `ark models create` used to update an existing `<model>-model-secret` with `kubectl apply` and now uses `kubectl replace`. It reads the Secret first and keeps its labels, annotations and the keys it does not manage.
 
-Nothing else changes in this release. The dashboard **Secrets** page and `/v1/secrets` still serve every Secret in the namespace, and references from Ark resources resolve as before.
-
-A later release will limit `/v1/secrets` to Secrets with both labels. Secrets without them will no longer appear in the dashboard, and `GET`, `PUT` and `DELETE` on them through the API will return `404`. References from models, MCP servers, queries and other resources will keep resolving, labels or not.
+`/v1/secrets` and the dashboard **Secrets** page serve only Secrets with both labels, as described in [`/v1/secrets` Serves Only Ark-Labelled Secrets](#v1secrets-serves-only-ark-labelled-secrets). References from models, MCP servers, queries and other resources resolve with or without the labels.
 
 Ark does not label existing Secrets on upgrade, because only you know which Secrets in a namespace belong to Ark.
 
@@ -146,6 +144,19 @@ Ark does not label existing Secrets on upgrade, because only you know which Secr
 - Ark also reads some Secrets by a fixed name rather than through a reference, so the list above misses them. Label `otel-environment-variables` if you use [tenant trace routing](/developer-guide/observability#tenant-configuration).
 - Secrets you created in the dashboard before this release have no labels either. Label the ones that no resource references but you still want to see there.
 - Add the labels to Secret manifests in GitOps repositories and to scripts that run `kubectl create secret`. [Manage secrets](/user-guide/secrets) has examples.
+
+### `/v1/secrets` Serves Only Ark-Labelled Secrets
+
+Every `/v1/secrets` route now works only on Secrets labelled `ark.mckinsey.com/resource-type=secret` and `ark.mckinsey.com/scope=shared`.
+
+- `GET /v1/secrets` and the dashboard **Secrets** page leave out every other Secret in the namespace. That includes Secrets created with kubectl or GitOps without the labels, Secrets created in the dashboard before this release, Helm release records, service account tokens, Ark API keys and MCP OAuth tokens.
+- `GET`, `PUT` and `DELETE` on `/v1/secrets/{name}` return `404` for a Secret without both labels, with the same body as for a Secret that does not exist. `PUT` and `DELETE` leave that Secret untouched.
+- `POST /v1/secrets` with the name of an existing unlabelled Secret still returns `409`.
+
+References to a Secret keep resolving whether it has the labels or not. The controller, the executors and the MCP header resolution in `ark-api` read referenced Secrets directly, outside `/v1/secrets`.
+
+**Migration:**
+- Label the Secrets you want to manage from the dashboard or the API, following [Secrets Created by Ark Carry Ownership Labels](#secrets-created-by-ark-carry-ownership-labels). A Secret appears in the list as soon as it has both labels.
 
 ### Generic Resources API Limited to an Allowlist
 
