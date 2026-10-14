@@ -59,5 +59,12 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, e
 			result.WriteString(string(jsonBytes))
 		}
 	}
+	if response.IsError {
+		text := result.String()
+		if text == "" {
+			text = fmt.Sprintf("tool %s reported an error", m.ToolName)
+		}
+		return ToolResult{ID: call.ID, Name: call.Function.Name, Error: text}, nil
+	}
 	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: result.String()}, nil
 }
