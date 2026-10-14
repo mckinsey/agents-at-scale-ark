@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -54,4 +55,17 @@ func TestClearAgentCardStatus(t *testing.T) {
 	assert.Empty(t, status.CardURL)
 	assert.Nil(t, status.SkillCount)
 	assert.Nil(t, status.StreamingSupported)
+}
+
+func TestApplyAgentCardStatusTruncatesOversizedCardFields(t *testing.T) {
+	status := &arkv1prealpha1.A2AServerStatus{}
+	card := &arka2a.A2AAgentCard{
+		URL:     "http://localhost:8000/" + strings.Repeat("a", 5000),
+		Version: strings.Repeat("é", 1000),
+	}
+
+	assert.True(t, applyAgentCardStatus(status, card, arka2a.ProtocolVersion3))
+	assert.Len(t, status.CardURL, maxCardURLLength)
+	assert.Equal(t, maxCardVersionLength, len([]rune(status.CardVersion)))
+	assert.False(t, applyAgentCardStatus(status, card, arka2a.ProtocolVersion3))
 }

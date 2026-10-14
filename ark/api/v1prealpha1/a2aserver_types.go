@@ -74,10 +74,12 @@ type A2AServerStatus struct {
 
 	// CardURL is the URL the agent card declares for A2A requests
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=2048
 	CardURL string `json:"cardUrl,omitempty"`
 
 	// CardVersion is the agent version declared in the agent card
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=256
 	CardVersion string `json:"cardVersion,omitempty"`
 
 	// SkillCount is the number of skills declared in the agent card

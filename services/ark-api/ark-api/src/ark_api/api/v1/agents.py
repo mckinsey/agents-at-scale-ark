@@ -5,6 +5,7 @@ import json
 from enum import Enum
 
 from fastapi import APIRouter, Depends, Query, Request
+from pydantic import ValidationError
 from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
 from ark_sdk.impersonation import ImpersonationConfig
@@ -19,6 +20,7 @@ from ...models.agents import (
     AgentCreateRequest,
     AgentUpdateRequest,
     AgentDetailResponse,
+    Skill,
 )
 from ...models.common import extract_availability_from_conditions
 from ...constants.annotations import (
@@ -109,10 +111,14 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
     if A2A_SERVER_SKILLS_ANNOTATION in annotations:
         try:
             skills_data = json.loads(annotations[A2A_SERVER_SKILLS_ANNOTATION])
-            skills = skills_data if isinstance(skills_data, list) else []
         except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse skills annotation for agent {metadata.get('name', '')}")
-            skills = []
+            skills_data = []
+        for item in skills_data if isinstance(skills_data, list) else []:
+            try:
+                skills.append(Skill.model_validate(item))
+            except ValidationError:
+                logger.warning(f"Skipping invalid skill entry for agent {metadata.get('name', '')}")
     
     # Extract availability from conditions
     conditions = status.get("conditions", [])

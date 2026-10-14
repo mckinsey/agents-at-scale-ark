@@ -277,10 +277,12 @@ spec:
             properties:
               cardUrl:
                 description: CardURL is the URL the agent card declares for A2A requests
+                maxLength: 2048
                 type: string
               cardVersion:
                 description: CardVersion is the agent version declared in the agent
                   card
+                maxLength: 256
                 type: string
               conditions:
                 description: Conditions represent the latest available observations

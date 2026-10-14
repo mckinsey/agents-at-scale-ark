@@ -32,6 +32,9 @@ const (
 	A2AServerReady            = "Ready"
 	A2AServerDiscovering      = "Discovering"
 	A2AServerEndpointOverride = "EndpointOverride"
+
+	maxCardURLLength     = 2048
+	maxCardVersionLength = 256
 )
 
 type A2AServerReconciler struct {
@@ -142,16 +145,18 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 func applyAgentCardStatus(status *arkv1prealpha1.A2AServerStatus, agentCard *arka2a.A2AAgentCard, protocol string) bool {
 	skillCount := int32(len(agentCard.Skills))
 	streaming := agentCard.Capabilities.Streaming != nil && *agentCard.Capabilities.Streaming
+	cardURL := truncateRunes(agentCard.URL, maxCardURLLength)
+	cardVersion := truncateRunes(agentCard.Version, maxCardVersionLength)
 
 	changed := status.NegotiatedProtocol != protocol ||
-		status.CardURL != agentCard.URL ||
-		status.CardVersion != agentCard.Version ||
+		status.CardURL != cardURL ||
+		status.CardVersion != cardVersion ||
 		status.SkillCount == nil || *status.SkillCount != skillCount ||
 		status.StreamingSupported == nil || *status.StreamingSupported != streaming
 
 	status.NegotiatedProtocol = protocol
-	status.CardURL = agentCard.URL
-	status.CardVersion = agentCard.Version
+	status.CardURL = cardURL
+	status.CardVersion = cardVersion
 	status.SkillCount = &skillCount
 	status.StreamingSupported = &streaming
 	return changed
@@ -163,6 +168,14 @@ func clearAgentCardStatus(status *arkv1prealpha1.A2AServerStatus) {
 	status.CardVersion = ""
 	status.SkillCount = nil
 	status.StreamingSupported = nil
+}
+
+func truncateRunes(s string, n int) string {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n])
 }
 
 // reconcileCondition updates a condition on the A2AServer and returns true if it changed

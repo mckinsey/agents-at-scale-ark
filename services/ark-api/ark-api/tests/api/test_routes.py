@@ -1340,6 +1340,32 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["skills"][0]["tags"], ["math", "calculation"])
 
     @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_get_a2a_agent_skips_invalid_skill_entries(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        skills = [{"foo": 1}, {"id": "echo_messages", "name": "Echo Messages"}, "not-a-skill"]
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/a2a-server-address": "http://simple-agent.default.svc.cluster.local:80",
+                    "ark.mckinsey.com/a2a-server-skills": json.dumps(skills),
+                },
+            },
+            "spec": {"description": "A simple agent"},
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+        mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        response = self.client.get("/v1/agents/simple-agent?namespace=default")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([s["id"] for s in response.json()["skills"]], ["echo_messages"])
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_success(self, mock_ark_client):
         """Test successful agent update."""
         # Setup async context manager mock
