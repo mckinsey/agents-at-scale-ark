@@ -1,5 +1,7 @@
 """Pydantic models for generic Kubernetes resource endpoints."""
-from pydantic import BaseModel
+from typing import Optional
+
+from pydantic import BaseModel, Field
 
 
 class AccessReviewRequest(BaseModel):
@@ -14,3 +16,7 @@ class AccessReviewResponse(BaseModel):
     """Result of a SelfSubjectAccessReview."""
 
     allowed: bool
+    reason: Optional[str] = Field(
+        default=None,
+        description="Set when ark-api refuses the operation for this caller before asking Kubernetes",
+    )
