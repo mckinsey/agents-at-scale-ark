@@ -49,6 +49,10 @@ async def list_workflows(
 ) -> Optional[dict]:
     """List workflows from Argo Server, newest first.
 
+    Argo Server (>= v3.6) selects each page from its in-memory store ordered by
+    start time, so page membership is global. It then re-sorts every page by
+    finish time; sorting the page by start time again restores the global order.
+
     Returns a WorkflowList shaped like the Kubernetes one, with
     metadata.continue set to the next offset when more items exist and
     metadata.remainingItemCount set when the list is paginated. Returns
