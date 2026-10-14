@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 os.environ["AUTH_MODE"] = "open"
 
 from fastapi.testclient import TestClient
+from ark_sdk.secret_scope import SecretScope
 
 _LEAKED_PASSWORD = "sup3rs3cret"
 _LEAKED_TOKEN_B64 = base64.b64encode(b"sk-FAKE-token").decode()
@@ -146,8 +147,6 @@ class TestSecretsScope(unittest.TestCase):
 
     @patch('ark_api.api.v1.secrets.SecretClient')
     def test_every_route_passes_the_shared_scope(self, mock_client_cls):
-        from ark_sdk.secret_scope import SecretScope
-
         detail = {"name": "s", "id": "uuid", "type": "Opaque", "secret_length": 1}
         mock_client = mock_client_cls.return_value
         mock_client.list_secrets = AsyncMock(return_value={"items": [], "count": 0})
