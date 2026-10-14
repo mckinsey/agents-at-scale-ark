@@ -202,8 +202,7 @@ describe('createModel', () => {
       .mockResolvedValueOnce({apiKey: 'new-secret-key'});
 
     mockExeca.mockResolvedValueOnce({}); // secret exists check
-    mockExeca.mockResolvedValueOnce({stdout: 'secret yaml'}); // dry-run output
-    mockExeca.mockResolvedValueOnce({}); // kubectl apply
+    mockExeca.mockResolvedValueOnce({}); // kubectl replace
     mockExeca.mockResolvedValueOnce({}); // apply model
 
     const result = await createModel('test-model');
