@@ -58,7 +58,7 @@ export function SecretNameField({
           value={value}
           onValueChange={(next, details) => {
             if (details.reason !== 'escape-key') {
-              onChange(next);
+              onChange(next.trim());
             }
           }}
           mode="list"
