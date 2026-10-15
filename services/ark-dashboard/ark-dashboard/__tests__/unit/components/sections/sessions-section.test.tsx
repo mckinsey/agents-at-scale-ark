@@ -1664,7 +1664,7 @@ describe('SessionsSection', () => {
       });
     });
 
-    it('should flatten parallel step groups and nest expandable children', async () => {
+    it('should fan out parallel step groups one level in and nest expandable children', async () => {
       const user = userEvent.setup();
       vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
         {
@@ -1728,6 +1728,9 @@ describe('SessionsSection', () => {
       expect(screen.getByText('fan-a')).toBeInTheDocument();
       expect(screen.getByText('fan-b')).toBeInTheDocument();
       expect(screen.queryByText('[0]')).not.toBeInTheDocument();
+      expect(screen.getByText('fan-a').closest('.pl-5')).not.toBeNull();
+      expect(screen.getByText('fan-b').closest('.pl-5')).not.toBeNull();
+      expect(screen.getByText('nested-parent').closest('.pl-5')).toBeNull();
       expect(screen.queryByText('nested-child')).not.toBeInTheDocument();
 
       await user.click(

@@ -7,7 +7,7 @@ import { Terminal } from '@/components/icons';
 import { SessionsSection } from '@/components/sections/sessions-section';
 
 export default function WorkflowRunsPage() {
-  const [sessionCount, setSessionCount] = useState(0);
+  const [sessionCount, setSessionCount] = useState<number | null>(null);
 
   const pageTitle = sessionCount
     ? `Workflow runs (${sessionCount})`

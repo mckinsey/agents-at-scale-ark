@@ -239,7 +239,7 @@ export function WorkflowNodeLogs({
         ref={scrollContainerRef}
         onScroll={handleScroll}
         data-testid="workflow-node-logs-scroll"
-        className="bg-fill-onsurface-ui-1 h-96 w-full overflow-auto p-2">
+        className="bg-fill-onsurface-ui-1 border-stroke-divider h-96 w-full overflow-auto border p-2">
         {buffer.loadingInitial && (
           <div className="flex items-center gap-2">
             <Spinner size="sm" className="text-fg-tertiary" />
@@ -250,7 +250,7 @@ export function WorkflowNodeLogs({
         )}
 
         {buffer.loaded && (
-          <div className="flex w-max min-w-full flex-col">
+          <div className="flex w-full min-w-0 flex-col">
             {buffer.loadingOlder && (
               <span className="paragraph-small-primary text-fg-tertiary px-1">
                 Loading older logs...
@@ -263,7 +263,7 @@ export function WorkflowNodeLogs({
               </span>
             )}
 
-            <pre className="paragraph-regular-primary text-fg-secondary whitespace-pre">
+            <pre className="paragraph-regular-primary text-fg-secondary break-words whitespace-pre-wrap">
               {buffer.lines.length === 0 ? 'No logs available' : content}
             </pre>
 

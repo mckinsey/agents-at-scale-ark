@@ -476,17 +476,21 @@ function WorkflowStepDetail({
 
       {detail.inputs && Object.keys(detail.inputs).length > 0 && (
         <LogEntryBlock icon={<InsertDriveFile />} label="Inputs">
-          {Object.entries(detail.inputs).map(([key, value]) => (
-            <LogEntryRow key={key} label={`${key}:`} value={value} />
-          ))}
+          <div className="border-stroke-divider flex w-full min-w-0 flex-col gap-1 border p-2">
+            {Object.entries(detail.inputs).map(([key, value]) => (
+              <LogEntryRow key={key} label={`${key}:`} value={value} />
+            ))}
+          </div>
         </LogEntryBlock>
       )}
 
       {detail.outputs && Object.keys(detail.outputs).length > 0 && (
         <LogEntryBlock icon={<InsertDriveFile />} label="Outputs">
-          {Object.entries(detail.outputs).map(([key, value]) => (
-            <LogEntryRow key={key} label={`${key}:`} value={value} />
-          ))}
+          <div className="border-stroke-divider flex w-full min-w-0 flex-col gap-1 border p-2">
+            {Object.entries(detail.outputs).map(([key, value]) => (
+              <LogEntryRow key={key} label={`${key}:`} value={value} />
+            ))}
+          </div>
         </LogEntryBlock>
       )}
 
@@ -665,8 +669,8 @@ function WorkflowStepNode({
           <WorkflowStepNode
             key={child.id}
             step={child}
-            depth={depth}
-            isLast={isLast && index === step.children!.length - 1}
+            depth={depth + 1}
+            isLast={index === step.children!.length - 1}
           />
         ))}
       </>
@@ -1190,7 +1194,7 @@ function SessionsBody({
 export function SessionsSection({
   onCountChange,
 }: {
-  readonly onCountChange?: (count: number) => void;
+  readonly onCountChange?: (count: number | null) => void;
 }) {
   const { namespace, isNamespaceResolved, readOnlyMode } = useNamespace();
   const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
@@ -1248,6 +1252,7 @@ export function SessionsSection({
     loading,
     error,
     hasNext,
+    totalCount,
     hasPrevious,
     goToNextPage,
     goToPreviousPage,
@@ -1334,11 +1339,9 @@ export function SessionsSection({
     }
   }, [filteredSessions, selectedSessionId]);
 
-  const sessionCount = filteredSessions.length;
-
   useEffect(() => {
-    onCountChange?.(sessionCount);
-  }, [onCountChange, sessionCount]);
+    onCountChange?.(totalCount);
+  }, [onCountChange, totalCount]);
 
   const selectedSessionFromList = filteredSessions.find(
     s => s.id === selectedSessionId,

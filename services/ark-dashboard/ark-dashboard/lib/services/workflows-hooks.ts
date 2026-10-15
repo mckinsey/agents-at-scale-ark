@@ -6,6 +6,7 @@ import { isTerminalPhase } from './workflow-mapper';
 import {
   type WorkflowFilters,
   type WorkflowLifecycleAction,
+  type WorkflowPage,
   workflowsService,
 } from './workflows';
 
@@ -47,6 +48,13 @@ function usePollWorkflows(
 
 const DEFAULT_PAGE_SIZE = 25;
 
+function computeTotalCount(offset: number, page: WorkflowPage): number | null {
+  if (page.remainingItemCount === undefined) {
+    return null;
+  }
+  return offset + page.items.length + page.remainingItemCount;
+}
+
 export function useWorkflows(
   namespace: string,
   filters?: WorkflowFilters,
@@ -58,6 +66,7 @@ export function useWorkflows(
   const [error, setError] = useState<Error | null>(null);
   const [page, setPage] = useState(0);
   const [hasNext, setHasNext] = useState(false);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
 
   // tokenStack[i] holds the continue token needed to fetch page i.
   // tokenStack[0] is always undefined (the first page has no cursor).
@@ -77,6 +86,7 @@ export function useWorkflows(
     async (targetPage: number, options?: { silent?: boolean }) => {
       if (!namespace) {
         setWorkflows([]);
+        setTotalCount(null);
         setError(null);
         setLoading(false);
         return;
@@ -111,6 +121,7 @@ export function useWorkflows(
             : result.items,
         );
         setHasNext(result.hasMore);
+        setTotalCount(computeTotalCount(targetPage * pageSize, result));
         if (result.continueToken) {
           tokenStackRef.current[targetPage + 1] = result.continueToken;
         }
@@ -241,6 +252,7 @@ export function useWorkflows(
     error,
     page,
     hasNext,
+    totalCount,
     hasPrevious: page > 0,
     goToNextPage,
     goToPreviousPage,
