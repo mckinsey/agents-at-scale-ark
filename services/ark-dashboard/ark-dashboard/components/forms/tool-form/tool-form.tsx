@@ -57,7 +57,7 @@ const inlineTextareaClassName =
 
 const jsonTextareaClassName = (expanded: boolean) =>
   cn(
-    'resize-y overflow-auto font-mono! text-sm leading-relaxed transition-[height] duration-200',
+    'resize-y overflow-auto font-mono! leading-relaxed! transition-[min-height,max-height] duration-200',
     expanded ? 'max-h-[80vh] min-h-[640px]' : 'max-h-[420px] min-h-[280px]',
   );
 
