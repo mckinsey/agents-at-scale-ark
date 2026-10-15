@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: agent-inline-tool-type
+spec:
+  prompt: Test agent
+  modelRef:
+    name: nonexistent-model
+  tools:
+  - type: inline
+    name: inline-tool
