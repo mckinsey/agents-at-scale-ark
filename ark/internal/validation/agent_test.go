@@ -14,129 +14,111 @@ import (
 )
 
 func TestValidateAgent(t *testing.T) {
-	lookup := newMockLookup()
-	v := NewValidator(lookup)
+	v := NewValidator(newMockLookup())
 	ctx := context.Background()
 
-	t.Run("valid agent", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
+	tests := []struct {
+		name        string
+		spec        arkv1alpha1.AgentSpec
+		expectErr   bool
+		errContains string
+	}{
+		{name: "valid agent"},
+		{
+			name:      "rejects invalid parameter",
+			spec:      arkv1alpha1.AgentSpec{Parameters: []arkv1alpha1.Parameter{{Name: ""}}},
+			expectErr: true,
+		},
+		{
+			name:      "rejects invalid override resourceType",
+			spec:      arkv1alpha1.AgentSpec{Overrides: []arkv1alpha1.Override{{ResourceType: "invalid"}}},
+			expectErr: true,
+		},
+		{
+			name:      "rejects agent tool with unsupported type",
+			spec:      arkv1alpha1.AgentSpec{Tools: []arkv1alpha1.AgentTool{{Type: "unknown", Name: "t"}}},
+			expectErr: true,
+		},
+		{
+			name:      "rejects built-in tool without name",
+			spec:      arkv1alpha1.AgentSpec{Tools: []arkv1alpha1.AgentTool{{Type: "built-in"}}},
+			expectErr: true,
+		},
+		{
+			name:      "rejects invalid built-in tool name",
+			spec:      arkv1alpha1.AgentSpec{Tools: []arkv1alpha1.AgentTool{{Type: "built-in", Name: "invalid"}}},
+			expectErr: true,
+		},
+		{
+			name: "accepts valid built-in tool",
+			spec: arkv1alpha1.AgentSpec{Tools: []arkv1alpha1.AgentTool{{Type: "built-in", Name: "noop"}}},
+		},
+		{
+			name: "accepts an inline tool attachment",
+			spec: arkv1alpha1.AgentSpec{Tools: []arkv1alpha1.AgentTool{{Type: "inline", Name: "csv-summarise"}}},
+		},
+		{
+			name:        "rejects inline tool without name",
+			spec:        arkv1alpha1.AgentSpec{Tools: []arkv1alpha1.AgentTool{{Type: "inline"}}},
+			expectErr:   true,
+			errContains: "inline tools must specify a name",
+		},
+		{
+			name:      "rejects mcp tool without name",
+			spec:      arkv1alpha1.AgentSpec{Tools: []arkv1alpha1.AgentTool{{Type: "mcp"}}},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
+				Spec:       tt.spec,
+			}
+			_, err := v.ValidateAgent(ctx, agent)
+			assertAgentValidationErr(t, err, tt.expectErr, tt.errContains)
+		})
+	}
+}
+
+func assertAgentValidationErr(t *testing.T, err error, expectErr bool, errContains string) {
+	t.Helper()
+
+	if !expectErr {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-	})
+		return
+	}
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if errContains != "" && !strings.Contains(err.Error(), errContains) {
+		t.Fatalf("expected error containing %q, got: %v", errContains, err)
+	}
+}
 
-	t.Run("rejects invalid parameter", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: arkv1alpha1.AgentSpec{
-				Parameters: []arkv1alpha1.Parameter{{Name: ""}},
-			},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
-		if err == nil {
-			t.Fatal("expected error for empty parameter name")
-		}
-	})
+func TestValidateAgentMigrationWarnings(t *testing.T) {
+	v := NewValidator(newMockLookup())
+	ctx := context.Background()
 
-	t.Run("rejects invalid override resourceType", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: arkv1alpha1.AgentSpec{
-				Overrides: []arkv1alpha1.Override{{ResourceType: "invalid"}},
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "a",
+			Namespace: "default",
+			Annotations: map[string]string{
+				annotations.MigrationWarningPrefix + "test": "warning message",
 			},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
-		if err == nil {
-			t.Fatal("expected error for invalid override")
-		}
-	})
-
-	t.Run("rejects agent tool with unsupported type", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: arkv1alpha1.AgentSpec{
-				Tools: []arkv1alpha1.AgentTool{{Type: "unknown", Name: "t"}},
-			},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
-		if err == nil {
-			t.Fatal("expected error for unsupported tool type")
-		}
-	})
-
-	t.Run("rejects built-in tool without name", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: arkv1alpha1.AgentSpec{
-				Tools: []arkv1alpha1.AgentTool{{Type: "built-in"}},
-			},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
-		if err == nil {
-			t.Fatal("expected error for built-in tool without name")
-		}
-	})
-
-	t.Run("rejects invalid built-in tool name", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: arkv1alpha1.AgentSpec{
-				Tools: []arkv1alpha1.AgentTool{{Type: "built-in", Name: "invalid"}},
-			},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
-		if err == nil {
-			t.Fatal("expected error for invalid built-in tool name")
-		}
-	})
-
-	t.Run("accepts valid built-in tool", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: arkv1alpha1.AgentSpec{
-				Tools: []arkv1alpha1.AgentTool{{Type: "built-in", Name: "noop"}},
-			},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("rejects mcp tool without name", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: arkv1alpha1.AgentSpec{
-				Tools: []arkv1alpha1.AgentTool{{Type: "mcp"}},
-			},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
-		if err == nil {
-			t.Fatal("expected error for mcp tool without name")
-		}
-	})
-
-	t.Run("collects migration warnings", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "a",
-				Namespace: "default",
-				Annotations: map[string]string{
-					annotations.MigrationWarningPrefix + "test": "warning message",
-				},
-			},
-		}
-		warnings, err := v.ValidateAgent(ctx, agent)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(warnings) != 1 {
-			t.Fatalf("expected 1 warning, got %d", len(warnings))
-		}
-	})
+		},
+	}
+	warnings, err := v.ValidateAgent(ctx, agent)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("expected 1 warning, got %d", len(warnings))
+	}
 }
 
 func TestValidateAgentToolApproval(t *testing.T) {

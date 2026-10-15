@@ -88,7 +88,7 @@ func validateAgentTool(index int, tool arkv1alpha1.AgentTool) error {
 			return fmt.Errorf("tool[%d]: unsupported built-in tool '%s': supported built-in tools are: noop, terminate", index, tool.Name)
 		}
 		return nil
-	case toolTypeCustom, "mcp", "http", "agent", "team", "builtin":
+	case toolTypeCustom, "mcp", "http", "agent", "team", "builtin", "inline":
 		if !hasName {
 			return fmt.Errorf("tool[%d]: %s tools must specify a name", index, tool.Type)
 		}
@@ -97,7 +97,7 @@ func validateAgentTool(index int, tool arkv1alpha1.AgentTool) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, mcp, http, agent, team, builtin", index, tool.Type)
+		return fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, mcp, http, agent, team, builtin, inline", index, tool.Type)
 	}
 }
 

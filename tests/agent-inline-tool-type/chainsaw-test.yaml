@@ -1,0 +1,29 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-inline-tool-type
+spec:
+  description: >
+    An agent referencing a type: inline tool must be admitted. Regression test
+    for validateAgentTool rejecting "inline" as an unsupported tool type.
+  steps:
+  - name: create-agent-with-inline-tool
+    try:
+    - apply:
+        file: manifests/a01-agent.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-inline-tool-type
+          spec:
+            tools:
+            - type: inline
+              name: inline-tool
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: agent-inline-tool-type
