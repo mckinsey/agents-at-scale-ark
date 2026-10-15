@@ -14,6 +14,7 @@ export interface ResolvedMarketplaceItem {
   item: GitHubMarketplaceItem;
   source: string;
   sourceLabel: string;
+  sourceUrl?: string;
 }
 
 async function resolveItem(
@@ -34,6 +35,7 @@ async function resolveItem(
         item: match,
         source: group.source,
         sourceLabel: group.displayName || group.source,
+        sourceUrl: group.url,
       };
   }
   return null;

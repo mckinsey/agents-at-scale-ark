@@ -8,7 +8,10 @@ import {
   getRawMarketplaceItemById,
 } from '@/lib/services/marketplace-server';
 
-const ARK_CLI_MARKETPLACE_SOURCE = 'agents-at-scale-marketplace';
+const ARK_CLI_MARKETPLACE_URLS = new Set([
+  'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json',
+  'https://github.com/mckinsey/agents-at-scale-marketplace/raw/main/marketplace.json',
+]);
 
 const ARK_CLI_CATEGORY_PATHS: Record<string, string> = {
   service: 'services',
@@ -103,10 +106,11 @@ async function executeHelmCommand(
  */
 function buildArkCommand(
   id: string,
-  source: string,
+  sourceUrl?: string,
   itemType?: string,
 ): string | undefined {
-  if (source !== ARK_CLI_MARKETPLACE_SOURCE || !itemType) return undefined;
+  if (!sourceUrl || !ARK_CLI_MARKETPLACE_URLS.has(sourceUrl) || !itemType)
+    return undefined;
   const categoryPath = ARK_CLI_CATEGORY_PATHS[itemType];
   return categoryPath
     ? `ark install marketplace/${categoryPath}/${id}`
@@ -164,12 +168,12 @@ async function fetchAndValidateMarketplaceItem(
  * Build command response for installation
  */
 function buildCommandResponse(
-  { item, source }: ResolvedMarketplaceItem,
+  { item, sourceUrl }: ResolvedMarketplaceItem,
   id: string,
   helmCommand: string,
   namespace?: string,
 ) {
-  const arkCommand = buildArkCommand(id, source, item.type);
+  const arkCommand = buildArkCommand(id, sourceUrl, item.type);
   return NextResponse.json({
     status: 'command',
     name: item.name || id,

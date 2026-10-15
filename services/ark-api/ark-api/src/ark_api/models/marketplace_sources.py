@@ -115,6 +115,7 @@ class MarketplaceItemsSourceResult(BaseModel):
 
     source: str
     displayName: str
+    url: Optional[str] = None
     items: Optional[list[dict[str, Any]]] = None
     error: Optional[MarketplaceItemError] = None
 

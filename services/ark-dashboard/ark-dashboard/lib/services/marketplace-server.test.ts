@@ -63,7 +63,12 @@ describe('marketplace-server', () => {
   it('returns the source key separately from its display label', async () => {
     vi.mocked(getArkApiAuthHeaders).mockResolvedValueOnce({});
     mockGet.mockResolvedValueOnce([
-      { ...group, source: 'internal-mirror', displayName: 'Internal Mirror' },
+      {
+        ...group,
+        source: 'internal-mirror',
+        displayName: 'Internal Mirror',
+        url: 'https://internal.example.com/marketplace.json',
+      },
     ]);
 
     const resolved = await getRawMarketplaceItemById(
@@ -76,6 +81,7 @@ describe('marketplace-server', () => {
       item: group.items[0],
       source: 'internal-mirror',
       sourceLabel: 'Internal Mirror',
+      sourceUrl: 'https://internal.example.com/marketplace.json',
     });
   });
 

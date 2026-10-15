@@ -78,16 +78,32 @@ function createRequest(url: string, options?: RequestInit) {
 }
 
 const DEFAULT_SOURCE = 'agents-at-scale-marketplace';
+const DEFAULT_SOURCE_URL =
+  'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
 
 function mockResolvedItem(
   item: GitHubMarketplaceItem,
+  sourceUrl: string = DEFAULT_SOURCE_URL,
   source: string = DEFAULT_SOURCE,
 ) {
   mockGetRawMarketplaceItemById.mockResolvedValueOnce({
     item,
     source,
     sourceLabel: source,
+    sourceUrl,
   });
+}
+
+async function requestCommand(id: string) {
+  const request = createRequest(
+    `http://localhost/api/marketplace/${id}/install`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'command' }),
+    },
+  );
+  const response = await POST(request, { params: Promise.resolve({ id }) });
+  return response.json();
 }
 
 const baseItem = {
@@ -222,8 +238,55 @@ describe('POST /api/marketplace/[id]/install', () => {
     expect(data.arkCommand).toBe('ark install marketplace/executors/my-executor');
   });
 
+  it('builds arkCommand for a renamed source that points at the default manifest', async () => {
+    mockResolvedItem({ ...baseItem }, DEFAULT_SOURCE_URL, 'ark-official');
+
+    const data = await requestCommand('phoenix');
+
+    expect(data.arkCommand).toBe('ark install marketplace/services/phoenix');
+  });
+
+  it('builds arkCommand for the github.com raw manifest URL', async () => {
+    mockResolvedItem(
+      { ...baseItem },
+      'https://github.com/mckinsey/agents-at-scale-marketplace/raw/main/marketplace.json',
+    );
+
+    const data = await requestCommand('phoenix');
+
+    expect(data.arkCommand).toBe('ark install marketplace/services/phoenix');
+  });
+
+  it('omits arkCommand when the default source name points at another manifest', async () => {
+    mockResolvedItem(
+      { ...baseItem },
+      'https://internal.example.com/marketplace.json',
+      DEFAULT_SOURCE,
+    );
+
+    const data = await requestCommand('phoenix');
+
+    expect(data.arkCommand).toBeUndefined();
+  });
+
+  it('omits arkCommand when the source URL is unknown', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+      item: { ...baseItem },
+      source: DEFAULT_SOURCE,
+      sourceLabel: DEFAULT_SOURCE,
+    });
+
+    const data = await requestCommand('phoenix');
+
+    expect(data.arkCommand).toBeUndefined();
+  });
+
   it('omits arkCommand for items from a non-default source', async () => {
-    mockResolvedItem({ ...baseItem }, 'internal-mirror');
+    mockResolvedItem(
+      { ...baseItem },
+      'https://internal.example.com/marketplace.json',
+      'internal-mirror',
+    );
 
     const request = createRequest(
       'http://localhost/api/marketplace/phoenix/install',
