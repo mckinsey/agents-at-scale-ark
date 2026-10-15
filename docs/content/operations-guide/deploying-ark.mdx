@@ -263,7 +263,7 @@ The policy-conflict decision checks pod selectors, not a policy's metadata label
 
 The controller checks policies against both the runner template and live runner pod labels. A conflict clears `status.resolvedAddress` and reports `Available=False`, reason `ConflictingNetworkPolicy`, with the policy name and an instruction to narrow it. Narrowing or deleting the policy restores availability once other runtime prerequisites are met. Policy and pod-label changes trigger re-evaluation; a 30-second API-only refresh also recovers missed events. If required policy or pod reads fail, the tool remains Pending with `ProvisioningFailed`. Removing identifying labels from a runner pod also blocks availability until an administrator restores them.
 
-The controller needs read-only access to Pods and ReplicaSets to follow runner ownership even after labels change. It changes only the policy it owns, never a tenant policy. **Rollout status:** executor integration remains incomplete; inline tools are disabled by default.
+The controller needs read-only access to Pods and ReplicaSets to follow runner ownership even after labels change. It changes only the policy it owns, never a tenant policy.
 
 An enforcing CNI is still required. On a non-enforcing CNI, outbound script connections and direct runner access may succeed despite the policy. Standard NetworkPolicy also has node-local traffic exceptions: administrators must protect node and metadata-service access and control who can change workload labels or policies. These restrictions are not per-user authentication, and Ark sends no traffic probes or synthetic control connections to verify them.
 
@@ -287,7 +287,22 @@ Activation, including the handshake, has a 60-second budget. Execution then has 
 
 On restart, existing warm owned runners receive a fresh 60-second grace period before idle cleanup. Scale writes use the scale subresource with optimistic concurrency, and failed reads or changed ownership prevent the write. The controller alone performs bounded drain while the feature is disabled. Backend calls are sent once: uncertain responses are not replayed.
 
-**Rollout status:** executor integration remains pending. Keep inline tools disabled in production until that integration is available.
+#### Staged rollout
+
+The feature is disabled by default and each stage is independently reversible. Do them in order, in a non-production namespace first:
+
+1. **Confirm the prerequisites.** A CNI that enforces NetworkPolicy, a finite per-pod PID limit, a non-empty `controllerManager.watchNamespaces`, and `webhook.enable=true` on the etcd backend. The chart enforces the last two; the first two it cannot see.
+2. **Install the runtime, grant nobody.** `inlineTools.enabled=true` with `inlineTools.activator.enabled=true`, and no `inline-tool-author-role` binding. Nothing can be authored yet, so nothing runs.
+3. **Grant one namespace.** Bind `inline-tool-author-role` for a pilot author and confirm a tool reaches `Available: True` with `status.resolvedAddress` set and zero runner replicas.
+4. **Attach and invoke.** Attach it to an agent and query. Check the first call cold-starts and the runner returns to zero after roughly a minute idle. Then test the egress boundary by invoking a tool whose script attempts an outbound connection: the call must return an error, not a response. A response means the CNI is not enforcing the policy. A runner writes no request logs, so this is the only check that distinguishes the two.
+5. **Widen per namespace.** Each additional namespace is another deliberate RoleBinding. There is no cluster-wide grant.
+
+At every stage these must hold; if one does not, stop and treat it as a defect rather than widening the grant:
+
+- No MCPServer resource and no second Tool are created for an inline tool. It is served by the shared activator, and `kubectl get tools` shows exactly what was authored.
+- No runner endpoint is reachable from outside the cluster. Runner Services are ClusterIP, and the activator Service admits only the configured callers.
+- No author grant is created by enabling the feature. `kubectl get rolebindings -A -o wide | grep inline-tool-author-role` returns only bindings an administrator made.
+- `Available: True` never outlives the configuration it describes. It is reported against `metadata.generation` and withdrawn on disable, policy conflict, or an unready activator.
 
 #### Disabling, deleting and downgrading
 
