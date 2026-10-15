@@ -29,7 +29,7 @@ spec:
     namespace: default                          # optional; defaults to the agent's namespace
 
   tools:                                        # tools exposed to the model
-    - type: http                                # built-in | custom | mcp | http | agent | team | builtin
+    - type: http                                # built-in | custom | mcp | http | agent | team | builtin | inline
       name: my-http-tool                        # required (minLength 1) unless type is built-in
     - type: mcp
       name: my-mcp-tool
@@ -77,7 +77,7 @@ spec:
 | `spec.executionEngine.name` | string | yes (when `executionEngine` set) | Name of the `ExecutionEngine` resource (minLength 1). |
 | `spec.executionEngine.namespace` | string | no | Namespace of the `ExecutionEngine`. Defaults to the agent's namespace. |
 | `spec.tools[]` | list | no | Tools exposed to the model. See [Tool types](#tool-types). |
-| `spec.tools[].type` | enum (`built-in`, `custom`, `mcp`, `http`, `agent`, `team`, `builtin`) | yes | Kind of tool. `built-in`/`builtin` are controller-provided (e.g. `terminate`, `noop`) and need no `Tool` CRD; `http`, `mcp`, and `custom` reference a `Tool` CRD; `agent` and `team` reference another `Agent` or `Team` in the same namespace. |
+| `spec.tools[].type` | enum (`built-in`, `custom`, `mcp`, `http`, `agent`, `team`, `builtin`, `inline`) | yes | Kind of tool. `built-in`/`builtin` are controller-provided (e.g. `terminate`, `noop`) and need no `Tool` CRD; `http`, `mcp`, `inline`, and `custom` reference a `Tool` CRD; `agent` and `team` reference another `Agent` or `Team` in the same namespace. |
 | `spec.tools[].name` | string | conditional | Name exposed to the model (minLength 1). Required for every type except `built-in`. For non-built-in types it must match a resource of that type in the namespace, unless overridden by `partial.name`. |
 | `spec.tools[].description` | string | no | Description of the tool as exposed to the model. |
 | `spec.tools[].functions[]` | list | no | Preconfigured function values (`name` + `value` or `valueFrom`) passed to the tool. |
@@ -98,6 +98,7 @@ spec:
 | `custom` | a `Tool` CRD | Deprecated generic type; the CRD type is not cross-checked. |
 | `agent` | another `Agent` | Lets the agent call another agent as a tool. |
 | `team` | a `Team` | Lets the agent call a team as a tool. |
+| `inline` | a `Tool` CRD of type `inline` | Script stored in the `Tool`; callable by the built-in completions executor once the `Tool` reports `Available`. Not available to agents on a named `ExecutionEngine`. |
 
 The controller validates that non-built-in tools exist in the agent's namespace and that the declared `type` matches the referenced `Tool` CRD's `spec.type` (except for `custom`).
 
