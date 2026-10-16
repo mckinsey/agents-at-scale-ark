@@ -50,6 +50,14 @@ inputs:
     description: 'Set policy.thirdPartyWebhooks.enabled=true on the aggregated apiserver (postgresql backend only)'
     required: false
     default: 'false'
+  enable-inline-tools:
+    description: 'Enable inline Tool authoring and the activator (dedicated inline e2e job)'
+    required: false
+    default: 'false'
+  mock-llm-enabled:
+    description: 'Pre-install the mock-llm sample into the default namespace (set false for suites that helm install their own there)'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -85,18 +93,27 @@ runs:
       with:
         metrics-enabled: false
         traefik-enabled: false
+        mock-llm-enabled: ${{ inputs.mock-llm-enabled }}
 
     - name: Run setup-e2e script
       shell: bash
       run: |
-        ./.github/actions/setup-e2e/setup-local.sh \
-          ${{ inputs.install-coverage == 'true' && '--install-coverage' || '' }} \
-          ${{ inputs.install-broker == 'true' && '--install-broker' || '' }} \
-          --storage-backend ${{ inputs.storage-backend }} \
-          ${{ inputs.prefetch-test-images == 'true' && '--prefetch-test-images' || '' }} \
-          ${{ inputs.prefetch-argo-images == 'true' && '--prefetch-argo-images' || '' }} \
-          ${{ inputs.enable-third-party-webhooks == 'true' && '--enable-third-party-webhooks' || '' }}
+        ARGS=(--storage-backend "$STORAGE_BACKEND")
+        if [ "$INSTALL_COVERAGE" = 'true' ]; then ARGS+=(--install-coverage); fi
+        if [ "$INSTALL_BROKER" = 'true' ]; then ARGS+=(--install-broker); fi
+        if [ "$PREFETCH_TEST_IMAGES" = 'true' ]; then ARGS+=(--prefetch-test-images); fi
+        if [ "$PREFETCH_ARGO_IMAGES" = 'true' ]; then ARGS+=(--prefetch-argo-images); fi
+        if [ "$ENABLE_THIRD_PARTY_WEBHOOKS" = 'true' ]; then ARGS+=(--enable-third-party-webhooks); fi
+        if [ "$ENABLE_INLINE_TOOLS" = 'true' ]; then ARGS+=(--enable-inline-tools); fi
+        ./.github/actions/setup-e2e/setup-local.sh "${ARGS[@]}"
       env:
+        STORAGE_BACKEND: ${{ inputs.storage-backend }}
+        INSTALL_COVERAGE: ${{ inputs.install-coverage }}
+        INSTALL_BROKER: ${{ inputs.install-broker }}
+        PREFETCH_TEST_IMAGES: ${{ inputs.prefetch-test-images }}
+        PREFETCH_ARGO_IMAGES: ${{ inputs.prefetch-argo-images }}
+        ENABLE_THIRD_PARTY_WEBHOOKS: ${{ inputs.enable-third-party-webhooks }}
+        ENABLE_INLINE_TOOLS: ${{ inputs.enable-inline-tools }}
         DOCKER_CICD_CACHE_REGISTRY: ${{ inputs.ci-cache-registry || format('ghcr.io/{0}', github.repository_owner) }}
         DOCKER_CICD_CACHE_REGISTRY_USERNAME: ${{ inputs.ci-cache-registry-username || github.actor }}
         DOCKER_CICD_CACHE_REGISTRY_PASSWORD: ${{ inputs.ci-cache-registry-password || github.token }}

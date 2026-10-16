@@ -21,6 +21,10 @@ PREFETCH_ARGO_IMAGES="false"
 # Off by default so the standard legs exercise the shipped default. Only the
 # dedicated third-party-webhooks job turns this on.
 ENABLE_THIRD_PARTY_WEBHOOKS="false"
+# Off by default: inline authoring and the activator ship disabled, and the
+# activator refuses a cluster-wide binding. Only the dedicated inline e2e job
+# turns this on.
+ENABLE_INLINE_TOOLS="false"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -49,14 +53,19 @@ while [[ $# -gt 0 ]]; do
       ENABLE_THIRD_PARTY_WEBHOOKS="true"
       shift
       ;;
+    --enable-inline-tools)
+      ENABLE_INLINE_TOOLS="true"
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images] [--prefetch-argo-images] [--enable-third-party-webhooks]"
+      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images] [--prefetch-argo-images] [--enable-third-party-webhooks] [--enable-inline-tools]"
       echo "  --install-coverage      Install coverage collection components"
       echo "  --install-broker        Install ark-broker (only needed for tests that use it)"
       echo "  --storage-backend       Storage backend to use (default: etcd)"
       echo "  --prefetch-test-images  Pre-pull chainsaw test images (mock-llm, curl, mockserver, etc.)"
       echo "  --prefetch-argo-images  Pre-pull Argo Workflows images (only needed for jobs that install Argo)"
       echo "  --enable-third-party-webhooks  Set policy.thirdPartyWebhooks.enabled=true on the apiserver (postgresql only)"
+      echo "  --enable-inline-tools   Enable inline Tool authoring and the activator (dedicated inline e2e job)"
       exit 0
       ;;
     *)
@@ -90,6 +99,13 @@ for img in \
 done
 if [ "${INSTALL_BROKER}" = "true" ]; then
   sudo k3s crictl pull "${REGISTRY}/ark-broker:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
+  IMAGE_PULL_PIDS+=($!)
+fi
+if [ "${ENABLE_INLINE_TOOLS}" = "true" ]; then
+  # Runner Deployments start at replicas 0, so this image is otherwise first
+  # pulled when the activator scales one up, inside its 60s activation budget.
+  # Python is the only language the inline suite uses.
+  sudo k3s crictl pull "${REGISTRY}/ark-inline-runner-python:${ARK_IMAGE_TAG}" > /dev/null 2>&1 &
   IMAGE_PULL_PIDS+=($!)
 fi
 if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
@@ -244,6 +260,21 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   )
 fi
 
+if [ "${ENABLE_INLINE_TOOLS}" = "true" ]; then
+  echo "=== Enabling inline Tool authoring and the activator ==="
+  # The activator refuses a cluster-wide binding, so the controller is narrowed
+  # to the namespaces the inline e2e suite uses; its tests pin to default, and
+  # the release namespace (ark-system) must be watched for availability checks.
+  # The controller appends the language suffix to the runner image repository.
+  HELM_ARGS+=(
+    --set inlineTools.enabled=true
+    --set inlineTools.activator.enabled=true
+    --set 'controllerManager.watchNamespaces={default,ark-system}'
+    --set inlineTools.runner.image.repository="${REGISTRY}/ark-inline-runner"
+    --set inlineTools.runner.image.tag="${ARK_IMAGE_TAG}"
+  )
+fi
+
 if [ "${INSTALL_COVERAGE}" = "true" ]; then
   echo "=== Including coverage collection in Helm install ==="
   kubectl create namespace ark-system 2>/dev/null || true
@@ -272,7 +303,8 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
     --set postgresql.sslMode=verify-full \
     --set postgresql.sslSecretName=ark-storage-dev-tls \
     --set postgresql.sslRootCertKey=ca.crt \
-    --set policy.thirdPartyWebhooks.enabled="${ENABLE_THIRD_PARTY_WEBHOOKS}"
+    --set policy.thirdPartyWebhooks.enabled="${ENABLE_THIRD_PARTY_WEBHOOKS}" \
+    --set inlineTools.enabled="${ENABLE_INLINE_TOOLS}"
 fi
 
 echo "=== Installing ARK Completions (background) ==="
