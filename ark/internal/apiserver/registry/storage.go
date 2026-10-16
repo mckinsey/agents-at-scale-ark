@@ -611,8 +611,8 @@ func setListItems(list runtime.Object, objects []runtime.Object, continueToken s
 	}
 	// listRV is the backend's store head revision: always at or above the purge
 	// floor, so the list→watch handoff never resumes below the floor, and set
-	// even for an empty kind so a watch can still resume. Zero means the store
-	// is empty (nothing ever written); leave the RV unset in that case.
+	// even for an empty kind so a watch can still resume. The PostgreSQL backend
+	// reports at least its head revision base; leave the RV unset on zero.
 	if listRV > 0 {
 		accessor.SetResourceVersion(strconv.FormatInt(listRV, 10))
 	}

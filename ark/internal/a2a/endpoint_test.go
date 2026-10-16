@@ -108,7 +108,7 @@ func TestUsesCardEndpoint(t *testing.T) {
 func TestResolveUnsupportedTransport(t *testing.T) {
 	resolved := ResolveUnsupportedTransport("http://weather:8000/", errors.New("agent card declares no JSONRPC interface, only GRPC"))
 
-	assert.Equal(t, "http://weather:8000", resolved.URL)
+	assert.Equal(t, "http://weather:8000/", resolved.URL)
 	assert.Equal(t, ReasonUnsupportedTransport, resolved.Reason)
 	assert.Empty(t, resolved.Rejected)
 	assert.Contains(t, resolved.Message, "GRPC")
@@ -144,11 +144,11 @@ func TestResolveEndpoint(t *testing.T) {
 			expectedURL: address,
 		},
 		{
-			name:        "address mode trims a trailing slash",
+			name:        "address mode keeps a trailing slash",
 			address:     address + "/",
 			cardURL:     "",
 			mode:        EndpointResolutionAddress,
-			expectedURL: address,
+			expectedURL: address + "/",
 		},
 		{
 			name:        "card path keeps the configured host",

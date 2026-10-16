@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.1.72-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.71...v0.1.72-rc) (2026-10-14)
+
+
+### Features
+
+* add Argo workflow lifecycle actions, run controls and pause states ([#3669](https://github.com/mckinsey/agents-at-scale-ark/issues/3669)) ([5278cc4](https://github.com/mckinsey/agents-at-scale-ark/commit/5278cc41e785182aeea2115a8b3d15dcad35fd1a))
+* workflow templates QBDS update ([#3621](https://github.com/mckinsey/agents-at-scale-ark/issues/3621)) ([38c4999](https://github.com/mckinsey/agents-at-scale-ark/commit/38c49994f352876885cbade83524123ba2857af6))
+
+
+### Bug Fixes
+
+* **a2a:** preserve trailing slash in lastResolvedEndpoint ([#3748](https://github.com/mckinsey/agents-at-scale-ark/issues/3748)) ([235e7ec](https://github.com/mckinsey/agents-at-scale-ark/commit/235e7ec98ce779449f8cf2a35cd0ed858b57d5cb))
+* **apiserver:** finish WatchList support on the PostgreSQL backend and re-enable WatchListClient ([#3739](https://github.com/mckinsey/agents-at-scale-ark/issues/3739)) ([439c14c](https://github.com/mckinsey/agents-at-scale-ark/commit/439c14c3a237eda0267e2a0b5ba1dd50f73a810b))
+* **ark-api:** limit the generic log routes to workflow pods ([#3705](https://github.com/mckinsey/agents-at-scale-ark/issues/3705)) ([f7e7763](https://github.com/mckinsey/agents-at-scale-ark/commit/f7e776360dbee6a2e20bf3fb85b3209c91098b91))
+* **ark-api:** require a user identity for generic resource writes ([#3703](https://github.com/mckinsey/agents-at-scale-ark/issues/3703)) ([e789ab8](https://github.com/mckinsey/agents-at-scale-ark/commit/e789ab86a7b500e5266fd034be27a39c0bf1ac62))
+* **ark-api:** restrict the generic resources route to an allowlist ([#3698](https://github.com/mckinsey/agents-at-scale-ark/issues/3698)) ([e3fc92c](https://github.com/mckinsey/agents-at-scale-ark/commit/e3fc92cf8dcf90ca9ce3ad990319aa201c303cc9))
+* **ark-dashboard:** fall back to polling when broker streaming is unavailable ([#3649](https://github.com/mckinsey/agents-at-scale-ark/issues/3649)) ([4b5ff1a](https://github.com/mckinsey/agents-at-scale-ark/commit/4b5ff1a775dab0e689f59540c17b5410cba8f6d6))
+* bump Go to 1.26.9 and golang.org/x/net to v0.61.0 ([#3747](https://github.com/mckinsey/agents-at-scale-ark/issues/3747)) ([9b6562c](https://github.com/mckinsey/agents-at-scale-ark/commit/9b6562ca427e2936a3c18c64d80a30f2f66d32c4))
+* bump transitive dompurify to 3.4.17 to resolve XRAY-1107265 ([#3753](https://github.com/mckinsey/agents-at-scale-ark/issues/3753)) ([7fd2d3c](https://github.com/mckinsey/agents-at-scale-ark/commit/7fd2d3c2f8803572928d96317c280f4c8bf3dd64))
+* migrate ark-sdk overlay and ark-api to a2a-sdk 1.x ([#3718](https://github.com/mckinsey/agents-at-scale-ark/issues/3718)) ([47db06c](https://github.com/mckinsey/agents-at-scale-ark/commit/47db06c77015150ba2f23ec0545c557c3c9ba427))
+* remove internal link from readme ([#3750](https://github.com/mckinsey/agents-at-scale-ark/issues/3750)) ([22ca243](https://github.com/mckinsey/agents-at-scale-ark/commit/22ca2439b877a62f9f084ecd1fe2954f4956d245))
+* sort workflow runs by start time and improve workflow log readability ([#3758](https://github.com/mckinsey/agents-at-scale-ark/issues/3758)) ([7d0fb30](https://github.com/mckinsey/agents-at-scale-ark/commit/7d0fb30800e6d7abc45995df15ed948c60fe401c))
+
 ## [0.1.71-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70...v0.1.71-rc) (2026-10-08)
 
 
