@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"slices"
 	"sync"
@@ -115,12 +116,9 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 	if err != nil {
 		return nil, err
 	}
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: inlinetools.ActivatorName, Version: "v1"}, nil)
-	session, err := mcpClient.Connect(activationCtx, &mcp.StreamableClientTransport{
-		Endpoint: current.address, HTTPClient: a.httpClient, MaxRetries: -1, DisableStandaloneSSE: true,
-	}, nil)
+	session, err := a.connect(activationCtx, current)
 	if err != nil {
-		return nil, fmt.Errorf("connect to inline runner: %w", err)
+		return nil, err
 	}
 	defer func() { _ = session.Close() }()
 	// A rollout or disable during the handshake must not execute the old target.
@@ -135,6 +133,45 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 	}
 	// One send only. A lost response is uncertain execution, never a replay.
 	return session.CallTool(executionCtx, &mcp.CallToolParams{Name: key.Name, Arguments: json.RawMessage(argument)})
+}
+
+// Readiness does not mean the Service IP is programmed: kube-proxy lags ready
+// endpoints, so a cold connect is refused until it syncs. Only a dial failure
+// is retried, within the activation budget; the tool call is still sent once.
+// A runner that is reachable but broken — a crash loop, or a non-2xx on
+// initialize — is a different failure and fails the call immediately instead
+// of waiting out the budget.
+func (a *Activator) connect(ctx context.Context, current *target) (*mcp.ClientSession, error) {
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: inlinetools.ActivatorName, Version: "v1"}, nil)
+	for {
+		session, err := mcpClient.Connect(ctx, &mcp.StreamableClientTransport{
+			Endpoint: current.address, HTTPClient: a.httpClient, MaxRetries: -1, DisableStandaloneSSE: true,
+		}, nil)
+		if err == nil {
+			return session, nil
+		}
+		if !isDialError(err) {
+			return nil, fmt.Errorf("connect to inline runner: %w", err)
+		}
+		timer := time.NewTimer(a.pollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("connect to inline runner: %w", err)
+		case <-timer.C:
+		}
+	}
+}
+
+// isDialError reports whether err is a failure to establish the TCP
+// connection — DNS, dial, connection refused — rather than a response from a
+// runner that is actually listening. Only this class is worth retrying: it is
+// the one kube-proxy lag produces, and every other failure (a bad HTTP status,
+// a malformed response) means the runner itself is broken and retrying in
+// place cannot help.
+func isDialError(err error) bool {
+	var opErr *net.OpError
+	return errors.As(err, &opErr) && opErr.Op == "dial"
 }
 
 // record runs during construction or with mu held. Recovered warm runners get
