@@ -12,6 +12,7 @@ export type MappedWorkflowStepType =
   | 'dag'
   | 'steps'
   | 'retry'
+  | 'taskgroup'
   | 'container'
   | 'script'
   | 'suspend';
@@ -97,6 +98,8 @@ function mapArgoTypeToWorkflowType(type: string): MappedWorkflowStepType {
       return 'steps';
     case 'Retry':
       return 'retry';
+    case 'TaskGroup':
+      return 'taskgroup';
     case 'Pod':
       return 'container';
     case 'Container':
@@ -169,21 +172,23 @@ function isStepGroupNode(node: ArgoNodeStatus): boolean {
   );
 }
 
-function collectRetryAttemptIds(
+const GROUP_NODE_TYPES = new Set(['Retry', 'TaskGroup']);
+
+function collectGroupedChildIds(
   allNodes: Record<string, ArgoNodeStatus>,
 ): Set<string> {
-  const attemptIds = new Set<string>();
+  const groupedIds = new Set<string>();
 
   for (const node of Object.values(allNodes)) {
-    if (node.type !== 'Retry' || !node.children) {
+    if (!GROUP_NODE_TYPES.has(node.type) || !node.children) {
       continue;
     }
-    for (const attemptId of node.children) {
-      attemptIds.add(attemptId);
+    for (const childId of node.children) {
+      groupedIds.add(childId);
     }
   }
 
-  return attemptIds;
+  return groupedIds;
 }
 
 function resolveContinuationNodes(
@@ -287,12 +292,12 @@ function mapDagTasks(
   node: ArgoNodeStatus,
   context: StepMappingContext,
 ): MappedWorkflowStep[] {
-  const retryAttemptIds = collectRetryAttemptIds(context.allNodes);
+  const groupedChildIds = collectGroupedChildIds(context.allNodes);
   const dagTaskIds = Object.keys(context.allNodes).filter(
     nodeId =>
       context.allNodes[nodeId].boundaryID === node.id &&
       nodeId !== node.id &&
-      !retryAttemptIds.has(nodeId) &&
+      !groupedChildIds.has(nodeId) &&
       !isStepGroupNode(context.allNodes[nodeId]),
   );
 
@@ -347,6 +352,13 @@ function mapChildSteps(
     return mapNodeIdsToSteps(node.children, context, {
       parentIsDag: false,
       inBoundedContext: true,
+    });
+  }
+
+  if (node.type === 'TaskGroup') {
+    return mapNodeIdsToSteps(node.children, context, {
+      parentIsDag: true,
+      inBoundedContext: false,
     });
   }
 
@@ -539,12 +551,12 @@ function mapTopLevelNodes(
   rootNodeId: string,
   context: StepMappingContext,
 ): MappedWorkflowStep[] {
-  const retryAttemptIds = collectRetryAttemptIds(context.allNodes);
+  const groupedChildIds = collectGroupedChildIds(context.allNodes);
   const topLevelNodeIds = getAllNodesFlat(context.allNodes)
     .filter(
       node =>
         (!node.boundaryID || node.boundaryID === rootNodeId) &&
-        !retryAttemptIds.has(node.id),
+        !groupedChildIds.has(node.id),
     )
     .map(node => node.id);
 

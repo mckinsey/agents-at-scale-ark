@@ -33,6 +33,7 @@ export interface ArgoNodeStatus {
     | 'Steps'
     | 'StepGroup'
     | 'DAG'
+    | 'TaskGroup'
     | 'Retry'
     | 'Container'
     | 'Script'

@@ -73,6 +73,33 @@ function retry(
   };
 }
 
+function taskGroup(
+  id: string,
+  displayName: string,
+  children: string[],
+  startedAt: string,
+): NodeMap[string] {
+  return {
+    id,
+    name: `wf-1.${displayName}`,
+    displayName,
+    type: 'TaskGroup',
+    phase: 'Succeeded',
+    boundaryID: 'wf-1',
+    startedAt,
+    children,
+  };
+}
+
+function startedPod(
+  id: string,
+  displayName: string,
+  startedAt: string,
+  children?: string[],
+): NodeMap[string] {
+  return { ...pod(id, displayName, children), startedAt };
+}
+
 function stepsWorkflow(nodes: NodeMap): ArgoWorkflow {
   return makeWorkflow({
     status: {
@@ -362,6 +389,60 @@ describe('mapArgoWorkflowToSession', () => {
       'task-b',
     ]);
     expect(session.steps[1].children?.[0].displayName).toBe('task-b(0)');
+  });
+
+  it('nests the expansions of a withItems DAG task under its task group', () => {
+    const session = mapArgoWorkflowToSession(
+      stepsWorkflow({
+        'wf-1': {
+          id: 'wf-1',
+          name: 'wf-1',
+          displayName: 'wf-1',
+          type: 'DAG',
+          phase: 'Succeeded',
+          children: ['fo1'],
+        },
+        fo1: taskGroup(
+          'fo1',
+          'fan-out-1',
+          ['fo1-0', 'fo1-1'],
+          '2024-01-01T00:00:01Z',
+        ),
+        'fo1-0': startedPod('fo1-0', 'fan-out-1(0:a)', '2024-01-01T00:00:02Z', [
+          'fi1',
+        ]),
+        'fo1-1': startedPod('fo1-1', 'fan-out-1(1:b)', '2024-01-01T00:00:01Z', [
+          'fi1',
+        ]),
+        fi1: startedPod('fi1', 'fan-in-1', '2024-01-01T00:00:10Z', ['fo2']),
+        fo2: taskGroup(
+          'fo2',
+          'fan-out-2',
+          ['fo2-0', 'fo2-1', 'fo2-2'],
+          '2024-01-01T00:00:20Z',
+        ),
+        'fo2-0': startedPod('fo2-0', 'fan-out-2(0:a)', '2024-01-01T00:00:21Z'),
+        'fo2-1': startedPod('fo2-1', 'fan-out-2(1:b)', '2024-01-01T00:00:21Z'),
+        'fo2-2': startedPod('fo2-2', 'fan-out-2(2:c)', '2024-01-01T00:00:21Z'),
+      }),
+    );
+
+    expect(session.steps.map(step => step.displayName)).toEqual([
+      'fan-out-1',
+      'fan-in-1',
+      'fan-out-2',
+    ]);
+    expect(session.steps[0].type).toBe('taskgroup');
+    expect(session.steps[0].children?.map(step => step.displayName)).toEqual([
+      'fan-out-1(0:a)',
+      'fan-out-1(1:b)',
+    ]);
+    expect(session.steps[0].children?.[0].children).toBeUndefined();
+    expect(session.steps[2].children?.map(step => step.displayName)).toEqual([
+      'fan-out-2(0:a)',
+      'fan-out-2(1:b)',
+      'fan-out-2(2:c)',
+    ]);
   });
 
   it('continues past a parallel group whose member is retried', () => {
