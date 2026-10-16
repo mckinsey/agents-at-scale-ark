@@ -1,0 +1,129 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: inline-tool-egress
+  labels:
+    inline-tools: "true"
+spec:
+  # Inline tools run only in watched namespaces; this assertion holds only on an
+  # enforcing CNI (the runner NetworkPolicy denies all egress). The dedicated
+  # inline e2e job provides both; pin to the watched default namespace.
+  namespace: default
+  description: >
+    A runner cannot open an egress connection to an internal endpoint: its
+    NetworkPolicy denies all egress, enforced by an enforcing CNI.
+  steps:
+  - name: create-probe-tool
+    try:
+    - apply:
+        file: manifests/a01-tool.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: egress-probe
+            namespace: default
+          status:
+            state: Ready
+            conditions:
+            - type: Available
+              status: "True"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Tool
+        name: egress-probe
+        namespace: default
+
+  - name: egress-blocked
+    try:
+    # Probe the Kubernetes API ClusterIP, an internal endpoint the runner must
+    # not reach. Resolve it at runtime since it varies per cluster. The control
+    # pod is not selected by any runner NetworkPolicy, so it proves the target
+    # is reachable from this namespace and a denied probe means policy denied
+    # it rather than the address being dead.
+    - script:
+        timeout: 60s
+        content: |
+          set -eu
+          K8S_IP=$(kubectl get svc kubernetes -n default -o jsonpath='{.spec.clusterIP}')
+          if [ -z "$K8S_IP" ]; then
+            echo "ERROR: svc/kubernetes in default has no clusterIP" >&2
+            exit 1
+          fi
+          kubectl run egress-control --image=curlimages/curl --rm -i \
+            --restart=Never -n default -- \
+            curl -sS -k -o /dev/null --max-time 10 \
+            "https://${K8S_IP}:443/version" >&2
+          kubectl apply -f - >&2 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: egress-probe-call
+            namespace: default
+          spec:
+            input: '{"host": "${K8S_IP}", "port": 443}'
+            target:
+              type: tool
+              name: egress-probe
+          EOF
+          printf '%s' "$K8S_IP"
+        outputs:
+        - name: k8sIp
+          value: ($stdout)
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: egress-probe-call
+        namespace: default
+        timeout: 90s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    # Ingress from the activator worked (the query completed), but the runner's
+    # own outbound connection was denied.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: egress-probe-call
+            namespace: default
+          status:
+            "(contains(response.content, '\"reachable\": false'))": true
+    # The runner echoes back what it dialled, so a probe that failed before
+    # leaving the pod cannot satisfy the assertion above.
+    - script:
+        timeout: 30s
+        env:
+        - name: K8S_IP
+          value: ($k8sIp)
+        content: |
+          set -eu
+          RESPONSE=$(kubectl get query egress-probe-call -n default \
+            -o jsonpath='{.status.response.content}')
+          echo "probe response: ${RESPONSE}"
+          echo "$RESPONSE" | grep -qF "\"host\": \"${K8S_IP}\"" || {
+            echo "ERROR: probe did not dial ${K8S_IP}" >&2
+            exit 1
+          }
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: egress-probe-call
+        namespace: default
+    cleanup:
+    - script:
+        content: |
+          kubectl delete pod egress-control -n default \
+            --ignore-not-found --wait=false
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: egress-probe-call
+          namespace: default
