@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.72-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc...v0.1.72-rc.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* address CVEs from issue [#3778](https://github.com/mckinsey/agents-at-scale-ark/issues/3778) ([#3783](https://github.com/mckinsey/agents-at-scale-ark/issues/3783)) ([b639757](https://github.com/mckinsey/agents-at-scale-ark/commit/b6397577d803e28e34d49ca51d3d2684abb044c9))
+* **ark-api:** default ARGO_SERVER_URL to the ark-api namespace ([#3779](https://github.com/mckinsey/agents-at-scale-ark/issues/3779)) ([0164f41](https://github.com/mckinsey/agents-at-scale-ark/commit/0164f4177f01cdaa318267d38e8729901e046b92)), closes [#3757](https://github.com/mckinsey/agents-at-scale-ark/issues/3757)
+* **ark-dashboard:** nest withItems expansions under their task group and settle nodes of cancelled workflows ([#3777](https://github.com/mckinsey/agents-at-scale-ark/issues/3777)) ([7f551ae](https://github.com/mckinsey/agents-at-scale-ark/commit/7f551ae8615dbc9018720180e3de96d5439e4b7a))
+* bump  next 16.3.6 → 16.4.1 to fix jFrog ([#3770](https://github.com/mckinsey/agents-at-scale-ark/issues/3770)) ([2e80b02](https://github.com/mckinsey/agents-at-scale-ark/commit/2e80b0257a0c1289d77d7b510a7817615e485283))
+* **dashboard:** disable workflow Run and Delete without access ([#3707](https://github.com/mckinsey/agents-at-scale-ark/issues/3707)) ([f4cbad7](https://github.com/mckinsey/agents-at-scale-ark/commit/f4cbad74430d0949edacbc1db3d9b3c690cc10ac))
+* **dashboard:** report execution engine delete failures ([#3706](https://github.com/mckinsey/agents-at-scale-ark/issues/3706)) ([5f25745](https://github.com/mckinsey/agents-at-scale-ark/commit/5f257455e2cade3d3029101d528ba593ee6de7b2))
+
 ## [0.1.72-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.71...v0.1.72-rc) (2026-10-14)
 
 
