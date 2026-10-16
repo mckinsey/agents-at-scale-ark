@@ -1,0 +1,27 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: inline-doubler
+  namespace: default
+spec:
+  type: inline
+  description: Double an integer and report the source version
+  inputSchema:
+    type: object
+    properties:
+      "n":
+        type: integer
+        description: Integer to double
+    required: ["n"]
+    additionalProperties: false
+  inline:
+    language: python
+    source: |
+      import json
+      import sys
+
+      args = json.loads(sys.argv[1])
+      n = args["n"]
+      if not isinstance(n, int):
+          raise ValueError("n must be an integer")
+      print(json.dumps({"result": n * 2, "version": "v1"}))
