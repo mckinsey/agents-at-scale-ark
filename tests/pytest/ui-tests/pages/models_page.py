@@ -102,7 +102,7 @@ class ModelsPage(BasePage):
         model_input.wait_for(state="visible", timeout=5000)
         model_input.fill(model)
         
-        self._select_from_combobox("[role='combobox']:has-text('Select a secret'), [role='combobox']:has-text('Select secret')", secret_name)
+        self._select_from_combobox("[role='combobox'][placeholder^='Select a secret']", secret_name)
         
         if base_url:
             try:

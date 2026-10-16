@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  Autocomplete,
   Combobox,
   ComboboxAnchor,
   ComboboxContent,
@@ -158,6 +160,46 @@ describe('Combobox', () => {
       );
 
       expect(container.querySelector('[data-slot="combobox-anchor"]')).toBeInTheDocument();
+    });
+  });
+
+  describe('Autocomplete', () => {
+    it('renders its items and reports typed text', async () => {
+      const user = userEvent.setup();
+      const onValueChange = vi.fn();
+      render(
+        <Autocomplete
+          items={['alpha', 'beta']}
+          onValueChange={onValueChange}
+          openOnInputClick>
+          <ComboboxAnchor>
+            <InputGroup>
+              <ComboboxInput placeholder="Name" />
+            </InputGroup>
+          </ComboboxAnchor>
+          <ComboboxContent>
+            <ComboboxList>
+              {(item: string) => (
+                <ComboboxItem key={item} value={item}>
+                  {item}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Autocomplete>,
+      );
+
+      await user.click(screen.getByPlaceholderText('Name'));
+      expect(
+        await screen.findByRole('option', { name: 'alpha' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'beta' })).toBeInTheDocument();
+
+      await user.type(screen.getByPlaceholderText('Name'), 'gamma');
+      expect(onValueChange).toHaveBeenLastCalledWith(
+        'gamma',
+        expect.anything(),
+      );
     });
   });
 });

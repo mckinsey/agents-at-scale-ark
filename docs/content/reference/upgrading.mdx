@@ -155,6 +155,8 @@ Every `/v1/secrets` route now works only on Secrets labelled `ark.mckinsey.com/r
 
 References to a Secret keep resolving whether it has the labels or not. The controller, the executors and the MCP header resolution in `ark-api` read referenced Secrets directly, outside `/v1/secrets`.
 
+Secret pickers in dashboard forms list only labelled Secrets. They also accept a typed name, and a form that already references an unlabelled Secret keeps showing its name. A typed Secret needs a `token` key, which is the key the forms read.
+
 The Python SDK's `SecretClient`, also exposed as `ArkClient.secrets`, applies the same scope to `list_secrets`, `get_secret`, `update_secret` and `delete_secret`. `get_secret_value` still reads any Secret.
 
 **Migration:**
