@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: inline-doubler-agent
+  namespace: default
+spec:
+  prompt: Double numbers the user provides using the inline-doubler tool.
+  modelRef:
+    name: test-model-mock
+  tools:
+    - type: inline
+      name: inline-doubler
