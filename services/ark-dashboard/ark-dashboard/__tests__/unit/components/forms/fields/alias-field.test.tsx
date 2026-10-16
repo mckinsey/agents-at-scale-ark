@@ -41,7 +41,7 @@ describe('AliasField', () => {
     expect(onChange).toHaveBeenCalledWith('github-mcp');
   });
 
-  it('does not commit typed text that is not an option', async () => {
+  it('commits typed text that is not an existing option', async () => {
     const user = userEvent.setup();
     const { onChange } = renderField();
 
@@ -51,7 +51,7 @@ describe('AliasField', () => {
     );
     await user.tab();
 
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenLastCalledWith('not-a-real-alias');
   });
 
   it('shows the empty-list message when there are no options', async () => {
