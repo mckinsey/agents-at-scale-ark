@@ -118,7 +118,7 @@ profiles:
           - name: PROXY_TIMEOUT
             value: "10.0"
           - name: ARGO_SERVER_URL
-            value: "http://argo-workflows-server.argo:2746"
+            value: "http://argo-workflows-server:2746"
           - name: ARK_A2A_AGENT_CARD_PORT
             value: "8000"
           - name: ARK_A2A_AGENT_CARD_HOST
