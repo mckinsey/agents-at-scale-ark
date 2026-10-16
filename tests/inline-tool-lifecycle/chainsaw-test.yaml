@@ -1,0 +1,298 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: inline-tool-lifecycle
+  labels:
+    inline-tools: "true"
+spec:
+  # Inline tools run only in namespaces the activator's controller watches, and
+  # the activator refuses a cluster-wide binding. Pin to a watched namespace
+  # instead of a generated one.
+  namespace: default
+  description: >
+    Full inline Tool lifecycle on an inline-enabled cluster: create, attach,
+    discover, call, idle scale-to-zero, edit, and delete with child cleanup.
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: create-inline-tool
+    try:
+    - apply:
+        file: manifests/a01-tool.yaml
+    # Usable once provisioned (Ready, Available, resolved endpoint) with
+    # authorship stamped by admission.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: inline-doubler
+            namespace: default
+            (annotations."ark.mckinsey.com/inline-authored-by" != null): true
+            (annotations."ark.mckinsey.com/inline-authored-at" != null): true
+          status:
+            state: Ready
+            (resolvedAddress != null): true
+            conditions:
+            - type: Available
+              status: "True"
+    # The controller provisions the full child set, owned by the Tool.
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: inline-doubler-source
+            namespace: default
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+    - assert:
+        resource:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Tool
+        name: inline-doubler
+        namespace: default
+
+  - name: provisions-cold
+    try:
+    # A newly provisioned inline tool keeps no warm pod; the runner starts on
+    # the first call.
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+          spec:
+            replicas: 0
+
+  - name: attach-and-discover
+    try:
+    - apply:
+        file: manifests/a02-agent.yaml
+    # The agent goes Available only once its inline tool is usable.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: inline-doubler-agent
+            namespace: default
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: inline-doubler-agent
+        namespace: default
+    cleanup:
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          name: inline-doubler-agent
+          namespace: default
+
+  - name: call
+    try:
+    - apply:
+        file: manifests/a03-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: inline-doubler-call
+        namespace: default
+        timeout: 90s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: inline-doubler-call
+            namespace: default
+          status:
+            "(contains(response.content, '\"result\": 10'))": true
+            "(contains(response.content, '\"version\": \"v1\"'))": true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: inline-doubler-call
+        namespace: default
+
+  - name: idle-scale-to-zero
+    try:
+    # The call warmed the runner, so this fails unless the activator's idle
+    # sweep scales it back down. The sweep ticks every second against a 60s
+    # idle window measured from the last completion.
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+          spec:
+            replicas: 0
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: inline-doubler-runner
+        namespace: default
+
+  - name: edit
+    try:
+    # Change the source: double becomes triple, v1 becomes v2.
+    - script:
+        timeout: 30s
+        content: |
+          kubectl patch tool inline-doubler -n default --type merge -p '{
+            "spec": {
+              "inline": {
+                "language": "python",
+                "source": "import json\nimport sys\n\nargs = json.loads(sys.argv[1])\nn = args[\"n\"]\nif not isinstance(n, int):\n    raise ValueError(\"n must be an integer\")\nprint(json.dumps({\"result\": n * 3, \"version\": \"v2\"}))\n"
+              }
+            }
+          }'
+    # The edit reconciles: the new generation is observed and stays Available.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: inline-doubler
+            namespace: default
+          status:
+            state: Ready
+            conditions:
+            - type: Available
+              status: "True"
+              observedGeneration: 2
+    # The edited source reaches the ConfigMap the runner reads on its next cold
+    # start (an already-warm runner is not restarted mid-flight, so proving the
+    # source propagated here is deterministic where a re-call would race it).
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: inline-doubler-source
+            namespace: default
+          data:
+            "(contains(source, 'n * 3'))": true
+            "(contains(source, '\"v2\"'))": true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Tool
+        name: inline-doubler
+        namespace: default
+
+  - name: delete
+    try:
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          name: inline-doubler
+          namespace: default
+    # Deleting the Tool cascades to every owned child.
+    - error:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+    - error:
+        resource:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+    - error:
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: inline-doubler-source
+            namespace: default
+    - error:
+        resource:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
+    - error:
+        resource:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: inline-doubler-runner
+            namespace: default
