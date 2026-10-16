@@ -244,7 +244,36 @@ interface StepMappingContext {
   allNodes: Record<string, ArgoNodeStatus>;
   workflowName: string;
   workflowNamespace?: string;
+  workflowTerminal: boolean;
+  workflowFinishedAt?: string;
   visitedNodes: Set<string>;
+}
+
+function settleStatus(
+  phase: string,
+  children: MappedWorkflowStep[] | undefined,
+  context: StepMappingContext,
+): MappedStepStatus {
+  const status = mapArgoPhaseToStatus(phase);
+  if (
+    !context.workflowTerminal ||
+    (status !== 'running' && status !== 'pending')
+  ) {
+    return status;
+  }
+  const allChildrenSucceeded =
+    !!children?.length &&
+    children.every(
+      child => child.status === 'succeeded' || child.status === 'skipped',
+    );
+  return allChildrenSucceeded ? 'succeeded' : 'failed';
+}
+
+function settleFinishedAt(
+  finishedAt: string | undefined,
+  context: StepMappingContext,
+): string | undefined {
+  return finishedAt ?? context.workflowFinishedAt;
 }
 
 interface ChildMappingOptions {
@@ -379,6 +408,7 @@ function mapArgoNodeToStep(
   }
   context.visitedNodes.add(node.id);
 
+  const finishedAt = settleFinishedAt(node.finishedAt, context);
   const step: MappedWorkflowStep = {
     id: node.id,
     name: node.name,
@@ -386,8 +416,8 @@ function mapArgoNodeToStep(
     type: mapArgoTypeToWorkflowType(node.type),
     status: mapArgoPhaseToStatus(node.phase),
     startedAt: node.startedAt,
-    finishedAt: node.finishedAt,
-    duration: calculateDuration(node.startedAt, node.finishedAt),
+    finishedAt,
+    duration: calculateDuration(node.startedAt, finishedAt),
     message: node.message,
     detail: buildNodeDetail(
       node,
@@ -400,6 +430,7 @@ function mapArgoNodeToStep(
   if (children.length > 0) {
     step.children = children;
   }
+  step.status = settleStatus(node.phase, step.children, context);
 
   return step;
 }
@@ -422,6 +453,8 @@ function buildParallelGroup(
     return [];
   }
 
+  const finishedAt = settleFinishedAt(stepGroupNode.finishedAt, context);
+
   // Create a container that will show the parallel steps as nested
   return [
     {
@@ -429,13 +462,10 @@ function buildParallelGroup(
       name: stepGroupNode.name,
       displayName: stepGroupNode.displayName || stepGroupNode.name,
       type: 'steps',
-      status: mapArgoPhaseToStatus(stepGroupNode.phase),
+      status: settleStatus(stepGroupNode.phase, parallelSteps, context),
       startedAt: stepGroupNode.startedAt,
-      finishedAt: stepGroupNode.finishedAt,
-      duration: calculateDuration(
-        stepGroupNode.startedAt,
-        stepGroupNode.finishedAt,
-      ),
+      finishedAt,
+      duration: calculateDuration(stepGroupNode.startedAt, finishedAt),
       children: parallelSteps,
     },
   ];
@@ -504,13 +534,17 @@ function processStepGroup(
 
 function createStepMappingContext(
   allNodes: Record<string, ArgoNodeStatus>,
-  workflowName: string,
-  workflowNamespace?: string,
+  workflow: ArgoWorkflow,
 ): StepMappingContext {
+  const workflowTerminal = isTerminalPhase(workflow.status?.phase);
   return {
     allNodes,
-    workflowName,
-    workflowNamespace,
+    workflowName: workflow.metadata.name,
+    workflowNamespace: workflow.metadata.namespace,
+    workflowTerminal,
+    workflowFinishedAt: workflowTerminal
+      ? workflow.status?.finishedAt
+      : undefined,
     visitedNodes: new Set<string>(),
   };
 }
@@ -601,11 +635,7 @@ export function mapArgoWorkflowToSession(
   const status = workflow.status;
   const nodes = status?.nodes || {};
   const rootNode = nodes[workflowName];
-  const context = createStepMappingContext(
-    nodes,
-    workflowName,
-    workflow.metadata.namespace,
-  );
+  const context = createStepMappingContext(nodes, workflow);
 
   const steps = rootNode?.children?.length
     ? mapRootNodeChildren(rootNode, context)
