@@ -1,27 +1,29 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: inline-tool-pending
+  name: inline-tool-conflicting-policy
   labels:
     inline-tools: "true"
 spec:
-  # The dashboard-first state: an authored tool the runtime cannot make usable
-  # is reported Pending and never shown as Ready. Pin to the watched default
-  # namespace; the conflicting policy is scoped to this tool only.
+  # A conflicting NetworkPolicy keeps an authored tool Pending and not shown as
+  # Ready. Pin to the watched default namespace; the conflicting policy is
+  # scoped to this tool only.
   namespace: default
   description: >
-    An authored inline tool that cannot be made usable stays Pending and not
-    Available (not shown as Ready), then recovers to Ready once the cause clears.
+    An authored inline tool blocked by a conflicting NetworkPolicy stays Pending
+    and not Available (not shown as Ready), then recovers to Ready once the
+    conflict clears.
   steps:
   - name: authored-but-pending
     try:
-    # Apply the conflict first so the tool never flaps to Ready.
+    # Apply the conflict first so the tool starts Pending rather than racing
+    # Ready before this step observes it.
     - apply:
         file: manifests/a01-conflicting-policy.yaml
     - apply:
         file: manifests/a02-tool.yaml
-    # Honest Pending: not Available, no usable endpoint, so the dashboard shows
-    # it as not executable rather than Ready.
+    # Honest Pending: not Available, no resolved endpoint, so the dashboard
+    # shows it as not executable rather than Ready.
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -31,6 +33,7 @@ spec:
             namespace: default
           status:
             state: Pending
+            (resolvedAddress == null || resolvedAddress == ''): true
             conditions:
             - type: Available
               status: "False"
