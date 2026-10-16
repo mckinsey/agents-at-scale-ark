@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"slices"
 	"sync"
@@ -135,8 +136,11 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 }
 
 // Readiness does not mean the Service IP is programmed: kube-proxy lags ready
-// endpoints, so a cold connect is refused until it syncs. Only the handshake is
-// retried, within the activation budget; the tool call is still sent once.
+// endpoints, so a cold connect is refused until it syncs. Only a dial failure
+// is retried, within the activation budget; the tool call is still sent once.
+// A runner that is reachable but broken — a crash loop, or a non-2xx on
+// initialize — is a different failure and fails the call immediately instead
+// of waiting out the budget.
 func (a *Activator) connect(ctx context.Context, current *target) (*mcp.ClientSession, error) {
 	mcpClient := mcp.NewClient(&mcp.Implementation{Name: inlinetools.ActivatorName, Version: "v1"}, nil)
 	for {
@@ -146,6 +150,9 @@ func (a *Activator) connect(ctx context.Context, current *target) (*mcp.ClientSe
 		if err == nil {
 			return session, nil
 		}
+		if !isDialError(err) {
+			return nil, fmt.Errorf("connect to inline runner: %w", err)
+		}
 		timer := time.NewTimer(a.pollInterval)
 		select {
 		case <-ctx.Done():
@@ -154,6 +161,17 @@ func (a *Activator) connect(ctx context.Context, current *target) (*mcp.ClientSe
 		case <-timer.C:
 		}
 	}
+}
+
+// isDialError reports whether err is a failure to establish the TCP
+// connection — DNS, dial, connection refused — rather than a response from a
+// runner that is actually listening. Only this class is worth retrying: it is
+// the one kube-proxy lag produces, and every other failure (a bad HTTP status,
+// a malformed response) means the runner itself is broken and retrying in
+// place cannot help.
+func isDialError(err error) bool {
+	var opErr *net.OpError
+	return errors.As(err, &opErr) && opErr.Op == "dial"
 }
 
 // record runs during construction or with mu held. Recovered warm runners get

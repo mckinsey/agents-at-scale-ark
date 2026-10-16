@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -814,6 +816,21 @@ func TestActivatorRejectsStaleOrUnownedEndpoints(t *testing.T) {
 	}
 }
 
+// dialRefusedError performs a real dial against a closed loopback port so the
+// resulting error is a genuine *net.OpError, matching what kube-proxy lag
+// actually produces instead of a string that merely looks like one.
+func dialRefusedError(t *testing.T) error {
+	t.Helper()
+	conn, err := net.Dial("tcp", "127.0.0.1:1")
+	require.Error(t, err, "expected the dial to a closed port to fail")
+	if conn != nil {
+		_ = conn.Close()
+	}
+	var opErr *net.OpError
+	require.ErrorAs(t, err, &opErr, "expected a *net.OpError from the dial")
+	return err
+}
+
 func TestActivatorRetriesRefusedHandshakeWithoutRetryingTheCall(t *testing.T) {
 	fixture := lifeFixture("echo", 1)
 	a, _ := lifeActivator(t, fixture)
@@ -826,7 +843,7 @@ func TestActivatorRetriesRefusedHandshakeWithoutRetryingTheCall(t *testing.T) {
 	var refused atomic.Int32
 	a.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if refused.Add(1) <= 3 {
-			return nil, fmt.Errorf("dial tcp 10.96.0.1:8080: connect: connection refused")
+			return nil, dialRefusedError(t)
 		}
 		return transport.RoundTrip(r)
 	})
@@ -846,8 +863,43 @@ func TestActivatorStopsRetryingTheHandshakeAtTheActivationBudget(t *testing.T) {
 	})
 	a.activationTimeout = 50 * time.Millisecond
 	a.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return nil, fmt.Errorf("connect: connection refused")
+		return nil, dialRefusedError(t)
 	})
 	_, err := invoke(a, context.Background(), fixture)
 	require.ErrorContains(t, err, "connect to inline runner")
+}
+
+// TestActivatorDoesNotRetryANonDialHandshakeError covers Bela's review on
+// #3677: a runner that accepts the TCP connection but is otherwise broken —
+// a crash loop, or a non-2xx response to initialize — must fail the call
+// immediately rather than retrying for the whole activation budget. Only a
+// dial failure (what kube-proxy lag produces) is retried.
+func TestActivatorDoesNotRetryANonDialHandshakeError(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		t.Error("a broken handshake must not execute the script")
+		return nil, fmt.Errorf("unreachable")
+	})
+	a.activationTimeout = time.Minute
+	var attempts atomic.Int32
+	a.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		attempts.Add(1)
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Status:     "500 Internal Server Error",
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header:     make(http.Header),
+		}, nil
+	})
+	start := time.Now()
+	_, err := invoke(a, context.Background(), fixture)
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), 5*time.Second, "a non-dial handshake error must fail fast, not wait out the activation budget")
+	// The SDK's own client makes a bounded, small number of requests setting up
+	// one session (e.g. the initialize call plus its own internal handling of a
+	// transient status); what matters is it never loops at the activator's
+	// pollInterval for the whole activation budget, which the timing assertion
+	// above already covers.
+	assert.Less(t, attempts.Load(), int32(5), "a non-dial handshake error must not be retried in the activator's own connect loop")
 }
