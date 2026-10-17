@@ -8,18 +8,25 @@ export interface CompletionChunkData {
   queryId: string;
   chunk: unknown;
   complete?: boolean;
+  runId?: string;
+  runStart?: boolean;
 }
 
 export interface ChunkStream {
   init?(): Promise<void>;
   close?(): void;
+  startRun(queryId: string, runId: string): Promise<void>;
   appendChunk(
     queryId: string,
-    chunk: unknown
+    chunk: unknown,
+    runId?: string
   ): Promise<BrokerItem<CompletionChunkData>>;
-  completeQuery(queryId: string): Promise<BrokerItem<CompletionChunkData>>;
+  completeQuery(
+    queryId: string,
+    runId?: string
+  ): Promise<BrokerItem<CompletionChunkData>>;
   getByQuery(queryId: string): Promise<BrokerItem<CompletionChunkData>[]>;
-  isComplete(queryId: string): Promise<boolean>;
+  isComplete(queryId: string, runId?: string): Promise<boolean>;
   subscribeToQuery(
     queryId: string,
     callback: (item: BrokerItem<CompletionChunkData>) => void
