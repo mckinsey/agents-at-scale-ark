@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -139,4 +140,48 @@ func TestHTTPEventStream_NotifyCompletionSendsCompletionWhenAbandoned(t *testing
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&completeRequests),
 		"an abandoned stream must still POST completion so the consumer's stream terminates")
+}
+
+func TestHTTPEventStream_UsesDistinctRunIDsAcrossResumption(t *testing.T) {
+	startIDs := make(chan string, 2)
+	chunkIDs := make(chan string, 1)
+	completeIDs := make(chan string, 2)
+	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/stream/test-query/start":
+			startIDs <- r.Header.Get(streamRunIDHeader)
+		case "/stream/test-query":
+			_, _ = io.Copy(io.Discard, r.Body)
+			chunkIDs <- r.Header.Get(streamRunIDHeader)
+		case "/stream/test-query/complete":
+			completeIDs <- r.Header.Get(streamRunIDHeader)
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer broker.Close()
+
+	stream := &HTTPEventStream{
+		baseURL:   broker.URL,
+		queryName: "test-query",
+		client:    &http.Client{Timeout: 5 * time.Second},
+	}
+
+	require.NoError(t, stream.StartRun(context.Background()))
+	firstRunID := <-startIDs
+	require.NotEmpty(t, firstRunID)
+	require.NoError(t, stream.StreamChunk(context.Background(), map[string]string{"text": "first"}))
+	require.NoError(t, stream.NotifyCompletion(context.Background()))
+	assert.Equal(t, firstRunID, <-chunkIDs)
+	assert.Equal(t, firstRunID, <-completeIDs)
+
+	require.NoError(t, stream.StartRun(context.Background()))
+	secondRunID := <-startIDs
+	require.NotEmpty(t, secondRunID)
+	assert.NotEqual(t, firstRunID, secondRunID)
+	// An empty resumed run still carries its own ID on completion.
+	require.NoError(t, stream.NotifyCompletion(context.Background()))
+	assert.Equal(t, secondRunID, <-completeIDs)
 }

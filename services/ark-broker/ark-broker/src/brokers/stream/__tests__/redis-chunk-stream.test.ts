@@ -97,7 +97,7 @@ describeIntegration('RedisChunkStream — redis-specific', () => {
     expect(items.map((i) => i.sequenceNumber)).toEqual([1, 2, 3]);
   });
 
-  it('isComplete uses XREVRANGE on per-query key', async () => {
+  it('isComplete reflects the latest run on the per-query key', async () => {
     const stream = new RedisChunkStream(client(), logger, PREFIX, TTL);
     await stream.appendChunk('q1', {text: 'chunk'});
     expect(await stream.isComplete('q1')).toBe(false);
