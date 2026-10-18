@@ -30,6 +30,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { PromptField } from './prompt-field';
 import { SkillsDisplaySection } from './sections';
+import { ToolApprovalsSection } from './sections/tool-approvals-section';
 import { ToolsMultiSelect } from './sections/tools-multi-select';
 import { AgentFormMode, type AgentFormProps } from './types';
 import { useAgentForm } from './use-agent-form';
@@ -72,6 +73,7 @@ export function ViewAgentForm({
     availableTools,
     toolsLoading,
     unavailableTools,
+    selectedTools,
     parameters,
     isExperimentalExecutionEngineEnabled,
     hasChanges,
@@ -82,6 +84,8 @@ export function ViewAgentForm({
     handleToolToggle,
     handleDeleteTool,
     isToolSelected,
+    getToolApproval,
+    setToolApproval,
     onSubmit,
   } = actions;
 
@@ -294,6 +298,12 @@ export function ViewAgentForm({
                     Remove them before saving.
                   </FieldDescription>
                 )}
+                <ToolApprovalsSection
+                  selectedTools={selectedTools}
+                  getToolApproval={getToolApproval}
+                  onApprovalChange={setToolApproval}
+                  disabled={isDisabled}
+                />
               </FieldSet>
             )}
 
