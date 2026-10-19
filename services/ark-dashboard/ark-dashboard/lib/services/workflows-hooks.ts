@@ -47,6 +47,8 @@ function usePollWorkflows(
 }
 
 const DEFAULT_PAGE_SIZE = 25;
+const OFFSET_TOKEN_PATTERN = /^\d+$/;
+const UNREACHABLE_PAGE_STATUSES = new Set([400, 410]);
 
 function computeTotalCount(offset: number, page: WorkflowPage): number | null {
   if (page.remainingItemCount === undefined) {
@@ -83,16 +85,19 @@ function withPinnedFirst(
   ];
 }
 
-function isUnreachablePage(
-  err: unknown,
-  targetPage: number,
-  offsetPaging: boolean | null,
-): boolean {
+function isUnreachablePage(err: unknown, targetPage: number): boolean {
   if (targetPage === 0) {
     return false;
   }
   const status = (err as { status?: number }).status;
-  return status === 410 || offsetPaging === null;
+  return status !== undefined && UNREACHABLE_PAGE_STATUSES.has(status);
+}
+
+function isOffsetPaging(page: WorkflowPage): boolean {
+  if (page.continueToken !== undefined) {
+    return OFFSET_TOKEN_PATTERN.test(page.continueToken);
+  }
+  return page.remainingItemCount !== undefined;
 }
 
 export interface UseWorkflowsOptions {
@@ -142,7 +147,7 @@ export function useWorkflows(
       }
       // A cached token's snapshot gets compacted by etcd after ~5 min, and a
       // deep-linked page cannot be reached with cursors - recover instead of dead-ending.
-      if (isUnreachablePage(err, targetPage, offsetPagingRef.current)) {
+      if (isUnreachablePage(err, targetPage)) {
         tokenStackRef.current = [undefined];
         onPageError?.(new Error('List changed — back to the first page'));
         onPageReset?.();
@@ -193,7 +198,7 @@ export function useWorkflows(
         if (abortControllerRef.current !== controller) {
           return;
         }
-        offsetPagingRef.current = result.remainingItemCount !== undefined;
+        offsetPagingRef.current = isOffsetPaging(result);
         const pinned = pinnedWorkflowRef.current;
         pinnedWorkflowRef.current = null;
         setWorkflows(
@@ -224,6 +229,7 @@ export function useWorkflows(
     if (lastQueryKeyRef.current !== queryKey) {
       lastQueryKeyRef.current = queryKey;
       tokenStackRef.current = [undefined];
+      offsetPagingRef.current = null;
     }
     fetchPage(page, { silent: page > 0 });
     return () => {

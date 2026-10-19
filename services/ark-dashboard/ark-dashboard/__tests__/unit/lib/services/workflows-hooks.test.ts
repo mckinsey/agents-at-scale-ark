@@ -259,6 +259,90 @@ describe('useWorkflows', () => {
     expect(result.current.workflows).toEqual([terminalWorkflow]);
   });
 
+  it('walks Kubernetes cursor pages even when the list reports a remaining item count', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce({
+        ...makePage([terminalWorkflow], 'k8s-cursor-page-2'),
+        remainingItemCount: 109,
+      })
+      .mockResolvedValueOnce(makePage([]));
+
+    const { result, rerender } = renderHook(
+      ({ page }) => useWorkflows('default', undefined, { page }),
+      { initialProps: { page: 0 } },
+    );
+
+    await waitFor(() => expect(result.current.totalCount).toBe(110));
+
+    rerender({ page: 1 });
+
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(2));
+    expect(workflowsService.list).toHaveBeenLastCalledWith(
+      'default',
+      undefined,
+      {
+        limit: 25,
+        continueToken: 'k8s-cursor-page-2',
+        signal: expect.any(AbortSignal),
+      },
+    );
+  });
+
+  it('detects the paging mode again after a namespace switch', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce(makePage([terminalWorkflow], 'cursor-token'))
+      .mockResolvedValueOnce({
+        ...makePage([terminalWorkflow], '6'),
+        remainingItemCount: 4,
+      });
+    const onPageReset = vi.fn();
+
+    const { rerender } = renderHook(
+      ({ namespace, page }) =>
+        useWorkflows(namespace, undefined, {
+          page,
+          pageSize: 2,
+          onPageReset,
+        }),
+      { initialProps: { namespace: 'team-a', page: 0 } },
+    );
+
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(1));
+
+    rerender({ namespace: 'team-b', page: 2 });
+
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(2));
+    expect(workflowsService.list).toHaveBeenLastCalledWith(
+      'team-b',
+      undefined,
+      {
+        limit: 2,
+        continueToken: '4',
+        signal: expect.any(AbortSignal),
+      },
+    );
+    expect(onPageReset).not.toHaveBeenCalled();
+  });
+
+  it('reports a server error on a deep-linked page instead of resetting to the first page', async () => {
+    const serverError = new APIError('Internal Server Error', 500);
+    vi.mocked(workflowsService.list).mockRejectedValue(serverError);
+    const onPageError = vi.fn();
+    const onPageReset = vi.fn();
+
+    renderHook(() =>
+      useWorkflows('default', undefined, {
+        page: 2,
+        pageSize: 10,
+        onPageError,
+        onPageReset,
+      }),
+    );
+
+    await waitFor(() => expect(onPageError).toHaveBeenCalledWith(serverError));
+    expect(onPageReset).not.toHaveBeenCalled();
+  });
+
   it('updateWorkflowItem replaces one item in place without re-fetching', async () => {
     vi.mocked(workflowsService.list).mockResolvedValue(
       makePage([terminalWorkflow]),
