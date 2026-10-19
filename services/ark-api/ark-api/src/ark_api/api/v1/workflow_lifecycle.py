@@ -38,6 +38,9 @@ COMPLETED_PHASES = frozenset({"Succeeded", "Failed", "Error"})
 RETRYABLE_PHASES = frozenset({"Failed", "Error"})
 RESET_NODE_PHASES = frozenset({"Error", "Failed", "Omitted"})
 KEEP_NODE_PHASES = frozenset({"Succeeded", "Skipped"})
+UNSETTLED_NODE_PHASES = frozenset({"Pending", "Running"})
+SETTLED_NODE_PHASES = KEEP_NODE_PHASES | RESET_NODE_PHASES
+STORED_SPEC_KEYS = ("storedWorkflowSpec", "storedWorkflowTemplateSpec")
 
 
 class LifecyclePreconditionError(ValueError):
@@ -108,16 +111,28 @@ def _clear_shutdown(spec: dict) -> None:
         spec["activeDeadlineSeconds"] = None
 
 
+def _is_unsettled_group_node(node: dict) -> bool:
+    """A group node the controller left unfinished when the workflow shut down.
+
+    Argo settles Pod and DAG nodes on shutdown but leaves expanded
+    ``withItems``/``withParam`` TaskGroup nodes at Pending or Running with no
+    finishedAt. The workflow itself has already completed, so nothing is
+    actually executing; the node is reset like a failed one on retry.
+    """
+    return node.get("type") in GROUP_NODE_TYPES and node.get("phase") in UNSETTLED_NODE_PHASES
+
+
 def _validate_retryable(status: dict) -> None:
     phase = status.get("phase")
     if phase not in RETRYABLE_PHASES:
         raise LifecyclePreconditionError(f"Cannot retry a workflow in phase {phase or 'Unknown'}")
     for node_id, node in (status.get("nodes") or {}).items():
         node_phase = node.get("phase")
-        if node_phase not in KEEP_NODE_PHASES and node_phase not in RESET_NODE_PHASES:
-            raise LifecyclePreconditionError(
-                f"Workflow cannot be retried with node {node_id} in {node_phase or 'Unknown'} phase"
-            )
+        if node_phase in SETTLED_NODE_PHASES or _is_unsettled_group_node(node):
+            continue
+        raise LifecyclePreconditionError(
+            f"Workflow cannot be retried with node {node_id} in {node_phase or 'Unknown'} phase"
+        )
 
 
 def _reset_retry_labels(metadata: dict) -> None:
@@ -135,8 +150,10 @@ def _reset_retry_status(status: dict, now: str) -> None:
     status["startedAt"] = now
     status["finishedAt"] = None
     status["persistentVolumeClaims"] = []
-    if isinstance(status.get("storedWorkflowSpec"), dict):
-        status["storedWorkflowSpec"].pop("shutdown", None)
+    for stored_spec_key in STORED_SPEC_KEYS:
+        stored_spec = status.get(stored_spec_key)
+        if isinstance(stored_spec, dict):
+            _clear_shutdown(stored_spec)
 
 
 def _retried_node(

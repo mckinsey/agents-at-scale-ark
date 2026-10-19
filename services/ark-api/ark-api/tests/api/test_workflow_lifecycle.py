@@ -74,6 +74,74 @@ def _failed_workflow() -> dict:
     }
 
 
+def _cancelled_fanout_workflow(shutdown: str = "Terminate") -> dict:
+    """A cancelled ``withItems`` fan-out driven by a workflowTemplateRef.
+
+    Mirrors the shape observed on a real cluster after terminate/stop: the DAG
+    and both expanded Pod nodes settle to Failed, the TaskGroup node that
+    expanded the loop is left at Running with no finishedAt, and the effective
+    spec lives in status.storedWorkflowTemplateSpec rather than
+    status.storedWorkflowSpec.
+    """
+    return {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Workflow",
+        "metadata": {
+            "name": "regress-49l7c",
+            "generateName": "regress-",
+            "labels": {LABEL_COMPLETED: "true", LABEL_PHASE: "Failed"},
+        },
+        "spec": {
+            "workflowTemplateRef": {"name": "regress"},
+            "shutdown": shutdown,
+        },
+        "status": {
+            "phase": "Failed",
+            "message": f"Stopped with strategy '{shutdown}'",
+            "startedAt": "2026-10-19T09:00:00Z",
+            "finishedAt": "2026-10-19T09:00:50Z",
+            "storedWorkflowTemplateSpec": {
+                "entrypoint": "main",
+                "shutdown": shutdown,
+                "workflowTemplateRef": {"name": "regress"},
+            },
+            "nodes": {
+                "regress-49l7c": {
+                    "id": "regress-49l7c",
+                    "name": "regress-49l7c",
+                    "type": "DAG",
+                    "phase": "Failed",
+                    "children": ["regress-49l7c-226120028"],
+                    "outboundNodes": ["regress-49l7c-1", "regress-49l7c-2"],
+                },
+                "regress-49l7c-226120028": {
+                    "id": "regress-49l7c-226120028",
+                    "name": "regress-49l7c.fan-out-1",
+                    "type": "TaskGroup",
+                    "phase": "Running",
+                    "finishedAt": None,
+                    "boundaryID": "regress-49l7c",
+                    "children": ["regress-49l7c-1", "regress-49l7c-2"],
+                },
+                "regress-49l7c-1": {
+                    "id": "regress-49l7c-1",
+                    "name": "regress-49l7c.fan-out-1(0:agent:author)",
+                    "type": "Pod",
+                    "phase": "Failed",
+                    "boundaryID": "regress-49l7c",
+                },
+                "regress-49l7c-2": {
+                    "id": "regress-49l7c-2",
+                    "name": "regress-49l7c.fan-out-1(1:agent:noah)",
+                    "type": "Pod",
+                    "phase": "Failed",
+                    "boundaryID": "regress-49l7c",
+                },
+            },
+        },
+    }
+
+
 class TestRetryWorkflow(unittest.TestCase):
     def test_rejects_non_failed_phase(self):
         wf = _failed_workflow()
@@ -290,6 +358,206 @@ class TestRetryWorkflow(unittest.TestCase):
         wf = _failed_workflow()
         formulate_retry_workflow(wf)
         self.assertEqual(wf, _failed_workflow())
+
+
+class TestRetryCancelledTaskGroupWorkflow(unittest.TestCase):
+    """Issue #3788: an unsettled TaskGroup node must not block retry."""
+
+    def test_unsettled_task_group_does_not_block_validation(self):
+        new_wf, _ = formulate_retry_workflow(_cancelled_fanout_workflow())
+        self.assertEqual(new_wf["status"]["phase"], "Running")
+
+    def test_unsettled_task_group_is_reset_not_dropped(self):
+        new_wf, _ = formulate_retry_workflow(_cancelled_fanout_workflow())
+        group = new_wf["status"]["nodes"]["regress-49l7c-226120028"]
+        self.assertEqual(group["phase"], "Running")
+        self.assertEqual(group["message"], "")
+        self.assertIsNone(group["finishedAt"])
+        self.assertNotEqual(group["startedAt"], "2026-10-19T09:00:00Z")
+
+    def test_failed_pods_under_unsettled_group_are_dropped_and_pruned(self):
+        new_wf, pods = formulate_retry_workflow(_cancelled_fanout_workflow())
+        nodes = new_wf["status"]["nodes"]
+        self.assertNotIn("regress-49l7c-1", nodes)
+        self.assertNotIn("regress-49l7c-2", nodes)
+        self.assertCountEqual(pods, ["regress-49l7c-1", "regress-49l7c-2"])
+        self.assertEqual(nodes["regress-49l7c-226120028"]["children"], [])
+        self.assertEqual(nodes["regress-49l7c"]["outboundNodes"], [])
+
+    def test_stop_strategy_is_retryable_too(self):
+        new_wf, _ = formulate_retry_workflow(_cancelled_fanout_workflow(shutdown="Stop"))
+        self.assertEqual(new_wf["status"]["phase"], "Running")
+
+    def test_pending_task_group_is_retryable(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["nodes"]["regress-49l7c-226120028"]["phase"] = "Pending"
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertEqual(new_wf["status"]["nodes"]["regress-49l7c-226120028"]["phase"], "Running")
+
+    def test_nested_task_groups_are_all_reset(self):
+        wf = _cancelled_fanout_workflow()
+        nodes = wf["status"]["nodes"]
+        nodes["regress-49l7c-226120028"]["children"].append("regress-49l7c-inner")
+        nodes["regress-49l7c-inner"] = {
+            "id": "regress-49l7c-inner",
+            "name": "regress-49l7c.fan-out-1.fan-out-2",
+            "type": "TaskGroup",
+            "phase": "Running",
+            "finishedAt": None,
+            "children": ["regress-49l7c-inner-pod"],
+        }
+        nodes["regress-49l7c-inner-pod"] = {
+            "id": "regress-49l7c-inner-pod",
+            "name": "regress-49l7c.fan-out-1.fan-out-2(0)",
+            "type": "Pod",
+            "phase": "Failed",
+        }
+        new_wf, pods = formulate_retry_workflow(wf)
+        new_nodes = new_wf["status"]["nodes"]
+        self.assertEqual(new_nodes["regress-49l7c-226120028"]["phase"], "Running")
+        self.assertEqual(new_nodes["regress-49l7c-inner"]["phase"], "Running")
+        self.assertEqual(new_nodes["regress-49l7c-inner"]["children"], [])
+        self.assertIn("regress-49l7c-inner-pod", pods)
+
+    def test_earlier_succeeded_group_is_kept_while_later_group_resets(self):
+        wf = _cancelled_fanout_workflow()
+        nodes = wf["status"]["nodes"]
+        nodes["regress-49l7c"]["children"].insert(0, "regress-49l7c-done-group")
+        nodes["regress-49l7c-done-group"] = {
+            "id": "regress-49l7c-done-group",
+            "name": "regress-49l7c.fan-out-0",
+            "type": "TaskGroup",
+            "phase": "Succeeded",
+            "finishedAt": "2026-10-19T08:59:00Z",
+            "children": ["regress-49l7c-done-pod"],
+        }
+        nodes["regress-49l7c-done-pod"] = {
+            "id": "regress-49l7c-done-pod",
+            "name": "regress-49l7c.fan-out-0(0)",
+            "type": "Pod",
+            "phase": "Succeeded",
+            "outputs": {"parameters": [{"name": "result", "value": "42"}]},
+        }
+        new_wf, pods = formulate_retry_workflow(wf)
+        new_nodes = new_wf["status"]["nodes"]
+        done = new_nodes["regress-49l7c-done-group"]
+        self.assertEqual(done["phase"], "Succeeded")
+        self.assertEqual(done["finishedAt"], "2026-10-19T08:59:00Z")
+        self.assertEqual(done["children"], ["regress-49l7c-done-pod"])
+        self.assertEqual(
+            new_nodes["regress-49l7c-done-pod"]["outputs"]["parameters"][0]["value"], "42"
+        )
+        self.assertNotIn("regress-49l7c-done-pod", pods)
+        self.assertEqual(new_nodes["regress-49l7c-226120028"]["phase"], "Running")
+
+    def test_running_pod_node_still_blocks_retry(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["nodes"]["regress-49l7c-1"]["phase"] = "Running"
+        with self.assertRaises(LifecyclePreconditionError) as ctx:
+            formulate_retry_workflow(wf)
+        self.assertIn("regress-49l7c-1", str(ctx.exception))
+        self.assertIn("Running", str(ctx.exception))
+
+    def test_pending_pod_node_still_blocks_retry(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["nodes"]["regress-49l7c-1"]["phase"] = "Pending"
+        with self.assertRaises(LifecyclePreconditionError):
+            formulate_retry_workflow(wf)
+
+    def test_group_node_with_unknown_phase_still_blocks_retry(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["nodes"]["regress-49l7c-226120028"]["phase"] = None
+        with self.assertRaises(LifecyclePreconditionError) as ctx:
+            formulate_retry_workflow(wf)
+        self.assertIn("Unknown", str(ctx.exception))
+
+    def test_succeeded_workflow_is_still_rejected(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["phase"] = "Succeeded"
+        with self.assertRaises(LifecyclePreconditionError) as ctx:
+            formulate_retry_workflow(wf)
+        self.assertEqual(str(ctx.exception), "Cannot retry a workflow in phase Succeeded")
+
+    def test_running_workflow_is_still_rejected(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["phase"] = "Running"
+        with self.assertRaises(LifecyclePreconditionError):
+            formulate_retry_workflow(wf)
+
+
+class TestRetryClearsStoredShutdown(unittest.TestCase):
+    """Issue #3789: a stale shutdown in the stored spec re-terminates the run."""
+
+    def test_clears_shutdown_in_stored_workflow_template_spec(self):
+        new_wf, _ = formulate_retry_workflow(_cancelled_fanout_workflow())
+        stored = new_wf["status"]["storedWorkflowTemplateSpec"]
+        self.assertNotIn("shutdown", stored)
+        self.assertEqual(stored["entrypoint"], "main")
+        self.assertEqual(stored["workflowTemplateRef"], {"name": "regress"})
+
+    def test_clears_shutdown_in_both_stored_specs(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["storedWorkflowSpec"] = {"entrypoint": "main", "shutdown": "Terminate"}
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertNotIn("shutdown", new_wf["status"]["storedWorkflowSpec"])
+        self.assertNotIn("shutdown", new_wf["status"]["storedWorkflowTemplateSpec"])
+        self.assertNotIn("shutdown", new_wf["spec"])
+
+    def test_clears_zero_active_deadline_in_stored_template_spec(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["storedWorkflowTemplateSpec"]["activeDeadlineSeconds"] = 0
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertIsNone(new_wf["status"]["storedWorkflowTemplateSpec"]["activeDeadlineSeconds"])
+
+    def test_keeps_non_zero_active_deadline_in_stored_template_spec(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["storedWorkflowTemplateSpec"]["activeDeadlineSeconds"] = 300
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertEqual(new_wf["status"]["storedWorkflowTemplateSpec"]["activeDeadlineSeconds"], 300)
+
+    def test_tolerates_absent_and_null_stored_specs(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["storedWorkflowTemplateSpec"] = None
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertIsNone(new_wf["status"]["storedWorkflowTemplateSpec"])
+        self.assertNotIn("storedWorkflowSpec", new_wf["status"])
+
+    def test_retrying_an_already_retried_workflow_is_stable(self):
+        first, _ = formulate_retry_workflow(_cancelled_fanout_workflow())
+        first["status"]["phase"] = "Failed"
+        first["status"]["nodes"]["regress-49l7c"]["phase"] = "Failed"
+        first["status"]["nodes"]["regress-49l7c-226120028"]["phase"] = "Running"
+        second, pods = formulate_retry_workflow(first)
+        self.assertEqual(second["status"]["phase"], "Running")
+        self.assertNotIn("shutdown", second["status"]["storedWorkflowTemplateSpec"])
+        self.assertEqual(pods, [])
+
+    def test_cancelled_before_any_pod_started(self):
+        wf = _cancelled_fanout_workflow()
+        wf["status"]["nodes"] = {
+            "regress-49l7c": {
+                "id": "regress-49l7c",
+                "name": "regress-49l7c",
+                "type": "DAG",
+                "phase": "Failed",
+                "children": [],
+            }
+        }
+        new_wf, pods = formulate_retry_workflow(wf)
+        self.assertEqual(pods, [])
+        self.assertEqual(new_wf["status"]["nodes"]["regress-49l7c"]["phase"], "Running")
+        self.assertNotIn("shutdown", new_wf["status"]["storedWorkflowTemplateSpec"])
+
+    def test_does_not_mutate_input(self):
+        wf = _cancelled_fanout_workflow()
+        formulate_retry_workflow(wf)
+        self.assertEqual(wf, _cancelled_fanout_workflow())
+
+    def test_resubmit_does_not_carry_stored_template_spec(self):
+        new_wf = formulate_resubmit_workflow(_cancelled_fanout_workflow())
+        self.assertNotIn("status", new_wf)
+        self.assertNotIn("shutdown", new_wf["spec"])
+        self.assertEqual(new_wf["spec"]["workflowTemplateRef"], {"name": "regress"})
 
 
 class TestResumeWorkflow(unittest.TestCase):
