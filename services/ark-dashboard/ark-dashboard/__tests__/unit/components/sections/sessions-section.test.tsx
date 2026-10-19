@@ -380,8 +380,7 @@ describe('SessionsSection', () => {
       expect(useWorkflows).toHaveBeenCalledWith(
         'default',
         expect.any(Object),
-        undefined,
-        expect.any(Function),
+        expect.objectContaining({ page: 0, pageSize: 10 }),
       );
     });
 
@@ -398,14 +397,12 @@ describe('SessionsSection', () => {
       expect(useWorkflows).toHaveBeenCalledWith(
         '',
         expect.any(Object),
-        undefined,
-        expect.any(Function),
+        expect.objectContaining({ page: 0, pageSize: 10 }),
       );
       expect(useWorkflows).not.toHaveBeenCalledWith(
         'default',
         expect.any(Object),
-        undefined,
-        expect.any(Function),
+        expect.objectContaining({ page: 0, pageSize: 10 }),
       );
     });
   });
@@ -701,7 +698,8 @@ describe('SessionsSection', () => {
 
     it('should show an error toast when a page fails to load', () => {
       render(<SessionsSection />);
-      const onPageError = vi.mocked(useWorkflows).mock.calls[0][3]!;
+      const onPageError =
+        vi.mocked(useWorkflows).mock.calls[0][2]!.onPageError!;
 
       act(() => {
         onPageError(new Error('List changed'));
@@ -1511,14 +1509,12 @@ describe('SessionsSection', () => {
       expect(useWorkflows).toHaveBeenCalledWith(
         'tenant-alpha',
         expect.any(Object),
-        undefined,
-        expect.any(Function),
+        expect.objectContaining({ page: 0, pageSize: 10 }),
       );
       expect(useWorkflows).not.toHaveBeenCalledWith(
         'default',
         expect.any(Object),
-        undefined,
-        expect.any(Function),
+        expect.objectContaining({ page: 0, pageSize: 10 }),
       );
     });
 
@@ -1974,79 +1970,142 @@ describe('SessionsSection', () => {
   });
 
   describe('Pagination', () => {
-    it('should disable Previous on the first page and enable Next when more pages exist', () => {
+    function mockPage(overrides: Record<string, unknown>) {
       vi.mocked(useWorkflows).mockReturnValue({
         workflows: [],
         loading: false,
         error: null,
-        page: 0,
-        hasNext: true,
-        hasPrevious: false,
-        goToNextPage: vi.fn(),
-        goToPreviousPage: vi.fn(),
-        refetch: vi.fn(),
-      } as any);
-
-      render(<SessionsSection />);
-
-      expect(
-        screen.getByRole('button', { name: /go to previous page/i }),
-      ).toBeDisabled();
-      expect(
-        screen.getByRole('button', { name: /go to next page/i }),
-      ).toBeEnabled();
-    });
-
-    it('should disable Next on the last page and enable Previous', () => {
-      vi.mocked(useWorkflows).mockReturnValue({
-        workflows: [],
-        loading: false,
-        error: null,
-        page: 1,
         hasNext: false,
-        hasPrevious: true,
-        goToNextPage: vi.fn(),
-        goToPreviousPage: vi.fn(),
+        totalCount: null,
         refetch: vi.fn(),
+        updateWorkflowItem: vi.fn(),
+        showCreatedWorkflow: vi.fn(),
+        watchWorkflow: vi.fn(),
+        ...overrides,
       } as any);
+    }
+
+    function lastReplacedUrl(): string {
+      const calls = mockRouter.replace.mock.calls;
+      return String(calls[calls.length - 1]?.[0] ?? '');
+    }
+
+    it('should keep Previous/Next when the total is unknown', () => {
+      mockPage({ hasNext: true, totalCount: null });
 
       render(<SessionsSection />);
 
       expect(
         screen.getByRole('button', { name: /go to previous page/i }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole('button', { name: /go to next page/i }),
       ).toBeEnabled();
       expect(
-        screen.getByRole('button', { name: /go to next page/i }),
-      ).toBeDisabled();
+        screen.queryByRole('button', { name: /go to page 1/i }),
+      ).not.toBeInTheDocument();
     });
 
-    it('should call goToNextPage and goToPreviousPage when clicked', async () => {
+    it('should write the page to the URL on Previous/Next', async () => {
       const user = userEvent.setup();
-      const goToNextPage = vi.fn();
-      const goToPreviousPage = vi.fn();
-      vi.mocked(useWorkflows).mockReturnValue({
-        workflows: [],
-        loading: false,
-        error: null,
-        page: 1,
-        hasNext: true,
-        hasPrevious: true,
-        goToNextPage,
-        goToPreviousPage,
-        refetch: vi.fn(),
-      } as any);
+      resetAppRouterMock('page=2');
+      mockPage({ hasNext: true, totalCount: null });
 
       render(<SessionsSection />);
 
       await user.click(
         screen.getByRole('button', { name: /go to next page/i }),
       );
-      expect(goToNextPage).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(lastReplacedUrl()).toContain('page=3'));
 
       await user.click(
         screen.getByRole('button', { name: /go to previous page/i }),
       );
-      expect(goToPreviousPage).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(lastReplacedUrl()).toContain('page=2'));
+    });
+
+    it('should show numbered pages and the page size selector when the total is known', async () => {
+      const user = userEvent.setup();
+      mockPage({ hasNext: true, totalCount: 37 });
+
+      render(<SessionsSection />);
+
+      expect(
+        screen.getByRole('button', { name: /go to page 4/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /go to page 5/i }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText(/items per page/i)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /go to page 4/i }));
+      await waitFor(() => expect(lastReplacedUrl()).toContain('page=4'));
+    });
+
+    it('should pass the page and page size from the URL to the hook', () => {
+      resetAppRouterMock('page=3&pageSize=25');
+      mockPage({ totalCount: 100 });
+
+      render(<SessionsSection />);
+
+      expect(useWorkflows).toHaveBeenLastCalledWith(
+        'default',
+        expect.any(Object),
+        expect.objectContaining({ page: 2, pageSize: 25 }),
+      );
+    });
+
+    it('should clamp the page to the last page when the total shrinks', async () => {
+      resetAppRouterMock('page=5');
+      mockPage({ totalCount: 12 });
+
+      render(<SessionsSection />);
+
+      await waitFor(() => expect(lastReplacedUrl()).toContain('page=2'));
+    });
+
+    it('should go back to the first page when a filter changes', async () => {
+      const user = userEvent.setup();
+      resetAppRouterMock('page=3');
+      mockPage({ totalCount: 100 });
+
+      render(<SessionsSection />);
+
+      await user.type(screen.getByPlaceholderText('Search'), 'x');
+
+      await waitFor(() =>
+        expect(lastReplacedUrl()).toContain('workflowName=x'),
+      );
+      expect(lastReplacedUrl()).not.toContain('page=');
+    });
+
+    it('should only hint at further pages when filters apply per page', () => {
+      resetAppRouterMock('workflowName=nomatch');
+      mockPage({ hasNext: true, totalCount: 40 });
+
+      render(<SessionsSection />);
+
+      expect(
+        screen.getByText('No workflow runs found matching your filters'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/more runs exist further on/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('should reset the URL page when the hook reports a reset', () => {
+      resetAppRouterMock('page=4');
+      mockPage({ totalCount: null });
+
+      render(<SessionsSection />);
+      const onPageReset =
+        vi.mocked(useWorkflows).mock.calls[0][2]!.onPageReset!;
+
+      act(() => {
+        onPageReset();
+      });
+
+      expect(lastReplacedUrl()).not.toContain('page=');
     });
   });
 });
