@@ -270,4 +270,42 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(changed).To(BeFalse())
 	})
+
+	It("reverts manual edits to the agent spec", func() {
+		server := createServer("manual-edit-agent", arkv1prealpha1.A2AServerSpec{})
+		reconciler := newReconciler()
+		card := &arka2a.A2AAgentCard{Name: "forecast", Description: "forecast agent"}
+
+		server.Status.LastResolvedEndpoint = address
+		agentName := reconciler.sanitizeAgentName(card.Name)
+		created, err := reconciler.createOrUpdateAgent(ctx, reconciler.buildAgentWithSkills(server, card, agentName), agentName, server.Name)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(created).To(BeTrue())
+		DeferCleanup(func() {
+			agent := &arkv1alpha1.Agent{}
+			agent.Name = agentName
+			agent.Namespace = server.Namespace
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, agent))).To(Succeed())
+		})
+
+		agent := &arkv1alpha1.Agent{}
+		key := types.NamespacedName{Name: agentName, Namespace: server.Namespace}
+		Expect(k8sClient.Get(ctx, key, agent)).To(Succeed())
+		agent.Spec.Description = "edited by hand"
+		agent.Spec.Prompt = "edited prompt"
+		Expect(k8sClient.Update(ctx, agent)).To(Succeed())
+
+		changed, err := reconciler.createOrUpdateAgent(ctx, reconciler.buildAgentWithSkills(server, card, agentName), agentName, server.Name)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(changed).To(BeTrue())
+
+		Expect(k8sClient.Get(ctx, key, agent)).To(Succeed())
+		Expect(agent.Spec.Description).To(Equal("forecast agent"))
+		Expect(agent.Spec.Prompt).To(Equal("You are forecast. forecast agent"))
+
+		By("not updating once the agent matches the A2AServer again")
+		changed, err = reconciler.createOrUpdateAgent(ctx, reconciler.buildAgentWithSkills(server, card, agentName), agentName, server.Name)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(changed).To(BeFalse())
+	})
 })

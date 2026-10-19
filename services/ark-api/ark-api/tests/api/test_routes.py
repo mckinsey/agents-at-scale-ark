@@ -1366,6 +1366,32 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual([s["id"] for s in response.json()["skills"]], ["echo_messages"])
 
     @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_a2a_agent_is_rejected(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        existing_agent = Mock()
+        existing_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {"ark.mckinsey.com/a2a-server-name": "simple-agent"},
+            },
+            "spec": {"description": "A simple agent", "prompt": "You are simple-agent."},
+        }
+        mock_client.agents.a_get = AsyncMock(return_value=existing_agent)
+        mock_client.agents.a_update = AsyncMock()
+
+        response = self.client.put(
+            "/v1/agents/simple-agent?namespace=default",
+            json={"description": "edited"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("update the A2A server", response.json()["detail"])
+        mock_client.agents.a_update.assert_not_called()
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_success(self, mock_ark_client):
         """Test successful agent update."""
         # Setup async context manager mock

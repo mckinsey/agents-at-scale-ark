@@ -4,7 +4,7 @@ import json
 
 from enum import Enum
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
 from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
@@ -257,6 +257,16 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Get the existing agent first
         existing_agent = await ark_client.agents.a_get(agent_name)
+        existing_annotations = existing_agent.to_dict().get("metadata", {}).get("annotations") or {}
+        if A2A_SERVER_NAME_ANNOTATION in existing_annotations:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Agent {agent_name} is managed by A2A server "
+                    f"{existing_annotations[A2A_SERVER_NAME_ANNOTATION]} and can't be edited. "
+                    "To change it, update the A2A server."
+                ),
+            )
         existing_spec = existing_agent.to_dict()["spec"]
 
         # exclude_unset keeps only the fields the client actually sent, so an

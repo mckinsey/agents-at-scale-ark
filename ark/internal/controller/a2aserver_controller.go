@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -414,8 +415,9 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 		return false, fmt.Errorf("failed to get agent %s: %w", agentName, getErr)
 	}
 
-	// Only update if the skills, endpoint or streaming annotations have changed
-	if agentAnnotationsChanged(existingAgent.Annotations, agent.Annotations) {
+	// The A2AServer is the only source for its agents, so any drift in the spec
+	// or the card-derived annotations is reverted.
+	if agentAnnotationsChanged(existingAgent.Annotations, agent.Annotations) || !equality.Semantic.DeepEqual(existingAgent.Spec, agent.Spec) {
 		existingAgent.Spec = agent.Spec
 		existingAgent.Annotations = agent.Annotations
 		if err := r.Update(ctx, existingAgent); err != nil {
