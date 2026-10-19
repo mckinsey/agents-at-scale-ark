@@ -36,7 +36,6 @@ RESUBMIT_SKIP_LABELS = frozenset({
 GROUP_NODE_TYPES = frozenset({"DAG", "TaskGroup", "StepGroup", "Steps"})
 COMPLETED_PHASES = frozenset({"Succeeded", "Failed", "Error"})
 RETRYABLE_PHASES = frozenset({"Failed", "Error"})
-RESET_NODE_PHASES = frozenset({"Error", "Failed", "Omitted"})
 KEEP_NODE_PHASES = frozenset({"Succeeded", "Skipped"})
 
 
@@ -112,12 +111,6 @@ def _validate_retryable(status: dict) -> None:
     phase = status.get("phase")
     if phase not in RETRYABLE_PHASES:
         raise LifecyclePreconditionError(f"Cannot retry a workflow in phase {phase or 'Unknown'}")
-    for node_id, node in (status.get("nodes") or {}).items():
-        node_phase = node.get("phase")
-        if node_phase not in KEEP_NODE_PHASES and node_phase not in RESET_NODE_PHASES:
-            raise LifecyclePreconditionError(
-                f"Workflow cannot be retried with node {node_id} in {node_phase or 'Unknown'} phase"
-            )
 
 
 def _reset_retry_labels(metadata: dict) -> None:
@@ -135,8 +128,8 @@ def _reset_retry_status(status: dict, now: str) -> None:
     status["startedAt"] = now
     status["finishedAt"] = None
     status["persistentVolumeClaims"] = []
-    if isinstance(status.get("storedWorkflowSpec"), dict):
-        status["storedWorkflowSpec"].pop("shutdown", None)
+    if isinstance(status.get("storedWorkflowTemplateSpec"), dict):
+        _clear_shutdown(status["storedWorkflowTemplateSpec"])
 
 
 def _retried_node(
