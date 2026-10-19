@@ -115,7 +115,7 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 		server := createServer("endpoint-address-mode-trailing-slash", arkv1prealpha1.A2AServerSpec{})
 		reconciler := newReconciler()
 
-		Expect(reconciler.reconcileEndpoint(ctx, server, reconciler.resolveEndpoint(server, address+"/", nil))).To(Succeed())
+		Expect(reconciler.reconcileEndpoint(ctx, server, reconciler.resolveEndpoint(server, address+"/", nil))).Error().NotTo(HaveOccurred())
 
 		Expect(server.Status.LastResolvedEndpoint).To(Equal(address + "/"))
 	})
