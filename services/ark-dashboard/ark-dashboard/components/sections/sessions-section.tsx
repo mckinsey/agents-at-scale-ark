@@ -81,6 +81,7 @@ type WorkflowStepType =
   | 'dag'
   | 'steps'
   | 'retry'
+  | 'taskgroup'
   | 'container'
   | 'script'
   | 'suspend';
@@ -650,7 +651,7 @@ function WorkflowStepNode({
   depth?: number;
   isLast?: boolean;
 }) {
-  const [showDetail, setShowDetail] = useState(false);
+  const [showDetail, setShowDetail] = useState(step.type === 'taskgroup');
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
 
