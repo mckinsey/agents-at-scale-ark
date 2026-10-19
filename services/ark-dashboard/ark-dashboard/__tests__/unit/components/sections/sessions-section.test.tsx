@@ -10,12 +10,15 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  applyAppRouterNavigations,
+  deferAppRouterLanding,
   getAppRouterMock,
   resetAppRouterMock,
 } from '@/__tests__/setup/mock-app-router';
 import { SessionsSection } from '@/components/sections/sessions-section';
 import { toast } from '@/components/ui/sonner';
 import { APIError } from '@/lib/api/client';
+import { SEARCH_DEBOUNCE_MS } from '@/lib/hooks/use-url-state';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
 import { resetNodeLogStore } from '@/lib/services/workflow-logs-store';
 import {
@@ -948,6 +951,39 @@ describe('SessionsSection', () => {
           }),
         );
       });
+    });
+
+    it('keeps every character typed before the debounced search commit lands (#3798)', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const mockUseWorkflows = vi.mocked(useWorkflows);
+      // A real browser's router.replace lands a render later than the call -
+      // defer it here too, so two keystrokes within the debounce window can
+      // land on top of each other the way they do in production.
+      deferAppRouterLanding();
+
+      render(<SessionsSection />);
+
+      const searchInput = screen.getByPlaceholderText('Search');
+      await user.type(searchInput, 'alpha');
+
+      expect(searchInput).toHaveValue('alpha');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+      });
+      act(() => {
+        applyAppRouterNavigations();
+      });
+
+      expect(searchInput).toHaveValue('alpha');
+      const lastCall =
+        mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
+      expect(lastCall[1]).toEqual(
+        expect.objectContaining({ workflowName: 'alpha' }),
+      );
+
+      vi.useRealTimers();
     });
 
     it('should pass status filter to API', async () => {

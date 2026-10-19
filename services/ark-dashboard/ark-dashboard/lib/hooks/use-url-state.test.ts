@@ -338,6 +338,34 @@ describe('useUrlState', () => {
     expect(target.searchParams.has('page')).toBe(false);
   });
 
+  it('keeps every keystroke when a debounced key is written on its own, unlike a call that also bundles an immediate key (#3798)', () => {
+    vi.useFakeTimers();
+    deferAppRouterLanding();
+    const { result } = renderHook(() => useUrlState(pagedDebouncedSpec));
+
+    // This is the pattern every debounced search/filter field must follow:
+    // `setUrlState({ q })` alone, letting the hook's own page-reset handle
+    // `page` once the debounced write lands (see the test above). #3798 was
+    // sessions-section.tsx's workflowName search box instead calling
+    // `setUrlState({ workflowName, page: 1 })` on every keystroke - bundling
+    // the immediate `page` key triggered a synchronous commit of the
+    // *previous* keystroke's stale draft on every subsequent keystroke,
+    // dropping characters typed at normal speed.
+    act(() => result.current[1]({ q: 'a' }));
+    act(() => result.current[1]({ q: 'al' }));
+    act(() => result.current[1]({ q: 'alp' }));
+
+    expect(result.current[0].q).toBe('alp');
+
+    act(() => applyAppRouterNavigations());
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+
+    expect(result.current[0].q).toBe('alp');
+    expect(lastTarget().searchParams.get('q')).toBe('alp');
+  });
+
   it('does not write a draft that was still pending when the screen unmounted', () => {
     vi.useFakeTimers();
     const { result, unmount } = renderHook(() => useUrlState(debouncedSpec));
