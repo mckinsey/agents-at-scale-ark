@@ -1664,7 +1664,7 @@ describe('SessionsSection', () => {
       });
     });
 
-    it('should flatten parallel step groups and nest expandable children', async () => {
+    it('should fan out parallel step groups one level in and nest expandable children', async () => {
       const user = userEvent.setup();
       vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
         {
@@ -1728,6 +1728,9 @@ describe('SessionsSection', () => {
       expect(screen.getByText('fan-a')).toBeInTheDocument();
       expect(screen.getByText('fan-b')).toBeInTheDocument();
       expect(screen.queryByText('[0]')).not.toBeInTheDocument();
+      expect(screen.getByText('fan-a').closest('.pl-5')).not.toBeNull();
+      expect(screen.getByText('fan-b').closest('.pl-5')).not.toBeNull();
+      expect(screen.getByText('nested-parent').closest('.pl-5')).toBeNull();
       expect(screen.queryByText('nested-child')).not.toBeInTheDocument();
 
       await user.click(
@@ -1735,6 +1738,59 @@ describe('SessionsSection', () => {
       );
 
       expect(screen.getByText('nested-child')).toBeInTheDocument();
+    });
+
+    it('should show the expansions of a DAG task group open and nested', () => {
+      vi.mocked(mapArgoWorkflowsToSessions).mockReturnValue([
+        {
+          id: 'dag-workflow',
+          name: 'dag-workflow',
+          type: 'workflow',
+          status: 'succeeded',
+          startedAt: '2024-01-15T10:00:00Z',
+          duration: '1m',
+          steps: [
+            {
+              id: 'fan-out-1',
+              name: 'fan-out-1',
+              displayName: 'fan-out-1',
+              type: 'taskgroup',
+              status: 'succeeded',
+              children: [
+                {
+                  id: 'item-0',
+                  name: 'fan-out-1(0:a)',
+                  displayName: 'fan-out-1(0:a)',
+                  type: 'container',
+                  status: 'succeeded',
+                },
+                {
+                  id: 'item-1',
+                  name: 'fan-out-1(1:b)',
+                  displayName: 'fan-out-1(1:b)',
+                  type: 'container',
+                  status: 'succeeded',
+                },
+              ],
+            },
+          ],
+        },
+      ] as any);
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: null,
+        loading: false,
+        error: null,
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(screen.getByText('fan-out-1').closest('.pl-5')).toBeNull();
+      expect(
+        screen.getByText('fan-out-1(0:a)').closest('.pl-5'),
+      ).not.toBeNull();
+      expect(
+        screen.getByText('fan-out-1(1:b)').closest('.pl-5'),
+      ).not.toBeNull();
     });
 
     it('should report an error when step logs cannot be loaded', async () => {

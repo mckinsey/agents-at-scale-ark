@@ -18,10 +18,7 @@ vi.mock('@/lib/services/workflows', () => ({
   },
 }));
 
-function makePage(
-  items: ArgoWorkflow[],
-  continueToken?: string,
-): WorkflowPage {
+function makePage(items: ArgoWorkflow[], continueToken?: string): WorkflowPage {
   return { items, continueToken, hasMore: Boolean(continueToken) };
 }
 
@@ -121,6 +118,41 @@ describe('useWorkflows', () => {
     expect(result.current.workflows).toEqual([terminalWorkflow]);
   });
 
+  it('exposes the total count from the remaining item count of each page', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce({
+        ...makePage([terminalWorkflow, terminalWorkflow], '2'),
+        remainingItemCount: 3,
+      })
+      .mockResolvedValueOnce({
+        ...makePage([terminalWorkflow, terminalWorkflow], '4'),
+        remainingItemCount: 1,
+      });
+
+    const { result } = renderHook(() => useWorkflows('default', undefined, 2));
+
+    await waitFor(() => expect(result.current.totalCount).toBe(5));
+
+    act(() => {
+      result.current.goToNextPage();
+    });
+
+    await waitFor(() => expect(result.current.page).toBe(1));
+    expect(result.current.totalCount).toBe(5);
+  });
+
+  it('reports no total count when the page has no remaining item count', async () => {
+    vi.mocked(workflowsService.list).mockResolvedValue(
+      makePage([terminalWorkflow], 'token-1'),
+    );
+
+    const { result } = renderHook(() => useWorkflows('default'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.totalCount).toBeNull();
+  });
+
   it('goToNextPage fetches with the token returned by the previous page', async () => {
     vi.mocked(workflowsService.list)
       .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
@@ -174,9 +206,9 @@ describe('useWorkflows', () => {
       result.current.goToNextPage();
     });
 
-    await waitFor(() => expect(onPageError).toHaveBeenCalledWith(
-      new Error('boom'),
-    ));
+    await waitFor(() =>
+      expect(onPageError).toHaveBeenCalledWith(new Error('boom')),
+    );
 
     expect(result.current.error).toBeNull();
     expect(result.current.page).toBe(0);
@@ -250,7 +282,9 @@ describe('useWorkflows', () => {
 
     const { result, rerender } = renderHook(
       ({ filters }) => useWorkflows('default', filters),
-      { initialProps: { filters: undefined as { status?: string } | undefined } },
+      {
+        initialProps: { filters: undefined as { status?: string } | undefined },
+      },
     );
 
     rerender({ filters: { status: 'running' } });
@@ -285,9 +319,7 @@ describe('useWorkflows', () => {
     });
 
     await waitFor(() => expect(onPageError).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(workflowsService.list).toHaveBeenCalledTimes(3),
-    );
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.page).toBe(0);
@@ -313,7 +345,9 @@ describe('useWorkflows', () => {
 
     const { result, rerender } = renderHook(
       ({ filters }) => useWorkflows('default', filters),
-      { initialProps: { filters: undefined as { status?: string } | undefined } },
+      {
+        initialProps: { filters: undefined as { status?: string } | undefined },
+      },
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));

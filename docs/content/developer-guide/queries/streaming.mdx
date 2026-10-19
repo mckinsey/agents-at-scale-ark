@@ -188,6 +188,8 @@ data:
 
 When this ConfigMap is present and `enabled` is set to `"true"`, the Query Controller will use the specified service for event streaming. If the ConfigMap is not present or `enabled` is `"false"`, streaming is disabled and queries return only their final response.
 
+When the service is `ark-broker`, leave `namespace` empty so the ConfigMap points at the broker in its own namespace. Each namespace runs its own broker, and pointing one namespace at another namespace's broker mixes the two namespaces' streams. See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+
 The `ark-broker` service implements this API when deployed with streaming enabled. By default chunks are held in the broker's process memory, so live streaming and `from-beginning=true` replay work within a single broker replica. With the [Redis chunks backend](/developer-guide/services/ark-broker#chunk-backend-redis) (`backends.chunk: redis`), chunks are stored in Redis Streams, so a client whose SSE connection lands on a different broker replica than the one that produced the chunks still receives the full stream. 
 
 ### Tool/Function Calling in Streams
