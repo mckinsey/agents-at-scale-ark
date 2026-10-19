@@ -1976,10 +1976,12 @@ export interface paths {
          *             Argo Server across the whole collection when it serves the list; otherwise applied
          *             only to the page returned by this call, so a page can come back with few or no
          *             matches even though more exist further in the cursor sequence.
-         *         workflowTemplateName: Filter by workflow template name (exact match). Applied
-         *             server-side via a label selector, so pagination stays correct across pages.
-         *         status: Filter by workflow status. Same server-side label selector as
-         *             workflowTemplateName.
+         *         workflowTemplateName: Filter by workflow template name (exact match), matched against
+         *             spec.workflowTemplateRef.name. Applied post-fetch like workflowName, since Argo only
+         *             labels a run with the template name when it is submitted through Argo's own API, not
+         *             when created via spec.workflowTemplateRef as the dashboard does; the same pagination
+         *             caveat as workflowName applies.
+         *         status: Filter by workflow status. Applied server-side via a label selector.
          *         limit: Maximum number of items returned by the underlying Kubernetes list call.
          *             Omit for the full, unpaginated list (used by non-paginated callers).
          *         continue_token: Opaque cursor from a previous page's response metadata
