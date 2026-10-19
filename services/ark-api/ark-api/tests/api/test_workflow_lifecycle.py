@@ -74,6 +74,58 @@ def _failed_workflow() -> dict:
     }
 
 
+def _cancelled_with_items_workflow() -> dict:
+    """A DAG with a withItems fan-out terminated mid-flight.
+
+    Argo leaves the TaskGroup node Running with no finishedAt after shutdown,
+    while its Pod children settle to Succeeded and Failed.
+    """
+    return {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Workflow",
+        "metadata": {"name": "fan-abc", "labels": {LABEL_COMPLETED: "true", LABEL_PHASE: "Failed"}},
+        "spec": {"workflowTemplateRef": {"name": "fan"}, "shutdown": "Terminate"},
+        "status": {
+            "phase": "Failed",
+            "message": "Stopped with strategy 'Terminate'",
+            "storedWorkflowTemplateSpec": {"entrypoint": "main", "shutdown": "Terminate"},
+            "nodes": {
+                "fan-abc": {
+                    "id": "fan-abc",
+                    "name": "fan-abc",
+                    "type": "DAG",
+                    "phase": "Failed",
+                    "children": ["fan-abc-group"],
+                },
+                "fan-abc-group": {
+                    "id": "fan-abc-group",
+                    "name": "fan-abc.fan-out-1",
+                    "type": "TaskGroup",
+                    "phase": "Running",
+                    "finishedAt": None,
+                    "boundaryID": "fan-abc",
+                    "children": ["fan-abc-ok", "fan-abc-ko"],
+                },
+                "fan-abc-ok": {
+                    "id": "fan-abc-ok",
+                    "name": "fan-abc.fan-out-1(0:a)",
+                    "type": "Pod",
+                    "phase": "Succeeded",
+                    "boundaryID": "fan-abc",
+                },
+                "fan-abc-ko": {
+                    "id": "fan-abc-ko",
+                    "name": "fan-abc.fan-out-1(1:b)",
+                    "type": "Pod",
+                    "phase": "Failed",
+                    "message": "workflow shutdown with strategy: Terminate",
+                    "boundaryID": "fan-abc",
+                },
+            },
+        },
+    }
+
+
 class TestRetryWorkflow(unittest.TestCase):
     def test_rejects_non_failed_phase(self):
         wf = _failed_workflow()
@@ -81,11 +133,29 @@ class TestRetryWorkflow(unittest.TestCase):
         with self.assertRaises(LifecyclePreconditionError):
             formulate_retry_workflow(wf)
 
-    def test_rejects_when_node_still_running(self):
+    def test_rejects_succeeded_phase(self):
+        wf = _failed_workflow()
+        wf["status"]["phase"] = "Succeeded"
+        with self.assertRaisesRegex(LifecyclePreconditionError, "Cannot retry a workflow in phase Succeeded"):
+            formulate_retry_workflow(wf)
+
+    def test_unsettled_task_group_does_not_block_retry(self):
+        new_wf, pods = formulate_retry_workflow(_cancelled_with_items_workflow())
+        nodes = new_wf["status"]["nodes"]
+        self.assertEqual(nodes["fan-abc-group"]["phase"], "Running")
+        self.assertIsNone(nodes["fan-abc-group"]["finishedAt"])
+        self.assertEqual(nodes["fan-abc"]["phase"], "Running")
+        self.assertEqual(nodes["fan-abc-ok"]["phase"], "Succeeded")
+        self.assertNotIn("fan-abc-ko", nodes)
+        self.assertEqual(pods, ["fan-abc-ko"])
+        self.assertEqual(nodes["fan-abc-group"]["children"], ["fan-abc-ok"])
+
+    def test_unsettled_pod_node_is_dropped_and_pod_deleted(self):
         wf = _failed_workflow()
         wf["status"]["nodes"]["retry-test-abc-111"]["phase"] = "Running"
-        with self.assertRaises(LifecyclePreconditionError):
-            formulate_retry_workflow(wf)
+        new_wf, pods = formulate_retry_workflow(wf)
+        self.assertNotIn("retry-test-abc-111", new_wf["status"]["nodes"])
+        self.assertEqual(pods, ["retry-test-abc-111"])
 
     def test_resets_top_level_status_and_labels(self):
         new_wf, _ = formulate_retry_workflow(_failed_workflow())
@@ -280,11 +350,17 @@ class TestRetryWorkflow(unittest.TestCase):
         new_wf, _ = formulate_retry_workflow(wf)
         self.assertEqual(new_wf["spec"]["activeDeadlineSeconds"], 300)
 
-    def test_clears_shutdown_in_stored_workflow_spec(self):
+    def test_clears_shutdown_in_stored_workflow_template_spec(self):
         wf = _failed_workflow()
-        wf["status"]["storedWorkflowSpec"] = {"entrypoint": "main", "shutdown": "Stop"}
+        wf["status"]["storedWorkflowTemplateSpec"] = {"entrypoint": "main", "shutdown": "Terminate"}
         new_wf, _ = formulate_retry_workflow(wf)
-        self.assertEqual(new_wf["status"]["storedWorkflowSpec"], {"entrypoint": "main"})
+        self.assertEqual(new_wf["status"]["storedWorkflowTemplateSpec"], {"entrypoint": "main"})
+
+    def test_clears_zero_active_deadline_in_stored_workflow_template_spec(self):
+        wf = _failed_workflow()
+        wf["status"]["storedWorkflowTemplateSpec"] = {"entrypoint": "main", "activeDeadlineSeconds": 0}
+        new_wf, _ = formulate_retry_workflow(wf)
+        self.assertIsNone(new_wf["status"]["storedWorkflowTemplateSpec"]["activeDeadlineSeconds"])
 
     def test_does_not_mutate_input(self):
         wf = _failed_workflow()

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.72-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc.1...v0.1.72-rc.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **ark-api:** unblock retry of cancelled withItems workflows and clear stored shutdown ([#3792](https://github.com/mckinsey/agents-at-scale-ark/issues/3792)) ([deb2b64](https://github.com/mckinsey/agents-at-scale-ark/commit/deb2b64c0dc3c741d47ca0f04f4ca8ae329d7482)), closes [#3788](https://github.com/mckinsey/agents-at-scale-ark/issues/3788) [#3789](https://github.com/mckinsey/agents-at-scale-ark/issues/3789)
+
+
+### Documentation
+
+* say that a broker serves only its own namespace ([#3774](https://github.com/mckinsey/agents-at-scale-ark/issues/3774)) ([2c6412e](https://github.com/mckinsey/agents-at-scale-ark/commit/2c6412e7b1fa792d242dfbd3a97d6584f8e75d5f))
+
 ## [0.1.72-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc...v0.1.72-rc.1) (2026-10-16)
 
 
