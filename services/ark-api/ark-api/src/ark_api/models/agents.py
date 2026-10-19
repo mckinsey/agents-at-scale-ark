@@ -112,10 +112,19 @@ def ensure_unique_header_names(headers: Optional[List[AgentHeader]]) -> Optional
     return headers
 
 
+def _has_label_selector(selector: Optional[AgentLabelSelector]) -> bool:
+    return selector is not None and bool(selector.matchLabels or selector.matchExpressions)
+
+
 def ensure_unique_override_header_names(overrides: Optional[List[AgentOverride]]) -> Optional[List[AgentOverride]]:
-    """Apply header name uniqueness to every override entry."""
-    for override in overrides or []:
-        ensure_unique_header_names(override.headers)
+    """Apply header name uniqueness across model overrides that have no label selector."""
+    model_headers = [
+        header
+        for override in overrides or []
+        if override.resourceType == "model" and not _has_label_selector(override.labelSelector)
+        for header in override.headers
+    ]
+    ensure_unique_header_names(model_headers)
     return overrides
 
 
