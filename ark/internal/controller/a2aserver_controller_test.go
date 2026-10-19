@@ -98,7 +98,8 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 
 	reconcileWithCard := func(reconciler *A2AServerReconciler, server *arkv1prealpha1.A2AServer, cardURL string) error {
 		card := &arka2a.A2AAgentCard{Name: "weather", URL: cardURL}
-		return reconciler.reconcileEndpoint(ctx, server, reconciler.resolveEndpoint(server, address, card))
+		_, err := reconciler.reconcileEndpoint(ctx, server, reconciler.resolveEndpoint(server, address, card))
+		return err
 	}
 
 	It("records the address as the endpoint and sets no override condition in address mode", func() {
@@ -126,7 +127,7 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 
 		resolved := reconciler.resolveEndpoint(server, address, grpcOnlyCard("grpc://a2a-server.default.svc.cluster.local:50051"))
 		Expect(resolved.Reason).To(BeEmpty())
-		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).To(Succeed())
+		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).Error().NotTo(HaveOccurred())
 
 		Expect(server.Status.LastResolvedEndpoint).To(Equal(address))
 		Expect(findCondition(server, A2AServerEndpointOverride)).To(BeNil())
@@ -210,7 +211,7 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 
 		resolved := reconciler.resolveEndpoint(server, address, grpcOnlyCard("grpc://a2a-server.default.svc.cluster.local:50051"))
 		Expect(resolved.Reason).To(Equal(arka2a.ReasonUnsupportedTransport))
-		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).To(Succeed())
+		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).Error().NotTo(HaveOccurred())
 
 		Expect(server.Status.LastResolvedEndpoint).To(Equal(address))
 		Expect(server.Status.RejectedEndpoint).To(BeEmpty())
@@ -223,7 +224,7 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 		Expect(findCondition(server, A2AServerReady).Reason).To(Equal("Initializing"))
 
 		By("staying stable when the transport is still unsupported")
-		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).To(Succeed())
+		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).Error().NotTo(HaveOccurred())
 		Expect(findCondition(server, A2AServerEndpointOverride).Reason).To(Equal(arka2a.ReasonUnsupportedTransport))
 	})
 

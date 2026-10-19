@@ -120,13 +120,10 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
-	if applyAgentCardStatus(&a2aServer.Status, agentCard, protocol) {
-		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
+	cardChanged := applyAgentCardStatus(&a2aServer.Status, agentCard, protocol)
 
-	if err := r.reconcileEndpoint(ctx, &a2aServer, r.resolveEndpoint(&a2aServer, resolvedAddress, agentCard)); err != nil {
+	endpointChanged, err := r.reconcileEndpoint(ctx, &a2aServer, r.resolveEndpoint(&a2aServer, resolvedAddress, agentCard))
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -139,7 +136,7 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
-	return r.finalizeA2AServerProcessing(ctx, a2aServer, agentsChanged)
+	return r.finalizeA2AServerProcessing(ctx, a2aServer, agentsChanged, cardChanged || endpointChanged)
 }
 
 // applyAgentCardStatus copies agent card details into the status and returns true if any changed
@@ -234,7 +231,8 @@ func (r *A2AServerReconciler) resolveEndpoint(a2aServer *arkv1prealpha1.A2AServe
 }
 
 // reconcileEndpoint persists the resolved endpoint and its condition when they change.
-func (r *A2AServerReconciler) reconcileEndpoint(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, resolved arka2a.ResolvedEndpoint) error {
+// reconcileEndpoint records the resolved endpoint and reports whether the status changed.
+func (r *A2AServerReconciler) reconcileEndpoint(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, resolved arka2a.ResolvedEndpoint) (bool, error) {
 	conditionChanged := false
 	switch {
 	case !arka2a.UsesCardEndpoint(a2aServer.Spec.EndpointResolution):
@@ -254,9 +252,9 @@ func (r *A2AServerReconciler) reconcileEndpoint(ctx context.Context, a2aServer *
 	a2aServer.Status.RejectedEndpoint = resolved.Rejected
 
 	if endpointChanged || conditionChanged {
-		return r.updateStatusWithConditions(ctx, a2aServer)
+		return true, r.updateStatusWithConditions(ctx, a2aServer)
 	}
-	return nil
+	return false, nil
 }
 
 func (r *A2AServerReconciler) emitEndpointRejected(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, resolved arka2a.ResolvedEndpoint) {
@@ -440,9 +438,11 @@ func agentAnnotationsChanged(existing, desired map[string]string) bool {
 	return false
 }
 
-func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a2aServer arkv1prealpha1.A2AServer, agentsChanged bool) (ctrl.Result, error) {
+// statusChanged reports that this reconcile changed the status, so the
+// conditions must be finalized and persisted even when the agent is unchanged.
+func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a2aServer arkv1prealpha1.A2AServer, agentsChanged, statusChanged bool) (ctrl.Result, error) {
 	readyCondition := meta.FindStatusCondition(a2aServer.Status.Conditions, A2AServerReady)
-	if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue && readyCondition.Reason == "AgentDiscovered" && !agentsChanged {
+	if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue && readyCondition.Reason == "AgentDiscovered" && !agentsChanged && !statusChanged {
 		// Already ready and no changes - skip event emission
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
