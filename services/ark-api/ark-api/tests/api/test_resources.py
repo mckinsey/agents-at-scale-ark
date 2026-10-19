@@ -441,7 +441,7 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_with_filters(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """status and workflowTemplateName become one combined label selector; workflowName stays post-fetch."""
+        """status becomes a label selector; workflowName and workflowTemplateName stay post-fetch."""
         mock_get_context.return_value = {"namespace": "default"}
 
         mock_api_client_instance = AsyncMock()
@@ -452,13 +452,18 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         mock_api_resource = AsyncMock()
         mock_resources = Mock()
-        # A real K8s server would already have applied the label selector -
-        # only test-workflow-123 matches template=test-template AND phase=Running.
+        # A real K8s server would already have applied the phase label selector -
+        # only runs still matching after that need workflowName/workflowTemplateName applied.
         mock_resources.to_dict.return_value = {
             "items": [
                 {
                     "metadata": {"name": "test-workflow-123"},
                     "spec": {"workflowTemplateRef": {"name": "test-template"}},
+                    "status": {"phase": "Running"}
+                },
+                {
+                    "metadata": {"name": "test-workflow-other-template"},
+                    "spec": {"workflowTemplateRef": {"name": "other-template"}},
                     "status": {"phase": "Running"}
                 }
             ]
@@ -479,8 +484,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["metadata"]["name"], "test-workflow-123")
         mock_api_resource.get.assert_called_once_with(
             namespace="default",
-            label_selector="workflows.argoproj.io/workflow-template=test-template,"
-            "workflows.argoproj.io/phase=Running",
+            label_selector="workflows.argoproj.io/phase=Running",
             limit=None,
             _continue=None,
         )
@@ -530,7 +534,7 @@ class TestResourcesEndpoint(unittest.TestCase):
     @patch('ark_api.api.v1.resources.DynamicClient')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_template(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
-        """workflowTemplateName becomes an exact-match label selector."""
+        """workflowTemplateName matches spec.workflowTemplateRef.name post-fetch, with no label selector sent."""
         mock_get_context.return_value = {"namespace": "default"}
 
         mock_api_client_instance = AsyncMock()
@@ -563,9 +567,69 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["metadata"]["name"], "workflow1")
         mock_api_resource.get.assert_called_once_with(
             namespace="default",
-            label_selector="workflows.argoproj.io/workflow-template=prod-template",
+            label_selector=None,
             limit=None,
             _continue=None,
+        )
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_list_workflows_filter_by_template_matches_runs_with_no_label(
+        self, mock_get_context, mock_dynamic_client_cls, mock_api_client
+    ):
+        """A run whose only link to its template is workflowTemplateRef (no Argo label) must match.
+
+        Regression test for #3797: runs created with spec.workflowTemplateRef (as the
+        dashboard does) never carry the workflows.argoproj.io/workflow-template label.
+        """
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_resources = Mock()
+        mock_resources.to_dict.return_value = {
+            "items": [
+                {
+                    "metadata": {"name": "test-1792427009009", "labels": {"workflows.argoproj.io/completed": "true"}},
+                    "spec": {"workflowTemplateRef": {"name": "test"}},
+                    "status": {"phase": "Succeeded"}
+                },
+                {
+                    "metadata": {"name": "simple-seq-1792427802897"},
+                    "spec": {"workflowTemplateRef": {"name": "simple-seq"}},
+                    "status": {"phase": "Succeeded"}
+                },
+                {
+                    "metadata": {"name": "test-2-123"},
+                    "spec": {"workflowTemplateRef": {"name": "test-2"}},
+                    "status": {"phase": "Succeeded"}
+                },
+                {
+                    "metadata": {"name": "no-template-ref-123"},
+                    "spec": {},
+                    "status": {"phase": "Succeeded"}
+                },
+            ]
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_resources)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowTemplateName=test"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        # Exact match only: "test-2" must not match a request for "test".
+        self.assertEqual(
+            [item["metadata"]["name"] for item in data["items"]],
+            ["test-1792427009009"],
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')

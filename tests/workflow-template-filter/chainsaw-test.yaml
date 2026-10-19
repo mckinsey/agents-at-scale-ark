@@ -1,0 +1,331 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workflow-template-filter
+  labels:
+    requires-images: "true"
+spec:
+  description: >
+    #3797: the workflow runs Template filter must match on spec.workflowTemplateRef.name, not on the workflows.argoproj.io/workflow-template label - Argo only sets that label when a run is submitted through its own API, never when a Workflow is created with workflowTemplateRef directly, which is how the dashboard creates every run. This test deploys a real ark-api (built from this PR's image), creates real WorkflowTemplate and Workflow resources the same way the dashboard does, and hits the live /v1/resources/apis/argoproj.io/v1alpha1/Workflow endpoint to prove the filter matches by workflowTemplateRef, matches exactly (a template name that is a prefix of another must not match loosely), and excludes runs with no workflowTemplateRef at all.
+  timeouts:
+    apply: 120s
+    assert: 120s
+    exec: 180s
+
+  steps:
+  - name: install-argo-crds
+    try:
+    - script:
+        timeout: 300s
+        # Only need the Workflow/WorkflowTemplate CRDs registered so real
+        # objects can be created and listed - the controller and server are
+        # disabled (replicas=0 / enabled=false) so none of these workflows
+        # ever actually run, keeping this step fast and side-effect free.
+        #
+        # `helm template | kubectl apply` rather than `helm install`: CRDs are
+        # cluster-scoped, so a plain `helm install` fails with "invalid
+        # ownership metadata" the moment any other release (e.g. a real
+        # argo-workflows install, or another instance of this same test
+        # running in parallel) has already created them under a different
+        # release name. kubectl apply has no such ownership check and is
+        # idempotent against an identical, already-applied CRD.
+        content: |
+          helm dependency update ../../services/argo-workflows/chart >/dev/null
+          helm template argo-workflows ../../services/argo-workflows/chart \
+            --namespace "$NAMESPACE" \
+            --set argo-workflows.singleNamespace=true \
+            --set argo-workflows.controller.replicas=0 \
+            --set argo-workflows.server.enabled=false \
+            --set minio.enabled=false \
+            --set httpRoute.argo.enabled=false \
+            | kubectl apply -f -
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: workflows.argoproj.io
+          status:
+            (conditions[?type == 'Established']):
+              - status: "True"
+    - assert:
+        resource:
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: workflowtemplates.argoproj.io
+          status:
+            (conditions[?type == 'Established']):
+              - status: "True"
+    # No cleanup: the CRDs are cluster-scoped and intentionally left in place
+    # (matching upstream's own crds.keep=true default) since other namespaces
+    # or concurrently running tests may still depend on them. Every other
+    # resource applied here is namespace-scoped and goes away with the
+    # ephemeral test namespace.
+
+  - name: install-ark-api
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-api ../../services/ark-api/chart \
+            --namespace "$NAMESPACE" \
+            ${ARK_API_IMAGE:+--set app.image.repository=${ARK_API_IMAGE}} \
+            ${ARK_API_IMAGE_TAG:+--set app.image.tag=${ARK_API_IMAGE_TAG}} \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          echo "=== Pods ==="
+          kubectl -n $NAMESPACE get pods -o wide
+          echo "=== Logs ark-api ==="
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-api --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: create-templates-and-runs
+    try:
+    - script:
+        timeout: 90s
+        # Mirrors exactly how the dashboard creates a run from a template
+        # (ark-dashboard/lib/services/workflow-templates.ts:145): a Workflow
+        # with only spec.workflowTemplateRef.name set, no labels at all. Two
+        # WorkflowTemplates are created - "test" and "test-2" - so the prefix
+        # case from the bug report (`test` must not loosely match `test-2`)
+        # is covered, plus a run with no workflowTemplateRef whatsoever.
+        content: |
+          set -eu
+          cat <<EOF | kubectl apply -f -
+          apiVersion: argoproj.io/v1alpha1
+          kind: WorkflowTemplate
+          metadata:
+            name: test
+            namespace: $NAMESPACE
+          spec:
+            entrypoint: main
+            templates:
+            - name: main
+              container:
+                image: busybox
+                command: ["echo", "hi"]
+          ---
+          apiVersion: argoproj.io/v1alpha1
+          kind: WorkflowTemplate
+          metadata:
+            name: test-2
+            namespace: $NAMESPACE
+          spec:
+            entrypoint: main
+            templates:
+            - name: main
+              container:
+                image: busybox
+                command: ["echo", "hi"]
+          ---
+          apiVersion: argoproj.io/v1alpha1
+          kind: Workflow
+          metadata:
+            name: run-from-test-1
+            namespace: $NAMESPACE
+          spec:
+            workflowTemplateRef:
+              name: test
+          ---
+          apiVersion: argoproj.io/v1alpha1
+          kind: Workflow
+          metadata:
+            name: run-from-test-2
+            namespace: $NAMESPACE
+          spec:
+            workflowTemplateRef:
+              name: test
+          ---
+          apiVersion: argoproj.io/v1alpha1
+          kind: Workflow
+          metadata:
+            name: run-from-test-dash-2
+            namespace: $NAMESPACE
+          spec:
+            workflowTemplateRef:
+              name: test-2
+          ---
+          apiVersion: argoproj.io/v1alpha1
+          kind: Workflow
+          metadata:
+            name: run-with-no-template-ref
+            namespace: $NAMESPACE
+          spec:
+            entrypoint: main
+            templates:
+            - name: main
+              container:
+                image: busybox
+                command: ["echo", "hi"]
+          EOF
+
+          # None of these runs ever gets the workflows.argoproj.io/workflow-template
+          # label - only Argo's own submit API or a CronWorkflow would set it.
+          # This is the exact condition the bug report traced the issue to.
+          for wf in run-from-test-1 run-from-test-2 run-from-test-dash-2; do
+            label=$(kubectl -n "$NAMESPACE" get workflow "$wf" -o jsonpath='{.metadata.labels.workflows\.argoproj\.io/workflow-template}')
+            [ -z "$label" ] || { echo "FAIL: $wf unexpectedly carries the workflow-template label: $label"; exit 1; }
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: probe-pod
+    try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: template-filter-curl
+          spec:
+            containers:
+              - name: curl
+                image: curlimages/curl:8.11.1
+                command: ["sleep", "300"]
+            restartPolicy: Never
+            terminationGracePeriodSeconds: 0
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: template-filter-curl
+        timeout: 120s
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+
+  - name: filter-matches-runs-with-no-label
+    try:
+    - script:
+        timeout: 60s
+        # The core regression guard: filtering by "test" must return exactly
+        # the two runs whose workflowTemplateRef.name is "test", using only
+        # that spec field - the label these runs don't have is never
+        # involved.
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/resources/apis/argoproj.io/v1alpha1/Workflow"
+
+          NAMES=$(kubectl exec template-filter-curl -n "$NAMESPACE" -- \
+            curl -s -G "$BASE_URL" \
+              --data-urlencode "namespace=$NAMESPACE" \
+              --data-urlencode "workflowTemplateName=test" \
+            | jq -r '.items[].metadata.name' | sort)
+
+          echo "matched: $NAMES"
+          EXPECTED=$(printf 'run-from-test-1\nrun-from-test-2')
+          [ "$NAMES" = "$EXPECTED" ] || { echo "FAIL: expected exactly run-from-test-1 and run-from-test-2, got: $NAMES"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs template-filter-curl || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: filter-is-an-exact-match-not-a-prefix
+    try:
+    - script:
+        timeout: 60s
+        # A template name that is a prefix of another ("test" vs "test-2")
+        # must not match loosely in either direction.
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/resources/apis/argoproj.io/v1alpha1/Workflow"
+
+          NAMES=$(kubectl exec template-filter-curl -n "$NAMESPACE" -- \
+            curl -s -G "$BASE_URL" \
+              --data-urlencode "namespace=$NAMESPACE" \
+              --data-urlencode "workflowTemplateName=test-2" \
+            | jq -r '.items[].metadata.name' | sort)
+
+          echo "matched: $NAMES"
+          [ "$NAMES" = "run-from-test-dash-2" ] || { echo "FAIL: expected exactly run-from-test-dash-2, got: $NAMES"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs template-filter-curl || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: filter-by-nonexistent-template-returns-empty
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/resources/apis/argoproj.io/v1alpha1/Workflow"
+
+          COUNT=$(kubectl exec template-filter-curl -n "$NAMESPACE" -- \
+            curl -s -G "$BASE_URL" \
+              --data-urlencode "namespace=$NAMESPACE" \
+              --data-urlencode "workflowTemplateName=nonexistent-xyz" \
+            | jq '.items | length')
+
+          [ "$COUNT" -eq 0 ] || { echo "FAIL: expected 0 items for a nonexistent template, got $COUNT"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs template-filter-curl || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: no-filter-returns-every-run
+    try:
+    - script:
+        timeout: 60s
+        # Unfiltered, all four runs come back, including the one with no
+        # workflowTemplateRef at all - that run is excluded only when a
+        # template filter is applied, never on its own.
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/resources/apis/argoproj.io/v1alpha1/Workflow"
+
+          NAMES=$(kubectl exec template-filter-curl -n "$NAMESPACE" -- \
+            curl -s -G "$BASE_URL" \
+              --data-urlencode "namespace=$NAMESPACE" \
+            | jq -r '.items[].metadata.name' | sort)
+
+          echo "all runs: $NAMES"
+          EXPECTED=$(printf 'run-from-test-1\nrun-from-test-2\nrun-from-test-dash-2\nrun-with-no-template-ref')
+          [ "$NAMES" = "$EXPECTED" ] || { echo "FAIL: expected all four runs, got: $NAMES"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs template-filter-curl || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

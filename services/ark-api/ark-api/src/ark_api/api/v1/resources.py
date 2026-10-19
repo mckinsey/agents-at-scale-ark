@@ -58,7 +58,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/resources", tags=["resources"])
 
 WORKFLOW_PHASE_LABEL = "workflows.argoproj.io/phase"
-WORKFLOW_TEMPLATE_LABEL = "workflows.argoproj.io/workflow-template"
 
 # `notin` for "pending" also matches resources where the label is absent
 # entirely, which covers a workflow the controller hasn't reconciled yet.
@@ -180,27 +179,39 @@ async def get_grouped_resource(
 def _build_label_selector(
     kind: str,
     label_selector: Optional[str],
-    workflow_template_name: Optional[str],
     status: Optional[str],
 ) -> str:
     selectors = [label_selector]
-    if kind == "Workflow":
-        if workflow_template_name:
-            selectors.append(f"{WORKFLOW_TEMPLATE_LABEL}={workflow_template_name}")
-        if status:
-            selectors.append(WORKFLOW_STATUS_LABEL_SELECTORS.get(status.lower()))
+    if kind == "Workflow" and status:
+        selectors.append(WORKFLOW_STATUS_LABEL_SELECTORS.get(status.lower()))
     return ",".join(filter(None, selectors))
 
 
-def _filter_items_by_name(resources_dict: dict, name: str) -> None:
+def _filter_items(resources_dict: dict, predicate) -> None:
     (resources_dict.get("metadata") or {}).pop("remainingItemCount", None)
     if "items" not in resources_dict:
         return
-    resources_dict["items"] = [
-        item
-        for item in resources_dict["items"]
-        if name.lower() in item.get("metadata", {}).get("name", "").lower()
-    ]
+    resources_dict["items"] = [item for item in resources_dict["items"] if predicate(item)]
+
+
+def _filter_items_by_name(resources_dict: dict, name: str) -> None:
+    needle = name.lower()
+    _filter_items(resources_dict, lambda item: needle in item.get("metadata", {}).get("name", "").lower())
+
+
+def _filter_items_by_template(resources_dict: dict, workflow_template_name: str) -> None:
+    """Keep only runs whose spec.workflowTemplateRef.name matches exactly.
+
+    Argo only sets the workflows.argoproj.io/workflow-template label when a run is
+    submitted through its own submit API or by a CronWorkflow, not when a Workflow
+    is created with spec.workflowTemplateRef directly (as the dashboard does), so
+    that label cannot be used as a selector here.
+    """
+    _filter_items(
+        resources_dict,
+        lambda item: ((item.get("spec") or {}).get("workflowTemplateRef") or {}).get("name")
+        == workflow_template_name,
+    )
 
 
 async def _is_access_allowed(
@@ -279,10 +290,12 @@ async def list_grouped_resources(
             Argo Server across the whole collection when it serves the list; otherwise applied
             only to the page returned by this call, so a page can come back with few or no
             matches even though more exist further in the cursor sequence.
-        workflowTemplateName: Filter by workflow template name (exact match). Applied
-            server-side via a label selector, so pagination stays correct across pages.
-        status: Filter by workflow status. Same server-side label selector as
-            workflowTemplateName.
+        workflowTemplateName: Filter by workflow template name (exact match), matched against
+            spec.workflowTemplateRef.name. Applied post-fetch like workflowName, since Argo only
+            labels a run with the template name when it is submitted through Argo's own API, not
+            when created via spec.workflowTemplateRef as the dashboard does; the same pagination
+            caveat as workflowName applies.
+        status: Filter by workflow status. Applied server-side via a label selector.
         limit: Maximum number of items returned by the underlying Kubernetes list call.
             Omit for the full, unpaginated list (used by non-paginated callers).
         continue_token: Opaque cursor from a previous page's response metadata
@@ -322,13 +335,15 @@ async def list_grouped_resources(
 
     api_version = f"{group}/{version}"
 
-    combined_label_selector = _build_label_selector(kind, label_selector, workflowTemplateName, status)
+    combined_label_selector = _build_label_selector(kind, label_selector, status)
 
     if api_version == WORKFLOW_API_VERSION and kind == WORKFLOW_KIND:
         workflow_list = await _list_workflows_from_argo_server(
             namespace, combined_label_selector or None, workflowName, limit, continue_token, impersonation
         )
         if workflow_list is not None:
+            if workflowTemplateName:
+                _filter_items_by_template(workflow_list, workflowTemplateName)
             return _create_resource_response(workflow_list, request)
 
     async with get_impersonating_api_client(impersonation) as api:
@@ -347,10 +362,12 @@ async def list_grouped_resources(
         )
         resources_dict = resources.to_dict()
 
-        # workflowName stays a post-fetch partial match, applied only to the
-        # page returned by this call, not the whole collection.
+        # workflowName and workflowTemplateName are post-fetch filters, applied
+        # only to the page returned by this call, not the whole collection.
         if kind == "Workflow" and workflowName:
             _filter_items_by_name(resources_dict, workflowName)
+        if kind == "Workflow" and workflowTemplateName:
+            _filter_items_by_template(resources_dict, workflowTemplateName)
 
         return _create_resource_response(resources_dict, request)
 

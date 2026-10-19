@@ -59,8 +59,7 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
 
         with patch('ark_api.api.v1.argo_server.httpx.AsyncClient', argo_client_factory(handler)):
             response = self.client.get(
-                f"{WORKFLOW_LIST_PATH}?limit=2&continue=4&status=running"
-                "&workflowTemplateName=tpl&workflowName=Demo"
+                f"{WORKFLOW_LIST_PATH}?limit=2&continue=4&status=running&workflowName=Demo"
             )
 
         self.assertEqual(response.status_code, 200)
@@ -75,7 +74,7 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
         self.assertEqual(request.url.params["listOptions.continue"], "4")
         self.assertEqual(
             request.url.params["listOptions.labelSelector"],
-            "workflows.argoproj.io/workflow-template=tpl,workflows.argoproj.io/phase=Running",
+            "workflows.argoproj.io/phase=Running",
         )
         self.assertEqual(
             request.url.params["listOptions.fieldSelector"],
@@ -89,6 +88,33 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
             (attributes.namespace, attributes.group, attributes.resource, attributes.verb),
             ("default", "argoproj.io", "workflows", "list"),
         )
+
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
+    def test_template_filter_is_applied_post_fetch_not_as_a_label_selector(
+        self, mock_auth_api_cls, mock_dynamic_client_cls, _ctx, _api
+    ):
+        """Regression test for #3797: no workflow carries the workflow-template label when
+        created via spec.workflowTemplateRef, so the filter must not rely on it as a selector.
+        """
+        mock_auth_api_cls.return_value = access_review(True)
+        matching = workflow("from-test", "2026-10-03T08:00:00Z")
+        matching["spec"] = {"workflowTemplateRef": {"name": "test"}}
+        other_template = workflow("from-simple-seq", "2026-10-02T08:00:00Z")
+        other_template["spec"] = {"workflowTemplateRef": {"name": "simple-seq"}}
+        items = [matching, other_template]
+        handler = self.argo_handler(items, remaining=5)
+
+        with patch('ark_api.api.v1.argo_server.httpx.AsyncClient', argo_client_factory(handler)):
+            response = self.client.get(f"{WORKFLOW_LIST_PATH}?limit=2&workflowTemplateName=test")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual([i["metadata"]["name"] for i in data["items"]], ["from-test"])
+        # A page-level filter can't vouch for the collection-wide remaining count.
+        self.assertEqual(data["metadata"], {"continue": "2"})
+
+        self.assertNotIn("listOptions.labelSelector", self.requests[0].url.params)
 
     @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
     def test_last_page_has_no_continue(self, mock_auth_api_cls, _ctx, _api):
@@ -191,6 +217,47 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
         api_resource.get = AsyncMock(return_value=resources)
         dynamic_client.resources.get = AsyncMock(return_value=api_resource)
         return api_resource
+
+
+def workflow_with_template(name, template_name):
+    item = workflow(name)
+    item["spec"] = {"workflowTemplateRef": {"name": template_name}} if template_name else {}
+    return item
+
+
+class TestFilterItemsByTemplate(unittest.TestCase):
+    def test_keeps_exact_match_only(self):
+        from ark_api.api.v1.resources import _filter_items_by_template
+        resources = {
+            "items": [
+                workflow_with_template("from-test", "test"),
+                workflow_with_template("from-test-2", "test-2"),
+                workflow_with_template("no-ref", None),
+            ]
+        }
+
+        _filter_items_by_template(resources, "test")
+
+        self.assertEqual([i["metadata"]["name"] for i in resources["items"]], ["from-test"])
+
+    def test_drops_remaining_count_that_ignores_the_page_filter(self):
+        from ark_api.api.v1.resources import _filter_items_by_template
+        resources = {
+            "metadata": {"continue": "token", "remainingItemCount": 40},
+            "items": [workflow_with_template("from-test", "test")],
+        }
+
+        _filter_items_by_template(resources, "test")
+
+        self.assertEqual(resources["metadata"], {"continue": "token"})
+
+    def test_leaves_response_without_items_untouched(self):
+        from ark_api.api.v1.resources import _filter_items_by_template
+        resources = {"metadata": {}}
+
+        _filter_items_by_template(resources, "test")
+
+        self.assertEqual(resources, {"metadata": {}})
 
 
 class TestFilterItemsByName(unittest.TestCase):
