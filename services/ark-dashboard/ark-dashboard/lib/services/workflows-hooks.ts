@@ -55,6 +55,46 @@ function computeTotalCount(offset: number, page: WorkflowPage): number | null {
   return offset + page.items.length + page.remainingItemCount;
 }
 
+function resolveContinueToken(
+  targetPage: number,
+  pageSize: number,
+  offsetPaging: boolean | null,
+  tokenStack: Array<string | undefined>,
+): string | undefined {
+  if (targetPage === 0) {
+    return undefined;
+  }
+  if (offsetPaging === false) {
+    return tokenStack[targetPage];
+  }
+  return String(targetPage * pageSize);
+}
+
+function withPinnedFirst(
+  items: ArgoWorkflow[],
+  pinned: ArgoWorkflow | null,
+): ArgoWorkflow[] {
+  if (!pinned) {
+    return items;
+  }
+  return [
+    pinned,
+    ...items.filter(item => item.metadata.name !== pinned.metadata.name),
+  ];
+}
+
+function isUnreachablePage(
+  err: unknown,
+  targetPage: number,
+  offsetPaging: boolean | null,
+): boolean {
+  if (targetPage === 0) {
+    return false;
+  }
+  const status = (err as { status?: number }).status;
+  return status === 410 || offsetPaging === null;
+}
+
 export interface UseWorkflowsOptions {
   page?: number;
   pageSize?: number;
@@ -94,6 +134,29 @@ export function useWorkflows(
     namespaceRef.current = namespace;
   }, [namespace]);
 
+  const handleFetchError = useCallback(
+    (err: unknown, targetPage: number, silent?: boolean) => {
+      // Cancelled on purpose, not a failure.
+      if ((err as Error).name === 'AbortError') {
+        return;
+      }
+      // A cached token's snapshot gets compacted by etcd after ~5 min, and a
+      // deep-linked page cannot be reached with cursors - recover instead of dead-ending.
+      if (isUnreachablePage(err, targetPage, offsetPagingRef.current)) {
+        tokenStackRef.current = [undefined];
+        onPageError?.(new Error('List changed — back to the first page'));
+        onPageReset?.();
+        return;
+      }
+      if (silent) {
+        onPageError?.(err as Error);
+      } else {
+        setError(err as Error);
+      }
+    },
+    [onPageError, onPageReset],
+  );
+
   const fetchPage = useCallback(
     async (targetPage: number, options?: { silent?: boolean }) => {
       if (!namespace) {
@@ -104,12 +167,12 @@ export function useWorkflows(
         return;
       }
 
-      const continueToken =
-        targetPage === 0
-          ? undefined
-          : offsetPagingRef.current === false
-            ? tokenStackRef.current[targetPage]
-            : String(targetPage * pageSize);
+      const continueToken = resolveContinueToken(
+        targetPage,
+        pageSize,
+        offsetPagingRef.current,
+        tokenStackRef.current,
+      );
       if (targetPage > 0 && continueToken === undefined) {
         onPageReset?.();
         return;
@@ -134,14 +197,7 @@ export function useWorkflows(
         const pinned = pinnedWorkflowRef.current;
         pinnedWorkflowRef.current = null;
         setWorkflows(
-          pinned && targetPage === 0
-            ? [
-                pinned,
-                ...result.items.filter(
-                  item => item.metadata.name !== pinned.metadata.name,
-                ),
-              ]
-            : result.items,
+          withPinnedFirst(result.items, targetPage === 0 ? pinned : null),
         );
         setHasNext(result.hasMore);
         setTotalCount(computeTotalCount(targetPage * pageSize, result));
@@ -150,34 +206,14 @@ export function useWorkflows(
         }
         setError(null);
       } catch (err) {
-        // Cancelled on purpose, not a failure.
-        if ((err as Error).name === 'AbortError') {
-          return;
-        }
-        // A cached token's snapshot gets compacted by etcd after ~5 min, and a
-        // deep-linked page cannot be reached with cursors - recover instead of dead-ending.
-        const status = (err as { status?: number }).status;
-        if (
-          targetPage > 0 &&
-          (status === 410 || offsetPagingRef.current === null)
-        ) {
-          tokenStackRef.current = [undefined];
-          onPageError?.(new Error('List changed — back to the first page'));
-          onPageReset?.();
-          return;
-        }
-        if (options?.silent) {
-          onPageError?.(err as Error);
-        } else {
-          setError(err as Error);
-        }
+        handleFetchError(err, targetPage, options?.silent);
       } finally {
         if (abortControllerRef.current === controller) {
           setLoading(false);
         }
       }
     },
-    [namespace, filters, pageSize, onPageError, onPageReset],
+    [namespace, filters, pageSize, onPageReset, handleFetchError],
   );
 
   // Filters/namespace narrow what a page shows, so a token stack built for a
