@@ -10,6 +10,8 @@ vi.mock('@/lib/services/workflow-templates', () => ({
   workflowTemplatesService: {
     canCreate: vi.fn(),
     canUpdate: vi.fn(),
+    canDelete: vi.fn(),
+    canRun: vi.fn(),
   },
 }));
 
@@ -23,12 +25,19 @@ vi.mock('next/navigation', () => ({
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
+const studioProps = vi.fn();
+
 vi.mock('@/components/workflow-studio/workflow-studio', () => ({
-  WorkflowStudio: () => <div data-testid="workflow-studio" />,
+  WorkflowStudio: (props: Record<string, unknown>) => {
+    studioProps(props);
+    return <div data-testid="workflow-studio" />;
+  },
 }));
 
 const mockCanCreate = vi.mocked(workflowTemplatesService.canCreate);
 const mockCanUpdate = vi.mocked(workflowTemplatesService.canUpdate);
+const mockCanDelete = vi.mocked(workflowTemplatesService.canDelete);
+const mockCanRun = vi.mocked(workflowTemplatesService.canRun);
 
 function setup(overrides?: { canUpdate?: boolean; namespace?: string }) {
   vi.mocked(useParams).mockReturnValue({ id: 'my-flow' });
@@ -40,6 +49,8 @@ function setup(overrides?: { canUpdate?: boolean; namespace?: string }) {
 
   mockCanCreate.mockResolvedValue(false);
   mockCanUpdate.mockResolvedValue(overrides?.canUpdate ?? false);
+  mockCanDelete.mockResolvedValue(false);
+  mockCanRun.mockResolvedValue(true);
 }
 
 describe('WorkflowTemplatePage', () => {
@@ -53,6 +64,14 @@ describe('WorkflowTemplatePage', () => {
     render(<WorkflowTemplatePage />);
 
     expect(await screen.findByTestId('workflow-studio')).toBeInTheDocument();
+    expect(studioProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'edit',
+        initialName: 'my-flow',
+        canRun: true,
+        canDelete: false,
+      }),
+    );
   });
 
   it('renders a not-authorized message with a back link and no studio when canUpdate is false', async () => {

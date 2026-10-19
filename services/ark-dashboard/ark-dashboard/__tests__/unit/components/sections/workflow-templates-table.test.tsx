@@ -139,6 +139,44 @@ describe('WorkflowTemplatesTable', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('disables Run when the user cannot run workflows', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowTemplatesTable
+        templates={templates}
+        onDelete={vi.fn()}
+        onRun={vi.fn()}
+        canRun={false}
+      />,
+    );
+    await user.click(screen.getByLabelText('Workflow template actions'));
+    expect(
+      screen.getByRole('menuitem', { name: 'Run workflow' }),
+    ).toHaveAttribute('data-disabled');
+    expect(
+      screen.getByRole('menuitem', { name: 'Delete' }),
+    ).not.toHaveAttribute('data-disabled');
+  });
+
+  it('disables Delete when the user cannot delete templates', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowTemplatesTable
+        templates={templates}
+        onDelete={vi.fn()}
+        onRun={vi.fn()}
+        canDelete={false}
+      />,
+    );
+    await user.click(screen.getByLabelText('Workflow template actions'));
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveAttribute(
+      'data-disabled',
+    );
+    expect(
+      screen.getByRole('menuitem', { name: 'Run workflow' }),
+    ).not.toHaveAttribute('data-disabled');
+  });
+
   it('disables Delete in read-only mode', async () => {
     readOnly = true;
     const user = userEvent.setup();

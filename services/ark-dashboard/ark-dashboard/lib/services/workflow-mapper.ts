@@ -12,6 +12,7 @@ export type MappedWorkflowStepType =
   | 'dag'
   | 'steps'
   | 'retry'
+  | 'taskgroup'
   | 'container'
   | 'script'
   | 'suspend';
@@ -47,6 +48,8 @@ export interface MappedWorkflowStep {
   children?: MappedWorkflowStep[];
 }
 
+export type MappedPauseState = 'pausing' | 'paused';
+
 export interface MappedWorkflowSession {
   id: string;
   name: string;
@@ -58,6 +61,15 @@ export interface MappedWorkflowSession {
   steps: MappedWorkflowStep[];
   namespace?: string;
   uid?: string;
+  suspended: boolean;
+  pauseState?: MappedPauseState;
+  shutdownRequested: boolean;
+}
+
+const TERMINAL_PHASES = new Set(['Succeeded', 'Failed', 'Error']);
+
+export function isTerminalPhase(phase: string | undefined): boolean {
+  return TERMINAL_PHASES.has(phase ?? '');
 }
 
 function mapArgoPhaseToStatus(phase: string): MappedStepStatus {
@@ -86,6 +98,8 @@ function mapArgoTypeToWorkflowType(type: string): MappedWorkflowStepType {
       return 'steps';
     case 'Retry':
       return 'retry';
+    case 'TaskGroup':
+      return 'taskgroup';
     case 'Pod':
       return 'container';
     case 'Container':
@@ -158,21 +172,23 @@ function isStepGroupNode(node: ArgoNodeStatus): boolean {
   );
 }
 
-function collectRetryAttemptIds(
+const GROUP_NODE_TYPES = new Set(['Retry', 'TaskGroup']);
+
+function collectGroupedChildIds(
   allNodes: Record<string, ArgoNodeStatus>,
 ): Set<string> {
-  const attemptIds = new Set<string>();
+  const groupedIds = new Set<string>();
 
   for (const node of Object.values(allNodes)) {
-    if (node.type !== 'Retry' || !node.children) {
+    if (!GROUP_NODE_TYPES.has(node.type) || !node.children) {
       continue;
     }
-    for (const attemptId of node.children) {
-      attemptIds.add(attemptId);
+    for (const childId of node.children) {
+      groupedIds.add(childId);
     }
   }
 
-  return attemptIds;
+  return groupedIds;
 }
 
 function resolveContinuationNodes(
@@ -228,7 +244,36 @@ interface StepMappingContext {
   allNodes: Record<string, ArgoNodeStatus>;
   workflowName: string;
   workflowNamespace?: string;
+  workflowTerminal: boolean;
+  workflowFinishedAt?: string;
   visitedNodes: Set<string>;
+}
+
+function settleStatus(
+  phase: string,
+  children: MappedWorkflowStep[] | undefined,
+  context: StepMappingContext,
+): MappedStepStatus {
+  const status = mapArgoPhaseToStatus(phase);
+  if (
+    !context.workflowTerminal ||
+    (status !== 'running' && status !== 'pending')
+  ) {
+    return status;
+  }
+  const allChildrenSucceeded =
+    !!children?.length &&
+    children.every(
+      child => child.status === 'succeeded' || child.status === 'skipped',
+    );
+  return allChildrenSucceeded ? 'succeeded' : 'failed';
+}
+
+function settleFinishedAt(
+  finishedAt: string | undefined,
+  context: StepMappingContext,
+): string | undefined {
+  return finishedAt ?? context.workflowFinishedAt;
 }
 
 interface ChildMappingOptions {
@@ -276,12 +321,12 @@ function mapDagTasks(
   node: ArgoNodeStatus,
   context: StepMappingContext,
 ): MappedWorkflowStep[] {
-  const retryAttemptIds = collectRetryAttemptIds(context.allNodes);
+  const groupedChildIds = collectGroupedChildIds(context.allNodes);
   const dagTaskIds = Object.keys(context.allNodes).filter(
     nodeId =>
       context.allNodes[nodeId].boundaryID === node.id &&
       nodeId !== node.id &&
-      !retryAttemptIds.has(nodeId) &&
+      !groupedChildIds.has(nodeId) &&
       !isStepGroupNode(context.allNodes[nodeId]),
   );
 
@@ -339,6 +384,13 @@ function mapChildSteps(
     });
   }
 
+  if (node.type === 'TaskGroup') {
+    return mapNodeIdsToSteps(node.children, context, {
+      parentIsDag: true,
+      inBoundedContext: false,
+    });
+  }
+
   if (options.parentIsDag || options.inBoundedContext) {
     return [];
   }
@@ -356,6 +408,7 @@ function mapArgoNodeToStep(
   }
   context.visitedNodes.add(node.id);
 
+  const finishedAt = settleFinishedAt(node.finishedAt, context);
   const step: MappedWorkflowStep = {
     id: node.id,
     name: node.name,
@@ -363,8 +416,8 @@ function mapArgoNodeToStep(
     type: mapArgoTypeToWorkflowType(node.type),
     status: mapArgoPhaseToStatus(node.phase),
     startedAt: node.startedAt,
-    finishedAt: node.finishedAt,
-    duration: calculateDuration(node.startedAt, node.finishedAt),
+    finishedAt,
+    duration: calculateDuration(node.startedAt, finishedAt),
     message: node.message,
     detail: buildNodeDetail(
       node,
@@ -377,6 +430,7 @@ function mapArgoNodeToStep(
   if (children.length > 0) {
     step.children = children;
   }
+  step.status = settleStatus(node.phase, step.children, context);
 
   return step;
 }
@@ -399,6 +453,8 @@ function buildParallelGroup(
     return [];
   }
 
+  const finishedAt = settleFinishedAt(stepGroupNode.finishedAt, context);
+
   // Create a container that will show the parallel steps as nested
   return [
     {
@@ -406,13 +462,10 @@ function buildParallelGroup(
       name: stepGroupNode.name,
       displayName: stepGroupNode.displayName || stepGroupNode.name,
       type: 'steps',
-      status: mapArgoPhaseToStatus(stepGroupNode.phase),
+      status: settleStatus(stepGroupNode.phase, parallelSteps, context),
       startedAt: stepGroupNode.startedAt,
-      finishedAt: stepGroupNode.finishedAt,
-      duration: calculateDuration(
-        stepGroupNode.startedAt,
-        stepGroupNode.finishedAt,
-      ),
+      finishedAt,
+      duration: calculateDuration(stepGroupNode.startedAt, finishedAt),
       children: parallelSteps,
     },
   ];
@@ -481,13 +534,17 @@ function processStepGroup(
 
 function createStepMappingContext(
   allNodes: Record<string, ArgoNodeStatus>,
-  workflowName: string,
-  workflowNamespace?: string,
+  workflow: ArgoWorkflow,
 ): StepMappingContext {
+  const workflowTerminal = isTerminalPhase(workflow.status?.phase);
   return {
     allNodes,
-    workflowName,
-    workflowNamespace,
+    workflowName: workflow.metadata.name,
+    workflowNamespace: workflow.metadata.namespace,
+    workflowTerminal,
+    workflowFinishedAt: workflowTerminal
+      ? workflow.status?.finishedAt
+      : undefined,
     visitedNodes: new Set<string>(),
   };
 }
@@ -528,16 +585,47 @@ function mapTopLevelNodes(
   rootNodeId: string,
   context: StepMappingContext,
 ): MappedWorkflowStep[] {
-  const retryAttemptIds = collectRetryAttemptIds(context.allNodes);
+  const groupedChildIds = collectGroupedChildIds(context.allNodes);
   const topLevelNodeIds = getAllNodesFlat(context.allNodes)
     .filter(
       node =>
         (!node.boundaryID || node.boundaryID === rootNodeId) &&
-        !retryAttemptIds.has(node.id),
+        !groupedChildIds.has(node.id),
     )
     .map(node => node.id);
 
   return mapNodeIdsToSteps(topLevelNodeIds, context, ROOT_CHILD_OPTIONS);
+}
+
+function isWaitingAtSuspendNode(nodes: Record<string, ArgoNodeStatus>) {
+  return Object.values(nodes).some(
+    node => node.type === 'Suspend' && node.phase === 'Running',
+  );
+}
+
+function hasActivePods(nodes: Record<string, ArgoNodeStatus>) {
+  return Object.values(nodes).some(
+    node =>
+      node.type === 'Pod' &&
+      (node.phase === 'Running' || node.phase === 'Pending'),
+  );
+}
+
+function getPauseState(
+  workflow: ArgoWorkflow,
+  nodes: Record<string, ArgoNodeStatus>,
+): MappedPauseState | undefined {
+  if (workflow.status?.phase !== 'Running') {
+    return undefined;
+  }
+  const podsActive = hasActivePods(nodes);
+  if (workflow.spec?.suspend === true) {
+    return podsActive ? 'pausing' : 'paused';
+  }
+  if (isWaitingAtSuspendNode(nodes) && !podsActive) {
+    return 'paused';
+  }
+  return undefined;
 }
 
 export function mapArgoWorkflowToSession(
@@ -547,11 +635,7 @@ export function mapArgoWorkflowToSession(
   const status = workflow.status;
   const nodes = status?.nodes || {};
   const rootNode = nodes[workflowName];
-  const context = createStepMappingContext(
-    nodes,
-    workflowName,
-    workflow.metadata.namespace,
-  );
+  const context = createStepMappingContext(nodes, workflow);
 
   const steps = rootNode?.children?.length
     ? mapRootNodeChildren(rootNode, context)
@@ -568,6 +652,9 @@ export function mapArgoWorkflowToSession(
     steps,
     namespace: workflow.metadata.namespace,
     uid: workflow.metadata.uid,
+    suspended: workflow.spec?.suspend === true || isWaitingAtSuspendNode(nodes),
+    pauseState: getPauseState(workflow, nodes),
+    shutdownRequested: Boolean(workflow.spec?.shutdown),
   };
 }
 

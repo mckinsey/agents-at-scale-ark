@@ -46,6 +46,14 @@ export async function expandCompressedNodes(
   }
 }
 
+export type WorkflowLifecycleAction =
+  | 'suspend'
+  | 'resume'
+  | 'stop'
+  | 'terminate'
+  | 'retry'
+  | 'resubmit';
+
 export interface WorkflowFilters {
   workflowName?: string;
   workflowTemplateName?: string;
@@ -62,6 +70,7 @@ export interface WorkflowPage {
   items: ArgoWorkflow[];
   continueToken?: string;
   hasMore: boolean;
+  remainingItemCount?: number;
 }
 
 export const workflowsService = {
@@ -94,17 +103,33 @@ export const workflowsService = {
       : await apiClient.get<ArgoWorkflowList>(url);
     const items = await Promise.all(response.items.map(expandCompressedNodes));
     const continueToken = response.metadata?.continue || undefined;
+    const remainingItemCount = response.metadata?.remainingItemCount;
 
     return {
       items,
       continueToken,
       hasMore: Boolean(continueToken),
+      remainingItemCount:
+        remainingItemCount === undefined
+          ? undefined
+          : Number(remainingItemCount),
     };
   },
 
   async get(namespace: string, name: string): Promise<ArgoWorkflow> {
     const response = await apiClient.get<ArgoWorkflow>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/${name}?namespace=${namespace}`,
+    );
+    return expandCompressedNodes(response);
+  },
+
+  async runLifecycleAction(
+    namespace: string,
+    name: string,
+    action: WorkflowLifecycleAction,
+  ): Promise<ArgoWorkflow> {
+    const response = await apiClient.put<ArgoWorkflow>(
+      `/api/v1/resources/apis/argoproj.io/v1alpha1/namespaces/${encodeURIComponent(namespace)}/workflows/${encodeURIComponent(name)}/${action}`,
     );
     return expandCompressedNodes(response);
   },

@@ -33,6 +33,7 @@ const STATS_POLL_INTERVAL_MS = 30000;
 interface StudioHeaderActionsProps {
   workflowName: string;
   persisted: boolean;
+  canDelete?: boolean;
 }
 
 function errorMessage(error: unknown): string {
@@ -42,6 +43,7 @@ function errorMessage(error: unknown): string {
 export function StudioHeaderActions({
   workflowName,
   persisted,
+  canDelete = true,
 }: Readonly<StudioHeaderActionsProps>) {
   const { namespace, readOnlyMode } = useNamespace();
   const argoLinks = useArgoLinks();
@@ -166,7 +168,29 @@ export function StudioHeaderActions({
           </Tooltip>
         )}
 
-        {!readOnlyMode && (
+        {!readOnlyMode && !canDelete && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex" tabIndex={0}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  aria-label="Delete workflow"
+                  disabled
+                  data-testid="studio-delete">
+                  <Trash className="h-4 w-4" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              You do not have permission to delete workflow templates
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {!readOnlyMode && canDelete && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

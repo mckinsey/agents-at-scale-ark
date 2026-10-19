@@ -3,12 +3,15 @@ import os
 import unittest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-from a2a.types import AgentSkill
-from fastapi.testclient import TestClient
+
+from a2a.types import AgentCard, AgentSkill
 from ark_api.api.v1 import a2a_gateway
 from ark_api.api.v1.a2a_gateway import get_a2a_manager
 from ark_api.main import app
+from fastapi.testclient import TestClient
+
 from .test_a2a_agent_card_url import _make_test_card
+
 os.environ["AUTH_MODE"] = "open"
 
 
@@ -68,7 +71,10 @@ class TestListAgentsPayload(A2AGatewayTestCase):
             AgentSkill(id="alerts", name="Alerts", description="d", tags=["t"]),
             AgentSkill(id="radar", name="Radar", description="d", tags=["t"]),
         ]
-        card = _make_test_card().model_copy(update={"skills": skills})
+        card = AgentCard()
+        card.CopyFrom(_make_test_card())
+        del card.skills[:]
+        card.skills.extend(skills)
 
         entry = self.list_agents([card])[0]
 
