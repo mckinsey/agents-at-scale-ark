@@ -54,47 +54,6 @@ func TestValidateAgent(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects duplicate model override header names ignoring case", func(t *testing.T) {
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: arkv1alpha1.AgentSpec{
-				Overrides: []arkv1alpha1.Override{
-					{ResourceType: "model", Headers: []arkv1alpha1.Header{{Name: "X-Tenant", Value: arkv1alpha1.HeaderValue{Value: "a"}}}},
-					{ResourceType: "model", Headers: []arkv1alpha1.Header{{Name: "x-tenant", Value: arkv1alpha1.HeaderValue{Value: "b"}}}},
-				},
-			},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
-		if err == nil || !strings.Contains(err.Error(), "duplicate header name: x-tenant") {
-			t.Fatalf("expected duplicate header error, got %v", err)
-		}
-	})
-
-	t.Run("allows duplicate header names outside unselected model overrides", func(t *testing.T) {
-		duplicates := []arkv1alpha1.Header{
-			{Name: "X-Tenant", Value: arkv1alpha1.HeaderValue{Value: "a"}},
-			{Name: "x-tenant", Value: arkv1alpha1.HeaderValue{Value: "b"}},
-		}
-		agent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: arkv1alpha1.AgentSpec{
-				Overrides: []arkv1alpha1.Override{
-					{ResourceType: "model", Headers: []arkv1alpha1.Header{{Name: "X-Tenant", Value: arkv1alpha1.HeaderValue{Value: "a"}}}},
-					{
-						ResourceType:  "model",
-						Headers:       duplicates,
-						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"env": "prod"}},
-					},
-					{ResourceType: "mcpserver", Headers: duplicates},
-				},
-			},
-		}
-		_, err := v.ValidateAgent(ctx, agent)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("rejects agent tool with unsupported type", func(t *testing.T) {
 		agent := &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
@@ -176,6 +135,53 @@ func TestValidateAgent(t *testing.T) {
 		}
 		if len(warnings) != 1 {
 			t.Fatalf("expected 1 warning, got %d", len(warnings))
+		}
+	})
+}
+
+func TestValidateAgentModelOverrideHeaders(t *testing.T) {
+	lookup := newMockLookup()
+	v := NewValidator(lookup)
+	ctx := context.Background()
+
+	t.Run("rejects duplicate model override header names ignoring case", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
+			Spec: arkv1alpha1.AgentSpec{
+				Overrides: []arkv1alpha1.Override{
+					{ResourceType: "model", Headers: []arkv1alpha1.Header{{Name: "X-Tenant", Value: arkv1alpha1.HeaderValue{Value: "a"}}}},
+					{ResourceType: "model", Headers: []arkv1alpha1.Header{{Name: "x-tenant", Value: arkv1alpha1.HeaderValue{Value: "b"}}}},
+				},
+			},
+		}
+		_, err := v.ValidateAgent(ctx, agent)
+		if err == nil || !strings.Contains(err.Error(), "duplicate header name: x-tenant") {
+			t.Fatalf("expected duplicate header error, got %v", err)
+		}
+	})
+
+	t.Run("allows duplicate header names outside unselected model overrides", func(t *testing.T) {
+		duplicates := []arkv1alpha1.Header{
+			{Name: "X-Tenant", Value: arkv1alpha1.HeaderValue{Value: "a"}},
+			{Name: "x-tenant", Value: arkv1alpha1.HeaderValue{Value: "b"}},
+		}
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
+			Spec: arkv1alpha1.AgentSpec{
+				Overrides: []arkv1alpha1.Override{
+					{ResourceType: "model", Headers: []arkv1alpha1.Header{{Name: "X-Tenant", Value: arkv1alpha1.HeaderValue{Value: "a"}}}},
+					{
+						ResourceType:  "model",
+						Headers:       duplicates,
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"env": "prod"}},
+					},
+					{ResourceType: "mcpserver", Headers: duplicates},
+				},
+			},
+		}
+		_, err := v.ValidateAgent(ctx, agent)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 }
