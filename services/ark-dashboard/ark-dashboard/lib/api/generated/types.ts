@@ -1976,8 +1976,8 @@ export interface paths {
          *             Argo Server across the whole collection when it serves the list; otherwise applied
          *             only to the page returned by this call, so a page can come back with few or no
          *             matches even though more exist further in the cursor sequence.
-         *         workflowTemplateName: Filter by workflow template name (exact match), matched against
-         *             spec.workflowTemplateRef.name. Applied post-fetch like workflowName, since Argo only
+         *         workflowTemplateName: Filter by workflow template name (exact match, case sensitive),
+         *             matched against spec.workflowTemplateRef.name. Applied post-fetch like workflowName, since Argo only
          *             labels a run with the template name when it is submitted through Argo's own API, not
          *             when created via spec.workflowTemplateRef as the dashboard does; the same pagination
          *             caveat as workflowName applies.
@@ -8841,7 +8841,7 @@ export interface operations {
                 labelSelector?: string | null;
                 /** @description Filter by workflow name (partial match, case insensitive) */
                 workflowName?: string | null;
-                /** @description Filter by workflow template name (exact match) */
+                /** @description Filter by workflow template name (exact match, case sensitive) */
                 workflowTemplateName?: string | null;
                 /** @description Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending */
                 status?: string | null;

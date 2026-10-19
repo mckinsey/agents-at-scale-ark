@@ -271,7 +271,7 @@ async def list_grouped_resources(
     namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
     label_selector: Optional[str] = Query(None, alias="labelSelector", description=LABEL_SELECTOR_DESCRIPTION),
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
-    workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (exact match)"),
+    workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (exact match, case sensitive)"),
     status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending"),
     limit: Optional[int] = Query(None, ge=1, le=MAX_PAGE_LIMIT, description="Maximum number of items to return per page (omit for the full list)"),
     continue_token: Optional[str] = Query(None, alias="continue", description="Continuation token returned by the previous page"),
@@ -290,8 +290,8 @@ async def list_grouped_resources(
             Argo Server across the whole collection when it serves the list; otherwise applied
             only to the page returned by this call, so a page can come back with few or no
             matches even though more exist further in the cursor sequence.
-        workflowTemplateName: Filter by workflow template name (exact match), matched against
-            spec.workflowTemplateRef.name. Applied post-fetch like workflowName, since Argo only
+        workflowTemplateName: Filter by workflow template name (exact match, case sensitive),
+            matched against spec.workflowTemplateRef.name. Applied post-fetch like workflowName, since Argo only
             labels a run with the template name when it is submitted through Argo's own API, not
             when created via spec.workflowTemplateRef as the dashboard does; the same pagination
             caveat as workflowName applies.
