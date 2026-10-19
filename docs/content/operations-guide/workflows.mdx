@@ -116,6 +116,7 @@ Set `app.config.argoUrl` to an empty string, or leave it unset. This is the defa
 
 - `app.config.argoUrl` is separate from the `app.env` list. Overriding `app.env`, as the multi-tenant examples do, does not remove it.
 - Leading and trailing whitespace and trailing slashes are ignored. A value with only whitespace counts as unset.
+- The value must start with `http://` or `https://`. Any other value counts as unset, so no Argo links are shown.
 - The value only sets where links point. Access to the Argo UI is controlled by the Argo server's own authentication mode.
 
 ## Related

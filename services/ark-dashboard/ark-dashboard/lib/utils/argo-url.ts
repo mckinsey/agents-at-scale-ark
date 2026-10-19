@@ -15,7 +15,12 @@ export function normalizeArgoUrl(raw: string | undefined): string | undefined {
   while (end > 0 && trimmed[end - 1] === '/') {
     end--;
   }
-  return trimmed.slice(0, end) || undefined;
+  const value = trimmed.slice(0, end);
+  const scheme = value.toLowerCase();
+  if (!scheme.startsWith('http://') && !scheme.startsWith('https://')) {
+    return undefined;
+  }
+  return value;
 }
 
 export function createArgoLinks(

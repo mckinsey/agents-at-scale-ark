@@ -29,9 +29,28 @@ describe('normalizeArgoUrl', () => {
   });
 
   it('keeps slashes that are not trailing', () => {
-    expect(normalizeArgoUrl(`${'/'.repeat(10000)}x`)).toBe(
-      `${'/'.repeat(10000)}x`,
+    const url = `https://argo.example.com${'/'.repeat(10000)}x`;
+    expect(normalizeArgoUrl(url)).toBe(url);
+  });
+
+  it('accepts http and https in any case', () => {
+    expect(normalizeArgoUrl('http://argo.example.com')).toBe(
+      'http://argo.example.com',
     );
+    expect(normalizeArgoUrl('HTTPS://argo.example.com')).toBe(
+      'HTTPS://argo.example.com',
+    );
+  });
+
+  it('rejects values that are not http or https URLs', () => {
+    expect(normalizeArgoUrl('javascript:alert(1)')).toBeUndefined();
+    expect(normalizeArgoUrl(' JavaScript:alert(1)//')).toBeUndefined();
+    expect(
+      normalizeArgoUrl('data:text/html,<script>alert(1)</script>'),
+    ).toBeUndefined();
+    expect(normalizeArgoUrl('//argo.example.com')).toBeUndefined();
+    expect(normalizeArgoUrl('argo.example.com')).toBeUndefined();
+    expect(normalizeArgoUrl('https://')).toBeUndefined();
   });
 
   it('keeps a path prefix', () => {
