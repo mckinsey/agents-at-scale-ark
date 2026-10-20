@@ -10,6 +10,7 @@ import {
   isFilesBrowserAvailableAtom,
   storedIsExperimentalDarkModeEnabledAtom,
 } from '@/atoms/experimental-features';
+import { tourActiveSectionAtom } from '@/atoms/onboarding';
 import {
   AccountTree,
   Bedtime,
@@ -95,6 +96,7 @@ interface CollapsibleSectionProps {
   onNavigate: (key: string) => void;
   isNamespaceResolved: boolean;
   loading: boolean;
+  onboardingId?: string;
 }
 
 function CollapsibleSection({
@@ -110,6 +112,7 @@ function CollapsibleSection({
   onNavigate,
   isNamespaceResolved,
   loading,
+  onboardingId,
 }: CollapsibleSectionProps) {
   return (
     <Collapsible
@@ -121,7 +124,8 @@ function CollapsibleSection({
           asChild
           isActive={isActive}
           tooltip={label}
-          className="group/button">
+          className="group/button"
+          data-onboarding-id={onboardingId}>
           <CollapsibleTrigger
             className="flex w-full items-center gap-2"
             onClick={e => {
@@ -145,6 +149,7 @@ function CollapsibleSection({
         {sections.map(item => (
           <SidebarMenuItem key={item.key}>
             <SidebarMenuButton
+              data-onboarding-id={`nav-${item.key}`}
               onClick={() => isNamespaceResolved && onNavigate(item.key)}
               isActive={item.key === activeKey}
               disabled={!isNamespaceResolved || loading}>
@@ -218,6 +223,7 @@ export function AppSidebar() {
     isAgentBuilderSection,
   );
   const [monitoringOpen, setMonitoringOpen] = useState(isMonitoringSection);
+  const tourActiveSection = useAtomValue(tourActiveSectionAtom);
 
   useEffect(() => {
     const checkFilesAPIHealth = async () => {
@@ -242,6 +248,23 @@ export function AppSidebar() {
       setMonitoringOpen(false);
     }
   }, [sidebarState]);
+
+  useEffect(() => {
+    if (!tourActiveSection) return;
+    const isTourTarget = (sections: DashboardSection[]) =>
+      sections.some(item => `nav-${item.key}` === tourActiveSection);
+
+    if (isTourTarget(AGENT_BUILDER_SECTIONS)) {
+      setSidebarOpen(true);
+      setAgentBuilderOpen(true);
+    } else if (
+      tourActiveSection === 'nav-monitoring' ||
+      isTourTarget(MONITORING_SECTIONS)
+    ) {
+      setSidebarOpen(true);
+      setMonitoringOpen(true);
+    }
+  }, [tourActiveSection, setSidebarOpen]);
 
   const navigateToSection = (sectionKey: string) => {
     trackEvent({
@@ -315,7 +338,8 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     onClick={() => navigateToSection('')}
                     isActive={getCurrentSection() === ''}
-                    tooltip="Home">
+                    tooltip="Home"
+                    data-onboarding-id="nav-home">
                     <Dashboard />
                     <span>Home</span>
                   </SidebarMenuButton>
@@ -343,7 +367,8 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     onClick={() => navigateToSection('workflow-templates')}
                     isActive={getCurrentSection() === 'workflow-templates'}
-                    tooltip="Workflows">
+                    tooltip="Workflows"
+                    data-onboarding-id="nav-workflows">
                     <AccountTree />
                     <span>Workflows</span>
                   </SidebarMenuButton>
@@ -353,7 +378,8 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     onClick={() => navigateToSection('mcp')}
                     isActive={getCurrentSection() === 'mcp'}
-                    tooltip="MCPs">
+                    tooltip="MCPs"
+                    data-onboarding-id="nav-mcps">
                     <PlugConnect />
                     <span>MCPs</span>
                   </SidebarMenuButton>
@@ -383,7 +409,8 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     onClick={() => navigateToSection('models')}
                     isActive={getCurrentSection() === 'models'}
-                    tooltip="Models">
+                    tooltip="Models"
+                    data-onboarding-id="nav-models">
                     <Memory />
                     <span>Models</span>
                   </SidebarMenuButton>
@@ -395,6 +422,7 @@ export function AppSidebar() {
                   onOpenChange={setMonitoringOpen}
                   icon={<Earthquake />}
                   label="Monitoring"
+                  onboardingId="nav-monitoring"
                   isActive={isAnySectionActive(MONITORING_SECTIONS)}
                   activeKey={getCurrentSection()}
                   sidebarState={sidebarState}
@@ -411,7 +439,8 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     onClick={() => navigateToSection('marketplace')}
                     isActive={getCurrentSection() === 'marketplace'}
-                    tooltip="Marketplace">
+                    tooltip="Marketplace"
+                    data-onboarding-id="nav-marketplace">
                     <Storefront />
                     <span>Marketplace</span>
                   </SidebarMenuButton>
@@ -503,7 +532,8 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   onClick={() => navigateToSection('settings')}
                   isActive={getCurrentSection() === 'settings'}
-                  tooltip="Settings">
+                  tooltip="Settings"
+                  data-onboarding-id="nav-settings">
                   <Settings className="h-4 w-4" />
                   <span>Settings</span>
                 </SidebarMenuButton>
