@@ -157,7 +157,7 @@ spec:
             ephemeral-storage: 64Mi
           limits:
             cpu: 200m
-            memory: 128Mi
+            memory: 512Mi
             ephemeral-storage: 256Mi
         command:
         - /bin/sh
