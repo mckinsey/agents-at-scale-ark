@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.72-rc.3](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc.2...v0.1.72-rc.3) (2026-10-20)
+
+
+### Features
+
+* **argo-workflows:** upgrade to Argo Workflows v4.1.5 ([#3801](https://github.com/mckinsey/agents-at-scale-ark/issues/3801)) ([ceb71d9](https://github.com/mckinsey/agents-at-scale-ark/commit/ceb71d91328faede32fb65f54c60b09e45d461d4))
+* **ark-dashboard:** numbered pagination for workflow runs ([#3790](https://github.com/mckinsey/agents-at-scale-ark/issues/3790)) ([bcdbbf1](https://github.com/mckinsey/agents-at-scale-ark/commit/bcdbbf111fcbb87087e69ac86ca9582fda3a5d8c))
+
+
+### Bug Fixes
+
+* keep every keystroke in workflow runs search ([#3800](https://github.com/mckinsey/agents-at-scale-ark/issues/3800)) ([a3cf864](https://github.com/mckinsey/agents-at-scale-ark/commit/a3cf864ec3400ff6359dae44bdf9915ba08f9d9b)), closes [#3798](https://github.com/mckinsey/agents-at-scale-ark/issues/3798)
+* read the Argo UI URL at runtime and hide Argo links when unset ([#3723](https://github.com/mckinsey/agents-at-scale-ark/issues/3723)) ([363eaf1](https://github.com/mckinsey/agents-at-scale-ark/commit/363eaf114842c686170b2a3bf14eb1a1ece4261d))
+
 ## [0.1.72-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc.1...v0.1.72-rc.2) (2026-10-19)
 
 
