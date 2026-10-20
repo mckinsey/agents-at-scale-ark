@@ -1440,7 +1440,7 @@ export function SessionsSection({
         <div className="flex w-full flex-col gap-3 pb-1 lg:flex-row lg:items-end">
           <ResourceSearchInput
             value={workflowNameInput}
-            onChange={workflowName => setUrlState({ workflowName, page: 1 })}
+            onChange={workflowName => setUrlState({ workflowName })}
             placeholder="Search"
             testId="workflow-runs-search"
             className="w-full lg:max-w-[493px] lg:flex-1"
