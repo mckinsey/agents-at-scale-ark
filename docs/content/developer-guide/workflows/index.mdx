@@ -50,6 +50,17 @@ kubectl port-forward svc/argo-workflows-server 2746:2746
 # Dashboard: http://localhost:2746
 ```
 
+### Linking the Ark dashboard to the Argo UI
+
+The Ark dashboard shows "Open in Argo" links on workflow templates, the Workflow Studio, and workflow runs. Set the Argo UI base URL on the `ark-dashboard` chart to enable them:
+
+```bash
+helm upgrade ark-dashboard ./services/ark-dashboard/chart --reuse-values \
+  --set app.config.argoUrl=https://argo.example.com
+```
+
+The value is read at runtime, so a pod restart applies it without an image rebuild. When `app.config.argoUrl` is empty (the default), the dashboard hides all Argo links. With devspace, `ENABLE_ARGO=true` sets it to the localhost gateway URL.
+
 ### Non-root workflow pods
 
 Workflow pods run their `argoexec` init and wait containers from Argo's non-root executor image (`quay.io/argoproj/argoexec:<version>-nonroot`, UID 8737), which is [Argo's recommended setting](https://argo-workflows.readthedocs.io/en/latest/workflow-pod-security-context/#non-root-executor-image). Each step's own container keeps the user its image declares, so steps running as root or any other UID still work.
@@ -374,7 +385,7 @@ Open **Sessions** in the Ark dashboard, pick the run, and expand a step to reach
 | `log-tail-template` | While `stream` runs, new lines arrive on each poll and the viewport stays pinned to the bottom. Scroll up and it stops following. A final burst lands on the last poll after the node finishes. |
 | `log-large-lines-template` | `chunk-spanning` emits 200KB lines, which arrive across several runtime log chunks and must be reassembled. `oversized-line` emits one line past the page byte budget, and `byte-capped-page` fills a page past it, so both report that lines were dropped. |
 | `log-fanout-template` | Each shard emits a different number of lines. Switching between nodes resets the viewport, and collapsing then reopening a node restores its scroll position. Submit with `-p shards=24` to push past the buffer cache limit. |
-| `log-unavailable-template` | `podGC` deletes each pod on completion, so the viewer reports that logs are unavailable and offers the Argo UI link. One node fails on purpose. |
+| `log-unavailable-template` | `podGC` deletes each pod on completion, so the viewer reports that logs are unavailable and offers the Argo UI link when `app.config.argoUrl` is set. One node fails on purpose. |
 
 Page size, byte budget, and poll interval come from `NEXT_PUBLIC_WORKFLOW_LOG_PAGE_LINES`, `NEXT_PUBLIC_WORKFLOW_LOG_MAX_BYTES`, and `NEXT_PUBLIC_WORKFLOW_LOG_POLL_INTERVAL_MS`. Lower `NEXT_PUBLIC_WORKFLOW_LOG_PAGE_LINES` to make paging easier to see on smaller runs.
 
