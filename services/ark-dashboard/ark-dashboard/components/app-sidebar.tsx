@@ -13,13 +13,13 @@ import {
 import {
   AccountTree,
   Bedtime,
+  Build,
   ChevronDown,
   ChevronRight,
   Dashboard,
   Database,
   Dns,
   Earthquake,
-  Build,
   Help,
   InsertDriveFile,
   KeyboardDoubleArrowLeft,
@@ -173,7 +173,7 @@ function CollapsibleGroup({
   return (
     <SidebarGroup>
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="text-sidebar-foreground/70 hover:bg-stateslayer-overlay-hover flex w-full shrink-0 cursor-pointer select-none items-center gap-1.5 px-3 py-2 text-sm font-normal outline-hidden transition-colors group-data-[collapsible=icon]:hidden">
+        <CollapsibleTrigger className="text-sidebar-foreground/70 hover:bg-stateslayer-overlay-hover flex w-full shrink-0 cursor-pointer items-center gap-1.5 px-3 py-2 text-sm font-normal outline-hidden transition-colors select-none group-data-[collapsible=icon]:hidden">
           {open ? (
             <ChevronDown className="h-3.5 w-3.5" />
           ) : (
@@ -310,188 +310,188 @@ export function AppSidebar() {
         <SidebarContent className="overflow-hidden px-2">
           <ScrollArea className="-mx-2 flex min-h-0 flex-1 flex-col px-2">
             <CollapsibleGroup label="General" defaultOpen>
-            <SidebarMenu className="pl-5 group-data-[collapsible=icon]:pl-0">
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('')}
-                  isActive={getCurrentSection() === ''}
-                  tooltip="Home">
-                  <Dashboard />
-                  <span>Home</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              <SidebarMenu className="pl-5 group-data-[collapsible=icon]:pl-0">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('')}
+                    isActive={getCurrentSection() === ''}
+                    tooltip="Home">
+                    <Dashboard />
+                    <span>Home</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <CollapsibleSection
-                sections={AGENT_BUILDER_SECTIONS}
-                isOpen={agentBuilderOpen}
-                onOpenChange={setAgentBuilderOpen}
-                icon={<SmartToy />}
-                label="Agent builder"
-                isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
-                activeKey={getCurrentSection()}
-                sidebarState={sidebarState}
-                onExpand={() => {
-                  setSidebarOpen(true);
-                  setTimeout(() => setAgentBuilderOpen(true), 100);
-                }}
-                onNavigate={navigateToSection}
-                isNamespaceResolved={isNamespaceResolved}
-                loading={loading}
-              />
+                <CollapsibleSection
+                  sections={AGENT_BUILDER_SECTIONS}
+                  isOpen={agentBuilderOpen}
+                  onOpenChange={setAgentBuilderOpen}
+                  icon={<SmartToy />}
+                  label="Agent builder"
+                  isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
+                  activeKey={getCurrentSection()}
+                  sidebarState={sidebarState}
+                  onExpand={() => {
+                    setSidebarOpen(true);
+                    setTimeout(() => setAgentBuilderOpen(true), 100);
+                  }}
+                  onNavigate={navigateToSection}
+                  isNamespaceResolved={isNamespaceResolved}
+                  loading={loading}
+                />
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('workflow-templates')}
-                  isActive={getCurrentSection() === 'workflow-templates'}
-                  tooltip="Workflows">
-                  <AccountTree />
-                  <span>Workflows</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('workflow-templates')}
+                    isActive={getCurrentSection() === 'workflow-templates'}
+                    tooltip="Workflows">
+                    <AccountTree />
+                    <span>Workflows</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('mcp')}
-                  isActive={getCurrentSection() === 'mcp'}
-                  tooltip="MCPs">
-                  <PlugConnect />
-                  <span>MCPs</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('mcp')}
+                    isActive={getCurrentSection() === 'mcp'}
+                    tooltip="MCPs">
+                    <PlugConnect />
+                    <span>MCPs</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('tools')}
-                  isActive={getCurrentSection() === 'tools'}
-                  tooltip="Tools">
-                  <Build />
-                  <span>Tools</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('tools')}
+                    isActive={getCurrentSection() === 'tools'}
+                    tooltip="Tools">
+                    <Build />
+                    <span>Tools</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('memory')}
-                  isActive={getCurrentSection() === 'memory'}
-                  tooltip="Memory">
-                  <Database />
-                  <span>Memory</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('memory')}
+                    isActive={getCurrentSection() === 'memory'}
+                    tooltip="Memory">
+                    <Database />
+                    <span>Memory</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('models')}
-                  isActive={getCurrentSection() === 'models'}
-                  tooltip="Models">
-                  <Memory />
-                  <span>Models</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('models')}
+                    isActive={getCurrentSection() === 'models'}
+                    tooltip="Models">
+                    <Memory />
+                    <span>Models</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <CollapsibleSection
-                sections={MONITORING_SECTIONS}
-                isOpen={monitoringOpen}
-                onOpenChange={setMonitoringOpen}
-                icon={<Earthquake />}
-                label="Monitoring"
-                isActive={isAnySectionActive(MONITORING_SECTIONS)}
-                activeKey={getCurrentSection()}
-                sidebarState={sidebarState}
-                onExpand={() => {
-                  setSidebarOpen(true);
-                  setTimeout(() => setMonitoringOpen(true), 100);
-                }}
-                onNavigate={navigateToSection}
-                isNamespaceResolved={isNamespaceResolved}
-                loading={loading}
-              />
+                <CollapsibleSection
+                  sections={MONITORING_SECTIONS}
+                  isOpen={monitoringOpen}
+                  onOpenChange={setMonitoringOpen}
+                  icon={<Earthquake />}
+                  label="Monitoring"
+                  isActive={isAnySectionActive(MONITORING_SECTIONS)}
+                  activeKey={getCurrentSection()}
+                  sidebarState={sidebarState}
+                  onExpand={() => {
+                    setSidebarOpen(true);
+                    setTimeout(() => setMonitoringOpen(true), 100);
+                  }}
+                  onNavigate={navigateToSection}
+                  isNamespaceResolved={isNamespaceResolved}
+                  loading={loading}
+                />
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('marketplace')}
-                  isActive={getCurrentSection() === 'marketplace'}
-                  tooltip="Marketplace">
-                  <Storefront />
-                  <span>Marketplace</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </CollapsibleGroup>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('marketplace')}
+                    isActive={getCurrentSection() === 'marketplace'}
+                    tooltip="Marketplace">
+                    <Storefront />
+                    <span>Marketplace</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </CollapsibleGroup>
 
-          <CollapsibleGroup label="Other" defaultOpen={false}>
-            <SidebarMenu className="pl-5 group-data-[collapsible=icon]:pl-0">
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('files')}
-                  isActive={getCurrentSection() === 'files'}
-                  tooltip="Files">
-                  <InsertDriveFile />
-                  <span>Files</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+            <CollapsibleGroup label="Other" defaultOpen={false}>
+              <SidebarMenu className="pl-5 group-data-[collapsible=icon]:pl-0">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('files')}
+                    isActive={getCurrentSection() === 'files'}
+                    tooltip="Files">
+                    <InsertDriveFile />
+                    <span>Files</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('tasks')}
-                  isActive={getCurrentSection() === 'tasks'}
-                  tooltip="A2A tasks">
-                  <PlaylistAddCheck />
-                  <span>A2A tasks</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('tasks')}
+                    isActive={getCurrentSection() === 'tasks'}
+                    tooltip="A2A tasks">
+                    <PlaylistAddCheck />
+                    <span>A2A tasks</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('a2a')}
-                  isActive={getCurrentSection() === 'a2a'}
-                  tooltip="A2A servers">
-                  <Dns />
-                  <span>A2A servers</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('a2a')}
+                    isActive={getCurrentSection() === 'a2a'}
+                    tooltip="A2A servers">
+                    <Dns />
+                    <span>A2A servers</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('secrets')}
-                  isActive={getCurrentSection() === 'secrets'}
-                  tooltip="Secrets">
-                  <Shield />
-                  <span>Secrets</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('secrets')}
+                    isActive={getCurrentSection() === 'secrets'}
+                    tooltip="Secrets">
+                    <Shield />
+                    <span>Secrets</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('configurations')}
-                  isActive={getCurrentSection() === 'configurations'}
-                  tooltip="Configurations">
-                  <Tune />
-                  <span>Configurations</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('configurations')}
+                    isActive={getCurrentSection() === 'configurations'}
+                    tooltip="Configurations">
+                    <Tune />
+                    <span>Configurations</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('api-keys')}
-                  isActive={getCurrentSection() === 'api-keys'}
-                  tooltip="API keys">
-                  <VpnKey />
-                  <span>API keys</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('api-keys')}
+                    isActive={getCurrentSection() === 'api-keys'}
+                    tooltip="API keys">
+                    <VpnKey />
+                    <span>API keys</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('export')}
-                  isActive={getCurrentSection() === 'export'}
-                  tooltip="Exports">
-                  <SaveAlt />
-                  <span>Exports</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </CollapsibleGroup>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('export')}
+                    isActive={getCurrentSection() === 'export'}
+                    tooltip="Exports">
+                    <SaveAlt />
+                    <span>Exports</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </CollapsibleGroup>
           </ScrollArea>
         </SidebarContent>
 
@@ -592,7 +592,6 @@ export function AppSidebar() {
           )}
         </SidebarFooter>
       </Sidebar>
-
     </div>
   );
 }
