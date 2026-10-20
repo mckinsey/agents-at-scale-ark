@@ -101,8 +101,6 @@ describe('useWorkflows', () => {
       continueToken: undefined,
       signal: expect.any(AbortSignal),
     });
-    expect(result.current.page).toBe(0);
-    expect(result.current.hasPrevious).toBe(false);
   });
 
   it('exposes hasNext based on the page continue token', async () => {
@@ -118,27 +116,32 @@ describe('useWorkflows', () => {
     expect(result.current.workflows).toEqual([terminalWorkflow]);
   });
 
-  it('exposes the total count from the remaining item count of each page', async () => {
+  it('requests any page by offset once the list reports a remaining item count', async () => {
     vi.mocked(workflowsService.list)
       .mockResolvedValueOnce({
         ...makePage([terminalWorkflow, terminalWorkflow], '2'),
-        remainingItemCount: 3,
+        remainingItemCount: 5,
       })
       .mockResolvedValueOnce({
-        ...makePage([terminalWorkflow, terminalWorkflow], '4'),
-        remainingItemCount: 1,
+        ...makePage([terminalWorkflow], undefined),
+        remainingItemCount: 0,
       });
 
-    const { result } = renderHook(() => useWorkflows('default', undefined, 2));
+    const { result, rerender } = renderHook(
+      ({ page }) => useWorkflows('default', undefined, { page, pageSize: 2 }),
+      { initialProps: { page: 0 } },
+    );
 
-    await waitFor(() => expect(result.current.totalCount).toBe(5));
+    await waitFor(() => expect(result.current.totalCount).toBe(7));
 
-    act(() => {
-      result.current.goToNextPage();
-    });
+    rerender({ page: 3 });
 
-    await waitFor(() => expect(result.current.page).toBe(1));
-    expect(result.current.totalCount).toBe(5);
+    await waitFor(() => expect(result.current.totalCount).toBe(7));
+    expect(workflowsService.list).toHaveBeenLastCalledWith(
+      'default',
+      undefined,
+      { limit: 2, continueToken: '6', signal: expect.any(AbortSignal) },
+    );
   });
 
   it('reports no total count when the page has no remaining item count', async () => {
@@ -153,93 +156,191 @@ describe('useWorkflows', () => {
     expect(result.current.totalCount).toBeNull();
   });
 
-  it('goToNextPage fetches with the token returned by the previous page', async () => {
+  it('walks cursor pages with the token returned by the previous page', async () => {
     vi.mocked(workflowsService.list)
       .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
-      .mockResolvedValueOnce(makePage([]));
+      .mockResolvedValueOnce(makePage([]))
+      .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'));
 
-    const { result } = renderHook(() => useWorkflows('default'));
+    const { result, rerender } = renderHook(
+      ({ page }) => useWorkflows('default', undefined, { page }),
+      { initialProps: { page: 0 } },
+    );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => {
-      result.current.goToNextPage();
-    });
-
-    await waitFor(() => expect(result.current.page).toBe(1));
-
+    rerender({ page: 1 });
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(2));
     expect(workflowsService.list).toHaveBeenLastCalledWith(
       'default',
       undefined,
       { limit: 25, continueToken: 'token-1', signal: expect.any(AbortSignal) },
     );
-    expect(result.current.hasPrevious).toBe(true);
-  });
 
-  it('goToNextPage is a no-op when there is no next page', async () => {
-    vi.mocked(workflowsService.list).mockResolvedValue(makePage([]));
-
-    const { result } = renderHook(() => useWorkflows('default'));
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    act(() => {
-      result.current.goToNextPage();
-    });
-
-    expect(workflowsService.list).toHaveBeenCalledTimes(1);
-  });
-
-  it('a failed goToNextPage reports onPageError and keeps the current page on screen', async () => {
-    vi.mocked(workflowsService.list)
-      .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
-      .mockRejectedValueOnce(new Error('boom'));
-    const onPageError = vi.fn();
-
-    const { result } = renderHook(() =>
-      useWorkflows('default', undefined, undefined, onPageError),
-    );
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    act(() => {
-      result.current.goToNextPage();
-    });
-
-    await waitFor(() =>
-      expect(onPageError).toHaveBeenCalledWith(new Error('boom')),
-    );
-
-    expect(result.current.error).toBeNull();
-    expect(result.current.page).toBe(0);
-    expect(result.current.workflows).toEqual([terminalWorkflow]);
-  });
-
-  it('goToPreviousPage replays the cached token instead of asking the server again', async () => {
-    vi.mocked(workflowsService.list)
-      .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
-      .mockResolvedValueOnce(makePage([]));
-
-    const { result } = renderHook(() => useWorkflows('default'));
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    act(() => {
-      result.current.goToNextPage();
-    });
-    await waitFor(() => expect(result.current.page).toBe(1));
-
-    act(() => {
-      result.current.goToPreviousPage();
-    });
-    await waitFor(() => expect(result.current.page).toBe(0));
-
-    expect(workflowsService.list).toHaveBeenCalledTimes(3);
+    rerender({ page: 0 });
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(3));
     expect(workflowsService.list).toHaveBeenLastCalledWith(
       'default',
       undefined,
       { limit: 25, continueToken: undefined, signal: expect.any(AbortSignal) },
     );
+  });
+
+  it('resets to the first page when a cursor page has no known token', async () => {
+    vi.mocked(workflowsService.list).mockResolvedValue(
+      makePage([terminalWorkflow], 'token-1'),
+    );
+    const onPageReset = vi.fn();
+
+    const { result, rerender } = renderHook(
+      ({ page }) => useWorkflows('default', undefined, { page, onPageReset }),
+      { initialProps: { page: 0 } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    rerender({ page: 3 });
+
+    await waitFor(() => expect(onPageReset).toHaveBeenCalled());
+    expect(workflowsService.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets to the first page when a deep-linked page cannot be loaded', async () => {
+    vi.mocked(workflowsService.list).mockRejectedValue(
+      new APIError('continue key is not valid', 400),
+    );
+    const onPageError = vi.fn();
+    const onPageReset = vi.fn();
+
+    renderHook(() =>
+      useWorkflows('default', undefined, {
+        page: 2,
+        pageSize: 10,
+        onPageError,
+        onPageReset,
+      }),
+    );
+
+    await waitFor(() => expect(onPageReset).toHaveBeenCalled());
+    expect(workflowsService.list).toHaveBeenCalledWith('default', undefined, {
+      limit: 10,
+      continueToken: '20',
+      signal: expect.any(AbortSignal),
+    });
+    expect(onPageError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('back to the first page'),
+      }),
+    );
+  });
+
+  it('a failed page load reports onPageError and keeps the current page on screen', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce({
+        ...makePage([terminalWorkflow], '25'),
+        remainingItemCount: 10,
+      })
+      .mockRejectedValueOnce(new Error('boom'));
+    const onPageError = vi.fn();
+
+    const { result, rerender } = renderHook(
+      ({ page }) => useWorkflows('default', undefined, { page, onPageError }),
+      { initialProps: { page: 0 } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    rerender({ page: 1 });
+
+    await waitFor(() =>
+      expect(onPageError).toHaveBeenCalledWith(new Error('boom')),
+    );
+    expect(result.current.error).toBeNull();
+    expect(result.current.workflows).toEqual([terminalWorkflow]);
+  });
+
+  it('walks Kubernetes cursor pages even when the list reports a remaining item count', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce({
+        ...makePage([terminalWorkflow], 'k8s-cursor-page-2'),
+        remainingItemCount: 109,
+      })
+      .mockResolvedValueOnce(makePage([]));
+
+    const { result, rerender } = renderHook(
+      ({ page }) => useWorkflows('default', undefined, { page }),
+      { initialProps: { page: 0 } },
+    );
+
+    await waitFor(() => expect(result.current.totalCount).toBe(110));
+
+    rerender({ page: 1 });
+
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(2));
+    expect(workflowsService.list).toHaveBeenLastCalledWith(
+      'default',
+      undefined,
+      {
+        limit: 25,
+        continueToken: 'k8s-cursor-page-2',
+        signal: expect.any(AbortSignal),
+      },
+    );
+  });
+
+  it('detects the paging mode again after a namespace switch', async () => {
+    vi.mocked(workflowsService.list)
+      .mockResolvedValueOnce(makePage([terminalWorkflow], 'cursor-token'))
+      .mockResolvedValueOnce({
+        ...makePage([terminalWorkflow], '6'),
+        remainingItemCount: 4,
+      });
+    const onPageReset = vi.fn();
+
+    const { rerender } = renderHook(
+      ({ namespace, page }) =>
+        useWorkflows(namespace, undefined, {
+          page,
+          pageSize: 2,
+          onPageReset,
+        }),
+      { initialProps: { namespace: 'team-a', page: 0 } },
+    );
+
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(1));
+
+    rerender({ namespace: 'team-b', page: 2 });
+
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(2));
+    expect(workflowsService.list).toHaveBeenLastCalledWith(
+      'team-b',
+      undefined,
+      {
+        limit: 2,
+        continueToken: '4',
+        signal: expect.any(AbortSignal),
+      },
+    );
+    expect(onPageReset).not.toHaveBeenCalled();
+  });
+
+  it('reports a server error on a deep-linked page instead of resetting to the first page', async () => {
+    const serverError = new APIError('Internal Server Error', 500);
+    vi.mocked(workflowsService.list).mockRejectedValue(serverError);
+    const onPageError = vi.fn();
+    const onPageReset = vi.fn();
+
+    renderHook(() =>
+      useWorkflows('default', undefined, {
+        page: 2,
+        pageSize: 10,
+        onPageError,
+        onPageReset,
+      }),
+    );
+
+    await waitFor(() => expect(onPageError).toHaveBeenCalledWith(serverError));
+    expect(onPageReset).not.toHaveBeenCalled();
   });
 
   it('updateWorkflowItem replaces one item in place without re-fetching', async () => {
@@ -301,70 +402,62 @@ describe('useWorkflows', () => {
     expect(result.current.error).toBeNull();
   });
 
-  it('a 410 on a cached page token resets to page 0 instead of leaving a dead end', async () => {
+  it('a 410 on a cached page token resets to the first page instead of leaving a dead end', async () => {
     vi.mocked(workflowsService.list)
       .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
-      .mockRejectedValueOnce(new APIError('Gone', 410))
-      .mockResolvedValueOnce(makePage([terminalWorkflow]));
+      .mockRejectedValueOnce(new APIError('Gone', 410));
     const onPageError = vi.fn();
+    const onPageReset = vi.fn();
 
-    const { result } = renderHook(() =>
-      useWorkflows('default', undefined, undefined, onPageError),
+    const { result, rerender } = renderHook(
+      ({ page }) =>
+        useWorkflows('default', undefined, { page, onPageError, onPageReset }),
+      { initialProps: { page: 0 } },
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => {
-      result.current.goToNextPage();
-    });
+    rerender({ page: 1 });
 
-    await waitFor(() => expect(onPageError).toHaveBeenCalled());
-    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(result.current.page).toBe(0);
+    await waitFor(() => expect(onPageReset).toHaveBeenCalled());
     expect(result.current.error).toBeNull();
-    expect(result.current.workflows).toEqual([terminalWorkflow]);
     expect(onPageError).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining('back to the first page'),
       }),
     );
-    expect(workflowsService.list).toHaveBeenLastCalledWith(
-      'default',
-      undefined,
-      { limit: 25, continueToken: undefined, signal: expect.any(AbortSignal) },
-    );
   });
 
-  it('resets to page 0 when filters change', async () => {
+  it('drops the cursor stack when filters change', async () => {
     vi.mocked(workflowsService.list)
       .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
-      .mockResolvedValueOnce(makePage([]))
       .mockResolvedValueOnce(makePage([]));
+    const onPageReset = vi.fn();
 
     const { result, rerender } = renderHook(
-      ({ filters }) => useWorkflows('default', filters),
+      ({ filters, page }) =>
+        useWorkflows('default', filters, { page, onPageReset }),
       {
-        initialProps: { filters: undefined as { status?: string } | undefined },
+        initialProps: {
+          filters: undefined as { status?: string } | undefined,
+          page: 0,
+        },
       },
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => {
-      result.current.goToNextPage();
-    });
-    await waitFor(() => expect(result.current.page).toBe(1));
-
-    rerender({ filters: { status: 'running' } });
-
-    await waitFor(() => expect(result.current.page).toBe(0));
+    rerender({ filters: { status: 'running' }, page: 0 });
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(2));
     expect(workflowsService.list).toHaveBeenLastCalledWith(
       'default',
       { status: 'running' },
       { limit: 25, continueToken: undefined, signal: expect.any(AbortSignal) },
     );
+
+    rerender({ filters: { status: 'running' }, page: 1 });
+    await waitFor(() => expect(onPageReset).toHaveBeenCalled());
+    expect(workflowsService.list).toHaveBeenCalledTimes(2);
   });
 
   it('returns an empty list without fetching when there is no namespace', async () => {
@@ -404,14 +497,15 @@ describe('useWorkflows', () => {
       .mockResolvedValueOnce(makePage([terminalWorkflow], 'token-1'))
       .mockResolvedValue(makePage([]));
 
-    const { result } = renderHook(() => useWorkflows('default'));
+    const { result, rerender } = renderHook(
+      ({ page }) => useWorkflows('default', undefined, { page }),
+      { initialProps: { page: 0 } },
+    );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => {
-      result.current.goToNextPage();
-    });
-    await waitFor(() => expect(result.current.page).toBe(1));
+    rerender({ page: 1 });
+    await waitFor(() => expect(workflowsService.list).toHaveBeenCalledTimes(2));
 
     await act(async () => {
       await result.current.refetch();
@@ -423,7 +517,6 @@ describe('useWorkflows', () => {
       undefined,
       { limit: 25, continueToken: 'token-1', signal: expect.any(AbortSignal) },
     );
-    expect(result.current.page).toBe(1);
   });
 });
 
@@ -491,12 +584,18 @@ describe('useWorkflows lifecycle updates', () => {
       .mockResolvedValueOnce(makePage([runningWorkflow('wf-1')], 'token-1'))
       .mockResolvedValueOnce(makePage([runningWorkflow('wf-2')]))
       .mockResolvedValueOnce(makePage([runningWorkflow('wf-1')], 'token-1'));
-    const { result } = renderHook(() => useWorkflows('default'));
+    const onPageReset = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ page }) => useWorkflows('default', undefined, { page, onPageReset }),
+      { initialProps: { page: 0 } },
+    );
     await waitFor(() => expect(result.current.hasNext).toBe(true));
-    act(() => {
-      result.current.goToNextPage();
-    });
-    await waitFor(() => expect(result.current.page).toBe(1));
+    rerender({ page: 1 });
+    await waitFor(() =>
+      expect(result.current.workflows.map(w => w.metadata.name)).toEqual([
+        'wf-2',
+      ]),
+    );
 
     let shown = false;
     act(() => {
@@ -504,16 +603,19 @@ describe('useWorkflows lifecycle updates', () => {
     });
 
     expect(shown).toBe(true);
-    await waitFor(() => expect(result.current.page).toBe(0));
+    expect(onPageReset).toHaveBeenCalled();
+    rerender({ page: 0 });
+    await waitFor(() =>
+      expect(result.current.workflows.map(w => w.metadata.name)).toEqual([
+        'wf-new',
+        'wf-1',
+      ]),
+    );
     expect(workflowsService.list).toHaveBeenLastCalledWith(
       'default',
       undefined,
       { limit: 25, continueToken: undefined, signal: expect.any(AbortSignal) },
     );
-    expect(result.current.workflows.map(w => w.metadata.name)).toEqual([
-      'wf-new',
-      'wf-1',
-    ]);
   });
 
   it('should move a created workflow the first page already contains to the top', async () => {
