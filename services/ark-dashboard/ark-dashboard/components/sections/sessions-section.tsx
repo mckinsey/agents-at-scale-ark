@@ -57,10 +57,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
-import {
-  ARGO_BASE_URL,
-  ARGO_WORKFLOWS_DOCS_URL,
-} from '@/lib/constants/workflows';
+import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
 import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   mapArgoWorkflowToSession,
@@ -80,6 +77,7 @@ import {
   parsePageSize,
 } from '@/lib/utils/pagination';
 import { useNamespace } from '@/providers/NamespaceProvider';
+import { useArgoLinks } from '@/providers/argo-url-provider';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
 type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
@@ -444,6 +442,7 @@ function WorkflowStepDetail({
   message?: string;
   status: StepStatus;
 }>) {
+  const argoLinks = useArgoLinks();
   const shouldFetchLogs = Boolean(
     detail.workflowName && detail.nodeId && detail.namespace,
   );
@@ -520,7 +519,11 @@ function WorkflowStepDetail({
           <WorkflowNodeLogs
             target={logTarget}
             isRunning={status === 'running' || status === 'pending'}
-            argoUrl={`${ARGO_BASE_URL}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+            argoUrl={argoLinks?.workflow(
+              logTarget.namespace,
+              logTarget.workflowName,
+              { tab: 'workflow', nodeId: logTarget.nodeId },
+            )}
           />
         </LogEntryBlock>
       )}
@@ -780,6 +783,7 @@ function SessionDetailView({
   session: Session;
   isLoading?: boolean;
 }) {
+  const argoLinks = useArgoLinks();
   return (
     <div className="border-fill-onsurface-ui-1 flex h-full min-h-0 min-w-0 flex-1 flex-col border">
       <div className="bg-surface-secondary flex h-10 shrink-0 items-center justify-between gap-3 px-3">
@@ -798,19 +802,24 @@ function SessionDetailView({
             </div>
           )}
           <StatusLabel status={getSessionDisplayStatus(session)} />
-          {session.type === 'workflow' && session.namespace && session.uid && (
-            <Button variant="outline" size="xs" asChild>
-              <a
-                href={`${ARGO_BASE_URL}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
-                target="_blank"
-                rel="noopener noreferrer">
-                View in Argo
-                <IconShell size="sm">
-                  <OpenInNew />
-                </IconShell>
-              </a>
-            </Button>
-          )}
+          {argoLinks &&
+            session.type === 'workflow' &&
+            session.namespace &&
+            session.uid && (
+              <Button variant="outline" size="xs" asChild>
+                <a
+                  href={argoLinks.workflow(session.namespace, session.name, {
+                    uid: session.uid,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  View in Argo
+                  <IconShell size="sm">
+                    <OpenInNew />
+                  </IconShell>
+                </a>
+              </Button>
+            )}
         </div>
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4">
