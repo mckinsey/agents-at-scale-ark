@@ -7,6 +7,15 @@ const SECRET_LABELS = {
   'ark.mckinsey.com/scope': 'shared',
 };
 
+const MANAGED_KEYS = [
+  'api-key',
+  'token',
+  'bedrock-api-key',
+  'access-key-id',
+  'secret-access-key',
+  'session-token',
+];
+
 function secretData(
   config: ProviderConfig
 ): Record<string, string | undefined> {
@@ -49,7 +58,7 @@ export function mergeIntoExisting(
 ) {
   const manifest = buildSecretManifest(config);
   const data = {...existing.data};
-  for (const key of Object.keys(manifest.stringData)) {
+  for (const key of MANAGED_KEYS) {
     delete data[key];
   }
   const metadata = {...existing.metadata};

@@ -122,6 +122,32 @@ describe('KubernetesSecretManager', () => {
     });
   });
 
+  it('drops the keys of a previous auth method', async () => {
+    const {manifest} = await run(
+      {
+        type: 'bedrock',
+        modelValue: 'claude',
+        secretName: 's',
+        region: 'us-east-1',
+        authMethod: 'api-key',
+        apiKey: 'br-key',
+      },
+      true,
+      {
+        ...EXISTING,
+        data: {
+          'access-key-id': 'b2xk',
+          'secret-access-key': 'b2xk',
+          'session-token': 'b2xk',
+          extra: 'a2VlcA==',
+        },
+      }
+    );
+
+    expect(manifest.data).toEqual({extra: 'a2VlcA=='});
+    expect(manifest.stringData).toEqual({'bedrock-api-key': 'br-key'});
+  });
+
   it('never puts secret values in argv or uses apply', async () => {
     await run(openai, true);
     await run(openai, false);
