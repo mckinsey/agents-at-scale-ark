@@ -46,6 +46,7 @@ import { Button } from '@/components/ui/button';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Select,
   SelectContent,
@@ -73,6 +74,11 @@ import {
   useWorkflows,
 } from '@/lib/services/workflows-hooks';
 import { cn } from '@/lib/utils';
+import {
+  DEFAULT_PAGE_SIZE,
+  parsePage,
+  parsePageSize,
+} from '@/lib/utils/pagination';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
@@ -99,11 +105,15 @@ const statusFilterItems = [
   { label: 'Failed', value: 'Failed' },
 ];
 
+const PAGE_SIZE_OPTIONS = [10, 15, 25, 50, 100];
+
 const URL_STATE_SPEC = {
   workflowName: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
   workflowTemplateName: { default: '' },
   status: { default: 'all', parse: normalizeStatus },
   run: { default: '' },
+  page: { default: 1, parse: parsePage },
+  pageSize: { default: DEFAULT_PAGE_SIZE, parse: parsePageSize },
 };
 
 interface WorkflowStepDetail {
@@ -1248,19 +1258,37 @@ export function SessionsSection({
     toast.error('Failed to load page', { description: err.message });
   }, []);
 
+  const page = urlState.page;
+  const pageSize = urlState.pageSize;
+
+  const handleWorkflowsPageReset = useCallback(() => {
+    setUrlState({ page: 1 });
+  }, [setUrlState]);
+
   const {
     workflows,
     loading,
     error,
     hasNext,
     totalCount,
-    hasPrevious,
-    goToNextPage,
-    goToPreviousPage,
     updateWorkflowItem,
     showCreatedWorkflow,
     watchWorkflow,
-  } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
+  } = useWorkflows(namespace, filters, {
+    page: page - 1,
+    pageSize,
+    onPageError: handleWorkflowsPageError,
+    onPageReset: handleWorkflowsPageReset,
+  });
+
+  const totalPages =
+    totalCount === null ? null : Math.max(1, Math.ceil(totalCount / pageSize));
+
+  useEffect(() => {
+    if (totalPages !== null && page > totalPages) {
+      setUrlState({ page: totalPages });
+    }
+  }, [page, totalPages, setUrlState]);
 
   const { runAction, isPending: isRunActionPending } =
     useWorkflowLifecycleActions(namespace, updateWorkflowItem);
@@ -1400,6 +1428,7 @@ export function SessionsSection({
         workflowName: '',
         workflowTemplateName: '',
         status: 'all',
+        page: 1,
       },
       { flush: true },
     );
@@ -1435,7 +1464,7 @@ export function SessionsSection({
                   const value = e.target.value;
                   setTemplateTextDraft(value);
                   if (value !== selectedTemplateName) {
-                    setUrlState({ workflowTemplateName: '' });
+                    setUrlState({ workflowTemplateName: '', page: 1 });
                   }
                   if (!templateDropdownOpen) {
                     setTemplateDropdownOpen(true);
@@ -1454,7 +1483,7 @@ export function SessionsSection({
                     onSelect={templateName => {
                       setTemplateTextDraft(null);
                       setUrlState(
-                        { workflowTemplateName: templateName },
+                        { workflowTemplateName: templateName, page: 1 },
                         { flush: true },
                       );
                       setTemplateDropdownOpen(false);
@@ -1475,7 +1504,7 @@ export function SessionsSection({
               items={statusFilterItems}
               value={statusFilter || 'all'}
               onValueChange={value =>
-                setUrlState({ status: String(value).toLowerCase() })
+                setUrlState({ status: String(value).toLowerCase(), page: 1 })
               }>
               <SelectTrigger
                 aria-labelledby="workflow-status-label"
@@ -1510,40 +1539,55 @@ export function SessionsSection({
           selectedSession={selectedSession}
           isDetailLoading={loadingDetail && useRealData}
           hasActiveFilters={Boolean(hasActiveFilters)}
-          hasNext={hasNext}
+          hasNext={hasNext && totalPages === null}
           onClearFilters={clearFilters}
           onRunAction={readOnlyMode ? undefined : handleRunAction}
           isRunActionPending={isRunActionPending}
         />
 
-        <nav
-          aria-label="Workflow runs pagination"
-          className="flex shrink-0 items-center justify-center gap-2 pt-1">
-          <button
-            type="button"
-            onClick={goToPreviousPage}
-            disabled={!hasPrevious || isLoading}
-            aria-label="Go to previous page"
-            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
-            <IconShell size="sm">
-              <ArrowBack />
-            </IconShell>
-            <span className="text-sm leading-5 tracking-[-0.028px]">
-              Previous
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={goToNextPage}
-            disabled={!hasNext || isLoading}
-            aria-label="Go to next page"
-            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
-            <span className="text-sm leading-5 tracking-[-0.028px]">Next</span>
-            <IconShell size="sm">
-              <ArrowForward />
-            </IconShell>
-          </button>
-        </nav>
+        {totalPages === null ? (
+          <nav
+            aria-label="Workflow runs pagination"
+            className="flex shrink-0 items-center justify-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setUrlState({ page: page - 1 })}
+              disabled={page <= 1 || isLoading}
+              aria-label="Go to previous page"
+              className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+              <IconShell size="sm">
+                <ArrowBack />
+              </IconShell>
+              <span className="text-sm leading-5 tracking-[-0.028px]">
+                Previous
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUrlState({ page: page + 1 })}
+              disabled={!hasNext || isLoading}
+              aria-label="Go to next page"
+              className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+              <span className="text-sm leading-5 tracking-[-0.028px]">
+                Next
+              </span>
+              <IconShell size="sm">
+                <ArrowForward />
+              </IconShell>
+            </button>
+          </nav>
+        ) : (
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            itemsPerPage={pageSize}
+            onPageChange={next => setUrlState({ page: next })}
+            onItemsPerPageChange={next =>
+              setUrlState({ pageSize: next, page: 1 })
+            }
+            itemsPerPageOptions={PAGE_SIZE_OPTIONS}
+          />
+        )}
       </div>
     </ErrorBoundary>
   );
