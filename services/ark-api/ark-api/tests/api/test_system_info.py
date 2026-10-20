@@ -35,7 +35,11 @@ class TestSystemInfoEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"kubernetes_version": "v1.31.2", "system_version": "v0.1.68"},
+            {
+                "kubernetes_version": "v1.31.2",
+                "system_version": "v0.1.68",
+                "argo_server_version_supported": None,
+            },
         )
 
     @patch("ark_api.api.v1.system_info.importlib.metadata.version")
@@ -77,6 +81,75 @@ class TestSystemInfoEndpoint(unittest.TestCase):
         )
         self.assertEqual(response.json()["system_version"], "vunknown")
         self.assertEqual(response.json()["kubernetes_version"], "v1.31.2")
+
+    @patch("ark_api.api.v1.system_info.argo_server.get_argo_server_version")
+    @patch("ark_api.api.v1.system_info.client.VersionApi")
+    @patch("ark_api.api.v1.system_info.create_api_client")
+    def test_argo_version_unsupported_when_below_minimum(
+        self, mock_api_client, mock_version_api, mock_get_version
+    ):
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_version_api.return_value.get_code = AsyncMock(
+            return_value=SimpleNamespace(git_version="v1.31.2")
+        )
+        mock_get_version.return_value = "v4.0.6"
+
+        with patch.dict(os.environ, {"ARGO_SERVER_URL": "http://argo-workflows-server:2746"}):
+            response = self.client.get("/v1/system-info")
+
+        self.assertFalse(response.json()["argo_server_version_supported"])
+
+    @patch("ark_api.api.v1.system_info.argo_server.get_argo_server_version")
+    @patch("ark_api.api.v1.system_info.client.VersionApi")
+    @patch("ark_api.api.v1.system_info.create_api_client")
+    def test_argo_version_supported_at_minimum(
+        self, mock_api_client, mock_version_api, mock_get_version
+    ):
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_version_api.return_value.get_code = AsyncMock(
+            return_value=SimpleNamespace(git_version="v1.31.2")
+        )
+        mock_get_version.return_value = "v4.1.0"
+
+        with patch.dict(os.environ, {"ARGO_SERVER_URL": "http://argo-workflows-server:2746"}):
+            response = self.client.get("/v1/system-info")
+
+        self.assertTrue(response.json()["argo_server_version_supported"])
+
+    @patch("ark_api.api.v1.system_info.argo_server.get_argo_server_version")
+    @patch("ark_api.api.v1.system_info.client.VersionApi")
+    @patch("ark_api.api.v1.system_info.create_api_client")
+    def test_argo_version_unknown_when_url_not_configured(
+        self, mock_api_client, mock_version_api, mock_get_version
+    ):
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_version_api.return_value.get_code = AsyncMock(
+            return_value=SimpleNamespace(git_version="v1.31.2")
+        )
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("ARGO_SERVER_URL", None)
+            response = self.client.get("/v1/system-info")
+
+        self.assertIsNone(response.json()["argo_server_version_supported"])
+        mock_get_version.assert_not_called()
+
+    @patch("ark_api.api.v1.system_info.argo_server.get_argo_server_version")
+    @patch("ark_api.api.v1.system_info.client.VersionApi")
+    @patch("ark_api.api.v1.system_info.create_api_client")
+    def test_argo_version_unknown_when_argo_server_unreachable(
+        self, mock_api_client, mock_version_api, mock_get_version
+    ):
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_version_api.return_value.get_code = AsyncMock(
+            return_value=SimpleNamespace(git_version="v1.31.2")
+        )
+        mock_get_version.return_value = None
+
+        with patch.dict(os.environ, {"ARGO_SERVER_URL": "http://argo-workflows-server:2746"}):
+            response = self.client.get("/v1/system-info")
+
+        self.assertIsNone(response.json()["argo_server_version_supported"])
 
     @patch("ark_api.api.v1.system_info.client.VersionApi")
     @patch("ark_api.api.v1.system_info.create_api_client")

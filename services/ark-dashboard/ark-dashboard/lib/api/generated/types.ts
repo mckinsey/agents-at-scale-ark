@@ -4996,6 +4996,8 @@ export interface components {
         };
         /** SystemInfo */
         SystemInfo: {
+            /** Argo Server Version Supported */
+            argo_server_version_supported?: boolean | null;
             /** Kubernetes Version */
             kubernetes_version: string;
             /** System Version */

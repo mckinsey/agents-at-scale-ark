@@ -6,6 +6,10 @@ import WorkflowRunsPage from '@/app/(dashboard)/workflow-runs/page';
 
 const reportedCount = vi.hoisted(() => ({ value: 1 as number | null }));
 
+vi.mock('@/lib/services/system-info-hooks', () => ({
+  useGetSystemInfo: () => ({ data: undefined }),
+}));
+
 vi.mock('@/components/sections/sessions-section', () => ({
   SessionsSection: ({
     onCountChange,
