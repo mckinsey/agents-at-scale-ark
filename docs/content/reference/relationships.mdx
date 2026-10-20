@@ -72,7 +72,7 @@ References resolve within a single namespace unless the reference type carries i
 | --- | --- |
 | `Agent.spec.modelRef` | Yes — honours `modelRef.namespace` (defaults to the agent's namespace). |
 | `Agent.spec.executionEngine` | Yes — honours `executionEngine.namespace` (except the built-in `a2a` engine, which needs no resource). |
-| `Query.spec.memory` | Yes — honours `memory.namespace` (resolved by the execution engine). |
+| `Query.spec.memory` | Yes — honours `memory.namespace` (resolved by the execution engine). Don't use it to reach a `Memory` backed by another namespace's ark-broker: the broker serves only its own namespace (see [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation)). |
 | `Query.spec.target` / `spec.selector` | **No** — resolved in the query's namespace. There is no namespace field on a target. |
 | `Team.spec.members[]` | **No** — members must live in the team's namespace. |
 

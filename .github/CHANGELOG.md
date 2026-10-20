@@ -1,5 +1,66 @@
 # Changelog
 
+## [0.1.72-rc.3](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc.2...v0.1.72-rc.3) (2026-10-20)
+
+
+### Features
+
+* **argo-workflows:** upgrade to Argo Workflows v4.1.5 ([#3801](https://github.com/mckinsey/agents-at-scale-ark/issues/3801)) ([ceb71d9](https://github.com/mckinsey/agents-at-scale-ark/commit/ceb71d91328faede32fb65f54c60b09e45d461d4))
+* **ark-dashboard:** numbered pagination for workflow runs ([#3790](https://github.com/mckinsey/agents-at-scale-ark/issues/3790)) ([bcdbbf1](https://github.com/mckinsey/agents-at-scale-ark/commit/bcdbbf111fcbb87087e69ac86ca9582fda3a5d8c))
+
+
+### Bug Fixes
+
+* keep every keystroke in workflow runs search ([#3800](https://github.com/mckinsey/agents-at-scale-ark/issues/3800)) ([a3cf864](https://github.com/mckinsey/agents-at-scale-ark/commit/a3cf864ec3400ff6359dae44bdf9915ba08f9d9b)), closes [#3798](https://github.com/mckinsey/agents-at-scale-ark/issues/3798)
+* read the Argo UI URL at runtime and hide Argo links when unset ([#3723](https://github.com/mckinsey/agents-at-scale-ark/issues/3723)) ([363eaf1](https://github.com/mckinsey/agents-at-scale-ark/commit/363eaf114842c686170b2a3bf14eb1a1ece4261d))
+
+## [0.1.72-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc.1...v0.1.72-rc.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **ark-api:** unblock retry of cancelled withItems workflows and clear stored shutdown ([#3792](https://github.com/mckinsey/agents-at-scale-ark/issues/3792)) ([deb2b64](https://github.com/mckinsey/agents-at-scale-ark/commit/deb2b64c0dc3c741d47ca0f04f4ca8ae329d7482)), closes [#3788](https://github.com/mckinsey/agents-at-scale-ark/issues/3788) [#3789](https://github.com/mckinsey/agents-at-scale-ark/issues/3789)
+
+
+### Documentation
+
+* say that a broker serves only its own namespace ([#3774](https://github.com/mckinsey/agents-at-scale-ark/issues/3774)) ([2c6412e](https://github.com/mckinsey/agents-at-scale-ark/commit/2c6412e7b1fa792d242dfbd3a97d6584f8e75d5f))
+
+## [0.1.72-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc...v0.1.72-rc.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* address CVEs from issue [#3778](https://github.com/mckinsey/agents-at-scale-ark/issues/3778) ([#3783](https://github.com/mckinsey/agents-at-scale-ark/issues/3783)) ([b639757](https://github.com/mckinsey/agents-at-scale-ark/commit/b6397577d803e28e34d49ca51d3d2684abb044c9))
+* **ark-api:** default ARGO_SERVER_URL to the ark-api namespace ([#3779](https://github.com/mckinsey/agents-at-scale-ark/issues/3779)) ([0164f41](https://github.com/mckinsey/agents-at-scale-ark/commit/0164f4177f01cdaa318267d38e8729901e046b92)), closes [#3757](https://github.com/mckinsey/agents-at-scale-ark/issues/3757)
+* **ark-dashboard:** nest withItems expansions under their task group and settle nodes of cancelled workflows ([#3777](https://github.com/mckinsey/agents-at-scale-ark/issues/3777)) ([7f551ae](https://github.com/mckinsey/agents-at-scale-ark/commit/7f551ae8615dbc9018720180e3de96d5439e4b7a))
+* bump  next 16.3.6 → 16.4.1 to fix jFrog ([#3770](https://github.com/mckinsey/agents-at-scale-ark/issues/3770)) ([2e80b02](https://github.com/mckinsey/agents-at-scale-ark/commit/2e80b0257a0c1289d77d7b510a7817615e485283))
+* **dashboard:** disable workflow Run and Delete without access ([#3707](https://github.com/mckinsey/agents-at-scale-ark/issues/3707)) ([f4cbad7](https://github.com/mckinsey/agents-at-scale-ark/commit/f4cbad74430d0949edacbc1db3d9b3c690cc10ac))
+* **dashboard:** report execution engine delete failures ([#3706](https://github.com/mckinsey/agents-at-scale-ark/issues/3706)) ([5f25745](https://github.com/mckinsey/agents-at-scale-ark/commit/5f257455e2cade3d3029101d528ba593ee6de7b2))
+
+## [0.1.72-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.71...v0.1.72-rc) (2026-10-14)
+
+
+### Features
+
+* add Argo workflow lifecycle actions, run controls and pause states ([#3669](https://github.com/mckinsey/agents-at-scale-ark/issues/3669)) ([5278cc4](https://github.com/mckinsey/agents-at-scale-ark/commit/5278cc41e785182aeea2115a8b3d15dcad35fd1a))
+* workflow templates QBDS update ([#3621](https://github.com/mckinsey/agents-at-scale-ark/issues/3621)) ([38c4999](https://github.com/mckinsey/agents-at-scale-ark/commit/38c49994f352876885cbade83524123ba2857af6))
+
+
+### Bug Fixes
+
+* **a2a:** preserve trailing slash in lastResolvedEndpoint ([#3748](https://github.com/mckinsey/agents-at-scale-ark/issues/3748)) ([235e7ec](https://github.com/mckinsey/agents-at-scale-ark/commit/235e7ec98ce779449f8cf2a35cd0ed858b57d5cb))
+* **apiserver:** finish WatchList support on the PostgreSQL backend and re-enable WatchListClient ([#3739](https://github.com/mckinsey/agents-at-scale-ark/issues/3739)) ([439c14c](https://github.com/mckinsey/agents-at-scale-ark/commit/439c14c3a237eda0267e2a0b5ba1dd50f73a810b))
+* **ark-api:** limit the generic log routes to workflow pods ([#3705](https://github.com/mckinsey/agents-at-scale-ark/issues/3705)) ([f7e7763](https://github.com/mckinsey/agents-at-scale-ark/commit/f7e776360dbee6a2e20bf3fb85b3209c91098b91))
+* **ark-api:** require a user identity for generic resource writes ([#3703](https://github.com/mckinsey/agents-at-scale-ark/issues/3703)) ([e789ab8](https://github.com/mckinsey/agents-at-scale-ark/commit/e789ab86a7b500e5266fd034be27a39c0bf1ac62))
+* **ark-api:** restrict the generic resources route to an allowlist ([#3698](https://github.com/mckinsey/agents-at-scale-ark/issues/3698)) ([e3fc92c](https://github.com/mckinsey/agents-at-scale-ark/commit/e3fc92cf8dcf90ca9ce3ad990319aa201c303cc9))
+* **ark-dashboard:** fall back to polling when broker streaming is unavailable ([#3649](https://github.com/mckinsey/agents-at-scale-ark/issues/3649)) ([4b5ff1a](https://github.com/mckinsey/agents-at-scale-ark/commit/4b5ff1a775dab0e689f59540c17b5410cba8f6d6))
+* bump Go to 1.26.9 and golang.org/x/net to v0.61.0 ([#3747](https://github.com/mckinsey/agents-at-scale-ark/issues/3747)) ([9b6562c](https://github.com/mckinsey/agents-at-scale-ark/commit/9b6562ca427e2936a3c18c64d80a30f2f66d32c4))
+* bump transitive dompurify to 3.4.17 to resolve XRAY-1107265 ([#3753](https://github.com/mckinsey/agents-at-scale-ark/issues/3753)) ([7fd2d3c](https://github.com/mckinsey/agents-at-scale-ark/commit/7fd2d3c2f8803572928d96317c280f4c8bf3dd64))
+* migrate ark-sdk overlay and ark-api to a2a-sdk 1.x ([#3718](https://github.com/mckinsey/agents-at-scale-ark/issues/3718)) ([47db06c](https://github.com/mckinsey/agents-at-scale-ark/commit/47db06c77015150ba2f23ec0545c557c3c9ba427))
+* remove internal link from readme ([#3750](https://github.com/mckinsey/agents-at-scale-ark/issues/3750)) ([22ca243](https://github.com/mckinsey/agents-at-scale-ark/commit/22ca2439b877a62f9f084ecd1fe2954f4956d245))
+* sort workflow runs by start time and improve workflow log readability ([#3758](https://github.com/mckinsey/agents-at-scale-ark/issues/3758)) ([7d0fb30](https://github.com/mckinsey/agents-at-scale-ark/commit/7d0fb30800e6d7abc45995df15ed948c60fe401c))
+
 ## [0.1.71-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.70...v0.1.71-rc) (2026-10-08)
 
 

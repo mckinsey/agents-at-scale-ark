@@ -14,7 +14,7 @@ const mockDelete = vi.fn();
 const mockIsArgoNotInstalledError = vi.fn(() => false);
 const mockPush = vi.fn();
 const mockReadOnly = { value: false };
-const mockAccess = { canCreate: true };
+const mockAccess = { canCreate: true, canRun: true, canDelete: true };
 
 vi.mock('next/navigation', async () => {
   const { createAppRouterMock } =
@@ -40,6 +40,8 @@ vi.mock('@/lib/hooks/use-workflow-template-access', () => ({
   useWorkflowTemplateAccess: () => ({
     canCreate: mockAccess.canCreate,
     canUpdate: true,
+    canRun: mockAccess.canRun,
+    canDelete: mockAccess.canDelete,
     loading: false,
   }),
 }));
@@ -70,10 +72,17 @@ vi.mock('@/components/sections/workflow-templates-not-installed', () => ({
 vi.mock('@/components/sections/workflow-templates-table', () => ({
   WorkflowTemplatesTable: ({
     templates,
+    canRun,
+    canDelete,
   }: {
     templates: WorkflowTemplateListItem[];
+    canRun?: boolean;
+    canDelete?: boolean;
   }) => (
-    <div data-testid="workflow-templates-table">
+    <div
+      data-testid="workflow-templates-table"
+      data-can-run={String(canRun)}
+      data-can-delete={String(canDelete)}>
       {templates.map(template => (
         <div key={template.id} data-testid="workflow-template-row">
           <span>{template.name}</span>
@@ -143,6 +152,8 @@ describe('WorkflowTemplatesSection', () => {
     resetAppRouterMock();
     mockReadOnly.value = false;
     mockAccess.canCreate = true;
+    mockAccess.canRun = true;
+    mockAccess.canDelete = true;
     mockIsArgoNotInstalledError.mockReturnValue(false);
   });
 
@@ -224,6 +235,16 @@ describe('WorkflowTemplatesSection', () => {
     expect(
       screen.queryByTestId('workflow-create-template'),
     ).not.toBeInTheDocument();
+  });
+
+  it('passes the run and delete access to the table', async () => {
+    mockAccess.canRun = false;
+    mockAccess.canDelete = false;
+    mockList.mockResolvedValue(templates);
+    renderSection();
+    const table = await screen.findByTestId('workflow-templates-table');
+    expect(table).toHaveAttribute('data-can-run', 'false');
+    expect(table).toHaveAttribute('data-can-delete', 'false');
   });
 
   it('disables the create button in read-only mode', async () => {

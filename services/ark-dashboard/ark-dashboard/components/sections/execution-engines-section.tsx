@@ -27,6 +27,7 @@ import type {
 } from '@/lib/services/engines';
 import {
   useDeleteExecutionEngine,
+  useExecutionEngineDeleteAccess,
   useGetAllExecutionEngines,
 } from '@/lib/services/engines-hooks';
 import { cn } from '@/lib/utils';
@@ -156,9 +157,11 @@ export function ExecutionEnginesSection() {
   const { readOnlyMode } = useNamespace();
   const { data: engines, isLoading } = useGetAllExecutionEngines();
   const deleteEngine = useDeleteExecutionEngine();
+  const deleteAccess = useExecutionEngineDeleteAccess();
+  const canDelete = !readOnlyMode && deleteAccess.data === true;
 
   const handleDelete = (name: string) => {
-    if (readOnlyMode) return;
+    if (!canDelete) return;
     deleteEngine.mutate(name);
   };
 
@@ -208,7 +211,7 @@ export function ExecutionEnginesSection() {
           <EngineTableRow
             key={engine.name}
             engine={engine}
-            onDelete={readOnlyMode ? undefined : handleDelete}
+            onDelete={canDelete ? handleDelete : undefined}
           />
         ))}
       </TableBody>

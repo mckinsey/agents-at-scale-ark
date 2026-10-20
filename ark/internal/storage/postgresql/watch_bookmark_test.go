@@ -23,7 +23,10 @@ import (
 	"mckinsey.com/ark/internal/storage"
 )
 
-const initialEventsEndAnnotation = metav1.InitialEventsAnnotationKey
+const (
+	initialEventsEndAnnotation = metav1.InitialEventsAnnotationKey
+	initialEventsEndValue      = "true"
+)
 
 type bookmarkConverter struct{}
 
@@ -53,6 +56,7 @@ func newBookmarkWatcher(opts storage.WatchOptions) *postgresWatcher {
 		sendInitialEvents: opts.SendInitialEvents,
 		allowBookmarks:    opts.AllowWatchBookmarks,
 		initialSynced:     true,
+		initialHeadRV:     7,
 	}
 }
 
@@ -105,7 +109,7 @@ func TestSendBookmark_WatchListAnnotatesOnlyTheFirstBookmark(t *testing.T) {
 	w.sendBookmark()
 
 	first, _ := takeEvent(t, w)
-	if got := bookmarkMeta(t, first).GetAnnotations()[initialEventsEndAnnotation]; got != "true" {
+	if got := bookmarkMeta(t, first).GetAnnotations()[initialEventsEndAnnotation]; got != initialEventsEndValue {
 		t.Errorf("first WatchList bookmark annotation = %q, want \"true\"", got)
 	}
 	second, ok := takeEvent(t, w)
@@ -123,15 +127,14 @@ func TestSendBookmark_WatchListWaitsForTheInitialSync(t *testing.T) {
 	w.initialSynced = false
 
 	w.sendBookmark()
-	before, _ := takeEvent(t, w)
-	if _, found := bookmarkMeta(t, before).GetAnnotations()[initialEventsEndAnnotation]; found {
-		t.Fatal("initial-events-end sent before the initial relist succeeded")
+	if ev, ok := takeEvent(t, w); ok {
+		t.Fatalf("WatchList got a %s before the initial relist succeeded", ev.Type)
 	}
 
 	w.initialSynced = true
 	w.sendBookmark()
 	after, _ := takeEvent(t, w)
-	if got := bookmarkMeta(t, after).GetAnnotations()[initialEventsEndAnnotation]; got != "true" {
+	if got := bookmarkMeta(t, after).GetAnnotations()[initialEventsEndAnnotation]; got != initialEventsEndValue {
 		t.Errorf("annotation after the sync = %q, want \"true\"", got)
 	}
 }
