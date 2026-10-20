@@ -68,6 +68,24 @@ class TestHandleK8sErrorsFallback(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(exc_info.value.status_code, 403)
 
+    async def test_fallback_can_be_refused_per_handler(self):
+        calls = []
+
+        @handle_k8s_errors(operation="create", resource_type="workflow", impersonation_fallback=False)
+        async def handler(namespace="default", impersonation=None):
+            calls.append(impersonation)
+            raise _make_api_exception(403)
+
+        config = ImpersonationConfig(username="bob@acme.com", groups=["viewers"])
+        with patch.dict("os.environ", {"IMPERSONATION_FALLBACK": "true"}):
+            response = await handler(namespace="default", impersonation=config)
+
+        body = json.loads(response.body)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(body["error"], "impersonation_forbidden")
+        self.assertEqual(calls, [config])
+        self.assertNotIn("X-Ark-Impersonation-Fallback", response.headers)
+
     async def test_fallback_header_set_on_response(self):
         @handle_k8s_errors(operation="delete", resource_type="model")
         async def handler(namespace="prod", impersonation=None):

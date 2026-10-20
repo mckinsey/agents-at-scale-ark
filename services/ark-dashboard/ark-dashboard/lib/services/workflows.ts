@@ -70,6 +70,7 @@ export interface WorkflowPage {
   items: ArgoWorkflow[];
   continueToken?: string;
   hasMore: boolean;
+  remainingItemCount?: number;
 }
 
 export const workflowsService = {
@@ -102,11 +103,16 @@ export const workflowsService = {
       : await apiClient.get<ArgoWorkflowList>(url);
     const items = await Promise.all(response.items.map(expandCompressedNodes));
     const continueToken = response.metadata?.continue || undefined;
+    const remainingItemCount = response.metadata?.remainingItemCount;
 
     return {
       items,
       continueToken,
       hasMore: Boolean(continueToken),
+      remainingItemCount:
+        remainingItemCount === undefined
+          ? undefined
+          : Number(remainingItemCount),
     };
   },
 

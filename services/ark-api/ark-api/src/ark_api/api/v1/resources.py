@@ -19,13 +19,20 @@ from ark_sdk.k8s import get_context
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
-from ...auth.generic_resources import GenericResourceGuard
+from ...auth.generic_resources import (
+    GENERIC_WRITE_RESOURCES,
+    GenericResourceGuard,
+    generic_write_identity_denial,
+    is_write_verb,
+    require_generic_write_identity,
+)
 from ...constants.query_param_descriptions import (
     NAMESPACE_DESCRIPTION,
     LABEL_SELECTOR_DESCRIPTION,
 )
 from ...models.pod_logs import LogWindow
 from ...models.resources import AccessReviewRequest, AccessReviewResponse
+from . import argo_server
 from .client_utils import get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 from .pagination import MAX_PAGE_LIMIT
@@ -170,6 +177,79 @@ async def get_grouped_resource(
         return _create_resource_response(resource.to_dict(), request)
 
 
+def _build_label_selector(
+    kind: str,
+    label_selector: Optional[str],
+    workflow_template_name: Optional[str],
+    status: Optional[str],
+) -> str:
+    selectors = [label_selector]
+    if kind == "Workflow":
+        if workflow_template_name:
+            selectors.append(f"{WORKFLOW_TEMPLATE_LABEL}={workflow_template_name}")
+        if status:
+            selectors.append(WORKFLOW_STATUS_LABEL_SELECTORS.get(status.lower()))
+    return ",".join(filter(None, selectors))
+
+
+def _filter_items_by_name(resources_dict: dict, name: str) -> None:
+    (resources_dict.get("metadata") or {}).pop("remainingItemCount", None)
+    if "items" not in resources_dict:
+        return
+    resources_dict["items"] = [
+        item
+        for item in resources_dict["items"]
+        if name.lower() in item.get("metadata", {}).get("name", "").lower()
+    ]
+
+
+async def _is_access_allowed(
+    impersonation: Optional[ImpersonationConfig],
+    namespace: str,
+    group: str,
+    resource: str,
+    verb: str,
+) -> bool:
+    async with get_impersonating_api_client(impersonation) as api:
+        review = client.V1SelfSubjectAccessReview(
+            spec=client.V1SelfSubjectAccessReviewSpec(
+                resource_attributes=client.V1ResourceAttributes(
+                    namespace=namespace,
+                    verb=verb,
+                    group=group,
+                    resource=resource,
+                )
+            )
+        )
+        result = await client.AuthorizationV1Api(api).create_self_subject_access_review(review)
+        return bool(result.status and result.status.allowed)
+
+
+async def _list_workflows_from_argo_server(
+    namespace: str,
+    label_selector: Optional[str],
+    workflow_name: Optional[str],
+    limit: Optional[int],
+    continue_token: Optional[str],
+    impersonation: Optional[ImpersonationConfig],
+) -> Optional[dict]:
+    base_url = argo_server.get_argo_server_url()
+    if not base_url or (continue_token is not None and not continue_token.isdigit()):
+        return None
+
+    if not await _is_access_allowed(impersonation, namespace, "argoproj.io", "workflows", "list"):
+        raise ApiException(status=403, reason="Forbidden")
+
+    return await argo_server.list_workflows(
+        base_url,
+        namespace,
+        label_selector,
+        workflow_name,
+        limit,
+        int(continue_token or 0),
+    )
+
+
 @router.get("/apis/{group}/{version}/{kind}", dependencies=[Depends(GenericResourceGuard("list"))])
 @handle_k8s_errors(operation="list", resource_type="resource")
 async def list_grouped_resources(
@@ -195,9 +275,10 @@ async def list_grouped_resources(
         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
         namespace: The namespace (defaults to current context)
         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
-        workflowName: Filter by workflow name (partial match, case insensitive). Applied only
-            to the page returned by this call, not the whole collection — a page can come back
-            with few or no matches even though more exist further in the cursor sequence.
+        workflowName: Filter by workflow name (partial match, case insensitive). Applied by
+            Argo Server across the whole collection when it serves the list; otherwise applied
+            only to the page returned by this call, so a page can come back with few or no
+            matches even though more exist further in the cursor sequence.
         workflowTemplateName: Filter by workflow template name (exact match). Applied
             server-side via a label selector, so pagination stays correct across pages.
         status: Filter by workflow status. Same server-side label selector as
@@ -213,6 +294,11 @@ async def list_grouped_resources(
         Response: List of raw Kubernetes resources as JSON. When the Kubernetes API has more
             items beyond this page, the response's metadata carries a "continue" token
             (pass it back as ?continue=... for the next page) and "remainingItemCount".
+
+    Workflows are listed through Argo Server when ARGO_SERVER_URL is set, sorted by start
+    time newest first, after a Kubernetes RBAC check for listing workflows in the namespace.
+    The continue token is then an item offset. The Kubernetes API is used when the variable
+    is unset, when the continue token is a Kubernetes one, or when Argo Server fails.
 
     Note:
         This is Kubernetes' cursor-based pagination, not traditional offset pagination:
@@ -236,15 +322,14 @@ async def list_grouped_resources(
 
     api_version = f"{group}/{version}"
 
-    workflow_label_selectors = []
-    if kind == "Workflow":
-        if workflowTemplateName:
-            workflow_label_selectors.append(f"{WORKFLOW_TEMPLATE_LABEL}={workflowTemplateName}")
-        if status:
-            status_selector = WORKFLOW_STATUS_LABEL_SELECTORS.get(status.lower())
-            if status_selector:
-                workflow_label_selectors.append(status_selector)
-    combined_label_selector = ",".join(filter(None, [label_selector, *workflow_label_selectors]))
+    combined_label_selector = _build_label_selector(kind, label_selector, workflowTemplateName, status)
+
+    if api_version == WORKFLOW_API_VERSION and kind == WORKFLOW_KIND:
+        workflow_list = await _list_workflows_from_argo_server(
+            namespace, combined_label_selector or None, workflowName, limit, continue_token, impersonation
+        )
+        if workflow_list is not None:
+            return _create_resource_response(workflow_list, request)
 
     async with get_impersonating_api_client(impersonation) as api:
         dynamic_client = await DynamicClient(api)
@@ -264,18 +349,17 @@ async def list_grouped_resources(
 
         # workflowName stays a post-fetch partial match, applied only to the
         # page returned by this call, not the whole collection.
-        if kind == "Workflow" and workflowName and "items" in resources_dict:
-            resources_dict["items"] = [
-                item
-                for item in resources_dict["items"]
-                if workflowName.lower() in item.get("metadata", {}).get("name", "").lower()
-            ]
+        if kind == "Workflow" and workflowName:
+            _filter_items_by_name(resources_dict, workflowName)
 
         return _create_resource_response(resources_dict, request)
 
 
-@router.post("/apis/{group}/{version}/{kind}", dependencies=[Depends(GenericResourceGuard("create"))])
-@handle_k8s_errors(operation="create", resource_type="resource")
+@router.post(
+    "/apis/{group}/{version}/{kind}",
+    dependencies=[Depends(GenericResourceGuard("create")), Depends(require_generic_write_identity)],
+)
+@handle_k8s_errors(operation="create", resource_type="resource", impersonation_fallback=False)
 async def create_grouped_resource(
     request: Request,
     group: str,
@@ -297,6 +381,10 @@ async def create_grouped_resource(
 
     Only (group, version, Kind, verb) tuples on the generic resources allowlist
     are served; everything else returns 403.
+
+    With authentication enabled, a signed-in user's write runs as that user and
+    needs impersonation; it is never retried as the service account. API key
+    and open-mode requests run as the service account.
 
     Returns:
         Response: The created Kubernetes resource as JSON
@@ -324,8 +412,11 @@ async def create_grouped_resource(
         return _create_resource_response(resource.to_dict(), request)
 
 
-@router.put("/apis/{group}/{version}/{kind}/{resource_name}", dependencies=[Depends(GenericResourceGuard("update"))])
-@handle_k8s_errors(operation="update", resource_type="resource")
+@router.put(
+    "/apis/{group}/{version}/{kind}/{resource_name}",
+    dependencies=[Depends(GenericResourceGuard("update")), Depends(require_generic_write_identity)],
+)
+@handle_k8s_errors(operation="update", resource_type="resource", impersonation_fallback=False)
 async def update_grouped_resource(
     request: Request,
     group: str,
@@ -354,6 +445,10 @@ async def update_grouped_resource(
 
     Only (group, version, Kind, verb) tuples on the generic resources allowlist
     are served; everything else returns 403.
+
+    With authentication enabled, a signed-in user's write runs as that user and
+    needs impersonation; it is never retried as the service account. API key
+    and open-mode requests run as the service account.
 
     Returns:
         Response: The updated Kubernetes resource as JSON
@@ -385,9 +480,10 @@ async def update_grouped_resource(
         return _create_resource_response(resource.to_dict(), request)
 
 
-@router.post("/access-review", response_model=AccessReviewResponse)
+@router.post("/access-review", response_model=AccessReviewResponse, response_model_exclude_none=True)
 @handle_k8s_errors(operation="create", resource_type="access review")
 async def create_access_review(
+    request: Request,
     body: AccessReviewRequest,
     namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)
@@ -397,6 +493,10 @@ async def create_access_review(
 
     Runs under the impersonated identity, so the result reflects the user's RBAC.
     When impersonation is disabled it runs as the service account.
+
+    A write the generic resource routes would refuse for this caller, because it
+    has to run as the signed-in user and cannot, returns allowed false with the
+    reason, without asking Kubernetes.
 
     Args:
         body: group, resource, and verb to review
@@ -408,28 +508,23 @@ async def create_access_review(
     Examples:
         - POST /v1/resources/access-review
     """
+    if (body.group, body.resource) in GENERIC_WRITE_RESOURCES and is_write_verb(body.verb):
+        denial = generic_write_identity_denial(request)
+        if denial is not None:
+            return AccessReviewResponse(allowed=False, reason=denial)
+
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    async with get_impersonating_api_client(impersonation) as api:
-        review = client.V1SelfSubjectAccessReview(
-            spec=client.V1SelfSubjectAccessReviewSpec(
-                resource_attributes=client.V1ResourceAttributes(
-                    namespace=namespace,
-                    verb=body.verb,
-                    group=body.group,
-                    resource=body.resource,
-                )
-            )
-        )
-        result = await client.AuthorizationV1Api(api).create_self_subject_access_review(review)
-        allowed = bool(result.status and result.status.allowed)
-
-        return AccessReviewResponse(allowed=allowed)
+    allowed = await _is_access_allowed(impersonation, namespace, body.group, body.resource, body.verb)
+    return AccessReviewResponse(allowed=allowed)
 
 
-@router.delete("/apis/{group}/{version}/{kind}/{resource_name}", dependencies=[Depends(GenericResourceGuard("delete"))])
-@handle_k8s_errors(operation="delete", resource_type="resource")
+@router.delete(
+    "/apis/{group}/{version}/{kind}/{resource_name}",
+    dependencies=[Depends(GenericResourceGuard("delete")), Depends(require_generic_write_identity)],
+)
+@handle_k8s_errors(operation="delete", resource_type="resource", impersonation_fallback=False)
 async def delete_grouped_resource(
     group: str,
     version: str,
@@ -450,6 +545,10 @@ async def delete_grouped_resource(
 
     Only (group, version, Kind, verb) tuples on the generic resources allowlist
     are served; everything else returns 403.
+
+    With authentication enabled, a signed-in user's write runs as that user and
+    needs impersonation; it is never retried as the service account. API key
+    and open-mode requests run as the service account.
 
     Returns:
         Response: HTTP 204 No Content on success
