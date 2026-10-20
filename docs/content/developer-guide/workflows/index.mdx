@@ -54,7 +54,7 @@ kubectl port-forward svc/argo-workflows-server 2746:2746
 
 Workflow pods run their `argoexec` init and wait containers from Argo's non-root executor image (`quay.io/argoproj/argoexec:<version>-nonroot`, UID 8737), which is [Argo's recommended setting](https://argo-workflows.readthedocs.io/en/latest/workflow-pod-security-context/#non-root-executor-image). Each step's own container keeps the user its image declares, so steps running as root or any other UID still work.
 
-The tag is pinned in `services/argo-workflows/chart/values.yaml` under `argo-workflows.executor.image.tag` and must be bumped with the Argo subchart version. Set `runAsUser: 0` on the workflow pod security context to run the executor as root instead.
+It is enabled in `services/argo-workflows/chart/values.yaml` with `argo-workflows.executor.image.nonroot: true`, so the tag follows the Argo subchart version. Set `runAsUser: 0` on the workflow pod security context to run the executor as root instead.
 
 ### Minio artifact storage
 
