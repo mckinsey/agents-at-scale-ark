@@ -149,52 +149,6 @@ spec:
           name: inline-doubler-agent
           namespace: default
 
-  - name: discover-via-agent
-    try:
-    - apply:
-        file: manifests/a04-discover-query.yaml
-    - wait:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        name: inline-doubler-discover
-        namespace: default
-        timeout: 90s
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    # Proves the query actually routed through the agent (not a direct
-    # target.type: tool call, which is what let this gap go unnoticed
-    # before). Doesn't assert the LLM actually invoked the tool: mock-llm's
-    # SSE streaming path can't carry a tool_calls message (it reads
-    # choices[0].message.content unconditionally before chunking, which is
-    # absent on a tool_calls-only message), and the completions executor
-    # always requests streaming. See mock-llm-values.yaml.
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: inline-doubler-discover
-            namespace: default
-          status:
-            phase: done
-            (response.target.name): 'inline-doubler-agent'
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        name: inline-doubler-discover
-        namespace: default
-    cleanup:
-    - delete:
-        ref:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          name: inline-doubler-discover
-          namespace: default
-
   - name: call
     try:
     - apply:
@@ -297,6 +251,60 @@ spec:
         kind: Tool
         name: inline-doubler
         namespace: default
+
+  - name: discover-via-agent
+    try:
+    - apply:
+        file: manifests/a04-discover-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: inline-doubler-discover
+        namespace: default
+        timeout: 90s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    # Proves the query actually routed through the agent (not a direct
+    # target.type: tool call, which is what let this gap go unnoticed
+    # before). Doesn't assert the LLM actually invoked the tool: mock-llm's
+    # SSE streaming path can't carry a tool_calls message (it reads
+    # choices[0].message.content unconditionally before chunking, which is
+    # absent on a tool_calls-only message), and the completions executor
+    # always requests streaming. See mock-llm-values.yaml.
+    #
+    # Runs after edit (not right after attach) so it can't perturb the
+    # create -> call -> idle-scale-to-zero timing: that sequence already
+    # races a freshly-created Tool's status propagating to the executor's
+    # cache, and adding an extra Agent+Query reconcile in between shifted
+    # that race enough to flake calling the tool directly (see the PR
+    # history for the "inline Tool is not available for its current
+    # generation" failure this caused when placed earlier).
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: inline-doubler-discover
+            namespace: default
+          status:
+            phase: done
+            (response.target.name): 'inline-doubler-agent'
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: inline-doubler-discover
+        namespace: default
+    cleanup:
+    - delete:
+        ref:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: inline-doubler-discover
+          namespace: default
 
   - name: delete
     try:
