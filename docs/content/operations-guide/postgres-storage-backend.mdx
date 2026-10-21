@@ -503,12 +503,23 @@ How multiple replicas behave:
 - **Cross-replica watch delivery is `pg_notify`-driven.** Every write emits a `pg_notify` on the `ark_resource_change` channel after commit, and every replica holds a `LISTEN` connection that wakes its watchers immediately — typically well under a second, regardless of which replica took the write. The notification carries only the resource kind; watchers are refreshed from the `resources` table, so a dropped notification delays delivery instead of losing it. The periodic relist (~120 seconds) remains as the backstop.
 - **Failover:** if the leader dies, a surviving replica acquires the lease (roughly the 15s lease duration) and starts the WAL consumer; the slot position is persistent, so no events are lost across the handover.
 
+### Read consistency and resourceVersion
+
+The resource version is a single counter for the whole `resources` table, so every write moves it forward for every kind. Reads honour `resourceVersion` and `resourceVersionMatch` the way kube-apiserver does, and a request for a version the store has not reached is refused instead of being answered with older data:
+
+- A list with `resourceVersionMatch=NotOlderThan`, or with a `resourceVersion` and no match, returns the current state once the store has reached that version. A get with a `resourceVersion` works the same way. If the request is ahead of the store, the apiserver answers `504 Timeout` with the cause `ResourceVersionTooLarge` and a one second `Retry-After`.
+- A list with `resourceVersionMatch=Exact` can only be served at the current head, because an update overwrites the previous row. A request below the head gets `410 Gone`, the answer etcd gives for a compacted revision. A request above the head gets the `504`. kube-apiserver also reads a `resourceVersion` sent with `limit` and no match as exact; this apiserver has no older state to serve, so it treats that form as a lower bound.
+- A watch-list request (`sendInitialEvents=true`) that is ahead of the store gets a single `ERROR` event carrying the same `504` status, as kube-apiserver sends.
+- `resourceVersion=0`, or no `resourceVersion`, means any version.
+
+client-go reflectors recover from these errors by listing again at the current state. A plain watch resumed from a newer `resourceVersion` is accepted, as in kube-apiserver, and can skip changes that carry lower versions.
+
 ## Backups and restore
 
 Treat the `resources` table like any other application table:
 
 - Use your provider's automated backups or `pg_dump` for ad-hoc snapshots.
-- A point-in-time restore restores Ark state to that moment. Take care to also drop and recreate the `ark_cdc` replication slot after a restore so the apiserver starts a fresh watch stream.
+- A point-in-time restore restores Ark state to that moment. Take care to also drop and recreate the `ark_cdc` replication slot after a restore so the apiserver starts a fresh watch stream. Clients that still hold a resource version from after the restore point get a `504` when they list, get, or start a watch-list from it, so the restore surfaces as an error instead of silently replacing their cache. A plain watch resumed from such a version is accepted and can miss writes made after the restore, so restart Ark controllers and other long-running clients after a restore. See [Read consistency and resourceVersion](#read-consistency-and-resourceversion).
 - Cluster-side state (Pods, Deployments owned by Ark) is **not** restored by a Postgres restore — only the declarative resources are.
 
 ## Uninstall and cleanup

@@ -108,6 +108,11 @@ func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.G
 	namespace := s.config.namespace(ctx)
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
+	if err := requireResourceVersion(sctx, s.backend, options); err != nil {
+		metrics.RecordStorageOperation("get", s.config.Kind, storageOutcome(err))
+		metrics.RecordStorageLatency("get", s.config.Kind, start)
+		return nil, getError(err)
+	}
 	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		metrics.RecordStorageOperation("get", s.config.Kind, "error")
@@ -132,18 +137,17 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 		}
 		opts.Limit = options.Limit
 		opts.Continue = options.Continue
+		opts.ResourceVersion = options.ResourceVersion
+		opts.ResourceVersionMatch = options.ResourceVersionMatch
 	}
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	objects, continueToken, listRV, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
 	if err != nil {
-		metrics.RecordStorageOperation("list", s.config.Kind, "error")
+		metrics.RecordStorageOperation("list", s.config.Kind, storageOutcome(err))
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
-		if errors.Is(err, storage.ErrInvalidRequest) {
-			return nil, apierrors.NewBadRequest(err.Error())
-		}
-		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
+		return nil, listError(err, s.config.Resource)
 	}
 
 	list := s.config.NewListFunc()
@@ -501,6 +505,10 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 
 	watcher, err := s.backend.Watch(ctx, s.config.Kind, namespace, opts)
 	if err != nil {
+		var tooLarge *storage.TooLargeResourceVersionError
+		if errors.As(err, &tooLarge) {
+			return errorWatcher(resourceVersionError(err)), nil
+		}
 		if errors.Is(err, storage.ErrInvalidRequest) {
 			return nil, apierrors.NewBadRequest(err.Error())
 		}
