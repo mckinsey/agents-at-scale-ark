@@ -46,6 +46,7 @@ import { Button } from '@/components/ui/button';
 import { IconActionButton } from '@/components/ui/icon-action-button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Select,
   SelectContent,
@@ -56,10 +57,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
-import {
-  ARGO_BASE_URL,
-  ARGO_WORKFLOWS_DOCS_URL,
-} from '@/lib/constants/workflows';
+import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
 import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   mapArgoWorkflowToSession,
@@ -73,7 +71,13 @@ import {
   useWorkflows,
 } from '@/lib/services/workflows-hooks';
 import { cn } from '@/lib/utils';
+import {
+  DEFAULT_PAGE_SIZE,
+  parsePage,
+  parsePageSize,
+} from '@/lib/utils/pagination';
 import { useNamespace } from '@/providers/NamespaceProvider';
+import { useArgoLinks } from '@/providers/argo-url-provider';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
 type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
@@ -99,11 +103,15 @@ const statusFilterItems = [
   { label: 'Failed', value: 'Failed' },
 ];
 
+const PAGE_SIZE_OPTIONS = [10, 15, 25, 50, 100];
+
 const URL_STATE_SPEC = {
   workflowName: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
   workflowTemplateName: { default: '' },
   status: { default: 'all', parse: normalizeStatus },
   run: { default: '' },
+  page: { default: 1, parse: parsePage },
+  pageSize: { default: DEFAULT_PAGE_SIZE, parse: parsePageSize },
 };
 
 interface WorkflowStepDetail {
@@ -434,6 +442,7 @@ function WorkflowStepDetail({
   message?: string;
   status: StepStatus;
 }>) {
+  const argoLinks = useArgoLinks();
   const shouldFetchLogs = Boolean(
     detail.workflowName && detail.nodeId && detail.namespace,
   );
@@ -510,7 +519,11 @@ function WorkflowStepDetail({
           <WorkflowNodeLogs
             target={logTarget}
             isRunning={status === 'running' || status === 'pending'}
-            argoUrl={`${ARGO_BASE_URL}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+            argoUrl={argoLinks?.workflow(
+              logTarget.namespace,
+              logTarget.workflowName,
+              { tab: 'workflow', nodeId: logTarget.nodeId },
+            )}
           />
         </LogEntryBlock>
       )}
@@ -770,6 +783,7 @@ function SessionDetailView({
   session: Session;
   isLoading?: boolean;
 }) {
+  const argoLinks = useArgoLinks();
   return (
     <div className="border-fill-onsurface-ui-1 flex h-full min-h-0 min-w-0 flex-1 flex-col border">
       <div className="bg-surface-secondary flex h-10 shrink-0 items-center justify-between gap-3 px-3">
@@ -788,19 +802,24 @@ function SessionDetailView({
             </div>
           )}
           <StatusLabel status={getSessionDisplayStatus(session)} />
-          {session.type === 'workflow' && session.namespace && session.uid && (
-            <Button variant="outline" size="xs" asChild>
-              <a
-                href={`${ARGO_BASE_URL}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
-                target="_blank"
-                rel="noopener noreferrer">
-                View in Argo
-                <IconShell size="sm">
-                  <OpenInNew />
-                </IconShell>
-              </a>
-            </Button>
-          )}
+          {argoLinks &&
+            session.type === 'workflow' &&
+            session.namespace &&
+            session.uid && (
+              <Button variant="outline" size="xs" asChild>
+                <a
+                  href={argoLinks.workflow(session.namespace, session.name, {
+                    uid: session.uid,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  View in Argo
+                  <IconShell size="sm">
+                    <OpenInNew />
+                  </IconShell>
+                </a>
+              </Button>
+            )}
         </div>
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4">
@@ -1248,19 +1267,37 @@ export function SessionsSection({
     toast.error('Failed to load page', { description: err.message });
   }, []);
 
+  const page = urlState.page;
+  const pageSize = urlState.pageSize;
+
+  const handleWorkflowsPageReset = useCallback(() => {
+    setUrlState({ page: 1 });
+  }, [setUrlState]);
+
   const {
     workflows,
     loading,
     error,
     hasNext,
     totalCount,
-    hasPrevious,
-    goToNextPage,
-    goToPreviousPage,
     updateWorkflowItem,
     showCreatedWorkflow,
     watchWorkflow,
-  } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
+  } = useWorkflows(namespace, filters, {
+    page: page - 1,
+    pageSize,
+    onPageError: handleWorkflowsPageError,
+    onPageReset: handleWorkflowsPageReset,
+  });
+
+  const totalPages =
+    totalCount === null ? null : Math.max(1, Math.ceil(totalCount / pageSize));
+
+  useEffect(() => {
+    if (totalPages !== null && page > totalPages) {
+      setUrlState({ page: totalPages });
+    }
+  }, [page, totalPages, setUrlState]);
 
   const { runAction, isPending: isRunActionPending } =
     useWorkflowLifecycleActions(namespace, updateWorkflowItem);
@@ -1400,6 +1437,7 @@ export function SessionsSection({
         workflowName: '',
         workflowTemplateName: '',
         status: 'all',
+        page: 1,
       },
       { flush: true },
     );
@@ -1435,7 +1473,7 @@ export function SessionsSection({
                   const value = e.target.value;
                   setTemplateTextDraft(value);
                   if (value !== selectedTemplateName) {
-                    setUrlState({ workflowTemplateName: '' });
+                    setUrlState({ workflowTemplateName: '', page: 1 });
                   }
                   if (!templateDropdownOpen) {
                     setTemplateDropdownOpen(true);
@@ -1454,7 +1492,7 @@ export function SessionsSection({
                     onSelect={templateName => {
                       setTemplateTextDraft(null);
                       setUrlState(
-                        { workflowTemplateName: templateName },
+                        { workflowTemplateName: templateName, page: 1 },
                         { flush: true },
                       );
                       setTemplateDropdownOpen(false);
@@ -1475,7 +1513,7 @@ export function SessionsSection({
               items={statusFilterItems}
               value={statusFilter || 'all'}
               onValueChange={value =>
-                setUrlState({ status: String(value).toLowerCase() })
+                setUrlState({ status: String(value).toLowerCase(), page: 1 })
               }>
               <SelectTrigger
                 aria-labelledby="workflow-status-label"
@@ -1510,40 +1548,55 @@ export function SessionsSection({
           selectedSession={selectedSession}
           isDetailLoading={loadingDetail && useRealData}
           hasActiveFilters={Boolean(hasActiveFilters)}
-          hasNext={hasNext}
+          hasNext={hasNext && totalPages === null}
           onClearFilters={clearFilters}
           onRunAction={readOnlyMode ? undefined : handleRunAction}
           isRunActionPending={isRunActionPending}
         />
 
-        <nav
-          aria-label="Workflow runs pagination"
-          className="flex shrink-0 items-center justify-center gap-2 pt-1">
-          <button
-            type="button"
-            onClick={goToPreviousPage}
-            disabled={!hasPrevious || isLoading}
-            aria-label="Go to previous page"
-            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
-            <IconShell size="sm">
-              <ArrowBack />
-            </IconShell>
-            <span className="text-sm leading-5 tracking-[-0.028px]">
-              Previous
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={goToNextPage}
-            disabled={!hasNext || isLoading}
-            aria-label="Go to next page"
-            className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
-            <span className="text-sm leading-5 tracking-[-0.028px]">Next</span>
-            <IconShell size="sm">
-              <ArrowForward />
-            </IconShell>
-          </button>
-        </nav>
+        {totalPages === null ? (
+          <nav
+            aria-label="Workflow runs pagination"
+            className="flex shrink-0 items-center justify-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setUrlState({ page: page - 1 })}
+              disabled={page <= 1 || isLoading}
+              aria-label="Go to previous page"
+              className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+              <IconShell size="sm">
+                <ArrowBack />
+              </IconShell>
+              <span className="text-sm leading-5 tracking-[-0.028px]">
+                Previous
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUrlState({ page: page + 1 })}
+              disabled={!hasNext || isLoading}
+              aria-label="Go to next page"
+              className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+              <span className="text-sm leading-5 tracking-[-0.028px]">
+                Next
+              </span>
+              <IconShell size="sm">
+                <ArrowForward />
+              </IconShell>
+            </button>
+          </nav>
+        ) : (
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            itemsPerPage={pageSize}
+            onPageChange={next => setUrlState({ page: next })}
+            onItemsPerPageChange={next =>
+              setUrlState({ pageSize: next, page: 1 })
+            }
+            itemsPerPageOptions={PAGE_SIZE_OPTIONS}
+          />
+        )}
       </div>
     </ErrorBoundary>
   );

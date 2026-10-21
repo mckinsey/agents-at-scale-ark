@@ -1406,6 +1406,13 @@ class TestAgentsEndpoint(unittest.TestCase):
             "status": {"phase": "Ready"},
         }
 
+        overrides = [
+            {
+                "resourceType": "model",
+                "headers": [{"name": "X-Tenant", "value": {"value": "acme"}}],
+            }
+        ]
+
         # Mock updated agent
         updated_agent = Mock()
         updated_agent.to_dict.return_value = {
@@ -1414,6 +1421,7 @@ class TestAgentsEndpoint(unittest.TestCase):
                 "description": "Updated description",
                 "prompt": "Updated prompt",
                 "modelRef": {"name": "gpt-4"},
+                "overrides": overrides,
             },
             "status": {"phase": "Ready"},
         }
@@ -1426,6 +1434,7 @@ class TestAgentsEndpoint(unittest.TestCase):
             "description": "Updated description",
             "prompt": "Updated prompt",
             "modelRef": {"name": "gpt-4"},
+            "overrides": overrides,
         }
         response = self.client.put(
             "/v1/agents/test-agent?namespace=default", json=request_data
@@ -1438,6 +1447,15 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["description"], "Updated description")
         self.assertEqual(data["prompt"], "Updated prompt")
         self.assertEqual(data["modelRef"]["name"], "gpt-4")
+        self.assertEqual(data["overrides"][0]["headers"][0]["name"], "X-Tenant")
+
+        request_data["overrides"][0]["headers"].append(
+            {"name": "x-tenant", "value": {"value": "other"}}
+        )
+        duplicate = self.client.put(
+            "/v1/agents/test-agent?namespace=default", json=request_data
+        )
+        self.assertEqual(duplicate.status_code, 422)
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_partial(self, mock_ark_client):
@@ -1671,6 +1689,16 @@ class TestModelsEndpoint(unittest.TestCase):
                             }
                         },
                         "baseUrl": {"value": "https://api.openai.com"},
+                        "headers": [
+                            {
+                                "name": "X-Token",
+                                "value": {
+                                    "valueFrom": {
+                                        "secretKeyRef": {"name": "header-key", "key": "token"}
+                                    }
+                                },
+                            }
+                        ],
                     }
                 },
             },
@@ -1683,7 +1711,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["items"][0]["secret_refs"], ["openai-key"])
+        self.assertEqual(data["items"][0]["secret_refs"], ["openai-key", "header-key"])
 
     @patch("ark_api.api.v1.models.with_ark_client")
     def test_list_models_empty(self, mock_ark_client):
@@ -1733,17 +1761,30 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_api_client_cls.return_value.__aenter__ = AsyncMock(return_value=Mock())
         mock_api_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
+        headers = [{"name": "X-Tenant", "value": {"value": "acme"}}]
         request_data = {
             "name": "gpt-4-model",
             "provider": "openai",
             "model": "gpt-4",
             "config": {
-                "openai": {"apiKey": "sk-test", "baseUrl": "https://api.openai.com/v1"}
+                "openai": {
+                    "apiKey": "sk-test",
+                    "baseUrl": "https://api.openai.com/v1",
+                    "headers": headers,
+                }
             },
         }
         response = self.client.post("/v1/models?namespace=default", json=request_data)
 
         self.assertEqual(response.status_code, 200)
+        sent_spec = mock_custom_api.create_namespaced_custom_object.call_args.kwargs["body"]["spec"]
+        self.assertEqual(sent_spec["config"]["openai"]["headers"], headers)
+
+        request_data["config"]["openai"]["headers"] = headers + [
+            {"name": "x-tenant", "value": {"value": "other"}}
+        ]
+        duplicate = self.client.post("/v1/models?namespace=default", json=request_data)
+        self.assertEqual(duplicate.status_code, 422)
         data = response.json()
         self.assertEqual(data["name"], "gpt-4-model")
         self.assertEqual(data["provider"], "openai")

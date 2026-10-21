@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 import { YamlViewer } from '@/components/common/yaml-viewer';
+import { CustomHeadersField } from '@/components/forms/shared/custom-headers-field';
 import {
   FieldDescription,
   FieldError,
@@ -79,6 +80,7 @@ export function ViewAgentForm({
     toolsLoading,
     unavailableTools,
     parameters,
+    headerRows,
     isExperimentalExecutionEngineEnabled,
     hasChanges,
   } = state;
@@ -89,6 +91,7 @@ export function ViewAgentForm({
     handleDeleteTool,
     isToolSelected,
     onSubmit,
+    onInvalid,
   } = actions;
 
   const promptValue = form.watch('prompt') || '';
@@ -149,7 +152,7 @@ export function ViewAgentForm({
       hasChanges={hasChanges}
       readOnlyMode={readOnlyMode || isA2A}
       titleAdornment={isA2A ? <A2AManagedInfo /> : undefined}
-      onSave={form.handleSubmit(onSubmit)}
+      onSave={form.handleSubmit(onSubmit, onInvalid)}
       switcherValue={agentName}
       switcherPlaceholder="Select agent"
       switcherItems={allAgents}
@@ -307,6 +310,16 @@ export function ViewAgentForm({
                   </FieldDescription>
                 )}
               </FieldSet>
+            )}
+
+            {!isA2A && (
+              <CustomHeadersField
+                headerRows={headerRows}
+                title="Model headers"
+                description="Sent with every request this agent makes to its model."
+                addLabel="Add model header"
+                disabled={isDisabled}
+              />
             )}
 
             {isA2A && (
