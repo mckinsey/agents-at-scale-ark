@@ -697,9 +697,13 @@ func decodeListContinueToken(s string) (listContinueToken, error) {
 // pages filter to rows visible in that snapshot, keeping the paginated view
 // consistent under concurrent inserts.
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, int64, error) {
+	rev, err := opts.Revision()
+	if err != nil {
+		return nil, "", 0, err
+	}
+
 	var contTok listContinueToken
 	if opts.Continue != "" {
-		var err error
 		contTok, err = decodeListContinueToken(opts.Continue)
 		if err != nil {
 			return nil, "", 0, err
@@ -741,6 +745,9 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		if err != nil {
 			return nil, "", 0, err
 		}
+	}
+	if err := checkListRevision(listRV, rev); err != nil {
+		return nil, "", 0, err
 	}
 
 	var continueToken string
