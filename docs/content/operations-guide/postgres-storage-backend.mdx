@@ -505,20 +505,21 @@ How multiple replicas behave:
 
 ### Read consistency and resourceVersion
 
-The resource version is a single counter for the whole `resources` table, so every write moves it forward for every kind. List requests honour `resourceVersion` and `resourceVersionMatch` the way kube-apiserver does:
+The resource version is a single counter for the whole `resources` table, so every write moves it forward for every kind. Reads honour `resourceVersion` and `resourceVersionMatch` the way kube-apiserver does, and a request for a version the store has not reached is refused instead of being answered with older data:
 
-- With `resourceVersionMatch=NotOlderThan`, the apiserver serves the current state when the store has reached the requested version. If the request is ahead of the store, it answers `504 Timeout` with the cause `ResourceVersionTooLarge` and a one second `Retry-After`.
-- With `resourceVersionMatch=Exact`, the apiserver can only serve the current head, because an update overwrites the previous row. A request below the head gets `410 Gone`, the same answer etcd gives for a compacted revision, and a request above it gets the `504`.
-- `resourceVersion=0` or no `resourceVersion` means any version, and the apiserver returns the current state.
+- A list with `resourceVersionMatch=NotOlderThan`, or with a `resourceVersion` and no match, returns the current state once the store has reached that version. A get with a `resourceVersion` works the same way. If the request is ahead of the store, the apiserver answers `504 Timeout` with the cause `ResourceVersionTooLarge` and a one second `Retry-After`.
+- A list with `resourceVersionMatch=Exact` can only be served at the current head, because an update overwrites the previous row. A request below the head gets `410 Gone`, the answer etcd gives for a compacted revision. A request above the head gets the `504`. kube-apiserver also reads a `resourceVersion` sent with `limit` and no match as exact; this apiserver has no older state to serve, so it treats that form as a lower bound.
+- A watch-list request (`sendInitialEvents=true`) that is ahead of the store gets a single `ERROR` event carrying the same `504` status, as kube-apiserver sends.
+- `resourceVersion=0`, or no `resourceVersion`, means any version.
 
-client-go reflectors recover from both errors by listing again.
+client-go reflectors recover from these errors by listing again at the current state. A plain watch resumed from a newer `resourceVersion` is accepted, as in kube-apiserver, and can skip changes that carry lower versions.
 
 ## Backups and restore
 
 Treat the `resources` table like any other application table:
 
 - Use your provider's automated backups or `pg_dump` for ad-hoc snapshots.
-- A point-in-time restore restores Ark state to that moment. Take care to also drop and recreate the `ark_cdc` replication slot after a restore so the apiserver starts a fresh watch stream. Clients that still hold a resource version from after the restore point get a `504` on their next list and relist, so they do not mistake the restored data for the latest state. See [Read consistency and resourceVersion](#read-consistency-and-resourceversion).
+- A point-in-time restore restores Ark state to that moment. Take care to also drop and recreate the `ark_cdc` replication slot after a restore so the apiserver starts a fresh watch stream. Clients that still hold a resource version from after the restore point get a `504` when they list, get, or start a watch-list from it, so the restore surfaces as an error instead of silently replacing their cache. A plain watch resumed from such a version is accepted and can miss writes made after the restore, so restart Ark controllers and other long-running clients after a restore. See [Read consistency and resourceVersion](#read-consistency-and-resourceversion).
 - Cluster-side state (Pods, Deployments owned by Ark) is **not** restored by a Postgres restore — only the declarative resources are.
 
 ## Uninstall and cleanup
