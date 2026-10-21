@@ -9,6 +9,42 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func TestParseMinResourceVersion(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    uint64
+		wantErr bool
+	}{
+		{in: "", want: 0},
+		{in: "0", want: 0},
+		{in: "42", want: 42},
+		{in: "00", want: 0},
+		{in: "9223372036854775808", want: 1 << 63},
+		{in: "18446744073709551615", want: 1<<64 - 1},
+		{in: "18446744073709551616", wantErr: true},
+		{in: "abc", wantErr: true},
+		{in: "-5", wantErr: true},
+		{in: "+5", wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.in, func(t *testing.T) {
+			got, err := ParseMinResourceVersion(tc.in)
+			if tc.wantErr {
+				if !errors.Is(err, ErrInvalidRequest) {
+					t.Fatalf("ParseMinResourceVersion(%q) error = %v, want ErrInvalidRequest", tc.in, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseMinResourceVersion(%q) error = %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Errorf("ParseMinResourceVersion(%q) = %d, want %d", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestListOptionsRevision(t *testing.T) {
 	notOlder := metav1.ResourceVersionMatchNotOlderThan
 	exact := metav1.ResourceVersionMatchExact
@@ -26,8 +62,9 @@ func TestListOptionsRevision(t *testing.T) {
 		{name: "NotOlderThan with limit", opts: ListOptions{ResourceVersion: "42", ResourceVersionMatch: notOlder, Limit: 1}, want: ListRevision{RV: 42}},
 		{name: "Exact", opts: ListOptions{ResourceVersion: "42", ResourceVersionMatch: exact}, want: ListRevision{RV: 42, Exact: true}},
 		{name: "Exact with limit", opts: ListOptions{ResourceVersion: "42", ResourceVersionMatch: exact, Limit: 1}, want: ListRevision{RV: 42, Exact: true}},
-		{name: "legacy without limit is NotOlderThan", opts: ListOptions{ResourceVersion: "42"}, want: ListRevision{RV: 42}},
-		{name: "legacy with limit is Exact", opts: ListOptions{ResourceVersion: "42", Limit: 1}, want: ListRevision{RV: 42, Exact: true}},
+		{name: "legacy without limit is a lower bound", opts: ListOptions{ResourceVersion: "42"}, want: ListRevision{RV: 42}},
+		{name: "legacy with limit is a lower bound", opts: ListOptions{ResourceVersion: "42", Limit: 1}, want: ListRevision{RV: 42}},
+		{name: "above int64", opts: ListOptions{ResourceVersion: "18446744073709551615", ResourceVersionMatch: notOlder}, want: ListRevision{RV: 1<<64 - 1}},
 		{name: "continue without resourceVersion", opts: ListOptions{Continue: "tok"}, want: ListRevision{}},
 		{name: "continue with resourceVersion 0", opts: ListOptions{Continue: "tok", ResourceVersion: "0"}, want: ListRevision{}},
 		{name: "continue with resourceVersion", opts: ListOptions{Continue: "tok", ResourceVersion: "42"}, wantErr: true},
