@@ -13,6 +13,12 @@ import {
   ComboboxTrigger,
   ComboboxValue,
 } from '@/components/ui/combobox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { InputGroup } from '@/components/ui/input-group';
 
 describe('Combobox', () => {
@@ -200,6 +206,46 @@ describe('Combobox', () => {
         'gamma',
         expect.anything(),
       );
+    });
+  });
+
+  describe('ComboboxContent stacking', () => {
+    const openCombobox = (
+      <Combobox open>
+        <ComboboxAnchor>
+          <InputGroup>
+            <ComboboxInput />
+          </InputGroup>
+        </ComboboxAnchor>
+        <ComboboxContent>
+          <ComboboxList>
+            <ComboboxItem value="item">Item</ComboboxItem>
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    );
+    const positioner = () =>
+      screen.getByText('Item').closest('[data-slot="combobox-content"]')
+        ?.parentElement;
+
+    it('stays at the tooltip layer outside a dialog', () => {
+      render(openCombobox);
+      expect(positioner()).toHaveClass('z-50');
+      expect(positioner()).not.toHaveClass('z-[60]');
+    });
+
+    it('sits above the dialog when portaled into one', () => {
+      render(
+        <Dialog open>
+          <DialogContent>
+            <DialogTitle>Title</DialogTitle>
+            <DialogDescription>Description</DialogDescription>
+            {openCombobox}
+          </DialogContent>
+        </Dialog>,
+      );
+      expect(positioner()).toHaveClass('z-[60]');
+      expect(positioner()?.closest('[role="dialog"]')).not.toBeNull();
     });
   });
 });

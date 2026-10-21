@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -154,5 +154,20 @@ describe('ConditionalInputRow', () => {
       value: 'kubectl-made',
       secretKey: undefined,
     });
+  });
+
+  it('gives the value column the same width for direct and secret rows', () => {
+    renderRow('direct');
+    const [, directValue] = screen.getAllByRole('textbox');
+    const directCell = directValue.closest('.flex-\\[2\\]');
+    cleanup();
+
+    renderRow('secret');
+    const secretCell = screen
+      .getByRole('combobox', { name: 'Secret name' })
+      .closest('.flex-\\[2\\]');
+
+    expect(directCell).not.toBeNull();
+    expect(secretCell).not.toBeNull();
   });
 });
