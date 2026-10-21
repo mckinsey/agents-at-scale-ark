@@ -89,6 +89,9 @@ class TestResourcesEndpoint(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["kind"], "ServiceList")
         self.assertEqual(len(data["items"]), 2)
+        mock_dynamic_client_instance.resources.get.assert_awaited_once_with(
+            prefix="api", api_version="v1", kind="Service"
+        )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.create_dynamic_client')

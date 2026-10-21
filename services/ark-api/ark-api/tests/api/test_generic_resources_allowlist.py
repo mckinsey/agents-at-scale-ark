@@ -152,9 +152,10 @@ class TestGenericResourcesAllowlist(unittest.TestCase):
                     response = self.client.request(method, path, json=body)
 
                     self.assertEqual(response.status_code, 204 if verb == "delete" else 200, response.text)
-                    dynamic_client.resources.get.assert_awaited_once_with(
-                        api_version=f"{group}/{version}" if group else version, kind=kind
-                    )
+                    expected_lookup = {"api_version": f"{group}/{version}", "kind": kind} if group else {
+                        "prefix": "api", "api_version": version, "kind": kind
+                    }
+                    dynamic_client.resources.get.assert_awaited_once_with(**expected_lookup)
 
     def test_denied_requests_never_reach_kubernetes(self, mock_dynamic_client_cls, _mock_api_client):
         for method, path, body in DENIED_REQUESTS:

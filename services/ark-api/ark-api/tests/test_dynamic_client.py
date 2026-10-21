@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -7,6 +9,7 @@ from kubernetes_asyncio.dynamic import ResourceInstance
 from kubernetes_asyncio.dynamic.exceptions import (
     ConflictError,
     ForbiddenError,
+    InternalServerError,
     NotFoundError,
     UnprocessibleEntityError,
 )
@@ -138,19 +141,86 @@ class TestRaisingDynamicClientSuccess(unittest.IsolatedAsyncioTestCase):
         self.assertIs(api.call_api.await_args.kwargs["_preload_content"], False)
 
 
+class FakeCluster:
+    """Answers discovery and API paths like a cluster with one broken API group."""
+
+    def __init__(self, broken_group_status: int):
+        self.routes = {
+            "/version": FakeResponse(200, {"major": "1", "minor": "33", "gitVersion": "v1.33.0"}),
+            "/apis": FakeResponse(200, {
+                "kind": "APIGroupList",
+                "groups": [{
+                    "name": "broken.io",
+                    "versions": [{"groupVersion": "broken.io/v1", "version": "v1"}],
+                    "preferredVersion": {"groupVersion": "broken.io/v1", "version": "v1"},
+                }],
+            }),
+            "/api/v1": FakeResponse(200, {
+                "kind": "APIResourceList",
+                "groupVersion": "v1",
+                "resources": [{"name": "services", "singularName": "service", "namespaced": True,
+                               "kind": "Service", "verbs": ["get", "list"]}],
+            }),
+            "/apis/broken.io/v1": FakeResponse(
+                broken_group_status, failure_status(broken_group_status, "Broken", "discovery failed")
+            ),
+        }
+        self.api = Mock()
+        self.api.configuration = Mock(host="https://fake-cluster.invalid")
+        self.api.select_header_accept.return_value = "application/json"
+        self.api.select_header_content_type.return_value = "application/json"
+        self.api.call_api = AsyncMock(side_effect=self._route)
+
+    async def _route(self, path, *_args, **_kwargs):
+        response = self.routes[path]
+        return FakeResponse(response.status, response._payload)
+
+
+class TestDiscoveryWithRaisingClient(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.cache_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.cache_dir.cleanup)
+
+    async def _client(self, broken_group_status: int) -> RaisingDynamicClient:
+        cluster = FakeCluster(broken_group_status)
+        cache_file = os.path.join(self.cache_dir.name, f"discovery-{broken_group_status}.json")
+        return await RaisingDynamicClient(cluster.api, cache_file=cache_file)
+
+    async def test_a_core_kind_resolves_under_the_api_prefix_despite_a_broken_group(self):
+        for status in (403, 404, 500):
+            with self.subTest(status=status):
+                client = await self._client(status)
+
+                resource = await client.resources.get(prefix="api", api_version="v1", kind="Service")
+
+                self.assertEqual(resource.kind, "Service")
+
+    async def test_searching_every_prefix_hits_the_broken_group(self):
+        client = await self._client(500)
+
+        with self.assertRaises(InternalServerError):
+            await client.resources.get(api_version="v1", kind="Service")
+
+    async def test_an_unavailable_group_is_still_skipped(self):
+        client = await self._client(503)
+
+        resource = await client.resources.get(api_version="v1", kind="Service")
+
+        self.assertEqual(resource.kind, "Service")
+
+
 class TestCreateDynamicClient(unittest.IsolatedAsyncioTestCase):
-    async def test_returns_a_discovered_raising_client(self):
-        api = Mock()
-        discovered = Mock()
+    async def test_returns_a_raising_client_with_discovery_loaded(self):
+        discoverer = Mock()
 
-        async def construct(_api):
-            return discovered
+        async def discover(_client, _cache_file):
+            return discoverer
 
-        with patch("ark_api.api.v1.client_utils.RaisingDynamicClient", side_effect=construct) as client_cls:
-            result = await create_dynamic_client(api)
+        with patch("kubernetes_asyncio.dynamic.client.LazyDiscoverer", side_effect=discover):
+            client = await create_dynamic_client(Mock())
 
-        self.assertIs(result, discovered)
-        client_cls.assert_called_once_with(api)
+        self.assertIsInstance(client, RaisingDynamicClient)
+        self.assertIs(client.resources, discoverer)
 
 
 if __name__ == "__main__":

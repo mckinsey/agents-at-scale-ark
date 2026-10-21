@@ -118,6 +118,7 @@ async def list_core_resources(
         dynamic_client = await create_dynamic_client(api)
 
         api_resource = await dynamic_client.resources.get(
+            prefix="api",
             api_version=version,
             kind=kind
         )
@@ -1501,7 +1502,7 @@ async def _delete_workflow_pods(
 
 
 @router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/suspend")
-@handle_k8s_errors(operation="suspend", resource_type="workflow")
+@handle_k8s_errors(operation="suspend", resource_type="workflow", impersonation_fallback=False)
 async def suspend_workflow(
     request: Request,
     workflow_name: str,
@@ -1522,7 +1523,7 @@ async def suspend_workflow(
 
 
 @router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resume")
-@handle_k8s_errors(operation="resume", resource_type="workflow")
+@handle_k8s_errors(operation="resume", resource_type="workflow", impersonation_fallback=False)
 async def resume_workflow(
     request: Request,
     workflow_name: str,
@@ -1543,7 +1544,7 @@ async def resume_workflow(
 
 
 @router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/stop")
-@handle_k8s_errors(operation="stop", resource_type="workflow")
+@handle_k8s_errors(operation="stop", resource_type="workflow", impersonation_fallback=False)
 async def stop_workflow(
     request: Request,
     workflow_name: str,
@@ -1565,7 +1566,7 @@ async def stop_workflow(
 
 
 @router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/terminate")
-@handle_k8s_errors(operation="terminate", resource_type="workflow")
+@handle_k8s_errors(operation="terminate", resource_type="workflow", impersonation_fallback=False)
 async def terminate_workflow(
     request: Request,
     workflow_name: str,
@@ -1587,7 +1588,7 @@ async def terminate_workflow(
 
 
 @router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/retry")
-@handle_k8s_errors(operation="retry", resource_type="workflow")
+@handle_k8s_errors(operation="retry", resource_type="workflow", impersonation_fallback=False)
 async def retry_workflow(
     request: Request,
     workflow_name: str,
@@ -1610,7 +1611,7 @@ async def retry_workflow(
 
 
 @router.put("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resubmit")
-@handle_k8s_errors(operation="resubmit", resource_type="workflow")
+@handle_k8s_errors(operation="resubmit", resource_type="workflow", impersonation_fallback=False)
 async def resubmit_workflow(
     request: Request,
     workflow_name: str,
