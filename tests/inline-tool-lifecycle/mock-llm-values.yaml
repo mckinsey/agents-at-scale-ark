@@ -16,6 +16,14 @@ config:
           ]
         }
 
+  # Single rule: mock-llm's SSE streaming path (streaming.js's
+  # streamResponse) always reads choices[0].message.content before chunking
+  # it, so a tool_calls-only message (no content field) crashes with a 500
+  # once the client requests streaming. The completions executor always
+  # requests streaming (StreamOptions is unconditional in provider_openai.go
+  # / provider_azure.go), so a tool_calls round-trip can't be scripted
+  # against this mock-llm version. Answer directly instead; see the test
+  # README for what this does and doesn't prove.
   - path: "/v1/chat/completions"
     response:
       status: 200

@@ -10,11 +10,25 @@ End-to-end lifecycle of a `type: inline` Tool on an inline-enabled cluster.
 - **Idle**: a newly provisioned inline Tool keeps its runner scaled to zero,
   and the activator scales a warmed runner back down within the idle window
   after the call completes.
-- **Attach/discover**: an Agent referencing the inline tool becomes `Available`.
+- **Attach/discover**: an Agent referencing the inline tool becomes `Available`,
+  and a `type: agent` Query actually completes through that agent (not a
+  direct `type: tool` call, which previously let this go untested — see the
+  limitation note below).
 - **Call**: a `type: tool` Query returns the runner's output.
 - **Edit**: changing the source reconciles the new generation and propagates to
   the source ConfigMap the runner reads on its next cold start.
 - **Delete**: deleting the Tool cascades to every owned child.
+
+## Known limitation
+The `discover-via-agent` step proves the query routes through the Agent, but
+not that the LLM actually invoked the inline tool via function-calling:
+`mock-llm`'s SSE streaming path (`streaming.js`) reads
+`choices[0].message.content` unconditionally before chunking it, which
+crashes on a `tool_calls`-only message (no `content` field), and the
+completions executor always requests streaming. There is currently no way to
+script a real tool-calling round-trip against this mock-llm version. This
+also affects other chainsaw tests that script a `tool_calls` mock-llm rule
+(e.g. `agent-tools`, `jq-filter-test`) — tracked separately.
 
 ## Prerequisites
 Labelled `inline-tools: "true"` and excluded from the standard e2e run, because
