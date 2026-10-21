@@ -253,7 +253,9 @@ Do not add a namespace to these; it would key identical data under many entries:
 - the namespaces list, and `arkconfig` — cluster-scoped
 - `api-keys` and `system-info` — the server resolves the namespace itself
 - everything under `/api/v1/broker/*` — the broker router declares no namespace
-  param at all (this covers sessions, messages, conversations, and logs)
+  param (this covers sessions, messages, conversations, and logs). The one
+  exception is the chunk watch, `/api/v1/broker/chunks?watch=true&query-id=…`,
+  which takes `namespace` to find the Query whose phase ends the stream
 
 One deliberate exception in the other direction: `files.ts` keeps sending
 `namespace` even though it proxies out of the repo, because the file-gateway may

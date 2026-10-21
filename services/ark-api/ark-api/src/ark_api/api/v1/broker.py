@@ -10,18 +10,23 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse, JSONResponse
+from kubernetes_asyncio import client as k8s_client, watch as k8s_watch
 from kubernetes_asyncio.client.rest import ApiException
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.k8s import get_context
 
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 from ...constants.query_phases import QUERY_PHASE_ERROR, TERMINAL_QUERY_PHASES
+from ...core.constants import GROUP
 
 from ...utils.memory_client import get_memory_service_address, get_all_memory_resources
+from ...utils.parse_duration import parse_duration_to_seconds
 from ...utils.streaming import StreamingErrorResponse
 from ...utils.url_validation import validate_path_segment, build_safe_url, validate_and_build_url
+from .client_utils import get_impersonating_api_client
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +34,11 @@ router = APIRouter(prefix="/broker", tags=["broker"])
 
 VERSION = "v1alpha1"
 BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
-BROKER_CHUNK_READ_TIMEOUT_SECONDS = float(os.getenv('BROKER_CHUNK_READ_TIMEOUT_SECONDS', '330'))
-CHUNK_PHASE_POLL_INTERVAL_SECONDS = 1.0
-CHUNK_TERMINAL_GRACE_SECONDS = 0.5
+BROKER_CHUNK_IDLE_TIMEOUT_SECONDS = float(os.getenv('BROKER_CHUNK_IDLE_TIMEOUT_SECONDS', '330'))
+CHUNK_TERMINAL_GRACE_SECONDS = 3.0
+CHUNK_ACTIVE_TIMEOUT_MARGIN_SECONDS = 60
+QUERY_WATCH_TIMEOUT_SECONDS = 300
+DEFAULT_QUERY_TIMEOUT = "30m"
 
 SSE_DONE_LINE = "data: [DONE]"
 SSE_DONE_EVENT = f"{SSE_DONE_LINE}\n\n"
@@ -87,9 +94,9 @@ def build_broker_unavailable_response(message: str, error_type: str) -> JSONResp
     )
 
 
-async def proxy_sse_stream(url: str, read_timeout: Optional[float] = None):
+async def proxy_sse_stream(url: str):
     """Proxy SSE stream from broker service."""
-    timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=read_timeout)
+    timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=None)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("GET", url) as response:
@@ -109,45 +116,128 @@ async def proxy_sse_stream(url: str, read_timeout: Optional[float] = None):
     except httpx.ConnectError as e:
         logger.error(f"Failed to connect to broker at {url}: {e}")
         yield f"data: {json.dumps(build_broker_unavailable_body('Failed to connect to broker service', 'connection_error'))}\n\n"
-    except httpx.ReadTimeout:
-        logger.warning(f"No data from broker at {url} for {read_timeout}s, closing stream")
-        error: StreamingErrorResponse = {
-            "error": {
-                "message": f"No data from broker for {read_timeout}s",
-                "type": "timeout_error",
-                "code": "broker_read_timeout",
-            }
-        }
-        yield f"data: {json.dumps(error)}\n\n"
-        yield SSE_DONE_EVENT
     except Exception as e:
         logger.error(f"Error proxying SSE stream: {e}")
         yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'server_error'}})}\n\n"
 
 
-async def fetch_query_status(ark_client, query_name: str):
-    """Return the Query's status, or None when the Query cannot be read."""
-    try:
-        query = await ark_client.queries.a_get(query_name)
-    except ApiException as e:
-        if e.status in (403, 404):
-            logger.debug(f"Query {query_name} not readable ({e.status}), relying on broker idle timeout")
-            return None
-        raise
-    return query.status
+def sse_error_event(message: str, error_type: str, code: str) -> str:
+    """Format an OpenAI-style error as an SSE event."""
+    error: StreamingErrorResponse = {"error": {"message": message, "type": error_type, "code": code}}
+    return f"data: {json.dumps(error)}\n\n"
 
 
-def terminal_sse_events(status) -> list[str]:
+def query_error_message(status: dict) -> str:
+    """Pick the most specific error text from a Query status."""
+    content = (status.get("response") or {}).get("content")
+    if content:
+        return content
+    for condition in reversed(status.get("conditions") or []):
+        if condition.get("message"):
+            return condition["message"]
+    return "Query failed"
+
+
+def terminal_sse_events(status: dict) -> list[str]:
     """Build the closing SSE events for a Query that reached a terminal phase."""
-    if status.phase != QUERY_PHASE_ERROR:
+    if status.get("phase") != QUERY_PHASE_ERROR:
         return [SSE_DONE_EVENT]
-    message = "Query failed"
-    if status.response and status.response.content:
-        message = status.response.content
-    error: StreamingErrorResponse = {
-        "error": {"message": message, "type": "server_error", "code": "query_error"}
-    }
-    return [f"data: {json.dumps(error)}\n\n", SSE_DONE_EVENT]
+    return [sse_error_event(query_error_message(status), "server_error", "query_error"), SSE_DONE_EVENT]
+
+
+class QueryPhaseTracker:
+    """Follows a Query's phase by reading it once and then watching from that resourceVersion."""
+
+    def __init__(
+        self,
+        query_name: str,
+        namespace: str,
+        namespace_given: bool,
+        impersonation: Optional[ImpersonationConfig],
+    ):
+        self.query_name = query_name
+        self.namespace = namespace
+        self.namespace_given = namespace_given
+        self.impersonation = impersonation
+        self.active = False
+        self.timeout_seconds: Optional[int] = None
+        self.closing_events: list[str] = []
+        self.terminal = asyncio.Event()
+
+    def observe(self, query: dict) -> bool:
+        """Record the Query's state and return True once it is terminal."""
+        status = query.get("status") or {}
+        self.timeout_seconds = parse_duration_to_seconds((query.get("spec") or {}).get("timeout") or DEFAULT_QUERY_TIMEOUT)
+        if status.get("phase") in TERMINAL_QUERY_PHASES:
+            self.finish(terminal_sse_events(status))
+            return True
+        self.active = True
+        return False
+
+    def finish(self, events: list[str]) -> None:
+        self.active = False
+        self.closing_events = events
+        self.terminal.set()
+
+    async def run(self) -> None:
+        """Track the phase until it is terminal. Raises when tracking cannot continue."""
+        try:
+            async with get_impersonating_api_client(self.impersonation) as api:
+                custom_api = k8s_client.CustomObjectsApi(api)
+                while True:
+                    try:
+                        query = await custom_api.get_namespaced_custom_object(
+                            GROUP, VERSION, self.namespace, "queries", self.query_name
+                        )
+                    except ApiException as e:
+                        if e.status == 404 and self.namespace_given:
+                            self.finish([sse_error_event("Query not found", "server_error", "query_not_found"), SSE_DONE_EVENT])
+                            return
+                        raise
+                    if self.observe(query):
+                        return
+                    try:
+                        if await self.watch(custom_api, query["metadata"]["resourceVersion"]):
+                            return
+                    except ApiException as e:
+                        if e.status != 410:
+                            raise
+        finally:
+            self.active = False
+
+    async def watch(self, custom_api, resource_version: str) -> bool:
+        """Watch until the Query is terminal (True) or the watch closes (False)."""
+        async with k8s_watch.Watch() as query_watch:
+            async for event in query_watch.stream(
+                custom_api.list_namespaced_custom_object,
+                group=GROUP,
+                version=VERSION,
+                namespace=self.namespace,
+                plural="queries",
+                field_selector=f"metadata.name={self.query_name}",
+                resource_version=resource_version,
+                timeout_seconds=QUERY_WATCH_TIMEOUT_SECONDS,
+            ):
+                if event["type"] == "DELETED":
+                    self.finish([sse_error_event("Query was deleted", "server_error", "query_deleted"), SSE_DONE_EVENT])
+                    return True
+                if event["type"] in ("ADDED", "MODIFIED") and self.observe(event["raw_object"]):
+                    return True
+        return False
+
+    def idle_limit_seconds(self) -> float:
+        """Allow an active Query its own timeout; otherwise use the default idle limit."""
+        if self.active and self.timeout_seconds is not None:
+            return max(BROKER_CHUNK_IDLE_TIMEOUT_SECONDS, self.timeout_seconds + CHUNK_ACTIVE_TIMEOUT_MARGIN_SECONDS)
+        return BROKER_CHUNK_IDLE_TIMEOUT_SECONDS
+
+
+def report_tracker_failure(task: asyncio.Task, query_name: str) -> None:
+    """Log why phase tracking stopped, so the stream falls back to the idle timeout visibly."""
+    if task.cancelled() or task.exception() is None:
+        return
+    error = task.exception()
+    logger.warning(f"Stopped tracking Query {query_name} phase, relying on the idle timeout: {error}", exc_info=error)
 
 
 async def watch_chunks_until_terminal(
@@ -157,39 +247,72 @@ async def watch_chunks_until_terminal(
     impersonation: Optional[ImpersonationConfig],
 ):
     """Relay the broker chunk stream, closing it once the Query reaches a terminal phase."""
-    stream = proxy_sse_stream(url, read_timeout=BROKER_CHUNK_READ_TIMEOUT_SECONDS)
+    tracker = QueryPhaseTracker(
+        query_name,
+        namespace or get_context()["namespace"],
+        namespace is not None,
+        impersonation,
+    )
+    tracker_task = asyncio.create_task(tracker.run())
+    tracker_task.add_done_callback(lambda task: report_tracker_failure(task, query_name))
+    terminal_wait = asyncio.ensure_future(tracker.terminal.wait())
+    stream = proxy_sse_stream(url)
     next_line = asyncio.ensure_future(anext(stream))
     loop = asyncio.get_running_loop()
-    terminal_status = None
-    deadline = None
+    last_line_at = loop.time()
+    grace_deadline = None
     try:
-        async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-            while True:
-                timeout = CHUNK_PHASE_POLL_INTERVAL_SECONDS if deadline is None else max(0.0, deadline - loop.time())
-                done, _ = await asyncio.wait({next_line}, timeout=timeout)
-                if done:
-                    try:
-                        line = next_line.result()
-                    except StopAsyncIteration:
-                        return
-                    yield line
-                    if line.strip() == SSE_DONE_LINE:
-                        return
-                    next_line = asyncio.ensure_future(anext(stream))
-                    continue
-                if terminal_status is not None:
-                    logger.info(f"Query {query_name} is {terminal_status.phase} but the broker sent no [DONE], closing stream")
-                    for event in terminal_sse_events(terminal_status):
-                        yield event
+        while True:
+            waiters = {next_line}
+            if grace_deadline is None:
+                waiters.add(terminal_wait)
+                deadline = last_line_at + tracker.idle_limit_seconds()
+            else:
+                deadline = grace_deadline
+            if not tracker_task.done():
+                waiters.add(tracker_task)
+            done, _ = await asyncio.wait(
+                waiters, timeout=max(0.0, deadline - loop.time()), return_when=asyncio.FIRST_COMPLETED
+            )
+
+            if next_line in done:
+                try:
+                    line = next_line.result()
+                except StopAsyncIteration:
                     return
-                status = await fetch_query_status(ark_client, query_name)
-                if status and status.phase in TERMINAL_QUERY_PHASES:
-                    terminal_status = status
-                    deadline = loop.time() + CHUNK_TERMINAL_GRACE_SECONDS
+                yield line
+                if line.strip() == SSE_DONE_LINE:
+                    return
+                last_line_at = loop.time()
+                next_line = asyncio.ensure_future(anext(stream))
+                continue
+
+            if grace_deadline is None and terminal_wait in done:
+                grace_deadline = loop.time() + CHUNK_TERMINAL_GRACE_SECONDS
+                continue
+
+            if tracker_task in done:
+                continue
+
+            if grace_deadline is not None:
+                logger.info(f"Query {query_name} finished but the broker sent no [DONE], closing stream")
+                for event in tracker.closing_events:
+                    yield event
+                return
+
+            if loop.time() < last_line_at + tracker.idle_limit_seconds():
+                continue
+            idle_seconds = tracker.idle_limit_seconds()
+            logger.warning(f"No chunks for Query {query_name} in {idle_seconds:.0f}s, closing stream")
+            yield sse_error_event(f"No data from broker for {idle_seconds:.0f}s", "timeout_error", "broker_idle_timeout")
+            yield SSE_DONE_EVENT
+            return
     finally:
-        next_line.cancel()
-        with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
-            await next_line
+        for task in (next_line, terminal_wait, tracker_task):
+            task.cancel()
+        for task in (next_line, terminal_wait, tracker_task):
+            with contextlib.suppress(BaseException):
+                await task
         await stream.aclose()
 
 

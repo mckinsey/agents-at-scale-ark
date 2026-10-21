@@ -275,12 +275,15 @@ class TestBrokerAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "text/event-stream; charset=utf-8")
 
-    @patch('ark_api.api.v1.broker.with_ark_client')
+    @patch('ark_api.api.v1.broker.QueryPhaseTracker')
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
-    def test_get_chunks_watch_with_query_id(self, mock_proxy_sse, mock_get_broker_url, mock_with_ark_client):
+    def test_get_chunks_watch_with_query_id(self, mock_proxy_sse, mock_get_broker_url, mock_tracker_class):
         mock_get_broker_url.return_value = "http://broker:8080"
-        mock_with_ark_client.return_value.__aenter__.return_value = AsyncMock()
+        tracker = mock_tracker_class.return_value
+        tracker.run = AsyncMock()
+        tracker.terminal = asyncio.Event()
+        tracker.idle_limit_seconds.return_value = 330
 
         async def mock_stream():
             yield "data: chunk\n\n"
@@ -296,8 +299,28 @@ class TestBrokerAPI(unittest.TestCase):
         call_args = mock_proxy_sse.call_args[0][0]
         self.assertIn("stream/query-123", call_args)
         self.assertIn("from-beginning=true", call_args)
-        self.assertEqual(mock_proxy_sse.call_args.kwargs["read_timeout"], 330)
-        self.assertEqual(mock_with_ark_client.call_args[0][0], "team-a")
+        mock_tracker_class.assert_called_once_with("query-123", "team-a", True, None)
+
+    @patch('ark_api.api.v1.broker.get_context', return_value={"namespace": "default"})
+    @patch('ark_api.api.v1.broker.QueryPhaseTracker')
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.proxy_sse_stream')
+    def test_get_chunks_watch_without_namespace_uses_context(self, mock_proxy_sse, mock_get_broker_url, mock_tracker_class, _):
+        mock_get_broker_url.return_value = "http://broker:8080"
+        tracker = mock_tracker_class.return_value
+        tracker.run = AsyncMock()
+        tracker.terminal = asyncio.Event()
+        tracker.idle_limit_seconds.return_value = 330
+
+        async def mock_stream():
+            yield "data: [DONE]\n\n"
+
+        mock_proxy_sse.return_value = mock_stream()
+
+        response = self.client.get("/v1/broker/chunks?watch=true&query-id=query-123")
+
+        self.assertEqual(response.status_code, 200)
+        mock_tracker_class.assert_called_once_with("query-123", "default", False, None)
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
@@ -634,37 +657,82 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertIn("server_error", result[0])
 
 
-def query_status(phase, content=None):
-    response = SimpleNamespace(content=content) if content is not None else None
-    return SimpleNamespace(status=SimpleNamespace(phase=phase, response=response))
+
+def query_object(phase, content=None, conditions=None, timeout=None, resource_version="100"):
+    status = {"phase": phase}
+    if content is not None:
+        status["response"] = {"content": content}
+    if conditions is not None:
+        status["conditions"] = conditions
+    spec = {"timeout": timeout} if timeout else {}
+    return {"metadata": {"name": "q", "resourceVersion": resource_version}, "spec": spec, "status": status}
+
+
+class FakeWatch:
+    """Plays one scripted list of events per watch; an Exception item is raised."""
+
+    scripts: list = []
+    calls: list = []
+
+    def __init__(self):
+        self.script = FakeWatch.scripts.pop(0) if FakeWatch.scripts else "hang"
+
+    def stream(self, func, **kwargs):
+        FakeWatch.calls.append(kwargs)
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return None
+
+    async def __aiter__(self):
+        if self.script == "hang":
+            await asyncio.Event().wait()
+        for item in self.script:
+            if isinstance(item, Exception):
+                raise item
+            yield item
 
 
 class TestWatchChunksUntilTerminal(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
+        FakeWatch.scripts = []
+        FakeWatch.calls = []
         self.broker_closed = asyncio.Event()
-        self.ark_client = MagicMock()
-        self.ark_client.queries.a_get = AsyncMock()
+        self.custom_api = MagicMock()
+        self.custom_api.get_namespaced_custom_object = AsyncMock()
 
-        timing = patch.multiple(
-            'ark_api.api.v1.broker',
-            CHUNK_PHASE_POLL_INTERVAL_SECONDS=0.01,
-            CHUNK_TERMINAL_GRACE_SECONDS=0.01,
-        )
-        timing.start()
-        self.addCleanup(timing.stop)
+        patches = [
+            patch.multiple(
+                'ark_api.api.v1.broker',
+                CHUNK_TERMINAL_GRACE_SECONDS=0.05,
+                BROKER_CHUNK_IDLE_TIMEOUT_SECONDS=0.3,
+                CHUNK_ACTIVE_TIMEOUT_MARGIN_SECONDS=0,
+            ),
+            patch('ark_api.api.v1.broker.k8s_watch.Watch', FakeWatch),
+            patch('ark_api.api.v1.broker.k8s_client.CustomObjectsApi', return_value=self.custom_api),
+            patch('ark_api.api.v1.broker.get_context', return_value={"namespace": "default"}),
+        ]
+        api_client = patch('ark_api.api.v1.broker.get_impersonating_api_client')
+        mock_api_client = api_client.start()
+        self.addCleanup(api_client.stop)
+        mock_api_client.return_value.__aenter__.return_value = MagicMock()
+        mock_api_client.return_value.__aexit__.return_value = None
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
 
-        client_patch = patch('ark_api.api.v1.broker.with_ark_client')
-        mock_with_ark_client = client_patch.start()
-        self.addCleanup(client_patch.stop)
-        mock_with_ark_client.return_value.__aenter__.return_value = self.ark_client
-
-    def broker(self, *lines, hang=True):
+    def broker(self, *lines, hang=True, delay=0):
         closed = self.broker_closed
 
-        async def stream(url, read_timeout=None):
+        async def stream(url):
             try:
                 for line in lines:
+                    if delay:
+                        await asyncio.sleep(delay)
                     yield line
                 if hang:
                     await asyncio.Event().wait()
@@ -675,121 +743,161 @@ class TestWatchChunksUntilTerminal(unittest.IsolatedAsyncioTestCase):
         proxy_patch.start()
         self.addCleanup(proxy_patch.stop)
 
-    async def collect(self):
+    async def collect(self, namespace=None, timeout=5):
         from ark_api.api.v1.broker import watch_chunks_until_terminal
 
-        events = []
-        async for event in watch_chunks_until_terminal("http://broker/stream/q", "q", None, None):
-            events.append(event)
-        return events
+        async def run():
+            return [e async for e in watch_chunks_until_terminal("http://broker/stream/q", "q", namespace, None)]
 
-    async def test_synthesizes_done_when_query_done_without_broker_done(self):
+        return await asyncio.wait_for(run(), timeout=timeout)
+
+    def error_payload(self, event):
+        return json.loads(event.removeprefix("data: ").strip())["error"]
+
+    async def test_already_terminal_on_read_closes_without_watching(self):
         self.broker("data: chunk-1\n\n")
-        self.ark_client.queries.a_get.return_value = query_status("done")
+        self.custom_api.get_namespaced_custom_object.return_value = query_object("done")
 
-        events = await asyncio.wait_for(self.collect(), timeout=5)
+        events = await self.collect()
 
         self.assertEqual(events, ["data: chunk-1\n\n", "data: [DONE]\n\n"])
+        self.assertEqual(FakeWatch.calls, [])
         self.assertTrue(self.broker_closed.is_set())
 
-    async def test_synthesizes_error_event_when_query_errors(self):
+    async def test_watches_from_read_resource_version_and_closes_on_error(self):
         self.broker("data: chunk-1\n\n")
-        self.ark_client.queries.a_get.return_value = query_status("error", "executor crashed")
+        self.custom_api.get_namespaced_custom_object.return_value = query_object("running", resource_version="42")
+        FakeWatch.scripts = [[{"type": "MODIFIED", "raw_object": query_object("error", content="executor crashed")}]]
 
-        events = await asyncio.wait_for(self.collect(), timeout=5)
+        events = await self.collect(namespace="team-a")
 
         self.assertEqual(len(events), 3)
-        payload = json.loads(events[1].removeprefix("data: ").strip())
-        self.assertEqual(payload["error"]["message"], "executor crashed")
-        self.assertEqual(payload["error"]["code"], "query_error")
+        self.assertEqual(self.error_payload(events[1]), {"message": "executor crashed", "type": "server_error", "code": "query_error"})
         self.assertEqual(events[2], "data: [DONE]\n\n")
-        self.assertTrue(self.broker_closed.is_set())
+        self.assertEqual(FakeWatch.calls[0]["resource_version"], "42")
+        self.assertEqual(FakeWatch.calls[0]["namespace"], "team-a")
+        self.assertEqual(FakeWatch.calls[0]["field_selector"], "metadata.name=q")
+        self.custom_api.get_namespaced_custom_object.assert_awaited_with("ark.mckinsey.com", "v1alpha1", "team-a", "queries", "q")
 
-    async def test_error_event_has_default_message_without_response(self):
+    async def test_error_message_falls_back_to_condition_message(self):
         self.broker()
-        self.ark_client.queries.a_get.return_value = query_status("error")
+        conditions = [{"type": "Completed", "message": "query execution failed: EOF"}]
+        self.custom_api.get_namespaced_custom_object.return_value = query_object("error", conditions=conditions)
 
-        events = await asyncio.wait_for(self.collect(), timeout=5)
+        events = await self.collect()
 
-        payload = json.loads(events[0].removeprefix("data: ").strip())
-        self.assertEqual(payload["error"]["message"], "Query failed")
+        self.assertEqual(self.error_payload(events[0])["message"], "query execution failed: EOF")
 
-    async def test_canceled_query_closes_with_done(self):
+    async def test_error_message_default(self):
         self.broker()
-        self.ark_client.queries.a_get.return_value = query_status("canceled")
+        self.custom_api.get_namespaced_custom_object.return_value = query_object("error")
 
-        events = await asyncio.wait_for(self.collect(), timeout=5)
+        events = await self.collect()
+
+        self.assertEqual(self.error_payload(events[0])["message"], "Query failed")
+
+    async def test_canceled_closes_with_done(self):
+        self.broker()
+        self.custom_api.get_namespaced_custom_object.return_value = query_object("canceled")
+
+        events = await self.collect()
 
         self.assertEqual(events, ["data: [DONE]\n\n"])
 
-    async def test_broker_done_passes_through_without_synthesis(self):
-        self.broker("data: chunk-1\n\n", "data: [DONE]\n\n")
-        self.ark_client.queries.a_get.return_value = query_status("done")
+    async def test_broker_done_during_grace_wins(self):
+        self.broker("data: chunk-1\n\n", "data: [DONE]\n\n", delay=0.1)
+        self.custom_api.get_namespaced_custom_object.return_value = query_object("done")
 
-        events = await asyncio.wait_for(self.collect(), timeout=5)
+        with patch('ark_api.api.v1.broker.CHUNK_TERMINAL_GRACE_SECONDS', 10):
+            events = await self.collect(timeout=2)
 
         self.assertEqual(events, ["data: chunk-1\n\n", "data: [DONE]\n\n"])
 
-    async def test_running_query_keeps_stream_open(self):
+    async def test_not_found_with_namespace_means_deleted(self):
+        self.broker()
+        self.custom_api.get_namespaced_custom_object.side_effect = ApiException(status=404)
+
+        events = await self.collect(namespace="team-a")
+
+        self.assertEqual(self.error_payload(events[0])["code"], "query_not_found")
+        self.assertEqual(events[1], "data: [DONE]\n\n")
+
+    async def test_not_found_without_namespace_keeps_relaying_until_idle(self):
         self.broker("data: chunk-1\n\n")
-        self.ark_client.queries.a_get.return_value = query_status("running")
+        self.custom_api.get_namespaced_custom_object.side_effect = ApiException(status=404)
 
-        with self.assertRaises(asyncio.TimeoutError):
-            await asyncio.wait_for(self.collect(), timeout=0.2)
+        with self.assertLogs('ark_api.api.v1.broker', level='WARNING') as logs:
+            events = await self.collect()
 
-        self.assertGreater(self.ark_client.queries.a_get.await_count, 1)
-        self.assertTrue(self.broker_closed.is_set())
+        self.assertEqual(events[0], "data: chunk-1\n\n")
+        self.assertEqual(self.error_payload(events[1])["code"], "broker_idle_timeout")
+        self.assertEqual(events[2], "data: [DONE]\n\n")
+        self.assertTrue(any("Stopped tracking Query q phase" in line for line in logs.output))
+        self.custom_api.get_namespaced_custom_object.assert_awaited_once()
 
-    async def test_unreadable_query_relies_on_broker(self):
-        self.broker("data: chunk-1\n\n", "data: chunk-2\n\n", hang=False)
-        self.ark_client.queries.a_get.side_effect = ApiException(status=404)
+    async def test_forbidden_is_logged_and_stream_continues(self):
+        self.broker("data: chunk-1\n\n", "data: chunk-2\n\n", hang=False, delay=0.05)
+        self.custom_api.get_namespaced_custom_object.side_effect = ApiException(status=403)
 
-        events = await asyncio.wait_for(self.collect(), timeout=5)
+        with self.assertLogs('ark_api.api.v1.broker', level='WARNING') as logs:
+            events = await self.collect(namespace="team-a")
 
         self.assertEqual(events, ["data: chunk-1\n\n", "data: chunk-2\n\n"])
+        self.assertTrue(any("403" in line for line in logs.output))
+        self.custom_api.get_namespaced_custom_object.assert_awaited_once()
 
-    async def test_unexpected_api_error_propagates(self):
+    async def test_watch_gone_rereads_and_restarts(self):
         self.broker()
-        self.ark_client.queries.a_get.side_effect = ApiException(status=500)
+        self.custom_api.get_namespaced_custom_object.side_effect = [
+            query_object("running", resource_version="1"),
+            query_object("running", resource_version="7"),
+        ]
+        FakeWatch.scripts = [
+            [ApiException(status=410)],
+            [{"type": "MODIFIED", "raw_object": query_object("done")}],
+        ]
 
-        with self.assertRaises(ApiException):
-            await asyncio.wait_for(self.collect(), timeout=5)
+        events = await self.collect()
+
+        self.assertEqual(events, ["data: [DONE]\n\n"])
+        self.assertEqual([c["resource_version"] for c in FakeWatch.calls], ["1", "7"])
+
+    async def test_watch_closing_normally_rereads(self):
+        self.broker()
+        self.custom_api.get_namespaced_custom_object.side_effect = [
+            query_object("running"),
+            query_object("done"),
+        ]
+        FakeWatch.scripts = [[]]
+
+        events = await self.collect()
+
+        self.assertEqual(events, ["data: [DONE]\n\n"])
+        self.assertEqual(self.custom_api.get_namespaced_custom_object.await_count, 2)
+
+    async def test_deleted_event_closes_with_error(self):
+        self.broker()
+        self.custom_api.get_namespaced_custom_object.return_value = query_object("running")
+        FakeWatch.scripts = [[{"type": "DELETED", "raw_object": query_object("running")}]]
+
+        events = await self.collect()
+
+        self.assertEqual(self.error_payload(events[0])["code"], "query_deleted")
+
+    async def test_active_query_is_not_cut_at_default_idle_limit(self):
+        self.broker("data: chunk-1\n\n")
+        self.custom_api.get_namespaced_custom_object.return_value = query_object("running", timeout="2s")
+
+        with self.assertRaises(asyncio.TimeoutError):
+            await self.collect(timeout=1)
 
         self.assertTrue(self.broker_closed.is_set())
 
+    async def test_active_query_closes_after_its_own_timeout(self):
+        self.broker("data: chunk-1\n\n")
+        self.custom_api.get_namespaced_custom_object.return_value = query_object("running", timeout="1s")
 
-class TestProxySseStreamReadTimeout(unittest.IsolatedAsyncioTestCase):
+        events = await self.collect(timeout=3)
 
-    async def test_read_timeout_emits_timeout_error_and_done(self):
-        from ark_api.api.v1.broker import proxy_sse_stream
-
-        mock_client = MagicMock()
-        mock_client.stream.side_effect = httpx.ReadTimeout("timed out")
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-
-        with patch('ark_api.api.v1.broker.httpx.AsyncClient') as mock_async_client:
-            mock_async_client.return_value = mock_client
-
-            result = [chunk async for chunk in proxy_sse_stream("http://broker:8080/stream/q", read_timeout=5)]
-
-        mock_async_client.assert_called_once()
-        self.assertEqual(mock_async_client.call_args.kwargs["timeout"].read, 5)
-        self.assertEqual(len(result), 2)
-        payload = json.loads(result[0].removeprefix("data: ").strip())
-        self.assertEqual(payload["error"]["code"], "broker_read_timeout")
-        self.assertEqual(result[1], "data: [DONE]\n\n")
-
-    async def test_default_has_no_read_timeout(self):
-        from ark_api.api.v1.broker import proxy_sse_stream
-
-        mock_client = MagicMock()
-        mock_client.stream.side_effect = httpx.ConnectError("down")
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-
-        with patch('ark_api.api.v1.broker.httpx.AsyncClient') as mock_async_client:
-            mock_async_client.return_value = mock_client
-            _ = [chunk async for chunk in proxy_sse_stream("http://broker:8080/traces")]
-
-        self.assertIsNone(mock_async_client.call_args.kwargs["timeout"].read)
+        self.assertEqual(self.error_payload(events[1])["code"], "broker_idle_timeout")
+        self.assertIn("1s", self.error_payload(events[1])["message"])
