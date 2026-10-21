@@ -125,6 +125,28 @@ done
 
 - Replace any override of `argo-workflows.executor.image.tag` with `argo-workflows.executor.image.nonroot: true`.
 
+### Generic Resources API Returns Kubernetes Errors
+
+The generic resources API under `/v1/resources` now answers with the HTTP status Kubernetes returned. Before, many errors came back as a success, with the Kubernetes `Status` object as the body.
+
+| Request | Before | Now |
+|---------|--------|-----|
+| `GET` of a missing resource | `200` with a `Status` body | `404` |
+| `GET` or list that Kubernetes refuses | `200` with a `Status` body | `403` |
+| `POST` of a resource that already exists | `200` with a `Status` body | `409` |
+| `PUT` of a missing resource, or with a stale `resourceVersion` | `200` with a `Status` body | `404` or `409` |
+| `DELETE` of a missing resource, or one Kubernetes refuses | `204` | `404` or `403` |
+| Workflow `suspend`, `resume`, `stop`, `terminate`, `retry` on a missing workflow | `500` | `404` |
+| Workflow `resubmit` on a missing workflow | `200` with a `Status` body, nothing created | `404` |
+
+Error responses carry a JSON `detail` field, like the other `ark-api` routes. Validation errors return `422` with the Kubernetes message. `resume` and `retry` now retry up to three times when the controller updates the workflow at the same moment, then return `409`.
+
+With `AUTH_MODE` set to `sso` or `hybrid` and `IMPERSONATION_FALLBACK=true`, a read that Kubernetes refuses for the signed-in user is now retried as the `ark-api` service account, as that setting intends. Writes are still never retried. The dashboard already handled the old responses as errors, so it is not affected.
+
+**Migration:**
+- Scripts that checked the response body for `"kind": "Status"` should check the HTTP status instead.
+- Scripts that delete through this API and expect `204` for an object that is already gone should accept `404`.
+
 ## v0.1.71
 
 ### Generic Resources API Limited to an Allowlist
