@@ -139,9 +139,11 @@ The generic resources API under `/v1/resources` now answers with the HTTP status
 | Workflow `suspend`, `resume`, `stop`, `terminate`, `retry` on a missing workflow | `500` | `404` |
 | Workflow `resubmit` on a missing workflow | `200` with a `Status` body, nothing created | `404` |
 
-Error responses carry a JSON `detail` field, like the other `ark-api` routes. Validation errors return `422` with the Kubernetes message. `resume` and `retry` now retry up to three times when the controller updates the workflow at the same moment, then return `409`.
+Error responses carry a JSON `detail` field, like the other `ark-api` routes. Validation errors return `422` with the Kubernetes message. When the controller updates a workflow during `resume` or `retry`, `ark-api` now reads it again and makes up to three attempts in total before returning `409`.
 
-With `AUTH_MODE` set to `sso` or `hybrid` and `IMPERSONATION_FALLBACK=true`, a read that Kubernetes refuses for the signed-in user is now retried as the `ark-api` service account, as that setting intends. Writes are still never retried. The dashboard already handled the old responses as errors, so it is not affected.
+With `AUTH_MODE` set to `sso` or `hybrid` and `IMPERSONATION_FALLBACK=true`, a `GET` or list that Kubernetes refuses for the signed-in user is now retried as the `ark-api` service account, as that setting does on the other `ark-api` read routes. In that setup a refused read returns the data instead of `403`. Writes and the workflow actions are never retried as the service account.
+
+The dashboard already treated the old responses as errors. One thing changes there: deleting a workflow template or an execution engine that someone else already deleted now shows an error instead of succeeding silently.
 
 **Migration:**
 - Scripts that checked the response body for `"kind": "Status"` should check the HTTP status instead.
