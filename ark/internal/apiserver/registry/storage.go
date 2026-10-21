@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
+	k8sstorage "k8s.io/apiserver/pkg/storage"
 	"k8s.io/apiserver/pkg/storage/names"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -36,6 +37,8 @@ const (
 	// used to be a no-op. Delete gets no server-side conflict retry the way patch does, so a
 	// resource under active reconciliation would surface a 409 it never used to.
 	maxDeleteConflictAttempts = 5
+
+	tooLargeResourceVersionRetrySeconds = 1
 )
 
 func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -132,6 +135,8 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 		}
 		opts.Limit = options.Limit
 		opts.Continue = options.Continue
+		opts.ResourceVersion = options.ResourceVersion
+		opts.ResourceVersionMatch = options.ResourceVersionMatch
 	}
 
 	sctx, cancel := storageContext(ctx)
@@ -140,10 +145,7 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	if err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
-		if errors.Is(err, storage.ErrInvalidRequest) {
-			return nil, apierrors.NewBadRequest(err.Error())
-		}
-		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
+		return nil, listError(err, s.config.Resource)
 	}
 
 	list := s.config.NewListFunc()
@@ -156,6 +158,20 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	metrics.RecordStorageOperation("list", s.config.Kind, "success")
 	metrics.RecordStorageLatency("list", s.config.Kind, start)
 	return list, nil
+}
+
+func listError(err error, resource string) error {
+	var tooLarge *storage.TooLargeResourceVersionError
+	switch {
+	case errors.Is(err, storage.ErrInvalidRequest):
+		return apierrors.NewBadRequest(err.Error())
+	case errors.As(err, &tooLarge):
+		return k8sstorage.NewTooLargeResourceVersionError(uint64(tooLarge.Requested), uint64(tooLarge.Current), tooLargeResourceVersionRetrySeconds)
+	case errors.Is(err, storage.ErrResourceExpired):
+		return apierrors.NewResourceExpired(err.Error())
+	default:
+		return apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", resource, err))
+	}
 }
 
 // PrepareForCreate populates server-owned metadata (namespace, uid, creationTimestamp) so
