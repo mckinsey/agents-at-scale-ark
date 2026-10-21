@@ -55,7 +55,6 @@ export function ConditionalInputRow({
     <div className="flex items-start gap-3">
       <div className="flex-1">
         <Input
-          id="name"
           variant="inline"
           value={data.name}
           onChange={e => onChange({ name: e.target.value })}
@@ -78,7 +77,7 @@ export function ConditionalInputRow({
               secretKey: undefined,
             })
           }>
-          <SelectTrigger id="type" className={cn(GHOST_TRIGGER, 'w-full')}>
+          <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
             <SelectValue placeholder="Select a type" />
           </SelectTrigger>
           <SelectContent className="bg-fill-onsurface-ui-2">
@@ -95,7 +94,6 @@ export function ConditionalInputRow({
         {data.type === 'direct' ? (
           <>
             <Input
-              id="value"
               variant="inline"
               value={data.value}
               onChange={e => onChange({ value: e.target.value })}

@@ -261,6 +261,26 @@ describe('ModelConfiguratorForm - API Key secret field', () => {
     ).toBeInTheDocument();
   });
 
+  it('says the secrets failed to load instead of flagging the stored secret', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useGetAllSecrets).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: null,
+    } as never);
+    renderForm(openaiDefaults({ secret: 'kubectl-made' }));
+
+    expect(
+      screen.queryByText(/Not in the list of Ark secrets/),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear secret' }));
+    await user.click(apiKeyInput());
+    expect(
+      await screen.findByText(/Couldn't load the Ark secrets/),
+    ).toBeInTheDocument();
+  });
+
   it('updates the field with a typed name', async () => {
     const user = userEvent.setup();
     renderForm(openaiDefaults({ secret: '' }));

@@ -164,10 +164,19 @@ describe('ConditionalInputRow', () => {
 
     renderRow('secret');
     const secretCell = screen
-      .getByRole('combobox', { name: 'Secret name' })
+      .getByRole('combobox', { name: 'Secret for Authorization' })
       .closest('.flex-\\[2\\]');
 
     expect(directCell).not.toBeNull();
     expect(secretCell).not.toBeNull();
+  });
+
+  it('does not repeat element ids across header rows', () => {
+    renderRow('direct');
+    renderRow('secret');
+
+    expect(
+      document.querySelectorAll('#name, #type, #value, #thirdValue'),
+    ).toHaveLength(0);
   });
 });

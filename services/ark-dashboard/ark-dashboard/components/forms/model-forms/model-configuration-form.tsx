@@ -65,6 +65,7 @@ export function ModelConfiguratorForm() {
   const {
     data: secrets,
     isPending: isSecretsPending,
+    isError: isSecretsError,
     error: secretsError,
   } = useGetAllSecrets();
 
@@ -188,6 +189,7 @@ export function ModelConfiguratorForm() {
         {provider === 'openai' && (
           <OpenAISpecificFields
             isSecretsPending={isSecretsPending}
+            isSecretsError={isSecretsError}
             secrets={secrets}
             isConfigurationsPending={isConfigurationsPending}
             configurations={configurations}
@@ -198,6 +200,7 @@ export function ModelConfiguratorForm() {
         {provider === 'azure' && (
           <AzureSpecificFields
             isSecretsPending={isSecretsPending}
+            isSecretsError={isSecretsError}
             secrets={secrets}
             isConfigurationsPending={isConfigurationsPending}
             configurations={configurations}
@@ -208,6 +211,7 @@ export function ModelConfiguratorForm() {
         {provider === 'bedrock' && (
           <AWSBedrockSpecificFields
             isSecretsPending={isSecretsPending}
+            isSecretsError={isSecretsError}
             secrets={secrets}
             isConfigurationsPending={isConfigurationsPending}
             configurations={configurations}
@@ -218,6 +222,7 @@ export function ModelConfiguratorForm() {
         {provider === 'anthropic' && (
           <AnthropicSpecificFields
             isSecretsPending={isSecretsPending}
+            isSecretsError={isSecretsError}
             secrets={secrets}
             isConfigurationsPending={isConfigurationsPending}
             configurations={configurations}
@@ -238,6 +243,7 @@ export function ModelConfiguratorForm() {
 
 type ProviderFieldsProps = {
   isSecretsPending: boolean;
+  isSecretsError: boolean;
   secrets?: Secret[];
   isConfigurationsPending: boolean;
   configurations?: Configuration[];
@@ -248,6 +254,7 @@ type ProviderFieldsProps = {
 function SecretSelectorField({
   control,
   isSecretsPending,
+  isSecretsError,
   secrets,
   fieldName,
   label,
@@ -255,13 +262,12 @@ function SecretSelectorField({
 }: {
   control: Control<FormValues, unknown, FormValues>;
   isSecretsPending: boolean;
+  isSecretsError: boolean;
   secrets?: Secret[];
   fieldName: KeysOfUnion<FormValues>;
   label: string;
   placeholder: string;
 }) {
-  const { isError } = useGetAllSecrets();
-
   return (
     <FormSecretNameField
       control={control}
@@ -269,7 +275,7 @@ function SecretSelectorField({
       label={label}
       secrets={secrets}
       isPending={isSecretsPending}
-      isError={isError}
+      isError={isSecretsError}
       placeholder={placeholder}
     />
   );
@@ -383,6 +389,7 @@ function BaseUrlField({
 
 function OpenAISpecificFields({
   isSecretsPending,
+  isSecretsError,
   secrets,
   isConfigurationsPending,
   configurations,
@@ -394,6 +401,7 @@ function OpenAISpecificFields({
       <SecretSelectorField
         control={control}
         isSecretsPending={isSecretsPending}
+        isSecretsError={isSecretsError}
         secrets={secrets}
         fieldName="secret"
         label="API Key"
@@ -415,6 +423,7 @@ type AzureSpecificFieldsProps = ProviderFieldsProps;
 function AzureSpecificFields({
   control,
   isSecretsPending,
+  isSecretsError,
   secrets,
   isConfigurationsPending,
   configurations,
@@ -465,6 +474,7 @@ function AzureSpecificFields({
         <SecretSelectorField
           control={control}
           isSecretsPending={isSecretsPending}
+          isSecretsError={isSecretsError}
           secrets={secrets}
           fieldName="secret"
           label="API Key"
@@ -556,6 +566,7 @@ function AzureSpecificFields({
 function AWSBedrockSpecificFields({
   control,
   isSecretsPending,
+  isSecretsError,
   secrets,
   isConfigurationsPending,
   configurations,
@@ -599,6 +610,7 @@ function AWSBedrockSpecificFields({
         <SecretSelectorField
           control={control}
           isSecretsPending={isSecretsPending}
+          isSecretsError={isSecretsError}
           secrets={secrets}
           fieldName="bedrockApiKeySecretName"
           label="API Key Secret"
@@ -609,6 +621,7 @@ function AWSBedrockSpecificFields({
           <SecretSelectorField
             control={control}
             isSecretsPending={isSecretsPending}
+            isSecretsError={isSecretsError}
             secrets={secrets}
             fieldName="bedrockAccessKeyIdSecretName"
             label="Access Key ID Secret"
@@ -617,6 +630,7 @@ function AWSBedrockSpecificFields({
           <SecretSelectorField
             control={control}
             isSecretsPending={isSecretsPending}
+            isSecretsError={isSecretsError}
             secrets={secrets}
             fieldName="bedrockSecretAccessKeySecretName"
             label="Secret Access Key Secret"
@@ -672,6 +686,7 @@ function AWSBedrockSpecificFields({
 
 function AnthropicSpecificFields({
   isSecretsPending,
+  isSecretsError,
   secrets,
   isConfigurationsPending,
   configurations,
@@ -683,6 +698,7 @@ function AnthropicSpecificFields({
       <SecretSelectorField
         control={control}
         isSecretsPending={isSecretsPending}
+        isSecretsError={isSecretsError}
         secrets={secrets}
         fieldName="secret"
         label="API Key"
