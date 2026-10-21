@@ -55,6 +55,9 @@ func (s *StatusStorage) Get(ctx context.Context, name string, options *metav1.Ge
 	namespace := s.config.namespace(ctx)
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
+	if err := requireResourceVersion(sctx, s.backend, options); err != nil {
+		return nil, getError(err)
+	}
 	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)

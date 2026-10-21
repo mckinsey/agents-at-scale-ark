@@ -7,8 +7,8 @@ package postgresql
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"fmt"
 	"strconv"
 	"testing"
 
@@ -16,6 +16,18 @@ import (
 
 	"mckinsey.com/ark/internal/storage"
 )
+
+const (
+	listRevisionKind        = "ListRevisionResource"
+	listRevisionClusterKind = "ListRevisionClusterResource"
+	listRevisionNS          = "list-revision-integration"
+)
+
+type listRevisionFixture struct {
+	backend     *PostgreSQLBackend
+	head        int64
+	firstSeedRV int64
+}
 
 func newListRevisionObject(kind, namespace, name string) *integrationTestObject {
 	obj := &integrationTestObject{APIVersion: "ark.mckinsey.com/v1alpha1", Kind: kind}
@@ -25,6 +37,68 @@ func newListRevisionObject(kind, namespace, name string) *integrationTestObject 
 	obj.Spec = map[string]interface{}{"name": name}
 	return obj
 }
+
+func newListRevisionBackend(t *testing.T, cfg Config) *PostgreSQLBackend {
+	t.Helper()
+	backend, err := New(cfg, &integrationMockConverter{})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := backend.Close(); err != nil {
+			t.Logf("close backend: %v", err)
+		}
+	})
+	return backend
+}
+
+func seedListRevision(t *testing.T) *listRevisionFixture {
+	t.Helper()
+	backend := newListRevisionBackend(t, testConfig(t))
+	ctx := context.Background()
+
+	_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 OR kind = $2", listRevisionKind, listRevisionClusterKind)
+	type seed struct{ kind, ns, name string }
+	seeds := []seed{
+		{listRevisionKind, listRevisionNS, "seed-1"},
+		{listRevisionKind, listRevisionNS, "seed-2"},
+		{listRevisionKind, listRevisionNS, "seed-3"},
+		{listRevisionClusterKind, "", "cluster-seed"},
+	}
+	for _, s := range seeds {
+		if err := backend.Create(ctx, s.kind, s.ns, s.name, newListRevisionObject(s.kind, s.ns, s.name)); err != nil {
+			t.Fatalf("seed Create %s failed: %v", s.name, err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, s := range seeds {
+			if err := backend.Delete(ctx, s.kind, s.ns, s.name); err != nil {
+				t.Logf("delete %s: %v", s.name, err)
+			}
+		}
+	})
+
+	firstSeedRV, err := backend.GetResourceVersion(ctx, listRevisionKind, listRevisionNS, "seed-1")
+	if err != nil {
+		t.Fatalf("GetResourceVersion failed: %v", err)
+	}
+	_, _, head, err := backend.List(ctx, listRevisionKind, listRevisionNS, storage.ListOptions{})
+	if err != nil {
+		t.Fatalf("baseline List failed: %v", err)
+	}
+	if head <= firstSeedRV {
+		t.Fatalf("head %d is not above the first seed's resourceVersion %d", head, firstSeedRV)
+	}
+	return &listRevisionFixture{backend: backend, head: head, firstSeedRV: firstSeedRV}
+}
+
+func (f *listRevisionFixture) list(t *testing.T, kind, namespace string, opts storage.ListOptions) (int, string, int64, error) {
+	t.Helper()
+	objects, cont, listRV, err := f.backend.List(context.Background(), kind, namespace, opts)
+	return len(objects), cont, listRV, err
+}
+
+func rvString(rv int64) string { return strconv.FormatInt(rv, 10) }
 
 func wantListedAt(t *testing.T, objects int, listRV int64, err error, wantObjects int, head int64) {
 	t.Helper()
@@ -39,158 +113,203 @@ func wantListedAt(t *testing.T, objects int, listRV int64, err error, wantObject
 	}
 }
 
-func TestListResourceVersion_Integration(t *testing.T) {
-	cfg := testConfig(t)
-	backend, err := New(cfg, &integrationMockConverter{})
-	if err != nil {
-		t.Fatalf("Failed to create backend: %v", err)
+func wantExpired(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, storage.ErrResourceExpired) {
+		t.Fatalf("want ErrResourceExpired, got %v", err)
 	}
-	defer backend.Close()
+}
 
+func wantInvalid(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, storage.ErrInvalidRequest) {
+		t.Fatalf("want ErrInvalidRequest, got %v", err)
+	}
+}
+
+func TestListResourceVersion_NotOlderThan_Integration(t *testing.T) {
+	f := seedListRevision(t)
+	notOlder := metav1.ResourceVersionMatchNotOlderThan
+
+	n, _, rv, err := f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.head), ResourceVersionMatch: notOlder})
+	wantListedAt(t, n, rv, err, 3, f.head)
+
+	n, _, rv, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.firstSeedRV), ResourceVersionMatch: notOlder})
+	wantListedAt(t, n, rv, err, 3, f.head)
+
+	_, _, _, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.head + 1), ResourceVersionMatch: notOlder})
+	assertTooLarge(t, err, uint64(f.head+1), f.head)
+
+	_, _, _, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.head + 1000000), ResourceVersionMatch: notOlder})
+	assertTooLarge(t, err, uint64(f.head+1000000), f.head)
+
+	_, _, _, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: "18446744073709551615", ResourceVersionMatch: notOlder})
+	assertTooLarge(t, err, 1<<64-1, f.head)
+}
+
+func TestListResourceVersion_Exact_Integration(t *testing.T) {
+	f := seedListRevision(t)
+	exact := metav1.ResourceVersionMatchExact
+
+	n, _, rv, err := f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.head), ResourceVersionMatch: exact})
+	wantListedAt(t, n, rv, err, 3, f.head)
+
+	_, _, _, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.firstSeedRV), ResourceVersionMatch: exact})
+	wantExpired(t, err)
+
+	_, _, _, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.head + 1), ResourceVersionMatch: exact})
+	assertTooLarge(t, err, uint64(f.head+1), f.head)
+}
+
+func TestListResourceVersion_LegacyIsALowerBound_Integration(t *testing.T) {
+	f := seedListRevision(t)
+
+	n, _, rv, err := f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.firstSeedRV)})
+	wantListedAt(t, n, rv, err, 3, f.head)
+
+	n, _, rv, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.firstSeedRV), Limit: 1})
+	wantListedAt(t, n, rv, err, 1, f.head)
+
+	_, _, _, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.head + 1)})
+	assertTooLarge(t, err, uint64(f.head+1), f.head)
+
+	_, _, _, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.head + 1), Limit: 1})
+	assertTooLarge(t, err, uint64(f.head+1), f.head)
+}
+
+func TestListResourceVersion_UnconstrainedAndMalformed_Integration(t *testing.T) {
+	f := seedListRevision(t)
+	notOlder := metav1.ResourceVersionMatchNotOlderThan
+
+	n, _, rv, err := f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: "0", ResourceVersionMatch: notOlder})
+	wantListedAt(t, n, rv, err, 3, f.head)
+	n, _, rv, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: "0", Limit: 1})
+	wantListedAt(t, n, rv, err, 1, f.head)
+	n, _, rv, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{})
+	wantListedAt(t, n, rv, err, 3, f.head)
+
+	for _, bad := range []string{"abc", "-5", "+5", "18446744073709551616"} {
+		_, _, _, err := f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: bad, ResourceVersionMatch: notOlder})
+		wantInvalid(t, err)
+	}
+}
+
+func TestListResourceVersion_Pagination_Integration(t *testing.T) {
+	f := seedListRevision(t)
+
+	n, cont, rv, err := f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{ResourceVersion: rvString(f.head), ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan, Limit: 2})
+	wantListedAt(t, n, rv, err, 2, f.head)
+	if cont == "" {
+		t.Fatal("page one has no continue token")
+	}
+	n, _, rv, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{Continue: cont, Limit: 2})
+	wantListedAt(t, n, rv, err, 1, f.head)
+
+	_, _, _, err = f.list(t, listRevisionKind, listRevisionNS, storage.ListOptions{Continue: cont, Limit: 2, ResourceVersion: rvString(f.head)})
+	wantInvalid(t, err)
+}
+
+func TestListResourceVersion_ClusterScoped_Integration(t *testing.T) {
+	f := seedListRevision(t)
+	notOlder := metav1.ResourceVersionMatchNotOlderThan
+
+	n, _, rv, err := f.list(t, listRevisionClusterKind, "", storage.ListOptions{ResourceVersion: rvString(f.head), ResourceVersionMatch: notOlder})
+	wantListedAt(t, n, rv, err, 1, f.head)
+	_, _, _, err = f.list(t, listRevisionClusterKind, "", storage.ListOptions{ResourceVersion: rvString(f.head + 1), ResourceVersionMatch: notOlder})
+	assertTooLarge(t, err, uint64(f.head+1), f.head)
+}
+
+func TestRequireResourceVersion_Integration(t *testing.T) {
+	f := seedListRevision(t)
 	ctx := context.Background()
-	testKind := "ListRevisionResource"
-	testNS := "list-revision-integration"
-	clusterKind := "ListRevisionClusterResource"
 
-	cleanup := func() {
-		_, _ = backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1 OR kind = $2", testKind, clusterKind)
+	if err := f.backend.RequireResourceVersion(ctx, uint64(f.head)); err != nil {
+		t.Fatalf("RequireResourceVersion(head) error = %v", err)
 	}
-	cleanup()
-	defer cleanup()
+	if err := f.backend.RequireResourceVersion(ctx, 0); err != nil {
+		t.Fatalf("RequireResourceVersion(0) error = %v", err)
+	}
+	assertTooLarge(t, f.backend.RequireResourceVersion(ctx, uint64(f.head+1)), uint64(f.head+1), f.head)
+}
 
-	for i := 1; i <= 3; i++ {
-		name := fmt.Sprintf("seed-%d", i)
-		if err := backend.Create(ctx, testKind, testNS, name, newListRevisionObject(testKind, testNS, name)); err != nil {
-			t.Fatalf("seed Create %s failed: %v", name, err)
-		}
+func TestWatchListResourceVersion_Integration(t *testing.T) {
+	f := seedListRevision(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, err := f.backend.Watch(ctx, listRevisionKind, listRevisionNS, storage.WatchOptions{
+		ResourceVersion:     rvString(f.head + 1),
+		SendInitialEvents:   true,
+		AllowWatchBookmarks: true,
+	})
+	assertTooLarge(t, err, uint64(f.head+1), f.head)
+
+	w, err := f.backend.Watch(ctx, listRevisionKind, listRevisionNS, storage.WatchOptions{
+		ResourceVersion:     rvString(f.head),
+		SendInitialEvents:   true,
+		AllowWatchBookmarks: true,
+	})
+	if err != nil {
+		t.Fatalf("WatchList at the head failed: %v", err)
 	}
-	if err := backend.Create(ctx, clusterKind, "", "cluster-seed", newListRevisionObject(clusterKind, "", "cluster-seed")); err != nil {
-		t.Fatalf("cluster seed Create failed: %v", err)
+	w.Stop()
+
+	w, err = f.backend.Watch(ctx, listRevisionKind, listRevisionNS, storage.WatchOptions{ResourceVersion: rvString(f.head + 1)})
+	if err != nil {
+		t.Fatalf("a plain watch from a future resourceVersion should be accepted, got %v", err)
 	}
-	firstSeedRV, err := backend.GetResourceVersion(ctx, testKind, testNS, "seed-1")
+	w.Stop()
+}
+
+func TestHeadResourceVersion_RowUpdatedAfterTheSnapshot_Integration(t *testing.T) {
+	f := seedListRevision(t)
+	ctx := context.Background()
+	name := "seed-top"
+	obj := newListRevisionObject(listRevisionKind, listRevisionNS, name)
+	if err := f.backend.Create(ctx, listRevisionKind, listRevisionNS, name, obj); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	t.Cleanup(func() { _ = f.backend.Delete(ctx, listRevisionKind, listRevisionNS, name) })
+	topRV, err := f.backend.GetResourceVersion(ctx, listRevisionKind, listRevisionNS, name)
 	if err != nil {
 		t.Fatalf("GetResourceVersion failed: %v", err)
 	}
 
-	_, _, head, err := backend.List(ctx, testKind, testNS, storage.ListOptions{})
+	tx, err := f.backend.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
-		t.Fatalf("baseline List failed: %v", err)
+		t.Fatalf("BeginTx failed: %v", err)
 	}
-	if head <= firstSeedRV {
-		t.Fatalf("head %d is not above the first seed's resourceVersion %d", head, firstSeedRV)
-	}
-	headStr := strconv.FormatInt(head, 10)
-	nextStr := strconv.FormatInt(head+1, 10)
-	seedStr := strconv.FormatInt(firstSeedRV, 10)
-	notOlder := metav1.ResourceVersionMatchNotOlderThan
-	exact := metav1.ResourceVersionMatchExact
-
-	list := func(namespace string, opts storage.ListOptions) (int, string, int64, error) {
-		objects, cont, listRV, err := backend.List(ctx, testKind, namespace, opts)
-		return len(objects), cont, listRV, err
+	defer func() { _ = tx.Rollback() }()
+	var snapshot string
+	if err := tx.QueryRowContext(ctx, "SELECT pg_current_snapshot()::text").Scan(&snapshot); err != nil {
+		t.Fatalf("capture snapshot: %v", err)
 	}
 
-	t.Run("NotOlderThan at the head is served", func(t *testing.T) {
-		n, _, rv, err := list(testNS, storage.ListOptions{ResourceVersion: headStr, ResourceVersionMatch: notOlder})
-		wantListedAt(t, n, rv, err, 3, head)
-	})
+	obj.Metadata.ResourceVersion = rvString(topRV)
+	obj.Spec = map[string]interface{}{"name": name, "updated": true}
+	if err := f.backend.Update(ctx, listRevisionKind, listRevisionNS, name, obj); err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
 
-	t.Run("NotOlderThan an old resourceVersion serves the current state", func(t *testing.T) {
-		n, _, rv, err := list(testNS, storage.ListOptions{ResourceVersion: seedStr, ResourceVersionMatch: notOlder})
-		wantListedAt(t, n, rv, err, 3, head)
-	})
+	inTx, err := f.backend.headResourceVersion(ctx, tx, snapshot)
+	if err != nil {
+		t.Fatalf("headResourceVersion in the list transaction: %v", err)
+	}
+	if inTx != topRV {
+		t.Errorf("head read inside the list transaction = %d, want %d", inTx, topRV)
+	}
 
-	t.Run("NotOlderThan head plus one is too large", func(t *testing.T) {
-		_, _, _, err := list(testNS, storage.ListOptions{ResourceVersion: nextStr, ResourceVersionMatch: notOlder})
-		assertTooLarge(t, err, head+1, head)
-	})
-
-	t.Run("NotOlderThan far in the future is too large", func(t *testing.T) {
-		_, _, _, err := list(testNS, storage.ListOptions{ResourceVersion: strconv.FormatInt(head+1000000, 10), ResourceVersionMatch: notOlder})
-		assertTooLarge(t, err, head+1000000, head)
-	})
-
-	t.Run("Exact at the head is served", func(t *testing.T) {
-		n, _, rv, err := list(testNS, storage.ListOptions{ResourceVersion: headStr, ResourceVersionMatch: exact})
-		wantListedAt(t, n, rv, err, 3, head)
-	})
-
-	t.Run("Exact below the head is expired", func(t *testing.T) {
-		_, _, _, err := list(testNS, storage.ListOptions{ResourceVersion: seedStr, ResourceVersionMatch: exact})
-		if !errors.Is(err, storage.ErrResourceExpired) {
-			t.Fatalf("want ErrResourceExpired, got %v", err)
-		}
-	})
-
-	t.Run("Exact head plus one is too large", func(t *testing.T) {
-		_, _, _, err := list(testNS, storage.ListOptions{ResourceVersion: nextStr, ResourceVersionMatch: exact})
-		assertTooLarge(t, err, head+1, head)
-	})
-
-	t.Run("legacy without limit behaves as NotOlderThan", func(t *testing.T) {
-		n, _, rv, err := list(testNS, storage.ListOptions{ResourceVersion: seedStr})
-		wantListedAt(t, n, rv, err, 3, head)
-		_, _, _, err = list(testNS, storage.ListOptions{ResourceVersion: nextStr})
-		assertTooLarge(t, err, head+1, head)
-	})
-
-	t.Run("legacy with limit behaves as Exact", func(t *testing.T) {
-		_, _, _, err := list(testNS, storage.ListOptions{ResourceVersion: nextStr, Limit: 1})
-		assertTooLarge(t, err, head+1, head)
-		_, _, _, err = list(testNS, storage.ListOptions{ResourceVersion: seedStr, Limit: 1})
-		if !errors.Is(err, storage.ErrResourceExpired) {
-			t.Fatalf("want ErrResourceExpired, got %v", err)
-		}
-	})
-
-	t.Run("resourceVersion 0 and empty are unconstrained", func(t *testing.T) {
-		n, _, rv, err := list(testNS, storage.ListOptions{ResourceVersion: "0", ResourceVersionMatch: notOlder})
-		wantListedAt(t, n, rv, err, 3, head)
-		n, _, rv, err = list(testNS, storage.ListOptions{ResourceVersion: "0", Limit: 1})
-		wantListedAt(t, n, rv, err, 1, head)
-		n, _, rv, err = list(testNS, storage.ListOptions{})
-		wantListedAt(t, n, rv, err, 3, head)
-	})
-
-	t.Run("paginated list keeps its bound on page one only", func(t *testing.T) {
-		n, cont, rv, err := list(testNS, storage.ListOptions{ResourceVersion: headStr, ResourceVersionMatch: notOlder, Limit: 2})
-		wantListedAt(t, n, rv, err, 2, head)
-		if cont == "" {
-			t.Fatal("page one has no continue token")
-		}
-		n, _, rv, err = list(testNS, storage.ListOptions{Continue: cont, Limit: 2})
-		wantListedAt(t, n, rv, err, 1, head)
-		_, _, _, err = list(testNS, storage.ListOptions{Continue: cont, Limit: 2, ResourceVersion: headStr})
-		if !errors.Is(err, storage.ErrInvalidRequest) {
-			t.Fatalf("continue with a resourceVersion: want ErrInvalidRequest, got %v", err)
-		}
-	})
-
-	t.Run("cluster-scoped kinds honour the bound", func(t *testing.T) {
-		objects, _, rv, err := backend.List(ctx, clusterKind, "", storage.ListOptions{ResourceVersion: headStr, ResourceVersionMatch: notOlder})
-		wantListedAt(t, len(objects), rv, err, 1, head)
-		_, _, _, err = backend.List(ctx, clusterKind, "", storage.ListOptions{ResourceVersion: nextStr, ResourceVersionMatch: notOlder})
-		assertTooLarge(t, err, head+1, head)
-	})
-
-	t.Run("malformed resourceVersion is an invalid request", func(t *testing.T) {
-		for _, rv := range []string{"abc", "-5", "+5"} {
-			_, _, _, err := list(testNS, storage.ListOptions{ResourceVersion: rv, ResourceVersionMatch: notOlder})
-			if !errors.Is(err, storage.ErrInvalidRequest) {
-				t.Errorf("resourceVersion %q: want ErrInvalidRequest, got %v", rv, err)
-			}
-		}
-	})
+	outside, err := f.backend.headResourceVersion(ctx, f.backend.db, snapshot)
+	if err != nil {
+		t.Fatalf("headResourceVersion outside the transaction: %v", err)
+	}
+	if outside >= topRV {
+		t.Fatalf("expected a separate statement to miss the updated row (got %d, top %d); the test no longer exercises the race", outside, topRV)
+	}
 }
 
 func TestListResourceVersion_EmptyStore_Integration(t *testing.T) {
-	cfg := freshDatabaseConfig(t)
-	backend, err := New(cfg, &integrationMockConverter{})
-	if err != nil {
-		t.Fatalf("Failed to create backend: %v", err)
-	}
-	defer backend.Close()
-
+	backend := newListRevisionBackend(t, freshDatabaseConfig(t))
 	ctx := context.Background()
 	notOlder := metav1.ResourceVersionMatchNotOlderThan
 

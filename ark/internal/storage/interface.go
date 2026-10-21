@@ -53,6 +53,7 @@ type Backend interface {
 	Delete(ctx context.Context, kind, namespace, name string) error
 	Watch(ctx context.Context, kind, namespace string, opts WatchOptions) (watch.Interface, error)
 	GetResourceVersion(ctx context.Context, kind, namespace, name string) (int64, error)
+	RequireResourceVersion(ctx context.Context, minRV uint64) error
 	Close() error
 }
 

@@ -20,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
-	k8sstorage "k8s.io/apiserver/pkg/storage"
 	"k8s.io/apiserver/pkg/storage/names"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -37,8 +36,6 @@ const (
 	// used to be a no-op. Delete gets no server-side conflict retry the way patch does, so a
 	// resource under active reconciliation would surface a 409 it never used to.
 	maxDeleteConflictAttempts = 5
-
-	tooLargeResourceVersionRetrySeconds = 1
 )
 
 func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -111,6 +108,11 @@ func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.G
 	namespace := s.config.namespace(ctx)
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
+	if err := requireResourceVersion(sctx, s.backend, options); err != nil {
+		metrics.RecordStorageOperation("get", s.config.Kind, storageOutcome(err))
+		metrics.RecordStorageLatency("get", s.config.Kind, start)
+		return nil, getError(err)
+	}
 	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		metrics.RecordStorageOperation("get", s.config.Kind, "error")
@@ -143,7 +145,7 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	defer cancel()
 	objects, continueToken, listRV, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
 	if err != nil {
-		metrics.RecordStorageOperation("list", s.config.Kind, "error")
+		metrics.RecordStorageOperation("list", s.config.Kind, storageOutcome(err))
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
 		return nil, listError(err, s.config.Resource)
 	}
@@ -158,20 +160,6 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	metrics.RecordStorageOperation("list", s.config.Kind, "success")
 	metrics.RecordStorageLatency("list", s.config.Kind, start)
 	return list, nil
-}
-
-func listError(err error, resource string) error {
-	var tooLarge *storage.TooLargeResourceVersionError
-	switch {
-	case errors.Is(err, storage.ErrInvalidRequest):
-		return apierrors.NewBadRequest(err.Error())
-	case errors.As(err, &tooLarge):
-		return k8sstorage.NewTooLargeResourceVersionError(uint64(tooLarge.Requested), uint64(tooLarge.Current), tooLargeResourceVersionRetrySeconds)
-	case errors.Is(err, storage.ErrResourceExpired):
-		return apierrors.NewResourceExpired(err.Error())
-	default:
-		return apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", resource, err))
-	}
 }
 
 // PrepareForCreate populates server-owned metadata (namespace, uid, creationTimestamp) so
@@ -517,6 +505,10 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 
 	watcher, err := s.backend.Watch(ctx, s.config.Kind, namespace, opts)
 	if err != nil {
+		var tooLarge *storage.TooLargeResourceVersionError
+		if errors.As(err, &tooLarge) {
+			return errorWatcher(resourceVersionError(err)), nil
+		}
 		if errors.Is(err, storage.ErrInvalidRequest) {
 			return nil, apierrors.NewBadRequest(err.Error())
 		}

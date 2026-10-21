@@ -56,6 +56,8 @@ func (f *fakeBackend) GetResourceVersion(context.Context, string, string, string
 	return 0, nil
 }
 
+func (f *fakeBackend) RequireResourceVersion(context.Context, uint64) error { return nil }
+
 func (f *fakeBackend) Close() error { return nil }
 
 func TestStorageLookup_GetArkConfig(t *testing.T) {
