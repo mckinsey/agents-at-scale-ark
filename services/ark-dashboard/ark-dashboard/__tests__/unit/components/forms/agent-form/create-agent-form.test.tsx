@@ -30,6 +30,10 @@ vi.mock('@/components/ui/parameter-editor', () => ({
   ParameterEditor: () => <div data-testid="parameter-editor" />,
 }));
 
+vi.mock('@/components/forms/shared/custom-headers-field', () => ({
+  CustomHeadersField: () => <div data-testid="custom-headers-field" />,
+}));
+
 vi.mock('@/components/ui/form', () => ({
   Form: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FormField: ({
@@ -79,6 +83,7 @@ function buildHook(overrides: Record<string, unknown> = {}) {
       handleDeleteTool: vi.fn(),
       isToolSelected: vi.fn(() => false),
       onSubmit: vi.fn(),
+      onInvalid: vi.fn(),
     },
   };
 }
@@ -139,6 +144,9 @@ describe('CreateAgentForm', () => {
     useAgentFormMock.mockReturnValue(hook);
     render(<CreateAgentForm mode="create" />);
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }));
-    expect(hook.form.handleSubmit).toHaveBeenCalledWith(hook.actions.onSubmit);
+    expect(hook.form.handleSubmit).toHaveBeenCalledWith(
+      hook.actions.onSubmit,
+      hook.actions.onInvalid,
+    );
   });
 });
