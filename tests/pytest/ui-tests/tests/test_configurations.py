@@ -142,7 +142,7 @@ class TestConfigurations:
         configurations.fill_form(value=EDITED_VALUE)
         configurations.submit_form("Save")
 
-        configurations.wait_for_row(name)
+        configurations.wait_for_row_value(name, EDITED_VALUE)
         cells = configurations.row_cells(name)
         assert EDITED_VALUE in cells, (
             f"the row should show the edited value, but held {cells}"

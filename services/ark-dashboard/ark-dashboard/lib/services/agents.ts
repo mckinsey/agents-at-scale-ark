@@ -9,6 +9,8 @@ export type AgentDetailResponse = components['schemas']['AgentDetailResponse'];
 export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type AgentCreateRequest = components['schemas']['AgentCreateRequest'];
 export type AgentUpdateRequest = components['schemas']['AgentUpdateRequest'];
+export type AgentHeader = components['schemas']['AgentHeader'];
+export type AgentOverride = components['schemas']['AgentOverride'];
 
 // AgentTool interface to match the API response structure
 export interface AgentTool {

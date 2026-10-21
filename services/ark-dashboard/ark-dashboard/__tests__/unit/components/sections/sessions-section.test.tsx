@@ -10,12 +10,15 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  applyAppRouterNavigations,
+  deferAppRouterLanding,
   getAppRouterMock,
   resetAppRouterMock,
 } from '@/__tests__/setup/mock-app-router';
 import { SessionsSection } from '@/components/sections/sessions-section';
 import { toast } from '@/components/ui/sonner';
 import { APIError } from '@/lib/api/client';
+import { SEARCH_DEBOUNCE_MS } from '@/lib/hooks/use-url-state';
 import { fetchNodeLogWindow } from '@/lib/services/workflow-logs';
 import { resetNodeLogStore } from '@/lib/services/workflow-logs-store';
 import {
@@ -30,6 +33,7 @@ import {
   useWorkflows,
 } from '@/lib/services/workflows-hooks';
 import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
+import { ArgoUrlProvider } from '@/providers/argo-url-provider';
 
 const mockUseNamespace = vi.fn();
 
@@ -950,6 +954,39 @@ describe('SessionsSection', () => {
       });
     });
 
+    it('keeps every character typed before the debounced search commit lands (#3798)', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const mockUseWorkflows = vi.mocked(useWorkflows);
+      // A real browser's router.replace lands a render later than the call -
+      // defer it here too, so two keystrokes within the debounce window can
+      // land on top of each other the way they do in production.
+      deferAppRouterLanding();
+
+      render(<SessionsSection />);
+
+      const searchInput = screen.getByPlaceholderText('Search');
+      await user.type(searchInput, 'alpha');
+
+      expect(searchInput).toHaveValue('alpha');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+      });
+      act(() => {
+        applyAppRouterNavigations();
+      });
+
+      expect(searchInput).toHaveValue('alpha');
+      const lastCall =
+        mockUseWorkflows.mock.calls[mockUseWorkflows.mock.calls.length - 1];
+      expect(lastCall[1]).toEqual(
+        expect.objectContaining({ workflowName: 'alpha' }),
+      );
+
+      vi.useRealTimers();
+    });
+
     it('should pass status filter to API', async () => {
       const user = userEvent.setup();
       const mockUseWorkflows = vi.mocked(useWorkflows);
@@ -1451,17 +1488,38 @@ describe('SessionsSection', () => {
         error: null,
       } as any);
 
-      render(<SessionsSection />);
+      render(
+        <ArgoUrlProvider argoUrl="https://argo.example.com">
+          <SessionsSection />
+        </ArgoUrlProvider>,
+      );
 
       await waitFor(() => {
         const argoLink = screen.getByRole('link', { name: /view in argo/i });
         expect(argoLink).toHaveAttribute(
           'href',
-          'http://localhost:2746/workflows/default/test-workflow-123?uid=abc-123-def',
+          'https://argo.example.com/workflows/default/test-workflow-123?uid=abc-123-def',
         );
         expect(argoLink).toHaveAttribute('target', '_blank');
         expect(argoLink).toHaveAttribute('rel', 'noopener noreferrer');
       });
+    });
+
+    it('should hide the Argo Workflows link when no Argo URL is configured', async () => {
+      vi.mocked(useWorkflow).mockReturnValue({
+        workflow: mockWorkflow,
+        loading: false,
+        error: null,
+      } as unknown as ReturnType<typeof useWorkflow>);
+
+      render(<SessionsSection />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/5m 30s/).length).toBeGreaterThan(0);
+      });
+      expect(
+        screen.queryByRole('link', { name: /view in argo/i }),
+      ).not.toBeInTheDocument();
     });
 
     it('should display workflow duration in list and detail view', async () => {

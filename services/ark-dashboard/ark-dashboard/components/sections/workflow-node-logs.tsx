@@ -33,7 +33,7 @@ const SCROLL_TOP_THRESHOLD_PX = 200;
 interface WorkflowNodeLogsProps {
   readonly target: LogWindowTarget;
   readonly isRunning: boolean;
-  readonly argoUrl: string;
+  readonly argoUrl?: string;
 }
 
 export function WorkflowNodeLogs({
@@ -220,14 +220,16 @@ export function WorkflowNodeLogs({
             disabled={buffer.loadingInitial}>
             Retry
           </Button>
-          <Button variant="ghost" size="xs" asChild>
-            <a href={argoUrl} target="_blank" rel="noopener noreferrer">
-              View logs in Argo UI
-              <IconShell size="sm">
-                <OpenInNew />
-              </IconShell>
-            </a>
-          </Button>
+          {argoUrl && (
+            <Button variant="ghost" size="xs" asChild>
+              <a href={argoUrl} target="_blank" rel="noopener noreferrer">
+                View logs in Argo UI
+                <IconShell size="sm">
+                  <OpenInNew />
+                </IconShell>
+              </a>
+            </Button>
+          )}
         </div>
       </div>
     );
