@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ArgoVersionUnsupportedAlert } from '@/components/alerts/argo-version-unsupported-alert';
 import { useGetSystemInfo } from '@/lib/services/system-info-hooks';
@@ -17,6 +17,10 @@ function mockSystemInfo(data: unknown) {
 }
 
 describe('ArgoVersionUnsupportedAlert', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it('renders the warning when the Argo Server version is unsupported', () => {
     mockSystemInfo({ argo_server_version_supported: false });
 
@@ -52,5 +56,43 @@ describe('ArgoVersionUnsupportedAlert', () => {
     const { container } = render(<ArgoVersionUnsupportedAlert />);
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders a dismiss control', () => {
+    mockSystemInfo({ argo_server_version_supported: false });
+
+    render(<ArgoVersionUnsupportedAlert />);
+
+    expect(
+      screen.getByTestId('argo-version-unsupported-alert-dismiss'),
+    ).toBeInTheDocument();
+  });
+
+  it('hides and stays hidden after the dismiss control is clicked', async () => {
+    mockSystemInfo({ argo_server_version_supported: false });
+
+    const { unmount } = render(<ArgoVersionUnsupportedAlert />);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('argo-version-unsupported-alert'),
+      ).toBeInTheDocument(),
+    );
+
+    fireEvent.click(
+      screen.getByTestId('argo-version-unsupported-alert-dismiss'),
+    );
+
+    expect(
+      screen.queryByTestId('argo-version-unsupported-alert'),
+    ).not.toBeInTheDocument();
+
+    unmount();
+    render(<ArgoVersionUnsupportedAlert />);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('argo-version-unsupported-alert'),
+      ).not.toBeInTheDocument(),
+    );
   });
 });

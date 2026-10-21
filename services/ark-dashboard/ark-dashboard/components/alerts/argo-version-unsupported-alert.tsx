@@ -3,17 +3,20 @@
 import { Warning } from '@/components/icons';
 import {
   Alert,
+  AlertClose,
   AlertContent,
   AlertDescription,
   AlertIcon,
   AlertTitle,
 } from '@/components/ui/alert';
 import { useGetSystemInfo } from '@/lib/services/system-info-hooks';
+import { useArgoVersionNotice } from './use-argo-version-notice';
 
 export function ArgoVersionUnsupportedAlert() {
   const { data: systemInfo } = useGetSystemInfo();
+  const { dismissed, dismiss } = useArgoVersionNotice();
 
-  if (systemInfo?.argo_server_version_supported !== false) {
+  if (dismissed || systemInfo?.argo_server_version_supported !== false) {
     return null;
   }
 
@@ -30,6 +33,11 @@ export function ArgoVersionUnsupportedAlert() {
           4.1.0 or later for full support.
         </AlertDescription>
       </AlertContent>
+      <AlertClose
+        onClick={dismiss}
+        aria-label="Dismiss"
+        data-testid="argo-version-unsupported-alert-dismiss"
+      />
     </Alert>
   );
 }
