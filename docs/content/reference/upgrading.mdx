@@ -173,11 +173,11 @@ Nothing changes in `open` mode, for requests authenticated with an API key, or f
 | Run a workflow | `create` on `workflows` |
 | Delete an execution engine | `delete` on `executionengines` in `ark.mckinsey.com` |
 
-### Aggregated Apiserver Rejects Unsatisfiable resourceVersion on List
+### Aggregated Apiserver Rejects Unsatisfiable resourceVersion
 
-In PostgreSQL mode the apiserver used to ignore `resourceVersion` and `resourceVersionMatch` on list requests and always answered `200` with the current state, even when the requested version was newer than the store. It now follows kube-apiserver: a version the store has not reached gets `504 Timeout` with `Retry-After: 1`, and `resourceVersionMatch=Exact` below the current head gets `410 Gone`. A `resourceVersion` given together with `continue` is a `400`.
+In PostgreSQL mode the apiserver used to ignore `resourceVersion` on list and get requests and on watch-list requests, and it always served the current state, even when the requested version was newer than the store. It now follows kube-apiserver. A version the store has not reached gets `504 Timeout` with `Retry-After: 1`, or a single `ERROR` event with that status on a watch-list. A list with `resourceVersionMatch=Exact` below the current head gets `410 Gone`. A `resourceVersion` sent together with `continue` is a `400`.
 
-client-go informers and reflectors need no change. Custom clients that pass an explicit `resourceVersion` on list should retry on `504` and relist on `410`.
+client-go informers and reflectors need no change. Custom clients that pass an explicit `resourceVersion` should retry on `504` and relist on `410`.
 
 ## v0.1.70
 
