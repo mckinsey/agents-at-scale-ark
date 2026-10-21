@@ -36,5 +36,6 @@ async def get_system_info() -> SystemInfo:
         return SystemInfo(
             kubernetes_version=version_info.git_version,
             system_version=f"v{ark_api_version}", # the k8s version has a leading v, add here for consistency
+            argo_server_configured=bool(argo_server_url),
             argo_server_version_supported=argo_server.is_version_supported(argo_version),
         )

@@ -3,12 +3,15 @@ import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import WorkflowRunsPage from '@/app/(dashboard)/workflow-runs/page';
+import { useGetSystemInfo } from '@/lib/services/system-info-hooks';
 
 const reportedCount = vi.hoisted(() => ({ value: 1 as number | null }));
 
 vi.mock('@/lib/services/system-info-hooks', () => ({
-  useGetSystemInfo: () => ({ data: undefined }),
+  useGetSystemInfo: vi.fn(),
 }));
+
+const mockUseGetSystemInfo = vi.mocked(useGetSystemInfo);
 
 vi.mock('@/components/sections/sessions-section', () => ({
   SessionsSection: ({
@@ -27,6 +30,9 @@ vi.mock('@/components/sections/sessions-section', () => ({
 describe('WorkflowRunsPage', () => {
   beforeEach(() => {
     reportedCount.value = 1;
+    mockUseGetSystemInfo.mockReturnValue({
+      data: undefined,
+    } as ReturnType<typeof useGetSystemInfo>);
   });
 
   it('should render page header and sessions section', () => {
@@ -36,6 +42,18 @@ describe('WorkflowRunsPage', () => {
       screen.getByRole('heading', { name: 'Workflow runs (1)' }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('sessions-section')).toBeInTheDocument();
+  });
+
+  it('should render the Argo Server URL alert', () => {
+    mockUseGetSystemInfo.mockReturnValue({
+      data: { argo_server_configured: false },
+    } as ReturnType<typeof useGetSystemInfo>);
+
+    render(<WorkflowRunsPage />);
+
+    expect(
+      screen.getByTestId('argo-server-url-missing-alert'),
+    ).toBeInTheDocument();
   });
 
   it('should show the total count reported by the sessions section', () => {

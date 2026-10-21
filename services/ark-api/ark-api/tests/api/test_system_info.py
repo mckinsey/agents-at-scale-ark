@@ -18,17 +18,20 @@ class TestSystemInfoEndpoint(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
+    @patch("ark_api.api.v1.system_info.argo_server.get_argo_server_version")
     @patch("ark_api.api.v1.system_info.importlib.metadata.version")
     @patch("ark_api.api.v1.system_info.client.VersionApi")
     @patch("ark_api.api.v1.system_info.create_api_client")
+    @patch.dict(os.environ, {"ARGO_SERVER_URL": "http://argo-workflows-server:2746"})
     def test_returns_cluster_and_service_versions(
-        self, mock_api_client, mock_version_api, mock_package_version
+        self, mock_api_client, mock_version_api, mock_package_version, mock_get_version
     ):
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
         mock_version_api.return_value.get_code = AsyncMock(
             return_value=SimpleNamespace(git_version="v1.31.2")
         )
         mock_package_version.return_value = "0.1.68"
+        mock_get_version.return_value = None
 
         response = self.client.get("/v1/system-info")
 
@@ -38,6 +41,7 @@ class TestSystemInfoEndpoint(unittest.TestCase):
             {
                 "kubernetes_version": "v1.31.2",
                 "system_version": "v0.1.68",
+                "argo_server_configured": True,
                 "argo_server_version_supported": None,
             },
         )
@@ -150,6 +154,34 @@ class TestSystemInfoEndpoint(unittest.TestCase):
             response = self.client.get("/v1/system-info")
 
         self.assertIsNone(response.json()["argo_server_version_supported"])
+
+    @patch("ark_api.api.v1.system_info.client.VersionApi")
+    @patch("ark_api.api.v1.system_info.create_api_client")
+    def test_reports_argo_server_not_configured_when_url_unset(self, mock_api_client, mock_version_api):
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_version_api.return_value.get_code = AsyncMock(
+            return_value=SimpleNamespace(git_version="v1.31.2")
+        )
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("ARGO_SERVER_URL", None)
+            response = self.client.get("/v1/system-info")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["argo_server_configured"])
+
+    @patch("ark_api.api.v1.system_info.client.VersionApi")
+    @patch("ark_api.api.v1.system_info.create_api_client")
+    @patch.dict(os.environ, {"ARGO_SERVER_URL": ""})
+    def test_reports_argo_server_not_configured_when_url_empty(self, mock_api_client, mock_version_api):
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_version_api.return_value.get_code = AsyncMock(
+            return_value=SimpleNamespace(git_version="v1.31.2")
+        )
+
+        response = self.client.get("/v1/system-info")
+
+        self.assertFalse(response.json()["argo_server_configured"])
 
     @patch("ark_api.api.v1.system_info.client.VersionApi")
     @patch("ark_api.api.v1.system_info.create_api_client")
