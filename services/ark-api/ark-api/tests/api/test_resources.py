@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from kubernetes_asyncio.client import V1ObjectMeta, V1Pod
 from kubernetes_asyncio.client.rest import ApiException
-from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
+from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError, api_exception
 
 os.environ["AUTH_MODE"] = "open"
 
@@ -30,6 +30,25 @@ def make_awaitable(return_value):
     return _awaitable
 
 
+def k8s_error(status, reason, message):
+    """The typed error the dynamic client raises for a Kubernetes Status response."""
+    error = ApiException(status=status, reason=reason)
+    error.body = json.dumps(
+        {"kind": "Status", "status": "Failure", "message": message, "reason": reason, "code": status}
+    )
+    return api_exception(error)
+
+
+def wire_grouped_resource(mock_dynamic_client_cls, mock_api_client):
+    """Route the generic handlers to a mocked dynamic resource and return it."""
+    mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+    mock_dynamic_client_instance = AsyncMock()
+    mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+    mock_api_resource = AsyncMock()
+    mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+    return mock_api_resource
+
+
 class TestResourcesEndpoint(unittest.TestCase):
     """Test cases for the /resources endpoints."""
 
@@ -39,7 +58,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.client = TestClient(app)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_core_resources_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful listing of core Kubernetes resources."""
@@ -72,7 +91,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(len(data["items"]), 2)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful retrieval of a grouped Kubernetes resource."""
@@ -102,7 +121,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["metadata"]["name"], "test-workflow")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_grouped_resources_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful listing of grouped Kubernetes resources."""
@@ -135,7 +154,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(len(data["items"]), 2)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_resource_with_namespace_param(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test resource retrieval with explicit namespace parameter."""
@@ -165,7 +184,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource.get.assert_called_once_with(name="test-wt", namespace="custom-namespace")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_resource_namespace_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test resource retrieval returns error when namespace operation fails."""
@@ -186,7 +205,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_core_resources_yaml_response(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test core resource listing returns YAML when requested."""
@@ -221,7 +240,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("kind: ServiceList", response.text)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_grouped_resource_yaml_response(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test grouped resource retrieval returns YAML when requested."""
@@ -253,7 +272,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("kind: WorkflowTemplate", response.text)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_grouped_resources_yaml_response(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test grouped resource listing returns YAML when requested."""
@@ -288,7 +307,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("kind: WorkflowTemplateList", response.text)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_grouped_resource_api_lookup_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test error handling when grouped API resource lookup fails."""
@@ -307,7 +326,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_get_grouped_resource_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test grouped resource retrieval returns error when operation fails."""
@@ -328,7 +347,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_grouped_resources_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test grouped resource listing returns error when operation fails."""
@@ -349,7 +368,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_grouped_resources_crd_not_installed(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test grouped resource listing returns 404 when the resource type/CRD is not installed."""
@@ -373,7 +392,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("not available in the cluster", response.json()["detail"])
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_delete_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful deletion of a grouped Kubernetes resource."""
@@ -395,7 +414,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource.delete.assert_called_once_with(name="test-workflow", namespace="default")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_delete_grouped_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test deletion of a grouped resource with explicit namespace parameter."""
@@ -417,7 +436,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource.delete.assert_called_once_with(name="test-workflow", namespace="custom-namespace")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_delete_grouped_resource_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test grouped resource deletion returns error when operation fails."""
@@ -438,7 +457,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_with_filters(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """status and workflowTemplateName become one combined label selector; workflowName stays post-fetch."""
@@ -486,7 +505,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_name(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test filtering workflows by name only."""
@@ -527,7 +546,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["metadata"]["name"], "my-test-workflow")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_template(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """workflowTemplateName becomes an exact-match label selector."""
@@ -569,7 +588,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_failed_status(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test filtering workflows by failed status (includes both Failed and Error)."""
@@ -618,7 +637,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_succeeded_status(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test filtering workflows by succeeded status."""
@@ -660,7 +679,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filter_by_pending_status_uses_notin_selector(
         self, mock_get_context, mock_dynamic_client_cls, mock_api_client
@@ -693,7 +712,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_combines_caller_label_selector_with_status(
         self, mock_get_context, mock_dynamic_client_cls, mock_api_client
@@ -727,7 +746,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_forwards_limit_and_continue_to_k8s(
         self, mock_get_context, mock_dynamic_client_cls, mock_api_client
@@ -757,7 +776,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_no_limit_used_when_not_specified(
         self, mock_get_context, mock_dynamic_client_cls, mock_api_client
@@ -785,7 +804,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_passthrough_of_continue_and_remaining_count(
         self, mock_get_context, mock_dynamic_client_cls, mock_api_client
@@ -822,7 +841,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(data["metadata"]["remainingItemCount"], 42)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_workflows_filtered_page_can_return_fewer_than_limit(
         self, mock_get_context, mock_dynamic_client_cls, mock_api_client
@@ -871,7 +890,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(too_high.status_code, 422)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_create_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful creation of a grouped Kubernetes resource."""
@@ -904,7 +923,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource.create.assert_called_once()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_create_grouped_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test creation of grouped resource with explicit namespace."""
@@ -1073,7 +1092,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_get_workflow_logs_pod_not_found(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """Test workflow logs when pod cannot be found."""
         mock_api_client_instance = AsyncMock()
@@ -1113,7 +1132,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_get_workflow_logs_node_not_in_workflow(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """Test workflow logs when node is not found in workflow spec."""
         mock_api_client_instance = AsyncMock()
@@ -1148,7 +1167,7 @@ class TestResourcesEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_get_workflow_logs_workflow_query_fails(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """Test workflow logs when workflow query fails in error handler."""
         mock_api_client_instance = AsyncMock()
@@ -1176,7 +1195,140 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertIn("Failed to fetch logs", response.text)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.CoreV1Api')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_get_workflow_logs_workflow_not_found(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
+        """A workflow that no longer exists explains the missing logs with a 404."""
+        mock_core_v1 = AsyncMock()
+        mock_core_v1.read_namespaced_pod = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
+        mock_core_v1.list_namespaced_pod = AsyncMock(return_value=Mock(items=[]))
+        mock_core_v1_cls.return_value = mock_core_v1
+
+        workflow_resource = wire_grouped_resource(mock_dynamic_client_cls, mock_api_client)
+        workflow_resource.get = AsyncMock(
+            side_effect=k8s_error(404, "NotFound", 'workflows.argoproj.io "test-wf" not found')
+        )
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/test-wf/node-id/log"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.text, "Workflow test-wf not found in namespace default")
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_get_grouped_resource_not_found(self, mock_dynamic_client_cls, mock_api_client):
+        """A missing resource answers 404 rather than 200 with a Kubernetes Status body."""
+        resource = wire_grouped_resource(mock_dynamic_client_cls, mock_api_client)
+        resource.get = AsyncMock(
+            side_effect=k8s_error(404, "NotFound", 'workflowtemplates.argoproj.io "nonexistent" not found')
+        )
+
+        response = self.client.get(
+            "/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/nonexistent?namespace=default"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "Resource 'nonexistent' not found in namespace default"})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_list_grouped_resources_forbidden(self, mock_dynamic_client_cls, mock_api_client):
+        """A list Kubernetes refuses answers 403 with the Kubernetes message."""
+        message = 'workflowtemplates.argoproj.io is forbidden: User "system:serviceaccount:default:ark-api" cannot list resource'
+        resource = wire_grouped_resource(mock_dynamic_client_cls, mock_api_client)
+        resource.get = AsyncMock(side_effect=k8s_error(403, "Forbidden", message))
+
+        response = self.client.get("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate?namespace=default")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"detail": message})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_create_grouped_resource_conflict(self, mock_dynamic_client_cls, mock_api_client):
+        """Creating a resource that already exists answers 409."""
+        resource = wire_grouped_resource(mock_dynamic_client_cls, mock_api_client)
+        resource.create = AsyncMock(
+            side_effect=k8s_error(409, "AlreadyExists", 'workflowtemplates.argoproj.io "wt" already exists')
+        )
+
+        response = self.client.post(
+            "/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate?namespace=default",
+            json={"apiVersion": "argoproj.io/v1alpha1", "kind": "WorkflowTemplate", "metadata": {"name": "wt"}},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json(), {"detail": "Resource already exists in namespace default"})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_update_grouped_resource_not_found(self, mock_dynamic_client_cls, mock_api_client):
+        """Updating a missing resource answers 404 and never replaces anything."""
+        resource = wire_grouped_resource(mock_dynamic_client_cls, mock_api_client)
+        resource.get = AsyncMock(
+            side_effect=k8s_error(404, "NotFound", 'workflowtemplates.argoproj.io "nonexistent" not found')
+        )
+
+        response = self.client.put(
+            "/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/nonexistent?namespace=default",
+            json={"apiVersion": "argoproj.io/v1alpha1", "kind": "WorkflowTemplate", "metadata": {"name": "nonexistent"}},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        resource.replace.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_update_grouped_resource_stale_resource_version(self, mock_dynamic_client_cls, mock_api_client):
+        """A replace with a stale resourceVersion answers 409."""
+        resource = wire_grouped_resource(mock_dynamic_client_cls, mock_api_client)
+        resource.replace = AsyncMock(
+            side_effect=k8s_error(409, "Conflict", "the object has been modified; please apply your changes to the latest version")
+        )
+
+        response = self.client.put(
+            "/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/wt?namespace=default",
+            json={"kind": "WorkflowTemplate", "metadata": {"name": "wt", "resourceVersion": "1"}},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        resource.get.assert_not_called()
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_delete_grouped_resource_not_found(self, mock_dynamic_client_cls, mock_api_client):
+        """Deleting a missing resource answers 404 rather than 204."""
+        resource = wire_grouped_resource(mock_dynamic_client_cls, mock_api_client)
+        resource.delete = AsyncMock(
+            side_effect=k8s_error(404, "NotFound", 'workflowtemplates.argoproj.io "nonexistent" not found')
+        )
+
+        response = self.client.delete(
+            "/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/nonexistent?namespace=default"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "Resource 'nonexistent' not found in namespace default"})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_delete_grouped_resource_forbidden(self, mock_dynamic_client_cls, mock_api_client):
+        """A delete Kubernetes refuses answers 403 rather than 204."""
+        message = 'executionengines.ark.mckinsey.com "engine" is forbidden'
+        resource = wire_grouped_resource(mock_dynamic_client_cls, mock_api_client)
+        resource.delete = AsyncMock(side_effect=k8s_error(403, "Forbidden", message))
+
+        response = self.client.delete(
+            "/v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine/engine?namespace=default"
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"detail": message})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_core_resources_with_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test listing core resources with label selector parameter."""
@@ -1220,7 +1372,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_grouped_resources_with_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test listing grouped resources with label selector parameter."""
@@ -1270,7 +1422,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_list_core_resources_without_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test listing core resources without label selector defaults to None."""
@@ -1301,7 +1453,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         )
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_update_resource_honours_resource_version(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test replace respects a caller-supplied resourceVersion (optimistic concurrency)."""
@@ -1344,7 +1496,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource.get.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_update_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test successful replace of a grouped Kubernetes resource in place."""
@@ -1389,7 +1541,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         mock_api_resource.replace.assert_called_once_with(name="test-wt", body=expected_body, namespace="default")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_update_resource_without_resource_version(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test replace succeeds when submitted body has no resourceVersion."""
@@ -1427,7 +1579,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(called_body["metadata"]["resourceVersion"], "12345")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_update_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test replace uses explicit namespace parameter."""
@@ -1465,7 +1617,7 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(called_kwargs["namespace"], "custom-ns")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.get_context')
     def test_update_resource_name_mismatch_uses_path_name(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
         """Test replace targets the URL path name, not body.metadata.name, when they differ."""
@@ -2098,7 +2250,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_workflow_log_window_reports_deleted_pod(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """A finished node with no pod explains how to archive logs."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
@@ -2151,7 +2303,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_workflow_log_window_reports_unknown_node(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """A node id missing from the workflow status is a 404 naming the node and workflow."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
@@ -2170,7 +2322,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_workflow_log_window_reports_node_without_logs(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """A running pod node or a non-pod node without a pod gets the generic unavailable detail."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
@@ -2192,7 +2344,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_workflow_log_window_reports_missing_workflow(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """A workflow that no longer exists is a 404 naming the workflow, not a 500."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
@@ -2212,7 +2364,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_workflow_log_window_propagates_workflow_lookup_status(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """A non-404 failure reading the workflow keeps its own status code."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
@@ -2231,7 +2383,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_workflow_log_window_keeps_a_forbidden_log_read_as_403(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """A denied log read keeps its own status instead of becoming archive guidance."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
@@ -2252,7 +2404,7 @@ class TestPodLogWindowEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
     @patch('ark_api.api.v1.resources.CoreV1Api')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_workflow_log_window_handles_a_missing_workflow_crd(self, mock_dynamic_client_cls, mock_core_v1_cls, mock_api_client):
         """Without the Argo CRD the explanation degrades to a 404, never an empty 500."""
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
@@ -2635,7 +2787,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         return mock_api_resource
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_suspend_patches_spec(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Running"}})
         response = self.client.put(f"{self.BASE}/suspend")
@@ -2645,14 +2797,14 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         self.assertEqual(kwargs["content_type"], "application/merge-patch+json")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_suspend_rejects_completed_workflow(self, mock_dynamic_client_cls, mock_api_client):
         self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Succeeded"}})
         response = self.client.put(f"{self.BASE}/suspend")
         self.assertEqual(response.status_code, 409)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_stop_patches_shutdown(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Running"}})
         response = self.client.put(f"{self.BASE}/stop")
@@ -2661,7 +2813,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         self.assertEqual(kwargs["body"], {"spec": {"shutdown": "Stop", "suspend": None}})
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_terminate_patches_shutdown(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Running"}})
         response = self.client.put(f"{self.BASE}/terminate")
@@ -2670,7 +2822,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         self.assertEqual(kwargs["body"], {"spec": {"shutdown": "Terminate", "suspend": None}})
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_resume_replaces_and_clears_suspend(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(
             mock_dynamic_client_cls, mock_api_client,
@@ -2683,7 +2835,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         self.assertNotIn("suspend", kwargs["body"]["spec"])
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_deletes_pods_and_replaces(self, mock_dynamic_client_cls, mock_api_client):
         existing = {
             "metadata": {"name": "wf-1", "labels": {}},
@@ -2733,7 +2885,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         return core
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_stop_rejects_completed_workflow(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Failed"}})
         response = self.client.put(f"{self.BASE}/stop")
@@ -2741,7 +2893,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         resource.patch.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_terminate_rejects_completed_workflow(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Succeeded"}})
         response = self.client.put(f"{self.BASE}/terminate")
@@ -2749,7 +2901,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         resource.patch.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_resume_rejects_completed_workflow(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(
             mock_dynamic_client_cls, mock_api_client,
@@ -2760,7 +2912,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         resource.replace.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_resume_rejects_workflow_that_is_not_suspended(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(
             mock_dynamic_client_cls, mock_api_client,
@@ -2772,7 +2924,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         resource.replace.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_resume_rejects_unresolvable_suspend_gate(self, mock_dynamic_client_cls, mock_api_client):
         existing = {
             "spec": {},
@@ -2793,7 +2945,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         resource.replace.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_deletes_only_matching_pods_and_ignores_missing_ones(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
         core = self._core_with_pods(
@@ -2814,7 +2966,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         resource.replace.assert_called_once()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_fails_when_pod_deletion_fails(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
         core = self._core_with_pods(
@@ -2829,7 +2981,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         resource.replace.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_does_not_delete_pod_whose_node_id_shares_trailing_digits(self, mock_dynamic_client_cls, mock_api_client):
         self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
         core = self._core_with_pods(
@@ -2844,7 +2996,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         core.delete_namespaced_pod.assert_called_once_with(name="wf-1-step-111", namespace="default")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_skips_pods_without_node_id_annotation(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
         core = self._core_with_pods(("wf-1-step-111", None))
@@ -2857,7 +3009,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         resource.replace.assert_called_once()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_rereads_and_rewrites_after_update_conflict(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
         written = Mock()
@@ -2873,7 +3025,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         self.assertEqual(resource.replace.call_count, 2)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_resume_reports_concurrent_modification_when_conflicts_persist(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(
             mock_dynamic_client_cls, mock_api_client,
@@ -2888,7 +3040,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         self.assertEqual(resource.replace.call_count, 3)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_propagates_non_conflict_replace_errors(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, self._failed_with_pod_node("wf-1-111"))
         resource.replace = AsyncMock(side_effect=ApiException(status=422, reason="Invalid"))
@@ -2909,7 +3061,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         return json.loads(gzip.decompress(base64.b64decode(compressed)))
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_resets_compressed_nodes_and_keeps_them_compressed(self, mock_dynamic_client_cls, mock_api_client):
         nodes = {
             "wf-1": {"id": "wf-1", "type": "Steps", "phase": "Failed", "children": ["wf-1-111"]},
@@ -2936,7 +3088,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         self.assertEqual(written_nodes["wf-1"]["phase"], "Running")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_resume_resolves_suspend_gate_in_compressed_nodes(self, mock_dynamic_client_cls, mock_api_client):
         nodes = {"gate": {"id": "gate", "type": "Suspend", "phase": "Running"}}
         existing = {
@@ -2953,7 +3105,7 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         self.assertEqual(written_nodes["gate"]["phase"], "Succeeded")
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_rejects_offloaded_node_status(self, mock_dynamic_client_cls, mock_api_client):
         existing = {
             "metadata": {"name": "wf-1", "labels": {}},
@@ -2972,14 +3124,14 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
         resource.replace.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_retry_rejects_running_workflow(self, mock_dynamic_client_cls, mock_api_client):
         self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Running", "nodes": {}}})
         response = self.client.put(f"{self.BASE}/retry")
         self.assertEqual(response.status_code, 409)
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_every_action_returns_404_for_missing_workflow(self, mock_dynamic_client_cls, mock_api_client):
         resource = self._wire(mock_dynamic_client_cls, mock_api_client, {})
         resource.get = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
@@ -2988,12 +3140,46 @@ class TestWorkflowLifecycleEndpoints(unittest.TestCase):
             with self.subTest(action=action):
                 response = self.client.put(f"{self.BASE}/{action}")
                 self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.json(), {"detail": "Workflow 'wf-1' not found in namespace default"})
         resource.patch.assert_not_called()
         resource.replace.assert_not_called()
         resource.create.assert_not_called()
 
     @patch('ark_api.api.v1.client_utils.create_api_client')
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_shutdown_actions_return_404_when_the_workflow_is_deleted_before_the_patch(
+        self, mock_dynamic_client_cls, mock_api_client
+    ):
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, {"status": {"phase": "Running"}})
+        resource.patch = AsyncMock(side_effect=k8s_error(404, "NotFound", 'workflows.argoproj.io "wf-1" not found'))
+
+        for action in ("suspend", "stop", "terminate"):
+            with self.subTest(action=action):
+                response = self.client.put(f"{self.BASE}/{action}")
+                self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.json(), {"detail": "Workflow 'wf-1' not found in namespace default"})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
+    def test_resubmit_returns_the_kubernetes_refusal_instead_of_success(self, mock_dynamic_client_cls, mock_api_client):
+        existing = {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "Workflow",
+            "metadata": {"name": "wf-1", "labels": {}},
+            "spec": {"entrypoint": "main"},
+            "status": {"phase": "Succeeded"},
+        }
+        message = 'workflows.argoproj.io is forbidden: User "viewer" cannot create resource "workflows"'
+        resource = self._wire(mock_dynamic_client_cls, mock_api_client, existing)
+        resource.create = AsyncMock(side_effect=k8s_error(403, "Forbidden", message))
+
+        response = self.client.put(f"{self.BASE}/resubmit")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"detail": message})
+
+    @patch('ark_api.api.v1.client_utils.create_api_client')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     def test_resubmit_creates_new_workflow(self, mock_dynamic_client_cls, mock_api_client):
         existing = {
             "apiVersion": "argoproj.io/v1alpha1",

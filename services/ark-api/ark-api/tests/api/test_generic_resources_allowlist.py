@@ -117,7 +117,7 @@ UNROUTED_REQUESTS = [
 
 
 @patch("ark_api.api.v1.client_utils.create_api_client")
-@patch("ark_api.api.v1.resources.DynamicClient")
+@patch("ark_api.api.v1.resources.create_dynamic_client")
 @patch("ark_api.api.v1.resources.get_context", Mock(return_value={"namespace": "default"}))
 class TestGenericResourcesAllowlist(unittest.TestCase):
     def setUp(self):

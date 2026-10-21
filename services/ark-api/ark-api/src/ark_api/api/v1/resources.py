@@ -33,7 +33,7 @@ from ...constants.query_param_descriptions import (
 from ...models.pod_logs import LogWindow
 from ...models.resources import AccessReviewRequest, AccessReviewResponse
 from . import argo_server
-from .client_utils import get_impersonating_api_client
+from .client_utils import create_dynamic_client, get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 from .pagination import MAX_PAGE_LIMIT
 from .workflow_lifecycle import (
@@ -115,7 +115,7 @@ async def list_core_resources(
         namespace = get_context()["namespace"]
 
     async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
+        dynamic_client = await create_dynamic_client(api)
 
         api_resource = await dynamic_client.resources.get(
             api_version=version,
@@ -165,7 +165,7 @@ async def get_grouped_resource(
     logger.info(f"Getting resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
 
     async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
+        dynamic_client = await create_dynamic_client(api)
 
         api_resource = await dynamic_client.resources.get(
             api_version=api_version,
@@ -332,7 +332,7 @@ async def list_grouped_resources(
             return _create_resource_response(workflow_list, request)
 
     async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
+        dynamic_client = await create_dynamic_client(api)
 
         api_resource = await dynamic_client.resources.get(
             api_version=api_version,
@@ -400,7 +400,7 @@ async def create_grouped_resource(
     logger.info(f"Creating resource: api_version={api_version}, kind={kind}, namespace={namespace}")
 
     async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
+        dynamic_client = await create_dynamic_client(api)
 
         api_resource = await dynamic_client.resources.get(
             api_version=api_version,
@@ -463,7 +463,7 @@ async def update_grouped_resource(
     logger.info(f"Updating resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
 
     async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
+        dynamic_client = await create_dynamic_client(api)
 
         api_resource = await dynamic_client.resources.get(
             api_version=api_version,
@@ -564,7 +564,7 @@ async def delete_grouped_resource(
     logger.info(f"Deleting resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
 
     async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
+        dynamic_client = await create_dynamic_client(api)
 
         api_resource = await dynamic_client.resources.get(
             api_version=api_version,
@@ -667,14 +667,22 @@ async def get_workflow_logs(
             
             # Try to determine if the pod was deleted
             try:
-                dynamic_client = await DynamicClient(api)
+                dynamic_client = await create_dynamic_client(api)
                 workflow_resource = await dynamic_client.resources.get(
                     api_version=WORKFLOW_API_VERSION,
                     kind=WORKFLOW_KIND
                 )
-                workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
+                try:
+                    workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
+                except ApiException as workflow_error:
+                    if workflow_error.status != 404:
+                        raise
+                    return PlainTextResponse(
+                        content=f"Workflow {workflow_name} not found in namespace {namespace}",
+                        status_code=404
+                    )
                 workflow_dict = workflow.to_dict()
-                
+
                 nodes = workflow_dict.get("status", {}).get("nodes", {})
                 node = nodes.get(node_id)
                 
@@ -1247,7 +1255,7 @@ async def _workflow_node_unavailable_detail(
     node_id: str,
 ) -> str:
     fallback = f"Logs are not available for node {node_id}"
-    dynamic_client = await DynamicClient(api)
+    dynamic_client = await create_dynamic_client(api)
     try:
         workflow_resource = await dynamic_client.resources.get(
             api_version=WORKFLOW_API_VERSION,
@@ -1382,7 +1390,7 @@ async def _patch_workflow_spec(
 ) -> Response:
     """Validate a Workflow's state, then apply a merge patch to its spec (used by suspend/stop/terminate)."""
     async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
+        dynamic_client = await create_dynamic_client(api)
         workflow_resource = await _get_workflow_resource(dynamic_client)
         existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
         try:
@@ -1445,7 +1453,7 @@ async def _replace_workflow(
     workflow between the read and the write.
     """
     async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
+        dynamic_client = await create_dynamic_client(api)
         workflow_resource = await _get_workflow_resource(dynamic_client)
         for _ in range(WORKFLOW_REPLACE_MAX_ATTEMPTS):
             existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
@@ -1619,7 +1627,7 @@ async def resubmit_workflow(
         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/resubmit
     """
     async with get_impersonating_api_client(impersonation) as api:
-        dynamic_client = await DynamicClient(api)
+        dynamic_client = await create_dynamic_client(api)
         workflow_resource = await _get_workflow_resource(dynamic_client)
         existing = await workflow_resource.get(name=workflow_name, namespace=namespace)
         new_workflow = formulate_resubmit_workflow(existing.to_dict())
