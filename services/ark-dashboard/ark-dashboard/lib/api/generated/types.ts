@@ -4996,6 +4996,8 @@ export interface components {
         };
         /** SystemInfo */
         SystemInfo: {
+            /** Argo Server Configured */
+            argo_server_configured: boolean;
             /** Kubernetes Version */
             kubernetes_version: string;
             /** System Version */

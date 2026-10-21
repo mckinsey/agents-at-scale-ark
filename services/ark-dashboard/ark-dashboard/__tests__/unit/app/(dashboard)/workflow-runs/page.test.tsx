@@ -6,6 +6,12 @@ import WorkflowRunsPage from '@/app/(dashboard)/workflow-runs/page';
 
 const reportedCount = vi.hoisted(() => ({ value: 1 as number | null }));
 
+vi.mock('@/components/alerts', () => ({
+  ArgoServerUrlMissingAlert: () => (
+    <div data-testid="argo-server-url-missing-alert" />
+  ),
+}));
+
 vi.mock('@/components/sections/sessions-section', () => ({
   SessionsSection: ({
     onCountChange,
@@ -32,6 +38,14 @@ describe('WorkflowRunsPage', () => {
       screen.getByRole('heading', { name: 'Workflow runs (1)' }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('sessions-section')).toBeInTheDocument();
+  });
+
+  it('should render the Argo Server URL alert', () => {
+    render(<WorkflowRunsPage />);
+
+    expect(
+      screen.getByTestId('argo-server-url-missing-alert'),
+    ).toBeInTheDocument();
   });
 
   it('should show the total count reported by the sessions section', () => {

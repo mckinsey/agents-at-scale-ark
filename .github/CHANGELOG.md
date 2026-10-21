@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.72-rc.4](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc.3...v0.1.72-rc.4) (2026-10-21)
+
+
+### Features
+
+* warn in the dashboard when ARGO_SERVER_URL is not set in ark-api ([#3794](https://github.com/mckinsey/agents-at-scale-ark/issues/3794)) ([da2facb](https://github.com/mckinsey/agents-at-scale-ark/commit/da2facb04370f8cba649022669bc6940ce8d8d43))
+
+
+### Bug Fixes
+
+* address CVEs from issue [#3808](https://github.com/mckinsey/agents-at-scale-ark/issues/3808) ([#3809](https://github.com/mckinsey/agents-at-scale-ark/issues/3809)) ([9009e22](https://github.com/mckinsey/agents-at-scale-ark/commit/9009e22578c2b03eeb302a3dfb67fcc7e28ab7b7))
+* address CVEs from issue [#3808](https://github.com/mckinsey/agents-at-scale-ark/issues/3808)## OverviewThis PR fixes security ([9009e22](https://github.com/mckinsey/agents-at-scale-ark/commit/9009e22578c2b03eeb302a3dfb67fcc7e28ab7b7))
+* allow typed alias values that are not in the suggestions list ([#3742](https://github.com/mckinsey/agents-at-scale-ark/issues/3742)) ([7d73e51](https://github.com/mckinsey/agents-at-scale-ark/commit/7d73e515a5a6a750721388923c296699bae64258)), closes [#3450](https://github.com/mckinsey/agents-at-scale-ark/issues/3450)
+
 ## [0.1.72-rc.3](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc.2...v0.1.72-rc.3) (2026-10-20)
 
 
