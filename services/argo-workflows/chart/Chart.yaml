@@ -2,14 +2,14 @@ apiVersion: v2
 name: argo-workflows
 description: Argo Workflows with Ark tenant for workflow orchestration
 type: application
-version: 0.1.72-rc.2
-appVersion: 0.1.72-rc.2
+version: 0.1.72-rc.3
+appVersion: 0.1.72-rc.3
 annotations:
   ark.mckinsey.com/service: argo-workflows
   ark.mckinsey.com/resources: service
 dependencies:
   - name: argo-workflows
-    version: 0.45.26
+    version: 2.0.13
     repository: https://argoproj.github.io/argo-helm
   - name: ark-tenant
     version: 0.1.40
