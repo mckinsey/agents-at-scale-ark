@@ -606,7 +606,9 @@ export const chatService = {
       unknown
     > {
       const response = await fetch(
-        apiUrl(`/api/v1/broker/chunks?watch=true&query-id=${queryName}`),
+        apiUrl(
+          `/api/v1/broker/chunks?watch=true&query-id=${queryName}&namespace=${encodeURIComponent(namespace)}`,
+        ),
         {
           signal: abortSignal,
         },
