@@ -13,6 +13,7 @@ import (
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	k8sstorage "k8s.io/apiserver/pkg/storage"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -126,5 +127,124 @@ func TestGenericStorage_List_OtherErrorsStayInternal(t *testing.T) {
 	_, err := gs.List(contextWithNamespace(testNS()), &metainternalversion.ListOptions{})
 	if !apierrors.IsInternalError(err) {
 		t.Fatalf("want an InternalError, got %v", err)
+	}
+}
+
+func TestGenericStorage_Get_ResourceVersion(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		rv           string
+		requireErr   error
+		wantRequired uint64
+		check        func(error) bool
+	}{
+		{name: "unset", rv: "", check: func(err error) bool { return err == nil }},
+		{name: "zero", rv: "0", check: func(err error) bool { return err == nil }},
+		{name: "reached", rv: "7", wantRequired: 7, check: func(err error) bool { return err == nil }},
+		{name: "ahead of the store", rv: "9", requireErr: &storage.TooLargeResourceVersionError{Requested: 9, Current: 8}, wantRequired: 9, check: k8sstorage.IsTooLargeResourceVersion},
+		{name: "malformed", rv: "abc", check: apierrors.IsBadRequest},
+		{name: "backend failure", rv: "7", requireErr: errors.New("connection reset"), wantRequired: 7, check: apierrors.IsInternalError},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := newMockBackend()
+			backend.requireErr = tc.requireErr
+			agent := &arkv1alpha1.Agent{}
+			agent.Name = testAgentName
+			agent.Namespace = testNS()
+			backend.objects["Agent/default/"+testAgentName] = agent
+			gs := newListOptionsTestStorage(backend)
+
+			_, err := gs.Get(contextWithNamespace(testNS()), testAgentName, &metav1.GetOptions{ResourceVersion: tc.rv})
+			if !tc.check(err) {
+				t.Fatalf("Get() error = %v", err)
+			}
+			if backend.requiredRV != tc.wantRequired {
+				t.Errorf("RequireResourceVersion got %d, want %d", backend.requiredRV, tc.wantRequired)
+			}
+		})
+	}
+}
+
+func TestStatusStorage_Get_ResourceVersionAheadOfTheStore(t *testing.T) {
+	t.Parallel()
+	ss, backend := newTestStatusStorage()
+	backend.requireErr = &storage.TooLargeResourceVersionError{Requested: 9, Current: 8}
+
+	_, err := ss.Get(contextWithNamespace(testNS()), testAgentName, &metav1.GetOptions{ResourceVersion: "9"})
+	if !k8sstorage.IsTooLargeResourceVersion(err) {
+		t.Fatalf("want a too large resource version error, got %v", err)
+	}
+	if backend.requiredRV != 9 {
+		t.Errorf("RequireResourceVersion got %d, want 9", backend.requiredRV)
+	}
+}
+
+type tooLargeWatchBackend struct {
+	*mockBackend
+}
+
+func (b *tooLargeWatchBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
+	return nil, &storage.TooLargeResourceVersionError{Requested: 11, Current: 10}
+}
+
+func TestGenericStorage_Watch_TooLargeIsAnErrorEvent(t *testing.T) {
+	t.Parallel()
+	yes := true
+	gs := newListOptionsTestStorage(&tooLargeWatchBackend{mockBackend: newMockBackend()})
+
+	w, err := gs.Watch(contextWithNamespace(testNS()), &metainternalversion.ListOptions{
+		ResourceVersion:      "11",
+		ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan,
+		SendInitialEvents:    &yes,
+		AllowWatchBookmarks:  true,
+	})
+	if err != nil {
+		t.Fatalf("Watch() error = %v, want an error event in the stream", err)
+	}
+	defer w.Stop()
+
+	ev, ok := <-w.ResultChan()
+	if !ok {
+		t.Fatal("watch closed without an event")
+	}
+	if ev.Type != watch.Error {
+		t.Fatalf("event type = %s, want %s", ev.Type, watch.Error)
+	}
+	status, ok := ev.Object.(*metav1.Status)
+	if !ok {
+		t.Fatalf("event object = %T, want *metav1.Status", ev.Object)
+	}
+	statusErr := &apierrors.StatusError{ErrStatus: *status}
+	if !k8sstorage.IsTooLargeResourceVersion(statusErr) {
+		t.Errorf("status is not a too large resource version error: %+v", status)
+	}
+	if status.Code != http.StatusGatewayTimeout {
+		t.Errorf("code = %d, want %d", status.Code, http.StatusGatewayTimeout)
+	}
+	if _, ok := <-w.ResultChan(); ok {
+		t.Error("watch kept streaming after the error event")
+	}
+}
+
+func TestStorageOutcome(t *testing.T) {
+	t.Parallel()
+	tests := map[string]error{
+		"rejected": &storage.TooLargeResourceVersionError{Requested: 2, Current: 1},
+		"error":    errors.New("connection reset"),
+	}
+	for want, err := range tests {
+		if got := storageOutcome(err); got != want {
+			t.Errorf("storageOutcome(%v) = %q, want %q", err, got, want)
+		}
+	}
+	for _, err := range []error{
+		fmt.Errorf("%w: bad", storage.ErrInvalidRequest),
+		fmt.Errorf("%w: old", storage.ErrResourceExpired),
+	} {
+		if got := storageOutcome(err); got != "rejected" {
+			t.Errorf("storageOutcome(%v) = %q, want rejected", err, got)
+		}
 	}
 }

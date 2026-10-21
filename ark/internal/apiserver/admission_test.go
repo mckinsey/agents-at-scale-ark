@@ -78,6 +78,8 @@ func (f *fakeBackend) GetResourceVersion(context.Context, string, string, string
 }
 func (f *fakeBackend) Close() error { return nil }
 
+func (f *fakeBackend) RequireResourceVersion(context.Context, uint64) error { return nil }
+
 // nopLookup satisfies validation.ResourceLookup and records the namespace each lookup was
 // asked for. The fixture objects reference nothing, so no validator consults it.
 type nopLookup struct {
