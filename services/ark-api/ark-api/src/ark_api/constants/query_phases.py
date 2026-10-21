@@ -1,0 +1,7 @@
+"""Query phase constants."""
+
+QUERY_PHASE_DONE = "done"
+QUERY_PHASE_ERROR = "error"
+QUERY_PHASE_CANCELED = "canceled"
+
+TERMINAL_QUERY_PHASES = frozenset({QUERY_PHASE_DONE, QUERY_PHASE_ERROR, QUERY_PHASE_CANCELED})

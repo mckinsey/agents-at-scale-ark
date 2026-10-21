@@ -1,9 +1,12 @@
+import asyncio
 import os
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 import httpx
+from kubernetes_asyncio.client.rest import ApiException
 
 os.environ["AUTH_MODE"] = "open"
 
@@ -272,23 +275,29 @@ class TestBrokerAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "text/event-stream; charset=utf-8")
 
+    @patch('ark_api.api.v1.broker.with_ark_client')
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
-    def test_get_chunks_watch_with_query_id(self, mock_proxy_sse, mock_get_broker_url):
+    def test_get_chunks_watch_with_query_id(self, mock_proxy_sse, mock_get_broker_url, mock_with_ark_client):
         mock_get_broker_url.return_value = "http://broker:8080"
+        mock_with_ark_client.return_value.__aenter__.return_value = AsyncMock()
 
         async def mock_stream():
             yield "data: chunk\n\n"
+            yield "data: [DONE]\n\n"
 
         mock_proxy_sse.return_value = mock_stream()
 
-        response = self.client.get("/v1/broker/chunks?watch=true&query-id=query-123")
+        response = self.client.get("/v1/broker/chunks?watch=true&query-id=query-123&namespace=team-a")
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.text, "data: chunk\n\ndata: [DONE]\n\n")
         mock_proxy_sse.assert_called_once()
         call_args = mock_proxy_sse.call_args[0][0]
         self.assertIn("stream/query-123", call_args)
         self.assertIn("from-beginning=true", call_args)
+        self.assertEqual(mock_proxy_sse.call_args.kwargs["read_timeout"], 330)
+        self.assertEqual(mock_with_ark_client.call_args[0][0], "team-a")
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
@@ -623,3 +632,164 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(result), 1)
             self.assertIn("server_error", result[0])
+
+
+def query_status(phase, content=None):
+    response = SimpleNamespace(content=content) if content is not None else None
+    return SimpleNamespace(status=SimpleNamespace(phase=phase, response=response))
+
+
+class TestWatchChunksUntilTerminal(unittest.IsolatedAsyncioTestCase):
+
+    def setUp(self):
+        self.broker_closed = asyncio.Event()
+        self.ark_client = MagicMock()
+        self.ark_client.queries.a_get = AsyncMock()
+
+        timing = patch.multiple(
+            'ark_api.api.v1.broker',
+            CHUNK_PHASE_POLL_INTERVAL_SECONDS=0.01,
+            CHUNK_TERMINAL_GRACE_SECONDS=0.01,
+        )
+        timing.start()
+        self.addCleanup(timing.stop)
+
+        client_patch = patch('ark_api.api.v1.broker.with_ark_client')
+        mock_with_ark_client = client_patch.start()
+        self.addCleanup(client_patch.stop)
+        mock_with_ark_client.return_value.__aenter__.return_value = self.ark_client
+
+    def broker(self, *lines, hang=True):
+        closed = self.broker_closed
+
+        async def stream(url, read_timeout=None):
+            try:
+                for line in lines:
+                    yield line
+                if hang:
+                    await asyncio.Event().wait()
+            finally:
+                closed.set()
+
+        proxy_patch = patch('ark_api.api.v1.broker.proxy_sse_stream', side_effect=stream)
+        proxy_patch.start()
+        self.addCleanup(proxy_patch.stop)
+
+    async def collect(self):
+        from ark_api.api.v1.broker import watch_chunks_until_terminal
+
+        events = []
+        async for event in watch_chunks_until_terminal("http://broker/stream/q", "q", None, None):
+            events.append(event)
+        return events
+
+    async def test_synthesizes_done_when_query_done_without_broker_done(self):
+        self.broker("data: chunk-1\n\n")
+        self.ark_client.queries.a_get.return_value = query_status("done")
+
+        events = await asyncio.wait_for(self.collect(), timeout=5)
+
+        self.assertEqual(events, ["data: chunk-1\n\n", "data: [DONE]\n\n"])
+        self.assertTrue(self.broker_closed.is_set())
+
+    async def test_synthesizes_error_event_when_query_errors(self):
+        self.broker("data: chunk-1\n\n")
+        self.ark_client.queries.a_get.return_value = query_status("error", "executor crashed")
+
+        events = await asyncio.wait_for(self.collect(), timeout=5)
+
+        self.assertEqual(len(events), 3)
+        payload = json.loads(events[1].removeprefix("data: ").strip())
+        self.assertEqual(payload["error"]["message"], "executor crashed")
+        self.assertEqual(payload["error"]["code"], "query_error")
+        self.assertEqual(events[2], "data: [DONE]\n\n")
+        self.assertTrue(self.broker_closed.is_set())
+
+    async def test_error_event_has_default_message_without_response(self):
+        self.broker()
+        self.ark_client.queries.a_get.return_value = query_status("error")
+
+        events = await asyncio.wait_for(self.collect(), timeout=5)
+
+        payload = json.loads(events[0].removeprefix("data: ").strip())
+        self.assertEqual(payload["error"]["message"], "Query failed")
+
+    async def test_canceled_query_closes_with_done(self):
+        self.broker()
+        self.ark_client.queries.a_get.return_value = query_status("canceled")
+
+        events = await asyncio.wait_for(self.collect(), timeout=5)
+
+        self.assertEqual(events, ["data: [DONE]\n\n"])
+
+    async def test_broker_done_passes_through_without_synthesis(self):
+        self.broker("data: chunk-1\n\n", "data: [DONE]\n\n")
+        self.ark_client.queries.a_get.return_value = query_status("done")
+
+        events = await asyncio.wait_for(self.collect(), timeout=5)
+
+        self.assertEqual(events, ["data: chunk-1\n\n", "data: [DONE]\n\n"])
+
+    async def test_running_query_keeps_stream_open(self):
+        self.broker("data: chunk-1\n\n")
+        self.ark_client.queries.a_get.return_value = query_status("running")
+
+        with self.assertRaises(asyncio.TimeoutError):
+            await asyncio.wait_for(self.collect(), timeout=0.2)
+
+        self.assertGreater(self.ark_client.queries.a_get.await_count, 1)
+        self.assertTrue(self.broker_closed.is_set())
+
+    async def test_unreadable_query_relies_on_broker(self):
+        self.broker("data: chunk-1\n\n", "data: chunk-2\n\n", hang=False)
+        self.ark_client.queries.a_get.side_effect = ApiException(status=404)
+
+        events = await asyncio.wait_for(self.collect(), timeout=5)
+
+        self.assertEqual(events, ["data: chunk-1\n\n", "data: chunk-2\n\n"])
+
+    async def test_unexpected_api_error_propagates(self):
+        self.broker()
+        self.ark_client.queries.a_get.side_effect = ApiException(status=500)
+
+        with self.assertRaises(ApiException):
+            await asyncio.wait_for(self.collect(), timeout=5)
+
+        self.assertTrue(self.broker_closed.is_set())
+
+
+class TestProxySseStreamReadTimeout(unittest.IsolatedAsyncioTestCase):
+
+    async def test_read_timeout_emits_timeout_error_and_done(self):
+        from ark_api.api.v1.broker import proxy_sse_stream
+
+        mock_client = MagicMock()
+        mock_client.stream.side_effect = httpx.ReadTimeout("timed out")
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch('ark_api.api.v1.broker.httpx.AsyncClient') as mock_async_client:
+            mock_async_client.return_value = mock_client
+
+            result = [chunk async for chunk in proxy_sse_stream("http://broker:8080/stream/q", read_timeout=5)]
+
+        mock_async_client.assert_called_once()
+        self.assertEqual(mock_async_client.call_args.kwargs["timeout"].read, 5)
+        self.assertEqual(len(result), 2)
+        payload = json.loads(result[0].removeprefix("data: ").strip())
+        self.assertEqual(payload["error"]["code"], "broker_read_timeout")
+        self.assertEqual(result[1], "data: [DONE]\n\n")
+
+    async def test_default_has_no_read_timeout(self):
+        from ark_api.api.v1.broker import proxy_sse_stream
+
+        mock_client = MagicMock()
+        mock_client.stream.side_effect = httpx.ConnectError("down")
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch('ark_api.api.v1.broker.httpx.AsyncClient') as mock_async_client:
+            mock_async_client.return_value = mock_client
+            _ = [chunk async for chunk in proxy_sse_stream("http://broker:8080/traces")]
+
+        self.assertIsNone(mock_async_client.call_args.kwargs["timeout"].read)

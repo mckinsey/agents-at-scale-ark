@@ -1,4 +1,6 @@
 """Broker API endpoints for real-time streaming of traces, messages, and chunks."""
+import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -8,13 +10,17 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse, JSONResponse
+from kubernetes_asyncio.client.rest import ApiException
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
+from ...constants.query_phases import QUERY_PHASE_ERROR, TERMINAL_QUERY_PHASES
 
 from ...utils.memory_client import get_memory_service_address, get_all_memory_resources
+from ...utils.streaming import StreamingErrorResponse
 from ...utils.url_validation import validate_path_segment, build_safe_url, validate_and_build_url
 
 logger = logging.getLogger(__name__)
@@ -23,6 +29,12 @@ router = APIRouter(prefix="/broker", tags=["broker"])
 
 VERSION = "v1alpha1"
 BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
+BROKER_CHUNK_READ_TIMEOUT_SECONDS = float(os.getenv('BROKER_CHUNK_READ_TIMEOUT_SECONDS', '330'))
+CHUNK_PHASE_POLL_INTERVAL_SECONDS = 1.0
+CHUNK_TERMINAL_GRACE_SECONDS = 0.5
+
+SSE_DONE_LINE = "data: [DONE]"
+SSE_DONE_EVENT = f"{SSE_DONE_LINE}\n\n"
 
 # Query parameter descriptions
 DESC_MEMORY = "Memory resource name"
@@ -75,9 +87,9 @@ def build_broker_unavailable_response(message: str, error_type: str) -> JSONResp
     )
 
 
-async def proxy_sse_stream(url: str):
+async def proxy_sse_stream(url: str, read_timeout: Optional[float] = None):
     """Proxy SSE stream from broker service."""
-    timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=None)
+    timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=read_timeout)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("GET", url) as response:
@@ -97,9 +109,88 @@ async def proxy_sse_stream(url: str):
     except httpx.ConnectError as e:
         logger.error(f"Failed to connect to broker at {url}: {e}")
         yield f"data: {json.dumps(build_broker_unavailable_body('Failed to connect to broker service', 'connection_error'))}\n\n"
+    except httpx.ReadTimeout:
+        logger.warning(f"No data from broker at {url} for {read_timeout}s, closing stream")
+        error: StreamingErrorResponse = {
+            "error": {
+                "message": f"No data from broker for {read_timeout}s",
+                "type": "timeout_error",
+                "code": "broker_read_timeout",
+            }
+        }
+        yield f"data: {json.dumps(error)}\n\n"
+        yield SSE_DONE_EVENT
     except Exception as e:
         logger.error(f"Error proxying SSE stream: {e}")
         yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'server_error'}})}\n\n"
+
+
+async def fetch_query_status(ark_client, query_name: str):
+    """Return the Query's status, or None when the Query cannot be read."""
+    try:
+        query = await ark_client.queries.a_get(query_name)
+    except ApiException as e:
+        if e.status in (403, 404):
+            logger.debug(f"Query {query_name} not readable ({e.status}), relying on broker idle timeout")
+            return None
+        raise
+    return query.status
+
+
+def terminal_sse_events(status) -> list[str]:
+    """Build the closing SSE events for a Query that reached a terminal phase."""
+    if status.phase != QUERY_PHASE_ERROR:
+        return [SSE_DONE_EVENT]
+    message = "Query failed"
+    if status.response and status.response.content:
+        message = status.response.content
+    error: StreamingErrorResponse = {
+        "error": {"message": message, "type": "server_error", "code": "query_error"}
+    }
+    return [f"data: {json.dumps(error)}\n\n", SSE_DONE_EVENT]
+
+
+async def watch_chunks_until_terminal(
+    url: str,
+    query_name: str,
+    namespace: Optional[str],
+    impersonation: Optional[ImpersonationConfig],
+):
+    """Relay the broker chunk stream, closing it once the Query reaches a terminal phase."""
+    stream = proxy_sse_stream(url, read_timeout=BROKER_CHUNK_READ_TIMEOUT_SECONDS)
+    next_line = asyncio.ensure_future(anext(stream))
+    loop = asyncio.get_running_loop()
+    terminal_status = None
+    deadline = None
+    try:
+        async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
+            while True:
+                timeout = CHUNK_PHASE_POLL_INTERVAL_SECONDS if deadline is None else max(0.0, deadline - loop.time())
+                done, _ = await asyncio.wait({next_line}, timeout=timeout)
+                if done:
+                    try:
+                        line = next_line.result()
+                    except StopAsyncIteration:
+                        return
+                    yield line
+                    if line.strip() == SSE_DONE_LINE:
+                        return
+                    next_line = asyncio.ensure_future(anext(stream))
+                    continue
+                if terminal_status is not None:
+                    logger.info(f"Query {query_name} is {terminal_status.phase} but the broker sent no [DONE], closing stream")
+                    for event in terminal_sse_events(terminal_status):
+                        yield event
+                    return
+                status = await fetch_query_status(ark_client, query_name)
+                if status and status.phase in TERMINAL_QUERY_PHASES:
+                    terminal_status = status
+                    deadline = loop.time() + CHUNK_TERMINAL_GRACE_SECONDS
+    finally:
+        next_line.cancel()
+        with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
+            await next_line
+        await stream.aclose()
 
 
 async def proxy_broker_request(
@@ -251,6 +342,7 @@ async def get_chunks(
     memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max chunks to return"),
     cursor: Optional[int] = Query(None, description=DESC_CURSOR),
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
 ):
     """Get or stream LLM chunks from the broker."""
@@ -265,7 +357,7 @@ async def get_chunks(
         url = build_safe_url(broker_url, "stream", query_id) + "?from-beginning=true"
         logger.info(f"Proxying chunks SSE stream from {url}")
         return StreamingResponse(
-            proxy_sse_stream(url),
+            watch_chunks_until_terminal(url, query_id, namespace, impersonation),
             media_type="text/event-stream",
             headers=sse_headers,
         )
