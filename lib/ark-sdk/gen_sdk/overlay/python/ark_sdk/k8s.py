@@ -28,6 +28,7 @@ from ark_sdk.labels import (
     validate_updated_tags,
 )
 from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
+from ark_sdk.secret_scope import SecretScope, validate_secret_name
 
 logger = logging.getLogger(__name__)
 
@@ -230,10 +231,12 @@ def _build_labels_and_annotations(
     existing_labels: Optional[Dict[str, str]] = None,
     existing_annotations: Optional[Dict[str, str]] = None,
     resource_type: Optional[str] = None,
+    system_labels: Optional[Dict[str, str]] = None,
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Build the labels and annotations this feature owns, preserving all others."""
     k8s_labels = strip_tag_labels(existing_labels)
     k8s_labels.update(tags_to_labels(labels))
+    k8s_labels.update(system_labels or {})
 
     annotations = {
         key: value
@@ -263,12 +266,13 @@ def _to_secret_metadata(metadata) -> Dict:
 class SecretClient:
     """Kubernetes Secret management client."""
 
-    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None, default_headers: Optional[Dict[str, str]] = None):
+    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None, default_headers: Optional[Dict[str, str]] = None, scope: SecretScope = SecretScope()):
         if namespace is None:
             namespace = get_context()["namespace"]
         self.namespace = namespace
         self.impersonation = impersonation
         self.default_headers = default_headers
+        self.scope = scope
 
     def _get_api_client(self, api: ApiClient) -> ApiClient:
         """Configure API client with impersonation headers if needed."""
@@ -336,6 +340,7 @@ class SecretClient:
         labels: Optional[List[str]] = None,
     ):
         """Create a new secret."""
+        validate_secret_name(name)
         validated_data = self.validate_and_encode_token(string_data)
         await init_k8s()
         async with create_api_client() as api:
@@ -343,7 +348,10 @@ class SecretClient:
             v1 = client.CoreV1Api(api)
 
             k8s_labels, annotations = _build_labels_and_annotations(
-                description, alias, [validate_tag(tag) for tag in (labels or [])]
+                description,
+                alias,
+                [validate_tag(tag) for tag in (labels or [])],
+                system_labels=self.scope.create_labels(),
             )
             secret = client.V1Secret(
                 api_version="v1",

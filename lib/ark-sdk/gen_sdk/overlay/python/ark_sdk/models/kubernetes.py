@@ -5,6 +5,7 @@ from pydantic import BaseModel, field_validator
 
 from ..annotations import filter_ark_annotations
 from ..labels import validate_legacy_tag, validate_tag
+from ..secret_scope import validate_secret_name
 
 
 class NamespaceResponse(BaseModel):
@@ -58,6 +59,11 @@ class SecretCreateRequest(BaseModel):
     description: Optional[str] = None
     alias: Optional[str] = None
     labels: List[str] = []
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        return validate_secret_name(value)
 
     @field_validator("labels")
     @classmethod
