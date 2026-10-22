@@ -93,37 +93,7 @@ ark import ark-export.yaml --upsert
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
-## v0.1.72
-
-### Argo Workflows Upgraded to v4.1
-
-The `argo-workflows` service now installs Argo Workflows v4.1.5 (subchart `2.0.13`), up from v3.7.2. The controller labels every run that uses `spec.workflowTemplateRef` with `workflows.argoproj.io/workflow-template` (or `workflows.argoproj.io/cluster-workflow-template`), however the run was created. The workflow runs Template filter relies on this label.
-
-Runs created before the upgrade are not relabeled, so they don't show up when filtering by template. They still appear in the unfiltered list.
-
-The executor image now comes from `argo-workflows.executor.image.nonroot: true` instead of a pinned `-nonroot` tag.
-
-**Migration:**
-- Back up Workflows and WorkflowTemplates before upgrading an existing cluster:
-
-```bash
-kubectl get workflows,workflowtemplates,cronworkflows -A -o yaml > argo-backup.yaml
-```
-
-- After the upgrade, add the template label to existing runs once:
-
-```bash
-kubectl get wf -A -o json | jq -r '.items[]
-  | select(.spec.workflowTemplateRef)
-  | (if .spec.workflowTemplateRef.clusterScope then "workflows.argoproj.io/cluster-workflow-template" else "workflows.argoproj.io/workflow-template" end) as $key
-  | select(.metadata.labels[$key] | not)
-  | "\(.metadata.namespace) \(.metadata.name) \($key) \(.spec.workflowTemplateRef.name)"' |
-while read ns name key tmpl; do
-  kubectl label wf -n "$ns" "$name" "$key=$tmpl"
-done
-```
-
-- Replace any override of `argo-workflows.executor.image.tag` with `argo-workflows.executor.image.nonroot: true`.
+## v0.1.73
 
 ### Duplicate Header Names Rejected
 
@@ -168,6 +138,38 @@ kubectl get agents -A -o json | jq -r '.items[] | . as $a
 
 - Keep one entry per header name in each listed resource. Update the source manifests too, so later applies and imports are not rejected.
 - Check that Models edited in the dashboard on earlier versions still have the headers they need.
+
+## v0.1.72
+
+### Argo Workflows Upgraded to v4.1
+
+The `argo-workflows` service now installs Argo Workflows v4.1.5 (subchart `2.0.13`), up from v3.7.2. The controller labels every run that uses `spec.workflowTemplateRef` with `workflows.argoproj.io/workflow-template` (or `workflows.argoproj.io/cluster-workflow-template`), however the run was created. The workflow runs Template filter relies on this label.
+
+Runs created before the upgrade are not relabeled, so they don't show up when filtering by template. They still appear in the unfiltered list.
+
+The executor image now comes from `argo-workflows.executor.image.nonroot: true` instead of a pinned `-nonroot` tag.
+
+**Migration:**
+- Back up Workflows and WorkflowTemplates before upgrading an existing cluster:
+
+```bash
+kubectl get workflows,workflowtemplates,cronworkflows -A -o yaml > argo-backup.yaml
+```
+
+- After the upgrade, add the template label to existing runs once:
+
+```bash
+kubectl get wf -A -o json | jq -r '.items[]
+  | select(.spec.workflowTemplateRef)
+  | (if .spec.workflowTemplateRef.clusterScope then "workflows.argoproj.io/cluster-workflow-template" else "workflows.argoproj.io/workflow-template" end) as $key
+  | select(.metadata.labels[$key] | not)
+  | "\(.metadata.namespace) \(.metadata.name) \($key) \(.spec.workflowTemplateRef.name)"' |
+while read ns name key tmpl; do
+  kubectl label wf -n "$ns" "$name" "$key=$tmpl"
+done
+```
+
+- Replace any override of `argo-workflows.executor.image.tag` with `argo-workflows.executor.image.nonroot: true`.
 
 ## v0.1.71
 
