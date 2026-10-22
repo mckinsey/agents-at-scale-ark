@@ -61,6 +61,10 @@ vi.mock('@/components/forms/agent-form/sections', () => ({
   SkillsDisplaySection: () => <div data-testid="skills-display-section" />,
 }));
 
+vi.mock('@/components/forms/shared/custom-headers-field', () => ({
+  CustomHeadersField: () => <div data-testid="custom-headers-field" />,
+}));
+
 vi.mock('@/components/ui/form', () => ({
   Form: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FormField: ({

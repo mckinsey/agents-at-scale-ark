@@ -3,6 +3,7 @@
 import { createContext, useContext } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import type { CustomHeaderRows } from '@/components/forms/shared/custom-header-rows';
 import type { KeysOfUnion } from '@/lib/types/utils';
 
 import type { BaseUrlFieldState } from './utils';
@@ -20,6 +21,7 @@ interface ModelConfigurationFormContext {
   initialAzureAuthMethod?: 'apiKey' | 'managedIdentity' | 'workloadIdentity';
   initialBedrockAuthMethod?: 'apiKey' | 'iam';
   baseUrlState?: BaseUrlFieldState;
+  headerRows?: CustomHeaderRows;
 }
 
 const ModelConfigurationFormContext = createContext<

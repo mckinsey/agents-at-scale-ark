@@ -1,6 +1,7 @@
 import type { UseFormReturn } from 'react-hook-form';
 import * as z from 'zod';
 
+import type { CustomHeaderRows } from '@/components/forms/shared/custom-header-rows';
 import type { Parameter } from '@/components/ui/parameter-editor';
 import type { Agent, AgentTool, Model, Skill, Tool } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
@@ -35,6 +36,7 @@ export interface AgentFormState {
   selectedTools: AgentTool[];
   unavailableTools: Tool[];
   parameters: Parameter[];
+  headerRows: CustomHeaderRows;
   isExperimentalExecutionEngineEnabled: boolean;
   hasChanges: boolean;
 }
@@ -45,6 +47,7 @@ export interface AgentFormActions {
   handleDeleteTool: (tool: Tool) => void;
   isToolSelected: (toolName: string) => boolean;
   onSubmit: (values: AgentFormValues) => Promise<void>;
+  onInvalid: () => void;
 }
 
 export interface AgentFormContextValue {
