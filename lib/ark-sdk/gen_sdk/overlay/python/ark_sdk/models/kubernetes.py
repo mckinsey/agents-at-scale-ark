@@ -1,11 +1,16 @@
 """Kubernetes-related response models."""
 from typing import List, Dict, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from ..annotations import filter_ark_annotations
 from ..labels import validate_legacy_tag, validate_tag
-from ..secret_scope import SecretScopeKind, validate_secret_name
+from ..secret_scope import (
+    MAX_SECRET_NAME_LENGTH,
+    PERSONAL_NAME_PREFIX_LENGTH,
+    SecretScopeKind,
+    validate_secret_name,
+)
 
 
 class NamespaceResponse(BaseModel):
@@ -61,6 +66,7 @@ class SecretCreateRequest(BaseModel):
     description: Optional[str] = None
     alias: Optional[str] = None
     labels: List[str] = []
+    scope: SecretScopeKind = "shared"
 
     @field_validator("name")
     @classmethod
@@ -72,6 +78,13 @@ class SecretCreateRequest(BaseModel):
     def _validate_labels(cls, value: List[str]) -> List[str]:
         return [validate_tag(label) for label in value]
 
+    @model_validator(mode="after")
+    def _validate_personal_name_length(self) -> "SecretCreateRequest":
+        limit = MAX_SECRET_NAME_LENGTH - PERSONAL_NAME_PREFIX_LENGTH
+        if self.scope == "personal" and len(self.name) > limit:
+            raise ValueError(f"Secret name is too long for a personal secret: at most {limit} characters")
+        return self
+
 
 class SecretUpdateRequest(BaseModel):
     """Request model for updating a secret."""
@@ -79,6 +92,7 @@ class SecretUpdateRequest(BaseModel):
     description: Optional[str] = None
     alias: Optional[str] = None
     labels: List[str] = []
+    scope: Optional[SecretScopeKind] = None
 
     @field_validator("labels")
     @classmethod

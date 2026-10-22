@@ -95,6 +95,7 @@ export function useSecretForm({
       description,
       alias,
       labels: values.labels,
+      scope: 'shared',
     });
   };
 

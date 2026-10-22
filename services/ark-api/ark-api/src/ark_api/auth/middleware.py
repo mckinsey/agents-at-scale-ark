@@ -49,7 +49,7 @@ def _extract_user_identity(
     payload: Dict[str, Any], settings: ImpersonationSettings
 ) -> Optional[UserIdentity]:
     username = _extract_claim(payload, settings.username_claim)
-    if username is None:
+    if not isinstance(username, str):
         return None
 
     raw_groups = _extract_claim(payload, settings.groups_claim)
