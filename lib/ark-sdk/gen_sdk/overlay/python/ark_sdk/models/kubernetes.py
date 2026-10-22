@@ -5,7 +5,7 @@ from pydantic import BaseModel, field_validator
 
 from ..annotations import filter_ark_annotations
 from ..labels import validate_legacy_tag, validate_tag
-from ..secret_scope import validate_secret_name
+from ..secret_scope import SecretScopeKind, validate_secret_name
 
 
 class NamespaceResponse(BaseModel):
@@ -34,6 +34,8 @@ class SecretResponse(BaseModel):
     """Kubernetes secret response model."""
     name: str
     id: str
+    display_name: str
+    scope: SecretScopeKind
     description: Optional[str] = None
     alias: Optional[str] = None
     labels: List[str] = []
@@ -91,6 +93,8 @@ class SecretDetailResponse(BaseModel):
     """Detailed secret response model."""
     name: str
     id: str
+    display_name: str
+    scope: SecretScopeKind
     type: str
     secret_length: int  # Total length of all secret data in bytes
     keys: List[str] = []  # Names of the keys in the secret data (never the values)

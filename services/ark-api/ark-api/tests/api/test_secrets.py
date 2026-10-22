@@ -58,6 +58,8 @@ class TestSecretsAnnotationLeak(unittest.TestCase):
         mock_client.list_secrets = AsyncMock(return_value={
             "items": [{
                 "name": "test-secret",
+                "display_name": "test-secret",
+                "scope": "shared",
                 "id": "uuid-12345",
                 "annotations": LEAKING_ANNOTATIONS,
             }],
@@ -80,6 +82,8 @@ class TestSecretsAnnotationLeak(unittest.TestCase):
         mock_client = mock_client_cls.return_value
         mock_client.get_secret = AsyncMock(return_value={
             "name": "test-secret",
+            "display_name": "test-secret",
+            "scope": "shared",
             "id": "uuid-12345",
             "type": "Opaque",
             "secret_length": 20,
@@ -97,6 +101,8 @@ class TestSecretsAnnotationLeak(unittest.TestCase):
         mock_client = mock_client_cls.return_value
         mock_client.create_secret = AsyncMock(return_value={
             "name": "test-secret",
+            "display_name": "test-secret",
+            "scope": "shared",
             "id": "uuid-12345",
             "type": "Opaque",
             "secret_length": 10,
@@ -115,6 +121,8 @@ class TestSecretsAnnotationLeak(unittest.TestCase):
         mock_client = mock_client_cls.return_value
         mock_client.update_secret = AsyncMock(return_value={
             "name": "test-secret",
+            "display_name": "test-secret",
+            "scope": "shared",
             "id": "uuid-12345",
             "type": "Opaque",
             "secret_length": 9,
@@ -150,7 +158,7 @@ class TestSecretsScope(unittest.TestCase):
 
     @patch('ark_api.api.v1.secrets.SecretClient')
     def test_every_route_passes_the_shared_scope(self, mock_client_cls):
-        detail = {"name": "s", "id": "uuid", "type": "Opaque", "secret_length": 1}
+        detail = {"name": "s", "id": "uuid", "type": "Opaque", "secret_length": 1, "display_name": "s", "scope": "shared"}
         mock_client = mock_client_cls.return_value
         mock_client.list_secrets = AsyncMock(return_value={"items": [], "count": 0})
         mock_client.create_secret = AsyncMock(return_value=detail)
