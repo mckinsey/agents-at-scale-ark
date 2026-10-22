@@ -1,0 +1,250 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: secret-scoping-personal
+  labels:
+    requires-images: "true"
+spec:
+  description: >
+    #2559 phase 2: personal secrets through a real ark-api in AUTH_MODE=sso
+    with real identities from Dex. Checks that the API rejects requests
+    without a valid token, that a personal secret is stored as
+    u-<sha256(username)[:16]>-<name> with the owner's scope label, that only
+    its owner can list, read, change or delete it while anyone else gets the
+    same 404 as a missing secret, that promoting it to shared keeps the name
+    and makes it visible to everyone, and that a shared secret cannot be made
+    personal.
+  timeouts:
+    apply: 120s
+    assert: 120s
+    exec: 180s
+
+  steps:
+  - name: install-dex
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          helm upgrade --install dex ../../charts/ark-dex-dev \
+            --namespace "$NAMESPACE" \
+            --set issuer="http://dex.$NAMESPACE.svc.cluster.local:5556/dex" \
+            --set oauth2.passwordConnector=local \
+            --set rbac.create=false \
+            --wait --timeout=240s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app=dex --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall dex --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: install-ark-api
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          sed "s/__NAMESPACE__/$NAMESPACE/g" manifests/ark-api-values.yaml | \
+          helm upgrade --install ark-api ../../services/ark-api/chart \
+            --namespace "$NAMESPACE" \
+            -f - \
+            ${ARK_API_IMAGE:+--set app.image.repository=${ARK_API_IMAGE}} \
+            ${ARK_API_IMAGE_TAG:+--set app.image.tag=${ARK_API_IMAGE_TAG}} \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-api --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: setup
+    try:
+    - apply:
+        file: manifests/a01-shared-secret.yaml
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: personal-curl
+          spec:
+            containers:
+              - name: curl
+                image: curlimages/curl:8.11.1
+                command: ["sleep", "900"]
+            restartPolicy: Never
+            terminationGracePeriodSeconds: 0
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: personal-curl
+        timeout: 120s
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+
+  - name: auth-gate
+    try:
+    - script:
+        timeout: 90s
+        content: |
+          set -eu
+          . ./helpers.sh
+          ADMIN=$(token admin@ark.local)
+
+          expect_status "GET without a token" "$(call "" GET "")" 401
+          expect_status "GET with a forged token" "$(call "not-a-jwt" GET "")" 401
+          R=$(call "$ADMIN" GET "")
+          expect_status "GET as admin" "$R" 200
+          [ "$(names "$R")" = '["ark-shared-token"]' ] || { echo "FAIL: unexpected list $(names "$R")"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: personal-crud
+    try:
+    - script:
+        timeout: 120s
+        content: |
+          set -eu
+          . ./helpers.sh
+          ADMIN=$(token admin@ark.local)
+          VIEWER=$(token viewer@ark.local)
+          HASH=$(owner_hash admin@ark.local)
+          NAME="u-$HASH-github"
+
+          R=$(call "$ADMIN" POST "" '{"name":"github","string_data":{"token":"admin-value"},"description":"GitHub token","scope":"personal"}')
+          expect_status "POST personal as admin" "$R" 200
+          body_of "$R" | jq -e --arg name "$NAME" '.name == $name and .display_name == "github" and .scope == "personal"' >/dev/null \
+            || { echo "FAIL: unexpected create response"; body_of "$R"; exit 1; }
+          kubectl get secret "$NAME" -n "$NAMESPACE" -o json \
+            | jq -e --arg scope "user-$HASH" '.metadata.labels | ."ark.mckinsey.com/resource-type" == "secret" and ."ark.mckinsey.com/scope" == $scope' >/dev/null \
+            || { echo "FAIL: $NAME does not carry the owner's scope label"; exit 1; }
+
+          R=$(call "$ADMIN" GET "")
+          [ "$(names "$R")" = '["ark-shared-token"]' ] || { echo "FAIL: default list is not shared only: $(names "$R")"; exit 1; }
+          R=$(call "$ADMIN" GET "?scope=personal")
+          [ "$(names "$R")" = "[\"$NAME\"]" ] || { echo "FAIL: admin personal list: $(names "$R")"; exit 1; }
+          R=$(call "$ADMIN" GET "?scope=all")
+          [ "$(names "$R")" = "[\"ark-shared-token\",\"$NAME\"]" ] || { echo "FAIL: admin all list: $(names "$R")"; exit 1; }
+          expect_status "GET own personal as admin" "$(call "$ADMIN" GET "/$NAME")" 200
+
+          R=$(call "$VIEWER" GET "?scope=all")
+          [ "$(names "$R")" = '["ark-shared-token"]' ] || { echo "FAIL: viewer sees $(names "$R")"; exit 1; }
+          R=$(call "$VIEWER" GET "?scope=personal")
+          [ "$(names "$R")" = '[]' ] || { echo "FAIL: viewer personal list: $(names "$R")"; exit 1; }
+
+          VIEWER_NAME="u-$(owner_hash viewer@ark.local)-github"
+          [ "$VIEWER_NAME" != "$NAME" ] || { echo "FAIL: both users got the same personal name"; exit 1; }
+          R=$(call "$VIEWER" POST "" '{"name":"github","string_data":{"token":"viewer-value"},"scope":"personal"}')
+          expect_status "POST personal github as viewer" "$R" 200
+          R=$(call "$VIEWER" GET "?scope=personal")
+          [ "$(names "$R")" = "[\"$VIEWER_NAME\"]" ] || { echo "FAIL: viewer personal list: $(names "$R")"; exit 1; }
+          R=$(call "$ADMIN" GET "?scope=personal")
+          [ "$(names "$R")" = "[\"$NAME\"]" ] || { echo "FAIL: admin sees viewer's secret: $(names "$R")"; exit 1; }
+
+          BEFORE=$(kubectl get secret "$NAME" -n "$NAMESPACE" -o json | jq -c '{data, labels: .metadata.labels}')
+          [ -n "$BEFORE" ] || { echo "FAIL: could not read $NAME"; exit 1; }
+          MISSING=$(body_of "$(call "$VIEWER" GET "/u-$HASH-missing")" | jq -r .detail | sed "s/u-$HASH-missing/NAME/")
+          for METHOD in GET PUT DELETE; do
+            case $METHOD in
+              PUT) R=$(call "$VIEWER" PUT "/$NAME" '{"string_data":{"token":"stolen"},"scope":"shared"}') ;;
+              *) R=$(call "$VIEWER" "$METHOD" "/$NAME") ;;
+            esac
+            expect_status "$METHOD admin's personal as viewer" "$R" 404
+            DETAIL=$(body_of "$R" | jq -r .detail | sed "s/$NAME/NAME/")
+            [ "$DETAIL" = "$MISSING" ] || { echo "FAIL: '$DETAIL' differs from a missing secret's '$MISSING'"; exit 1; }
+          done
+          AFTER=$(kubectl get secret "$NAME" -n "$NAMESPACE" -o json | jq -c '{data, labels: .metadata.labels}')
+          [ "$BEFORE" = "$AFTER" ] || { echo "FAIL: viewer changed admin's personal secret"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get secrets --show-labels || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: promotion
+    try:
+    - script:
+        timeout: 120s
+        content: |
+          set -eu
+          . ./helpers.sh
+          ADMIN=$(token admin@ark.local)
+          VIEWER=$(token viewer@ark.local)
+          HASH=$(owner_hash admin@ark.local)
+          NAME="u-$HASH-github"
+
+          R=$(call "$ADMIN" PUT "/$NAME" '{"scope":"shared","description":"GitHub token"}')
+          expect_status "PUT scope=shared as admin" "$R" 200
+          body_of "$R" | jq -e --arg name "$NAME" '.name == $name and .display_name == "github" and .scope == "shared" and .description == "GitHub token"' >/dev/null \
+            || { echo "FAIL: unexpected promote response"; body_of "$R"; exit 1; }
+          kubectl get secret "$NAME" -n "$NAMESPACE" -o json \
+            | jq -e '.metadata.labels."ark.mckinsey.com/scope" == "shared" and (.data.token | @base64d) == "admin-value"' >/dev/null \
+            || { echo "FAIL: promotion did not flip the label or lost the value"; exit 1; }
+
+          R=$(call "$VIEWER" GET "")
+          [ "$(names "$R")" = "[\"ark-shared-token\",\"$NAME\"]" ] || { echo "FAIL: viewer does not see the promoted secret: $(names "$R")"; exit 1; }
+          expect_status "GET promoted as viewer" "$(call "$VIEWER" GET "/$NAME")" 200
+
+          R=$(call "$ADMIN" POST "" '{"name":"github","string_data":{"token":"again"},"scope":"personal"}')
+          expect_status "POST personal github again after promotion" "$R" 409
+
+          VIEWER_NAME="u-$(owner_hash viewer@ark.local)-github"
+          expect_status "DELETE own personal as viewer" "$(call "$VIEWER" DELETE "/$VIEWER_NAME")" 200
+          ! kubectl get secret "$VIEWER_NAME" -n "$NAMESPACE" 2>/dev/null || { echo "FAIL: $VIEWER_NAME was not deleted"; exit 1; }
+
+          R=$(call "$ADMIN" PUT "/ark-shared-token" '{"scope":"personal"}')
+          expect_status "PUT scope=personal on a shared secret" "$R" 422
+          kubectl get secret ark-shared-token -n "$NAMESPACE" -o json \
+            | jq -e '.metadata.labels."ark.mckinsey.com/scope" == "shared"' >/dev/null \
+            || { echo "FAIL: ark-shared-token is no longer shared"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get secrets --show-labels || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
