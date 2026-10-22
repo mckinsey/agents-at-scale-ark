@@ -28,6 +28,7 @@ from ark_sdk.labels import (
     validate_updated_tags,
 )
 from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
+from ark_sdk.secret_scope import SecretScope, validate_secret_name
 
 logger = logging.getLogger(__name__)
 
@@ -230,10 +231,12 @@ def _build_labels_and_annotations(
     existing_labels: Optional[Dict[str, str]] = None,
     existing_annotations: Optional[Dict[str, str]] = None,
     resource_type: Optional[str] = None,
+    system_labels: Optional[Dict[str, str]] = None,
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Build the labels and annotations this feature owns, preserving all others."""
     k8s_labels = strip_tag_labels(existing_labels)
     k8s_labels.update(tags_to_labels(labels))
+    k8s_labels.update(system_labels or {})
 
     annotations = {
         key: value
@@ -263,12 +266,13 @@ def _to_secret_metadata(metadata) -> Dict:
 class SecretClient:
     """Kubernetes Secret management client."""
 
-    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None, default_headers: Optional[Dict[str, str]] = None):
+    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None, default_headers: Optional[Dict[str, str]] = None, scope: SecretScope = SecretScope()):
         if namespace is None:
             namespace = get_context()["namespace"]
         self.namespace = namespace
         self.impersonation = impersonation
         self.default_headers = default_headers
+        self.scope = scope
 
     def _get_api_client(self, api: ApiClient) -> ApiClient:
         """Configure API client with impersonation headers if needed."""
@@ -301,15 +305,23 @@ class SecretClient:
                 total_length += len(str(value).encode('utf-8'))
         return total_length
     
+    async def _read_secret_in_scope(self, v1, name: str):
+        """Read a Secret, refusing any outside this client's scope."""
+        secret = await v1.read_namespaced_secret(name=name, namespace=self.namespace)
+        if not self.scope.contains(secret.metadata.labels):
+            raise ApiException(status=404, reason=f"Secret '{name}' not found")
+        return secret
+
     async def list_secrets(self, label_selector: Optional[str] = None):
-        """List all secrets in namespace."""
+        """List the secrets in namespace that fall within this client's scope."""
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
+            selectors = [self.scope.label_selector()] + ([label_selector] if label_selector else [])
             secrets = await v1.list_namespaced_secret(
                 namespace=self.namespace,
-                label_selector=label_selector
+                label_selector=",".join(selectors)
             )
             
             secret_list = []
@@ -336,6 +348,7 @@ class SecretClient:
         labels: Optional[List[str]] = None,
     ):
         """Create a new secret."""
+        validate_secret_name(name)
         validated_data = self.validate_and_encode_token(string_data)
         await init_k8s()
         async with create_api_client() as api:
@@ -343,7 +356,10 @@ class SecretClient:
             v1 = client.CoreV1Api(api)
 
             k8s_labels, annotations = _build_labels_and_annotations(
-                description, alias, [validate_tag(tag) for tag in (labels or [])]
+                description,
+                alias,
+                [validate_tag(tag) for tag in (labels or [])],
+                system_labels=self.scope.create_labels(),
             )
             secret = client.V1Secret(
                 api_version="v1",
@@ -375,10 +391,7 @@ class SecretClient:
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
-            secret = await v1.read_namespaced_secret(
-                name=name,
-                namespace=self.namespace
-            )
+            secret = await self._read_secret_in_scope(v1, name)
 
             return {
                 "name": secret.metadata.name,
@@ -391,7 +404,12 @@ class SecretClient:
             }
 
     async def get_secret_value(self, name: str, key: str):
-        """Get a specific secret."""
+        """Read one key of a secret, ignoring this client's scope.
+
+        Executors and MCP header resolution use this to follow secretKeyRef
+        references, which may point at secrets without Ark labels. Scoping it
+        would break those references, so only the /v1/secrets CRUD is scoped.
+        """
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
@@ -432,10 +450,7 @@ class SecretClient:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
 
-            existing_secret = await v1.read_namespaced_secret(
-                name=name,
-                namespace=self.namespace
-            )
+            existing_secret = await self._read_secret_in_scope(v1, name)
 
             if string_data is not None:
                 existing_secret.string_data = self.validate_and_encode_token(string_data)
@@ -472,9 +487,16 @@ class SecretClient:
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
+            existing = await self._read_secret_in_scope(v1, name)
             await v1.delete_namespaced_secret(
                 name=name,
-                namespace=self.namespace
+                namespace=self.namespace,
+                body=client.V1DeleteOptions(
+                    preconditions=client.V1Preconditions(
+                        uid=existing.metadata.uid,
+                        resource_version=existing.metadata.resource_version,
+                    )
+                ),
             )
             return True
 

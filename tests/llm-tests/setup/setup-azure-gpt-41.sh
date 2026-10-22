@@ -13,6 +13,9 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: test-model-token
+  labels:
+    ark.mckinsey.com/resource-type: secret
+    ark.mckinsey.com/scope: shared
 type: Opaque
 stringData:
   token: ${AZURE_OPENAI_KEY}
