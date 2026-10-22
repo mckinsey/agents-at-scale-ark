@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 
+import { ArgoServerUrlMissingAlert } from '@/components/alerts';
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Terminal } from '@/components/icons';
 import { SessionsSection } from '@/components/sections/sessions-section';
 
 export default function WorkflowRunsPage() {
-  const [sessionCount, setSessionCount] = useState(0);
+  const [sessionCount, setSessionCount] = useState<number | null>(null);
 
   const pageTitle = sessionCount
     ? `Workflow runs (${sessionCount})`
@@ -20,6 +21,8 @@ export default function WorkflowRunsPage() {
         title={pageTitle}
         description="Track workflow execution across agents, tools, and tasks"
       />
+
+      <ArgoServerUrlMissingAlert />
 
       <SessionsSection onCountChange={setSessionCount} />
     </div>

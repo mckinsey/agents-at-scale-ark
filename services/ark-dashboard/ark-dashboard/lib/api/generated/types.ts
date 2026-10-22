@@ -1615,6 +1615,10 @@ export interface paths {
          *     Runs under the impersonated identity, so the result reflects the user's RBAC.
          *     When impersonation is disabled it runs as the service account.
          *
+         *     A write the generic resource routes would refuse for this caller, because it
+         *     has to run as the signed-in user and cannot, returns allowed false with the
+         *     reason, without asking Kubernetes.
+         *
          *     Args:
          *         body: group, resource, and verb to review
          *         namespace: The namespace (defaults to current context)
@@ -1968,9 +1972,10 @@ export interface paths {
          *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
          *         namespace: The namespace (defaults to current context)
          *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
-         *         workflowName: Filter by workflow name (partial match, case insensitive). Applied only
-         *             to the page returned by this call, not the whole collection — a page can come back
-         *             with few or no matches even though more exist further in the cursor sequence.
+         *         workflowName: Filter by workflow name (partial match, case insensitive). Applied by
+         *             Argo Server across the whole collection when it serves the list; otherwise applied
+         *             only to the page returned by this call, so a page can come back with few or no
+         *             matches even though more exist further in the cursor sequence.
          *         workflowTemplateName: Filter by workflow template name (exact match). Applied
          *             server-side via a label selector, so pagination stays correct across pages.
          *         status: Filter by workflow status. Same server-side label selector as
@@ -1986,6 +1991,11 @@ export interface paths {
          *         Response: List of raw Kubernetes resources as JSON. When the Kubernetes API has more
          *             items beyond this page, the response's metadata carries a "continue" token
          *             (pass it back as ?continue=... for the next page) and "remainingItemCount".
+         *
+         *     Workflows are listed through Argo Server when ARGO_SERVER_URL is set, sorted by start
+         *     time newest first, after a Kubernetes RBAC check for listing workflows in the namespace.
+         *     The continue token is then an item offset. The Kubernetes API is used when the variable
+         *     is unset, when the continue token is a Kubernetes one, or when Argo Server fails.
          *
          *     Note:
          *         This is Kubernetes' cursor-based pagination, not traditional offset pagination:
@@ -2019,6 +2029,10 @@ export interface paths {
          *
          *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
          *     are served; everything else returns 403.
+         *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
          *
          *     Returns:
          *         Response: The created Kubernetes resource as JSON
@@ -2083,6 +2097,10 @@ export interface paths {
          *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
          *     are served; everything else returns 403.
          *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
+         *
          *     Returns:
          *         Response: The updated Kubernetes resource as JSON
          *
@@ -2104,6 +2122,10 @@ export interface paths {
          *
          *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
          *     are served; everything else returns 403.
+         *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
          *
          *     Returns:
          *         Response: HTTP 204 No Content on success
@@ -2724,6 +2746,11 @@ export interface components {
         AccessReviewResponse: {
             /** Allowed */
             allowed: boolean;
+            /**
+             * Reason
+             * @description Set when ark-api refuses the operation for this caller before asking Kubernetes
+             */
+            reason?: string | null;
         };
         /**
          * AgentConfigMapKeyRef
@@ -4971,6 +4998,8 @@ export interface components {
         };
         /** SystemInfo */
         SystemInfo: {
+            /** Argo Server Configured */
+            argo_server_configured: boolean;
             /** Kubernetes Version */
             kubernetes_version: string;
             /** System Version */

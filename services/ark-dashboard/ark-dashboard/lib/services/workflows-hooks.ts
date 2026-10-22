@@ -6,6 +6,7 @@ import { isTerminalPhase } from './workflow-mapper';
 import {
   type WorkflowFilters,
   type WorkflowLifecycleAction,
+  type WorkflowPage,
   workflowsService,
 } from './workflows';
 
@@ -46,22 +47,87 @@ function usePollWorkflows(
 }
 
 const DEFAULT_PAGE_SIZE = 25;
+const OFFSET_TOKEN_PATTERN = /^\d+$/;
+const UNREACHABLE_PAGE_STATUSES = new Set([400, 410]);
+
+function computeTotalCount(offset: number, page: WorkflowPage): number | null {
+  if (page.remainingItemCount === undefined) {
+    return null;
+  }
+  return offset + page.items.length + page.remainingItemCount;
+}
+
+function resolveContinueToken(
+  targetPage: number,
+  pageSize: number,
+  offsetPaging: boolean | null,
+  tokenStack: Array<string | undefined>,
+): string | undefined {
+  if (targetPage === 0) {
+    return undefined;
+  }
+  if (offsetPaging === false) {
+    return tokenStack[targetPage];
+  }
+  return String(targetPage * pageSize);
+}
+
+function withPinnedFirst(
+  items: ArgoWorkflow[],
+  pinned: ArgoWorkflow | null,
+): ArgoWorkflow[] {
+  if (!pinned) {
+    return items;
+  }
+  return [
+    pinned,
+    ...items.filter(item => item.metadata.name !== pinned.metadata.name),
+  ];
+}
+
+function isUnreachablePage(err: unknown, targetPage: number): boolean {
+  if (targetPage === 0) {
+    return false;
+  }
+  const status = (err as { status?: number }).status;
+  return status !== undefined && UNREACHABLE_PAGE_STATUSES.has(status);
+}
+
+function isOffsetPaging(page: WorkflowPage): boolean {
+  if (page.continueToken !== undefined) {
+    return OFFSET_TOKEN_PATTERN.test(page.continueToken);
+  }
+  return page.remainingItemCount !== undefined;
+}
+
+export interface UseWorkflowsOptions {
+  page?: number;
+  pageSize?: number;
+  onPageError?: (error: Error) => void;
+  onPageReset?: () => void;
+}
 
 export function useWorkflows(
   namespace: string,
   filters?: WorkflowFilters,
-  pageSize: number = DEFAULT_PAGE_SIZE,
-  onPageError?: (error: Error) => void,
+  {
+    page = 0,
+    pageSize = DEFAULT_PAGE_SIZE,
+    onPageError,
+    onPageReset,
+  }: UseWorkflowsOptions = {},
 ) {
   const [workflows, setWorkflows] = useState<ArgoWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [page, setPage] = useState(0);
   const [hasNext, setHasNext] = useState(false);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
 
   // tokenStack[i] holds the continue token needed to fetch page i.
   // tokenStack[0] is always undefined (the first page has no cursor).
   const tokenStackRef = useRef<Array<string | undefined>>([undefined]);
+
+  const offsetPagingRef = useRef<boolean | null>(null);
 
   // Lets a newer fetch cancel a stale in-flight one.
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -73,12 +139,47 @@ export function useWorkflows(
     namespaceRef.current = namespace;
   }, [namespace]);
 
+  const handleFetchError = useCallback(
+    (err: unknown, targetPage: number, silent?: boolean) => {
+      // Cancelled on purpose, not a failure.
+      if ((err as Error).name === 'AbortError') {
+        return;
+      }
+      // A cached token's snapshot gets compacted by etcd after ~5 min, and a
+      // deep-linked page cannot be reached with cursors - recover instead of dead-ending.
+      if (isUnreachablePage(err, targetPage)) {
+        tokenStackRef.current = [undefined];
+        onPageError?.(new Error('List changed — back to the first page'));
+        onPageReset?.();
+        return;
+      }
+      if (silent) {
+        onPageError?.(err as Error);
+      } else {
+        setError(err as Error);
+      }
+    },
+    [onPageError, onPageReset],
+  );
+
   const fetchPage = useCallback(
     async (targetPage: number, options?: { silent?: boolean }) => {
       if (!namespace) {
         setWorkflows([]);
+        setTotalCount(null);
         setError(null);
         setLoading(false);
+        return;
+      }
+
+      const continueToken = resolveContinueToken(
+        targetPage,
+        pageSize,
+        offsetPagingRef.current,
+        tokenStackRef.current,
+      );
+      if (targetPage > 0 && continueToken === undefined) {
+        onPageReset?.();
         return;
       }
 
@@ -88,7 +189,6 @@ export function useWorkflows(
 
       try {
         setLoading(true);
-        const continueToken = tokenStackRef.current[targetPage];
         const result = await workflowsService.list(namespace, filters, {
           limit: pageSize,
           continueToken,
@@ -98,73 +198,45 @@ export function useWorkflows(
         if (abortControllerRef.current !== controller) {
           return;
         }
+        offsetPagingRef.current = isOffsetPaging(result);
         const pinned = pinnedWorkflowRef.current;
         pinnedWorkflowRef.current = null;
         setWorkflows(
-          pinned && targetPage === 0
-            ? [
-                pinned,
-                ...result.items.filter(
-                  item => item.metadata.name !== pinned.metadata.name,
-                ),
-              ]
-            : result.items,
+          withPinnedFirst(result.items, targetPage === 0 ? pinned : null),
         );
         setHasNext(result.hasMore);
+        setTotalCount(computeTotalCount(targetPage * pageSize, result));
         if (result.continueToken) {
           tokenStackRef.current[targetPage + 1] = result.continueToken;
         }
-        setPage(targetPage);
         setError(null);
       } catch (err) {
-        // Cancelled on purpose, not a failure.
-        if ((err as Error).name === 'AbortError') {
-          return;
-        }
-        // A cached token's snapshot gets compacted by etcd after ~5 min - recover instead of dead-ending.
-        const status = (err as { status?: number }).status;
-        if (options?.silent && status === 410) {
-          tokenStackRef.current = [undefined];
-          onPageError?.(new Error('List changed — back to the first page'));
-          fetchPage(0, { silent: true });
-          return;
-        }
-        if (options?.silent) {
-          onPageError?.(err as Error);
-        } else {
-          setError(err as Error);
-        }
+        handleFetchError(err, targetPage, options?.silent);
       } finally {
         if (abortControllerRef.current === controller) {
           setLoading(false);
         }
       }
     },
-    [namespace, filters, pageSize, onPageError],
+    [namespace, filters, pageSize, onPageReset, handleFetchError],
   );
 
-  // Filters/namespace narrow what a page shows, so restart at page 0 whenever
-  // they change instead of reusing a token stack built for a different query.
+  // Filters/namespace narrow what a page shows, so a token stack built for a
+  // different query is dropped before the requested page is loaded.
+  const queryKey = `${namespace}|${JSON.stringify(filters ?? {})}|${pageSize}`;
+  const lastQueryKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    tokenStackRef.current = [undefined];
-    fetchPage(0);
+    if (lastQueryKeyRef.current !== queryKey) {
+      lastQueryKeyRef.current = queryKey;
+      tokenStackRef.current = [undefined];
+      offsetPagingRef.current = null;
+    }
+    fetchPage(page, { silent: page > 0 });
     return () => {
       abortControllerRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [namespace, filters, pageSize]);
-
-  const goToNextPage = useCallback(() => {
-    if (hasNext) {
-      fetchPage(page + 1, { silent: true });
-    }
-  }, [hasNext, page, fetchPage]);
-
-  const goToPreviousPage = useCallback(() => {
-    if (page > 0) {
-      fetchPage(page - 1, { silent: true });
-    }
-  }, [page, fetchPage]);
+  }, [queryKey, page]);
 
   // Patches one item in place - avoids re-fetching with a stale cached token.
   const updateWorkflowItem = useCallback((updated: ArgoWorkflow) => {
@@ -191,10 +263,14 @@ export function useWorkflows(
       ]);
       pinnedWorkflowRef.current = created;
       tokenStackRef.current = [undefined];
-      fetchPage(0, { silent: true });
+      if (page > 0) {
+        onPageReset?.();
+      } else {
+        fetchPage(0, { silent: true });
+      }
       return true;
     },
-    [fetchPage],
+    [fetchPage, page, onPageReset],
   );
 
   const [watchedNames, setWatchedNames] = useState<ReadonlySet<string>>(
@@ -239,11 +315,8 @@ export function useWorkflows(
     workflows,
     loading,
     error,
-    page,
     hasNext,
-    hasPrevious: page > 0,
-    goToNextPage,
-    goToPreviousPage,
+    totalCount,
     updateWorkflowItem,
     showCreatedWorkflow,
     watchWorkflow,

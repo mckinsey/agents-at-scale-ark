@@ -28,6 +28,9 @@ app:
     # serves at the domain root. Substituted at container startup; no rebuild
     # required to change the value.
     basePath: ""
+    # Base URL of the Argo Workflows UI that "Open in Argo" links point at.
+    # Read at runtime; no rebuild required. Leave empty to hide Argo links.
+    argoUrl: ""
   
   # Other environment variables
   env:
@@ -59,10 +62,6 @@ app:
       value: ""
     - name: AUTH_MODE
       value: "open"
-    # Base URL of the Argo UI that "Open in Argo" links point at. Defaults to the
-    # Argo server exposed through the localhost gateway; override per environment.
-    - name: NEXT_PUBLIC_ARGO_URL
-      value: "http://argo.default.127.0.0.1.nip.io:8080" # NOSONAR - local development gateway URL, overridden per environment
 
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:

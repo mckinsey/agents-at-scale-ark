@@ -5,10 +5,13 @@ import {
   buildBaseUrlValueSource,
   CLEAR_BASE_URL_VALUE,
   createConfig,
+  getHeadersForUpdate,
   mapBaseUrlState,
+  providerSupportsHeaders,
 } from '@/components/forms/model-forms/utils';
 import { createSchema } from '@/components/forms/model-forms/schema';
 import type { FormValues } from '@/components/forms/model-forms/schema';
+import type { Model } from '@/lib/services';
 
 describe('mapBaseUrlState', () => {
   it('reads a configuration reference', () => {
@@ -213,5 +216,34 @@ describe('createConfig - preserving a legacy literal base URL on submit', () => 
     });
 
     expect(config.bedrock?.baseUrl).toBeUndefined();
+  });
+});
+
+describe('model headers', () => {
+  const headers = [{ name: 'X-Tenant', value: { value: 'acme' } }];
+  const formValues = {
+    name: 'my-model',
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    secret: 'openai-token',
+    baseUrl: 'ai-gateway',
+  } as FormValues;
+
+  it('adds headers to supported providers only when present', () => {
+    expect(createConfig(formValues, {}, headers).openai?.headers).toEqual(
+      headers,
+    );
+    expect(createConfig(formValues).openai).not.toHaveProperty('headers');
+    expect(providerSupportsHeaders('anthropic')).toBe(true);
+    expect(providerSupportsHeaders('bedrock')).toBe(false);
+  });
+
+  it('reads headers from the provider config of a model', () => {
+    const model = {
+      provider: 'openai',
+      config: { openai: { headers } },
+    } as unknown as Model;
+    expect(getHeadersForUpdate(model)).toEqual(headers);
+    expect(getHeadersForUpdate({ ...model, config: {} })).toEqual([]);
   });
 });
