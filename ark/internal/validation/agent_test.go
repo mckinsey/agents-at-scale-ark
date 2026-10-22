@@ -158,6 +158,16 @@ func TestValidateAgentModelOverrideHeaders(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "duplicate header name: x-tenant") {
 			t.Fatalf("expected duplicate header error, got %v", err)
 		}
+
+		githubSelector := &metav1.LabelSelector{MatchLabels: map[string]string{"mcp/server": "github"}}
+		agent.Spec.Overrides = []arkv1alpha1.Override{
+			{ResourceType: "mcpserver", LabelSelector: githubSelector, Headers: []arkv1alpha1.Header{{Name: "Authorization", Value: arkv1alpha1.HeaderValue{Value: "a"}}}},
+			{ResourceType: "mcpserver", LabelSelector: githubSelector.DeepCopy(), Headers: []arkv1alpha1.Header{{Name: "authorization", Value: arkv1alpha1.HeaderValue{Value: "b"}}}},
+		}
+		_, err = v.ValidateAgent(ctx, agent)
+		if err == nil || !strings.Contains(err.Error(), "spec.overrides (mcpserver, mcp/server=github): duplicate header name: authorization") {
+			t.Fatalf("expected duplicate MCP header error, got %v", err)
+		}
 	})
 
 	t.Run("allows duplicate header names outside unselected model overrides", func(t *testing.T) {
@@ -175,7 +185,12 @@ func TestValidateAgentModelOverrideHeaders(t *testing.T) {
 						Headers:       duplicates,
 						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"env": "prod"}},
 					},
-					{ResourceType: "mcpserver", Headers: duplicates},
+					{ResourceType: "mcpserver", Headers: duplicates[:1]},
+					{
+						ResourceType:  "mcpserver",
+						Headers:       duplicates[1:],
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"mcp/server": "github"}},
+					},
 				},
 			},
 		}

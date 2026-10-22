@@ -1539,7 +1539,7 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.at(-1)).toEqual([
+      expect(lastCall?.at(-2)).toEqual([
         { name: 'muting', value: 'BANANAPHONE' },
       ]);
     });

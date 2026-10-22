@@ -12,13 +12,14 @@ import {
 import { CustomHeadersField } from '@/components/forms/shared/custom-headers-field';
 import type { AgentHeader } from '@/lib/services';
 
-vi.mock('@/lib/services/secrets-hooks', () => ({
-  useGetAllSecrets: () => ({ data: [] }),
+vi.mock('@/lib/hooks/use-secret-key-options', () => ({
+  useSecretKeyOptions: () => ({ options: [], loaded: true }),
 }));
 
-vi.mock('@/components/ui/conditionalInputRow', () => ({
-  ConditionalInputRow: ({ data }: { data: { name: string } }) => (
-    <div data-testid="header-row">{data.name}</div>
+vi.mock('@/components/ui/mcp-header-row', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/components/ui/mcp-header-row')>()),
+  McpHeaderRowFields: ({ row }: { row: { name: string } }) => (
+    <div data-testid="header-row">{row.name}</div>
   ),
 }));
 
@@ -96,13 +97,11 @@ describe('CustomHeadersField', () => {
     return <CustomHeadersField headerRows={headerRows} addLabel="Add it" />;
   }
 
-  it('renders editable and read-only headers and adds rows', async () => {
+  it('renders only editable headers and adds rows', async () => {
     render(<Harness />);
     expect(screen.getAllByTestId('header-row')).toHaveLength(1);
-    expect(
-      screen.getByDisplayValue('ConfigMap: cfg/tenant'),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/read-only here/i)).toBeInTheDocument();
+    expect(screen.queryByText('X-Tenant')).not.toBeInTheDocument();
+    expect(screen.getByText('1 header')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Add it' }));
     expect(screen.getAllByTestId('header-row')).toHaveLength(2);

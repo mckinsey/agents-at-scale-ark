@@ -50,6 +50,21 @@ function chatSession(overrides: Partial<ChatSession> = {}): ChatSession {
     canAddParameterRow: false,
     missingParameters: [],
     engineToolWarning: null,
+    mcpHeaders: {
+      visible: false,
+      rows: [],
+      isAgentRow: vi.fn(() => false),
+      nameOptionsFor: vi.fn(() => []),
+      canAddRow: false,
+      errors: {},
+      hasErrors: false,
+      serverNames: [],
+      effectiveCount: 0,
+      addRow: vi.fn(),
+      updateRow: vi.fn(),
+      removeRow: vi.fn(),
+      toApiOverrides: vi.fn(),
+    },
     ...overrides,
   };
 }

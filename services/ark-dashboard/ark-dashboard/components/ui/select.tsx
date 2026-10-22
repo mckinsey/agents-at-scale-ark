@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 
 export type SelectSize = 'sm' | 'default' | 'lg';
 
+export const FLIP_COLLISION = { side: 'flip', align: 'shift' } as const;
+
 export const GHOST_TRIGGER =
   'rounded-none border-0 border-b border-white/[0.24] bg-transparent px-0 hover:border-b-white/40 focus-visible:border-b-stroke-status-focus';
 

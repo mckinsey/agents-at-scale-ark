@@ -83,15 +83,22 @@ export function validateCustomHeaders(
   const { errors, hasErrors, nonEmptyHeaders } = validateHeaders(rows);
   const uniqueErrors = { ...errors };
   let hasUniqueErrors = hasErrors;
-  const seenNames = new Set(
+  const hiddenNames = new Set(
     readOnlyHeaders.map(header => header.name.trim().toLowerCase()),
   );
+  const seenNames = new Set<string>();
   nonEmptyHeaders.forEach(header => {
     const normalizedName = header.name.trim().toLowerCase();
     if (normalizedName === '') {
       return;
     }
-    if (seenNames.has(normalizedName)) {
+    if (hiddenNames.has(normalizedName)) {
+      uniqueErrors[header.key] = {
+        ...uniqueErrors[header.key],
+        nameError: 'Already set outside the dashboard',
+      };
+      hasUniqueErrors = true;
+    } else if (seenNames.has(normalizedName)) {
       uniqueErrors[header.key] = {
         ...uniqueErrors[header.key],
         nameError: 'Header name must be unique',

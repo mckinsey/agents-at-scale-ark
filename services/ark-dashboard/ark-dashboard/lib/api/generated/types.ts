@@ -4075,6 +4075,11 @@ export interface components {
             } | null;
             authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
+            /**
+             * Header Names
+             * @default []
+             */
+            header_names: string[];
             /** Name */
             name: string;
             /** Namespace */
@@ -4921,12 +4926,19 @@ export interface components {
             /** Id */
             id: string;
             /**
+             * Keys
+             * @default []
+             */
+            keys: string[];
+            /**
              * Labels
              * @default []
              */
             labels: string[];
             /** Name */
             name: string;
+            /** Type */
+            type?: string | null;
         };
         /**
          * SecretUpdateRequest
