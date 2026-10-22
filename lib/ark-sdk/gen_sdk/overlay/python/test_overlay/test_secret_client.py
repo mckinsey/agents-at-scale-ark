@@ -1,12 +1,13 @@
 """Tests for SecretClient Kubernetes secret management - adapted from ark-api tests."""
+import inspect
 import unittest
 import base64
 import json
 from unittest.mock import Mock, AsyncMock, MagicMock, patch, call
 from kubernetes_asyncio.client.rest import ApiException
 
-from ark_sdk.k8s import SecretClient, _build_labels_and_annotations
-from ark_sdk.secret_scope import SecretScope
+from ark_sdk.k8s import SecretClient, _build_labels_and_annotations, read_secret_labels
+from ark_sdk.secret_scope import SecretScope, SecretScopeChangeError, SecretScopeError
 
 SYSTEM_LABELS = {
     "ark.mckinsey.com/resource-type": "secret",
@@ -538,6 +539,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
 
         existing_secret = Mock()
+        existing_secret.metadata.name = "test-secret"
         existing_secret.metadata.labels = {**SYSTEM_LABELS, "ark.mckinsey.com/label.old": "true"}
         existing_secret.metadata.annotations = {}
         existing_secret.data = {}
@@ -557,6 +559,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
 
         existing_secret = Mock()
+        existing_secret.metadata.name = "test-secret"
         existing_secret.metadata.labels = {**SYSTEM_LABELS, "ark.mckinsey.com/label.old": "true"}
         existing_secret.metadata.annotations = {}
         existing_secret.data = {}
@@ -737,7 +740,12 @@ OUT_OF_SCOPE_LABELS = [
     {"ark.mckinsey.com/resource-type": "secret"},
     {"ark.mckinsey.com/scope": "shared"},
     {"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "user-abc"},
+    {"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "user-0123456789abcdef"},
 ]
+
+ALICE = "alice@example.com"
+ALICE_SCOPE = "user-ff8d9819fc0e12bf"
+ALICE_LABELS = {"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": ALICE_SCOPE}
 
 
 @patch('ark_sdk.k8s.ApiClient')
@@ -753,9 +761,9 @@ class TestSecretClientScope(unittest.IsolatedAsyncioTestCase):
         self.v1.replace_namespaced_secret = AsyncMock()
         self.v1.delete_namespaced_secret = AsyncMock()
 
-    def _stored(self, labels):
+    def _stored(self, labels, name="legacy-token"):
         secret = Mock()
-        secret.metadata.name = "legacy-token"
+        secret.metadata.name = name
         secret.metadata.uid = "uuid-legacy"
         secret.metadata.labels = labels
         secret.metadata.annotations = {}
@@ -773,11 +781,11 @@ class TestSecretClientScope(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_list_uses_every_scope_value(self, _):
-        await SecretClient(namespace="ns", scope=SecretScope(("shared", "user-x"))).list_secrets()
+        await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).list_secrets()
 
         self.assertEqual(
             self.v1.list_namespaced_secret.call_args.kwargs["label_selector"],
-            "ark.mckinsey.com/resource-type=secret,ark.mckinsey.com/scope in (shared,user-x)",
+            f"ark.mckinsey.com/resource-type=secret,ark.mckinsey.com/scope in (shared,{ALICE_SCOPE})",
         )
 
     async def test_out_of_scope_secret_is_not_found(self, _):
@@ -800,11 +808,196 @@ class TestSecretClientScope(unittest.IsolatedAsyncioTestCase):
         self.v1.delete_namespaced_secret.assert_not_called()
 
     async def test_user_scope_reaches_its_own_secret(self, _):
-        self._stored({"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "user-x"})
+        self._stored(ALICE_LABELS, name="u-ff8d9819fc0e12bf-github")
 
-        result = await SecretClient(namespace="ns", scope=SecretScope(("shared", "user-x"))).get_secret("legacy-token")
+        result = await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).get_secret("u-ff8d9819fc0e12bf-github")
 
-        self.assertEqual(result["name"], "legacy-token")
+        self.assertEqual(result["name"], "u-ff8d9819fc0e12bf-github")
+        self.assertEqual(result["display_name"], "github")
+        self.assertEqual(result["scope"], "personal")
+
+    async def test_another_users_personal_secret_is_not_found(self, _):
+        self._stored(ALICE_LABELS, name="u-ff8d9819fc0e12bf-github")
+        client = SecretClient(namespace="ns", scope=SecretScope.for_user("bob@example.com"))
+
+        with self.assertRaises(ApiException) as raised:
+            await client.update_secret("u-ff8d9819fc0e12bf-github", scope="shared")
+
+        self.assertEqual(raised.exception.status, 404)
+        self.v1.replace_namespaced_secret.assert_not_called()
+
+    async def test_another_users_personal_secret_cannot_be_read_or_deleted(self, _):
+        self._stored(ALICE_LABELS, name="u-ff8d9819fc0e12bf-github")
+        bob = SecretClient(namespace="ns", scope=SecretScope.for_user("bob@example.com"))
+        operations = {
+            "get": lambda: bob.get_secret("u-ff8d9819fc0e12bf-github"),
+            "delete": lambda: bob.delete_secret("u-ff8d9819fc0e12bf-github"),
+            "invalid scope": lambda: bob.update_secret("u-ff8d9819fc0e12bf-github", scope="everyone"),
+        }
+        for operation, call_operation in operations.items():
+            with self.subTest(operation=operation):
+                with self.assertRaises(ApiException) as raised:
+                    await call_operation()
+                self.assertEqual(raised.exception.status, 404)
+
+        self.v1.replace_namespaced_secret.assert_not_called()
+        self.v1.delete_namespaced_secret.assert_not_called()
+
+    async def test_list_selects_the_users_scope(self, _):
+        await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).list_secrets()
+
+        self.assertEqual(
+            self.v1.list_namespaced_secret.call_args.kwargs["label_selector"],
+            f"ark.mckinsey.com/resource-type=secret,ark.mckinsey.com/scope in (shared,{ALICE_SCOPE})",
+        )
+
+    async def test_list_reports_scope_and_display_name(self, _):
+        shared = Mock()
+        shared.metadata.name = "openai"
+        shared.metadata.uid = "uuid-shared"
+        shared.metadata.labels = dict(SYSTEM_LABELS)
+        shared.metadata.annotations = {}
+        personal = Mock()
+        personal.metadata.name = "u-ff8d9819fc0e12bf-github"
+        personal.metadata.uid = "uuid-personal"
+        personal.metadata.labels = dict(ALICE_LABELS)
+        personal.metadata.annotations = {}
+        self.v1.list_namespaced_secret = AsyncMock(return_value=Mock(items=[shared, personal]))
+
+        result = await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).list_secrets()
+
+        self.assertEqual(
+            [(item["name"], item["display_name"], item["scope"]) for item in result["items"]],
+            [("openai", "openai", "shared"), ("u-ff8d9819fc0e12bf-github", "github", "personal")],
+        )
+
+    async def test_create_personal_secret_prefixes_the_name_and_labels_the_owner(self, _):
+        self.v1.create_namespaced_secret = AsyncMock(side_effect=lambda namespace, body: body)
+
+        result = await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).create_secret(
+            "github", {"token": "ghp"}, labels=["prod"], personal=True
+        )
+
+        body = self.v1.create_namespaced_secret.call_args.kwargs["body"]
+        self.assertEqual(body.metadata.name, "u-ff8d9819fc0e12bf-github")
+        self.assertEqual(body.metadata.labels, {**ALICE_LABELS, "ark.mckinsey.com/label.prod": "true"})
+        self.assertEqual(result["display_name"], "github")
+        self.assertEqual(result["scope"], "personal")
+
+    async def test_create_shared_secret_with_a_user_scope_stays_shared(self, _):
+        self.v1.create_namespaced_secret = AsyncMock(side_effect=lambda namespace, body: body)
+
+        result = await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).create_secret(
+            "openai", {"token": "sk"}
+        )
+
+        body = self.v1.create_namespaced_secret.call_args.kwargs["body"]
+        self.assertEqual(body.metadata.name, "openai")
+        self.assertEqual(body.metadata.labels, SYSTEM_LABELS)
+        self.assertEqual(result["scope"], "shared")
+
+    async def test_create_personal_secret_needs_a_user(self, _):
+        self.v1.create_namespaced_secret = AsyncMock()
+
+        with self.assertRaises(SecretScopeError):
+            await SecretClient(namespace="ns").create_secret("github", {"token": "ghp"}, personal=True)
+
+        self.v1.create_namespaced_secret.assert_not_called()
+
+    async def test_personal_only_scope_cannot_create_shared(self, _):
+        self.v1.create_namespaced_secret = AsyncMock()
+
+        with self.assertRaises(SecretScopeError):
+            await SecretClient(namespace="ns", scope=SecretScope((ALICE_SCOPE,))).create_secret("openai", {"token": "sk"})
+
+        self.v1.create_namespaced_secret.assert_not_called()
+
+    async def test_create_personal_secret_rejects_a_reserved_name(self, _):
+        self.v1.create_namespaced_secret = AsyncMock()
+
+        with self.assertRaises(ValueError):
+            await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).create_secret(
+                "u-0123456789abcdef-x", {"token": "ghp"}, personal=True
+            )
+
+        self.v1.create_namespaced_secret.assert_not_called()
+
+    async def test_promote_flips_the_scope_label_and_keeps_the_name(self, _):
+        stored = self._stored(
+            {**ALICE_LABELS, "ark.mckinsey.com/label.prod": "true", "app": "github"},
+            name="u-ff8d9819fc0e12bf-github",
+        )
+        self.v1.replace_namespaced_secret = AsyncMock(side_effect=lambda name, namespace, body: body)
+
+        result = await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).update_secret(
+            "u-ff8d9819fc0e12bf-github", labels=["prod"], scope="shared"
+        )
+
+        kwargs = self.v1.replace_namespaced_secret.call_args.kwargs
+        self.assertEqual(kwargs["name"], "u-ff8d9819fc0e12bf-github")
+        self.assertEqual(
+            kwargs["body"].metadata.labels,
+            {**SYSTEM_LABELS, "ark.mckinsey.com/label.prod": "true", "app": "github"},
+        )
+        self.assertIs(kwargs["body"], stored)
+        self.assertEqual(result["display_name"], "github")
+        self.assertEqual(result["scope"], "shared")
+
+    async def test_personal_only_scope_cannot_promote(self, _):
+        self._stored(dict(ALICE_LABELS), name="u-ff8d9819fc0e12bf-github")
+
+        with self.assertRaises(SecretScopeChangeError):
+            await SecretClient(namespace="ns", scope=SecretScope((ALICE_SCOPE,))).update_secret(
+                "u-ff8d9819fc0e12bf-github", scope="shared"
+            )
+
+        self.v1.replace_namespaced_secret.assert_not_called()
+
+    async def test_invalid_scope_on_a_personal_secret_is_refused(self, _):
+        self._stored(dict(ALICE_LABELS), name="u-ff8d9819fc0e12bf-github")
+
+        for scope in ("everyone", ""):
+            with self.subTest(scope=scope):
+                with self.assertRaises(SecretScopeChangeError):
+                    await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).update_secret(
+                        "u-ff8d9819fc0e12bf-github", scope=scope
+                    )
+
+        self.v1.replace_namespaced_secret.assert_not_called()
+
+    async def test_update_without_scope_keeps_a_personal_secret_personal(self, _):
+        self._stored(dict(ALICE_LABELS), name="u-ff8d9819fc0e12bf-github")
+        self.v1.replace_namespaced_secret = AsyncMock(side_effect=lambda name, namespace, body: body)
+
+        for scope in (None, "personal"):
+            with self.subTest(scope=scope):
+                result = await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).update_secret(
+                    "u-ff8d9819fc0e12bf-github", string_data={"token": "new"}, scope=scope
+                )
+                self.assertEqual(
+                    self.v1.replace_namespaced_secret.call_args.kwargs["body"].metadata.labels, ALICE_LABELS
+                )
+                self.assertEqual(result["scope"], "personal")
+
+    async def test_shared_secret_cannot_be_made_personal(self, _):
+        self._stored(dict(SYSTEM_LABELS), name="openai")
+
+        for scope in ("personal", "everyone", ""):
+            with self.subTest(scope=scope):
+                with self.assertRaises(SecretScopeChangeError):
+                    await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).update_secret(
+                        "openai", scope=scope
+                    )
+
+        self.v1.replace_namespaced_secret.assert_not_called()
+
+    async def test_sharing_a_shared_secret_changes_nothing(self, _):
+        self._stored(dict(SYSTEM_LABELS), name="openai")
+        self.v1.replace_namespaced_secret = AsyncMock(side_effect=lambda name, namespace, body: body)
+
+        await SecretClient(namespace="ns").update_secret("openai", scope="shared")
+
+        self.assertEqual(self.v1.replace_namespaced_secret.call_args.kwargs["body"].metadata.labels, SYSTEM_LABELS)
 
     async def test_get_secret_value_reads_unlabelled_secret(self, _):
         self._stored({})
@@ -812,6 +1005,44 @@ class TestSecretClientScope(unittest.IsolatedAsyncioTestCase):
         result = await SecretClient(namespace="ns").get_secret_value("legacy-token", "token")
 
         self.assertEqual(result["value"], "dGVzdC10b2tlbg==")
+
+
+@patch('ark_sdk.k8s.ApiClient')
+class TestReadSecretLabels(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        patcher = patch('ark_sdk.k8s.init_k8s', new=AsyncMock())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        v1_patcher = patch('ark_sdk.k8s.client.CoreV1Api')
+        self.v1 = v1_patcher.start().return_value
+        self.addCleanup(v1_patcher.stop)
+
+    async def test_returns_the_labels_of_any_secret(self, mock_api_client):
+        for labels, expected in ((ALICE_LABELS, ALICE_LABELS), ({"app": "legacy"}, {"app": "legacy"}), (None, {})):
+            with self.subTest(labels=labels):
+                self.v1.read_namespaced_secret = AsyncMock(return_value=Mock(metadata=Mock(labels=labels)))
+
+                self.assertEqual(await read_secret_labels("ns", "u-ff8d9819fc0e12bf-github"), expected)
+
+        self.v1.read_namespaced_secret.assert_called_with(name="u-ff8d9819fc0e12bf-github", namespace="ns")
+        mock_api_client.return_value.set_default_header.assert_not_called()
+        mock_api_client.return_value.__aenter__.return_value.set_default_header.assert_not_called()
+
+    def test_takes_only_namespace_and_name(self, _):
+        self.assertEqual(list(inspect.signature(read_secret_labels).parameters), ["namespace", "name"])
+
+    async def test_missing_secret_is_none(self, _):
+        self.v1.read_namespaced_secret = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
+
+        self.assertIsNone(await read_secret_labels("ns", "missing"))
+
+    async def test_other_errors_propagate(self, _):
+        self.v1.read_namespaced_secret = AsyncMock(side_effect=ApiException(status=403, reason="Forbidden"))
+
+        with self.assertRaises(ApiException) as raised:
+            await read_secret_labels("ns", "protected")
+
+        self.assertEqual(raised.exception.status, 403)
 
 
 class TestBuildLabelsAndAnnotations(unittest.TestCase):

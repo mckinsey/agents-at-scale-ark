@@ -2,7 +2,12 @@ import unittest
 
 from pydantic import ValidationError
 
-from ark_sdk.models.kubernetes import SecretCreateRequest, SecretUpdateRequest
+from ark_sdk.models.kubernetes import (
+    SecretCreateRequest,
+    SecretDetailResponse,
+    SecretResponse,
+    SecretUpdateRequest,
+)
 
 
 class TestSecretRequestModels(unittest.TestCase):
@@ -15,3 +20,27 @@ class TestSecretRequestModels(unittest.TestCase):
 
     def test_update_request_has_no_name(self):
         self.assertNotIn("name", SecretUpdateRequest.model_fields)
+
+
+class TestSecretResponseModels(unittest.TestCase):
+    def test_responses_carry_scope_and_display_name(self):
+        name = "u-ff8d9819fc0e12bf-github"
+        responses = [
+            SecretResponse(name=name, id="x", display_name="github", scope="personal"),
+            SecretDetailResponse(name=name, id="x", type="Opaque", secret_length=1, display_name="github", scope="personal"),
+        ]
+        for response in responses:
+            with self.subTest(response=type(response).__name__):
+                dumped = response.model_dump()
+                self.assertEqual(dumped["display_name"], "github")
+                self.assertEqual(dumped["scope"], "personal")
+
+    def test_responses_require_scope_and_display_name(self):
+        with self.assertRaises(ValidationError):
+            SecretResponse(name="a", id="x")
+        with self.assertRaises(ValidationError):
+            SecretDetailResponse(name="a", id="x", type="Opaque", secret_length=1)
+
+    def test_responses_reject_unknown_scope(self):
+        with self.assertRaises(ValidationError):
+            SecretResponse(name="a", id="x", display_name="a", scope="everyone")
