@@ -773,11 +773,11 @@ class TestSecretClientScope(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_list_uses_every_scope_value(self, _):
-        await SecretClient(namespace="ns", scope=SecretScope(("shared", "user-x"))).list_secrets()
+        await SecretClient(namespace="ns", scope=SecretScope(("shared", "user-0123456789abcdef"))).list_secrets()
 
         self.assertEqual(
             self.v1.list_namespaced_secret.call_args.kwargs["label_selector"],
-            "ark.mckinsey.com/resource-type=secret,ark.mckinsey.com/scope in (shared,user-x)",
+            "ark.mckinsey.com/resource-type=secret,ark.mckinsey.com/scope in (shared,user-0123456789abcdef)",
         )
 
     async def test_out_of_scope_secret_is_not_found(self, _):
@@ -800,9 +800,9 @@ class TestSecretClientScope(unittest.IsolatedAsyncioTestCase):
         self.v1.delete_namespaced_secret.assert_not_called()
 
     async def test_user_scope_reaches_its_own_secret(self, _):
-        self._stored({"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "user-x"})
+        self._stored({"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "user-0123456789abcdef"})
 
-        result = await SecretClient(namespace="ns", scope=SecretScope(("shared", "user-x"))).get_secret("legacy-token")
+        result = await SecretClient(namespace="ns", scope=SecretScope(("shared", "user-0123456789abcdef"))).get_secret("legacy-token")
 
         self.assertEqual(result["name"], "legacy-token")
 
