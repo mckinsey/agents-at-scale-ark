@@ -1,6 +1,6 @@
 'use client';
 
-import { CreateResourceButton } from '@/components/forms/shared/create-resource-dialog';
+import { SecretNameField } from '@/components/forms/fields/secret-name-field';
 import { Trash } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
@@ -87,7 +87,7 @@ export function ConditionalInputRow({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex-1">
+      <div className="min-w-0 flex-[2]">
         {data.type === 'direct' ? (
           <>
             <Input
@@ -106,33 +106,14 @@ export function ConditionalInputRow({
           </>
         ) : (
           <>
-            <div className="flex items-center gap-3">
-              <Select
-                value={data.value}
-                onValueChange={value =>
-                  onChange({ value: value as string, secretKey: undefined })
-                }>
-                <SelectTrigger
-                  id="thirdValue"
-                  className={cn(GHOST_TRIGGER, 'flex-1')}
-                  aria-invalid={!!valueError}>
-                  <SelectValue placeholder="Select a secret" />
-                </SelectTrigger>
-                <SelectContent className="bg-fill-onsurface-ui-2">
-                  {secrets.map(secret => (
-                    <SelectItem key={secret.name} value={secret.name}>
-                      <SelectItemText>{secret.name}</SelectItemText>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <CreateResourceButton
-                kind="secret"
-                onCreated={name =>
-                  onChange({ value: name, secretKey: undefined })
-                }
-              />
-            </div>
+            <SecretNameField
+              id="thirdValue"
+              aria-label="Secret name"
+              value={data.value}
+              onChange={value => onChange({ value, secretKey: undefined })}
+              secrets={secrets}
+              invalid={!!valueError}
+            />
             {valueError && (
               <p className="text-status-error mt-1 text-sm font-normal">
                 {valueError}
