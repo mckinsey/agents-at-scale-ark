@@ -125,6 +125,50 @@ done
 
 - Replace any override of `argo-workflows.executor.image.tag` with `argo-workflows.executor.image.nonroot: true`.
 
+### Duplicate Header Names Rejected
+
+The admission webhook now rejects Models and Agents that repeat a header name. Names are compared case-insensitively, after trimming whitespace, so `X-Tenant` and `x-tenant` count as the same header.
+
+| Resource | Checked headers |
+|----------|-----------------|
+| Model | `spec.config.openai.headers`, `spec.config.azure.headers`, `spec.config.anthropic.headers`, each list on its own |
+| Agent | All `spec.overrides` entries with `resourceType: model` and no `labelSelector`, checked as one list |
+
+Agent overrides with a `labelSelector`, `resourceType: mcpserver` overrides, Query overrides and MCPServer headers are not checked. The existing A2AServer header check is unchanged.
+
+The check runs on every create and update. Existing resources with duplicates keep working, but any later change to them is rejected until the duplicates are removed, including label or annotation edits, `kubectl apply` and `ark import --upsert`. The error names the field and the header, for example `spec.config.openai.headers: duplicate header name: x-tenant`.
+
+`ark-api` applies the same rule to model and agent create and update requests and returns `422`. Get requests still return existing resources that contain duplicates.
+
+Before this release, the dashboard model edit form dropped headers that were set outside the dashboard when saving. Models saved from the dashboard on earlier versions may have lost their headers.
+
+**Migration:**
+- Find Models with duplicate header names:
+
+```bash
+kubectl get models -A -o json | jq -r '.items[] | . as $m
+  | (.spec.config // {}) | to_entries[] | select(.key == "openai" or .key == "azure" or .key == "anthropic")
+  | [(.value.headers // [])[].name | ascii_downcase | gsub("^\\s+|\\s+$"; "")]
+  | group_by(.)[] | select(length > 1)
+  | "\($m.metadata.namespace)/\($m.metadata.name) \(.[0])"'
+```
+
+- Find Agents with duplicate header names in model overrides without a `labelSelector`:
+
+```bash
+kubectl get agents -A -o json | jq -r '.items[] | . as $a
+  | [(.spec.overrides // [])[]
+    | select(.resourceType == "model"
+        and ((.labelSelector.matchLabels // {}) | length) == 0
+        and ((.labelSelector.matchExpressions // []) | length) == 0)
+    | (.headers // [])[].name | ascii_downcase | gsub("^\\s+|\\s+$"; "")]
+  | group_by(.)[] | select(length > 1)
+  | "\($a.metadata.namespace)/\($a.metadata.name) \(.[0])"'
+```
+
+- Keep one entry per header name in each listed resource. Update the source manifests too, so later applies and imports are not rejected.
+- Check that Models edited in the dashboard on earlier versions still have the headers they need.
+
 ## v0.1.71
 
 ### Generic Resources API Limited to an Allowlist
