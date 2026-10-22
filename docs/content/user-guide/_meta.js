@@ -11,6 +11,7 @@ export default {
   queries: 'Run queries / chat with agents and teams',
   tools: 'Creating Tools and MCP Servers',
   configurations: 'Configurations',
+  secrets: 'Secrets',
   files: 'Managing Files',
   'ark-cli': 'The Ark CLI',
 

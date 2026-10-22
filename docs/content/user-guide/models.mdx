@@ -44,9 +44,11 @@ The form changes per provider:
 ### Via kubectl
 
 ```bash
-# Store the API key in a Secret first.
+# Store the API key in a Secret first, labelled as an Ark secret.
 kubectl create secret generic default-model-token \
   --from-literal=token='YOUR_OPENAI_API_KEY'
+kubectl label secret default-model-token \
+  ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
 
 # Create the Model resource.
 cat <<'EOF' | kubectl apply -f -
@@ -144,6 +146,10 @@ kubectl create secret generic my-model-token \
 # Or strip any trailing whitespace from a file
 tr -d '\n\r' < key.txt | kubectl create secret generic my-model-token \
   --from-file=token=/dev/stdin
+
+# Either way, label it as an Ark secret
+kubectl label secret my-model-token \
+  ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
 ```
 
 `kubectl describe model <name>` shows the underlying probe error in the `ModelAvailable` condition.
