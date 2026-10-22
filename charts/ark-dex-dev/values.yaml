@@ -58,6 +58,12 @@ users:
 refreshTokens:
   reuseInterval: "3m"
 
+# Connector that answers the OAuth2 password grant, e.g. "local" for the static
+# users above. Off by default: only automated tests need tokens without a
+# browser, and the grant hands a token to anyone holding a password.
+oauth2:
+  passwordConnector: ""
+
 rbac:
   create: true
   # Role installed by charts/ark-tenant, bound to the admin user on top of the
