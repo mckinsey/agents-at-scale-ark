@@ -1,5 +1,6 @@
 'use client';
 
+import { type Ref, useId, useState } from 'react';
 import type { Control, FieldPath, FieldValues } from 'react-hook-form';
 
 import { CreateResourceButton } from '@/components/forms/shared/create-resource-dialog';
@@ -28,11 +29,22 @@ interface SecretNameFieldProps {
   readonly onBlur?: () => void;
   readonly secrets?: readonly Pick<Secret, 'name'>[];
   readonly isPending?: boolean;
+  readonly isError?: boolean;
   readonly placeholder?: string;
   readonly disabled?: boolean;
   readonly invalid?: boolean;
-  readonly id?: string;
+  readonly error?: string;
+  readonly ref?: Ref<HTMLInputElement>;
   readonly 'aria-label'?: string;
+}
+
+function emptyMessage(isError: boolean, hasSecrets: boolean) {
+  if (isError) {
+    return "Couldn't load the Ark secrets. You can still type a secret name.";
+  }
+  return hasSecrets
+    ? 'No Ark secret matches. The typed name is used as is.'
+    : 'No Ark secrets in this namespace. Type a secret name.';
 }
 
 export function SecretNameField({
@@ -41,14 +53,30 @@ export function SecretNameField({
   onBlur,
   secrets,
   isPending = false,
+  isError = false,
   placeholder = 'Select or type a secret name',
   disabled,
   invalid,
-  id,
+  error,
+  ref,
   'aria-label': ariaLabel,
 }: SecretNameFieldProps) {
+  const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [createdNames, setCreatedNames] = useState<string[]>([]);
+  const hintId = useId();
+  const errorId = useId();
   const names = secrets?.map(secret => secret.name) ?? [];
-  const isStoredValueMissing = !!value && !isPending && !names.includes(value);
+  const showMissingHint =
+    !!value &&
+    !focused &&
+    !isPending &&
+    !isError &&
+    !names.includes(value) &&
+    !createdNames.includes(value);
+  const describedBy =
+    [showMissingHint && hintId, error && errorId].filter(Boolean).join(' ') ||
+    undefined;
 
   return (
     <div className="flex flex-col gap-1">
@@ -61,19 +89,30 @@ export function SecretNameField({
               onChange(next.trim());
             }
           }}
+          onOpenChange={setOpen}
           mode="list"
           openOnInputClick
           disabled={disabled}>
           <ComboboxAnchor className="min-w-0 flex-1">
             <InputGroup className={FILLED_TRIGGER_CLASS}>
               <ComboboxInput
-                id={id}
+                ref={ref}
                 variant="inline"
                 placeholder={placeholder}
                 disabled={disabled}
                 aria-label={ariaLabel}
                 aria-invalid={invalid}
-                onBlur={onBlur}
+                aria-describedby={describedBy}
+                onFocus={() => setFocused(true)}
+                onBlur={() => {
+                  setFocused(false);
+                  onBlur?.();
+                }}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' && open) {
+                    event.preventDefault();
+                  }
+                }}
               />
               <InputGroupAddon align="inline-end">
                 <ComboboxClear aria-label="Clear secret" />
@@ -86,9 +125,7 @@ export function SecretNameField({
               <Spinner size="sm" className="mx-auto my-2" />
             ) : (
               <ComboboxEmpty>
-                {names.length === 0
-                  ? 'No Ark secrets in this namespace. Type a secret name.'
-                  : 'No Ark secret matches. The typed name is used as is.'}
+                {emptyMessage(isError, names.length > 0)}
               </ComboboxEmpty>
             )}
             <ComboboxList>
@@ -100,14 +137,21 @@ export function SecretNameField({
             </ComboboxList>
           </ComboboxContent>
         </Autocomplete>
-        <CreateResourceButton kind="secret" onCreated={onChange} />
+        <CreateResourceButton
+          kind="secret"
+          onCreated={name => {
+            setCreatedNames(current => [...current, name]);
+            onChange(name);
+          }}
+        />
       </div>
-      {isStoredValueMissing && (
-        <p className="text-fg-secondary text-sm">
+      {showMissingHint && (
+        <p id={hintId} className="text-fg-secondary text-sm">
           Not in the list of Ark secrets for this namespace. It is referenced by
           name.
         </p>
       )}
+      <FieldError id={errorId}>{error}</FieldError>
     </div>
   );
 }
@@ -121,6 +165,7 @@ export interface FormSecretNameFieldProps<
   label: string;
   secrets?: readonly Pick<Secret, 'name'>[];
   isPending?: boolean;
+  isError?: boolean;
   placeholder?: string;
 }
 
@@ -133,6 +178,7 @@ export function FormSecretNameField<
   label,
   secrets,
   isPending,
+  isError,
   placeholder,
 }: Readonly<FormSecretNameFieldProps<TFieldValues, TName>>) {
   return (
@@ -143,16 +189,18 @@ export function FormSecretNameField<
         <FieldSet className="gap-2">
           <FieldTitle>{label}</FieldTitle>
           <SecretNameField
+            ref={field.ref}
             value={field.value ?? ''}
             onChange={field.onChange}
             onBlur={field.onBlur}
             secrets={secrets}
             isPending={isPending}
+            isError={isError}
             placeholder={placeholder}
             aria-label={label}
             invalid={!!fieldState.error}
+            error={fieldState.error?.message}
           />
-          <FieldError>{fieldState.error?.message}</FieldError>
         </FieldSet>
       )}
     />

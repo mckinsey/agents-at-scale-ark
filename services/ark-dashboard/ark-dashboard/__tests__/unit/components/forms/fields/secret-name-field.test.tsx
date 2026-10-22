@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { createRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SecretNameField } from '@/components/forms/fields/secret-name-field';
@@ -166,5 +166,99 @@ describe('SecretNameField', () => {
   it('disables the input when disabled', () => {
     renderField({ disabled: true });
     expect(input()).toBeDisabled();
+  });
+
+  it('hides the hint while the field has focus', async () => {
+    const user = userEvent.setup();
+    renderField({ value: 'kubectl-made' });
+
+    await user.click(input());
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+
+    await user.tab();
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+  });
+
+  it('says the list failed to load instead of flagging the stored name', async () => {
+    const user = userEvent.setup();
+    renderField({ value: 'kubectl-made', secrets: undefined, isError: true });
+
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear secret' }));
+    await user.click(input());
+    expect(
+      await screen.findByText(/Couldn't load the Ark secrets/),
+    ).toBeInTheDocument();
+  });
+
+  it('does not flag a secret just created with Add New', async () => {
+    const user = userEvent.setup();
+    render(<StatefulField onChange={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add New' }));
+
+    expect(input()).toHaveValue('created-secret');
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+  });
+
+  function renderInForm() {
+    const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <StatefulField onChange={vi.fn()} />
+        <button type="submit">Create</button>
+      </form>,
+    );
+    return { onSubmit };
+  }
+
+  it('closes the list on Enter without submitting the form', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderInForm();
+
+    await user.type(input(), 'no-match');
+    await screen.findByText(/No Ark secret matches/);
+    await user.keyboard('{Enter}');
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(input()).toHaveValue('no-match');
+  });
+
+  it('submits the form on Enter once the list is closed', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderInForm();
+
+    await user.click(input());
+    await user.keyboard('{Escape}{Enter}');
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('still picks the highlighted item on Enter', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<StatefulField onChange={onChange} />);
+
+    await user.type(input(), 'github');
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(onChange).toHaveBeenLastCalledWith('github-pat');
+  });
+
+  it('links the error to the input', () => {
+    renderField({ invalid: true, error: 'API Key is required' });
+
+    const error = screen.getByRole('alert');
+    expect(error).toHaveTextContent('API Key is required');
+    expect(input()).toHaveAttribute(
+      'aria-describedby',
+      expect.stringContaining(error.id),
+    );
+  });
+
+  it('forwards the ref to the input', () => {
+    const ref = createRef<HTMLInputElement>();
+    renderField({ ref });
+    expect(ref.current).toBe(input());
   });
 });

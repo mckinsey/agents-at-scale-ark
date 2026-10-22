@@ -38,7 +38,11 @@ export function McpServerFields({
   nameDisabled,
   transportDisabled,
 }: McpServerFieldsProps) {
-  const { data: secrets } = useGetAllSecrets();
+  const {
+    data: secrets,
+    isPending: isSecretsPending,
+    isError: isSecretsError,
+  } = useGetAllSecrets();
   const {
     headers,
     headerErrors,
@@ -121,6 +125,8 @@ export function McpServerFields({
               clearRowError(row.key, updated);
             }}
             secrets={secrets ?? []}
+            isSecretsPending={isSecretsPending}
+            isSecretsError={isSecretsError}
             deleteRow={deleteRow}
             nameError={headerErrors[row.key]?.nameError}
             valueError={headerErrors[row.key]?.valueError}
