@@ -3,12 +3,15 @@ import base64
 import json
 import os
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 os.environ["AUTH_MODE"] = "open"
 
 from fastapi.testclient import TestClient
+from kubernetes_asyncio.client.rest import ApiException
 from ark_sdk.secret_scope import SecretScope
+from ark_api.api.v1.secrets import router as secrets_router
+from ark_api.auth.secret_scope import get_secret_scope
 
 _LEAKED_PASSWORD = "sup3rs3cret"
 _LEAKED_TOKEN_B64 = base64.b64encode(b"sk-FAKE-token").decode()
@@ -166,6 +169,49 @@ class TestSecretsScope(unittest.TestCase):
             mock_client_cls.reset_mock()
             self.assertEqual(send().status_code, 200)
             self.assertEqual(mock_client_cls.call_args.kwargs["scope"], SecretScope())
+
+    def test_every_route_declares_the_scope_dependency(self):
+        for route in secrets_router.routes:
+            with self.subTest(route=route.path, methods=route.methods):
+                self.assertIn(get_secret_scope, [dep.call for dep in route.dependant.dependencies])
+
+
+@patch('ark_sdk.k8s.ApiClient')
+@patch('ark_sdk.k8s.init_k8s', new=AsyncMock())
+class TestSecretsOutOfScope(unittest.TestCase):
+    def setUp(self):
+        from ark_api.main import app
+        self.client = TestClient(app)
+        v1_patcher = patch('ark_sdk.k8s.client.CoreV1Api')
+        self.v1 = v1_patcher.start().return_value
+        self.addCleanup(v1_patcher.stop)
+        self.v1.replace_namespaced_secret = AsyncMock()
+        self.v1.delete_namespaced_secret = AsyncMock()
+
+    def _send_all(self):
+        return [
+            self.client.get("/v1/secrets/legacy-token?namespace=default"),
+            self.client.put("/v1/secrets/legacy-token?namespace=default", json={"string_data": {"token": "t"}}),
+            self.client.delete("/v1/secrets/legacy-token?namespace=default"),
+        ]
+
+    def test_out_of_scope_secret_looks_like_a_missing_one(self, _):
+        self.v1.read_namespaced_secret = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
+        missing = self._send_all()
+
+        unlabelled = Mock()
+        unlabelled.metadata.labels = {"app": "legacy"}
+        self.v1.read_namespaced_secret = AsyncMock(return_value=unlabelled)
+        out_of_scope = self._send_all()
+
+        for missing_response, out_of_scope_response in zip(missing, out_of_scope):
+            self.assertEqual(out_of_scope_response.status_code, 404)
+            self.assertEqual(out_of_scope_response.json(), missing_response.json())
+        self.assertEqual(
+            out_of_scope[0].json(), {"detail": "Secret 'legacy-token' not found in namespace default"}
+        )
+        self.v1.replace_namespaced_secret.assert_not_called()
+        self.v1.delete_namespaced_secret.assert_not_called()
 
 
 if __name__ == '__main__':

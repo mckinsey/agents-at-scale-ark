@@ -1,0 +1,235 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: secret-scoping
+  labels:
+    requires-images: "true"
+spec:
+  description: >
+    #2559: every /v1/secrets route serves only secrets carrying the Ark labels
+    (resource-type=secret, scope=shared). Deploys a real ark-api from this
+    build's image and checks against real Secrets that unlabelled,
+    half-labelled and internal secrets are absent from the list, that GET, PUT
+    and DELETE on them answer 404 without touching the stored data, that a
+    created secret gets both labels and can be updated and deleted, that the
+    reserved u-<16 hex>- prefix is
+    rejected, and that labelling an existing secret brings it into scope.
+  timeouts:
+    apply: 120s
+    assert: 120s
+    exec: 180s
+
+  steps:
+  - name: install-ark-api
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-api ../../services/ark-api/chart \
+            --namespace "$NAMESPACE" \
+            ${ARK_API_IMAGE:+--set app.image.repository=${ARK_API_IMAGE}} \
+            ${ARK_API_IMAGE_TAG:+--set app.image.tag=${ARK_API_IMAGE_TAG}} \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-api --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: create-secrets-and-probe
+    try:
+    - apply:
+        file: manifests/a01-secrets.yaml
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: secret-scoping-curl
+          spec:
+            containers:
+              - name: curl
+                image: curlimages/curl:8.11.1
+                command: ["sleep", "600"]
+            restartPolicy: Never
+            terminationGracePeriodSeconds: 0
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: secret-scoping-curl
+        timeout: 120s
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+
+  - name: list-serves-only-ark-secrets
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          set -eu
+          NAMES=$(kubectl exec secret-scoping-curl -n "$NAMESPACE" -- \
+            curl -sf "http://ark-api.$NAMESPACE.svc.cluster.local/v1/secrets?namespace=$NAMESPACE" \
+            | jq -c '[.items[].name] | sort')
+          echo "listed: $NAMES"
+          [ "$NAMES" = '["ark-shared-token"]' ] || { echo "FAIL: expected only ark-shared-token"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: out-of-scope-secrets-are-not-found
+    try:
+    - script:
+        timeout: 90s
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/secrets"
+          status() {
+            kubectl exec secret-scoping-curl -n "$NAMESPACE" -- \
+              curl -s -o /dev/null -w '%{http_code}' -X "$1" "$BASE_URL/$2?namespace=$NAMESPACE" \
+              -H 'Content-Type: application/json' ${3:+-d "$3"}
+          }
+          expect() {
+            CODE=$(status "$1" "$2" "${4:-}")
+            echo "$1 $2 -> $CODE"
+            [ "$CODE" = "$3" ] || { echo "FAIL: expected $3"; exit 1; }
+          }
+
+          BEFORE=$(kubectl get secret legacy-token -n "$NAMESPACE" -o jsonpath='{.data}')
+          expect GET legacy-token 404
+          expect PUT legacy-token 404 '{"string_data":{"token":"overwritten"}}'
+          expect DELETE legacy-token 404
+          AFTER=$(kubectl get secret legacy-token -n "$NAMESPACE" -o jsonpath='{.data}')
+          [ "$BEFORE" = "$AFTER" ] || { echo "FAIL: legacy-token data changed"; exit 1; }
+
+          expect GET half-labelled 404
+          expect GET internal-api-key 404
+          expect DELETE internal-api-key 404
+          kubectl get secret half-labelled internal-api-key -n "$NAMESPACE" >/dev/null
+
+          MISSING=$(kubectl exec secret-scoping-curl -n "$NAMESPACE" -- \
+            curl -s "$BASE_URL/does-not-exist?namespace=$NAMESPACE" | jq -r .detail)
+          LEGACY=$(kubectl exec secret-scoping-curl -n "$NAMESPACE" -- \
+            curl -s "$BASE_URL/legacy-token?namespace=$NAMESPACE" | jq -r .detail)
+          echo "missing: $MISSING"
+          echo "legacy:  $LEGACY"
+          [ "$LEGACY" = "Secret 'legacy-token' not found in namespace $NAMESPACE" ] || { echo "FAIL: unexpected detail"; exit 1; }
+          [ "$(echo "$MISSING" | sed s/does-not-exist/NAME/)" = "$(echo "$LEGACY" | sed s/legacy-token/NAME/)" ] \
+            || { echo "FAIL: details differ"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: create-labels-and-reserved-prefix
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/secrets?namespace=$NAMESPACE"
+          create() {
+            kubectl exec secret-scoping-curl -n "$NAMESPACE" -- \
+              curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL" \
+              -H 'Content-Type: application/json' \
+              -d "{\"name\":\"$1\",\"string_data\":{\"token\":\"value\"}}"
+          }
+
+          CODE=$(create u-0123456789abcdef-x)
+          echo "POST u-0123456789abcdef-x -> $CODE"
+          [ "$CODE" = "422" ] || { echo "FAIL: expected 422"; exit 1; }
+          ! kubectl get secret u-0123456789abcdef-x -n "$NAMESPACE" 2>/dev/null || { echo "FAIL: reserved secret was created"; exit 1; }
+
+          CODE=$(create fresh)
+          echo "POST fresh -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+          LABELS=$(kubectl get secret fresh -n "$NAMESPACE" -o json | jq -c '.metadata.labels')
+          echo "fresh labels: $LABELS"
+          echo "$LABELS" | jq -e '."ark.mckinsey.com/resource-type" == "secret" and ."ark.mckinsey.com/scope" == "shared"' >/dev/null \
+            || { echo "FAIL: fresh is missing the Ark labels"; exit 1; }
+
+          CODE=$(kubectl exec secret-scoping-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' -X PUT "http://ark-api.$NAMESPACE.svc.cluster.local/v1/secrets/fresh?namespace=$NAMESPACE" \
+            -H 'Content-Type: application/json' -d '{"string_data":{"token":"rotated"}}')
+          echo "PUT fresh -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+          TOKEN=$(kubectl get secret fresh -n "$NAMESPACE" -o jsonpath='{.data.token}' | base64 -d)
+          [ "$TOKEN" = "rotated" ] || { echo "FAIL: PUT did not change the value"; exit 1; }
+          kubectl get secret fresh -n "$NAMESPACE" -o json \
+            | jq -e '.metadata.labels | ."ark.mckinsey.com/resource-type" == "secret" and ."ark.mckinsey.com/scope" == "shared"' >/dev/null \
+            || { echo "FAIL: PUT dropped the Ark labels"; exit 1; }
+
+          kubectl create secret generic doomed -n "$NAMESPACE" --from-literal=token=x
+          kubectl label secret doomed -n "$NAMESPACE" ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
+          CODE=$(kubectl exec secret-scoping-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' -X DELETE "http://ark-api.$NAMESPACE.svc.cluster.local/v1/secrets/doomed?namespace=$NAMESPACE")
+          echo "DELETE doomed -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+          ! kubectl get secret doomed -n "$NAMESPACE" 2>/dev/null || { echo "FAIL: labelled secret was not deleted"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: labelling-brings-a-secret-into-scope
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/secrets"
+          kubectl label secret legacy-token -n "$NAMESPACE" \
+            ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared --overwrite
+
+          CODE=$(kubectl exec secret-scoping-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/legacy-token?namespace=$NAMESPACE")
+          echo "GET legacy-token after labelling -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+
+          NAMES=$(kubectl exec secret-scoping-curl -n "$NAMESPACE" -- \
+            curl -sf "$BASE_URL?namespace=$NAMESPACE" | jq -c '[.items[].name] | sort')
+          echo "listed: $NAMES"
+          [ "$NAMES" = '["ark-shared-token","fresh","legacy-token"]' ] || { echo "FAIL: unexpected list"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

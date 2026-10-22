@@ -111,7 +111,7 @@ kubectl create secret generic alice-github-token \
   --from-literal=token="Bearer ghp_alice_personal_access_token"
 ```
 
-The registration token carries the [Ark secret labels](/user-guide/secrets) because the whole namespace shares it. Leave the personal tokens without them: each belongs to one user, and the query override reads it by name either way. Once `/v1/secrets` serves only labelled Secrets, the personal tokens also stay off the dashboard **Secrets** page.
+The registration token carries the [Ark secret labels](/user-guide/secrets) because the whole namespace shares it. Leave the personal tokens without them: each belongs to one user, and the query override reads it by name either way. Without the labels, the personal tokens also stay off the dashboard **Secrets** page.
 
 ## Step 4 — Query as the user
 

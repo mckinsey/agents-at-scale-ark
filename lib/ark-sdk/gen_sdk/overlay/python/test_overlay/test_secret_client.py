@@ -6,6 +6,7 @@ from unittest.mock import Mock, AsyncMock, MagicMock, patch, call
 from kubernetes_asyncio.client.rest import ApiException
 
 from ark_sdk.k8s import SecretClient, _build_labels_and_annotations
+from ark_sdk.secret_scope import SecretScope
 
 SYSTEM_LABELS = {
     "ark.mckinsey.com/resource-type": "secret",
@@ -97,7 +98,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         # Verify namespace parameter was passed correctly
         mock_api_instance.list_namespaced_secret.assert_called_once_with(
             namespace="test-namespace",
-            label_selector=None
+            label_selector="ark.mckinsey.com/resource-type=secret,ark.mckinsey.com/scope in (shared)"
         )
 
     @patch('ark_sdk.k8s.ApiClient')
@@ -194,7 +195,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = {}
-        mock_secret.metadata.labels = {}
+        mock_secret.metadata.labels = dict(SYSTEM_LABELS)
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": secret_value}  # base64 encoded "test-token"
         
@@ -221,7 +222,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
-        mock_secret.metadata.labels = {}
+        mock_secret.metadata.labels = dict(SYSTEM_LABELS)
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "placeholder"}
 
@@ -411,7 +412,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = {}
-        mock_secret.metadata.labels = {}
+        mock_secret.metadata.labels = dict(SYSTEM_LABELS)
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "bmV3LXRva2Vu"}  # base64 encoded "new-token"
         
@@ -442,7 +443,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
-        mock_secret.metadata.labels = {}
+        mock_secret.metadata.labels = dict(SYSTEM_LABELS)
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "bmV3LXRva2Vu"}
 
@@ -467,7 +468,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         existing_secret = Mock()
         existing_secret.metadata.name = "test-secret"
         existing_secret.metadata.uid = "uuid-12345"
-        existing_secret.metadata.labels = {}
+        existing_secret.metadata.labels = dict(SYSTEM_LABELS)
         existing_secret.metadata.annotations = {}
         existing_secret.type = "Opaque"
         existing_secret.data = {"token": "b2xkLXRva2Vu"}
@@ -497,7 +498,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         existing_secret = Mock()
         existing_secret.metadata.name = "test-secret"
         existing_secret.metadata.uid = "uuid-12345"
-        existing_secret.metadata.labels = {"ark.mckinsey.com/label.my-key": "true"}
+        existing_secret.metadata.labels = {**SYSTEM_LABELS, "ark.mckinsey.com/label.my-key": "true"}
         existing_secret.metadata.annotations = {}
         existing_secret.type = "Opaque"
         existing_secret.data = {"token": "b2xkLXRva2Vu"}
@@ -520,7 +521,7 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         existing_secret = Mock()
         existing_secret.metadata.name = "test-secret"
         existing_secret.metadata.uid = "uuid-12345"
-        existing_secret.metadata.labels = {}
+        existing_secret.metadata.labels = dict(SYSTEM_LABELS)
         existing_secret.metadata.annotations = {}
         existing_secret.type = "Opaque"
         existing_secret.data = {"token": "b2xkLXRva2Vu"}
@@ -552,11 +553,11 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
-    async def test_update_secret_does_not_adopt_unlabelled_secret(self, mock_v1_api, mock_api_client):
+    async def test_update_secret_keeps_system_labels_when_tags_are_cleared(self, mock_v1_api, mock_api_client):
         mock_api_client.return_value.__aenter__.return_value = AsyncMock()
 
         existing_secret = Mock()
-        existing_secret.metadata.labels = {"app": "legacy"}
+        existing_secret.metadata.labels = {**SYSTEM_LABELS, "ark.mckinsey.com/label.old": "true"}
         existing_secret.metadata.annotations = {}
         existing_secret.data = {}
 
@@ -564,10 +565,11 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_api_instance.read_namespaced_secret = AsyncMock(return_value=existing_secret)
         mock_api_instance.replace_namespaced_secret = AsyncMock(return_value=existing_secret)
 
-        await self.client.update_secret(name="legacy-secret", string_data={"token": "new-token"})
+        await self.client.update_secret(name="test-secret", labels=[])
 
         body = mock_api_instance.replace_namespaced_secret.call_args.kwargs["body"]
-        self.assertEqual(body.metadata.labels, {"app": "legacy"})
+        self.assertIs(body, existing_secret)
+        self.assertEqual(body.metadata.labels, SYSTEM_LABELS)
 
     def test_update_secret_invalid_fields(self):
         """Test updating secret with invalid fields - adapted from ark-api test."""
@@ -669,21 +671,23 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_api_client_instance = AsyncMock()
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
         
-        # Mock successful deletion (no return value)
+        existing_secret = Mock()
+        existing_secret.metadata.uid = "uuid-12345"
+        existing_secret.metadata.resource_version = "42"
+        existing_secret.metadata.labels = dict(SYSTEM_LABELS)
+
         mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=existing_secret)
         mock_api_instance.delete_namespaced_secret = AsyncMock(return_value=None)
-        
-        # Test the method
+
         result = await self.client.delete_secret("test-secret")
-        
-        # Assert response
+
         self.assertTrue(result)
-        
-        # Verify the delete was called correctly
-        mock_api_instance.delete_namespaced_secret.assert_called_once_with(
-            name="test-secret",
-            namespace="test-namespace"
-        )
+        kwargs = mock_api_instance.delete_namespaced_secret.call_args.kwargs
+        self.assertEqual(kwargs["name"], "test-secret")
+        self.assertEqual(kwargs["namespace"], "test-namespace")
+        self.assertEqual(kwargs["body"].preconditions.uid, "uuid-12345")
+        self.assertEqual(kwargs["body"].preconditions.resource_version, "42")
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
@@ -693,16 +697,16 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_api_client_instance = AsyncMock()
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
         
-        # Mock API exception
         mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.delete_namespaced_secret = AsyncMock(side_effect=ApiException(
+        mock_api_instance.read_namespaced_secret = AsyncMock(side_effect=ApiException(
             status=404,
             reason="Not Found"
         ))
-        
-        # Test that exception is propagated
+        mock_api_instance.delete_namespaced_secret = AsyncMock()
+
         with self.assertRaises(ApiException):
             await self.client.delete_secret("nonexistent")
+        mock_api_instance.delete_namespaced_secret.assert_not_called()
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
@@ -712,8 +716,10 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_api_client_instance = AsyncMock()
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
         
-        # Mock API exception
         mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=Mock(
+            metadata=Mock(uid="uuid-12345", labels=dict(SYSTEM_LABELS))
+        ))
         mock_api_instance.delete_namespaced_secret = AsyncMock(side_effect=ApiException(
             status=403,
             reason="Forbidden"
@@ -722,6 +728,90 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         # Test that exception is propagated
         with self.assertRaises(ApiException):
             await self.client.delete_secret("protected-secret")
+
+
+OUT_OF_SCOPE_LABELS = [
+    None,
+    {},
+    {"app": "legacy"},
+    {"ark.mckinsey.com/resource-type": "secret"},
+    {"ark.mckinsey.com/scope": "shared"},
+    {"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "user-abc"},
+]
+
+
+@patch('ark_sdk.k8s.ApiClient')
+class TestSecretClientScope(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        patcher = patch('ark_sdk.k8s.init_k8s', new=AsyncMock())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        v1_patcher = patch('ark_sdk.k8s.client.CoreV1Api')
+        self.v1 = v1_patcher.start().return_value
+        self.addCleanup(v1_patcher.stop)
+        self.v1.list_namespaced_secret = AsyncMock(return_value=Mock(items=[]))
+        self.v1.replace_namespaced_secret = AsyncMock()
+        self.v1.delete_namespaced_secret = AsyncMock()
+
+    def _stored(self, labels):
+        secret = Mock()
+        secret.metadata.name = "legacy-token"
+        secret.metadata.uid = "uuid-legacy"
+        secret.metadata.labels = labels
+        secret.metadata.annotations = {}
+        secret.type = "Opaque"
+        secret.data = {"token": "dGVzdC10b2tlbg=="}
+        self.v1.read_namespaced_secret = AsyncMock(return_value=secret)
+        return secret
+
+    async def test_list_combines_scope_with_caller_selector(self, _):
+        await SecretClient(namespace="ns").list_secrets(label_selector="ark.mckinsey.com/label.prod=true")
+
+        self.v1.list_namespaced_secret.assert_called_once_with(
+            namespace="ns",
+            label_selector="ark.mckinsey.com/resource-type=secret,ark.mckinsey.com/scope in (shared),ark.mckinsey.com/label.prod=true",
+        )
+
+    async def test_list_uses_every_scope_value(self, _):
+        await SecretClient(namespace="ns", scope=SecretScope(("shared", "user-x"))).list_secrets()
+
+        self.assertEqual(
+            self.v1.list_namespaced_secret.call_args.kwargs["label_selector"],
+            "ark.mckinsey.com/resource-type=secret,ark.mckinsey.com/scope in (shared,user-x)",
+        )
+
+    async def test_out_of_scope_secret_is_not_found(self, _):
+        client = SecretClient(namespace="ns")
+        operations = {
+            "get": lambda: client.get_secret("legacy-token"),
+            "update": lambda: client.update_secret("legacy-token", string_data={"token": "new-token"}),
+            "delete": lambda: client.delete_secret("legacy-token"),
+        }
+        for labels in OUT_OF_SCOPE_LABELS:
+            for operation, call_operation in operations.items():
+                with self.subTest(labels=labels, operation=operation):
+                    self._stored(labels)
+                    with self.assertRaises(ApiException) as raised:
+                        await call_operation()
+                    self.assertEqual(raised.exception.status, 404)
+                    self.assertEqual(raised.exception.reason, "Secret 'legacy-token' not found")
+
+        self.v1.replace_namespaced_secret.assert_not_called()
+        self.v1.delete_namespaced_secret.assert_not_called()
+
+    async def test_user_scope_reaches_its_own_secret(self, _):
+        self._stored({"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "user-x"})
+
+        result = await SecretClient(namespace="ns", scope=SecretScope(("shared", "user-x"))).get_secret("legacy-token")
+
+        self.assertEqual(result["name"], "legacy-token")
+
+    async def test_get_secret_value_reads_unlabelled_secret(self, _):
+        self._stored({})
+
+        result = await SecretClient(namespace="ns").get_secret_value("legacy-token", "token")
+
+        self.assertEqual(result["value"], "dGVzdC10b2tlbg==")
 
 
 class TestBuildLabelsAndAnnotations(unittest.TestCase):
