@@ -10,8 +10,8 @@
 # Steps 2 and 3 run in that order; reversing them would sweep the cards landing
 # in N+1 straight on to N+2. Status is never written during the moves.
 #
-# Usage: scripts/sprint-rollover.sh <released-version> [options]
-# Example: scripts/sprint-rollover.sh 0.1.72 --apply
+# Usage: bash .claude/skills/sprint-rollover/scripts/sprint-rollover.sh <version> [options]
+# Example: bash .claude/skills/sprint-rollover/scripts/sprint-rollover.sh 0.1.72 --apply
 #
 # Dry-run unless --apply is given. Needs an OAuth or fine-grained token with
 # the project scope: the mckinsey org rejects classic PATs, so run
@@ -52,7 +52,7 @@ usage() {
 Shift the ARK project board forward one release after a release ships.
 
 Usage:
-  scripts/sprint-rollover.sh <released-version> [options]
+  bash .claude/skills/sprint-rollover/scripts/sprint-rollover.sh <version> [options]
 
 Arguments:
   <released-version>    Release that just shipped, e.g. 0.1.72. Must match a
@@ -79,9 +79,9 @@ Options:
   -h, --help            Show this help.
 
 Examples:
-  scripts/sprint-rollover.sh 0.1.72
-  scripts/sprint-rollover.sh 0.1.72 --apply
-  scripts/sprint-rollover.sh --apply --report /tmp/rollover.md
+  bash .claude/skills/sprint-rollover/scripts/sprint-rollover.sh 0.1.72
+  bash .claude/skills/sprint-rollover/scripts/sprint-rollover.sh 0.1.72 --apply
+  bash .claude/skills/sprint-rollover/scripts/sprint-rollover.sh --apply --yes
 EOF
 }
 
@@ -106,7 +106,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$REPO_ROOT" ]; then
+  REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+fi
+[ -f "$REPO_ROOT/version.txt" ] ||
+  { echo -e "${red}error${nc}: could not locate the repo root from $0"; exit 1; }
 cd "$REPO_ROOT"
 
 for bin in gh git python3; do
@@ -320,9 +325,14 @@ echo -e "   mode         $( $APPLY && echo -e "${red}APPLY${nc}" || echo -e "${g
 
 step "Scanning board"
 
+SCAN_ATTEMPT=0
+while :; do
+SCAN_ATTEMPT=$((SCAN_ATTEMPT + 1))
 : >"${WORK}/pages.jsonl"
 CURSOR=""
 PAGE=0
+COLLECTED=0
+PAGE_RETRY=0
 while :; do
   PAGE=$((PAGE + 1))
   if [ -z "$CURSOR" ]; then AFTER="null"; else AFTER="\"${CURSOR}\""; fi
@@ -331,6 +341,7 @@ query {
   organization(login: "${ORG}") {
     projectV2(number: ${PROJECT_NUMBER}) {
       items(first: 100, after: ${AFTER}) {
+        totalCount
         pageInfo { hasNextPage endCursor }
         nodes {
           id
@@ -359,18 +370,66 @@ query {
 }
 EOF
   gql "${WORK}/q-scan.graphql" "${WORK}/page.json"
-  cat "${WORK}/page.json" >>"${WORK}/pages.jsonl"
-  read -r HAS_NEXT CURSOR < <(python3 -c '
+  read -r N_NODES HAS_NEXT TOTAL NEXT_CURSOR < <(python3 -c '
 import json, sys
 d = json.load(open(sys.argv[1]))
-pi = d["data"]["organization"]["projectV2"]["items"]["pageInfo"]
-print(pi["hasNextPage"], pi["endCursor"] or "")
+it = d["data"]["organization"]["projectV2"]["items"]
+pi = it["pageInfo"]
+print(len(it["nodes"]), pi["hasNextPage"], it.get("totalCount") or 0, pi["endCursor"] or "")
 ' "${WORK}/page.json")
-  printf '\r   page %d scanned' "$PAGE"
+  if { [ "$N_NODES" -eq 0 ] || [ "$TOTAL" -eq 0 ]; } &&
+     { [ "$TOTAL" -eq 0 ] || [ "$COLLECTED" -lt "$TOTAL" ]; }; then
+    PAGE_RETRY=$((PAGE_RETRY + 1))
+    if [ "$PAGE_RETRY" -le 6 ]; then
+      printf '\r   page %d came back empty; retrying in %ds   ' "$PAGE" "$((PAGE_RETRY * 10))"
+      sleep $((PAGE_RETRY * 10))
+      PAGE=$((PAGE - 1))
+      continue
+    fi
+    break
+  fi
+  PAGE_RETRY=0
+  cat "${WORK}/page.json" >>"${WORK}/pages.jsonl"
+  COLLECTED=$((COLLECTED + N_NODES))
+  CURSOR="$NEXT_CURSOR"
+  printf '\r   page %d scanned (%d/%d items)        ' "$PAGE" "$COLLECTED" "$TOTAL"
   [ "$HAS_NEXT" = "True" ] || break
   sleep 1
 done
 echo
+
+if python3 - "${WORK}/pages.jsonl" <<'PY'
+import json, sys
+txt = open(sys.argv[1]).read()
+dec, i, collected, totals = json.JSONDecoder(), 0, 0, []
+while i < len(txt):
+    while i < len(txt) and txt[i] in " \n\r\t":
+        i += 1
+    if i >= len(txt):
+        break
+    obj, i = dec.raw_decode(txt, i)
+    it = obj["data"]["organization"]["projectV2"]["items"]
+    collected += len(it["nodes"])
+    totals.append(it.get("totalCount") or 0)
+expected = max(totals) if totals else 0
+if expected and collected < expected:
+    print("   truncated: collected %d of %d items" % (collected, expected), file=sys.stderr)
+    sys.exit(1)
+if not expected:
+    print("   totalCount unavailable; cannot confirm the scan is complete", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+PY
+then
+  break
+fi
+
+if [ "$SCAN_ATTEMPT" -ge 4 ]; then
+  fail "board scan kept coming back short after ${SCAN_ATTEMPT} attempts. GitHub truncates deep Projects pagination under load - wait a minute and re-run. Nothing has been changed."
+fi
+echo -e "   ${yellow}incomplete scan${nc}; restarting it (attempt $((SCAN_ATTEMPT + 1)) of 4)"
+sleep 30
+done
 
 python3 - "${WORK}/pages.jsonl" "$N_TITLE" "$N1_TITLE" "${WORK}/items.json" <<'PY'
 import json, sys
