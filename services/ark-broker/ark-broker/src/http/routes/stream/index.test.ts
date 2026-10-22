@@ -37,14 +37,32 @@ describe('Streaming API', () => {
   // Helper to send chunks to stream endpoint
   const sendChunks = async (
     queryId: string,
-    chunks: unknown[]
+    chunks: unknown[],
+    runId?: string
   ): Promise<unknown> => {
-    const response = await request(app)
+    const chunkRequest = request(app)
       .post(`/stream/${queryId}`)
-      .set('Content-Type', 'application/x-ndjson')
-      .send(chunks.map((c) => JSON.stringify(c) + '\n').join(''));
-    return response;
+      .set('Content-Type', 'application/x-ndjson');
+    if (runId) chunkRequest.set('X-Ark-Stream-Run-ID', runId);
+    return await chunkRequest.send(
+      chunks.map((c) => JSON.stringify(c) + '\n').join('')
+    );
   };
+
+  const startRun = async (queryId: string, runId: string): Promise<unknown> =>
+    await request(app)
+      .post(`/stream/${queryId}/start`)
+      .set('X-Ark-Stream-Run-ID', runId)
+      .send({});
+
+  const completeRun = async (
+    queryId: string,
+    runId: string
+  ): Promise<unknown> =>
+    await request(app)
+      .post(`/stream/${queryId}/complete`)
+      .set('X-Ark-Stream-Run-ID', runId)
+      .send({});
 
   // Helper to consume SSE stream with timeout
   const consumeStream = (
@@ -242,6 +260,126 @@ describe('Streaming API', () => {
       expect(JSON.parse(events[0]).choices[0].delta.content).toBe(
         'New message'
       );
+    });
+  });
+
+  describe('Multiple execution runs', () => {
+    it('replays only the latest run after a same-name query is recreated', async () => {
+      const queryId = 'recreated-query';
+      await startRun(queryId, 'run-1');
+      await sendChunks(queryId, [createTextChunk('Old answer')], 'run-1');
+
+      await startRun(queryId, 'run-2');
+      await sendChunks(queryId, [createTextChunk('New answer')], 'run-2');
+      await sendChunks(queryId, [createTextChunk('Late old answer')], 'run-1');
+      await completeRun(queryId, 'run-1');
+      await completeRun(queryId, 'run-2');
+
+      const events = await consumeStream(queryId, {fromBeginning: true});
+      expect(events.some((event) => event.includes('New answer'))).toBe(true);
+      expect(events.some((event) => event.includes('Old answer'))).toBe(false);
+      expect(events.some((event) => event.includes('Late old answer'))).toBe(
+        false
+      );
+      expect(events.at(-1)).toBe('[DONE]');
+    });
+
+    it('ignores late chunks from an older run for a live subscriber', async () => {
+      const queryId = 'live-recreated-query';
+      await startRun(queryId, 'run-1');
+      await sendChunks(queryId, [createTextChunk('Old answer')], 'run-1');
+      await completeRun(queryId, 'run-1');
+      await startRun(queryId, 'run-2');
+
+      const streamPromise = consumeStream(queryId, {timeout: 5000});
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sendChunks(queryId, [createTextChunk('Late old answer')], 'run-1');
+      await sendChunks(queryId, [createTextChunk('New answer')], 'run-2');
+      await completeRun(queryId, 'run-2');
+
+      const events = await streamPromise;
+      expect(events.some((event) => event.includes('New answer'))).toBe(true);
+      expect(events.some((event) => event.includes('Old answer'))).toBe(false);
+      expect(events.at(-1)).toBe('[DONE]');
+    });
+
+    it('terminates a live subscriber on the resumed run completion', async () => {
+      const queryId = 'resumed-query';
+      await startRun(queryId, 'run-1');
+      await sendChunks(
+        queryId,
+        [createTextChunk('Approval requested')],
+        'run-1'
+      );
+      await completeRun(queryId, 'run-1');
+
+      const streamPromise = consumeStream(queryId, {timeout: 5000});
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await startRun(queryId, 'run-2');
+      await sendChunks(queryId, [createTextChunk('Resumed answer')], 'run-2');
+      await completeRun(queryId, 'run-2');
+
+      const events = await streamPromise;
+      expect(events.some((event) => event.includes('Resumed answer'))).toBe(
+        true
+      );
+      expect(events.some((event) => event.includes('Approval requested'))).toBe(
+        false
+      );
+      expect(events.at(-1)).toBe('[DONE]');
+    });
+
+    it('buffers live completion while a replay subscriber is catching up', async () => {
+      const queryId = 'replay-catch-up-query';
+      let releaseReplay!: () => void;
+      let markReplayStarted!: () => void;
+      const replayStarted = new Promise<void>((resolve) => {
+        markReplayStarted = resolve;
+      });
+      const replayGate = new Promise<void>((resolve) => {
+        releaseReplay = resolve;
+      });
+      const originalGetByQuery = chunks.getByQuery.bind(chunks);
+      jest.spyOn(chunks, 'getByQuery').mockImplementation(async (id) => {
+        if (id === queryId) {
+          markReplayStarted();
+          await replayGate;
+        }
+        return originalGetByQuery(id);
+      });
+
+      const streamPromise = consumeStream(queryId, {
+        fromBeginning: true,
+        timeout: 5000,
+      });
+      await replayStarted;
+
+      await startRun(queryId, 'run-1');
+      await sendChunks(queryId, [createTextChunk('Resumed answer')], 'run-1');
+      await completeRun(queryId, 'run-1');
+      releaseReplay();
+
+      const events = await streamPromise;
+      expect(events.some((event) => event.includes('Resumed answer'))).toBe(
+        true
+      );
+      expect(events.at(-1)).toBe('[DONE]');
+    });
+
+    it('creates and completes a run when it produced no chunks', async () => {
+      const queryId = 'empty-resumed-query';
+      await startRun(queryId, 'run-1');
+      await completeRun(queryId, 'run-1');
+      await startRun(queryId, 'run-2');
+
+      const response = await completeRun(queryId, 'run-2');
+      expect((response as {body: {status: string}}).body.status).toBe(
+        'completed'
+      );
+
+      const events = await consumeStream(queryId, {fromBeginning: true});
+      expect(events).toEqual(['[DONE]']);
     });
   });
 
