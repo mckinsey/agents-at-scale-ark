@@ -294,6 +294,54 @@ func TestConsumeA2AStreamEventsArtifactsPreferredOverFinalStatus(t *testing.T) {
 	assert.Equal(t, []string{"artifact answer"}, result.A2AResponse.Messages, "artifacts win over the terminal status message")
 }
 
+func TestConsumeA2AStreamEventsRejectedStatus(t *testing.T) {
+	ctx := context.Background()
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	stream := &mockEventStream{}
+
+	events <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskStatusUpdateEvent{
+			TaskID:    "task-1",
+			ContextID: "ctx-1",
+			Final:     true,
+			Status: protocol.TaskStatus{
+				State: protocol.TaskState(arka2a.TaskStateRejected),
+				Message: &protocol.Message{
+					Parts: []protocol.Part{protocol.NewTextPart("tool rejected")},
+				},
+			},
+		},
+	}
+
+	_, err := consumeA2AStreamEvents(ctx, nil, events, stream, "agent/test", "comp-1", "test", "default", "", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "task failed with state: rejected")
+}
+
+func TestConsumeA2AStreamEventsFailedStatus(t *testing.T) {
+	ctx := context.Background()
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	stream := &mockEventStream{}
+
+	events <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskStatusUpdateEvent{
+			TaskID:    "task-1",
+			ContextID: "ctx-1",
+			Final:     true,
+			Status: protocol.TaskStatus{
+				State: protocol.TaskState(arka2a.TaskStateFailed),
+				Message: &protocol.Message{
+					Parts: []protocol.Part{protocol.NewTextPart("tool failed")},
+				},
+			},
+		},
+	}
+
+	_, err := consumeA2AStreamEvents(ctx, nil, events, stream, "agent/test", "comp-1", "test", "default", "", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "task failed with state: failed")
+}
+
 func TestConsumeA2AStreamEventsNoEvents(t *testing.T) {
 	ctx := context.Background()
 	events := make(chan protocol.StreamingMessageEvent)
