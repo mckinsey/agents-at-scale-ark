@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.73-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72...v0.1.73-rc) (2026-10-23)
+
+
+### Bug Fixes
+
+* address CVEs from issue [#3830](https://github.com/mckinsey/agents-at-scale-ark/issues/3830) ([#3831](https://github.com/mckinsey/agents-at-scale-ark/issues/3831)) ([d684b4f](https://github.com/mckinsey/agents-at-scale-ark/commit/d684b4fcc95bdc22fe0f4ca3010fb5bfb92adbf5))
+
 ## [0.1.72-rc.4](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.72-rc.3...v0.1.72-rc.4) (2026-10-21)
 
 
