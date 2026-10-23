@@ -32,6 +32,7 @@ from ark_sdk.secret_scope import (
     SCOPE_LABEL,
     SHARED_SCOPE,
     SecretScope,
+    PersonalSecretError,
     SecretScopeChangeError,
     SecretScopeKind,
     display_name,
@@ -456,12 +457,17 @@ class SecretClient:
                 **_to_secret_metadata(secret.metadata),
             }
 
-    async def get_secret_value(self, name: str, key: str):
+    async def get_secret_value(self, name: str, key: str, *, allow_personal: bool = False):
         """Read one key of a secret, ignoring this client's scope.
 
         Executors and MCP header resolution use this to follow secretKeyRef
         references, which may point at secrets without Ark labels. Scoping it
         would break those references, so only the /v1/secrets CRUD is scoped.
+
+        A personal secret raises PersonalSecretError: personal secrets resolve
+        only from the headers of a Query's mcpserver overrides. Pass
+        allow_personal=True only on that path. The decision reads the labels,
+        so the value of a refused secret never leaves this method.
         """
         await init_k8s()
         async with create_api_client() as api:
@@ -471,6 +477,11 @@ class SecretClient:
                 name=name, 
                 namespace=self.namespace
             )
+            if not allow_personal and scope_kind(secret.metadata.labels) == "personal":
+                raise PersonalSecretError(
+                    f"Secret {name} is personal: personal secrets can only be used "
+                    "in the headers of a Query mcpserver override"
+                )
             if key not in secret.data:
                 raise ValueError(f"Invalid key {key} for secret {name}")
                 
