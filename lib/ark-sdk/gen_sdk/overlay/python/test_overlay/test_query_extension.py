@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
 
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import PersonalSecretError
 from ark_sdk.extensions.query import (
     QUERY_EXTENSION_URI,
     QUERY_EXTENSION_METADATA_KEY,
@@ -560,6 +561,17 @@ class TestResolveValueSource(unittest.IsolatedAsyncioTestCase):
         vs = {"valueFrom": {"secretKeyRef": {"name": "missing", "key": "k"}}}
         result = await _resolve_value_source(vs, "ns")
         self.assertEqual(result, "")
+
+    @patch("ark_sdk.extensions.query.SecretClient")
+    async def test_personal_secret_refusal_propagates(self, mock_secret_cls):
+        mock_sc = AsyncMock()
+        mock_sc.get_secret_value = AsyncMock(side_effect=PersonalSecretError("Secret u-0123456789abcdef-k is personal"))
+        mock_secret_cls.return_value = mock_sc
+
+        vs = {"valueFrom": {"secretKeyRef": {"name": "u-0123456789abcdef-k", "key": "token"}}}
+        with self.assertRaises(PersonalSecretError):
+            await _resolve_value_source(vs, "ns")
+        mock_sc.get_secret_value.assert_awaited_once_with("u-0123456789abcdef-k", "token")
 
 
 class TestResolveModelWithSecrets(unittest.IsolatedAsyncioTestCase):
