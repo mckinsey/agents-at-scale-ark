@@ -10,6 +10,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/resolution"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 type OverrideType string
@@ -24,10 +25,23 @@ func ResolveHeaders(ctx context.Context, k8sClient client.Client, headers []arkv
 }
 
 func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error) {
+	return resolveHeaderValueWithAccess(ctx, k8sClient, header, namespace, secretscope.RejectPersonal)
+}
+
+func resolveHeaderValueWithAccess(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string, access secretscope.Access) (string, error) {
 	if header.Value.ValueFrom != nil && header.Value.ValueFrom.QueryParameterRef != nil {
 		return resolveQueryParameterRef(ctx, header.Value.ValueFrom.QueryParameterRef)
 	}
-	return resolution.ResolveHeaderValue(ctx, k8sClient, header, namespace)
+	return resolution.ResolveHeaderValueWithAccess(ctx, k8sClient, header, namespace, access)
+}
+
+func overrideHeaderResolver(overrideType OverrideType, access secretscope.Access) resolution.HeaderResolver {
+	if overrideType != OverrideTypeMCPServer {
+		access = secretscope.RejectPersonal
+	}
+	return func(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error) {
+		return resolveHeaderValueWithAccess(ctx, k8sClient, header, namespace, access)
+	}
 }
 
 func listResourcesByLabels(ctx context.Context, k8sClient client.Client, namespace string, overrideType OverrideType, labelSelector *metav1.LabelSelector) ([]client.Object, error) {
@@ -71,15 +85,16 @@ func listResourcesByLabels(ctx context.Context, k8sClient client.Client, namespa
 	return resources, nil
 }
 
-func ResolveHeadersFromOverrides(ctx context.Context, k8sClient client.Client, overrides []arkv1alpha1.Override, namespace string, overrideType OverrideType) (map[string]map[string]string, error) {
+func ResolveHeadersFromOverrides(ctx context.Context, k8sClient client.Client, overrides []arkv1alpha1.Override, namespace string, overrideType OverrideType, access secretscope.Access) (map[string]map[string]string, error) {
 	resourceHeaders := make(map[string]map[string]string)
+	resolve := overrideHeaderResolver(overrideType, access)
 
 	for _, override := range overrides {
 		if override.ResourceType != string(overrideType) {
 			continue
 		}
 
-		resolvedHeaders, err := ResolveHeaders(ctx, k8sClient, override.Headers, namespace)
+		resolvedHeaders, err := resolution.ResolveHeadersWith(ctx, k8sClient, override.Headers, namespace, resolve)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve headers for overrideType %s: %w", overrideType, err)
 		}

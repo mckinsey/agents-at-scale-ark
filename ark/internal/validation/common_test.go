@@ -3,6 +3,8 @@ package validation
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 func TestCommonValidateParameters(t *testing.T) { //nolint:gocognit
@@ -600,4 +603,30 @@ func TestValidatePollInterval(t *testing.T) {
 			t.Fatal("expected error")
 		}
 	})
+}
+
+func TestCommonResolveValueSourceRejectsPersonalSecret(t *testing.T) {
+	lookup := newMockLookup()
+	lookup.addSecret("default", "u-0123456789abcdef-base-url", map[string][]byte{"key": []byte("https://personal.example.com")})
+	lookup.secrets["default/u-0123456789abcdef-base-url"].Labels = map[string]string{
+		secretscope.ResourceTypeLabel: secretscope.SecretResourceType,
+		secretscope.ScopeLabel:        "user-0123456789abcdef",
+	}
+	v := NewValidator(lookup)
+
+	vs := arkv1alpha1.ValueSource{
+		ValueFrom: &arkv1alpha1.ValueFromSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "u-0123456789abcdef-base-url"},
+				Key:                  "key",
+			},
+		},
+	}
+	val, err := v.ResolveValueSource(context.Background(), vs, "default")
+	if !errors.Is(err, secretscope.ErrPersonalSecret) {
+		t.Fatalf("expected personal secret error, got %v", err)
+	}
+	if val != "" || strings.Contains(err.Error(), "personal.example.com") {
+		t.Fatalf("personal secret value leaked: %q, %v", val, err)
+	}
 }
