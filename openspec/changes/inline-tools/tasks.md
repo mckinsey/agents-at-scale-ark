@@ -57,7 +57,8 @@
 
 - [ ] 7.1 Add stdlib-only sample Tools and run the in-memory CSV example, including valid, empty/header-only, malformed-column, and non-finite-number cases; no example may depend on an unmounted file.
 - [ ] 7.2 Add Chainsaw end-to-end coverage on an enforcing CNI for create/attach/discover/call/idle/edit/delete and negative egress, plus both-backend admission coverage. Test the dashboard-first state separately from the completed runtime.
-  - [x] create/attach/discover/call/idle/edit/delete (`tests/inline-tool-lifecycle`)
+  - [x] create/attach/call/idle/edit/delete (`tests/inline-tool-lifecycle`)
+  - [ ] discover via agent — `tests/inline-tool-lifecycle` routes a query through the Agent, but mock-llm can't script a real tool-calling round-trip (see README's known limitation); blocked on [dwmkerr/mock-llm#97](https://github.com/dwmkerr/mock-llm/issues/97) and [dwmkerr/mock-llm#98](https://github.com/dwmkerr/mock-llm/issues/98)
   - [x] negative egress (`tests/inline-tool-egress`)
   - [x] both-backend admission coverage (`tests/inline-tool-admission`)
   - [x] `Available=False` with reason `ConflictingNetworkPolicy`, and recovery to Ready (`tests/inline-tool-conflicting-policy`)

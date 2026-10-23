@@ -271,8 +271,12 @@ spec:
     # before). Doesn't assert the LLM actually invoked the tool: mock-llm's
     # SSE streaming path can't carry a tool_calls message (it reads
     # choices[0].message.content unconditionally before chunking, which is
-    # absent on a tool_calls-only message), and the completions executor
-    # always requests streaming. See mock-llm-values.yaml.
+    # absent on a tool_calls-only message). The completions executor only
+    # takes that path when the query's namespace has ark-config-streaming
+    # enabled, which is true for this test's pinned "default" namespace but
+    # not for agent-tools/jq-filter-test's generated namespaces, so those
+    # tests script tool_calls rules too without hitting this. See
+    # mock-llm-values.yaml.
     #
     # Runs after edit (not right after attach) so it can't perturb the
     # create -> call -> idle-scale-to-zero timing: that sequence already
