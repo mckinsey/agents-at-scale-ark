@@ -6,10 +6,13 @@ from typing import Optional
 from ark_sdk.models.tool_v1alpha1 import ToolV1alpha1
 from ark_sdk.models.tool_v1alpha1_spec import ToolV1alpha1Spec
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import SecretScope
 
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.secret_scope import get_secret_scope
+from ...services.personal_secret_refs import enforce_personal_secret_refs
 
 from ...models.tools import (
     ToolResponse,
@@ -92,7 +95,7 @@ async def list_tools(request: Request, namespace: Optional[str] = Query(None, de
 
 @router.post("", response_model=ToolDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="create", resource_type="tool")
-async def create_tool(request: Request, body: ToolCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
+async def create_tool(request: Request, body: ToolCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> ToolDetailResponse:
     """
     Create a new Tool CR.
     
@@ -118,6 +121,9 @@ async def create_tool(request: Request, body: ToolCreateRequest, namespace: Opti
             spec=ToolV1alpha1Spec(**tool_spec)
         )
         
+        await enforce_personal_secret_refs(
+            tool_resource.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         created_tool = await ark_client.tools.a_create(tool_resource)
         
         return tool_to_detail_response(created_tool.to_dict())
@@ -144,7 +150,7 @@ async def get_tool(request: Request, tool_name: str, namespace: Optional[str] = 
 
 @router.put("/{tool_name}", response_model=ToolDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="tool")
-async def update_tool(request: Request, tool_name: str, body: ToolUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ToolDetailResponse:
+async def update_tool(request: Request, tool_name: str, body: ToolUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> ToolDetailResponse:
     """
     Update a Tool CR by name.
     
@@ -174,6 +180,9 @@ async def update_tool(request: Request, tool_name: str, body: ToolUpdateRequest,
         # Update the tool
         updated_resource = ToolV1alpha1(**existing_dict)
         
+        await enforce_personal_secret_refs(
+            updated_resource.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         updated_tool = await ark_client.tools.a_update(updated_resource)
         
         return tool_to_detail_response(updated_tool.to_dict())
