@@ -28,6 +28,11 @@ const group = {
   items: [{ name: 'Phoenix', description: 'Observability platform' }],
 };
 
+function mockGroups(groups: Record<string, unknown>[]) {
+  vi.mocked(getArkApiAuthHeaders).mockResolvedValueOnce({});
+  mockGet.mockResolvedValueOnce(groups);
+}
+
 describe('marketplace-server', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,5 +63,58 @@ describe('marketplace-server', () => {
       '/v1/namespaces/team-a/marketplace-items',
       { headers: {} },
     );
+  });
+
+  it('returns the source key separately from its display label', async () => {
+    mockGroups([
+      {
+        ...group,
+        source: 'internal-mirror',
+        displayName: 'Internal Mirror',
+        url: 'https://internal.example.com/marketplace.json',
+      },
+    ]);
+
+    const resolved = await getRawMarketplaceItemById(
+      createRequest(),
+      'phoenix',
+      'team-a',
+    );
+
+    expect(resolved).toEqual({
+      item: group.items[0],
+      source: 'internal-mirror',
+      sourceLabel: 'Internal Mirror',
+      sourceUrl: 'https://internal.example.com/marketplace.json',
+    });
+  });
+
+  it('returns the first matching source when an item exists in several', async () => {
+    mockGroups([
+      { ...group, source: 'agents-at-scale-marketplace' },
+      { ...group, source: 'internal-mirror' },
+    ]);
+
+    const resolved = await getRawMarketplaceItemById(
+      createRequest(),
+      'phoenix',
+      'team-a',
+    );
+
+    expect(resolved?.source).toBe('agents-at-scale-marketplace');
+  });
+
+  it('labels the item with the source display name', async () => {
+    mockGroups([
+      { ...group, source: 'internal-mirror', displayName: 'Internal Mirror' },
+    ]);
+
+    const item = await getMarketplaceItemById(
+      createRequest(),
+      'phoenix',
+      'team-a',
+    );
+
+    expect(item?.source).toBe('Internal Mirror');
   });
 });
