@@ -10,6 +10,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 type HeaderResolver func(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error)
@@ -32,6 +33,10 @@ func ResolveHeadersWith(ctx context.Context, k8sClient client.Client, headers []
 }
 
 func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error) {
+	return ResolveHeaderValueWithAccess(ctx, k8sClient, header, namespace, secretscope.RejectPersonal)
+}
+
+func ResolveHeaderValueWithAccess(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string, access secretscope.Access) (string, error) {
 	if header.Value.Value != "" {
 		return header.Value.Value, nil
 	}
@@ -41,7 +46,7 @@ func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header ark
 	}
 
 	if header.Value.ValueFrom.SecretKeyRef != nil {
-		return ResolveFromSecret(ctx, k8sClient, header.Value.ValueFrom.SecretKeyRef, namespace)
+		return ResolveFromSecretWithAccess(ctx, k8sClient, header.Value.ValueFrom.SecretKeyRef, namespace, access)
 	}
 
 	if header.Value.ValueFrom.ConfigMapKeyRef != nil {
@@ -64,6 +69,10 @@ func ResolveHeaderValueV1PreAlpha1(ctx context.Context, k8sClient client.Client,
 }
 
 func ResolveFromSecret(ctx context.Context, k8sClient client.Client, secretRef *corev1.SecretKeySelector, namespace string) (string, error) {
+	return ResolveFromSecretWithAccess(ctx, k8sClient, secretRef, namespace, secretscope.RejectPersonal)
+}
+
+func ResolveFromSecretWithAccess(ctx context.Context, k8sClient client.Client, secretRef *corev1.SecretKeySelector, namespace string, access secretscope.Access) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -76,6 +85,10 @@ func ResolveFromSecret(ctx context.Context, k8sClient client.Client, secretRef *
 
 	if err := k8sClient.Get(ctx, secretKey, secret); err != nil {
 		return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretRef.Name, err)
+	}
+
+	if err := secretscope.CheckResolvable(secret, access); err != nil {
+		return "", err
 	}
 
 	value, exists := secret.Data[secretRef.Key]
