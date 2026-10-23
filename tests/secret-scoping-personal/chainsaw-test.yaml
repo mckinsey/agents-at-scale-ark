@@ -12,8 +12,9 @@ spec:
     u-<sha256(username)[:16]>-<name> with the owner's scope label, that only
     its owner can list, read, change or delete it while anyone else gets the
     same 404 as a missing secret, that promoting it to shared keeps the name
-    and makes it visible to everyone, and that a shared secret cannot be made
-    personal.
+    and makes it visible to everyone, that a shared secret cannot be made
+    personal, and that a personal secret can only be referenced from its
+    owner's Query MCP header overrides with a labelSelector.
   timeouts:
     apply: 120s
     assert: 120s
@@ -85,6 +86,8 @@ spec:
     try:
     - apply:
         file: manifests/a01-shared-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
     - apply:
         resource:
           apiVersion: v1
@@ -244,6 +247,91 @@ spec:
     - script:
         content: |
           kubectl -n $NAMESPACE get secrets --show-labels || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: enforcement
+    try:
+    - script:
+        timeout: 150s
+        content: |
+          set -eu
+          . ./helpers.sh
+          ADMIN=$(token admin@ark.local)
+          VIEWER=$(token viewer@ark.local)
+          HASH=$(owner_hash admin@ark.local)
+          MCP="u-$HASH-mcp"
+          PROMOTED="u-$HASH-github"
+          SELECTOR='{"matchLabels":{"ark.mckinsey.com/name":"github"}}'
+
+          override() {
+            printf '{"resourceType":"%s","labelSelector":%s,"headers":[{"name":"Authorization","value":{"valueFrom":{"secretKeyRef":{"name":"%s","key":"token"}}}}]}' "$2" "$3" "$1"
+          }
+          query() {
+            printf '{"name":"%s","input":"hi","target":{"type":"model","name":"personal-model"},%s}' "$1" "$2"
+          }
+          model() {
+            printf '{"name":"%s","provider":"openai","model":"gpt-4o-mini","config":{"openai":{"baseUrl":"https://model.invalid/v1","apiKey":{"valueFrom":{"secretKeyRef":{"name":"%s","key":"token"}}}}}}' "$1" "$2"
+          }
+          expect_rejected() {
+            expect_status "$1" "$2" 422
+            DETAIL=$(body_of "$2" | jq -r .detail)
+            [ "$DETAIL" = "$REJECTED" ] || { echo "FAIL: '$DETAIL' differs from '$REJECTED'"; exit 1; }
+            assert_absent "$3" "$4"
+          }
+          assert_absent() {
+            kubectl get "$1" "$2" -n "$NAMESPACE" 2>&1 | grep -q NotFound || { echo "FAIL: $1/$2 exists or could not be checked"; exit 1; }
+          }
+
+          R=$(call "$ADMIN" POST "" '{"name":"mcp","string_data":{"token":"admin-mcp-value"},"scope":"personal"}')
+          expect_status "POST personal mcp as admin" "$R" 200
+
+          R=$(call_api queries "$ADMIN" POST "" "$(query q-owner "\"overrides\":[$(override "$MCP" mcpserver "$SELECTOR")]")")
+          expect_status "POST query with own personal MCP override as admin" "$R" 200
+          kubectl get query q-owner -n "$NAMESPACE" -o json \
+            | jq -e --arg name "$MCP" '.spec.overrides[0].headers[0].value.valueFrom.secretKeyRef.name == $name' >/dev/null \
+            || { echo "FAIL: q-owner does not keep the override"; exit 1; }
+
+          R=$(call_api queries "$ADMIN" POST "" "$(query q-missing "\"overrides\":[$(override "u-$HASH-missing" mcpserver "$SELECTOR")]")")
+          REJECTED=$(body_of "$R" | jq -r .detail)
+          case "$REJECTED" in
+            *"Personal secrets can only be referenced from MCP server header overrides"*) ;;
+            *) echo "FAIL: unexpected rejection detail '$REJECTED'"; exit 1 ;;
+          esac
+          expect_rejected "POST query with a missing personal secret" "$R" query q-missing
+          R=$(call_api queries "$VIEWER" PUT "/q-owner" '{"input":"changed by viewer"}')
+          expect_status "PUT admin's query as viewer" "$R" 422
+          [ "$(body_of "$R" | jq -r .detail)" = "$REJECTED" ] || { echo "FAIL: viewer PUT detail differs"; exit 1; }
+          kubectl get query q-owner -n "$NAMESPACE" -o jsonpath='{.spec.input}' | grep -qx hi || { echo "FAIL: viewer changed q-owner"; exit 1; }
+          expect_status "PUT own query as admin" "$(call_api queries "$ADMIN" PUT "/q-owner" '{"input":"changed by admin"}')" 200
+          expect_status "DELETE q-owner" "$(call_api queries "$ADMIN" DELETE "/q-owner")" 204
+
+          R=$(call_api queries "$VIEWER" POST "" "$(query q-viewer "\"overrides\":[$(override "$MCP" mcpserver "$SELECTOR")]")")
+          expect_rejected "POST query with admin's personal secret as viewer" "$R" query q-viewer
+          R=$(call_api queries "$ADMIN" POST "" "$(query q-empty "\"overrides\":[$(override "$MCP" mcpserver '{}')]")")
+          expect_rejected "POST query with an empty labelSelector" "$R" query q-empty
+          R=$(call_api queries "$ADMIN" POST "" "$(query q-model "\"overrides\":[$(override "$MCP" model "$SELECTOR")]")")
+          expect_rejected "POST query with a model override" "$R" query q-model
+          PARAMETERS=$(printf '"parameters":[{"name":"token","valueFrom":{"secretKeyRef":{"name":"%s","key":"token"}}}]' "$MCP")
+          R=$(call_api queries "$ADMIN" POST "" "$(query q-param "$PARAMETERS")")
+          expect_rejected "POST query with a personal secret in parameters" "$R" query q-param
+
+          R=$(call_api models "$ADMIN" POST "" "$(model m-personal "$MCP")")
+          expect_rejected "POST model with a personal secret as its owner" "$R" model m-personal
+          R=$(call_api models "$VIEWER" POST "" "$(model m-promoted "$PROMOTED")")
+          expect_status "POST model with the promoted secret as viewer" "$R" 200
+          expect_status "DELETE m-promoted" "$(call_api models "$VIEWER" DELETE "/m-promoted")" 204
+          expect_status "DELETE own personal mcp as admin" "$(call "$ADMIN" DELETE "/$MCP")" 200
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get secrets --show-labels || true
+          kubectl -n $NAMESPACE get queries,models || true
           kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
         env:
         - name: NAMESPACE
