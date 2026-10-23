@@ -9,10 +9,13 @@ from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import SecretScope
 
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.secret_scope import get_secret_scope
+from ...services.personal_secret_refs import enforce_personal_secret_refs
 
 from ...models.agents import (
     AgentResponse,
@@ -171,7 +174,7 @@ async def list_agents(request: Request, namespace: Optional[str] = Query(None, d
 
 @router.post("", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="agent")
-async def create_agent(request: Request, body: AgentCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
+async def create_agent(request: Request, body: AgentCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> AgentDetailResponse:
     """
     Create a new Agent CR.
     
@@ -214,6 +217,9 @@ async def create_agent(request: Request, body: AgentCreateRequest, namespace: Op
             spec=agent_spec
         )
         
+        await enforce_personal_secret_refs(
+            agent.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         created_agent = await ark_client.agents.a_create(agent)
         
         return agent_to_detail_response(created_agent.to_dict())
@@ -240,7 +246,7 @@ async def get_agent(request: Request, agent_name: str, namespace: Optional[str] 
 
 @router.put("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="agent")
-async def update_agent(request: Request, agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
+async def update_agent(request: Request, agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> AgentDetailResponse:
     """
     Update an Agent CR by name.
     
@@ -274,6 +280,9 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
         # Create updated agent object
         updated_agent_obj = AgentV1alpha1(**existing_agent_dict)
         
+        await enforce_personal_secret_refs(
+            updated_agent_obj.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         updated_agent = await ark_client.agents.a_update(updated_agent_obj)
         
         return agent_to_detail_response(updated_agent.to_dict())
