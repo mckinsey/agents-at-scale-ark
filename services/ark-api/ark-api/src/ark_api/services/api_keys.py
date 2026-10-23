@@ -209,13 +209,15 @@ class APIKeyService:
         """
         try:
             metadata = json.loads(annotation_json)
+            raw_expires_at = parse_iso_timestamp(metadata.get("expiresAt"))
             return {
                 "name": metadata.get("name", "Unknown"),
                 "created_at": _parse_utc_timestamp(metadata.get("createdAt")),
                 "expires_at": _parse_utc_timestamp(metadata.get("expiresAt")),
                 "last_used_at": _parse_utc_timestamp(metadata.get("lastUsedAt")),
                 "deleted_at": _parse_utc_timestamp(metadata.get("deletedAt")),
-                "created_by": metadata.get("createdBy")
+                "created_by": metadata.get("createdBy"),
+                "expires_at_without_timezone": raw_expires_at is not None and raw_expires_at.tzinfo is None
             }
         except (json.JSONDecodeError, Exception) as e:
             logger.error(f"Error parsing API key annotation: {e}")
@@ -225,7 +227,8 @@ class APIKeyService:
                 "expires_at": None,
                 "last_used_at": None,
                 "deleted_at": None,
-                "created_by": None
+                "created_by": None,
+                "expires_at_without_timezone": False
             }
     
     async def create_api_key(
@@ -412,6 +415,10 @@ class APIKeyService:
             # Check expiration
             expires_at = metadata["expires_at"]
             if expires_at and expires_at < datetime.now(timezone.utc):
+                return None
+
+            if metadata["expires_at_without_timezone"]:
+                logger.warning(f"Rejecting API key {public_key}: its expiry was stored without a timezone")
                 return None
 
             if created_by is not None and metadata.get("created_by") != created_by:

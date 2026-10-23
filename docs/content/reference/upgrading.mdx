@@ -99,7 +99,7 @@ Exports created by older Ark CLI versions may contain stale `metadata.resourceVe
 
 Revoked API keys were previously kept indefinitely. ark-api now deletes the Secret of any API key revoked or expired more than 90 days ago, checking at startup and then every hour. The first check after upgrading deletes every key already past that age, along with its creator and last-use metadata.
 
-API keys created through the API with an expiry that had no timezone could never authenticate. They now authenticate until their expiry.
+API keys created through the API with an expiry that had no timezone still cannot authenticate, and ark-api now logs a warning naming the key. Create a replacement key. New keys always store their expiry with a timezone.
 
 **Migration:**
 - To keep revoked and expired keys indefinitely, set `API_KEY_RETENTION_SECONDS` to `"0"` in the ark-api chart's `app.env` before upgrading.

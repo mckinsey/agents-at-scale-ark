@@ -1027,11 +1027,20 @@ class TestAPIKeyRevocationAndVerification(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(stored, "2026-12-01T00:00:00+00:00")
 
-    async def test_naive_future_expiry_still_authenticates(self):
+    async def test_naive_future_expiry_stays_blocked(self):
         naive_future = (self.now + timedelta(days=30)).replace(tzinfo=None)
         self.v1.read_namespaced_secret = AsyncMock(return_value=_api_key_secret("naive", expires_at=naive_future))
 
         result = await self.service.get_api_key_by_public_key("pk-ark-naive")
+
+        self.assertIsNone(result)
+
+    async def test_future_expiry_with_timezone_authenticates(self):
+        self.v1.read_namespaced_secret = AsyncMock(
+            return_value=_api_key_secret("aware", expires_at=self.now + timedelta(days=30))
+        )
+
+        result = await self.service.get_api_key_by_public_key("pk-ark-aware")
 
         self.assertIsNotNone(result)
 
