@@ -6,10 +6,13 @@ from typing import Optional
 from ark_sdk.models.mcp_server_v1alpha1 import MCPServerV1alpha1
 from ark_sdk.models.mcp_server_v1alpha1_spec import MCPServerV1alpha1Spec
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import SecretScope
 
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.secret_scope import get_secret_scope
+from ...services.personal_secret_refs import enforce_personal_secret_refs
 
 from ...models.mcp_servers import (
     MCPServerResponse,
@@ -141,7 +144,7 @@ async def list_mcp_servers(request: Request, namespace: Optional[str] = Query(No
 
 @router.post("", response_model=MCPServerDetailResponse, include_in_schema=True)
 @handle_k8s_errors(operation="create", resource_type="mcp server")
-async def create_mcp_server(request: Request, body: MCPServerCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerDetailResponse:
+async def create_mcp_server(request: Request, body: MCPServerCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> MCPServerDetailResponse:
     """
     Create a new MCPServer CR.
     
@@ -166,6 +169,9 @@ async def create_mcp_server(request: Request, body: MCPServerCreateRequest, name
             spec=MCPServerV1alpha1Spec(**mcp_server_spec)
         )
         
+        await enforce_personal_secret_refs(
+            mcp_server_resource.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         created_mcp_server = await ark_client.mcpservers.a_create(mcp_server_resource)
         return mcp_server_to_detail_response(created_mcp_server.to_dict())
 
@@ -191,7 +197,7 @@ async def get_mcp_server(request: Request, mcp_server_name: str, namespace: Opti
 
 @router.put("/{mcp_server_name}", response_model=MCPServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="mcp server")
-async def update_mcp_server(request: Request, mcp_server_name: str, body: MCPServerUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MCPServerDetailResponse:
+async def update_mcp_server(request: Request, mcp_server_name: str, body: MCPServerUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> MCPServerDetailResponse:
     """
     Update a MCPServer CR by name.
     
@@ -221,6 +227,9 @@ async def update_mcp_server(request: Request, mcp_server_name: str, body: MCPSer
         # Update the MCP server
         updated_resource = MCPServerV1alpha1(**existing_dict)
         
+        await enforce_personal_secret_refs(
+            updated_resource.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         updated_mcp_server = await ark_client.mcpservers.a_update(updated_resource)
         
         return mcp_server_to_detail_response(updated_mcp_server.to_dict())

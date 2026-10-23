@@ -11,8 +11,11 @@ from kubernetes_asyncio.client import CustomObjectsApi
 from ark_sdk.client import with_ark_client
 from ark_sdk.k8s import get_context
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import SecretScope
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.secret_scope import get_secret_scope
+from ...services.personal_secret_refs import enforce_personal_secret_refs
 from .client_utils import get_impersonating_api_client
 
 from ...models.models import (
@@ -198,7 +201,7 @@ async def list_models(request: Request, namespace: Optional[str] = Query(None, d
 
 @router.post("", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="model")
-async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
+async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> ModelDetailResponse:
     """
     Create a new Model CR.
 
@@ -278,6 +281,9 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
         "metadata": {"name": body.name, "namespace": namespace},
         "spec": model_spec,
     }
+    await enforce_personal_secret_refs(
+        model_spec, namespace=namespace, caller_scope=secret_scope
+    )
     async with get_impersonating_api_client(impersonation) as api_client:
         custom_api = CustomObjectsApi(api_client)
         created_cr = await custom_api.create_namespaced_custom_object(
@@ -374,7 +380,7 @@ def _build_config_dict_from_body(body_config, provider: str) -> dict:
 
 @router.put("/{model_name}", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="model")
-async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ModelDetailResponse:
+async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> ModelDetailResponse:
     """
     Update a Model CR by name.
 
@@ -403,6 +409,9 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
 
         existing_cr["spec"] = spec
 
+        await enforce_personal_secret_refs(
+            existing_cr["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         updated_cr = await custom_api.replace_namespaced_custom_object(
             group=MODEL_CRD_GROUP,
             version=VERSION,
