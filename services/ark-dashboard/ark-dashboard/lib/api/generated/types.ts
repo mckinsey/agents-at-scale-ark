@@ -2149,13 +2149,13 @@ export interface paths {
         };
         /**
          * List Secrets
-         * @description List all secrets in namespace using ark-sdk.
+         * @description List the shared and/or personal secrets in namespace using ark-sdk.
          */
         get: operations["list_secrets_v1_secrets_get"];
         put?: never;
         /**
          * Create Secret
-         * @description Create a new secret using ark-sdk.
+         * @description Create a new shared or personal secret using ark-sdk.
          */
         post: operations["create_secret_v1_secrets_post"];
         delete?: never;
@@ -2178,7 +2178,7 @@ export interface paths {
         get: operations["get_secret_v1_secrets__secret_name__get"];
         /**
          * Update Secret
-         * @description Update a secret using ark-sdk.
+         * @description Update a secret using ark-sdk; scope "shared" promotes a personal secret.
          */
         put: operations["update_secret_v1_secrets__secret_name__put"];
         post?: never;
@@ -4853,6 +4853,12 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @default shared
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** String Data */
             string_data: {
                 [key: string]: string;
@@ -4956,6 +4962,8 @@ export interface components {
              * @default []
              */
             labels: string[];
+            /** Scope */
+            scope?: ("shared" | "personal") | null;
             /** String Data */
             string_data?: {
                 [key: string]: string;
@@ -9058,6 +9066,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Which secrets to list: shared (default), the caller's personal ones, or all of both */
+                scope?: "shared" | "personal" | "all";
             };
             header?: never;
             path?: never;

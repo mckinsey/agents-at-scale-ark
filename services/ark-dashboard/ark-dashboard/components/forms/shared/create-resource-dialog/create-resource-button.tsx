@@ -136,6 +136,7 @@ export function CreateResourceButton({
         string_data: { token: values.value },
         labels: [],
         type: 'Opaque',
+        scope: 'shared',
       });
       return;
     }

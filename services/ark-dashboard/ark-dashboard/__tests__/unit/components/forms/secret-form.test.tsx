@@ -161,6 +161,7 @@ describe('SecretForm', () => {
         description: 'Production API key',
         alias: 'other-secret',
         labels: ['prod'],
+        scope: 'shared',
       });
     });
   });
