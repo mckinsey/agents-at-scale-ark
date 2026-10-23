@@ -153,7 +153,7 @@ Every `/v1/secrets` route now works only on Secrets labelled `ark.mckinsey.com/r
 - `GET`, `PUT` and `DELETE` on `/v1/secrets/{name}` return `404` for a Secret without both labels, with the same body as for a Secret that does not exist. `PUT` and `DELETE` leave that Secret untouched.
 - `POST /v1/secrets` with the name of an existing unlabelled Secret still returns `409`.
 
-References to a Secret keep resolving whether it has the labels or not. The controller, the executors and the MCP header resolution in `ark-api` read referenced Secrets directly, outside `/v1/secrets`.
+References to a Secret keep resolving whether it has the labels or not. The one exception is a reference written through the API to a name with the reserved `u-<owner>-` prefix, which the API checks as described in [Personal Secrets](#personal-secrets-in-v1secrets). The controller, the executors and the MCP header resolution in `ark-api` read referenced Secrets directly, outside `/v1/secrets`.
 
 Secret pickers in dashboard forms list only labelled Secrets. They also accept a typed name, and a form that already references an unlabelled Secret keeps showing its name. A typed Secret needs a `token` key, which is the key the forms read.
 
@@ -169,7 +169,10 @@ A signed-in user can create a personal Secret that only they can list, read, cha
 - `POST /v1/secrets` accepts `"scope": "personal"`. Ark stores the Secret as `u-<owner>-<name>`, where `<owner>` is the first sixteen hex digits of the SHA-256 of the username, and labels it `ark.mckinsey.com/scope=user-<owner>`. Without a user identity, for example in `open` mode or with an API key, the request returns `403`. `scope` defaults to `shared`.
 - `GET /v1/secrets` takes `?scope=shared|personal|all` and defaults to `shared`, so existing clients keep getting only shared Secrets. `personal` lists the caller's own and returns an empty list without a user identity.
 - `GET`, `PUT` and `DELETE` on `/v1/secrets/{name}` work on shared Secrets and on the caller's personal ones. Another user's personal Secret returns `404` with the same body as a Secret that does not exist.
-- This scope covers `/v1/secrets` only. Resources that reference Secrets through `secretKeyRef` are not checked against it yet.
+- A resource can reference a personal Secret through `secretKeyRef` in one place only: a header of a Query `overrides` entry with `resourceType: mcpserver` and a non-empty `labelSelector`, and only when the caller owns the Secret. Creating or updating an Agent, Model, MCPServer, A2AServer, Tool, Memory or Query through the API with any other reference to a personal Secret returns `422`.
+- That `422` has the same body whether the Secret is someone else's, does not exist, has no Ark labels, or carries `ark.mckinsey.com/scope=shared` without `ark.mckinsey.com/resource-type=secret`. If ark-api cannot read the Secret's labels, the request returns `500`.
+- An update checks the whole spec it is about to write, so a resource that already holds such a reference must drop it in the same request. Deletes are never blocked.
+- Shared Secrets, including promoted ones named `u-<owner>-<name>`, can be referenced anywhere. Names without the `u-<owner>-` prefix are not checked, and resources applied with `kubectl` bypass the check.
 - `PUT /v1/secrets/{name}` with `"scope": "shared"` turns a personal Secret into a shared one and keeps its name and value. Like any `PUT`, it replaces `description`, `alias` and `labels`, so send their current values to keep them. `"scope": "personal"` on a shared Secret returns `422`. Once promoted, the name `u-<owner>-<name>` is taken: creating a personal Secret with the same name returns `409`.
 - Secret responses carry `scope` (`shared` or `personal`) and `display_name`, the name without the `u-<owner>-` prefix.
 
