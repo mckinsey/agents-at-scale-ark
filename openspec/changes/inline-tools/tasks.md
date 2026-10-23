@@ -45,6 +45,7 @@
 - [x] 5.5 Implement pending/active accounting, 60-second idle scale-down, separate activation/execution deadlines, and cancellation; test active-call protection, conservative restart recovery, no late execution after abandonment, and no replay after uncertain responses.
   - [x] 5.5a Bind stateless MCP tools/call work to the original HTTP request context on both activator and runner. Test pre-dispatch cancellation, no late execution after disconnect, and process-group termination through the real HTTP runner.
   - [x] 5.5b Enforce pending/active accounting, idle scale-down, separate budgets, conservative recovery, and single-send backend execution in the activator lifecycle.
+  - [x] 5.5c Retry only the cold-start handshake within the activation budget, so kube-proxy Service-IP lag does not fail a call; test that a refused handshake recovers, the tool call is still sent once, and an unreachable runner fails at the budget without executing.
 
 ## 6. Phase 3: existing MCP execution integration
 
