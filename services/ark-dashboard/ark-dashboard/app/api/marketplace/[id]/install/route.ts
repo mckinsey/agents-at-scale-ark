@@ -1,6 +1,6 @@
-import { spawn } from 'node:child_process';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { spawn } from 'node:child_process';
 import { z } from 'zod';
 
 import {
@@ -70,15 +70,15 @@ async function executeHelmCommand(
       }
     }, timeoutMs);
 
-    helmProcess.stdout?.on('data', (data) => {
+    helmProcess.stdout?.on('data', data => {
       stdout += data.toString();
     });
 
-    helmProcess.stderr?.on('data', (data) => {
+    helmProcess.stderr?.on('data', data => {
       stderr += data.toString();
     });
 
-    helmProcess.on('close', (code) => {
+    helmProcess.on('close', code => {
       completed = true;
       clearTimeout(timeout);
 
@@ -93,7 +93,7 @@ async function executeHelmCommand(
       }
     });
 
-    helmProcess.on('error', (error) => {
+    helmProcess.on('error', error => {
       completed = true;
       clearTimeout(timeout);
       reject(new Error(`Failed to execute Helm command: ${error.message}`));
@@ -154,6 +154,7 @@ async function fetchAndValidateMarketplaceItem(
   if (!resolved) {
     return {
       resolved: null,
+      item: null,
       error: NextResponse.json(
         { error: 'Marketplace item not found' },
         { status: 404 },
@@ -161,7 +162,7 @@ async function fetchAndValidateMarketplaceItem(
     };
   }
 
-  return { resolved, error: null };
+  return { resolved, item: resolved.item, error: null };
 }
 
 /**
@@ -209,13 +210,12 @@ export async function POST(
       );
     }
 
-    const { resolved, error } = await fetchAndValidateMarketplaceItem(
+    const { resolved, item, error } = await fetchAndValidateMarketplaceItem(
       request,
       id,
       namespace,
     );
     if (error) return error;
-    const item = resolved!.item;
 
     if (!item.ark?.chartPath || !item.ark?.helmReleaseName) {
       return NextResponse.json(
@@ -275,13 +275,12 @@ export async function DELETE(
       );
     }
 
-    const { resolved, error } = await fetchAndValidateMarketplaceItem(
+    const { item, error } = await fetchAndValidateMarketplaceItem(
       request,
       id,
       namespace,
     );
     if (error) return error;
-    const item = resolved!.item;
 
     if (!item.ark?.helmReleaseName) {
       return NextResponse.json(

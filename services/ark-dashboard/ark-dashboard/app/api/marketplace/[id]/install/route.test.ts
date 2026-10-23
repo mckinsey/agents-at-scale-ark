@@ -103,7 +103,7 @@ async function requestCommand(id: string) {
     },
   );
   const response = await POST(request, { params: Promise.resolve({ id }) });
-  return response.json();
+  return { status: response.status, data: await response.json() };
 }
 
 const baseItem = {
@@ -241,7 +241,7 @@ describe('POST /api/marketplace/[id]/install', () => {
   it('builds arkCommand for a renamed source that points at the default manifest', async () => {
     mockResolvedItem({ ...baseItem }, DEFAULT_SOURCE_URL, 'ark-official');
 
-    const data = await requestCommand('phoenix');
+    const { data } = await requestCommand('phoenix');
 
     expect(data.arkCommand).toBe('ark install marketplace/services/phoenix');
   });
@@ -252,7 +252,7 @@ describe('POST /api/marketplace/[id]/install', () => {
       'https://github.com/mckinsey/agents-at-scale-marketplace/raw/main/marketplace.json',
     );
 
-    const data = await requestCommand('phoenix');
+    const { data } = await requestCommand('phoenix');
 
     expect(data.arkCommand).toBe('ark install marketplace/services/phoenix');
   });
@@ -264,7 +264,7 @@ describe('POST /api/marketplace/[id]/install', () => {
       DEFAULT_SOURCE,
     );
 
-    const data = await requestCommand('phoenix');
+    const { data } = await requestCommand('phoenix');
 
     expect(data.arkCommand).toBeUndefined();
   });
@@ -276,7 +276,7 @@ describe('POST /api/marketplace/[id]/install', () => {
       sourceLabel: DEFAULT_SOURCE,
     });
 
-    const data = await requestCommand('phoenix');
+    const { data } = await requestCommand('phoenix');
 
     expect(data.arkCommand).toBeUndefined();
   });
@@ -288,19 +288,9 @@ describe('POST /api/marketplace/[id]/install', () => {
       'internal-mirror',
     );
 
-    const request = createRequest(
-      'http://localhost/api/marketplace/phoenix/install',
-      {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      },
-    );
-    const response = await POST(request, {
-      params: Promise.resolve({ id: 'phoenix' }),
-    });
-    const data = await response.json();
+    const { status, data } = await requestCommand('phoenix');
 
-    expect(response.status).toBe(200);
+    expect(status).toBe(200);
     expect(data.arkCommand).toBeUndefined();
     expect(data.helmCommand).toBe(
       'helm upgrade --install phoenix oci://ghcr.io/mckinsey/agents-at-scale-marketplace/phoenix',
@@ -313,17 +303,7 @@ describe('POST /api/marketplace/[id]/install', () => {
     async type => {
       mockResolvedItem({ ...baseItem, type } as GitHubMarketplaceItem);
 
-      const request = createRequest(
-        'http://localhost/api/marketplace/item/install',
-        {
-          method: 'POST',
-          body: JSON.stringify({ mode: 'command' }),
-        },
-      );
-      const response = await POST(request, {
-        params: Promise.resolve({ id: 'item' }),
-      });
-      const data = await response.json();
+      const { data } = await requestCommand('item');
 
       expect(data.arkCommand).toBeUndefined();
       expect(data.helmCommand).toContain('helm upgrade --install phoenix');
@@ -331,20 +311,9 @@ describe('POST /api/marketplace/[id]/install', () => {
   );
 
   it('omits arkCommand when the item has no type', async () => {
-    const { type: _type, ...untyped } = baseItem;
-    mockResolvedItem(untyped);
+    mockResolvedItem({ ...baseItem, type: undefined });
 
-    const request = createRequest(
-      'http://localhost/api/marketplace/phoenix/install',
-      {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      },
-    );
-    const response = await POST(request, {
-      params: Promise.resolve({ id: 'phoenix' }),
-    });
-    const data = await response.json();
+    const { data } = await requestCommand('phoenix');
 
     expect(data.arkCommand).toBeUndefined();
   });

@@ -28,6 +28,11 @@ const group = {
   items: [{ name: 'Phoenix', description: 'Observability platform' }],
 };
 
+function mockGroups(groups: Record<string, unknown>[]) {
+  vi.mocked(getArkApiAuthHeaders).mockResolvedValueOnce({});
+  mockGet.mockResolvedValueOnce(groups);
+}
+
 describe('marketplace-server', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,8 +66,7 @@ describe('marketplace-server', () => {
   });
 
   it('returns the source key separately from its display label', async () => {
-    vi.mocked(getArkApiAuthHeaders).mockResolvedValueOnce({});
-    mockGet.mockResolvedValueOnce([
+    mockGroups([
       {
         ...group,
         source: 'internal-mirror',
@@ -86,8 +90,7 @@ describe('marketplace-server', () => {
   });
 
   it('returns the first matching source when an item exists in several', async () => {
-    vi.mocked(getArkApiAuthHeaders).mockResolvedValueOnce({});
-    mockGet.mockResolvedValueOnce([
+    mockGroups([
       { ...group, source: 'agents-at-scale-marketplace' },
       { ...group, source: 'internal-mirror' },
     ]);
@@ -102,8 +105,7 @@ describe('marketplace-server', () => {
   });
 
   it('labels the item with the source display name', async () => {
-    vi.mocked(getArkApiAuthHeaders).mockResolvedValueOnce({});
-    mockGet.mockResolvedValueOnce([
+    mockGroups([
       { ...group, source: 'internal-mirror', displayName: 'Internal Mirror' },
     ]);
 
