@@ -68,6 +68,9 @@ deployments:
         path: ./dist/chart
       values:
         controllerManager:
+          watchNamespaces:
+            - default
+            - ark-system
           container:
             image:
               repository: ${runtime.images.ark-controller.image}
@@ -90,6 +93,8 @@ deployments:
           enable: true
         inlineTools:
           enabled: true
+          activator:
+            enabled: true
         completions:
           enabled: false
         telemetry:
