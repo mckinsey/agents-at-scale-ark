@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: inline-doubler-discover
+  namespace: default
+spec:
+  input: Double the number 5 using the inline-doubler tool.
+  target:
+    type: agent
+    name: inline-doubler-agent
