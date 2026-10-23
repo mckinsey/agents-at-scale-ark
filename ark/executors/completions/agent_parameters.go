@@ -10,6 +10,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/resolution"
 )
 
 func (a *Agent) resolvePrompt(ctx context.Context) (string, error) {
@@ -88,17 +89,7 @@ func (a *Agent) resolveConfigMapRef(ctx context.Context, ref *corev1.ConfigMapKe
 }
 
 func (a *Agent) resolveSecretRef(ctx context.Context, ref *corev1.SecretKeySelector) (string, error) {
-	secret := &corev1.Secret{}
-	key := types.NamespacedName{Name: ref.Name, Namespace: a.Namespace}
-	if err := a.client.Get(ctx, key, secret); err != nil {
-		return "", fmt.Errorf("failed to get Secret %s: %w", ref.Name, err)
-	}
-
-	value, exists := secret.Data[ref.Key]
-	if !exists {
-		return "", fmt.Errorf("key %s not found in Secret %s", ref.Key, ref.Name)
-	}
-	return string(value), nil
+	return resolution.ResolveFromSecret(ctx, a.client, ref, a.Namespace)
 }
 
 func (a *Agent) resolveQueryParameterRef(ctx context.Context, ref *arkv1alpha1.QueryParameterReference) (string, error) {
