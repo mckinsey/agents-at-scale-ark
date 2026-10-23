@@ -68,6 +68,7 @@ Keep `impersonation.fallback=false` in production. When `true`, a request denied
 
 - **Defaults give no attribution.** Out of the box `AUTH_MODE=open` and `impersonation.enabled=false`, so everything is created as the ark-api service account.
 - **Attribution stops at the Workflow.** Query resources created inside Argo workflow steps run as the `argo-workflow` service account, not the launching user. You can see who created the Workflow, then correlate child resources by workflow name or owner references.
+- **Revoked and expired API keys are kept for 90 days.** After that, ark-api deletes their Secrets, so key metadata such as creator and last use is gone. Change the period with `API_KEY_RETENTION_SECONDS` — see [Revoked and Expired Key Retention](/developer-guide/authentication#revoked-and-expired-key-retention).
 - **Viewing the trail** means querying your cluster's log backend (CloudWatch, Cloud Logging, or Log Analytics), not the Ark dashboard.
 
 ## More reading

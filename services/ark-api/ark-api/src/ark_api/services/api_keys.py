@@ -1,12 +1,14 @@
 """API key management service."""
 
+import asyncio
+import os
 import secrets
 import bcrypt
 import base64
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, Dict, Any
 from kubernetes_asyncio import client
 
@@ -29,11 +31,37 @@ API_KEY_ANNOTATION = ARK_PREFIX + "api-key-metadata"  # JSON annotation with all
 
 # API Key generation constants
 # These values determine the length of the random token portion of API keys
-# 32 bytes = 43 characters in base64url encoding (pk-ark- prefix adds 6 chars = 49 total)
-# 48 bytes = 64 characters in base64url encoding (sk-ark- prefix adds 6 chars = 70 total)
+# 32 bytes = 43 characters in base64url encoding (pk-ark- prefix adds 7 chars = 50 total)
+# 48 bytes = 64 characters in base64url encoding (sk-ark- prefix adds 7 chars = 71 total)
 # These lengths provide sufficient entropy for security while keeping keys manageable
 PUBLIC_KEY_TOKEN_LENGTH = 32  # bytes for public key token generation
 SECRET_KEY_TOKEN_LENGTH = 48  # bytes for secret key token generation
+
+BCRYPT_MAX_INPUT_BYTES = 72
+
+DEFAULT_API_KEY_RETENTION_SECONDS = 90 * 24 * 60 * 60
+DEFAULT_API_KEY_REAPER_INTERVAL_SECONDS = 60 * 60
+
+
+def _is_active(data: Dict[str, str]) -> bool:
+    if not data.get("is_active"):
+        return True
+    return base64.b64decode(data["is_active"]).decode('utf-8') == "true"
+
+
+def _int_env(name: str, default: int) -> int:
+    value = os.getenv(name, str(default))
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError(f"{name} must be a whole number of seconds, got {value!r}") from None
+
+
+def _parse_utc_timestamp(value: Any) -> Optional[datetime]:
+    parsed = parse_iso_timestamp(value)
+    if parsed is not None and parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 class APIKeyService:
@@ -79,9 +107,13 @@ class APIKeyService:
         Returns:
             True if the secret key is valid
         """
+        secret_bytes = secret_key.encode('utf-8')
+        if len(secret_bytes) > BCRYPT_MAX_INPUT_BYTES:
+            return False
+
         try:
             hashed_bytes = base64.b64decode(hashed_secret.encode('utf-8'))
-            return bcrypt.checkpw(secret_key.encode('utf-8'), hashed_bytes)
+            return bcrypt.checkpw(secret_bytes, hashed_bytes)
         except Exception as e:
             logger.error(f"Error verifying secret key: {e}")
             return False
@@ -124,6 +156,8 @@ class APIKeyService:
         """
         if not dt:
             return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         return dt.isoformat()
     
     def _create_api_key_annotation(
@@ -177,10 +211,10 @@ class APIKeyService:
             metadata = json.loads(annotation_json)
             return {
                 "name": metadata.get("name", "Unknown"),
-                "created_at": parse_iso_timestamp(metadata.get("createdAt")),
-                "expires_at": parse_iso_timestamp(metadata.get("expiresAt")),
-                "last_used_at": parse_iso_timestamp(metadata.get("lastUsedAt")),
-                "deleted_at": parse_iso_timestamp(metadata.get("deletedAt")),
+                "created_at": _parse_utc_timestamp(metadata.get("createdAt")),
+                "expires_at": _parse_utc_timestamp(metadata.get("expiresAt")),
+                "last_used_at": _parse_utc_timestamp(metadata.get("lastUsedAt")),
+                "deleted_at": _parse_utc_timestamp(metadata.get("deletedAt")),
                 "created_by": metadata.get("createdBy")
             }
         except (json.JSONDecodeError, Exception) as e:
@@ -300,7 +334,7 @@ class APIKeyService:
                 # Get data from secret
                 data = secret.data or {}
                 public_key = base64.b64decode(data.get("public_key", "")).decode('utf-8') if data.get("public_key") else ""
-                is_active = base64.b64decode(data.get("is_active", "")).decode('utf-8') == "true" if data.get("is_active") else True
+                is_active = _is_active(data)
                 
                 # Skip soft-deleted keys
                 if deleted_at is not None or not is_active:
@@ -360,7 +394,7 @@ class APIKeyService:
             
             stored_public_key = base64.b64decode(data.get("public_key", "")).decode('utf-8') if data.get("public_key") else ""
             secret_key_hash = base64.b64decode(data.get("secret_key_hash", "")).decode('utf-8') if data.get("secret_key_hash") else ""
-            is_active = base64.b64decode(data.get("is_active", "")).decode('utf-8') == "true" if data.get("is_active") else True
+            is_active = _is_active(data)
             
             # Parse JSON annotation
             api_key_json = annotations.get(API_KEY_ANNOTATION, "{}")
@@ -515,7 +549,7 @@ class APIKeyService:
                     created_at=metadata["created_at"] or now,
                     expires_at=metadata["expires_at"],
                     last_used_at=metadata["last_used_at"],
-                    deleted_at=now,
+                    deleted_at=metadata["deleted_at"] or now,
                     created_by=metadata.get("created_by")
                 )
                 
@@ -548,3 +582,93 @@ class APIKeyService:
         except Exception as e:
             logger.error(f"Error deleting API key {public_key}: {e}")
             return False
+
+    async def purge_inactive_api_keys(self, retention_seconds: int) -> int:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=retention_seconds)
+        purged = 0
+        failed: list[str] = []
+        first_error: Optional[Exception] = None
+
+        async with create_api_client() as api:
+            v1 = client.CoreV1Api(api)
+            api_key_secrets = await v1.list_namespaced_secret(
+                namespace=self.namespace,
+                label_selector=f"{API_KEY_TYPE}=true",
+                field_selector=f"type={API_KEY_TYPE}"
+            )
+
+            for secret in api_key_secrets.items:
+                try:
+                    if await self._purge_if_past_retention(v1, secret, cutoff):
+                        purged += 1
+                except Exception as e:
+                    failed.append(secret.metadata.name)
+                    first_error = first_error or e
+
+        if purged:
+            logger.info(f"Purged {purged} revoked or expired API keys that ended more than {retention_seconds}s ago")
+        if failed:
+            raise RuntimeError(f"Failed to purge API key Secrets: {', '.join(failed)}") from first_error
+        return purged
+
+    async def _purge_if_past_retention(self, v1: client.CoreV1Api, secret: Any, cutoff: datetime) -> bool:
+        annotations = secret.metadata.annotations or {}
+        metadata = self._parse_api_key_annotation(annotations.get(API_KEY_ANNOTATION, "{}"))
+        expired_at = metadata["expires_at"]
+        if expired_at is not None and metadata["created_at"] is not None:
+            expired_at = max(expired_at, metadata["created_at"])
+        ended = [t for t in (metadata["deleted_at"], expired_at) if t is not None]
+        if not ended:
+            if not _is_active(secret.data or {}):
+                logger.warning(
+                    f"API key Secret {secret.metadata.name} is inactive but has no revocation time; not purging"
+                )
+            return False
+        if min(ended) > cutoff:
+            return False
+
+        try:
+            await v1.delete_namespaced_secret(
+                name=secret.metadata.name,
+                namespace=self.namespace,
+                body=client.V1DeleteOptions(
+                    preconditions=client.V1Preconditions(
+                        uid=secret.metadata.uid,
+                        resource_version=secret.metadata.resource_version
+                    )
+                )
+            )
+        except client.rest.ApiException as e:
+            if e.status in (404, 409):
+                return False
+            raise
+        return True
+
+
+async def run_api_key_reaper(retention_seconds: int, interval_seconds: int) -> None:
+    while True:
+        try:
+            await APIKeyService().purge_inactive_api_keys(retention_seconds)
+        except Exception:
+            logger.exception("API key reaper run failed; retrying next interval")
+        await asyncio.sleep(interval_seconds)
+
+
+def start_api_key_reaper() -> Optional[asyncio.Task]:
+    if os.getenv("READ_ONLY_MODE", "false").lower() == "true":
+        logger.info("API key reaper disabled in read-only mode")
+        return None
+
+    retention_seconds = _int_env("API_KEY_RETENTION_SECONDS", DEFAULT_API_KEY_RETENTION_SECONDS)
+    if retention_seconds < 0:
+        raise ValueError("API_KEY_RETENTION_SECONDS must be 0 or greater")
+    if retention_seconds == 0:
+        logger.info("API key retention disabled; revoked and expired API keys are kept indefinitely")
+        return None
+
+    interval_seconds = _int_env("API_KEY_REAPER_INTERVAL_SECONDS", DEFAULT_API_KEY_REAPER_INTERVAL_SECONDS)
+    if interval_seconds <= 0:
+        raise ValueError("API_KEY_REAPER_INTERVAL_SECONDS must be greater than 0")
+
+    logger.info(f"API key reaper started: retention {retention_seconds}s, interval {interval_seconds}s")
+    return asyncio.create_task(run_api_key_reaper(retention_seconds, interval_seconds))

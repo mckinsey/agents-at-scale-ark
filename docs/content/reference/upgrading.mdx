@@ -93,6 +93,25 @@ ark import ark-export.yaml --upsert
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
+## v0.1.73
+
+### Revoked and Expired API Keys Are Deleted After 90 Days
+
+Revoked API keys were previously kept indefinitely. ark-api now deletes the Secret of any API key revoked or expired more than 90 days ago, checking at startup and then every hour. The first check after upgrading deletes every key already past that age, along with its creator and last-use metadata.
+
+API keys created through the API with an expiry that had no timezone could never authenticate. They now authenticate until their expiry.
+
+**Migration:**
+- To keep revoked and expired keys indefinitely, set `API_KEY_RETENTION_SECONDS` to `"0"` in the ark-api chart's `app.env` before upgrading.
+- To keep a record of the key metadata, export it before upgrading:
+
+```bash
+kubectl get secrets -n <ark-api-namespace> -l ark.mckinsey.com/api-key=true \
+  -o jsonpath='{range .items[*]}{.metadata.annotations.ark\.mckinsey\.com/api-key-metadata}{"\n"}{end}' > api-key-metadata.jsonl
+```
+
+See [Revoked and Expired Key Retention](/developer-guide/authentication#revoked-and-expired-key-retention).
+
 ## v0.1.72
 
 ### Argo Workflows Upgraded to v4.1

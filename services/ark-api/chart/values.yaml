@@ -87,6 +87,10 @@ app:
     # Read-only mode - set to "true" to disable write operations
     - name: READ_ONLY_MODE
       value: "false"
+    - name: API_KEY_RETENTION_SECONDS
+      value: "7776000"
+    - name: API_KEY_REAPER_INTERVAL_SECONDS
+      value: "3600"
     # MCP authorization endpoints. Leave ARK_API_PUBLIC_CALLBACK_URL unset to
     # disable the four /api/v1/mcp-servers/{name}/auth/* endpoints (they will
     # return 503). When set, the URL MUST be https unless the host is a
