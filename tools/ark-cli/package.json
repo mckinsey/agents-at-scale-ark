@@ -87,7 +87,7 @@
   "overrides": {
     "vite": "^8.3.3",
     "brace-expansion": "^5.0.12",
-    "ip-address": "^10.3.1",
+    "ip-address": "^10.7.4",
     "js-yaml": "^4.3.1",
     "minimatch": "^10.2.3",
     "rollup": "4.59.0",
