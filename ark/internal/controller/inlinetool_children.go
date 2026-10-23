@@ -59,7 +59,11 @@ func (r *ToolReconciler) reconcileInlineChildren(ctx context.Context, tool *arkv
 	configMap := inlineSourceConfigMap(tool)
 	desiredData := configMap.Data
 	if err := r.applyInlineChild(ctx, tool, configMap, func(existing client.Object) {
-		existing.(*corev1.ConfigMap).Data = desiredData
+		current := existing.(*corev1.ConfigMap)
+		current.Data = desiredData
+		// Data and BinaryData keys may not overlap, so source moved into
+		// binaryData would reject every later write to this child.
+		current.BinaryData = nil
 	}); err != nil {
 		return err
 	}

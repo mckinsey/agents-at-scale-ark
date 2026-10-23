@@ -162,6 +162,9 @@ func inlineDeployment(tool *arkv1alpha1.Tool, image string) (*appsv1.Deployment,
 				Spec: corev1.PodSpec{
 					ServiceAccountName:           names.Runner,
 					AutomountServiceAccountToken: ptr.To(false),
+					// Service links would name every Service in the namespace to
+					// the script in its own environment.
+					EnableServiceLinks: ptr.To(false),
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot:   ptr.To(true),
 						RunAsUser:      ptr.To(inlineRunnerUser),
