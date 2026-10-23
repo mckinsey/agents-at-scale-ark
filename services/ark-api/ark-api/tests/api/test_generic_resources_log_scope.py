@@ -112,7 +112,7 @@ class TestPodLogRoutesServeOnlyWorkflowPods(unittest.TestCase):
 
 
 @patch("ark_api.api.v1.client_utils.create_api_client")
-@patch("ark_api.api.v1.resources.DynamicClient")
+@patch("ark_api.api.v1.resources.create_dynamic_client")
 @patch("ark_api.api.v1.resources.CoreV1Api")
 class TestNodeLogRoutesStayInsideTheWorkflow(unittest.TestCase):
     def setUp(self):
