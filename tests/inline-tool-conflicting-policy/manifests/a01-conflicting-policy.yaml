@@ -1,0 +1,15 @@
+# Selects only this test's runner (by inline-tool label) and widens its egress,
+# which the controller flags as a conflict so the tool stays Pending. Scoped to
+# one tool so it does not perturb other inline tests in the namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: widen-pending-probe-egress
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      ark.mckinsey.com/inline-tool: inline-pending-probe
+  policyTypes: ["Egress"]
+  egress:
+  - {}
