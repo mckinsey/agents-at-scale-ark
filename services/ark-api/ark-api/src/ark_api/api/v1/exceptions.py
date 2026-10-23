@@ -34,6 +34,15 @@ def _extract_error_detail(exception: ApiException | SyncApiException) -> str:
     return error_detail
 
 
+def _extract_error_reason(exception: ApiException | SyncApiException) -> str | None:
+    if not exception.body:
+        return None
+    try:
+        return json.loads(exception.body).get("reason")
+    except (json.JSONDecodeError, AttributeError):
+        return None
+
+
 def _is_admission_denial(exception: ApiException | SyncApiException) -> bool:
     detail = _extract_error_detail(exception) or ""
     return detail.startswith("admission webhook ") and "denied the request" in detail
@@ -106,12 +115,17 @@ def handle_k8s_errors(
                     raise HTTPException(status_code=404, detail=detail)
                 
                 elif e.status == 409:
-                    detail = f"{resource_type.title()} "
+                    detail = resource_type.title()
                     if resource_name:
-                        detail += f"'{resource_name}' "
-                    detail += "already exists"
-                    if namespace:
-                        detail += f" in namespace {namespace}"
+                        detail += f" '{resource_name}'"
+                    if _extract_error_reason(e) == "Conflict":
+                        if namespace:
+                            detail += f" in namespace {namespace}"
+                        detail += " was modified by another request; reload it and try again"
+                    else:
+                        detail += " already exists"
+                        if namespace:
+                            detail += f" in namespace {namespace}"
                     raise HTTPException(status_code=409, detail=detail)
                 
                 elif e.status == 422:
