@@ -276,7 +276,7 @@ requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], specifier = ">=1.0.0,<2.0.0" },
     { name = "aiofiles", specifier = ">=24.1.0" },
     { name = "ark-sdk", path = "out/ark_sdk-0.1.71rc0-py3-none-any.whl" },
-    { name = "bcrypt", specifier = ">=4.0.0" },
+    { name = "bcrypt", specifier = ">=5.0.0" },
     { name = "coverage", specifier = ">=7.10.4" },
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "dpath", specifier = ">=2.2.0" },
