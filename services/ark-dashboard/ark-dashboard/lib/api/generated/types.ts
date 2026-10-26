@@ -4083,6 +4083,10 @@ export interface components {
             } | null;
             authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
