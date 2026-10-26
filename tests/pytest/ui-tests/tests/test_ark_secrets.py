@@ -27,6 +27,8 @@ class TestArkSecrets:
 
         assert result["popup_visible"], "Success popup should be visible"
         assert result["in_table"], "Secret should be visible in table"
+        assert not result["personal_option_visible"], "Personal scope should not be offered without a signed-in user"
+        assert result["scope"] == "Shared", "Secret should be listed with the Shared scope"
 
         secret_test_resources["secret_name"] = result["name"]
         logger.info(f"Secret created: {result['name']}")
