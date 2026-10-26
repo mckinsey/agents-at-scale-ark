@@ -476,3 +476,98 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+
+  - name: name-label
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . ./helpers.sh
+          ADMIN=$(token admin@ark.local)
+          HASH=$(owner_hash admin@ark.local)
+          TOKEN="u-$HASH-echo-api"
+          SOURCE=$(kubectl get mcpserver mock-llm-mcp -n "$NAMESPACE" -o json)
+
+          server() {
+            printf '%s' "$SOURCE" | jq -c --arg name "$1" --arg ns "$NAMESPACE" --argjson labels "$2" \
+              '{name: $name, namespace: $ns, labels: $labels, spec: {transport: .spec.transport, address: .spec.address}}'
+          }
+          labels_of() {
+            kubectl get mcpserver "$1" -n "$NAMESPACE" -o json \
+              | jq -cS '.metadata.labels // {} | with_entries(select(.key == "ark.mckinsey.com/name" or .key == "team"))'
+          }
+          expect_labels() {
+            [ "$(labels_of "$1")" = "$2" ] || { echo "FAIL: $1 labels $(labels_of "$1"), expected $2"; exit 1; }
+          }
+          expect_selected() {
+            SELECTED=$(kubectl get mcpservers -n "$NAMESPACE" -l "ark.mckinsey.com/name=$1" -o json | jq -c '[.items[].metadata.name] | sort')
+            [ "$SELECTED" = "$2" ] || { echo "FAIL: ark.mckinsey.com/name=$1 selects $SELECTED, expected $2"; exit 1; }
+          }
+
+          expect_status "POST mcp server echo-api" "$(call_api mcp-servers "$ADMIN" POST "" "$(server echo-api '{"team":"e2e"}')")" 200
+          expect_labels echo-api '{"ark.mckinsey.com/name":"echo-api","team":"e2e"}'
+          expect_status "POST mcp server echo-spoof claiming mock-llm-mcp" \
+            "$(call_api mcp-servers "$ADMIN" POST "" "$(server echo-spoof '{"ark.mckinsey.com/name":"mock-llm-mcp"}')")" 200
+          expect_labels echo-spoof '{"ark.mckinsey.com/name":"echo-spoof"}'
+          expect_selected mock-llm-mcp '["mock-llm-mcp"]'
+          expect_selected echo-api '["echo-api"]'
+
+          expect_status "PUT echo-api with labels that drop the name label" \
+            "$(call_api mcp-servers "$ADMIN" PUT "/echo-api" '{"labels":{"team":"other"}}')" 200
+          expect_labels echo-api '{"ark.mckinsey.com/name":"echo-api","team":"other"}'
+          kubectl label mcpserver echo-api -n "$NAMESPACE" ark.mckinsey.com/name=mock-llm-mcp --overwrite >/dev/null
+          expect_status "PUT echo-api after kubectl changed the name label" \
+            "$(call_api mcp-servers "$ADMIN" PUT "/echo-api" '{"annotations":{"e2e":"restored"}}')" 200
+          expect_labels echo-api '{"ark.mckinsey.com/name":"echo-api","team":"other"}'
+          expect_selected mock-llm-mcp '["mock-llm-mcp"]'
+          expect_status "DELETE echo-spoof" "$(call_api mcp-servers "$ADMIN" DELETE "/echo-spoof")" 204
+
+          for _ in $(seq 1 45); do
+            kubectl get tool echo-api-echo-headers -n "$NAMESPACE" >/dev/null 2>&1 && break
+            sleep 2
+          done
+          kubectl get tool echo-api-echo-headers -n "$NAMESPACE" >/dev/null \
+            || { echo "FAIL: no tool discovered for echo-api"; kubectl get mcpserver echo-api -n "$NAMESPACE" -o yaml; exit 1; }
+          AGENT='{"name":"a-echo-api","prompt":"You are a test assistant.","modelRef":{"name":"personal-mock-model"},"tools":[{"type":"mcp","name":"echo-api-echo-headers"}]}'
+          expect_status "POST agent with the echo-api tool" "$(call_api agents "$ADMIN" POST "" "$AGENT")" 200
+
+          R=$(call "$ADMIN" POST "" '{"name":"echo-api","string_data":{"token":"admin-echo-api-value"},"scope":"personal"}')
+          expect_status "POST personal echo-api as admin" "$R" 200
+          QUERY=$(printf '{"name":"q-echo-api","input":"echo-headers","target":{"type":"agent","name":"a-echo-api"},"overrides":[{"resourceType":"mcpserver","labelSelector":{"matchLabels":{"ark.mckinsey.com/name":"echo-api"}},"headers":[{"name":"X-Personal-Token","value":{"valueFrom":{"secretKeyRef":{"name":"%s","key":"token"}}}}]}]}' "$TOKEN")
+          expect_status "POST query selecting echo-api by its name label" "$(call_api queries "$ADMIN" POST "" "$QUERY")" 200
+          for _ in $(seq 1 45); do
+            CONTENT=$(kubectl get query q-echo-api -n "$NAMESPACE" -o jsonpath='{.status.response.content}')
+            [ -n "$CONTENT" ] && break
+            [ "$(kubectl get query q-echo-api -n "$NAMESPACE" -o jsonpath='{.status.phase}')" = error ] && break
+            sleep 2
+          done
+          printf '%s' "$CONTENT" | grep -i x-personal-token | grep -q admin-echo-api-value \
+            || { echo "FAIL: echo-api did not receive the header selected by its name label"; kubectl get query q-echo-api -n "$NAMESPACE" -o yaml; exit 1; }
+
+          expect_status "DELETE q-echo-api" "$(call_api queries "$ADMIN" DELETE "/q-echo-api")" 204
+          expect_status "DELETE a-echo-api" "$(call_api agents "$ADMIN" DELETE "/a-echo-api")" 204
+          expect_status "DELETE echo-api" "$(call_api mcp-servers "$ADMIN" DELETE "/echo-api")" 204
+          expect_status "DELETE own personal echo-api as admin" "$(call "$ADMIN" DELETE "/$TOKEN")" 200
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get mcpservers,tools,agents --show-labels || true
+          kubectl -n $NAMESPACE get queries -o yaml || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    finally:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE delete query q-echo-api --ignore-not-found || true
+          kubectl -n $NAMESPACE delete agent a-echo-api --ignore-not-found || true
+          kubectl -n $NAMESPACE delete mcpserver echo-api echo-spoof --ignore-not-found || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
