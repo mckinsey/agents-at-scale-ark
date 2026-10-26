@@ -28,6 +28,7 @@ export function createSecretFormSchema(
       alias: aliasSchema,
       labels: z.array(z.string()),
       labelDraft: z.string(),
+      scope: z.enum(['shared', 'personal']),
     })
     .superRefine((data, ctx) => {
       if (mode === SecretFormMode.CREATE && data.password.length === 0) {

@@ -59,8 +59,14 @@ export const useCreateSecret = (props?: UseCreateSecretProps) => {
       props?.onSuccess?.(data);
     },
     onError: (error, request) => {
+      const personalForbidden =
+        request.scope === 'personal' &&
+        error instanceof APIError &&
+        error.status === 403;
       toast.error(`Failed to create Secret: ${request.name}`, {
-        description: createResourceErrorMessage(error, 'Secret', request.name),
+        description: personalForbidden
+          ? getErrorMessage(error)
+          : createResourceErrorMessage(error, 'Secret', request.name),
       });
     },
     onSettled: () => {
@@ -71,6 +77,7 @@ export const useCreateSecret = (props?: UseCreateSecretProps) => {
 
 type UseUpdateSecretProps = {
   onSuccess?: (data: SecretDetailResponse) => void;
+  successMessage?: string;
 };
 
 export const useUpdateSecret = (props?: UseUpdateSecretProps) => {
@@ -87,7 +94,7 @@ export const useUpdateSecret = (props?: UseUpdateSecretProps) => {
       request: SecretUpdateRequest;
     }) => secretsService.update(namespace, name, request),
     onSuccess: data => {
-      toast.success('Secret updated successfully');
+      toast.success(props?.successMessage ?? 'Secret updated successfully');
       props?.onSuccess?.(data);
     },
     onError: (error, { name }) => {

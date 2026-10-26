@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,9 +10,16 @@ const mockUseNamespace = vi.fn(() => ({
 interface MockSecret {
   id: string;
   name: string;
+  display_name?: string;
+  scope?: 'shared' | 'personal';
   description: string | null;
   alias: string | null;
   labels: string[];
+}
+
+interface MockUser {
+  name?: string | null;
+  email?: string | null;
 }
 
 interface MockGetSecretResult {
@@ -22,11 +29,19 @@ interface MockGetSecretResult {
 
 const mockCreateMutateAsync = vi.fn().mockResolvedValue(undefined);
 const mockUpdateMutateAsync = vi.fn().mockResolvedValue(undefined);
+const mockUpdateMutate = vi.fn();
+const mockUseUpdateSecretProps = vi.fn();
+const mockUpdatePending = vi.fn(() => false);
+const mockUseUser = vi.fn<() => { user?: MockUser | null }>(() => ({
+  user: undefined,
+}));
 const mockUseGetSecret = vi.fn<() => MockGetSecretResult>(() => ({
   data: undefined,
   isLoading: false,
 }));
-const mockUseGetAllSecrets = vi.fn(() => ({ data: [] as MockSecret[] }));
+const mockUseGetAllSecrets = vi.fn((..._args: unknown[]) => ({
+  data: [] as MockSecret[],
+}));
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
@@ -38,21 +53,29 @@ vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => mockUseNamespace(),
 }));
 
+vi.mock('@/providers/UserProvider', () => ({
+  useUser: () => mockUseUser(),
+}));
+
 vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
   useNamespacedNavigation: vi.fn(() => ({ push: vi.fn() })),
 }));
 
 vi.mock('@/lib/services/secrets-hooks', () => ({
   useGetSecret: () => mockUseGetSecret(),
-  useGetAllSecrets: () => mockUseGetAllSecrets(),
+  useGetAllSecrets: (...args: unknown[]) => mockUseGetAllSecrets(...args),
   useCreateSecret: () => ({
     mutateAsync: mockCreateMutateAsync,
     isPending: false,
   }),
-  useUpdateSecret: () => ({
-    mutateAsync: mockUpdateMutateAsync,
-    isPending: false,
-  }),
+  useUpdateSecret: (props?: unknown) => {
+    mockUseUpdateSecretProps(props);
+    return {
+      mutateAsync: mockUpdateMutateAsync,
+      mutate: mockUpdateMutate,
+      isPending: mockUpdatePending(),
+    };
+  },
 }));
 
 import { SecretForm } from '@/components/forms/secret-form/secret-form';
@@ -75,6 +98,8 @@ describe('SecretForm', () => {
     });
     mockUseGetSecret.mockReturnValue({ data: undefined, isLoading: false });
     mockUseGetAllSecrets.mockReturnValue({ data: [] });
+    mockUseUser.mockReturnValue({ user: undefined });
+    mockUpdatePending.mockReturnValue(false);
   });
 
   it('leaves every field editable in a writable namespace', () => {
@@ -172,6 +197,8 @@ describe('SecretForm', () => {
       data: {
         id: '1',
         name: 'api-key-production',
+        display_name: 'api-key-production',
+        scope: 'shared',
         description: 'Production API key',
         alias: 'prod-key',
         labels: ['prod'],
@@ -215,5 +242,350 @@ describe('SecretForm', () => {
       ).toBeInTheDocument();
     });
     expect(mockCreateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  describe('scope', () => {
+    const PERSONAL_NAME = 'u-0123456789abcdef-github-pat';
+    const personalSecret: MockSecret = {
+      id: PERSONAL_NAME,
+      name: PERSONAL_NAME,
+      display_name: 'github-pat',
+      scope: 'personal',
+      description: 'My GitHub token',
+      alias: 'gh',
+      labels: ['mcp'],
+    };
+    const sharedSecret: MockSecret = {
+      id: 'openai',
+      name: 'openai',
+      display_name: 'openai',
+      scope: 'shared',
+      description: null,
+      alias: null,
+      labels: [],
+    };
+
+    async function fillRequired(user: ReturnType<typeof userEvent.setup>) {
+      await user.type(field(NAME_FIELD), 'github-pat');
+      await user.type(field(VALUE_FIELD), 'ghp_token');
+    }
+
+    it('suggests aliases from shared secrets only', () => {
+      render(<SecretForm mode={SecretFormMode.CREATE} />);
+
+      expect(mockUseGetAllSecrets).toHaveBeenCalled();
+      for (const args of mockUseGetAllSecrets.mock.calls) {
+        expect(args).toEqual([]);
+      }
+    });
+
+    it('offers no scope choice without a signed-in user and creates a shared secret', async () => {
+      const user = userEvent.setup();
+      render(<SecretForm mode={SecretFormMode.CREATE} />);
+
+      expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('radio', { name: 'Personal' }),
+      ).not.toBeInTheDocument();
+
+      await fillRequired(user);
+      await user.click(screen.getByRole('button', { name: 'Create' }));
+
+      await waitFor(() => {
+        expect(mockCreateMutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({ name: 'github-pat', scope: 'shared' }),
+        );
+      });
+    });
+
+    it('lets a signed-in user choose the scope, defaulting to Shared', () => {
+      mockUseUser.mockReturnValue({ user: { email: 'admin@ark.local' } });
+      render(<SecretForm mode={SecretFormMode.CREATE} />);
+
+      expect(
+        screen.getByRole('radiogroup', { name: 'Scope' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Shared' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Personal' })).not.toBeChecked();
+      expect(
+        screen.getByRole('radio', { name: 'Personal' }),
+      ).toHaveAccessibleDescription(
+        /used only in the MCP server overrides of a query/,
+      );
+    });
+
+    it('creates a shared secret when a signed-in user keeps the default', async () => {
+      const user = userEvent.setup();
+      mockUseUser.mockReturnValue({ user: { email: 'admin@ark.local' } });
+      render(<SecretForm mode={SecretFormMode.CREATE} />);
+
+      await fillRequired(user);
+      await user.click(screen.getByRole('button', { name: 'Create' }));
+
+      await waitFor(() => {
+        expect(mockCreateMutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({ scope: 'shared' }),
+        );
+      });
+    });
+
+    it('sends the chosen Personal scope with the logical name', async () => {
+      const user = userEvent.setup();
+      mockUseUser.mockReturnValue({ user: { email: 'admin@ark.local' } });
+      render(<SecretForm mode={SecretFormMode.CREATE} />);
+
+      await fillRequired(user);
+      await user.click(screen.getByRole('radio', { name: 'Personal' }));
+      await user.click(screen.getByRole('button', { name: 'Create' }));
+
+      await waitFor(() => {
+        expect(mockCreateMutateAsync).toHaveBeenCalledWith({
+          name: 'github-pat',
+          string_data: { token: 'ghp_token' },
+          type: 'Opaque',
+          description: null,
+          alias: null,
+          labels: [],
+          scope: 'personal',
+        });
+      });
+    });
+
+    it('disables the scope choice in a read-only namespace', () => {
+      mockUseUser.mockReturnValue({ user: { email: 'admin@ark.local' } });
+      mockUseNamespace.mockReturnValue({
+        namespace: 'default',
+        readOnlyMode: true,
+      });
+      render(<SecretForm mode={SecretFormMode.CREATE} />);
+
+      expect(screen.getByRole('radio', { name: 'Shared' })).toBeDisabled();
+      expect(screen.getByRole('radio', { name: 'Personal' })).toBeDisabled();
+    });
+
+    it('shows the scope read-only when editing, with no choice', () => {
+      mockUseUser.mockReturnValue({ user: { email: 'admin@ark.local' } });
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      render(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+
+      expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+      expect(screen.getByRole('group', { name: 'Scope' })).toHaveTextContent(
+        'Personal',
+      );
+    });
+
+    it('makes a personal secret shared after confirmation, sending its full state', async () => {
+      const user = userEvent.setup();
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      render(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Make shared' }));
+      expect(mockUpdateMutate).not.toHaveBeenCalled();
+
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog).toHaveTextContent(
+        `Everyone with access to this namespace will see "github-pat" in Ark and can use it in any resource. Its name stays "${PERSONAL_NAME}". A shared secret cannot be made personal again.`,
+      );
+      await user.click(
+        within(dialog).getByRole('button', { name: 'Make shared' }),
+      );
+
+      expect(mockUpdateMutate).toHaveBeenCalledWith({
+        name: PERSONAL_NAME,
+        request: {
+          description: 'My GitHub token',
+          alias: 'gh',
+          labels: ['mcp'],
+          scope: 'shared',
+        },
+      });
+      expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the confirmation is cancelled', async () => {
+      const user = userEvent.setup();
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      render(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Make shared' }));
+      await user.click(
+        within(await screen.findByRole('dialog')).getByRole('button', {
+          name: 'Cancel',
+        }),
+      );
+
+      expect(mockUpdateMutate).not.toHaveBeenCalled();
+    });
+
+    it('blocks Make shared while there are unsaved changes', async () => {
+      const user = userEvent.setup();
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      render(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+      expect(screen.getByRole('button', { name: 'Make shared' })).toBeEnabled();
+
+      await user.type(field(DESCRIPTION_FIELD), ' edited');
+
+      const button = screen.getByRole('button', { name: 'Make shared' });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(
+        'Save or discard your changes before making it shared.',
+      );
+      expect(mockUpdateMutate).not.toHaveBeenCalled();
+    });
+
+    it('disables Make shared while an update is in flight', () => {
+      mockUpdatePending.mockReturnValue(true);
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      render(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'Make shared' }),
+      ).toBeDisabled();
+    });
+
+    it('stays on the page after making a secret shared and says so', () => {
+      const onSuccess = vi.fn();
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      render(
+        <SecretForm
+          mode={SecretFormMode.EDIT}
+          secretName={PERSONAL_NAME}
+          onSuccess={onSuccess}
+        />,
+      );
+
+      expect(mockUseUpdateSecretProps).toHaveBeenCalledWith({ onSuccess });
+      expect(mockUseUpdateSecretProps).toHaveBeenCalledWith({
+        successMessage: 'Secret is now shared',
+      });
+    });
+
+    it('moves focus to the scope once the secret reloads as shared', () => {
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      const { rerender } = render(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+      mockUseGetSecret.mockReturnValue({
+        data: { ...personalSecret, scope: 'shared' },
+        isLoading: false,
+      });
+      rerender(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+
+      const group = screen.getByRole('group', { name: 'Scope' });
+      expect(group).toHaveTextContent('Shared');
+      expect(group).toHaveFocus();
+      expect(
+        screen.queryByRole('button', { name: 'Make shared' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows the display name in the breadcrumb of a personal secret', () => {
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      render(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+
+      const current = document.querySelector('[aria-current="page"]');
+      expect(current).toHaveTextContent(/^github-pat$/);
+    });
+
+    it('hides Make shared for a shared secret', () => {
+      mockUseGetSecret.mockReturnValue({
+        data: sharedSecret,
+        isLoading: false,
+      });
+
+      render(<SecretForm mode={SecretFormMode.EDIT} secretName="openai" />);
+
+      expect(screen.getByRole('group', { name: 'Scope' })).toHaveTextContent(
+        'Shared',
+      );
+      expect(
+        screen.queryByRole('button', { name: 'Make shared' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('disables Make shared in a read-only namespace', () => {
+      mockUseNamespace.mockReturnValue({
+        namespace: 'default',
+        readOnlyMode: true,
+      });
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      render(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'Make shared' }),
+      ).toBeDisabled();
+    });
+
+    it('does not send a scope when saving an edit', async () => {
+      const user = userEvent.setup();
+      mockUseGetSecret.mockReturnValue({
+        data: personalSecret,
+        isLoading: false,
+      });
+
+      render(
+        <SecretForm mode={SecretFormMode.EDIT} secretName={PERSONAL_NAME} />,
+      );
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1);
+      });
+      expect(mockUpdateMutateAsync.mock.calls[0][0].request).not.toHaveProperty(
+        'scope',
+      );
+    });
   });
 });

@@ -264,6 +264,53 @@ describe('secrets-hooks', () => {
       expect(onSuccess).toHaveBeenCalledWith(secretDetail);
     });
 
+    it('shows the server reason when a personal secret is refused with 403', async () => {
+      vi.mocked(secretsService.create).mockRejectedValue(
+        new APIError(
+          'Personal secrets require an authenticated user identity',
+          403,
+        ),
+      );
+
+      const { result } = renderHook(() => useCreateSecret(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({ ...createRequest, scope: 'personal' });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to create Secret: aws-credentials',
+        {
+          description:
+            'Personal secrets require an authenticated user identity',
+        },
+      );
+    });
+
+    it('keeps the permission message when a shared secret is refused with 403', async () => {
+      vi.mocked(secretsService.create).mockRejectedValue(
+        new APIError('Forbidden', 403),
+      );
+
+      const { result } = renderHook(() => useCreateSecret(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({ ...createRequest, scope: 'shared' });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to create Secret: aws-credentials',
+        {
+          description:
+            'You do not have permission to create a Secret in this namespace.',
+        },
+      );
+    });
+
     it('should report a name clash on 409', async () => {
       vi.mocked(secretsService.create).mockRejectedValue(
         new APIError('Conflict', 409),
@@ -326,6 +373,24 @@ describe('secrets-hooks', () => {
   });
 
   describe('useUpdateSecret', () => {
+    it('uses the given success message', async () => {
+      vi.mocked(secretsService.update).mockResolvedValue(secretDetail);
+
+      const { result } = renderHook(
+        () => useUpdateSecret({ successMessage: 'Secret is now shared' }),
+        { wrapper: createWrapper() },
+      );
+
+      result.current.mutate({
+        name: 'aws-credentials',
+        request: updateRequest,
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(toast.success).toHaveBeenCalledWith('Secret is now shared');
+    });
+
     it('should update a secret and notify the caller', async () => {
       vi.mocked(secretsService.update).mockResolvedValue(secretDetail);
 
