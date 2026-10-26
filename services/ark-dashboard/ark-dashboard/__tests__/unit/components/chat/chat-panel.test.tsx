@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -86,6 +86,7 @@ function chatSession(overrides: Partial<ChatSession> = {}): ChatSession {
 }
 
 const NAME_LABEL = 'ark.mckinsey.com/name';
+const MOUNT_FOCUS_SETTLED_MS = 150;
 
 function mcpServer(name: string, labels: Record<string, string> | null) {
   return { id: name, name, namespace: 'team-a', labels };
@@ -189,9 +190,13 @@ describe('ChatPanel MCP credentials', () => {
     return user;
   }
 
-  async function waitForComposerFocus() {
-    await waitFor(() =>
-      expect(screen.getByPlaceholderText('Type your message...')).toHaveFocus(),
+  async function renderPanel(
+    overrides: Partial<ChatSession> = {},
+    type: 'agent' | 'team' | 'model' = 'agent',
+  ) {
+    renderChatPanel(overrides, type);
+    await act(
+      () => new Promise(resolve => setTimeout(resolve, MOUNT_FOCUS_SETTLED_MS)),
     );
   }
 
@@ -207,15 +212,15 @@ describe('ChatPanel MCP credentials', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   }
 
-  it('is hidden when the namespace has no MCP servers', () => {
-    renderChatPanel();
+  it('is hidden when the namespace has no MCP servers', async () => {
+    await renderPanel();
 
     expect(screen.queryByText('MCP credentials')).not.toBeInTheDocument();
   });
 
   it('starts collapsed when there are no credentials', async () => {
     mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
-    renderChatPanel();
+    await renderPanel();
     const user = userEvent.setup();
 
     expect(
@@ -243,7 +248,7 @@ describe('ChatPanel MCP credentials', () => {
     storeCredentials([GITHUB_ROW]);
     const sendMessage = vi.fn(async () => {});
 
-    renderChatPanel({ sendMessage }, 'model');
+    await renderPanel({ sendMessage }, 'model');
 
     expect(screen.queryByText('MCP credentials')).not.toBeInTheDocument();
     expect(useChatSession).toHaveBeenLastCalledWith({
@@ -261,9 +266,8 @@ describe('ChatPanel MCP credentials', () => {
   it('adds a row with the default header and key and focuses its server', async () => {
     mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
     storeCredentials([{ ...GITHUB_ROW, server: '', secret: '' }]);
-    renderChatPanel();
+    await renderPanel();
     const user = userEvent.setup();
-    await waitForComposerFocus();
 
     await user.click(
       screen.getByRole('button', { name: 'Add MCP credential' }),
@@ -287,7 +291,7 @@ describe('ChatPanel MCP credentials', () => {
   it('stores the server picked for a row', async () => {
     mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
     storeCredentials([{ ...GITHUB_ROW, server: '' }]);
-    renderChatPanel();
+    await renderPanel();
     const user = userEvent.setup();
 
     await user.click(screen.getByLabelText('MCP server for credential 1'));
@@ -303,11 +307,11 @@ describe('ChatPanel MCP credentials', () => {
     ).toBe('github');
   });
 
-  it('passes a saved credential for a labelled server to the session', () => {
+  it('passes a saved credential for a labelled server to the session', async () => {
     mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
     storeCredentials([GITHUB_ROW]);
 
-    renderChatPanel();
+    await renderPanel();
 
     expect(useChatSession).toHaveBeenLastCalledWith({
       name: 'test-agent',
@@ -326,7 +330,7 @@ describe('ChatPanel MCP credentials', () => {
       mcpServer('jira', null),
     ]);
     storeCredentials([{ ...GITHUB_ROW, server: '' }]);
-    renderChatPanel();
+    await renderPanel();
     const user = userEvent.setup();
 
     await user.click(screen.getByLabelText('MCP server for credential 1'));
@@ -352,7 +356,7 @@ describe('ChatPanel MCP credentials', () => {
     storeCredentials([GITHUB_ROW]);
     const sendMessage = vi.fn(async () => {});
 
-    renderChatPanel({ sendMessage });
+    await renderPanel({ sendMessage });
 
     const row = screen.getByRole('group', { name: 'Credential for github' });
     expect(row).toHaveAccessibleDescription(
@@ -388,7 +392,7 @@ describe('ChatPanel MCP credentials', () => {
     storeCredentials([GITHUB_ROW]);
     const sendMessage = vi.fn(async () => {});
 
-    renderChatPanel({ sendMessage });
+    await renderPanel({ sendMessage });
 
     const row = screen.getByRole('group', { name: 'Credential for github' });
     expect(row).toHaveAccessibleDescription(
@@ -407,7 +411,7 @@ describe('ChatPanel MCP credentials', () => {
     storeCredentials([{ ...GITHUB_ROW, key: '' }]);
     const sendMessage = vi.fn(async () => {});
 
-    renderChatPanel({ sendMessage });
+    await renderPanel({ sendMessage });
 
     expect(
       screen.getByText('Fill in every field or remove this credential.'),
@@ -422,14 +426,14 @@ describe('ChatPanel MCP credentials', () => {
     await expectSendBlocked(sendMessage);
   });
 
-  it('names the repeated header when two rows send it to one server', () => {
+  it('names the repeated header when two rows send it to one server', async () => {
     mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
     storeCredentials([
       GITHUB_ROW,
       { ...GITHUB_ROW, id: 'c2', header: ' authorization ' },
     ]);
 
-    renderChatPanel();
+    await renderPanel();
 
     expect(
       screen.getByText(
@@ -438,11 +442,11 @@ describe('ChatPanel MCP credentials', () => {
     ).toBeInTheDocument();
   });
 
-  it('says it is checking while the server list loads', () => {
+  it('says it is checking while the server list loads', async () => {
     mockMcpServers(undefined, true);
     storeCredentials([GITHUB_ROW]);
 
-    renderChatPanel();
+    await renderPanel();
 
     expect(screen.getByText('Checking MCP servers…')).toBeInTheDocument();
     expect(
@@ -454,7 +458,7 @@ describe('ChatPanel MCP credentials', () => {
   it('offers a retry when the server list fails to load', async () => {
     mockMcpServers(undefined, false);
     storeCredentials([GITHUB_ROW]);
-    renderChatPanel();
+    await renderPanel();
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('button', { name: 'Retry' }));
@@ -465,8 +469,7 @@ describe('ChatPanel MCP credentials', () => {
   it('sends again once the blocking row is removed and moves focus to Add', async () => {
     mockMcpServers([mcpServer('github', null)]);
     storeCredentials([GITHUB_ROW]);
-    renderChatPanel();
-    await waitForComposerFocus();
+    await renderPanel();
     const user = await typeMessage();
 
     await user.click(
@@ -499,7 +502,7 @@ describe('ChatPanel MCP credentials', () => {
         'admin@ark.local/team-a': [{ ...GITHUB_ROW, secret: '' }],
       }),
     );
-    renderChatPanel();
+    await renderPanel();
     const user = userEvent.setup();
 
     await user.click(
@@ -511,11 +514,11 @@ describe('ChatPanel MCP credentials', () => {
     expect(useGetAllSecrets).toHaveBeenCalledWith('all', { enabled: true });
   });
 
-  it('disables the rows while a query runs', () => {
+  it('disables the rows while a query runs', async () => {
     mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
     storeCredentials([GITHUB_ROW]);
 
-    renderChatPanel({ isProcessing: true });
+    await renderPanel({ isProcessing: true });
 
     expect(
       screen.getByRole('button', { name: 'Add MCP credential' }),
