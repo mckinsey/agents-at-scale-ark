@@ -164,7 +164,7 @@ The Python SDK's `SecretClient`, also exposed as `ArkClient.secrets`, applies th
 
 ### Personal Secrets in `/v1/secrets`
 
-A signed-in user can create a personal Secret that only they can list, read, change and delete through `/v1/secrets`.
+A signed-in user can create a personal Secret that only they can list, read, change and delete through `/v1/secrets`. [Personal secrets](/user-guide/secrets#personal-secrets) describes how to create and use them.
 
 - `POST /v1/secrets` accepts `"scope": "personal"`. Ark stores the Secret as `u-<owner>-<name>`, where `<owner>` is the first sixteen hex digits of the SHA-256 of the username, and labels it `ark.mckinsey.com/scope=user-<owner>`. Without a user identity, for example in `open` mode or with an API key, the request returns `403`. `scope` defaults to `shared`.
 - `GET /v1/secrets` takes `?scope=shared|personal|all` and defaults to `shared`, so existing clients keep getting only shared Secrets. `personal` lists the caller's own and returns an empty list without a user identity.
