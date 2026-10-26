@@ -181,6 +181,15 @@ A signed-in user can create a personal Secret that only they can list, read, cha
 
 The username is the claim set by `IMPERSONATION_USERNAME_CLAIM` (default `email`), exactly as the identity provider sends it and without `IMPERSONATION_PREFIX`. It is case-sensitive, so `Alice@example.com` and `alice@example.com` own different Secrets. If the claim value changes for a user, their existing personal Secrets stop showing up for them; pick a claim that stays stable.
 
+### MCPServers Get a Name Label
+
+`POST /v1/mcp-servers` and `PUT /v1/mcp-servers/{name}` set the label `ark.mckinsey.com/name` to the server's name, so a Query or Agent `mcpserver` override can pick one server with `labelSelector.matchLabels`. That is how a personal Secret reaches a single MCP server.
+
+- The value is always the server's name, and other labels are kept. A different value in the request body is replaced. A value set with `kubectl` stays until the next write through `/v1/mcp-servers`.
+- A name longer than 63 characters cannot be a label value. Such a server gets no name label, an update removes any name label it has, and an override cannot select it by name.
+- Only `/v1/mcp-servers` sets the label. The controller and the MCP OAuth endpoints do not. MCPServers created before the upgrade, or applied with `kubectl`, Helm or GitOps, have no name label until someone updates them through the API, so add `ark.mckinsey.com/name: <name>` to their manifests. An override that selects a name no server carries matches nothing, and the Query runs without those headers.
+- Nothing outside the API checks the label. Anyone who can create or edit MCPServers in a namespace with `kubectl` can give a server another server's name, and that server then also receives the headers of overrides that select the name. The same applies to any other label an override selects on.
+
 ## v0.1.72
 
 ### Argo Workflows Upgraded to v4.1
