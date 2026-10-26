@@ -169,6 +169,7 @@ export function SecretNameField({
         </Autocomplete>
         <CreateResourceButton
           kind="secret"
+          disabled={disabled}
           onCreated={name => {
             setCreatedNames(current => [...current, name]);
             onChange(name);

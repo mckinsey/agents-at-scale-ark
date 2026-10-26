@@ -583,8 +583,10 @@ describe('StudioChatPanel', () => {
         expect(chatService.startStreamChatResponse).toHaveBeenCalled(),
       );
       const call = vi.mocked(chatService.startStreamChatResponse).mock.calls[0];
-      expect(call[4]).toBe('argo-make-default-my-workflow');
-      expect(call[5]).toBe('conv-prev');
+      expect(call[4]).toMatchObject({
+        sessionId: 'argo-make-default-my-workflow',
+        conversationId: 'conv-prev',
+      });
     });
   });
 
@@ -678,7 +680,8 @@ describe('StudioChatPanel', () => {
         expect(chatService.startStreamChatResponse).toHaveBeenCalledTimes(2),
       );
       expect(
-        vi.mocked(chatService.startStreamChatResponse).mock.calls[1][5],
+        vi.mocked(chatService.startStreamChatResponse).mock.calls[1][4]
+          ?.conversationId,
       ).toBe('conv-1');
       await waitForTurnComplete();
 
@@ -690,7 +693,8 @@ describe('StudioChatPanel', () => {
         expect(chatService.startStreamChatResponse).toHaveBeenCalledTimes(3),
       );
       expect(
-        vi.mocked(chatService.startStreamChatResponse).mock.calls[2][5],
+        vi.mocked(chatService.startStreamChatResponse).mock.calls[2][4]
+          ?.conversationId,
       ).toBeUndefined();
     });
   });
