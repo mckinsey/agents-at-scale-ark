@@ -8,10 +8,15 @@ import { SecretNameField } from '@/components/forms/fields/secret-name-field';
 vi.mock('@/components/forms/shared/create-resource-dialog', () => ({
   CreateResourceButton: ({
     onCreated,
+    disabled,
   }: {
     onCreated: (name: string) => void;
+    disabled?: boolean;
   }) => (
-    <button type="button" onClick={() => onCreated('created-secret')}>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onCreated('created-secret')}>
       Add New
     </button>
   ),
@@ -361,5 +366,12 @@ describe('SecretNameField', () => {
       const option = await screen.findByRole('option', { name: 'github-pat' });
       expect(within(option).queryByText('Personal')).not.toBeInTheDocument();
     });
+  });
+
+  it('disables Add New together with the field', () => {
+    renderField({ disabled: true });
+
+    expect(input()).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add New' })).toBeDisabled();
   });
 });

@@ -9,6 +9,7 @@ import {
   chatHistoryAtom,
   createNewSessionId,
 } from '@/atoms/chat-history';
+import type { StoredMcpCredential } from '@/atoms/chat-mcp-credentials';
 import {
   isChatStreamingEnabledAtom,
   queryTimeoutSettingAtom,
@@ -24,6 +25,7 @@ import {
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
 import { useBrokerFallbackNotice } from '@/lib/hooks/use-broker-fallback-notice';
+import { buildMcpCredentialOverrides } from '@/lib/hooks/use-chat-mcp-credentials';
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
 import {
@@ -31,6 +33,7 @@ import {
   type ChatResponse,
   type MemoryNotice,
   type MemoryNoticeLookup,
+  type QueryOverride,
   isBrokerUnavailableError,
 } from '@/lib/services/chat';
 import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
@@ -181,6 +184,13 @@ function buildCascadingApprovalMessage(
 interface UseChatSessionParams {
   name: string;
   type: ChatType;
+  mcpCredentials?: readonly StoredMcpCredential[];
+  mcpCredentialsBlocked?: boolean;
+}
+
+interface ChatTurnRequest {
+  parameters?: ApiQueryParameter[];
+  overrides?: QueryOverride[];
 }
 
 interface UseChatSessionReturn {
@@ -219,9 +229,13 @@ interface UseChatSessionReturn {
   engineToolWarning: string | null;
 }
 
+const NO_MCP_CREDENTIALS: readonly StoredMcpCredential[] = [];
+
 export function useChatSession({
   name,
   type,
+  mcpCredentials = NO_MCP_CREDENTIALS,
+  mcpCredentialsBlocked = false,
 }: UseChatSessionParams): UseChatSessionReturn {
   const { namespace } = useNamespace();
   const invalidateQueriesList = useInvalidateQueriesList();
@@ -476,7 +490,7 @@ export function useChatSession({
   } | null>(null);
 
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+    async (userMessage: string, turnRequest: ChatTurnRequest) => {
       chatStreamAbortControllerRef.current = new AbortController();
 
       const turnStartIndex = chatMessages.length + 1;
@@ -553,11 +567,14 @@ export function useChatSession({
           userMessage,
           type,
           name,
-          sessionId,
-          conversationId,
-          queryTimeout,
-          chatStreamAbortControllerRef.current.signal,
-          apiParameters,
+          {
+            sessionId,
+            conversationId,
+            timeout: queryTimeout,
+            abortSignal: chatStreamAbortControllerRef.current.signal,
+            parameters: turnRequest.parameters,
+            overrides: turnRequest.overrides,
+          },
         );
 
       queryName = streamQueryName;
@@ -999,7 +1016,7 @@ export function useChatSession({
   const handlePollChatResponse = useCallback(
     async (
       userMessage: string,
-      apiParameters?: ApiQueryParameter[],
+      turnRequest: ChatTurnRequest,
       existingQueryName?: string,
     ) => {
       let queryName = existingQueryName;
@@ -1009,10 +1026,13 @@ export function useChatSession({
           userMessage,
           type,
           name,
-          sessionId,
-          conversationId,
-          queryTimeout,
-          apiParameters,
+          {
+            sessionId,
+            conversationId,
+            timeout: queryTimeout,
+            parameters: turnRequest.parameters,
+            overrides: turnRequest.overrides,
+          },
         );
         queryName = query.name;
         invalidateQueriesList();
@@ -1175,11 +1195,14 @@ export function useChatSession({
       setError(null);
       resumeAutoScroll();
 
-      if (missingParameters.length > 0) {
+      if (missingParameters.length > 0 || mcpCredentialsBlocked) {
         return;
       }
 
-      const apiParameters = toApiParameters();
+      const turnRequest: ChatTurnRequest = {
+        parameters: toApiParameters(),
+        overrides: buildMcpCredentialOverrides(mcpCredentials),
+      };
 
       trackEvent({
         name: 'chat_message_sent',
@@ -1203,10 +1226,10 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage, apiParameters);
+          await handleStreamChatResponse(userMessage, turnRequest);
           await ensureConversationId();
         } else {
-          await handlePollChatResponse(userMessage, apiParameters);
+          await handlePollChatResponse(userMessage, turnRequest);
         }
       } catch (err) {
         console.error('Error sending message:', err);
@@ -1219,7 +1242,7 @@ export function useChatSession({
           try {
             await handlePollChatResponse(
               userMessage,
-              apiParameters,
+              turnRequest,
               err.queryName || lastQueryName.current || undefined,
             );
           } catch (pollErr) {
@@ -1303,6 +1326,8 @@ export function useChatSession({
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
+      mcpCredentials,
+      mcpCredentialsBlocked,
       missingParameters,
       name,
       refreshMemoryNotice,
