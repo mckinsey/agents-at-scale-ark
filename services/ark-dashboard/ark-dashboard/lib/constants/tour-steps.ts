@@ -4,6 +4,7 @@ export interface TourStep {
   message: string;
   action?: string;
   actionHref?: string;
+  resource?: string;
 }
 
 export const navTargetId = (key: string) => `nav-${key || 'home'}`;
@@ -22,6 +23,7 @@ export const TOUR_STEPS: TourStep[] = [
       'Start by configuring an AI model provider. Your agents need a default model to run on.',
     action: 'Configure your default model',
     actionHref: '/models/new',
+    resource: 'models',
   },
   {
     targetId: navTargetId('mcp'),
@@ -30,6 +32,7 @@ export const TOUR_STEPS: TourStep[] = [
       'Add MCP (Model Context Protocol) servers to extend your agents with external tools and data sources.',
     action: 'Add an MCP server',
     actionHref: '/mcp/new',
+    resource: 'mcpservers',
   },
   {
     targetId: navTargetId('agents'),
@@ -38,6 +41,7 @@ export const TOUR_STEPS: TourStep[] = [
       'Create autonomous AI agents with custom instructions, tools, and behaviors. This is where your AI solutions come to life.',
     action: 'Create an agent',
     actionHref: '/agents/new',
+    resource: 'agents',
   },
   {
     targetId: navTargetId('teams'),
@@ -46,6 +50,7 @@ export const TOUR_STEPS: TourStep[] = [
       'Coordinate multiple agents to work together on complex tasks. Define a mission and prompt to orchestrate their collaboration.',
     action: 'Build a team of agents',
     actionHref: '/teams/new',
+    resource: 'teams',
   },
   {
     targetId: navTargetId('workflow-templates'),

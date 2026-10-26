@@ -29,7 +29,21 @@ const CASES: DialogCase[] = [
     confirmLabel: /Create my first agent/i,
     dismissLabel: /Maybe later/i,
     render: (onConfirm, onDismiss) => (
-      <PostTourDialog open onCreateAgent={onConfirm} onDismiss={onDismiss} />
+      <PostTourDialog open onConfirm={onConfirm} onDismiss={onDismiss} />
+    ),
+  },
+  {
+    name: 'PostTourDialog (read-only)',
+    title: 'Tour complete',
+    confirmLabel: /Explore agents/i,
+    dismissLabel: /Maybe later/i,
+    render: (onConfirm, onDismiss) => (
+      <PostTourDialog
+        open
+        readOnly
+        onConfirm={onConfirm}
+        onDismiss={onDismiss}
+      />
     ),
   },
 ];

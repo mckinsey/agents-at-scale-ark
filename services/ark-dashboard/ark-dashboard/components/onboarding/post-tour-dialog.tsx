@@ -7,13 +7,15 @@ import { OnboardingDialog } from './onboarding-dialog';
 
 interface PostTourDialogProps {
   open: boolean;
-  onCreateAgent: () => void;
+  readOnly?: boolean;
+  onConfirm: () => void;
   onDismiss: () => void;
 }
 
 export function PostTourDialog({
   open,
-  onCreateAgent,
+  readOnly = false,
+  onConfirm,
   onDismiss,
 }: Readonly<PostTourDialogProps>) {
   return (
@@ -21,13 +23,14 @@ export function PostTourDialog({
       open={open}
       icon={<Celebration />}
       title="Tour complete"
-      confirmLabel="Create my first agent"
+      confirmLabel={readOnly ? 'Explore agents' : 'Create my first agent'}
       dismissLabel="Maybe later"
-      onConfirm={onCreateAgent}
+      onConfirm={onConfirm}
       onDismiss={onDismiss}>
       <DialogDescription className="text-center">
-        Great job! You&apos;ve seen how Ark works. Now, let&apos;s get your
-        first AI agent up and running.
+        {readOnly
+          ? "Great job! You've seen how Ark works. Take a look at the agents already running in this namespace."
+          : "Great job! You've seen how Ark works. Now, let's get your first AI agent up and running."}
       </DialogDescription>
     </OnboardingDialog>
   );

@@ -19,9 +19,13 @@ interface TourSpotlightProps {
   onPrev: () => void;
   onSkip: () => void;
   onAction: (href: string) => void;
+  readOnly?: boolean;
 }
 
 const PADDING = 8;
+
+export const READ_ONLY_HINT =
+  'You have view-only access in this namespace. Ask an admin for edit permissions.';
 
 export function TourSpotlight({
   steps,
@@ -30,6 +34,7 @@ export function TourSpotlight({
   onPrev,
   onSkip,
   onAction,
+  readOnly = false,
 }: Readonly<TourSpotlightProps>) {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const currentStep = steps[activeStep];
@@ -73,7 +78,8 @@ export function TourSpotlight({
   if (!currentStep) return null;
 
   const isLastStep = activeStep === steps.length - 1;
-  const { action, actionHref } = currentStep;
+  const { action, actionHref, resource } = currentStep;
+  const isActionBlocked = readOnly && Boolean(resource);
 
   const highlight = rect
     ? {
@@ -161,13 +167,21 @@ export function TourSpotlight({
           </p>
 
           {action && actionHref && (
-            <Button
-              variant="secondary"
-              onClick={() => onAction(actionHref)}
-              className="group mb-4 w-full justify-between">
-              <span>{action}</span>
-              <ArrowForward className="size-4 transition-transform group-hover:translate-x-0.5" />
-            </Button>
+            <div className="mb-4 flex flex-col gap-2">
+              <Button
+                variant="secondary"
+                disabled={isActionBlocked}
+                onClick={() => onAction(actionHref)}
+                className="group w-full justify-between">
+                <span>{action}</span>
+                <ArrowForward className="size-4 transition-transform group-hover:translate-x-0.5" />
+              </Button>
+              {isActionBlocked && (
+                <p className="label-small-primary text-fg-tertiary">
+                  {READ_ONLY_HINT}
+                </p>
+              )}
+            </div>
           )}
 
           <div className="flex items-center gap-2">

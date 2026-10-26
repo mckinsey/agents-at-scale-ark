@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { TourStep } from '@/lib/constants/tour-steps';
 
-import { TourSpotlight } from './tour-spotlight';
+import { READ_ONLY_HINT, TourSpotlight } from './tour-spotlight';
 
 const STEPS: TourStep[] = [
   {
@@ -12,11 +12,18 @@ const STEPS: TourStep[] = [
     message: 'Alpha message',
     action: 'Do alpha',
     actionHref: '/alpha',
+    resource: 'agents',
   },
-  { targetId: 'nav-beta', title: 'Beta step', message: 'Beta message' },
+  {
+    targetId: 'nav-beta',
+    title: 'Beta step',
+    message: 'Beta message',
+    action: 'See beta',
+    actionHref: '/beta',
+  },
 ];
 
-function setup(activeStep: number, withTarget: boolean) {
+function setup(activeStep: number, withTarget: boolean, readOnly = false) {
   const handlers = {
     onNext: vi.fn(),
     onPrev: vi.fn(),
@@ -26,7 +33,12 @@ function setup(activeStep: number, withTarget: boolean) {
   const view = render(
     <>
       {withTarget && <div data-onboarding-id={STEPS[activeStep].targetId} />}
-      <TourSpotlight steps={STEPS} activeStep={activeStep} {...handlers} />
+      <TourSpotlight
+        steps={STEPS}
+        activeStep={activeStep}
+        readOnly={readOnly}
+        {...handlers}
+      />
     </>,
   );
   return { handlers, ...view };
@@ -53,6 +65,32 @@ describe('TourSpotlight', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Do alpha/i }));
     expect(handlers.onAction).toHaveBeenCalledWith('/alpha');
+  });
+
+  it('disables a create action and explains why in read-only mode', () => {
+    const { handlers } = setup(0, true, true);
+    const action = screen.getByRole('button', { name: /Do alpha/i });
+    expect(action).toBeDisabled();
+    expect(screen.getByText(READ_ONLY_HINT)).toBeInTheDocument();
+
+    fireEvent.click(action);
+    expect(handlers.onAction).not.toHaveBeenCalled();
+  });
+
+  it('keeps navigation-only actions enabled in read-only mode', () => {
+    const { handlers } = setup(1, true, true);
+    expect(screen.queryByText(READ_ONLY_HINT)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /See beta/i }));
+    expect(handlers.onAction).toHaveBeenCalledWith('/beta');
+  });
+
+  it('does not show the read-only hint when editing is allowed', () => {
+    setup(0, true);
+    expect(
+      screen.getByRole('button', { name: /Do alpha/i }),
+    ).not.toBeDisabled();
+    expect(screen.queryByText(READ_ONLY_HINT)).not.toBeInTheDocument();
   });
 
   it('shows Back and Finish Tour on the last step', () => {

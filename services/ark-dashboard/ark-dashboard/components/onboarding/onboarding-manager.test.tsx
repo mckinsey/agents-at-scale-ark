@@ -12,9 +12,19 @@ import { TOUR_STEPS } from '@/lib/constants/tour-steps';
 import { OnboardingManager } from './onboarding-manager';
 
 const mockPush = vi.fn();
+const mockNamespace = { readOnlyMode: false };
 
 vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
   useNamespacedNavigation: () => ({ push: mockPush, replace: vi.fn() }),
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'test-namespace',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: mockNamespace.readOnlyMode,
+  }),
 }));
 
 const nextButton = () =>
@@ -32,6 +42,7 @@ describe('OnboardingManager', () => {
   beforeEach(() => {
     localStorage.clear();
     mockPush.mockClear();
+    mockNamespace.readOnlyMode = false;
   });
 
   it('auto-opens the welcome dialog on first visit', () => {
@@ -143,5 +154,31 @@ describe('OnboardingManager', () => {
     fireEvent.click(screen.getByRole('button', { name: /Maybe later/i }));
     expect(store.get(onboardingPhaseAtom)).toBe('idle');
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('disables create actions during the tour in read-only mode', () => {
+    mockNamespace.readOnlyMode = true;
+    const store = createStore();
+    store.set(storedOnboardingCompletedAtom, true);
+    store.set(onboardingPhaseAtom, 'tour');
+    const actionStep = TOUR_STEPS.findIndex(step => step.resource);
+    store.set(tourStepAtom, actionStep);
+    renderManager(store);
+    expect(
+      screen.getByRole('button', {
+        name: new RegExp(TOUR_STEPS[actionStep].action ?? '', 'i'),
+      }),
+    ).toBeDisabled();
+  });
+
+  it('sends read-only users to the agents list after the tour', () => {
+    mockNamespace.readOnlyMode = true;
+    const store = createStore();
+    store.set(storedOnboardingCompletedAtom, true);
+    store.set(onboardingPhaseAtom, 'post_tour');
+    renderManager(store);
+    fireEvent.click(screen.getByRole('button', { name: /Explore agents/i }));
+    expect(store.get(onboardingPhaseAtom)).toBe('idle');
+    expect(mockPush).toHaveBeenCalledWith('/agents');
   });
 });

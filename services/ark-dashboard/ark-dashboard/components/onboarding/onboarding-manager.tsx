@@ -11,6 +11,7 @@ import {
 } from '@/atoms/onboarding';
 import { TOUR_STEPS } from '@/lib/constants/tour-steps';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { FloatingTourButton } from './floating-tour-button';
 import { PostTourDialog } from './post-tour-dialog';
@@ -19,6 +20,7 @@ import { WelcomeDialog } from './welcome-dialog';
 
 export function OnboardingManager() {
   const { push } = useNamespacedNavigation();
+  const { readOnlyMode } = useNamespace();
 
   const completed = useAtomValue(onboardingCompletedAtom);
   const completeOnboarding = useSetAtom(completeOnboardingAtom);
@@ -86,14 +88,16 @@ export function OnboardingManager() {
           onPrev={handlePrev}
           onSkip={endOnboarding}
           onAction={handleAction}
+          readOnly={readOnlyMode}
         />
       )}
 
       <PostTourDialog
         open={phase === 'post_tour'}
-        onCreateAgent={() => {
+        readOnly={readOnlyMode}
+        onConfirm={() => {
           setPhase('idle');
-          push('/agents/new');
+          push(readOnlyMode ? '/agents' : '/agents/new');
         }}
         onDismiss={() => setPhase('idle')}
       />
