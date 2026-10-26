@@ -60,7 +60,7 @@ config:
                 "id": "call_{{timestamp}}",
                 "type": "function",
                 "function": {
-                  "name": "mock-llm-mcp-echo-headers",
+                  "name": "{{jmes request body.tools[0].function.name}}",
                   "arguments": "{}"
                 }
               }]
