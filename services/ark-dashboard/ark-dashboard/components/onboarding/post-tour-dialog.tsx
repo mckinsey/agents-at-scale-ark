@@ -1,7 +1,6 @@
 'use client';
 
-import { Celebration, ChevronRight } from '@/components/icons';
-import { Button } from '@/components/ui/button';
+import { Celebration } from '@/components/icons';
 import { DialogDescription } from '@/components/ui/dialog';
 
 import { OnboardingDialog } from './onboarding-dialog';
@@ -20,22 +19,12 @@ export function PostTourDialog({
   return (
     <OnboardingDialog
       open={open}
-      onOpenChange={isOpen => {
-        if (!isOpen) onDismiss();
-      }}
       icon={<Celebration />}
       title="Tour complete"
-      footer={
-        <>
-          <Button variant="outline" onClick={onDismiss}>
-            Maybe later
-          </Button>
-          <Button onClick={onCreateAgent}>
-            Create my first agent
-            <ChevronRight className="size-4" />
-          </Button>
-        </>
-      }>
+      confirmLabel="Create my first agent"
+      dismissLabel="Maybe later"
+      onConfirm={onCreateAgent}
+      onDismiss={onDismiss}>
       <DialogDescription className="text-center">
         Great job! You&apos;ve seen how Ark works. Now, let&apos;s get your
         first AI agent up and running.

@@ -6,15 +6,17 @@ export interface TourStep {
   actionHref?: string;
 }
 
+export const navTargetId = (key: string) => `nav-${key || 'home'}`;
+
 export const TOUR_STEPS: TourStep[] = [
   {
-    targetId: 'nav-home',
+    targetId: navTargetId(''),
     title: 'Home',
     message:
       'Your platform hub. Monitor and manage your agents, teams, models, and infrastructure from one central location.',
   },
   {
-    targetId: 'nav-models',
+    targetId: navTargetId('models'),
     title: 'Models',
     message:
       'Start by configuring an AI model provider. Your agents need a default model to run on.',
@@ -22,7 +24,7 @@ export const TOUR_STEPS: TourStep[] = [
     actionHref: '/models/new',
   },
   {
-    targetId: 'nav-mcps',
+    targetId: navTargetId('mcp'),
     title: 'MCPs',
     message:
       'Add MCP (Model Context Protocol) servers to extend your agents with external tools and data sources.',
@@ -30,7 +32,7 @@ export const TOUR_STEPS: TourStep[] = [
     actionHref: '/mcp/new',
   },
   {
-    targetId: 'nav-agents',
+    targetId: navTargetId('agents'),
     title: 'Agents',
     message:
       'Create autonomous AI agents with custom instructions, tools, and behaviors. This is where your AI solutions come to life.',
@@ -38,7 +40,7 @@ export const TOUR_STEPS: TourStep[] = [
     actionHref: '/agents/new',
   },
   {
-    targetId: 'nav-teams',
+    targetId: navTargetId('teams'),
     title: 'Teams',
     message:
       'Coordinate multiple agents to work together on complex tasks. Define a mission and prompt to orchestrate their collaboration.',
@@ -46,7 +48,7 @@ export const TOUR_STEPS: TourStep[] = [
     actionHref: '/teams/new',
   },
   {
-    targetId: 'nav-workflows',
+    targetId: navTargetId('workflow-templates'),
     title: 'Workflows',
     message:
       'Automate multi-step processes. Chain agents and define business logic for enterprise-scale automation.',
@@ -54,19 +56,19 @@ export const TOUR_STEPS: TourStep[] = [
     actionHref: '/workflow-templates',
   },
   {
-    targetId: 'nav-monitoring',
+    targetId: navTargetId('monitoring'),
     title: 'Monitoring',
     message:
       'Track performance, debug issues, and analyze agent behavior in real time. Essential for production deployments.',
   },
   {
-    targetId: 'nav-marketplace',
+    targetId: navTargetId('marketplace'),
     title: 'Marketplace',
     message:
       'Discover pre-built agents, workflows, and integrations. Accelerate development with proven patterns.',
   },
   {
-    targetId: 'nav-settings',
+    targetId: navTargetId('settings'),
     title: 'Settings',
     message:
       'Manage platform preferences, A2A servers, and secure your API keys and secrets.',

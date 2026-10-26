@@ -1,7 +1,6 @@
 'use client';
 
-import { ChevronRight, Rocket } from '@/components/icons';
-import { Button } from '@/components/ui/button';
+import { Rocket } from '@/components/icons';
 import { DialogDescription } from '@/components/ui/dialog';
 import { TOUR_STEPS } from '@/lib/constants/tour-steps';
 
@@ -21,22 +20,12 @@ export function WelcomeDialog({
   return (
     <OnboardingDialog
       open={open}
-      onOpenChange={isOpen => {
-        if (!isOpen) onSkip();
-      }}
       icon={<Rocket />}
       title="Welcome to Ark"
-      footer={
-        <>
-          <Button variant="outline" onClick={onSkip}>
-            Skip for now
-          </Button>
-          <Button onClick={onStart}>
-            Start Guided Tour
-            <ChevronRight className="size-4" />
-          </Button>
-        </>
-      }>
+      confirmLabel="Start Guided Tour"
+      dismissLabel="Skip for now"
+      onConfirm={onStart}
+      onDismiss={onSkip}>
       <div className="flex flex-col items-center gap-4">
         <DialogDescription className="text-center">
           Would you like a quick tour of the Ark platform? We&apos;ll show you

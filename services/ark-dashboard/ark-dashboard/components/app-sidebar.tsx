@@ -3,7 +3,7 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { type ComponentType, useEffect, useState } from 'react';
 
 import {
   isExperimentalDarkModeEnabledAtom,
@@ -73,6 +73,7 @@ import {
   type DashboardSection,
   MONITORING_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
+import { navTargetId } from '@/lib/constants/tour-steps';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { proxyService } from '@/lib/services/proxy';
 import { cn } from '@/lib/utils';
@@ -83,37 +84,122 @@ import qbLogoDark from '../app/img/qb-logo-dark.svg';
 import qbLogoLight from '../app/img/qb-logo-light.svg';
 import { UserDetails } from './user';
 
-interface CollapsibleSectionProps {
+interface NavItemConfig {
+  key: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+}
+
+const HOME_ITEM: NavItemConfig = { key: '', label: 'Home', icon: Dashboard };
+
+const BUILD_ITEMS: NavItemConfig[] = [
+  { key: 'workflow-templates', label: 'Workflows', icon: AccountTree },
+  { key: 'mcp', label: 'MCPs', icon: PlugConnect },
+  { key: 'tools', label: 'Tools', icon: Build },
+  { key: 'memory', label: 'Memory', icon: Database },
+  { key: 'models', label: 'Models', icon: Memory },
+];
+
+const MARKETPLACE_ITEM: NavItemConfig = {
+  key: 'marketplace',
+  label: 'Marketplace',
+  icon: Storefront,
+};
+
+const OTHER_ITEMS: NavItemConfig[] = [
+  { key: 'files', label: 'Files', icon: InsertDriveFile },
+  { key: 'tasks', label: 'A2A tasks', icon: PlaylistAddCheck },
+  { key: 'a2a', label: 'A2A servers', icon: Dns },
+  { key: 'secrets', label: 'Secrets', icon: Shield },
+  { key: 'configurations', label: 'Configurations', icon: Tune },
+  { key: 'api-keys', label: 'API keys', icon: VpnKey },
+  { key: 'export', label: 'Exports', icon: SaveAlt },
+];
+
+const SETTINGS_ITEM: NavItemConfig = {
+  key: 'settings',
+  label: 'Settings',
+  icon: Settings,
+};
+
+type SectionGroupKey = 'agent-builder' | 'monitoring';
+
+interface SectionGroupConfig {
+  key: SectionGroupKey;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
   sections: DashboardSection[];
+}
+
+const AGENT_BUILDER_GROUP: SectionGroupConfig = {
+  key: 'agent-builder',
+  label: 'Agent builder',
+  icon: SmartToy,
+  sections: AGENT_BUILDER_SECTIONS,
+};
+
+const MONITORING_GROUP: SectionGroupConfig = {
+  key: 'monitoring',
+  label: 'Monitoring',
+  icon: Earthquake,
+  sections: MONITORING_SECTIONS,
+};
+
+const SECTION_GROUPS = [AGENT_BUILDER_GROUP, MONITORING_GROUP];
+
+const containsSection = (sections: DashboardSection[], key: string) =>
+  sections.some(item => item.key === key);
+
+const groupContainsTarget = (group: SectionGroupConfig, targetId: string) =>
+  navTargetId(group.key) === targetId ||
+  group.sections.some(item => navTargetId(item.key) === targetId);
+
+interface NavItemProps {
+  item: NavItemConfig;
+  isActive: boolean;
+  onNavigate: (key: string) => void;
+}
+
+function NavItem({ item, isActive, onNavigate }: Readonly<NavItemProps>) {
+  const Icon = item.icon;
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        onClick={() => onNavigate(item.key)}
+        isActive={isActive}
+        tooltip={item.label}
+        data-onboarding-id={navTargetId(item.key)}>
+        <Icon />
+        <span>{item.label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+interface CollapsibleSectionProps {
+  group: SectionGroupConfig;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  icon: React.ReactNode;
-  label: string;
-  isActive: boolean;
   activeKey: string;
   sidebarState: 'expanded' | 'collapsed';
   onExpand: () => void;
   onNavigate: (key: string) => void;
   isNamespaceResolved: boolean;
   loading: boolean;
-  onboardingId?: string;
 }
 
 function CollapsibleSection({
-  sections,
+  group,
   isOpen,
   onOpenChange,
-  icon,
-  label,
-  isActive,
   activeKey,
   sidebarState,
   onExpand,
   onNavigate,
   isNamespaceResolved,
   loading,
-  onboardingId,
-}: CollapsibleSectionProps) {
+}: Readonly<CollapsibleSectionProps>) {
+  const Icon = group.icon;
   return (
     <Collapsible
       open={isOpen}
@@ -122,10 +208,10 @@ function CollapsibleSection({
       <SidebarMenuItem>
         <SidebarMenuButton
           asChild
-          isActive={isActive}
-          tooltip={label}
+          isActive={containsSection(group.sections, activeKey)}
+          tooltip={group.label}
           className="group/button"
-          data-onboarding-id={onboardingId}>
+          data-onboarding-id={navTargetId(group.key)}>
           <CollapsibleTrigger
             className="flex w-full items-center gap-2"
             onClick={e => {
@@ -134,8 +220,8 @@ function CollapsibleSection({
                 onExpand();
               }
             }}>
-            {icon}
-            <span>{label}</span>
+            <Icon />
+            <span>{group.label}</span>
             <ChevronDown
               className={cn(
                 'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',
@@ -146,10 +232,10 @@ function CollapsibleSection({
         </SidebarMenuButton>
       </SidebarMenuItem>
       <CollapsibleContent>
-        {sections.map(item => (
+        {group.sections.map(item => (
           <SidebarMenuItem key={item.key}>
             <SidebarMenuButton
-              data-onboarding-id={`nav-${item.key}`}
+              data-onboarding-id={navTargetId(item.key)}
               onClick={() => isNamespaceResolved && onNavigate(item.key)}
               isActive={item.key === activeKey}
               disabled={!isNamespaceResolved || loading}>
@@ -212,18 +298,17 @@ export function AppSidebar() {
   const [loading, setLoading] = useState(true);
 
   const currentSection = pathname.split('/')[1];
-  const isAgentBuilderSection = AGENT_BUILDER_SECTIONS.some(
-    item => item.key === currentSection,
-  );
-  const isMonitoringSection = MONITORING_SECTIONS.some(
-    item => item.key === currentSection,
-  );
 
-  const [agentBuilderOpen, setAgentBuilderOpen] = useState(
-    isAgentBuilderSection,
-  );
-  const [monitoringOpen, setMonitoringOpen] = useState(isMonitoringSection);
+  const [openGroups, setOpenGroups] = useState<
+    Record<SectionGroupKey, boolean>
+  >(() => ({
+    'agent-builder': containsSection(AGENT_BUILDER_SECTIONS, currentSection),
+    monitoring: containsSection(MONITORING_SECTIONS, currentSection),
+  }));
   const tourActiveSection = useAtomValue(tourActiveSectionAtom);
+
+  const setGroupOpen = (key: SectionGroupKey, open: boolean) =>
+    setOpenGroups(prev => ({ ...prev, [key]: open }));
 
   useEffect(() => {
     const checkFilesAPIHealth = async () => {
@@ -244,26 +329,18 @@ export function AppSidebar() {
 
   useEffect(() => {
     if (sidebarState === 'collapsed') {
-      setAgentBuilderOpen(false);
-      setMonitoringOpen(false);
+      setOpenGroups({ 'agent-builder': false, monitoring: false });
     }
   }, [sidebarState]);
 
   useEffect(() => {
     if (!tourActiveSection) return;
-    const isTourTarget = (sections: DashboardSection[]) =>
-      sections.some(item => `nav-${item.key}` === tourActiveSection);
-
-    if (isTourTarget(AGENT_BUILDER_SECTIONS)) {
-      setSidebarOpen(true);
-      setAgentBuilderOpen(true);
-    } else if (
-      tourActiveSection === 'nav-monitoring' ||
-      isTourTarget(MONITORING_SECTIONS)
-    ) {
-      setSidebarOpen(true);
-      setMonitoringOpen(true);
-    }
+    const target = SECTION_GROUPS.find(group =>
+      groupContainsTarget(group, tourActiveSection),
+    );
+    if (!target) return;
+    setSidebarOpen(true);
+    setOpenGroups(prev => ({ ...prev, [target.key]: true }));
   }, [tourActiveSection, setSidebarOpen]);
 
   const navigateToSection = (sectionKey: string) => {
@@ -271,18 +348,43 @@ export function AppSidebar() {
       name: 'nav_item_clicked',
       properties: {
         section: sectionKey,
-        fromSection: pathname.split('/')[1],
+        fromSection: currentSection,
       },
     });
     navigateTo(`/${sectionKey}`);
   };
 
-  const getCurrentSection = () => pathname.split('/')[1];
+  const isSidebarExpanded = sidebarState === 'expanded';
+  const sidebarToggleLabel = isSidebarExpanded
+    ? 'Collapse sidebar'
+    : 'Expand sidebar';
+  const themeLabel = isExperimentalDarkModeEnabled ? 'Dark mode' : 'Light mode';
 
-  const isAnySectionActive = (sections: DashboardSection[]) => {
-    const current = getCurrentSection();
-    return sections.some(item => item.key === current);
-  };
+  const renderNavItem = (item: NavItemConfig) => (
+    <NavItem
+      key={item.key}
+      item={item}
+      isActive={currentSection === item.key}
+      onNavigate={navigateToSection}
+    />
+  );
+
+  const renderSectionGroup = (group: SectionGroupConfig) => (
+    <CollapsibleSection
+      group={group}
+      isOpen={openGroups[group.key]}
+      onOpenChange={open => setGroupOpen(group.key, open)}
+      activeKey={currentSection}
+      sidebarState={sidebarState}
+      onExpand={() => {
+        setSidebarOpen(true);
+        setTimeout(() => setGroupOpen(group.key, true), 100);
+      }}
+      onNavigate={navigateToSection}
+      isNamespaceResolved={isNamespaceResolved}
+      loading={loading}
+    />
+  );
 
   return (
     <div>
@@ -334,191 +436,17 @@ export function AppSidebar() {
           <ScrollArea className="-mx-2 flex min-h-0 flex-1 flex-col px-2">
             <CollapsibleGroup label="General" defaultOpen>
               <SidebarMenu className="pl-5 group-data-[collapsible=icon]:pl-0">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('')}
-                    isActive={getCurrentSection() === ''}
-                    tooltip="Home"
-                    data-onboarding-id="nav-home">
-                    <Dashboard />
-                    <span>Home</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <CollapsibleSection
-                  sections={AGENT_BUILDER_SECTIONS}
-                  isOpen={agentBuilderOpen}
-                  onOpenChange={setAgentBuilderOpen}
-                  icon={<SmartToy />}
-                  label="Agent builder"
-                  isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
-                  activeKey={getCurrentSection()}
-                  sidebarState={sidebarState}
-                  onExpand={() => {
-                    setSidebarOpen(true);
-                    setTimeout(() => setAgentBuilderOpen(true), 100);
-                  }}
-                  onNavigate={navigateToSection}
-                  isNamespaceResolved={isNamespaceResolved}
-                  loading={loading}
-                />
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('workflow-templates')}
-                    isActive={getCurrentSection() === 'workflow-templates'}
-                    tooltip="Workflows"
-                    data-onboarding-id="nav-workflows">
-                    <AccountTree />
-                    <span>Workflows</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('mcp')}
-                    isActive={getCurrentSection() === 'mcp'}
-                    tooltip="MCPs"
-                    data-onboarding-id="nav-mcps">
-                    <PlugConnect />
-                    <span>MCPs</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('tools')}
-                    isActive={getCurrentSection() === 'tools'}
-                    tooltip="Tools">
-                    <Build />
-                    <span>Tools</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('memory')}
-                    isActive={getCurrentSection() === 'memory'}
-                    tooltip="Memory">
-                    <Database />
-                    <span>Memory</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('models')}
-                    isActive={getCurrentSection() === 'models'}
-                    tooltip="Models"
-                    data-onboarding-id="nav-models">
-                    <Memory />
-                    <span>Models</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <CollapsibleSection
-                  sections={MONITORING_SECTIONS}
-                  isOpen={monitoringOpen}
-                  onOpenChange={setMonitoringOpen}
-                  icon={<Earthquake />}
-                  label="Monitoring"
-                  onboardingId="nav-monitoring"
-                  isActive={isAnySectionActive(MONITORING_SECTIONS)}
-                  activeKey={getCurrentSection()}
-                  sidebarState={sidebarState}
-                  onExpand={() => {
-                    setSidebarOpen(true);
-                    setTimeout(() => setMonitoringOpen(true), 100);
-                  }}
-                  onNavigate={navigateToSection}
-                  isNamespaceResolved={isNamespaceResolved}
-                  loading={loading}
-                />
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('marketplace')}
-                    isActive={getCurrentSection() === 'marketplace'}
-                    tooltip="Marketplace"
-                    data-onboarding-id="nav-marketplace">
-                    <Storefront />
-                    <span>Marketplace</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                {renderNavItem(HOME_ITEM)}
+                {renderSectionGroup(AGENT_BUILDER_GROUP)}
+                {BUILD_ITEMS.map(renderNavItem)}
+                {renderSectionGroup(MONITORING_GROUP)}
+                {renderNavItem(MARKETPLACE_ITEM)}
               </SidebarMenu>
             </CollapsibleGroup>
 
             <CollapsibleGroup label="Other" defaultOpen={false}>
               <SidebarMenu className="pl-5 group-data-[collapsible=icon]:pl-0">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('files')}
-                    isActive={getCurrentSection() === 'files'}
-                    tooltip="Files">
-                    <InsertDriveFile />
-                    <span>Files</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('tasks')}
-                    isActive={getCurrentSection() === 'tasks'}
-                    tooltip="A2A tasks">
-                    <PlaylistAddCheck />
-                    <span>A2A tasks</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('a2a')}
-                    isActive={getCurrentSection() === 'a2a'}
-                    tooltip="A2A servers">
-                    <Dns />
-                    <span>A2A servers</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('secrets')}
-                    isActive={getCurrentSection() === 'secrets'}
-                    tooltip="Secrets">
-                    <Shield />
-                    <span>Secrets</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('configurations')}
-                    isActive={getCurrentSection() === 'configurations'}
-                    tooltip="Configurations">
-                    <Tune />
-                    <span>Configurations</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('api-keys')}
-                    isActive={getCurrentSection() === 'api-keys'}
-                    tooltip="API keys">
-                    <VpnKey />
-                    <span>API keys</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('export')}
-                    isActive={getCurrentSection() === 'export'}
-                    tooltip="Exports">
-                    <SaveAlt />
-                    <span>Exports</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                {OTHER_ITEMS.map(renderNavItem)}
               </SidebarMenu>
             </CollapsibleGroup>
           </ScrollArea>
@@ -528,16 +456,7 @@ export function AppSidebar() {
           <div className="px-2">
             <Separator className="my-2" />
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => navigateToSection('settings')}
-                  isActive={getCurrentSection() === 'settings'}
-                  tooltip="Settings"
-                  data-onboarding-id="nav-settings">
-                  <Settings className="h-4 w-4" />
-                  <span>Settings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {renderNavItem(SETTINGS_ITEM)}
 
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Help">
@@ -558,32 +477,23 @@ export function AppSidebar() {
                       !isExperimentalDarkModeEnabled,
                     )
                   }
-                  tooltip={
-                    isExperimentalDarkModeEnabled ? 'Dark mode' : 'Light mode'
-                  }>
+                  tooltip={themeLabel}>
                   {isExperimentalDarkModeEnabled ? (
                     <Bedtime className="h-4 w-4" />
                   ) : (
                     <LightMode className="h-4 w-4" />
                   )}
-                  <span>
-                    {isExperimentalDarkModeEnabled ? 'Dark mode' : 'Light mode'}
-                  </span>
+                  <span>{themeLabel}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  onClick={() =>
-                    setSidebarOpen(sidebarState === 'expanded' ? false : true)
-                  }
+                  onClick={() => setSidebarOpen(!isSidebarExpanded)}
                   className="w-8 px-2"
-                  tooltip={
-                    sidebarState === 'expanded'
-                      ? 'Collapse sidebar'
-                      : 'Expand sidebar'
-                  }>
-                  {sidebarState === 'expanded' ? (
+                  tooltip={sidebarToggleLabel}
+                  aria-label={sidebarToggleLabel}>
+                  {isSidebarExpanded ? (
                     <KeyboardDoubleArrowLeft className="h-4 w-4" />
                   ) : (
                     <KeyboardDoubleArrowRight className="h-4 w-4" />

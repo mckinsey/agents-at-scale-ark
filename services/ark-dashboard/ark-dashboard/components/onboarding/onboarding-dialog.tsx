@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react';
 
+import { ChevronRight } from '@/components/icons';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -13,23 +15,31 @@ import { IconShell } from '@/components/ui/icon-shell';
 
 interface OnboardingDialogProps {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
   icon: ReactNode;
   title: string;
   children: ReactNode;
-  footer: ReactNode;
+  confirmLabel: string;
+  dismissLabel: string;
+  onConfirm: () => void;
+  onDismiss: () => void;
 }
 
 export function OnboardingDialog({
   open,
-  onOpenChange,
   icon,
   title,
   children,
-  footer,
+  confirmLabel,
+  dismissLabel,
+  onConfirm,
+  onDismiss,
 }: Readonly<OnboardingDialogProps>) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={isOpen => {
+        if (!isOpen) onDismiss();
+      }}>
       <DialogContent className="content-center gap-8 p-12 sm:min-h-[28rem] sm:max-w-[38.5rem]">
         <DialogHeader className="items-center text-center sm:text-center">
           <div className="mb-2 flex size-12 items-center justify-center">
@@ -42,7 +52,15 @@ export function OnboardingDialog({
 
         {children}
 
-        <DialogFooter className="sm:justify-center">{footer}</DialogFooter>
+        <DialogFooter className="sm:justify-center">
+          <Button variant="outline" onClick={onDismiss}>
+            {dismissLabel}
+          </Button>
+          <Button onClick={onConfirm}>
+            {confirmLabel}
+            <ChevronRight className="size-4" />
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

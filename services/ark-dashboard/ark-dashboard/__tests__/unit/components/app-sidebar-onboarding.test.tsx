@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { onboardingPhaseAtom, tourStepAtom } from '@/atoms/onboarding';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import { TOUR_STEPS } from '@/lib/constants/tour-steps';
+import { TOUR_STEPS, navTargetId } from '@/lib/constants/tour-steps';
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
@@ -110,7 +110,7 @@ const tourStore = (targetId: string) => {
 
 describe('AppSidebar - onboarding tour', () => {
   it('exposes a tour target for every step', async () => {
-    renderSidebar(tourStore('nav-agents'));
+    renderSidebar(tourStore(navTargetId('agents')));
     await screen.findByRole('button', { name: 'Teams' });
     for (const step of TOUR_STEPS) {
       expect(
@@ -120,17 +120,25 @@ describe('AppSidebar - onboarding tour', () => {
   });
 
   it('expands Agent builder when the tour reaches Teams', async () => {
-    renderSidebar(tourStore('nav-teams'));
+    renderSidebar(tourStore(navTargetId('teams')));
     expect(
       await screen.findByRole('button', { name: 'Teams' }),
-    ).toHaveAttribute('data-onboarding-id', 'nav-teams');
+    ).toHaveAttribute('data-onboarding-id', navTargetId('teams'));
   });
 
   it('expands Monitoring when the tour reaches it', async () => {
-    renderSidebar(tourStore('nav-monitoring'));
+    renderSidebar(tourStore(navTargetId('monitoring')));
     expect(
       await screen.findByRole('button', { name: 'Sessions' }),
     ).toBeInTheDocument();
+  });
+
+  it('leaves sections collapsed when the step is outside any section', async () => {
+    renderSidebar(tourStore(navTargetId('')));
+    await screen.findByRole('button', { name: 'Agent builder' });
+    expect(
+      screen.queryByRole('button', { name: 'Agents' }),
+    ).not.toBeInTheDocument();
   });
 
   it('keeps sections collapsed when the tour is not running', () => {
