@@ -39,6 +39,7 @@ const mockGetQuery = vi.fn();
 const mockCancelQuery = vi.fn();
 const mockGetByName = vi.fn();
 const mockTeamGetByName = vi.fn();
+const mockEngineGetByName = vi.fn();
 const mockResolveMemoryNotice = vi.fn();
 
 vi.mock('@/lib/services', () => ({
@@ -59,6 +60,9 @@ vi.mock('@/lib/services', () => ({
   },
   teamsService: {
     getByName: (...args: unknown[]) => mockTeamGetByName(...args),
+  },
+  executionEnginesService: {
+    getByName: (...args: unknown[]) => mockEngineGetByName(...args),
   },
 }));
 
@@ -141,6 +145,7 @@ describe('useChatSession', () => {
     mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });
     mockGetByName.mockResolvedValue({ parameters: [] });
     mockTeamGetByName.mockResolvedValue({ members: [] });
+    mockEngineGetByName.mockResolvedValue(null);
     sessionStorage.clear();
 
     mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
@@ -1432,6 +1437,78 @@ describe('useChatSession', () => {
 
       expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
       expect(mockSubmitChatQuery).not.toHaveBeenCalled();
+    });
+
+    it('detects openai-responses engines by their service annotation', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'structured' },
+      });
+      mockEngineGetByName.mockResolvedValue({
+        name: 'structured',
+        annotations: {
+          'ark.mckinsey.com/service': 'executor-openai-responses',
+        },
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.supportsOutputSchema).toBe(true);
+      });
+    });
+
+    it('ignores the override when the agent has its own schema', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+        annotations: {
+          'executor-openai-responses.ark.mckinsey.com/output-schema': SCHEMA,
+        },
+      });
+      streamReply();
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.hasOwnOutputSchema).toBe(true);
+      });
+
+      act(() => {
+        result.current.setOutputSchemaOverride('{"type":');
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
+      expect(lastCall?.[9]).toBeUndefined();
+    });
+
+    it('treats an engine-level schema as the agent own schema', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+      mockEngineGetByName.mockResolvedValue({
+        name: 'executor-openai-responses',
+        annotations: {
+          'executor-openai-responses.ark.mckinsey.com/output-schema': SCHEMA,
+        },
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.hasOwnOutputSchema).toBe(true);
+      });
     });
   });
 

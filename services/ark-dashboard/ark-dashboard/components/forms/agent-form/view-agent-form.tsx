@@ -27,7 +27,6 @@ import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type AgentListItem, agentsService } from '@/lib/services';
 import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
-import { supportsOutputSchema } from '@/lib/utils/output-schema';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { PromptField } from './prompt-field';
@@ -84,13 +83,15 @@ export function ViewAgentForm({
     handleToolToggle,
     handleDeleteTool,
     isToolSelected,
+    isOutputSchemaSupported,
     onSubmit,
   } = actions;
 
   const promptValue = form.watch('prompt') || '';
   const isA2A = agent?.isA2A ?? false;
-  const showOutputSchema =
-    !isA2A && supportsOutputSchema(form.watch('executionEngineName'));
+  const showOutputSchema = isOutputSchemaSupported(
+    form.watch('executionEngineName'),
+  );
   const isDisabled = form.formState.isSubmitting;
 
   const fetchAgentYaml = useCallback(

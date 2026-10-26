@@ -38,6 +38,7 @@ import type {
 } from '@/lib/types/chat-message';
 import {
   supportsOutputSchema as engineSupportsOutputSchema,
+  hasOutputSchemaAnnotation,
   toOutputSchemaAnnotations,
   validateOutputSchema,
 } from '@/lib/utils/output-schema';
@@ -196,6 +197,7 @@ interface UseChatSessionReturn {
   missingParameters: string[];
   engineToolWarning: string | null;
   supportsOutputSchema: boolean;
+  hasOwnOutputSchema: boolean;
   outputSchemaOverride: string;
   setOutputSchemaOverride: (value: string) => void;
   isOutputSchemaOverrideValid: boolean;
@@ -372,23 +374,30 @@ export function useChatSession({
     toApiParameters,
     engineToolWarning,
     executionEngineName,
+    executionEngineAnnotations,
+    agentAnnotations,
   } = useAgentQueryParameters(name, type);
 
   const supportsOutputSchema =
-    type === 'agent' && engineSupportsOutputSchema(executionEngineName);
+    type === 'agent' &&
+    engineSupportsOutputSchema(executionEngineName, executionEngineAnnotations);
+  const hasOwnOutputSchema =
+    supportsOutputSchema &&
+    hasOutputSchemaAnnotation(executionEngineAnnotations, agentAnnotations);
+  const canOverrideOutputSchema = supportsOutputSchema && !hasOwnOutputSchema;
   const [outputSchemaOverride, setOutputSchemaOverride] = useState('');
   const isOutputSchemaOverrideValid =
     validateOutputSchema(outputSchemaOverride) === null;
   const outputSchemaAnnotations = useMemo(
     () =>
-      supportsOutputSchema
+      canOverrideOutputSchema
         ? toOutputSchemaAnnotations(outputSchemaOverride)
         : undefined,
-    [supportsOutputSchema, outputSchemaOverride],
+    [canOverrideOutputSchema, outputSchemaOverride],
   );
   const isSendBlocked =
     missingParameters.length > 0 ||
-    (supportsOutputSchema && !isOutputSchemaOverrideValid);
+    (canOverrideOutputSchema && !isOutputSchemaOverrideValid);
 
   useEffect(() => {
     setOutputSchemaOverride('');
@@ -1491,6 +1500,7 @@ export function useChatSession({
     missingParameters,
     engineToolWarning,
     supportsOutputSchema,
+    hasOwnOutputSchema,
     outputSchemaOverride,
     setOutputSchemaOverride,
     isOutputSchemaOverrideValid,

@@ -5,7 +5,7 @@ import re
 
 from enum import Enum
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
 from ark_sdk.impersonation import ImpersonationConfig
@@ -22,7 +22,11 @@ from ...models.agents import (
     AgentDetailResponse,
 )
 from ...models.common import extract_availability_from_conditions
-from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION, ORIGIN_ANNOTATION
+from ...constants.annotations import (
+    A2A_SERVER_ADDRESS_ANNOTATION,
+    ORIGIN_ANNOTATION,
+    OUTPUT_SCHEMA_ANNOTATION,
+)
 from .exceptions import handle_k8s_errors
 from .pagination import PaginationParams
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION, VIEW_DESCRIPTION
@@ -30,6 +34,9 @@ from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION, VIEW_DE
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+UPDATABLE_ANNOTATIONS = frozenset({OUTPUT_SCHEMA_ANNOTATION})
 
 
 class AgentView(str, Enum):
@@ -252,13 +259,19 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
     Returns:
         AgentDetailResponse: The updated agent details
     """
+    updates = body.model_dump(exclude_unset=True)
+    annotation_updates = updates.pop("annotations", None) or {}
+    disallowed_annotations = sorted(set(annotation_updates) - UPDATABLE_ANNOTATIONS)
+    if disallowed_annotations:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Annotations not allowed: {', '.join(disallowed_annotations)}",
+        )
+
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Get the existing agent first
         existing_agent = await ark_client.agents.a_get(agent_name)
         existing_spec = existing_agent.to_dict()["spec"]
-
-        updates = body.model_dump(exclude_unset=True)
-        annotation_updates = updates.pop("annotations", None) or {}
 
         # exclude_unset keeps only the fields the client actually sent, so an
         # omitted field is left as-is while one explicitly set to null is

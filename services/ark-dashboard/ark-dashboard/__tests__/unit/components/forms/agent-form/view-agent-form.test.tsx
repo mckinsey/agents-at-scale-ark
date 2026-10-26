@@ -111,6 +111,7 @@ function buildHook(overrides: Record<string, unknown> = {}) {
       handleToolToggle: vi.fn(),
       handleDeleteTool: vi.fn(),
       isToolSelected: vi.fn(),
+      isOutputSchemaSupported: vi.fn((_engineName?: string) => false),
       onSubmit: vi.fn(),
     },
   };
@@ -152,10 +153,14 @@ describe('ViewAgentForm', () => {
     hook.form.watch = vi.fn((field?: string) =>
       field === 'executionEngineName' ? 'executor-openai-responses' : '',
     );
+    hook.actions.isOutputSchemaSupported.mockReturnValue(true);
     useAgentFormMock.mockReturnValue(hook);
     render(<ViewAgentForm mode="view" agentName="a1" />);
     expect(screen.getByText('Output Schema')).toBeInTheDocument();
     expect(screen.getByLabelText('Output schema')).toBeInTheDocument();
+    expect(hook.actions.isOutputSchemaSupported).toHaveBeenCalledWith(
+      'executor-openai-responses',
+    );
   });
 
   it('hides the Output Schema field for other engines', () => {

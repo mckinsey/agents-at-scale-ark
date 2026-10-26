@@ -1,16 +1,51 @@
 export const OUTPUT_SCHEMA_ANNOTATION =
   'executor-openai-responses.ark.mckinsey.com/output-schema';
 
+const SERVICE_ANNOTATION = 'ark.mckinsey.com/service';
+const OPENAI_RESPONSES_SERVICE = 'executor-openai-responses';
 const OPENAI_RESPONSES_ENGINE_MARKER = 'openai-responses';
+
+const JSON_SCHEMA_TYPES = new Set([
+  'string',
+  'number',
+  'integer',
+  'boolean',
+  'object',
+  'array',
+  'null',
+]);
+const SUBSCHEMA_KEYWORDS = ['items', 'additionalProperties', 'not'];
+const SUBSCHEMA_LIST_KEYWORDS = ['anyOf', 'allOf', 'oneOf', 'prefixItems'];
+const SUBSCHEMA_MAP_KEYWORDS = ['properties', '$defs', 'definitions'];
 
 export const OUTPUT_SCHEMA_INVALID_JSON_MESSAGE = 'Enter valid JSON.';
 export const OUTPUT_SCHEMA_NOT_OBJECT_MESSAGE =
   'The schema must be a JSON object.';
+export const OUTPUT_SCHEMA_ROOT_TYPE_MESSAGE =
+  'The root schema must have "type": "object".';
 
 export function supportsOutputSchema(
   executionEngineName: string | null | undefined,
+  executionEngineAnnotations?: Record<string, string> | null,
 ): boolean {
-  return Boolean(executionEngineName?.includes(OPENAI_RESPONSES_ENGINE_MARKER));
+  if (!executionEngineName) {
+    return false;
+  }
+  const service = executionEngineAnnotations?.[SERVICE_ANNOTATION];
+  if (service) {
+    return service === OPENAI_RESPONSES_SERVICE;
+  }
+  return executionEngineName
+    .toLowerCase()
+    .includes(OPENAI_RESPONSES_ENGINE_MARKER);
+}
+
+export function hasOutputSchemaAnnotation(
+  ...annotationSources: (Record<string, string> | null | undefined)[]
+): boolean {
+  return annotationSources.some(annotations =>
+    Boolean(annotations?.[OUTPUT_SCHEMA_ANNOTATION]?.trim()),
+  );
 }
 
 function parseJson(
@@ -23,6 +58,75 @@ function parseJson(
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function findTypeError(type: unknown, path: string): string | null {
+  const types = Array.isArray(type) ? type : [type];
+  const unknownType = types.find(
+    entry => typeof entry !== 'string' || !JSON_SCHEMA_TYPES.has(entry),
+  );
+  if (unknownType === undefined) {
+    return null;
+  }
+  return `Unknown type ${JSON.stringify(unknownType)} at ${path}.`;
+}
+
+function findSubschemaError(schema: unknown, path: string): string | null {
+  if (typeof schema === 'boolean') {
+    return null;
+  }
+  if (!isPlainObject(schema)) {
+    return `The schema at ${path} must be a JSON object.`;
+  }
+  if ('type' in schema) {
+    const typeError = findTypeError(schema.type, path);
+    if (typeError) {
+      return typeError;
+    }
+  }
+  for (const keyword of SUBSCHEMA_KEYWORDS) {
+    if (keyword in schema) {
+      const error = findSubschemaError(schema[keyword], `${path}.${keyword}`);
+      if (error) {
+        return error;
+      }
+    }
+  }
+  for (const keyword of SUBSCHEMA_LIST_KEYWORDS) {
+    if (!(keyword in schema)) {
+      continue;
+    }
+    const entries = schema[keyword];
+    if (!Array.isArray(entries)) {
+      return `"${keyword}" at ${path} must be an array.`;
+    }
+    for (const [index, entry] of entries.entries()) {
+      const error = findSubschemaError(entry, `${path}.${keyword}[${index}]`);
+      if (error) {
+        return error;
+      }
+    }
+  }
+  for (const keyword of SUBSCHEMA_MAP_KEYWORDS) {
+    if (!(keyword in schema)) {
+      continue;
+    }
+    const entries = schema[keyword];
+    if (!isPlainObject(entries)) {
+      return `"${keyword}" at ${path} must be an object.`;
+    }
+    for (const [name, entry] of Object.entries(entries)) {
+      const error = findSubschemaError(entry, `${path}.${keyword}.${name}`);
+      if (error) {
+        return error;
+      }
+    }
+  }
+  return null;
+}
+
 export function validateOutputSchema(value: string): string | null {
   if (!value.trim()) {
     return null;
@@ -31,21 +135,21 @@ export function validateOutputSchema(value: string): string | null {
   if (!parsed.ok) {
     return OUTPUT_SCHEMA_INVALID_JSON_MESSAGE;
   }
-  if (
-    typeof parsed.value !== 'object' ||
-    parsed.value === null ||
-    Array.isArray(parsed.value)
-  ) {
+  if (!isPlainObject(parsed.value)) {
     return OUTPUT_SCHEMA_NOT_OBJECT_MESSAGE;
   }
-  return null;
+  if (parsed.value.type !== 'object') {
+    return OUTPUT_SCHEMA_ROOT_TYPE_MESSAGE;
+  }
+  return findSubschemaError(parsed.value, 'root');
 }
 
 export function formatOutputSchema(value: string): string {
-  if (validateOutputSchema(value) || !value.trim()) {
+  const parsed = parseJson(value);
+  if (!parsed.ok || !isPlainObject(parsed.value)) {
     return value;
   }
-  return JSON.stringify(JSON.parse(value), null, 2);
+  return JSON.stringify(parsed.value, null, 2);
 }
 
 export function toOutputSchemaAnnotations(
@@ -54,12 +158,20 @@ export function toOutputSchemaAnnotations(
   return value.trim() ? { [OUTPUT_SCHEMA_ANNOTATION]: value } : undefined;
 }
 
-export function buildOutputSchemaAnnotationUpdate(
-  executionEngineName: string | null | undefined,
-  value: string | undefined,
-): Record<string, string | null> | undefined {
-  if (!supportsOutputSchema(executionEngineName)) {
-    return undefined;
+export function buildOutputSchemaAnnotationUpdate({
+  supported,
+  engineChanged,
+  value,
+}: {
+  supported: boolean;
+  engineChanged: boolean;
+  value: string | undefined;
+}): Record<string, string | null> | undefined {
+  if (supported) {
+    return { [OUTPUT_SCHEMA_ANNOTATION]: value?.trim() ? value : null };
   }
-  return { [OUTPUT_SCHEMA_ANNOTATION]: value?.trim() ? value : null };
+  if (engineChanged && value?.trim()) {
+    return { [OUTPUT_SCHEMA_ANNOTATION]: null };
+  }
+  return undefined;
 }

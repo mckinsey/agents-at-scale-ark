@@ -15,6 +15,7 @@ vi.mock('@/providers/NamespaceProvider', () => ({
 const mockGetByName = vi.fn();
 const mockTeamGetByName = vi.fn();
 const mockToolsGetAll = vi.fn();
+const mockEngineGetByName = vi.fn();
 
 vi.mock('@/lib/services', () => ({
   agentsService: {
@@ -25,6 +26,9 @@ vi.mock('@/lib/services', () => ({
   },
   toolsService: {
     getAll: (...args: unknown[]) => mockToolsGetAll(...args),
+  },
+  executionEnginesService: {
+    getByName: (...args: unknown[]) => mockEngineGetByName(...args),
   },
 }));
 
@@ -51,6 +55,7 @@ describe('useAgentQueryParameters', () => {
     mockGetByName.mockResolvedValue({ parameters: [] });
     mockTeamGetByName.mockResolvedValue({ members: [] });
     mockToolsGetAll.mockResolvedValue([]);
+    mockEngineGetByName.mockResolvedValue(null);
   });
 
   it('exposes only query-sourced parameters by their queryParameterRef name', async () => {
@@ -545,6 +550,45 @@ describe('useAgentQueryParameters', () => {
       rerender({ type: 'model' });
 
       expect(result.current.executionEngineName).toBeNull();
+    });
+  });
+
+  describe('annotations', () => {
+    it('exposes the agent and execution engine annotations', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'structured' },
+        annotations: { agent: 'a' },
+      });
+      mockEngineGetByName.mockResolvedValue({
+        name: 'structured',
+        annotations: { engine: 'e' },
+      });
+
+      const { result } = renderHook(() =>
+        useAgentQueryParameters('engine-agent', 'agent'),
+      );
+
+      await waitFor(() => {
+        expect(result.current.executionEngineAnnotations).toEqual({
+          engine: 'e',
+        });
+      });
+      expect(result.current.agentAnnotations).toEqual({ agent: 'a' });
+      expect(mockEngineGetByName).toHaveBeenCalledWith('default', 'structured');
+    });
+
+    it('does not fetch an engine for agents without one or the a2a engine', async () => {
+      mockGetByName.mockResolvedValue({ executionEngine: { name: 'a2a' } });
+
+      const { result } = renderHook(() =>
+        useAgentQueryParameters('a2a-agent', 'agent'),
+      );
+
+      await waitFor(() => {
+        expect(result.current.executionEngineName).toBe('a2a');
+      });
+      expect(mockEngineGetByName).not.toHaveBeenCalled();
+      expect(result.current.executionEngineAnnotations).toBeNull();
     });
   });
 });

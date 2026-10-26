@@ -1,11 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { Provider, createStore } from 'jotai';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { storedIsExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import { AgentFormMode } from '@/components/forms/agent-form/types';
 import { useAgentForm } from '@/components/forms/agent-form/use-agent-form';
-import { agentsService } from '@/lib/services';
+import { agentsService, executionEnginesService } from '@/lib/services';
 
 const OUTPUT_SCHEMA_KEY =
   'executor-openai-responses.ark.mckinsey.com/output-schema';
@@ -34,12 +36,16 @@ vi.mock('@/lib/services', () => ({
   toolsService: { getAll: vi.fn().mockResolvedValue([]) },
 }));
 
+let store = createStore();
+
 function wrapper({ children }: { children: ReactNode }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <Provider store={store}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </Provider>
   );
 }
 
@@ -74,6 +80,7 @@ async function renderLoadedForm() {
 describe('useAgentForm output schema', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    store = createStore();
   });
 
   it('loads the schema from the agent annotation', async () => {
@@ -141,5 +148,83 @@ describe('useAgentForm output schema', () => {
     expect(vi.mocked(agentsService.update).mock.calls[0][2].annotations).toBe(
       undefined,
     );
+  });
+
+  it('removes the annotation when the engine is switched away', async () => {
+    store.set(storedIsExperimentalExecutionEngineEnabledAtom, true);
+    mockAgent('executor-openai-responses', {
+      [OUTPUT_SCHEMA_KEY]: '{"type":"object"}',
+    });
+    const { result } = await renderLoadedForm();
+
+    await act(async () => {
+      await result.current.actions.onSubmit({
+        ...result.current.form.getValues(),
+        executionEngineName: 'executor-langchain',
+      });
+    });
+
+    expect(agentsService.update).toHaveBeenCalledWith(
+      'test-namespace',
+      'a1',
+      expect.objectContaining({
+        executionEngine: { name: 'executor-langchain' },
+        annotations: { [OUTPUT_SCHEMA_KEY]: null },
+      }),
+    );
+  });
+
+  it('skips schema validation when the engine does not support it', async () => {
+    mockAgent('executor-langchain');
+    const { result } = await renderLoadedForm();
+
+    act(() => {
+      result.current.form.setValue('outputSchema', '{"type":');
+    });
+
+    let valid = false;
+    await act(async () => {
+      valid = await result.current.form.trigger();
+    });
+    expect(valid).toBe(true);
+  });
+
+  it('validates the schema when the engine supports it', async () => {
+    mockAgent('executor-openai-responses');
+    const { result } = await renderLoadedForm();
+
+    act(() => {
+      result.current.form.setValue('outputSchema', '{"type":');
+    });
+
+    let valid = true;
+    await act(async () => {
+      valid = await result.current.form.trigger();
+    });
+    expect(valid).toBe(false);
+    expect(
+      result.current.form.getFieldState('outputSchema').error,
+    ).toBeDefined();
+  });
+
+  it('detects openai-responses engines by their service annotation', async () => {
+    store.set(storedIsExperimentalExecutionEngineEnabledAtom, true);
+    vi.mocked(executionEnginesService.getAll).mockResolvedValue([
+      {
+        name: 'structured',
+        namespace: 'test-namespace',
+        phase: 'ready',
+        annotations: {
+          'ark.mckinsey.com/service': 'executor-openai-responses',
+        },
+      },
+    ]);
+    mockAgent('structured');
+    const { result } = await renderLoadedForm();
+
+    expect(result.current.actions.isOutputSchemaSupported('structured')).toBe(
+      true,
+    );
+    expect(result.current.actions.isOutputSchemaSupported('other')).toBe(false);
   });
 });

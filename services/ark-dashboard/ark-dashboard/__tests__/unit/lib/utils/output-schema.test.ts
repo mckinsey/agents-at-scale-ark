@@ -4,17 +4,35 @@ import {
   OUTPUT_SCHEMA_ANNOTATION,
   OUTPUT_SCHEMA_INVALID_JSON_MESSAGE,
   OUTPUT_SCHEMA_NOT_OBJECT_MESSAGE,
+  OUTPUT_SCHEMA_ROOT_TYPE_MESSAGE,
   buildOutputSchemaAnnotationUpdate,
   formatOutputSchema,
+  hasOutputSchemaAnnotation,
   supportsOutputSchema,
   toOutputSchemaAnnotations,
   validateOutputSchema,
 } from '@/lib/utils/output-schema';
 
 describe('supportsOutputSchema', () => {
-  it('accepts engines named after openai-responses', () => {
+  it('accepts engines named after openai-responses in any case', () => {
     expect(supportsOutputSchema('executor-openai-responses')).toBe(true);
     expect(supportsOutputSchema('openai-responses-eu')).toBe(true);
+    expect(supportsOutputSchema('OpenAI-Responses')).toBe(true);
+  });
+
+  it('prefers the engine service annotation over the name', () => {
+    const service = 'ark.mckinsey.com/service';
+    expect(
+      supportsOutputSchema('structured', {
+        [service]: 'executor-openai-responses',
+      }),
+    ).toBe(true);
+    expect(
+      supportsOutputSchema('openai-responses-fork', {
+        [service]: 'executor-langchain',
+      }),
+    ).toBe(false);
+    expect(supportsOutputSchema('openai-responses', {})).toBe(true);
   });
 
   it('rejects other or missing engines', () => {
@@ -31,8 +49,59 @@ describe('validateOutputSchema', () => {
     expect(validateOutputSchema('   ')).toBeNull();
   });
 
-  it('accepts a JSON object', () => {
+  it('accepts an object schema', () => {
     expect(validateOutputSchema('{"type":"object"}')).toBeNull();
+    expect(
+      validateOutputSchema(
+        JSON.stringify({
+          type: 'object',
+          properties: {
+            answer: { type: ['string', 'null'] },
+            items: { type: 'array', items: { type: 'integer' } },
+            choice: { anyOf: [{ type: 'number' }, { $ref: '#/$defs/x' }] },
+          },
+          $defs: { x: { type: 'boolean' } },
+          additionalProperties: false,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('requires an object at the root', () => {
+    expect(validateOutputSchema('{}')).toBe(OUTPUT_SCHEMA_ROOT_TYPE_MESSAGE);
+    expect(validateOutputSchema('{"type":"string"}')).toBe(
+      OUTPUT_SCHEMA_ROOT_TYPE_MESSAGE,
+    );
+  });
+
+  it('rejects unknown types at any depth', () => {
+    expect(
+      validateOutputSchema(
+        '{"type":"object","properties":{"a":{"type":"strng"}}}',
+      ),
+    ).toBe('Unknown type "strng" at root.properties.a.');
+    expect(
+      validateOutputSchema(
+        '{"type":"object","properties":{"a":{"type":"array","items":{"type":["string","nul"]}}}}',
+      ),
+    ).toBe('Unknown type "nul" at root.properties.a.items.');
+    expect(
+      validateOutputSchema(
+        '{"type":"object","properties":{"a":{"anyOf":[{"type":1}]}}}',
+      ),
+    ).toBe('Unknown type 1 at root.properties.a.anyOf[0].');
+  });
+
+  it('rejects malformed subschema containers', () => {
+    expect(validateOutputSchema('{"type":"object","properties":[]}')).toBe(
+      '"properties" at root must be an object.',
+    );
+    expect(validateOutputSchema('{"type":"object","anyOf":{}}')).toBe(
+      '"anyOf" at root must be an array.',
+    );
+    expect(
+      validateOutputSchema('{"type":"object","properties":{"a":"string"}}'),
+    ).toBe('The schema at root.properties.a must be a JSON object.');
   });
 
   it('rejects malformed JSON', () => {
@@ -75,29 +144,70 @@ describe('toOutputSchemaAnnotations', () => {
   });
 });
 
-describe('buildOutputSchemaAnnotationUpdate', () => {
-  it('sets the annotation for openai-responses engines', () => {
+describe('hasOutputSchemaAnnotation', () => {
+  it('detects a non-blank annotation in any source', () => {
     expect(
-      buildOutputSchemaAnnotationUpdate(
-        'executor-openai-responses',
-        '{"type":"object"}',
-      ),
+      hasOutputSchemaAnnotation(null, { [OUTPUT_SCHEMA_ANNOTATION]: '{}' }),
+    ).toBe(true);
+    expect(
+      hasOutputSchemaAnnotation({ [OUTPUT_SCHEMA_ANNOTATION]: ' ' }, undefined),
+    ).toBe(false);
+    expect(hasOutputSchemaAnnotation({ other: 'x' })).toBe(false);
+  });
+});
+
+describe('buildOutputSchemaAnnotationUpdate', () => {
+  it('sets the annotation when supported', () => {
+    expect(
+      buildOutputSchemaAnnotationUpdate({
+        supported: true,
+        engineChanged: false,
+        value: '{"type":"object"}',
+      }),
     ).toEqual({ [OUTPUT_SCHEMA_ANNOTATION]: '{"type":"object"}' });
   });
 
   it('removes the annotation when the schema is blank', () => {
     expect(
-      buildOutputSchemaAnnotationUpdate('executor-openai-responses', ' '),
+      buildOutputSchemaAnnotationUpdate({
+        supported: true,
+        engineChanged: false,
+        value: ' ',
+      }),
     ).toEqual({ [OUTPUT_SCHEMA_ANNOTATION]: null });
     expect(
-      buildOutputSchemaAnnotationUpdate('executor-openai-responses', undefined),
+      buildOutputSchemaAnnotationUpdate({
+        supported: true,
+        engineChanged: false,
+        value: undefined,
+      }),
     ).toEqual({ [OUTPUT_SCHEMA_ANNOTATION]: null });
   });
 
-  it('leaves annotations untouched for other engines', () => {
+  it('removes the annotation when switching to an unsupported engine', () => {
     expect(
-      buildOutputSchemaAnnotationUpdate('a2a', '{"type":"object"}'),
+      buildOutputSchemaAnnotationUpdate({
+        supported: false,
+        engineChanged: true,
+        value: '{"type":"object"}',
+      }),
+    ).toEqual({ [OUTPUT_SCHEMA_ANNOTATION]: null });
+  });
+
+  it('leaves annotations untouched otherwise', () => {
+    expect(
+      buildOutputSchemaAnnotationUpdate({
+        supported: false,
+        engineChanged: false,
+        value: '{"type":"object"}',
+      }),
     ).toBeUndefined();
-    expect(buildOutputSchemaAnnotationUpdate('', '{}')).toBeUndefined();
+    expect(
+      buildOutputSchemaAnnotationUpdate({
+        supported: false,
+        engineChanged: true,
+        value: '',
+      }),
+    ).toBeUndefined();
   });
 });

@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { components } from '@/lib/api/generated/types';
-import { agentsService, teamsService, toolsService } from '@/lib/services';
+import {
+  agentsService,
+  executionEnginesService,
+  teamsService,
+  toolsService,
+} from '@/lib/services';
 import { extractAgentRequiredParams } from '@/lib/utils/query-parameters';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -43,6 +48,8 @@ interface UseAgentQueryParametersResult {
   toApiParameters: () => ApiQueryParameter[] | undefined;
   engineToolWarning: string | null;
   executionEngineName: string | null;
+  executionEngineAnnotations: Record<string, string> | null;
+  agentAnnotations: Record<string, string> | null;
 }
 
 function stripPrefix(name: string): string {
@@ -122,6 +129,12 @@ export function useAgentQueryParameters(
   const [executionEngineName, setExecutionEngineName] = useState<string | null>(
     null,
   );
+  const [executionEngineAnnotations, setExecutionEngineAnnotations] =
+    useState<Record<string, string> | null>(null);
+  const [agentAnnotations, setAgentAnnotations] = useState<Record<
+    string,
+    string
+  > | null>(null);
   const rowIdCounter = useRef(0);
 
   const createRowId = useCallback(() => {
@@ -139,10 +152,14 @@ export function useAgentQueryParameters(
       setRows([]);
       setEngineToolWarning(null);
       setExecutionEngineName(null);
+      setExecutionEngineAnnotations(null);
+      setAgentAnnotations(null);
       return;
     }
 
     setExecutionEngineName(null);
+    setExecutionEngineAnnotations(null);
+    setAgentAnnotations(null);
 
     let cancelled = false;
 
@@ -186,10 +203,18 @@ export function useAgentQueryParameters(
         setAvailableParameters(extractAgentRequiredParams(agent?.parameters));
         setTeamAgents([]);
         setRows([]);
-        setExecutionEngineName(agent?.executionEngine?.name ?? null);
-        const warning = await deriveEngineToolWarning(namespace, agent);
+        const engineName = agent?.executionEngine?.name ?? null;
+        setExecutionEngineName(engineName);
+        setAgentAnnotations(agent?.annotations ?? null);
+        const [warning, engine] = await Promise.all([
+          deriveEngineToolWarning(namespace, agent),
+          engineName && engineName !== BUILT_IN_A2A_ENGINE
+            ? executionEnginesService.getByName(namespace, engineName)
+            : null,
+        ]);
         if (cancelled) return;
         setEngineToolWarning(warning);
+        setExecutionEngineAnnotations(engine?.annotations ?? null);
       })
       .catch(() => {
         if (cancelled) return;
@@ -291,5 +316,7 @@ export function useAgentQueryParameters(
     toApiParameters,
     engineToolWarning,
     executionEngineName,
+    executionEngineAnnotations,
+    agentAnnotations,
   };
 }

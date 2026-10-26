@@ -1455,26 +1455,66 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["description"], "desc")
 
     @patch("ark_api.api.v1.agents.with_ark_client")
-    def test_update_agent_annotations_merged(self, mock_ark_client):
-        """Annotations are merged: sent keys are set, null keys removed, others kept."""
+    def test_update_agent_output_schema_annotation_set(self, mock_ark_client):
+        """The output-schema annotation is set and other annotations are kept."""
+        schema_key = "executor-openai-responses.ark.mckinsey.com/output-schema"
         mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
         mock_client.agents.a_get.return_value.to_dict.return_value["metadata"][
             "annotations"
-        ] = {"keep": "kept", "remove": "gone", "replace": "old"}
+        ] = {"keep": "kept", schema_key: "old"}
 
         response = self.client.put(
             "/v1/agents/test-agent?namespace=default",
-            json={"annotations": {"remove": None, "replace": "new", "add": "added"}},
+            json={"annotations": {schema_key: '{"type": "object"}'}},
         )
 
         self.assertEqual(response.status_code, 200)
         persisted = mock_client.agents.a_update.call_args.args[0].to_dict()
         self.assertEqual(
             persisted["metadata"]["annotations"],
-            {"keep": "kept", "replace": "new", "add": "added"},
+            {"keep": "kept", schema_key: '{"type": "object"}'},
         )
         self.assertNotIn("annotations", persisted["spec"])
         self.assertEqual(persisted["spec"]["prompt"], "prompt")
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_output_schema_annotation_removed(self, mock_ark_client):
+        """A null value removes the output-schema annotation."""
+        schema_key = "executor-openai-responses.ark.mckinsey.com/output-schema"
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+        mock_client.agents.a_get.return_value.to_dict.return_value["metadata"][
+            "annotations"
+        ] = {"keep": "kept", schema_key: "old"}
+
+        response = self.client.put(
+            "/v1/agents/test-agent?namespace=default",
+            json={"annotations": {schema_key: None}},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        persisted = mock_client.agents.a_update.call_args.args[0].to_dict()
+        self.assertEqual(persisted["metadata"]["annotations"], {"keep": "kept"})
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_disallowed_annotation_rejected(self, mock_ark_client):
+        """Annotations other than output-schema are rejected with 400."""
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+
+        for key in (
+            "ark.mckinsey.com/a2a-server-address",
+            "executor-openai-responses.ark.mckinsey.com/tools",
+            "custom",
+        ):
+            with self.subTest(key=key):
+                response = self.client.put(
+                    "/v1/agents/test-agent?namespace=default",
+                    json={"annotations": {key: "value"}},
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(key, response.json()["detail"])
+
+        mock_client.agents.a_update.assert_not_called()
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_omit_annotations_preserved(self, mock_ark_client):

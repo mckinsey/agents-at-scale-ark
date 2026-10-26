@@ -73,6 +73,7 @@ export function ChatPanel({
     missingParameters,
     engineToolWarning,
     supportsOutputSchema,
+    hasOwnOutputSchema,
     outputSchemaOverride,
     setOutputSchemaOverride,
     isOutputSchemaOverrideValid,
@@ -81,7 +82,11 @@ export function ChatPanel({
   const [currentMessage, setCurrentMessage] = useState('');
   const [debugMode, setDebugMode] = useState(true);
   const [showOutputSchema, setShowOutputSchema] = useState(false);
-  const isOutputSchemaOverrideActive = outputSchemaOverride.trim().length > 0;
+  const canOverrideOutputSchema = supportsOutputSchema && !hasOwnOutputSchema;
+  const isOutputSchemaOverrideActive =
+    canOverrideOutputSchema && outputSchemaOverride.trim().length > 0;
+  const isOutputSchemaOverrideInvalid =
+    canOverrideOutputSchema && !isOutputSchemaOverrideValid;
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const toolCallCount = messages.reduce(
@@ -102,7 +107,7 @@ export function ChatPanel({
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isProcessing) return;
-    if (supportsOutputSchema && !isOutputSchemaOverrideValid) return;
+    if (isOutputSchemaOverrideInvalid) return;
     const userMessage = currentMessage.trim();
     setCurrentMessage('');
     inputRef.current?.focus();
@@ -195,7 +200,15 @@ export function ChatPanel({
             )}
           </div>
         )}
-        {supportsOutputSchema && showOutputSchema && (
+        {isOutputSchemaOverrideInvalid && !showOutputSchema && (
+          <div className="px-4 pt-4">
+            <ChatNotice icon={<Info />} iconClassName="text-status-error">
+              The output schema override is invalid. Open the output schema
+              panel to fix or clear it before sending.
+            </ChatNotice>
+          </div>
+        )}
+        {canOverrideOutputSchema && showOutputSchema && (
           <div className="px-4 pt-4">
             <OutputSchemaField
               value={outputSchemaOverride}
@@ -281,22 +294,38 @@ export function ChatPanel({
                 {supportsOutputSchema && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-pressed={showOutputSchema}
-                        aria-label="Output schema override"
-                        onClick={() => setShowOutputSchema(!showOutputSchema)}
-                        className="relative">
-                        <IconShell size="sm" variant="secondary">
-                          <Code />
-                        </IconShell>
-                        {isOutputSchemaOverrideActive && (
-                          <span className="bg-status-success absolute -top-0.5 -right-0.5 size-2 rounded-full" />
-                        )}
-                      </Button>
+                      <span className="inline-flex">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-pressed={
+                            canOverrideOutputSchema && showOutputSchema
+                          }
+                          aria-label="Output schema override"
+                          disabled={hasOwnOutputSchema}
+                          onClick={() => setShowOutputSchema(!showOutputSchema)}
+                          className="relative">
+                          <IconShell size="sm" variant="secondary">
+                            <Code />
+                          </IconShell>
+                          {isOutputSchemaOverrideActive && (
+                            <span
+                              className={cn(
+                                'absolute -top-0.5 -right-0.5 size-2 rounded-full',
+                                isOutputSchemaOverrideInvalid
+                                  ? 'bg-status-error'
+                                  : 'bg-status-success',
+                              )}
+                            />
+                          )}
+                        </Button>
+                      </span>
                     </TooltipTrigger>
-                    <TooltipContent>Output schema override</TooltipContent>
+                    <TooltipContent>
+                      {hasOwnOutputSchema
+                        ? 'This agent already has an output schema, so an override has no effect.'
+                        : 'Output schema override'}
+                    </TooltipContent>
                   </Tooltip>
                 )}
 
@@ -357,7 +386,7 @@ export function ChatPanel({
                   disabled={
                     !currentMessage.trim() ||
                     missingParameters.length > 0 ||
-                    (supportsOutputSchema && !isOutputSchemaOverrideValid)
+                    isOutputSchemaOverrideInvalid
                   }
                   variant="ghost"
                   size="icon-sm"

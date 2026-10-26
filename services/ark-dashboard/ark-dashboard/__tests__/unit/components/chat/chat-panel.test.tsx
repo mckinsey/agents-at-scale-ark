@@ -52,6 +52,7 @@ function chatSession(overrides: Partial<ChatSession> = {}): ChatSession {
     missingParameters: [],
     engineToolWarning: null,
     supportsOutputSchema: false,
+    hasOwnOutputSchema: false,
     outputSchemaOverride: '',
     setOutputSchemaOverride: vi.fn(),
     isOutputSchemaOverrideValid: true,
@@ -130,5 +131,43 @@ describe('ChatPanel output schema override', () => {
 
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('explains why sending is blocked while the editor is collapsed', async () => {
+    const user = userEvent.setup();
+    renderChatPanel({
+      supportsOutputSchema: true,
+      outputSchemaOverride: '{"type":',
+      isOutputSchemaOverrideValid: false,
+    });
+
+    expect(
+      screen.getByText(/The output schema override is invalid/),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Output schema override' }),
+    );
+
+    expect(
+      screen.queryByText(/The output schema override is invalid/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Output schema')).toBeInTheDocument();
+  });
+
+  it('disables the override when the agent has its own schema', () => {
+    renderChatPanel({
+      supportsOutputSchema: true,
+      hasOwnOutputSchema: true,
+      outputSchemaOverride: '{"type":',
+      isOutputSchemaOverrideValid: false,
+    });
+
+    expect(
+      screen.getByRole('button', { name: 'Output schema override' }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByText(/The output schema override is invalid/),
+    ).not.toBeInTheDocument();
   });
 });
