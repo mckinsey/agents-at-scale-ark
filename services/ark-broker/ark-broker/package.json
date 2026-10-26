@@ -100,6 +100,7 @@
     "proxy-addr": "^2.0.8",
     "dockerode": {
       "protobufjs": "^7.6.5"
-    }
+    },
+    "body-parser": "^2.4.0"
   }
 }
