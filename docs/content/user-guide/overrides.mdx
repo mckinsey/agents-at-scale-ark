@@ -134,6 +134,27 @@ overrides:
         tier: production
 ```
 
+### Select an MCP Server by Name
+
+MCPServers created or updated with `/v1/mcp-servers` carry the label `ark.mckinsey.com/name` set to their name. Use it to send headers to a single server:
+
+```yaml
+overrides:
+  - headers:
+      - name: Authorization
+        value:
+          valueFrom:
+            secretKeyRef:
+              name: github-token
+              key: token
+    resourceType: mcpserver
+    labelSelector:
+      matchLabels:
+        ark.mckinsey.com/name: github
+```
+
+The controller does not add this label. Add `ark.mckinsey.com/name: <name>` to MCPServers you apply with `kubectl`, Helm or GitOps. A server whose name is longer than 63 characters gets no name label and cannot be selected this way. The API is the only place that checks the label, so anyone who can edit MCPServers with `kubectl` can set it to another server's name. See [Upgrading](/reference/upgrading#mcpservers-get-a-name-label).
+
 ### Match Expressions
 
 Use more complex matching logic:
