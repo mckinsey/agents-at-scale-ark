@@ -85,6 +85,7 @@ class MCPServerResponse(BaseModel):
     name: str
     namespace: str
     address: Optional[str] = None
+    labels: Optional[Dict[str, str]] = None
     annotations: Optional[Dict[str, str]] = None
     transport: Optional[str] = None
     available: Optional[AvailabilityStatus] = None

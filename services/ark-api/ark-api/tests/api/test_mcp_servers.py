@@ -231,6 +231,17 @@ class TestNameLabel(unittest.TestCase):
         written = self.ark.mcpservers.a_update.await_args.args[0].to_dict()["metadata"]["labels"]
         return response.json()["labels"], written
 
+    def test_list_response_exposes_labels(self):
+        mcp = _mcp_dict()
+        mcp["metadata"]["labels"] = {NAME_LABEL: "notion-mcp", "team": "a"}
+
+        resp = mcp_server_to_response(mcp)
+
+        self.assertEqual(resp.labels, {NAME_LABEL: "notion-mcp", "team": "a"})
+
+    def test_list_response_labels_null_when_absent(self):
+        self.assertIsNone(mcp_server_to_response(_mcp_dict()).labels)
+
     def test_create_adds_the_name_label(self):
         returned, written = self._create("github")
 
