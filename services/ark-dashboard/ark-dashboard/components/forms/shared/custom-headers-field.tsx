@@ -67,7 +67,7 @@ export function CustomHeadersField({
   ).length;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5" data-testid="model-headers">
       <HeaderRowsHeading
         title={title}
         tooltip={description}

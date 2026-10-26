@@ -17,6 +17,7 @@ import {
 import { useSecretKeyOptions } from '@/lib/hooks/use-secret-key-options';
 import { cn } from '@/lib/utils';
 import type {
+  HeaderNamesForServer,
   McpHeaderRow,
   McpHeaderRowError,
 } from '@/lib/utils/mcp-header-overrides';
@@ -26,8 +27,8 @@ const PRECEDENCE_TOOLTIP =
 
 export interface ChatMcpHeaderFieldsProps {
   readonly rows: McpHeaderRow[];
-  readonly isAgentRow: (id: string) => boolean;
   readonly nameOptionsFor: (row: McpHeaderRow) => string[];
+  readonly namesForServer: HeaderNamesForServer;
   readonly canAddRow: boolean;
   readonly errors: Record<string, McpHeaderRowError>;
   readonly serverNames: string[];
@@ -41,8 +42,8 @@ export interface ChatMcpHeaderFieldsProps {
 
 export function ChatMcpHeaderFields({
   rows,
-  isAgentRow,
   nameOptionsFor,
+  namesForServer,
   canAddRow,
   errors,
   serverNames,
@@ -57,7 +58,9 @@ export function ChatMcpHeaderFields({
   const { options, loaded } = useSecretKeyOptions(expanded);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      className="flex flex-col gap-3"
+      data-testid="chat-mcp-header-overrides">
       <div className="flex items-center justify-between">
         <Button
           type="button"
@@ -72,7 +75,9 @@ export function ChatMcpHeaderFields({
             <ChevronDown />
           </IconShell>
           MCP header overrides
-          <span className="text-fg-tertiary text-xs">
+          <span
+            className="text-fg-tertiary text-xs"
+            data-testid="chat-mcp-header-effective-count">
             {effectiveCount} effective
           </span>
           {hasErrors && !expanded && (
@@ -100,7 +105,7 @@ export function ChatMcpHeaderFields({
         <div className="flex flex-col gap-3">
           {rows.length > 0 && (
             <div className="flex flex-col gap-2">
-              <span className="text-fg-tertiary text-xs uppercase tracking-wide">
+              <span className="text-fg-tertiary text-xs tracking-wide uppercase">
                 This query only
               </span>
               <McpHeaderColumnLabels />
@@ -110,11 +115,11 @@ export function ChatMcpHeaderFields({
                   row={row}
                   serverNames={serverNames}
                   nameOptions={nameOptionsFor(row)}
+                  namesForServer={namesForServer}
                   secretOptions={options}
                   secretsLoaded={loaded}
                   error={errors[row.id]}
                   disabled={disabled}
-                  scopeLocked={isAgentRow(row.id)}
                   onChange={updates => onUpdateRow(row.id, updates)}
                   onRemove={() => onRemoveRow(row.id)}
                 />

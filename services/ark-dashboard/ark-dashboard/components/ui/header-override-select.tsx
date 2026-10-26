@@ -60,7 +60,7 @@ export function HeaderOverrideSelect({
     <div className="flex min-w-0 flex-col gap-1">
       <Select
         items={items}
-        value={isKnown ? currentValue : undefined}
+        value={isKnown ? currentValue : null}
         onValueChange={value => handleChange(String(value))}
         disabled={disabled}>
         <SelectTrigger

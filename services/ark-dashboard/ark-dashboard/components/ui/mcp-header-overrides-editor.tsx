@@ -45,11 +45,14 @@ export function McpHeaderOverridesEditor({
   className,
 }: McpHeaderOverridesEditorProps) {
   const { options, loaded } = useSecretKeyOptions();
-  const canAdd =
-    serverHeaderNames(undefined, serverNames, headerNamesByServer).length > 0;
+  const namesForServer = (serverName?: string) =>
+    serverHeaderNames(serverName, serverNames, headerNamesByServer);
+  const canAdd = namesForServer(undefined).length > 0;
 
   return (
-    <div className={cn('flex flex-col gap-5', className)}>
+    <div
+      className={cn('flex flex-col gap-5', className)}
+      data-testid="mcp-header-overrides">
       <HeaderRowsHeading
         title="MCP header overrides"
         tooltip={HEADERS_TOOLTIP_TEXT}
@@ -93,12 +96,9 @@ export function McpHeaderOverridesEditor({
               nameOptions={headerNameOptions(
                 row,
                 rows,
-                serverHeaderNames(
-                  row.serverName,
-                  serverNames,
-                  headerNamesByServer,
-                ),
+                namesForServer(row.serverName),
               )}
+              namesForServer={namesForServer}
               secretOptions={options}
               secretsLoaded={loaded}
               error={errors[row.id]}

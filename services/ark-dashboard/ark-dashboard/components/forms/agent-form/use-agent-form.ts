@@ -34,7 +34,10 @@ import {
   GET_ALL_AGENTS_QUERY_KEY,
 } from '@/lib/services/agents-hooks';
 import { useGetAllMcpServers } from '@/lib/services/mcp-servers-hooks';
-import { mcpServerNamesFromTools } from '@/lib/utils/mcp-header-overrides';
+import {
+  mcpServerNamesFromTools,
+  serverHeaderNames,
+} from '@/lib/utils/mcp-header-overrides';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
@@ -231,14 +234,23 @@ export function useAgentForm({
   }, [selectedTools, availableTools]);
 
   useEffect(() => {
-    reconcileMcpServers(mcpServerNames, mcpHeaderNames);
-  }, [mcpServerNames, mcpHeaderNames, mcpLoadVersion, reconcileMcpServers]);
+    reconcileMcpServers(mcpServerNames);
+  }, [mcpServerNames, mcpLoadVersion, reconcileMcpServers]);
+
+  const mcpNamesForServer = useMemo(
+    () =>
+      mcpHeaderNames
+        ? (serverName?: string) =>
+            serverHeaderNames(serverName, mcpServerNames, mcpHeaderNames)
+        : undefined,
+    [mcpServerNames, mcpHeaderNames],
+  );
 
   const onSubmit = useCallback(
     async (values: AgentFormValues) => {
       const isA2A = agent?.isA2A ?? false;
       const headers = isA2A ? [] : validateHeaderRows();
-      const mcpOverrides = isA2A ? [] : validateMcpHeaders();
+      const mcpOverrides = isA2A ? [] : validateMcpHeaders(mcpNamesForServer);
       if (!headers || !mcpOverrides) {
         toast.error('Fix the header errors before saving');
         return;
@@ -356,6 +368,7 @@ export function useAgentForm({
       mapParametersToApi,
       validateHeaderRows,
       validateMcpHeaders,
+      mcpNamesForServer,
       initialOverrides,
       queryClient,
       namespace,
@@ -398,9 +411,9 @@ export function useAgentForm({
   const onInvalid = useCallback(() => {
     if (!agent?.isA2A) {
       validateHeaderRows();
-      validateMcpHeaders();
+      validateMcpHeaders(mcpNamesForServer);
     }
-  }, [agent?.isA2A, validateHeaderRows, validateMcpHeaders]);
+  }, [agent?.isA2A, validateHeaderRows, validateMcpHeaders, mcpNamesForServer]);
 
   const hasHeadersChanged =
     JSON.stringify(getHeadersPayload()) !== initialHeadersSnapshot;

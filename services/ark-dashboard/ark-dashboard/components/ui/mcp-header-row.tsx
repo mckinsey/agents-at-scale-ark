@@ -25,10 +25,12 @@ import {
 } from '@/components/ui/tooltip';
 import type { SecretKeyOption } from '@/lib/hooks/use-secret-key-options';
 import { cn } from '@/lib/utils';
-import type {
-  McpHeaderRow,
-  McpHeaderRowError,
-  McpHeaderSource,
+import {
+  type HeaderNamesForServer,
+  type McpHeaderRow,
+  type McpHeaderRowError,
+  type McpHeaderSource,
+  serverChangeUpdates,
 } from '@/lib/utils/mcp-header-overrides';
 
 export const COLUMN_LABEL_CLASS = 'text-fg-secondary label-small-primary';
@@ -128,11 +130,11 @@ export interface McpHeaderRowFieldsProps {
   readonly showServer?: boolean;
   readonly serverNames?: string[];
   readonly nameOptions?: string[];
+  readonly namesForServer?: HeaderNamesForServer;
   readonly secretOptions: SecretKeyOption[];
   readonly secretsLoaded: boolean;
   readonly error?: McpHeaderRowError;
   readonly disabled?: boolean;
-  readonly scopeLocked?: boolean;
   readonly namePlaceholder?: string;
   readonly valuePlaceholder?: string;
   readonly onChange: (updates: Partial<McpHeaderRow>) => void;
@@ -144,26 +146,36 @@ export function McpHeaderRowFields({
   showServer = true,
   serverNames = [],
   nameOptions,
+  namesForServer,
   secretOptions,
   secretsLoaded,
   error,
   disabled,
-  scopeLocked,
   namePlaceholder,
   valuePlaceholder = 'Value',
   onChange,
   onRemove,
 }: McpHeaderRowFieldsProps) {
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-3" data-testid="header-row">
       {showServer && (
         <div className="flex min-w-0 flex-1">
           <McpServerSelect
             id={`mcp-${row.id}-server`}
             serverNames={serverNames}
             value={row.serverName}
-            disabled={disabled || scopeLocked}
-            onChange={serverName => onChange({ serverName })}
+            disabled={disabled}
+            onChange={serverName =>
+              onChange(
+                namesForServer
+                  ? serverChangeUpdates(
+                      row,
+                      serverName,
+                      namesForServer(serverName),
+                    )
+                  : { serverName },
+              )
+            }
           />
         </div>
       )}
@@ -174,7 +186,7 @@ export function McpHeaderRowFields({
             id={`mcp-${row.id}-name`}
             value={row.name}
             options={nameOptions}
-            disabled={disabled || scopeLocked}
+            disabled={disabled}
             invalid={!!error?.nameError}
             onChange={name => onChange({ name })}
           />
@@ -182,7 +194,7 @@ export function McpHeaderRowFields({
           <HeaderNameField
             id={`mcp-${row.id}-name`}
             value={row.name}
-            disabled={disabled || scopeLocked}
+            disabled={disabled}
             invalid={!!error?.nameError}
             placeholder={namePlaceholder}
             onChange={name => onChange({ name })}
@@ -211,8 +223,8 @@ export function McpHeaderRowFields({
             <SelectValue />
           </SelectTrigger>
           <SelectContent
-        className="bg-fill-onsurface-ui-2"
-        collisionAvoidance={FLIP_COLLISION}>
+            className="bg-fill-onsurface-ui-2"
+            collisionAvoidance={FLIP_COLLISION}>
             {SOURCE_ITEMS.map(item => (
               <SelectItem key={item.value} value={item.value}>
                 <SelectItemText>{item.label}</SelectItemText>
@@ -254,19 +266,17 @@ export function McpHeaderRowFields({
       </div>
 
       <div className="flex h-9 w-7 shrink-0 items-center justify-center">
-        {!scopeLocked && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onRemove}
-            disabled={disabled}
-            aria-label="Remove header">
-            <IconShell size="sm" variant="secondary">
-              <Trash />
-            </IconShell>
-          </Button>
-        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onRemove}
+          disabled={disabled}
+          aria-label="Remove header">
+          <IconShell size="sm" variant="secondary">
+            <Trash />
+          </IconShell>
+        </Button>
       </div>
     </div>
   );

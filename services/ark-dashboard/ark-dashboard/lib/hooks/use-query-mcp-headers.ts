@@ -12,10 +12,8 @@ import {
   createMcpHeaderRow,
   headerNameOptions,
   isBlankMcpHeaderRow,
-  isSameMcpHeaderRow,
   mcpServerNamesFromTools,
   serverHeaderNames,
-  splitMcpOverrides,
   validateMcpHeaderRows,
 } from '@/lib/utils/mcp-header-overrides';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -26,9 +24,6 @@ export function useQueryMcpHeaders(
 ) {
   const { namespace } = useNamespace();
   const [agentHeaders, setAgentHeaders] = useState<AgentMcpHeader[]>([]);
-  const [agentRows, setAgentRows] = useState<Record<string, McpHeaderRow>>(
-    {},
-  );
   const [toolServerNames, setToolServerNames] = useState<string[]>([]);
   const [headerNamesByServer, setHeaderNamesByServer] = useState<
     Record<string, string[]>
@@ -37,7 +32,6 @@ export function useQueryMcpHeaders(
 
   useEffect(() => {
     setRows([]);
-    setAgentRows({});
     if (type !== 'agent' || !name || !namespace) {
       setAgentHeaders([]);
       setToolServerNames([]);
@@ -66,10 +60,7 @@ export function useQueryMcpHeaders(
           mcpServers.map(server => [server.name, server.header_names ?? []]),
         ),
       );
-      const split = splitMcpOverrides(agent?.overrides);
       setAgentHeaders(agentMcpHeaders(agent?.overrides));
-      setAgentRows(Object.fromEntries(split.rows.map(row => [row.id, row])));
-      setRows(split.rows);
       setToolServerNames(
         mcpServerNamesFromTools(
           tools.filter(tool => agentToolNames.has(tool.name)),
@@ -91,47 +82,41 @@ export function useQueryMcpHeaders(
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [toolServerNames, agentHeaders]);
 
-  const changedRows = useMemo(
-    () =>
-      rows.filter(row => {
-        if (isBlankMcpHeaderRow(row)) return false;
-        const agentRow = agentRows[row.id];
-        return !agentRow || !isSameMcpHeaderRow(row, agentRow);
-      }),
-    [rows, agentRows],
+  const namesForServer = useCallback(
+    (serverName?: string) => {
+      const agentNames = agentHeaders
+        .filter(
+          header =>
+            !serverName ||
+            header.scope.kind === 'all' ||
+            (header.scope.kind === 'server' &&
+              header.scope.serverName === serverName),
+        )
+        .map(header => header.name);
+      return [
+        ...serverHeaderNames(serverName, serverNames, headerNamesByServer),
+        ...agentNames,
+      ];
+    },
+    [agentHeaders, serverNames, headerNamesByServer],
   );
 
-  const errors = useMemo(() => validateMcpHeaderRows(rows), [rows]);
+  const errors = useMemo(
+    () => validateMcpHeaderRows(rows, [], namesForServer),
+    [rows, namesForServer],
+  );
 
   const effectiveCount = rows.filter(row => !isBlankMcpHeaderRow(row)).length;
 
   const nameOptionsFor = useCallback(
-    (row: McpHeaderRow) => {
-      const agentNames = agentHeaders
-        .filter(
-          header =>
-            !row.serverName ||
-            header.scope.kind === 'all' ||
-            (header.scope.kind === 'server' &&
-              header.scope.serverName === row.serverName),
-        )
-        .map(header => header.name);
-      return headerNameOptions(row, rows, [
-        ...serverHeaderNames(row.serverName, serverNames, headerNamesByServer),
-        ...agentNames,
-      ]);
-    },
-    [agentHeaders, rows, serverNames, headerNamesByServer],
+    (row: McpHeaderRow) =>
+      headerNameOptions(row, rows, namesForServer(row.serverName)),
+    [rows, namesForServer],
   );
 
   const canAddRow =
     agentHeaders.length > 0 ||
     serverHeaderNames(undefined, serverNames, headerNamesByServer).length > 0;
-
-  const isAgentRow = useCallback(
-    (id: string) => id in agentRows,
-    [agentRows],
-  );
 
   const addRow = useCallback(() => {
     setRows(prev => [...prev, createMcpHeaderRow()]);
@@ -151,15 +136,15 @@ export function useQueryMcpHeaders(
   }, []);
 
   const toApiOverrides = useCallback((): AgentOverride[] | undefined => {
-    const overrides = buildQueryMcpOverrides(changedRows, agentHeaders);
+    const overrides = buildQueryMcpOverrides(rows, agentHeaders);
     return overrides.length > 0 ? overrides : undefined;
-  }, [changedRows, agentHeaders]);
+  }, [rows, agentHeaders]);
 
   return {
     visible: type === 'agent' && (serverNames.length > 0 || rows.length > 0),
     rows,
-    isAgentRow,
     nameOptionsFor,
+    namesForServer,
     canAddRow,
     errors,
     hasErrors: Object.keys(errors).length > 0,

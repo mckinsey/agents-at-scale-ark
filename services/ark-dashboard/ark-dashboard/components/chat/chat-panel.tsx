@@ -201,8 +201,8 @@ export function ChatPanel({
           <div className="px-4 pt-4">
             <ChatMcpHeaderFields
               rows={mcpHeaders.rows}
-              isAgentRow={mcpHeaders.isAgentRow}
               nameOptionsFor={mcpHeaders.nameOptionsFor}
+              namesForServer={mcpHeaders.namesForServer}
               canAddRow={mcpHeaders.canAddRow}
               errors={mcpHeaders.errors}
               serverNames={mcpHeaders.serverNames}

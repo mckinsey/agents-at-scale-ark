@@ -39,7 +39,7 @@ export function HeaderNameSelect({
   return (
     <Select
       items={items}
-      value={value || undefined}
+      value={value || null}
       onValueChange={next => onChange(String(next ?? ''))}
       disabled={disabled || items.length === 0}>
       <SelectTrigger

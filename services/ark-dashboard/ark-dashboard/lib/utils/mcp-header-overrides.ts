@@ -20,7 +20,6 @@ export interface McpHeaderRow {
   value: string;
   secretName: string;
   secretKey: string;
-  seeded?: boolean;
 }
 
 export interface LockedMcpHeader {
@@ -72,27 +71,22 @@ export function mcpServerNamesFromTools(tools: Tool[]): string[] {
   return Array.from(names).sort((a, b) => a.localeCompare(b));
 }
 
-export function createMcpHeaderRow(
-  serverName?: string,
-  name = '',
-  seeded = false,
-): McpHeaderRow {
+export function createMcpHeaderRow(serverName?: string): McpHeaderRow {
   return {
     id: generateUUID(),
     serverName,
-    name,
+    name: '',
     source: 'secret',
     value: '',
     secretName: '',
     secretKey: '',
-    ...(seeded ? { seeded } : {}),
   };
 }
 
 export function isBlankMcpHeaderRow(row: McpHeaderRow): boolean {
   const hasValue =
     !!row.value.trim() || !!row.secretName.trim() || !!row.secretKey.trim();
-  return !hasValue && (row.seeded === true || !row.name.trim());
+  return !hasValue && !row.name.trim();
 }
 
 export function getMcpScope(override: AgentOverride): McpScope {
@@ -245,9 +239,17 @@ function normalizeName(name: string): string {
   return name.trim().toLowerCase();
 }
 
+export type HeaderNamesForServer = (serverName?: string) => string[];
+
+function hasHeaderName(names: string[], name: string): boolean {
+  const key = normalizeName(name);
+  return names.some(candidate => normalizeName(candidate) === key);
+}
+
 export function validateMcpHeaderRows(
   rows: McpHeaderRow[],
   lockedHeaders: LockedMcpHeader[] = [],
+  namesForServer?: HeaderNamesForServer,
 ): Record<string, McpHeaderRowError> {
   const errors: Record<string, McpHeaderRowError> = {};
   const seen = new Map<string, Set<string>>();
@@ -273,6 +275,12 @@ export function validateMcpHeaderRows(
       error.nameError = 'Header name is required';
     } else if (hiddenNames.has(`${scopeKey(row.serverName)}::${name}`)) {
       error.nameError = 'Already set outside the dashboard';
+    } else if (
+      namesForServer &&
+      !hasHeaderName(namesForServer(row.serverName), name)
+    ) {
+      const scope = row.serverName ?? 'the selected MCP servers';
+      error.nameError = `Not a header of ${scope}`;
     } else {
       const names = namesIn(row.serverName);
       if (names.has(name)) {
@@ -299,32 +307,15 @@ export function validateMcpHeaderRows(
   return errors;
 }
 
-export function reconcileServerRows(
+export function removeServerRows(
   rows: McpHeaderRow[],
-  serverNames: string[],
-  seedServers: string[],
-  headerNamesByServer: Record<string, string[]>,
-  removedServers: string[] = [],
+  removedServers: string[],
 ): McpHeaderRow[] {
-  const wanted = new Set(serverNames);
   const removed = new Set(removedServers);
   const kept = rows.filter(
-    row =>
-      !row.serverName ||
-      (!removed.has(row.serverName) &&
-        (wanted.has(row.serverName) || !isBlankMcpHeaderRow(row))),
+    row => !row.serverName || !removed.has(row.serverName),
   );
-  const taken = new Set(
-    kept.map(row => `${scopeKey(row.serverName)}::${normalizeName(row.name)}`),
-  );
-  const added = seedServers.flatMap(serverName =>
-    (headerNamesByServer[serverName] ?? [])
-      .filter(name => !taken.has(`${serverName}::${normalizeName(name)}`))
-      .map(name => createMcpHeaderRow(serverName, name, true)),
-  );
-
-  if (added.length === 0 && kept.length === rows.length) return rows;
-  return [...kept, ...added];
+  return kept.length === rows.length ? rows : kept;
 }
 
 export function serverHeaderNames(
@@ -334,6 +325,16 @@ export function serverHeaderNames(
 ): string[] {
   const servers = serverName ? [serverName] : serverNames;
   return servers.flatMap(server => headerNamesByServer[server] ?? []);
+}
+
+export function serverChangeUpdates(
+  row: McpHeaderRow,
+  serverName: string | undefined,
+  names: string[],
+): Partial<McpHeaderRow> {
+  return hasHeaderName(names, row.name)
+    ? { serverName }
+    : { serverName, name: '' };
 }
 
 export function headerNameOptions(
@@ -381,17 +382,6 @@ export function agentMcpHeaders(
         scope,
       }));
     });
-}
-
-export function isSameMcpHeaderRow(a: McpHeaderRow, b: McpHeaderRow): boolean {
-  return (
-    a.serverName === b.serverName &&
-    a.name.trim() === b.name.trim() &&
-    a.source === b.source &&
-    a.value === b.value &&
-    a.secretName === b.secretName &&
-    a.secretKey === b.secretKey
-  );
 }
 
 function rowReaches(row: McpHeaderRow, scope: McpScope): boolean {

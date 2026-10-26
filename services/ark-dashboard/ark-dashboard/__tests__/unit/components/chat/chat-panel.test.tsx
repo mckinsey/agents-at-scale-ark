@@ -53,8 +53,8 @@ function chatSession(overrides: Partial<ChatSession> = {}): ChatSession {
     mcpHeaders: {
       visible: false,
       rows: [],
-      isAgentRow: vi.fn(() => false),
       nameOptionsFor: vi.fn(() => []),
+      namesForServer: vi.fn(() => []),
       canAddRow: false,
       errors: {},
       hasErrors: false,
