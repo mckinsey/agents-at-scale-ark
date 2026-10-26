@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -260,5 +260,106 @@ describe('SecretNameField', () => {
     const ref = createRef<HTMLInputElement>();
     renderField({ ref });
     expect(ref.current).toBe(input());
+  });
+
+  describe('scope', () => {
+    const PERSONAL_NAME = 'u-0123456789abcdef-github-pat';
+    const SCOPED = [
+      {
+        name: 'openai-token',
+        display_name: 'openai-token',
+        scope: 'shared' as const,
+      },
+      {
+        name: PERSONAL_NAME,
+        display_name: 'github-pat',
+        scope: 'personal' as const,
+      },
+    ];
+
+    it('lists a personal secret by its display name with a Personal badge and its real name', async () => {
+      const user = userEvent.setup();
+      renderField({ secrets: SCOPED });
+
+      await user.click(input());
+
+      const personal = await screen.findByRole('option', {
+        name: /github-pat/,
+      });
+      expect(within(personal).getByText('github-pat')).toBeInTheDocument();
+      expect(within(personal).getByText(PERSONAL_NAME)).toBeInTheDocument();
+      expect(within(personal).getByText('Personal')).toBeInTheDocument();
+    });
+
+    it('shows no badge and no second name for a shared secret', async () => {
+      const user = userEvent.setup();
+      renderField({ secrets: SCOPED });
+
+      await user.click(input());
+
+      const shared = await screen.findByRole('option', {
+        name: 'openai-token',
+      });
+      expect(within(shared).queryByText('Personal')).not.toBeInTheDocument();
+      expect(within(shared).getAllByText('openai-token')).toHaveLength(1);
+    });
+
+    it('commits the real name when a personal secret is picked', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<StatefulField onChange={onChange} secrets={SCOPED} />);
+
+      await user.click(input());
+      await user.click(
+        await screen.findByRole('option', { name: /github-pat/ }),
+      );
+
+      expect(onChange).toHaveBeenLastCalledWith(PERSONAL_NAME);
+      expect(input()).toHaveValue(PERSONAL_NAME);
+    });
+
+    it('does not flag a stored personal name as missing', () => {
+      renderField({ secrets: SCOPED, value: PERSONAL_NAME });
+
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it('keeps a promoted secret apart from a shared one with the same display name', async () => {
+      const user = userEvent.setup();
+      const PROMOTED = 'u-fedcba9876543210-openai';
+      const onChange = vi.fn();
+      render(
+        <StatefulField
+          onChange={onChange}
+          secrets={[
+            { name: 'openai', display_name: 'openai', scope: 'shared' },
+            { name: PROMOTED, display_name: 'openai', scope: 'shared' },
+          ]}
+        />,
+      );
+
+      await user.click(input());
+
+      const plain = await screen.findByRole('option', { name: 'openai' });
+      const promoted = screen.getByRole('option', {
+        name: `openai ${PROMOTED}`,
+      });
+      expect(within(plain).queryByText(PROMOTED)).not.toBeInTheDocument();
+      expect(within(promoted).getByText(PROMOTED)).toBeInTheDocument();
+      expect(within(promoted).queryByText('Personal')).not.toBeInTheDocument();
+
+      await user.click(promoted);
+      expect(onChange).toHaveBeenLastCalledWith(PROMOTED);
+    });
+
+    it('still renders plain names when the list has no scope details', async () => {
+      const user = userEvent.setup();
+      renderField();
+
+      await user.click(input());
+
+      const option = await screen.findByRole('option', { name: 'github-pat' });
+      expect(within(option).queryByText('Personal')).not.toBeInTheDocument();
+    });
   });
 });

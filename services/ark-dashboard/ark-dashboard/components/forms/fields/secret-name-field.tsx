@@ -3,6 +3,7 @@
 import { type Ref, useId, useState } from 'react';
 import type { Control, FieldPath, FieldValues } from 'react-hook-form';
 
+import { SecretScopeBadge } from '@/components/common/secret-scope-badge';
 import { CreateResourceButton } from '@/components/forms/shared/create-resource-dialog';
 import {
   Autocomplete,
@@ -23,11 +24,14 @@ import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
 import type { Secret } from '@/lib/services';
 
+export type SecretNameOption = Pick<Secret, 'name'> &
+  Partial<Pick<Secret, 'display_name' | 'scope'>>;
+
 interface SecretNameFieldProps {
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly onBlur?: () => void;
-  readonly secrets?: readonly Pick<Secret, 'name'>[];
+  readonly secrets?: readonly SecretNameOption[];
   readonly isPending?: boolean;
   readonly isError?: boolean;
   readonly placeholder?: string;
@@ -45,6 +49,28 @@ function emptyMessage(isError: boolean, hasSecrets: boolean) {
   return hasSecrets
     ? 'No Ark secret matches. The typed name is used as is.'
     : 'No Ark secrets in this namespace. Type a secret name.';
+}
+
+function SecretOptionLabel({
+  name,
+  option,
+}: Readonly<{ name: string; option?: SecretNameOption }>) {
+  const displayName = option?.display_name ?? name;
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-2">
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate">{displayName}</span>
+        {displayName !== name && (
+          <span className="text-fg-secondary label-small-primary truncate font-mono">
+            {name}
+          </span>
+        )}
+      </span>
+      {option?.scope === 'personal' && (
+        <SecretScopeBadge scope="personal" className="ml-auto" />
+      )}
+    </span>
+  );
 }
 
 export function SecretNameField({
@@ -67,6 +93,7 @@ export function SecretNameField({
   const hintId = useId();
   const errorId = useId();
   const names = secrets?.map(secret => secret.name) ?? [];
+  const optionsByName = new Map(secrets?.map(secret => [secret.name, secret]));
   const showMissingHint =
     !!value &&
     !focused &&
@@ -131,7 +158,10 @@ export function SecretNameField({
             <ComboboxList>
               {(name: string) => (
                 <ComboboxItem key={name} value={name} showCheckmark={false}>
-                  {name}
+                  <SecretOptionLabel
+                    name={name}
+                    option={optionsByName.get(name)}
+                  />
                 </ComboboxItem>
               )}
             </ComboboxList>
@@ -163,7 +193,7 @@ export interface FormSecretNameFieldProps<
   control: Control<TFieldValues>;
   name: TName;
   label: string;
-  secrets?: readonly Pick<Secret, 'name'>[];
+  secrets?: readonly SecretNameOption[];
   isPending?: boolean;
   isError?: boolean;
   placeholder?: string;
