@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -189,6 +189,12 @@ describe('ChatPanel MCP credentials', () => {
     return user;
   }
 
+  async function waitForComposerFocus() {
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('Type your message...')).toHaveFocus(),
+    );
+  }
+
   function sendButton() {
     return screen.getByRole('button', { name: 'Send message' });
   }
@@ -257,6 +263,7 @@ describe('ChatPanel MCP credentials', () => {
     storeCredentials([{ ...GITHUB_ROW, server: '', secret: '' }]);
     renderChatPanel();
     const user = userEvent.setup();
+    await waitForComposerFocus();
 
     await user.click(
       screen.getByRole('button', { name: 'Add MCP credential' }),
@@ -459,6 +466,7 @@ describe('ChatPanel MCP credentials', () => {
     mockMcpServers([mcpServer('github', null)]);
     storeCredentials([GITHUB_ROW]);
     renderChatPanel();
+    await waitForComposerFocus();
     const user = await typeMessage();
 
     await user.click(
