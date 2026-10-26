@@ -12,6 +12,7 @@ import { secretsService } from './secrets';
 import type {
   SecretCreateRequest,
   SecretDetailResponse,
+  SecretListScope,
   SecretUpdateRequest,
 } from './secrets';
 
@@ -21,12 +22,12 @@ export const CREATE_SECRET_MUTATION_KEY = 'create-secret';
 export const UPDATE_SECRET_MUTATION_KEY = 'update-secret';
 export const DELETE_SECRET_MUTATION_KEY = 'delete-secret';
 
-export const useGetAllSecrets = () => {
+export const useGetAllSecrets = (scope: SecretListScope = 'shared') => {
   const { namespace } = useNamespace();
 
   return useQuery({
-    queryKey: [GET_ALL_SECRETS_QUERY_KEY, namespace],
-    queryFn: () => secretsService.getAll(namespace),
+    queryKey: [GET_ALL_SECRETS_QUERY_KEY, scope, namespace],
+    queryFn: () => secretsService.getAll(namespace, scope),
     enabled: Boolean(namespace),
   });
 };
