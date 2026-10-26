@@ -67,6 +67,8 @@ const createWrapper = () => wrapperFor(createQueryClient());
 const secret: Secret = {
   id: 'aws-credentials',
   name: 'aws-credentials',
+  display_name: 'aws-credentials',
+  scope: 'shared',
   description: null,
   alias: null,
   labels: [],
@@ -111,6 +113,80 @@ describe('secrets-hooks', () => {
 
       expect(result.current.data).toEqual([secret]);
       expect(secretsService.getAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('lists shared secrets by default, keyed by scope then namespace', async () => {
+      vi.mocked(secretsService.getAll).mockResolvedValue([secret]);
+      const queryClient = createQueryClient();
+
+      const { result } = renderHook(() => useGetAllSecrets(), {
+        wrapper: wrapperFor(queryClient),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(secretsService.getAll).toHaveBeenCalledWith('default', 'shared');
+      expect(
+        queryClient.getQueryData([
+          GET_ALL_SECRETS_QUERY_KEY,
+          'shared',
+          'default',
+        ]),
+      ).toEqual([secret]);
+    });
+
+    it('keeps the requested scope in its own cache entry', async () => {
+      const personal: Secret = {
+        ...secret,
+        id: 'u-0123456789abcdef-aws-credentials',
+        name: 'u-0123456789abcdef-aws-credentials',
+        scope: 'personal',
+      };
+      vi.mocked(secretsService.getAll).mockImplementation(
+        async (_namespace, scope) =>
+          scope === 'all' ? [secret, personal] : [secret],
+      );
+      const queryClient = createQueryClient();
+
+      const { result } = renderHook(
+        () => ({ shared: useGetAllSecrets(), all: useGetAllSecrets('all') }),
+        { wrapper: wrapperFor(queryClient) },
+      );
+
+      await waitFor(() => {
+        expect(result.current.shared.isSuccess).toBe(true);
+        expect(result.current.all.isSuccess).toBe(true);
+      });
+
+      expect(secretsService.getAll).toHaveBeenCalledWith('default', 'all');
+      expect(result.current.shared.data).toEqual([secret]);
+      expect(result.current.all.data).toEqual([secret, personal]);
+      expect(
+        queryClient.getQueryData([GET_ALL_SECRETS_QUERY_KEY, 'all', 'default']),
+      ).toEqual([secret, personal]);
+    });
+
+    it('is reached by the bare-prefix invalidation for every scope', async () => {
+      vi.mocked(secretsService.getAll).mockResolvedValue([secret]);
+      const queryClient = createQueryClient();
+
+      const { result } = renderHook(
+        () => ({ shared: useGetAllSecrets(), all: useGetAllSecrets('all') }),
+        { wrapper: wrapperFor(queryClient) },
+      );
+
+      await waitFor(() => {
+        expect(result.current.shared.isSuccess).toBe(true);
+        expect(result.current.all.isSuccess).toBe(true);
+      });
+      vi.mocked(secretsService.getAll).mockClear();
+
+      await queryClient.invalidateQueries({
+        queryKey: [GET_ALL_SECRETS_QUERY_KEY],
+      });
+
+      expect(secretsService.getAll).toHaveBeenCalledWith('default', 'shared');
+      expect(secretsService.getAll).toHaveBeenCalledWith('default', 'all');
     });
 
     it('should surface fetch errors', async () => {

@@ -140,6 +140,16 @@ describe('ModelConfiguratorForm - AWS Bedrock', () => {
     expect(screen.getByText('API Key Secret')).toBeInTheDocument();
     expect(screen.queryByText('API Key Secret Key')).not.toBeInTheDocument();
   });
+
+  it('lists only shared secrets in its pickers', () => {
+    renderForm(bedrockDefaults());
+
+    const calls = vi.mocked(useGetAllSecrets).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const args of calls) {
+      expect(args).toEqual([]);
+    }
+  });
 });
 
 describe('ModelConfiguratorForm - Base URL field', () => {
