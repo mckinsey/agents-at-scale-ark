@@ -514,6 +514,163 @@ describe('ChatPanel MCP credentials', () => {
     expect(useGetAllSecrets).toHaveBeenCalledWith('all', { enabled: true });
   });
 
+  it('locks the key to token for a secret from the list', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    mockSecrets([
+      {
+        name: 'u-0123456789abcdef-github',
+        display_name: 'github',
+        scope: 'personal',
+      },
+    ]);
+    storeCredentials([{ ...GITHUB_ROW, key: 'pat' }]);
+
+    await renderPanel();
+
+    const key = screen.getByLabelText('Secret key for github');
+    expect(key).toHaveValue('token');
+    expect(key).toHaveAttribute('readonly');
+    expect(key).toHaveAttribute(
+      'title',
+      'Secrets in Ark keep their value under the token key.',
+    );
+  });
+
+  it('labels a free key field as the key inside the secret', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    storeCredentials([{ ...GITHUB_ROW, secret: 'outside-secret' }]);
+
+    await renderPanel();
+
+    const key = screen.getByLabelText('Secret key for github');
+    expect(key).not.toHaveAttribute('readonly');
+    expect(key).toHaveAttribute('placeholder', 'Secret key');
+    expect(key).toHaveAttribute(
+      'title',
+      'The key inside the secret that holds the value, usually token. Never paste a token here.',
+    );
+  });
+
+  it('blocks a token pasted as the key and says to store it in a secret', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    storeCredentials([{ ...GITHUB_ROW, secret: 'outside-secret' }]);
+    const sendMessage = vi.fn(async () => {});
+    await renderPanel({ sendMessage });
+    const user = userEvent.setup();
+
+    const key = screen.getByLabelText('Secret key for github');
+    await user.clear(key);
+    await user.click(key);
+    await user.paste('ghp_FakeToken1234567890');
+
+    expect(
+      screen.getByText(
+        'This looks like a token. Store it in a secret and pick the secret here.',
+      ),
+    ).toBeInTheDocument();
+    expect(key).toHaveAttribute('aria-invalid', 'true');
+    expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).not.toContain(
+      'FakeToken',
+    );
+    await expectSendBlocked(sendMessage);
+  });
+
+  const TOKEN_MESSAGE =
+    'This looks like a token. Store it in a secret and pick the secret here.';
+
+  async function pasteInto(label: string, value: string) {
+    const user = userEvent.setup();
+    const field = screen.getByLabelText(label);
+    await user.clear(field);
+    await user.click(field);
+    await user.paste(value);
+    return { user, field };
+  }
+
+  it('says a token pasted as the header belongs in a secret', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    storeCredentials([GITHUB_ROW]);
+    await renderPanel();
+
+    await pasteInto('Header name for github', 'sk-proj-abc');
+
+    expect(screen.getByText(TOKEN_MESSAGE)).toBeInTheDocument();
+  });
+
+  it('recognises a token pasted with a leading space', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    storeCredentials([{ ...GITHUB_ROW, secret: 'outside-secret' }]);
+    await renderPanel();
+
+    await pasteInto('Secret key for github', ' ghp_FakeToken1234567890');
+
+    expect(screen.getByText(TOKEN_MESSAGE)).toBeInTheDocument();
+  });
+
+  it('explains a header name with a space without calling it a token', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    storeCredentials([GITHUB_ROW]);
+    await renderPanel();
+
+    await pasteInto('Header name for github', 'X Bad');
+
+    expect(
+      screen.getByText(
+        'Header names cannot contain spaces or special characters.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(TOKEN_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  it('asks for a secret name before warning about a token key', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    storeCredentials([{ ...GITHUB_ROW, secret: 'outside-secret' }]);
+    await renderPanel();
+
+    await pasteInto('Secret key for github', 'ghp_FakeToken1234567890');
+    const user = userEvent.setup();
+    const secret = screen.getByRole('combobox', { name: 'Secret for github' });
+    await user.clear(secret);
+    await user.type(secret, 'Bearer abc');
+
+    expect(
+      screen.getByText(/Enter the name of a secret, not its value/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(TOKEN_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  it('saves a key when the field loses focus', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    storeCredentials([{ ...GITHUB_ROW, secret: 'outside-secret' }]);
+    await renderPanel();
+
+    const { user } = await pasteInto('Secret key for github', 'password');
+    expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).not.toContain(
+      'password',
+    );
+    await user.tab();
+
+    expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).toContain(
+      '"key":"password"',
+    );
+  });
+
+  it('waits for the secret list before sending a custom key', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    vi.mocked(useGetAllSecrets).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+    } as unknown as ReturnType<typeof useGetAllSecrets>);
+    storeCredentials([{ ...GITHUB_ROW, key: 'pat' }]);
+    const sendMessage = vi.fn(async () => {});
+
+    await renderPanel({ sendMessage });
+
+    expect(screen.getByText('Checking secrets…')).toBeInTheDocument();
+    await expectSendBlocked(sendMessage);
+  });
+
   it('disables the rows while a query runs', async () => {
     mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
     storeCredentials([GITHUB_ROW]);

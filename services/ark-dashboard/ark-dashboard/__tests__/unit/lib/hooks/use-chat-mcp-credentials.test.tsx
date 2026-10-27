@@ -12,6 +12,7 @@ import {
   evaluateMcpCredentials,
   getMcpServerTargetIssue,
   isValidMcpCredentialField,
+  looksLikeToken,
   mcpCredentialStorageKey,
   readyMcpCredentials,
   useChatMcpCredentials,
@@ -114,6 +115,14 @@ describe('isValidMcpCredentialField', () => {
     ['secret', 'u-0123456789abcdef-github'],
     ['secret', 'team.github-token'],
     ['key', 'api_key.v2'],
+    ['key', 'token'],
+    ['key', 'task-id'],
+    ['key', 'AbCdEfGhIjKlMnOpQrStUvW'],
+    ['key', 'SERVICE_ACCOUNT_TOKEN_KEY_V2_PROD_01'],
+    ['key', 'service-account-token-key-v2-prod-01'],
+    ['header', 'X-Personal-Token'],
+    ['header', 'X-Very-Long-Custom-Authorization-Header'],
+    ['secret', 'sk-team-token'],
     ['secret', ''],
   ] as const)('accepts %s %j', (field, value) => {
     expect(isValidMcpCredentialField(field, value)).toBe(true);
@@ -125,6 +134,22 @@ describe('isValidMcpCredentialField', () => {
     ['secret', 'Bearer abc'],
     ['secret', 'a'.repeat(254)],
     ['key', 'my key'],
+    ['key', 'ghp_AbC123'],
+    ['key', 'gho_AbC123'],
+    ['key', 'ghs_AbC123'],
+    ['key', 'glpat-x'],
+    ['key', 'sk_live_AbC'],
+    ['key', 'dop_v1_abc'],
+    ['key', 'AIzaAbC'],
+    ['key', 'AbCdEfGhIjKlMnOpQrStUvWx'],
+    ['key', '00000000-0000-0000-0000-000000000000'],
+    ['header', 'ASIAIOSFODNN7EXAMPLE'],
+    ['key', 'github_pat_11ABCDEF'],
+    ['key', 'xoxb-123-abc'],
+    ['key', 'eyJabc'],
+    ['key', 'AbCdEfGhIjKlMnOpQrStUvWxYz123456'],
+    ['header', 'sk-proj-abc'],
+    ['header', 'AKIAIOSFODNN7EXAMPLE'],
   ] as const)('rejects %s %j', (field, value) => {
     expect(isValidMcpCredentialField(field, value)).toBe(false);
   });
@@ -204,6 +229,85 @@ describe('evaluateMcpCredentials', () => {
       issue: 'invalid',
       invalidFields: ['secret'],
     });
+  });
+});
+
+describe('looksLikeToken', () => {
+  it('ignores surrounding spaces', () => {
+    expect(looksLikeToken('  ghp_AbC123 ')).toBe(true);
+  });
+
+  it('flags a long run of hex digits', () => {
+    expect(looksLikeToken('0123456789abcdef'.repeat(2))).toBe(true);
+  });
+});
+
+describe('evaluateMcpCredentials with the listed secrets', () => {
+  const LISTED = new Set(['github-token']);
+
+  it('locks the key to token for a secret from the list', () => {
+    const [row] = evaluateMcpCredentials(
+      [credential({ key: 'pat' })],
+      LOADED,
+      {},
+      LISTED,
+    );
+    expect(row).toMatchObject({ key: 'token', keyLocked: true, issue: null });
+  });
+
+  it('locks the key for a listed secret typed with surrounding spaces', () => {
+    const [row] = evaluateMcpCredentials(
+      [credential({ secret: 'github-token ', key: 'pat' })],
+      LOADED,
+      {},
+      LISTED,
+    );
+    expect(row).toMatchObject({ key: 'token', keyLocked: true });
+  });
+
+  it('waits for the secret list before sending a key other than token', () => {
+    const rows = evaluateMcpCredentials(
+      [
+        credential({ id: 'c1', key: 'pat' }),
+        credential({ id: 'c2', header: 'X-Other' }),
+      ],
+      LOADED,
+      {},
+      new Set(),
+      true,
+    );
+    expect(rows.map(row => row.issue)).toEqual(['secrets-pending', null]);
+  });
+
+  it('keeps a typed key for a secret outside the list', () => {
+    const [row] = evaluateMcpCredentials(
+      [credential({ secret: 'outside', key: 'pat' })],
+      LOADED,
+      {},
+      LISTED,
+    );
+    expect(row).toMatchObject({ key: 'pat', keyLocked: false, issue: null });
+  });
+
+  it('never sends a token stored as the key of a listed secret', () => {
+    const rows = evaluateMcpCredentials(
+      [credential({ key: 'ghp_AbC123' })],
+      LOADED,
+      {},
+      LISTED,
+    );
+    expect(rows[0].issue).toBeNull();
+    expect(readyMcpCredentials(rows)[0].key).toBe('token');
+  });
+
+  it('flags a token typed as the key of a secret outside the list', () => {
+    const [row] = evaluateMcpCredentials(
+      [credential({ secret: 'outside', key: 'ghp_AbC123' })],
+      LOADED,
+      {},
+      LISTED,
+    );
+    expect(row).toMatchObject({ issue: 'invalid', invalidFields: ['key'] });
   });
 });
 
@@ -472,6 +576,140 @@ describe('useChatMcpCredentials', () => {
       issue: null,
     });
     expect(stored()['team-a'][0].secret).toBe('github-token');
+  });
+
+  function mockListedSecrets(names: string[]) {
+    vi.mocked(useGetAllSecrets).mockReturnValue({
+      data: names.map(name => ({ name })),
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useGetAllSecrets>);
+  }
+
+  it('saves the header and key only when the field is committed', () => {
+    const { result } = render();
+    const id = addGithubCredential(result, 'typed-secret');
+
+    act(() => {
+      result.current.updateRow(id, { header: 'X-Token', key: 'pat' });
+    });
+    expect(result.current.rows[0]).toMatchObject({
+      header: 'X-Token',
+      key: 'pat',
+      issue: null,
+    });
+    expect(stored()['team-a'][0]).toMatchObject({
+      header: 'Authorization',
+      key: 'token',
+    });
+
+    act(() => {
+      result.current.commitRow(id);
+    });
+
+    expect(stored()['team-a'][0]).toMatchObject({
+      header: 'X-Token',
+      key: 'pat',
+    });
+  });
+
+  it('never saves any part of a token typed one character at a time', () => {
+    const { result } = render();
+    const id = addGithubCredential(result, 'typed-secret');
+    const token = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789';
+
+    for (let i = 1; i <= token.length; i++) {
+      act(() => {
+        result.current.updateRow(id, { key: token.slice(0, i) });
+      });
+    }
+    act(() => {
+      result.current.commitRow(id);
+    });
+
+    expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).not.toContain(
+      'AbCd',
+    );
+    expect(result.current.blocked).toBe(true);
+  });
+
+  it('keeps a custom key while a secret name is typed over a listed one', () => {
+    mockListedSecrets(['db']);
+    const { result } = render();
+    const id = addGithubCredential(result, 'typed-secret');
+    act(() => {
+      result.current.updateRow(id, { key: 'password' });
+    });
+    act(() => {
+      result.current.commitRow(id);
+    });
+
+    act(() => {
+      result.current.updateRow(id, { secret: 'db' });
+    });
+    expect(result.current.rows[0]).toMatchObject({
+      key: 'token',
+      keyLocked: true,
+    });
+    act(() => {
+      result.current.updateRow(id, { secret: 'db-prod' });
+    });
+
+    expect(stored()['team-a'][0]).toMatchObject({
+      secret: 'db-prod',
+      key: 'password',
+    });
+    expect(result.current.rows[0]).toMatchObject({
+      key: 'password',
+      keyLocked: false,
+    });
+  });
+
+  it('sends token for a listed secret that arrives after mount', () => {
+    vi.mocked(useGetAllSecrets).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+    } as unknown as ReturnType<typeof useGetAllSecrets>);
+    storeRows({ 'team-a': [credential({ key: 'pat' })] });
+    const { result, rerender } = render();
+    expect(result.current.rows[0].issue).toBe('secrets-pending');
+
+    mockListedSecrets(['github-token']);
+    rerender();
+
+    expect(result.current.credentials).toEqual([
+      expect.objectContaining({ key: 'token' }),
+    ]);
+  });
+
+  it('cleans a header and key that an older version saved as tokens', () => {
+    storeRows({
+      'team-a': [credential({ header: 'sk-proj-abc', key: 'ghp_AbC123' })],
+    });
+
+    render();
+
+    expect(stored()['team-a'][0]).toMatchObject({ header: '', key: 'token' });
+  });
+
+  it('keeps a token pasted as the key out of local storage and blocks sending', () => {
+    const { result } = render();
+    const id = addGithubCredential(result, 'typed-secret');
+
+    act(() => {
+      result.current.updateRow(id, { key: 'ghp_FakeToken1234567890' });
+    });
+    act(() => {
+      result.current.commitRow(id);
+    });
+
+    expect(result.current.rows[0].key).toBe('ghp_FakeToken1234567890');
+    expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).not.toContain(
+      'FakeToken',
+    );
+    expect(result.current.blocked).toBe(true);
+    expect(result.current.credentials).toEqual([]);
   });
 
   it('keeps each namespace separate', () => {

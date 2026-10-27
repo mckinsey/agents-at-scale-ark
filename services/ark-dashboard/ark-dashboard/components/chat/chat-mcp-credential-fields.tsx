@@ -31,6 +31,7 @@ import {
   type McpCredentialRow,
   type McpServerTargetIssue,
   getMcpServerTargetIssue,
+  looksLikeToken,
 } from '@/lib/hooks/use-chat-mcp-credentials';
 
 interface Props {
@@ -78,8 +79,10 @@ function issueMessage(row: McpCredentialRow): string | null {
       return 'Checking MCP servers…';
     case 'servers-unavailable':
       return "Couldn't load the MCP servers, so this credential can't be checked.";
+    case 'secrets-pending':
+      return 'Checking secrets…';
     case 'invalid':
-      return invalidMessage(row.invalidFields);
+      return invalidMessage(row);
     case 'incomplete':
       return 'Fill in every field or remove this credential.';
     case 'duplicate':
@@ -89,9 +92,13 @@ function issueMessage(row: McpCredentialRow): string | null {
   }
 }
 
-function invalidMessage(fields: readonly McpCredentialField[]): string {
+function invalidMessage(row: McpCredentialRow): string {
+  const fields = row.invalidFields;
   if (fields.includes('secret')) {
     return 'Enter the name of a secret, not its value. Names use lowercase letters, digits, "-" and ".".';
+  }
+  if ((['header', 'key'] as const).some(field => looksLikeToken(row[field]))) {
+    return 'This looks like a token. Store it in a secret and pick the secret here.';
   }
   if (fields.includes('header')) {
     return 'Header names cannot contain spaces or special characters.';
@@ -123,7 +130,12 @@ const ABOUT_TOOLTIP =
   'Send a header from a secret to one MCP server with every message in this chat. ' +
   `Only MCP servers labelled with ${ARK_LABELS.NAME} can be picked. ` +
   'When you are signed in, your personal secrets are listed too. ' +
-  'Choices are kept per namespace in this browser, as names only.';
+  'Choices are kept per namespace in this browser, as names only. ' +
+  'Put tokens in a secret; never paste one into these fields.';
+
+const KEY_TITLE_LOCKED = 'Secrets in Ark keep their value under the token key.';
+const KEY_TITLE =
+  'The key inside the secret that holds the value, usually token. Never paste a token here.';
 
 interface CredentialRowProps {
   readonly row: McpCredentialRow;
@@ -133,6 +145,7 @@ interface CredentialRowProps {
   readonly isSecretsPending: boolean;
   readonly isSecretsError: boolean;
   readonly onChange: (id: string, patch: McpCredentialPatch) => void;
+  readonly onCommit: (id: string) => void;
   readonly onRemove: (id: string) => void;
   readonly onRetryServers: () => void;
   readonly disabled?: boolean;
@@ -152,6 +165,7 @@ function CredentialRow({
   isSecretsPending,
   isSecretsError,
   onChange,
+  onCommit,
   onRemove,
   onRetryServers,
   disabled,
@@ -216,6 +230,7 @@ function CredentialRow({
           size="sm"
           value={row.header}
           onChange={e => onChange(row.id, { header: e.target.value })}
+          onBlur={() => onCommit(row.id)}
           placeholder="Header name"
           disabled={fieldsDisabled}
           aria-label={`Header name for ${subject}`}
@@ -255,17 +270,20 @@ function CredentialRow({
           size="sm"
           value={row.key}
           onChange={e => onChange(row.id, { key: e.target.value })}
-          placeholder="Key"
+          onBlur={() => onCommit(row.id)}
+          placeholder="Secret key"
+          title={row.keyLocked ? KEY_TITLE_LOCKED : KEY_TITLE}
+          readOnly={row.keyLocked}
           disabled={fieldsDisabled}
           aria-label={`Secret key for ${subject}`}
           aria-invalid={invalid.has('key') || undefined}
           aria-describedby={invalid.has('key') ? describedBy : undefined}
-          className="w-24 shrink-0"
+          className="w-28 shrink-0"
         />
       </div>
 
       {message &&
-        (row.issue === 'servers-pending' ? (
+        (row.issue === 'servers-pending' || row.issue === 'secrets-pending' ? (
           <p id={hintId} className="text-fg-secondary text-sm">
             {message}
           </p>
@@ -296,6 +314,7 @@ export function ChatMcpCredentialFields({
     blocked,
     addRow,
     updateRow,
+    commitRow,
     removeRow,
     retryServers,
     servers,
@@ -399,6 +418,7 @@ export function ChatMcpCredentialFields({
                   isSecretsPending={isSecretsPending}
                   isSecretsError={isSecretsError}
                   onChange={updateRow}
+                  onCommit={commitRow}
                   onRemove={handleRemove}
                   onRetryServers={() => {
                     retryServers();

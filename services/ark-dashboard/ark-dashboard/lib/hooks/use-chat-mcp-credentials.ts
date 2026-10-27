@@ -1,7 +1,7 @@
 'use client';
 
 import { useAtom } from 'jotai';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   type StoredMcpCredential,
@@ -26,6 +26,12 @@ const MAX_NAME_LENGTH = 253;
 const HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const SECRET_NAME_PATTERN = /^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/;
 const SECRET_KEY_PATTERN = /^[-._a-zA-Z0-9]+$/;
+const TOKEN_PREFIX_PATTERN =
+  /^(gh[pousr]_|github_pat_|glpat-|sk[-_]|rk_|hf_|npm_|dop_v1_|xox[abeoprs]-|xapp-|AIza|AKIA|ASIA|eyJ)/;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TOKEN_RUN_PATTERN = /[A-Za-z0-9]{24,}/;
+const COMMIT_ON_BLUR_FIELDS = ['header', 'key'] as const;
 
 type McpServerTarget = Pick<MCPServer, 'name' | 'labels'>;
 
@@ -38,6 +44,7 @@ export type McpCredentialIssue =
   | 'server-missing'
   | 'servers-pending'
   | 'servers-unavailable'
+  | 'secrets-pending'
   | 'invalid'
   | 'incomplete'
   | 'duplicate';
@@ -45,6 +52,7 @@ export type McpCredentialIssue =
 export interface McpCredentialRow extends StoredMcpCredential {
   issue: McpCredentialIssue | null;
   invalidFields: McpCredentialField[];
+  keyLocked: boolean;
 }
 
 export type McpCredentialPatch = Partial<
@@ -67,6 +75,15 @@ const FIELD_VALIDATORS: Record<
   key: SECRET_KEY_PATTERN,
 };
 
+export function looksLikeToken(value: string): boolean {
+  const trimmed = value.trim();
+  return (
+    TOKEN_PREFIX_PATTERN.test(trimmed) ||
+    UUID_PATTERN.test(trimmed) ||
+    TOKEN_RUN_PATTERN.test(trimmed)
+  );
+}
+
 export function isValidMcpCredentialField(
   field: McpCredentialField,
   value: string,
@@ -74,6 +91,9 @@ export function isValidMcpCredentialField(
   const trimmed = value.trim();
   if (field === 'server' || trimmed === '') {
     return true;
+  }
+  if (field !== 'secret' && looksLikeToken(trimmed)) {
+    return false;
   }
   return (
     trimmed.length <= MAX_NAME_LENGTH && FIELD_VALIDATORS[field].test(trimmed)
@@ -132,18 +152,31 @@ export function evaluateMcpCredentials(
   credentials: readonly StoredMcpCredential[],
   serversState: McpServersState,
   drafts: McpCredentialDrafts = {},
+  listedSecrets: ReadonlySet<string> = new Set(),
+  secretsPending = false,
 ): McpCredentialRow[] {
   const seen = new Set<string>();
 
   return credentials.map(stored => {
-    const credential = { ...stored, ...drafts[stored.id] };
+    const merged = { ...stored, ...drafts[stored.id] };
+    const keyLocked = listedSecrets.has(merged.secret.trim());
+    const credential = keyLocked
+      ? { ...merged, key: DEFAULT_MCP_CREDENTIAL_KEY }
+      : merged;
     const invalidFields = (['header', 'secret', 'key'] as const).filter(
       field => !isValidMcpCredentialField(field, credential[field]),
     );
     if (isBlank(credential) && invalidFields.length === 0) {
-      return { ...credential, issue: null, invalidFields };
+      return { ...credential, issue: null, invalidFields, keyLocked };
     }
     let issue = serverIssue(credential, serversState);
+    if (
+      !issue &&
+      secretsPending &&
+      credential.key.trim() !== DEFAULT_MCP_CREDENTIAL_KEY
+    ) {
+      issue = 'secrets-pending';
+    }
     if (!issue && invalidFields.length > 0) {
       issue = 'invalid';
     }
@@ -155,7 +188,7 @@ export function evaluateMcpCredentials(
       issue = 'duplicate';
     }
     seen.add(target);
-    return { ...credential, issue, invalidFields };
+    return { ...credential, issue, invalidFields, keyLocked };
   });
 }
 
@@ -208,7 +241,10 @@ export function mcpCredentialStorageKey(
   return owner ? `${owner}/${namespace}` : namespace;
 }
 
-function splitPatch(patch: McpCredentialPatch): {
+function splitPatch(
+  patch: McpCredentialPatch,
+  holdFields: readonly McpCredentialField[] = [],
+): {
   valid: McpCredentialPatch;
   invalid: McpCredentialPatch;
 } {
@@ -219,13 +255,37 @@ function splitPatch(patch: McpCredentialPatch): {
     if (value === undefined) {
       continue;
     }
-    if (isValidMcpCredentialField(field, value)) {
+    if (
+      !holdFields.includes(field) &&
+      isValidMcpCredentialField(field, value)
+    ) {
       valid[field] = value;
     } else {
       invalid[field] = value;
     }
   }
   return { valid, invalid };
+}
+
+function sanitizeStoredCredential(
+  credential: StoredMcpCredential,
+): StoredMcpCredential {
+  return {
+    ...credential,
+    header: isValidMcpCredentialField('header', credential.header)
+      ? credential.header
+      : '',
+    key: isValidMcpCredentialField('key', credential.key)
+      ? credential.key
+      : DEFAULT_MCP_CREDENTIAL_KEY,
+  };
+}
+
+function needsSanitizing(credential: StoredMcpCredential): boolean {
+  return (
+    !isValidMcpCredentialField('header', credential.header) ||
+    !isValidMcpCredentialField('key', credential.key)
+  );
 }
 
 type UseChatMcpCredentialsOptions = {
@@ -242,6 +302,10 @@ export function useChatMcpCredentials({
   const servers = useGetAllMcpServers({ enabled });
   const secrets = useGetAllSecrets(user ? 'all' : 'shared', { enabled });
   const storageKey = mcpCredentialStorageKey(namespace, user?.email);
+  const listedSecrets = useMemo(
+    () => new Set((secrets.data ?? []).map(secret => secret.name)),
+    [secrets.data],
+  );
 
   const credentials = useMemo(
     () => readStoredMcpCredentials(stored, storageKey),
@@ -254,8 +318,17 @@ export function useChatMcpCredentials({
         credentials,
         { servers: servers.data, isPending: servers.isPending },
         drafts,
+        listedSecrets,
+        secrets.isPending,
       ),
-    [credentials, servers.data, servers.isPending, drafts],
+    [
+      credentials,
+      servers.data,
+      servers.isPending,
+      drafts,
+      listedSecrets,
+      secrets.isPending,
+    ],
   );
 
   const ready = useMemo(() => readyMcpCredentials(rows), [rows]);
@@ -281,6 +354,12 @@ export function useChatMcpCredentials({
     [storageKey, setStored],
   );
 
+  useEffect(() => {
+    if (credentials.some(needsSanitizing)) {
+      writeCredentials(current => current.map(sanitizeStoredCredential));
+    }
+  }, [credentials, writeCredentials]);
+
   const addRow = useCallback((): string => {
     const id = generateUUID();
     writeCredentials(current => [
@@ -298,7 +377,7 @@ export function useChatMcpCredentials({
 
   const updateRow = useCallback(
     (id: string, patch: McpCredentialPatch) => {
-      const { valid, invalid } = splitPatch(patch);
+      const { valid, invalid } = splitPatch(patch, COMMIT_ON_BLUR_FIELDS);
       setDrafts(current => {
         const draft = { ...current[id] };
         for (const field of CREDENTIAL_FIELDS) {
@@ -321,6 +400,43 @@ export function useChatMcpCredentials({
       }
     },
     [writeCredentials],
+  );
+
+  const commitRow = useCallback(
+    (id: string) => {
+      const draft = drafts[id];
+      if (!draft) {
+        return;
+      }
+      const committed: McpCredentialPatch = {};
+      for (const field of COMMIT_ON_BLUR_FIELDS) {
+        const value = draft[field];
+        if (value !== undefined && isValidMcpCredentialField(field, value)) {
+          committed[field] = value;
+        }
+      }
+      if (Object.keys(committed).length === 0) {
+        return;
+      }
+      setDrafts(current => {
+        const next = { ...current, [id]: { ...current[id] } };
+        for (const field of Object.keys(committed) as McpCredentialField[]) {
+          if (next[id][field] === committed[field]) {
+            delete next[id][field];
+          }
+        }
+        if (Object.keys(next[id]).length === 0) {
+          delete next[id];
+        }
+        return next;
+      });
+      writeCredentials(current =>
+        current.map(credential =>
+          credential.id === id ? { ...credential, ...committed } : credential,
+        ),
+      );
+    },
+    [drafts, writeCredentials],
   );
 
   const removeRow = useCallback(
@@ -349,6 +465,7 @@ export function useChatMcpCredentials({
     isSecretsError: secrets.isError,
     addRow,
     updateRow,
+    commitRow,
     removeRow,
   };
 }
