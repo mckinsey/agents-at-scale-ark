@@ -154,13 +154,52 @@ func TestRequireResourceVersion_QueryErrorIsNotTooLarge(t *testing.T) {
 	}
 }
 
-func TestLiftHeadFresh_SkipsTheFloorReadWhenTheHeadSuffices(t *testing.T) {
-	p, mock := newMockedBackend(t)
-	if got := p.liftHeadFresh(context.Background(), 20, 20); got != 20 {
-		t.Errorf("liftHeadFresh() = %d, want 20", got)
+func TestFreshHead(t *testing.T) {
+	tests := []struct {
+		name        string
+		maxRV       int64
+		cachedFloor int64
+		base        int64
+		want        uint64
+		dbFloor     int64
+		readsFloor  bool
+		wantHead    int64
+	}{
+		{name: "max already enough", maxRV: 20, want: 20, wantHead: 20},
+		{name: "cached floor lifts without a read", maxRV: 10, cachedFloor: 30, want: 25, wantHead: 30},
+		{name: "base lifts an empty store", maxRV: 0, base: 1, want: 1, wantHead: 1},
+		{name: "re-reads the floor when short", maxRV: 10, want: 15, dbFloor: 15, readsFloor: true, wantHead: 15},
+		{name: "still short after the read", maxRV: 10, want: 16, dbFloor: 15, readsFloor: true, wantHead: 15},
 	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unexpected query: %v", err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p, mock := newMockedBackend(t)
+			p.cachedPurgeFloor.Store(tc.cachedFloor)
+			p.headRevisionBase = tc.base
+			if tc.readsFloor {
+				expectFloor(mock, tc.dbFloor)
+			}
+			if got := p.freshHead(context.Background(), tc.maxRV, tc.want); got != tc.wantHead {
+				t.Errorf("freshHead() = %d, want %d", got, tc.wantHead)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("floor reads: %v", err)
+			}
+		})
+	}
+}
+
+func TestWatch_PlainWatchResourceVersionParsing(t *testing.T) {
+	p := &PostgreSQLBackend{}
+	for _, rv := range []string{"abc", "-5", "+5", "9223372036854775808", "18446744073709551616"} {
+		w, err := p.Watch(context.Background(), "Agent", "default", storage.WatchOptions{ResourceVersion: rv})
+		if w != nil {
+			w.Stop()
+			t.Fatalf("resourceVersion %q: expected no watcher", rv)
+		}
+		if !errors.Is(err, storage.ErrInvalidRequest) {
+			t.Errorf("resourceVersion %q: want ErrInvalidRequest, got %v", rv, err)
+		}
 	}
 }
 
