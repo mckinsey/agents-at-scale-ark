@@ -92,6 +92,10 @@ spec:
 
 The resolved endpoint is written to `status.resolvedAddress`.
 
+## Name label
+
+Ark sets the label `ark.mckinsey.com/name` to the server's name on every create and update, and removes it when the name is not a valid label value (for example longer than 63 characters). A value set by hand is replaced. Query and Agent overrides use it to [select one MCP server by name](/user-guide/overrides#select-an-mcp-server-by-name).
+
 ## Using MCP servers with agents
 
 Agents never reference an MCPServer directly. A [Tool](/reference/resources/tools) of `type: mcp` binds a specific tool exposed by the server, and the agent references that Tool:

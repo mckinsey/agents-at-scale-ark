@@ -136,7 +136,7 @@ overrides:
 
 ### Select an MCP Server by Name
 
-MCPServers created or updated with `/v1/mcp-servers` carry the label `ark.mckinsey.com/name` set to their name. Use it to send headers to a single server:
+Every MCPServer carries the label `ark.mckinsey.com/name` set to its name. Ark sets it on every create and update, so it cannot be set to another server's name. Use it to send headers to a single server:
 
 ```yaml
 overrides:
@@ -153,9 +153,9 @@ overrides:
         ark.mckinsey.com/name: github
 ```
 
-The **MCP credentials** block of the dashboard chat builds one such override per MCP server from the rows you add, and sends it with every agent or team query in the namespace. Ark API accepts a header that references a [personal Secret](/user-guide/secrets#personal-secrets) only from the Secret's owner, in a Query `mcpserver` override with a non-empty `labelSelector`. The header goes to whatever the selected MCPServer points at when the query runs, so anyone who can change that server's `address` receives it.
+The **MCP credentials** block of the dashboard chat builds one such override per MCP server from the rows you add, and sends it with every agent or team query in the namespace. A header that references a [personal Secret](/user-guide/secrets#personal-secrets) is accepted only in a Query `mcpserver` override whose selector is exactly this one: `matchLabels` with `ark.mckinsey.com/name` and nothing else. The header goes to whatever the selected MCPServer points at when the query runs, so anyone who can change that server's `address` receives it.
 
-The controller does not add this label. Add `ark.mckinsey.com/name: <name>` to MCPServers you apply with `kubectl`, Helm or GitOps. A server whose name is longer than 63 characters gets no name label and cannot be selected this way. The API is the only place that checks the label, so anyone who can edit MCPServers with `kubectl` can set it to another server's name. See [Upgrading](/reference/upgrading#mcpservers-get-a-name-label).
+MCPServers created before the upgrade get the label the next time they are updated; the controller does not update them by itself. A server whose name is longer than 63 characters gets no name label and cannot be selected this way. See [Upgrading](/reference/upgrading#mcpservers-get-a-name-label).
 
 ### Match Expressions
 
