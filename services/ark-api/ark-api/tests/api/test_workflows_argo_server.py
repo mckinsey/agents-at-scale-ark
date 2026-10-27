@@ -47,7 +47,7 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
             return httpx.Response(status_code, json={"metadata": metadata, "items": items})
         return handler
 
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
     def test_sorts_page_by_start_time_and_returns_next_offset(self, mock_auth_api_cls, mock_dynamic_client_cls, _ctx, _api):
         mock_auth_api_cls.return_value = access_review(True)
@@ -152,7 +152,7 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
         self.assertEqual(response.json()["items"], [])
         self.assertEqual(self.requests, [])
 
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
     def test_falls_back_to_kubernetes_when_argo_fails(self, mock_auth_api_cls, mock_dynamic_client_cls, _ctx, _api):
         mock_auth_api_cls.return_value = access_review(True)
@@ -165,7 +165,7 @@ class TestListWorkflowsFromArgoServer(unittest.TestCase):
         self.assertEqual(response.json()["items"][0]["metadata"]["name"], "from-k8s")
         api_resource.get.assert_called_once()
 
-    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.create_dynamic_client')
     @patch('ark_api.api.v1.resources.client.AuthorizationV1Api')
     def test_kubernetes_continue_token_uses_kubernetes(self, mock_auth_api_cls, mock_dynamic_client_cls, _ctx, _api):
         api_resource = self.kubernetes_list(mock_dynamic_client_cls, [workflow("from-k8s")])
