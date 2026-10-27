@@ -25,6 +25,10 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$`
 	ToolCallTimeout string `json:"toolCallTimeout,omitempty"`
+	// Transport selects the MCP transport. "http" is Streamable HTTP.
+	// "sse" is the legacy HTTP+SSE transport, deprecated by the MCP
+	// specification; use it only for servers that do not support
+	// Streamable HTTP.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=http;sse
 	// +kubebuilder:default="http"
