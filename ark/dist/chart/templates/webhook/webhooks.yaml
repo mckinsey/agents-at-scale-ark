@@ -66,6 +66,31 @@ webhooks:
           - v1alpha1
         resources:
           - models
+  - name: mmcpserver-v1.kb.io
+    {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
+    clientConfig:
+      service:
+        name: ark-webhook-service
+        namespace: {{ .Release.Namespace }}
+        path: /mutate-ark-mckinsey-com-v1alpha1-mcpserver
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
+    sideEffects: None
+    admissionReviewVersions:
+      - v1
+    rules:
+      - operations:
+          - CREATE
+          - UPDATE
+        apiGroups:
+          - ark.mckinsey.com
+        apiVersions:
+          - v1alpha1
+        resources:
+          - mcpservers
   - name: mquery-v1.kb.io
     {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
