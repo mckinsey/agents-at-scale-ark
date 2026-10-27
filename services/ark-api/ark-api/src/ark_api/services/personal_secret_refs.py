@@ -6,13 +6,15 @@ from fastapi import HTTPException
 from kubernetes_asyncio.client.rest import ApiException
 
 from ark_sdk.k8s import get_context, read_secret_labels
+from ark_sdk.labels import NAME_LABEL
 from ark_sdk.secret_scope import SecretScope, is_reserved_name
 
 logger = logging.getLogger(__name__)
 
 PERSONAL_SECRET_REF_ERROR = (
     "This resource references a Secret it cannot use. Personal secrets can only be referenced "
-    "from MCP server header overrides of a Query that sets a labelSelector."
+    "from MCP server header overrides of a Query that selects one server with matchLabels "
+    "ark.mckinsey.com/name."
 )
 SECRET_REF_CHECK_ERROR = "Could not check the Secrets this resource references"
 
@@ -39,12 +41,18 @@ def iter_secret_refs(obj: Any, path: SecretRefPath = ()) -> Iterator[Tuple[Secre
             yield from iter_secret_refs(item, path + (index,))
 
 
-def _has_label_selector(selector: Any) -> bool:
-    return isinstance(selector, dict) and bool(selector.get("matchLabels") or selector.get("matchExpressions"))
+def _selects_one_server_by_name(selector: Any) -> bool:
+    if not isinstance(selector, dict) or selector.get("matchExpressions"):
+        return False
+    match_labels = selector.get("matchLabels")
+    if not isinstance(match_labels, dict) or len(match_labels) != 1:
+        return False
+    name = match_labels.get(NAME_LABEL)
+    return isinstance(name, str) and name != ""
 
 
 def query_override_header_allows(path: SecretRefPath, spec: Dict[str, Any]) -> bool:
-    """Allow only overrides[i].headers[j].value.valueFrom.secretKeyRef of an mcpserver override with a labelSelector."""
+    """Allow only overrides[i].headers[j].value.valueFrom.secretKeyRef of an mcpserver override that selects one server by name."""
     if len(path) != 7 or path[0] != "overrides" or path[2] != "headers" or path[4:] != _QUERY_OVERRIDE_HEADER_TAIL:
         return False
     override_index, header_index = path[1], path[3]
@@ -57,7 +65,7 @@ def query_override_header_allows(path: SecretRefPath, spec: Dict[str, Any]) -> b
     return (
         isinstance(override, dict)
         and override.get("resourceType") == "mcpserver"
-        and _has_label_selector(override.get("labelSelector"))
+        and _selects_one_server_by_name(override.get("labelSelector"))
     )
 
 
