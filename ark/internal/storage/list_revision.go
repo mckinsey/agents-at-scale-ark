@@ -19,6 +19,10 @@ type TooLargeResourceVersionError struct {
 	Current   int64
 }
 
+func NewTooLargeResourceVersionError(requested uint64, current int64) error {
+	return &TooLargeResourceVersionError{Requested: requested, Current: current}
+}
+
 func (e *TooLargeResourceVersionError) Error() string {
 	return fmt.Sprintf("too large resource version: %d, current: %d", e.Requested, e.Current)
 }

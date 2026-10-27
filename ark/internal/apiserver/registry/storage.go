@@ -109,9 +109,10 @@ func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.G
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	if err := requireResourceVersion(sctx, s.backend, options); err != nil {
-		metrics.RecordStorageOperation("get", s.config.Kind, storageOutcome(err))
+		outcome, apiErr := classifyStorageError(err, err)
+		metrics.RecordStorageOperation("get", s.config.Kind, outcome)
 		metrics.RecordStorageLatency("get", s.config.Kind, start)
-		return nil, getError(err)
+		return nil, apiErr
 	}
 	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
@@ -145,9 +146,10 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	defer cancel()
 	objects, continueToken, listRV, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
 	if err != nil {
-		metrics.RecordStorageOperation("list", s.config.Kind, storageOutcome(err))
+		outcome, apiErr := classifyStorageError(err, fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
+		metrics.RecordStorageOperation("list", s.config.Kind, outcome)
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
-		return nil, listError(err, s.config.Resource)
+		return nil, apiErr
 	}
 
 	list := s.config.NewListFunc()
