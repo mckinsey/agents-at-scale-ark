@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +33,9 @@ const (
 	A2AServerReady            = "Ready"
 	A2AServerDiscovering      = "Discovering"
 	A2AServerEndpointOverride = "EndpointOverride"
+
+	maxCardURLLength     = 2048
+	maxCardVersionLength = 256
 )
 
 type A2AServerReconciler struct {
@@ -107,15 +111,19 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 	// Use the already resolved address from status
 	resolvedAddress := a2aServer.Status.LastResolvedAddress
 	// Don't pass recorder - we handle events at controller level based on actual changes
-	agentCard, err := arka2a.DiscoverA2AAgents(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
+	agentCard, protocol, err := arka2a.DiscoverA2AAgentCard(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
 	if err != nil {
+		clearAgentCardStatus(&a2aServer.Status)
 		if err := r.reconcileConditionsDiscoveryFailed(ctx, &a2aServer, err, resolvedAddress); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
-	if err := r.reconcileEndpoint(ctx, &a2aServer, r.resolveEndpoint(&a2aServer, resolvedAddress, agentCard)); err != nil {
+	cardChanged := applyAgentCardStatus(&a2aServer.Status, agentCard, protocol)
+
+	endpointChanged, err := r.reconcileEndpoint(ctx, &a2aServer, r.resolveEndpoint(&a2aServer, resolvedAddress, agentCard))
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -128,7 +136,44 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
-	return r.finalizeA2AServerProcessing(ctx, a2aServer, agentsChanged)
+	return r.finalizeA2AServerProcessing(ctx, a2aServer, agentsChanged, cardChanged || endpointChanged)
+}
+
+// applyAgentCardStatus copies agent card details into the status and returns true if any changed
+func applyAgentCardStatus(status *arkv1prealpha1.A2AServerStatus, agentCard *arka2a.A2AAgentCard, protocol string) bool {
+	skillCount := int32(len(agentCard.Skills))
+	streaming := agentCard.Capabilities.Streaming != nil && *agentCard.Capabilities.Streaming
+	cardURL := truncateRunes(agentCard.URL, maxCardURLLength)
+	cardVersion := truncateRunes(agentCard.Version, maxCardVersionLength)
+
+	changed := status.NegotiatedProtocol != protocol ||
+		status.CardURL != cardURL ||
+		status.CardVersion != cardVersion ||
+		status.SkillCount == nil || *status.SkillCount != skillCount ||
+		status.StreamingSupported == nil || *status.StreamingSupported != streaming
+
+	status.NegotiatedProtocol = protocol
+	status.CardURL = cardURL
+	status.CardVersion = cardVersion
+	status.SkillCount = &skillCount
+	status.StreamingSupported = &streaming
+	return changed
+}
+
+func clearAgentCardStatus(status *arkv1prealpha1.A2AServerStatus) {
+	status.NegotiatedProtocol = ""
+	status.CardURL = ""
+	status.CardVersion = ""
+	status.SkillCount = nil
+	status.StreamingSupported = nil
+}
+
+func truncateRunes(s string, n int) string {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n])
 }
 
 // reconcileCondition updates a condition on the A2AServer and returns true if it changed
@@ -186,7 +231,8 @@ func (r *A2AServerReconciler) resolveEndpoint(a2aServer *arkv1prealpha1.A2AServe
 }
 
 // reconcileEndpoint persists the resolved endpoint and its condition when they change.
-func (r *A2AServerReconciler) reconcileEndpoint(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, resolved arka2a.ResolvedEndpoint) error {
+// reconcileEndpoint records the resolved endpoint and reports whether the status changed.
+func (r *A2AServerReconciler) reconcileEndpoint(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, resolved arka2a.ResolvedEndpoint) (bool, error) {
 	conditionChanged := false
 	switch {
 	case !arka2a.UsesCardEndpoint(a2aServer.Spec.EndpointResolution):
@@ -206,9 +252,9 @@ func (r *A2AServerReconciler) reconcileEndpoint(ctx context.Context, a2aServer *
 	a2aServer.Status.RejectedEndpoint = resolved.Rejected
 
 	if endpointChanged || conditionChanged {
-		return r.updateStatusWithConditions(ctx, a2aServer)
+		return true, r.updateStatusWithConditions(ctx, a2aServer)
 	}
-	return nil
+	return false, nil
 }
 
 func (r *A2AServerReconciler) emitEndpointRejected(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, resolved arka2a.ResolvedEndpoint) {
@@ -367,8 +413,9 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 		return false, fmt.Errorf("failed to get agent %s: %w", agentName, getErr)
 	}
 
-	// Only update if the skills, endpoint or streaming annotations have changed
-	if agentAnnotationsChanged(existingAgent.Annotations, agent.Annotations) {
+	// The A2AServer is the only source for its agents, so any drift in the spec
+	// or the card-derived annotations is reverted.
+	if agentAnnotationsChanged(existingAgent.Annotations, agent.Annotations) || !equality.Semantic.DeepEqual(existingAgent.Spec, agent.Spec) {
 		existingAgent.Spec = agent.Spec
 		existingAgent.Annotations = agent.Annotations
 		if err := r.Update(ctx, existingAgent); err != nil {
@@ -391,9 +438,11 @@ func agentAnnotationsChanged(existing, desired map[string]string) bool {
 	return false
 }
 
-func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a2aServer arkv1prealpha1.A2AServer, agentsChanged bool) (ctrl.Result, error) {
+// statusChanged reports that this reconcile changed the status, so the
+// conditions must be finalized and persisted even when the agent is unchanged.
+func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a2aServer arkv1prealpha1.A2AServer, agentsChanged, statusChanged bool) (ctrl.Result, error) {
 	readyCondition := meta.FindStatusCondition(a2aServer.Status.Conditions, A2AServerReady)
-	if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue && readyCondition.Reason == "AgentDiscovered" && !agentsChanged {
+	if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue && readyCondition.Reason == "AgentDiscovered" && !agentsChanged && !statusChanged {
 		// Already ready and no changes - skip event emission
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
