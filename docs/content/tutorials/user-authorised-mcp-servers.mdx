@@ -26,7 +26,7 @@ MCPServer.spec.headers  <  MCPServer.spec.authorization  <  Agent.spec.overrides
 
 The `MCPServer`-level credential applies to both tool **discovery** and tool **calls**, so an agent can use the server with no override at all. A per-query `Authorization` override replaces it for that call — that's what makes the request "user authorised."
 
-Each user keeps their token in a [personal Secret](/user-guide/secrets#personal-secrets). Only its owner sees it in the dashboard and `/v1/secrets`. Ark resolves it only from a header of a Query `mcpserver` override, and Ark API accepts that override only from the owner and only with a `labelSelector`.
+Each user keeps their token in a [personal Secret](/user-guide/secrets#personal-secrets). Only its owner sees it in the dashboard and `/v1/secrets`. Ark resolves it only from a header of a Query `mcpserver` override, and Ark API accepts that override only from the owner and only with a selector that picks one server by its name label.
 
 ## Prerequisites
 
@@ -51,8 +51,6 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: MCPServer
 metadata:
   name: github
-  labels:
-    ark.mckinsey.com/name: github
 spec:
   address:
     value: "https://api.githubcopilot.com/mcp/"
@@ -71,7 +69,7 @@ spec:
         value: "ark-tutorial/1.0"
 ```
 
-The `ark.mckinsey.com/name` label lets a query override pick this one server by name. Ark API sets it on the MCPServers it creates or updates; a server applied with `kubectl` needs it in the manifest.
+Ark labels every MCPServer with its own name, here `ark.mckinsey.com/name: github`, so a query override can pick this one server by name.
 
 Apply it and wait for discovery:
 
@@ -131,7 +129,7 @@ As Alice, open a chat with `github-agent`. Above the message box sits the **MCP 
 
 Ask "Who am I on GitHub? Reply with just my login." The chat sends the row as an `mcpserver` override that selects `ark.mckinsey.com/name: github` and reads Alice's Secret, so the `github-get-me` call runs with her token and the agent answers with her login. Bob does the same with his own Secret, and the same agent answers as Bob, without re-registering the server.
 
-The rows apply to every agent and team chat in the namespace, and the browser keeps them for Alice in that namespace. A server without the name label shows **Needs name label** and cannot be picked. See [use personal secrets from the chat](/user-guide/secrets#use-personal-secrets-from-the-chat) for the cases where the chat blocks sending.
+The rows apply to every agent and team chat in the namespace, and the browser keeps them for Alice in that namespace. A server created before the upgrade and not updated since has no name label, shows **Needs name label** and cannot be picked. See [use personal secrets from the chat](/user-guide/secrets#use-personal-secrets-from-the-chat) for the cases where the chat blocks sending.
 
 ## Step 5 — Query as the user through the API
 
@@ -175,7 +173,7 @@ curl -s "$ARK_API/v1/queries/who-am-i?namespace=default" \
 # alice
 ```
 
-Ark API accepts the query only because Alice owns the Secret. If Bob sends a query that references Alice's Secret, or Alice leaves out the `labelSelector`, Ark API returns `422` and creates nothing. Without a selector the header would go to every MCP server the agent uses, so Ark API requires one for personal Secrets.
+Ark API accepts the query only because Alice owns the Secret. If Bob sends a query that references Alice's Secret, or Alice selects the server by anything other than its name label alone, Ark API returns `422` and creates nothing. Selecting by name keeps her token on that one server.
 
 ## Alternative — pass the token at request time
 
