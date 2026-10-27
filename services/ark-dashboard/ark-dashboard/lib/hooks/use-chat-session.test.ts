@@ -1,8 +1,9 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { Provider } from 'jotai';
+import { Provider, createStore } from 'jotai';
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { chatHistoryAtom } from '@/atoms/chat-history';
 import { CHAT_STREAMING_FEATURE_KEY } from '@/atoms/experimental-features';
 import { agentsService, chatService } from '@/lib/services';
 import type { ChatResponse } from '@/lib/services/chat';
@@ -1160,6 +1161,106 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
 
     expect(activeAtSecondSend).toBeUndefined();
     expect(storedActiveQueryName()).toBeUndefined();
+  });
+
+  it('writes no error when polling fails while the page unloads', async () => {
+    globalThis.localStorage.setItem(
+      CHAT_STREAMING_FEATURE_KEY,
+      JSON.stringify(false),
+    );
+    vi.mocked(chatService.submitChatQuery).mockResolvedValueOnce({
+      name: 'q-poll-throw',
+    } as Awaited<ReturnType<typeof chatService.submitChatQuery>>);
+    let rejectResult: ((reason: Error) => void) | undefined;
+    vi.mocked(chatService.getQueryResult).mockImplementationOnce(
+      () =>
+        new Promise<ChatResponse>((_resolve, reject) => {
+          rejectResult = reject;
+        }),
+    );
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const { result } = renderChatSession();
+    let sending: Promise<void> | undefined;
+    act(() => {
+      sending = result.current.sendMessage('hello');
+    });
+
+    await waitFor(() => {
+      expect(storedActiveQueryName()).toBe('q-poll-throw');
+    });
+
+    await act(async () => {
+      globalThis.dispatchEvent(new Event('pagehide'));
+      rejectResult?.(new TypeError('Failed to fetch'));
+      await sending;
+    });
+
+    expect(storedActiveQueryName()).toBe('q-poll-throw');
+    expect(result.current.messages).toEqual([
+      { role: 'user', content: 'hello' },
+    ]);
+    consoleError.mockRestore();
+  });
+
+  it('reports a polling failure that is not caused by leaving the page', async () => {
+    globalThis.localStorage.setItem(
+      CHAT_STREAMING_FEATURE_KEY,
+      JSON.stringify(false),
+    );
+    vi.mocked(chatService.submitChatQuery).mockResolvedValueOnce({
+      name: 'q-poll-error',
+    } as Awaited<ReturnType<typeof chatService.submitChatQuery>>);
+    vi.mocked(chatService.getQueryResult).mockRejectedValueOnce(
+      new Error('boom'),
+    );
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const { result } = renderChatSession();
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    expect(result.current.messages).toEqual([
+      { role: 'user', content: 'hello' },
+      {
+        role: 'assistant',
+        content: 'Error while processing query',
+        metadata: { status: 'failed', queryName: 'q-poll-error' },
+      },
+    ]);
+    expect(storedActiveQueryName()).toBe('q-poll-error');
+    consoleError.mockRestore();
+  });
+
+  it('does not create a broken session when the chat entry is gone', async () => {
+    const store = createStore();
+    vi.mocked(chatService.cancelQuery).mockResolvedValue(undefined as never);
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      {
+        wrapper: ({ children }: { children: React.ReactNode }) =>
+          React.createElement(Provider, { store }, children),
+      },
+    );
+
+    await waitFor(() => {
+      expect(store.get(chatHistoryAtom)[CHAT_KEY]).toBeDefined();
+    });
+
+    await act(async () => {
+      store.set(chatHistoryAtom, {});
+      await result.current.cancelQuery();
+    });
+
+    const session = store.get(chatHistoryAtom)[CHAT_KEY];
+    expect(session?.sessionId).toBeDefined();
+    expect(session?.activeQueryName).toBeUndefined();
   });
 
   it('keeps the active query when polling cannot reach the API', async () => {

@@ -242,11 +242,10 @@ export function useChatSession({
   const setActiveQueryName = useCallback(
     (queryName: string | undefined) => {
       setChatHistory(prev => {
-        const safePrev = prev || {};
-        const currentSession = safePrev[chatKey];
-        if (!currentSession) return safePrev;
+        const currentSession = prev[chatKey];
+        if (!currentSession) return prev;
         return {
-          ...safePrev,
+          ...prev,
           [chatKey]: { ...currentSession, activeQueryName: queryName },
         };
       });
@@ -260,7 +259,7 @@ export function useChatSession({
   );
 
   const getMessages = useCallback(
-    () => store.get(chatHistoryAtom)?.[chatKey]?.messages ?? [],
+    () => store.get(chatHistoryAtom)[chatKey]?.messages ?? [],
     [chatKey, store],
   );
 
