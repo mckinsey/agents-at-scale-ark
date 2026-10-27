@@ -5,7 +5,6 @@ package registry
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,11 +30,11 @@ func resourceVersionError(err error) error {
 	}
 }
 
-func listError(err error, resource string) error {
+func classifyStorageError(err, internal error) (string, error) {
 	if apiErr := resourceVersionError(err); apiErr != nil {
-		return apiErr
+		return "rejected", apiErr
 	}
-	return apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", resource, err))
+	return "error", apierrors.NewInternalError(internal)
 }
 
 func requireResourceVersion(ctx context.Context, backend storage.Backend, options *metav1.GetOptions) error {
@@ -49,13 +48,6 @@ func requireResourceVersion(ctx context.Context, backend storage.Backend, option
 	return backend.RequireResourceVersion(ctx, minRV)
 }
 
-func getError(err error) error {
-	if apiErr := resourceVersionError(err); apiErr != nil {
-		return apiErr
-	}
-	return apierrors.NewInternalError(err)
-}
-
 func errorWatcher(err error) watch.Interface {
 	var status apierrors.APIStatus
 	ch := make(chan watch.Event, 1)
@@ -65,11 +57,4 @@ func errorWatcher(err error) watch.Interface {
 	}
 	close(ch)
 	return watch.NewProxyWatcher(ch)
-}
-
-func storageOutcome(err error) string {
-	if resourceVersionError(err) != nil {
-		return "rejected"
-	}
-	return "error"
 }

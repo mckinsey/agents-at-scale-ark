@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +19,7 @@ import (
 	k8sstorage "k8s.io/apiserver/pkg/storage"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/apiserver/metrics"
 	"mckinsey.com/ark/internal/storage"
 )
 
@@ -171,6 +174,13 @@ func TestStatusStorage_Get_ResourceVersionAheadOfTheStore(t *testing.T) {
 	t.Parallel()
 	ss, backend := newTestStatusStorage()
 	backend.requireErr = &storage.TooLargeResourceVersionError{Requested: 9, Current: 8}
+	rejected := metrics.StorageOperations.WithLabelValues("get_status", "Agent", "rejected")
+	before := testutil.ToFloat64(rejected)
+	t.Cleanup(func() {
+		if got := testutil.ToFloat64(rejected); got != before+1 {
+			t.Errorf("get_status rejected counter = %v, want %v", got, before+1)
+		}
+	})
 
 	_, err := ss.Get(contextWithNamespace(testNS()), testAgentName, &metav1.GetOptions{ResourceVersion: "9"})
 	if !k8sstorage.IsTooLargeResourceVersion(err) {
@@ -228,23 +238,32 @@ func TestGenericStorage_Watch_TooLargeIsAnErrorEvent(t *testing.T) {
 	}
 }
 
-func TestStorageOutcome(t *testing.T) {
+func TestClassifyStorageError(t *testing.T) {
 	t.Parallel()
-	tests := map[string]error{
-		"rejected": &storage.TooLargeResourceVersionError{Requested: 2, Current: 1},
-		"error":    errors.New("connection reset"),
-	}
-	for want, err := range tests {
-		if got := storageOutcome(err); got != want {
-			t.Errorf("storageOutcome(%v) = %q, want %q", err, got, want)
-		}
-	}
-	for _, err := range []error{
+	rejected := []error{
+		&storage.TooLargeResourceVersionError{Requested: 2, Current: 1},
 		fmt.Errorf("%w: bad", storage.ErrInvalidRequest),
 		fmt.Errorf("%w: old", storage.ErrResourceExpired),
-	} {
-		if got := storageOutcome(err); got != "rejected" {
-			t.Errorf("storageOutcome(%v) = %q, want rejected", err, got)
+	}
+	for _, err := range rejected {
+		outcome, apiErr := classifyStorageError(err, err)
+		if outcome != "rejected" {
+			t.Errorf("classifyStorageError(%v) outcome = %q, want rejected", err, outcome)
 		}
+		if apierrors.IsInternalError(apiErr) {
+			t.Errorf("classifyStorageError(%v) = internal error, want a client-facing status", err)
+		}
+	}
+
+	failure := errors.New("connection reset")
+	outcome, apiErr := classifyStorageError(failure, fmt.Errorf("failed to list agents: %w", failure))
+	if outcome != "error" {
+		t.Errorf("outcome = %q, want error", outcome)
+	}
+	if !apierrors.IsInternalError(apiErr) {
+		t.Fatalf("want an InternalError, got %v", apiErr)
+	}
+	if got := apiErr.Error(); !strings.Contains(got, "failed to list agents: connection reset") {
+		t.Errorf("internal error message = %q, want it to carry the wrapped cause", got)
 	}
 }
