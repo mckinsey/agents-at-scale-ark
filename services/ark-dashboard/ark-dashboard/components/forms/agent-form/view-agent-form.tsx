@@ -6,6 +6,7 @@ import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { OutputSchemaField } from '@/components/common/output-schema-field';
 import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 import { YamlViewer } from '@/components/common/yaml-viewer';
+import { CustomHeadersField } from '@/components/forms/shared/custom-headers-field';
 import {
   FieldDescription,
   FieldError,
@@ -24,13 +25,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type AgentListItem, agentsService } from '@/lib/services';
 import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { PromptField } from './prompt-field';
-import { SkillsDisplaySection } from './sections';
+import {
+  A2AManagedInfo,
+  AgentOriginField,
+  AgentStreamingField,
+  SkillsDisplaySection,
+} from './sections';
 import { ToolsMultiSelect } from './sections/tools-multi-select';
 import { AgentFormMode, type AgentFormProps } from './types';
 import { useAgentForm } from './use-agent-form';
@@ -74,6 +81,7 @@ export function ViewAgentForm({
     toolsLoading,
     unavailableTools,
     parameters,
+    headerRows,
     isExperimentalExecutionEngineEnabled,
     hasChanges,
   } = state;
@@ -85,14 +93,16 @@ export function ViewAgentForm({
     isToolSelected,
     isOutputSchemaSupported,
     onSubmit,
+    onInvalid,
   } = actions;
 
   const promptValue = form.watch('prompt') || '';
   const isA2A = agent?.isA2A ?? false;
+  const a2aServerName = agent?.annotations?.[ARK_ANNOTATIONS.A2A_SERVER_NAME];
   const showOutputSchema = isOutputSchemaSupported(
     form.watch('executionEngineName'),
   );
-  const isDisabled = form.formState.isSubmitting;
+  const isDisabled = form.formState.isSubmitting || isA2A;
 
   const fetchAgentYaml = useCallback(
     async (name: string) => {
@@ -145,8 +155,9 @@ export function ViewAgentForm({
       displayName={displayName}
       saving={saving}
       hasChanges={hasChanges}
-      readOnlyMode={readOnlyMode}
-      onSave={form.handleSubmit(onSubmit)}
+      readOnlyMode={readOnlyMode || isA2A}
+      titleAdornment={isA2A ? <A2AManagedInfo /> : undefined}
+      onSave={form.handleSubmit(onSubmit, onInvalid)}
       switcherValue={agentName}
       switcherPlaceholder="Select agent"
       switcherItems={allAgents}
@@ -159,6 +170,10 @@ export function ViewAgentForm({
       }
       formContent={
         <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
+          <AgentOriginField
+            origin={agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]}
+            a2aServerName={a2aServerName}
+          />
           <Form {...form}>
             <FormField
               control={form.control}
@@ -314,6 +329,24 @@ export function ViewAgentForm({
                     description="JSON schema the response must follow."
                   />
                 )}
+              />
+            )}
+
+            {!isA2A && (
+              <CustomHeadersField
+                headerRows={headerRows}
+                title="Model headers"
+                description="Sent with every request this agent makes to its model."
+                addLabel="Add model header"
+                disabled={isDisabled}
+              />
+            )}
+
+            {isA2A && (
+              <AgentStreamingField
+                streamingSupported={
+                  agent.annotations?.[ARK_ANNOTATIONS.A2A_STREAMING_SUPPORTED]
+                }
               />
             )}
 

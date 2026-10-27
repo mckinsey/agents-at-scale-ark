@@ -482,6 +482,8 @@ This is also what makes user attribution appear in the Kubernetes audit log. See
 | `basic` | No | Service-to-service, no human user |
 | `open` | No | No authentication |
 
+Writes through the [generic resources API](/reference/ark-apis#generic-resources-api) are stricter for signed-in users. They back WorkflowTemplate authoring, running a template, and deleting an execution engine in the dashboard, and they can make Argo run containers. In `sso` and `hybrid` mode, a signed-in user's write runs only as that user: it needs impersonation enabled and is never retried as the service account under fallback. API keys and `open` mode keep running as the service account.
+
 ### Configuration
 
 Helm values:
@@ -556,7 +558,7 @@ See `samples/rbac-test-bindings.yaml` for a complete example covering all resour
 
 1. **Deploy with defaults** — `impersonation.enabled: false`. No behavioral change.
 2. **Create RoleBindings** — Bind SSO users/groups to Ark ClusterRoles per namespace.
-3. **Enable fallback mode** — Set `enabled: true`, `fallback: true`. Monitor logs for `"Impersonation fallback"` warnings identifying users missing RBAC.
+3. **Enable fallback mode** — Set `enabled: true`, `fallback: true`. Monitor logs for `"Impersonation fallback"` warnings identifying users missing RBAC. Writes through the generic resources API are not retried, so users need RBAC for them before this step.
 4. **Fix RBAC gaps** — Create missing RoleBindings for users identified in logs.
 5. **Disable fallback** — Set `fallback: false`. K8s RBAC is now fully enforced.
 6. **Rollback** — Set `enabled: false` to revert to SA-based access.

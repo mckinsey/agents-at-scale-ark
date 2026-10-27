@@ -79,15 +79,13 @@ func CardTransportURL(card *A2AAgentCard) (string, error) {
 
 func ResolveUnsupportedTransport(address string, err error) ResolvedEndpoint {
 	return ResolvedEndpoint{
-		URL:     strings.TrimSuffix(address, "/"),
+		URL:     address,
 		Reason:  ReasonUnsupportedTransport,
 		Message: fmt.Sprintf("Ark only speaks %s: %v, using spec.address", TransportJSONRPC, err),
 	}
 }
 
 func ResolveEndpoint(address, cardURL, mode string, allowedHosts []string) ResolvedEndpoint {
-	address = strings.TrimSuffix(address, "/")
-
 	if !UsesCardEndpoint(mode) {
 		return ResolvedEndpoint{URL: address, Message: "Using spec.address"}
 	}

@@ -1,11 +1,11 @@
 """Kubernetes agents API endpoints."""
 import logging
 import json
-import re
 
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
 from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
 from ark_sdk.impersonation import ImpersonationConfig
@@ -20,10 +20,13 @@ from ...models.agents import (
     AgentCreateRequest,
     AgentUpdateRequest,
     AgentDetailResponse,
+    Skill,
 )
 from ...models.common import extract_availability_from_conditions
 from ...constants.annotations import (
     A2A_SERVER_ADDRESS_ANNOTATION,
+    A2A_SERVER_NAME_ANNOTATION,
+    A2A_SERVER_SKILLS_ANNOTATION,
     ORIGIN_ANNOTATION,
     OUTPUT_SCHEMA_ANNOTATION,
 )
@@ -52,7 +55,7 @@ def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentRes
     """Convert a Kubernetes Agent CR to a response model.
 
     Trimmed views omit the heavy fields the list UI never renders: prompt is
-    dropped and annotations are reduced to the origin key. The with-tools view
+    dropped and annotations are reduced to the origin and A2A server name keys. The with-tools view
     is a trimmed view that additionally carries the referenced tool names so a
     list caller can compute tool usage without a per-agent detail fetch.
     """
@@ -77,7 +80,7 @@ def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentRes
         annotations = {
             key: value
             for key, value in annotations.items()
-            if key == ORIGIN_ANNOTATION
+            if key in (ORIGIN_ANNOTATION, A2A_SERVER_NAME_ANNOTATION)
         }
 
     tool_names = None
@@ -99,8 +102,6 @@ def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentRes
         tool_names=tool_names
     )
 
-SKILLS_ANNOTATION_REGEX = re.compile(r'a2a\..*\/skills$')
-
 def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
     """Convert a Kubernetes Agent CR to a detailed response model."""
     metadata = agent.get("metadata", {})
@@ -111,19 +112,17 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
     is_a2a = A2A_SERVER_ADDRESS_ANNOTATION in annotations
     
     skills = []
-    skills_annotation_key = None
-    for annotation_key in annotations:
-        if SKILLS_ANNOTATION_REGEX.search(annotation_key):
-            skills_annotation_key = annotation_key
-            break
-    
-    if skills_annotation_key:
+    if A2A_SERVER_SKILLS_ANNOTATION in annotations:
         try:
-            skills_data = json.loads(annotations[skills_annotation_key])
-            skills = skills_data if isinstance(skills_data, list) else []
+            skills_data = json.loads(annotations[A2A_SERVER_SKILLS_ANNOTATION])
         except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse skills annotation for agent {metadata.get('name', '')}")
-            skills = []
+            skills_data = []
+        for item in skills_data if isinstance(skills_data, list) else []:
+            try:
+                skills.append(Skill.model_validate(item))
+            except ValidationError:
+                logger.warning(f"Skipping invalid skill entry for agent {metadata.get('name', '')}")
     
     # Extract availability from conditions
     conditions = status.get("conditions", [])
@@ -271,6 +270,16 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Get the existing agent first
         existing_agent = await ark_client.agents.a_get(agent_name)
+        existing_annotations = existing_agent.to_dict().get("metadata", {}).get("annotations") or {}
+        if A2A_SERVER_NAME_ANNOTATION in existing_annotations:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Agent {agent_name} is managed by A2A server "
+                    f"{existing_annotations[A2A_SERVER_NAME_ANNOTATION]} and can't be edited. "
+                    "To change it, update the A2A server."
+                ),
+            )
         existing_spec = existing_agent.to_dict()["spec"]
 
         # exclude_unset keeps only the fields the client actually sent, so an

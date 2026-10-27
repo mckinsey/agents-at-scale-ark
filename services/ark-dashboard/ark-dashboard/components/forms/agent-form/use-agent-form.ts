@@ -7,11 +7,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
+import {
+  normalizeCustomHeaders,
+  useCustomHeaderRows,
+} from '@/components/forms/shared/custom-header-rows';
 import type { Parameter } from '@/components/ui/parameter-editor';
 import { toast } from '@/components/ui/sonner';
 import type {
   Agent,
   AgentCreateRequest,
+  AgentOverride,
   AgentTool,
   AgentUpdateRequest,
   ExecutionEngine,
@@ -42,6 +47,8 @@ import {
 } from './types';
 import {
   agentParametersChanged,
+  buildAgentOverrides,
+  getModelOverrideHeaders,
   transformAgentParametersToForm,
   transformFormParametersToApi,
 } from './utils';
@@ -89,6 +96,14 @@ export function useAgentForm({
   );
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [initialParameters, setInitialParameters] = useState<Parameter[]>([]);
+  const headerRows = useCustomHeaderRows();
+  const {
+    load: loadHeaders,
+    validate: validateHeaderRows,
+    toPayload: getHeadersPayload,
+  } = headerRows;
+  const [initialOverrides, setInitialOverrides] = useState<AgentOverride[]>([]);
+  const [initialHeadersSnapshot, setInitialHeadersSnapshot] = useState('[]');
 
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
@@ -175,6 +190,12 @@ export function useAgentForm({
           );
           setParameters(transformedParams);
           setInitialParameters(transformedParams);
+          const loadedHeaders = getModelOverrideHeaders(agentData.overrides);
+          loadHeaders(loadedHeaders);
+          setInitialOverrides(agentData.overrides ?? []);
+          setInitialHeadersSnapshot(
+            JSON.stringify(normalizeCustomHeaders(loadedHeaders)),
+          );
 
           form.reset({
             name: agentData.name,
@@ -221,6 +242,17 @@ export function useAgentForm({
 
   const onSubmit = useCallback(
     async (values: AgentFormValues) => {
+      const isA2A = agent?.isA2A ?? false;
+      const headers = isA2A ? [] : validateHeaderRows();
+      if (!headers) {
+        toast.error('Fix the header errors before saving');
+        return;
+      }
+      const overrides = buildAgentOverrides(
+        mode === AgentFormMode.CREATE ? [] : initialOverrides,
+        headers,
+      );
+
       setSaving(true);
       try {
         if (mode === AgentFormMode.CREATE) {
@@ -244,6 +276,7 @@ export function useAgentForm({
             prompt: values.prompt || undefined,
             tools: selectedTools,
             parameters: mapParametersToApi(),
+            overrides: overrides.length > 0 ? overrides : undefined,
           };
 
           await agentsService.create(namespace, createData);
@@ -280,6 +313,11 @@ export function useAgentForm({
                 toEngineName(agent.executionEngine?.name),
               value: values.outputSchema,
             }),
+            overrides: agent.isA2A
+              ? undefined
+              : overrides.length > 0
+                ? overrides
+                : null,
           };
 
           const updated = await agentsService.update(
@@ -305,6 +343,10 @@ export function useAgentForm({
           form.reset(values);
           setInitialTools(selectedTools);
           setInitialParameters(parameters);
+          if (!agent.isA2A) {
+            setInitialOverrides(overrides);
+            setInitialHeadersSnapshot(JSON.stringify(headers));
+          }
         }
 
         onSuccessRef.current?.();
@@ -322,6 +364,8 @@ export function useAgentForm({
       selectedTools,
       parameters,
       mapParametersToApi,
+      validateHeaderRows,
+      initialOverrides,
       queryClient,
       namespace,
       form,
@@ -361,8 +405,20 @@ export function useAgentForm({
     [parameters, initialParameters],
   );
 
+  const onInvalid = useCallback(() => {
+    if (!agent?.isA2A) {
+      validateHeaderRows();
+    }
+  }, [agent?.isA2A, validateHeaderRows]);
+
+  const hasHeadersChanged =
+    JSON.stringify(getHeadersPayload()) !== initialHeadersSnapshot;
+
   const hasChanges =
-    form.formState.isDirty || hasToolsChanged() || hasParametersChanged();
+    form.formState.isDirty ||
+    hasToolsChanged() ||
+    hasParametersChanged() ||
+    hasHeadersChanged;
 
   return {
     form,
@@ -378,6 +434,7 @@ export function useAgentForm({
       selectedTools,
       unavailableTools,
       parameters,
+      headerRows,
       isExperimentalExecutionEngineEnabled,
       hasChanges,
     },
@@ -388,6 +445,7 @@ export function useAgentForm({
       isToolSelected,
       isOutputSchemaSupported,
       onSubmit,
+      onInvalid,
     },
   };
 }

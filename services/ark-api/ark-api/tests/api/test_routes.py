@@ -1,5 +1,6 @@
 """Tests for API routes."""
 
+import json
 import os
 import unittest
 import unittest.mock
@@ -1099,6 +1100,34 @@ class TestAgentsEndpoint(unittest.TestCase):
         )
 
     @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_list_agents_summary_view_keeps_a2a_server_name(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/a2a-server-name": "simple-agent",
+                    "ark.mckinsey.com/a2a-server-skills": '[{"heavy": "payload"}]',
+                },
+            },
+            "spec": {"description": "A simple agent"},
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([mock_agent]))
+
+        response = self.client.get("/v1/agents?namespace=default&view=summary")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["items"][0]["annotations"],
+            {"ark.mckinsey.com/a2a-server-name": "simple-agent"},
+        )
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
     def test_list_agents_with_tools_view(self, mock_ark_client):
         """With-tools view trims heavy fields but carries the referenced tool names."""
         mock_client = AsyncMock()
@@ -1274,6 +1303,95 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["status"]["phase"], "Ready")
 
     @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_get_a2a_agent_returns_skills_from_annotation(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        skills = [
+            {
+                "id": "simple_math",
+                "name": "Simple Math",
+                "description": "Perform basic mathematical calculations",
+                "tags": ["math", "calculation"],
+            },
+            {"id": "echo_messages", "name": "Echo Messages"},
+        ]
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/a2a-server-address": "http://simple-agent.default.svc.cluster.local:80",
+                    "ark.mckinsey.com/a2a-server-skills": json.dumps(skills),
+                },
+            },
+            "spec": {"description": "A simple agent"},
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+        mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        response = self.client.get("/v1/agents/simple-agent?namespace=default")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["isA2A"])
+        self.assertEqual([s["id"] for s in data["skills"]], ["simple_math", "echo_messages"])
+        self.assertEqual(data["skills"][0]["tags"], ["math", "calculation"])
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_get_a2a_agent_skips_invalid_skill_entries(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        skills = [{"foo": 1}, {"id": "echo_messages", "name": "Echo Messages"}, "not-a-skill"]
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/a2a-server-address": "http://simple-agent.default.svc.cluster.local:80",
+                    "ark.mckinsey.com/a2a-server-skills": json.dumps(skills),
+                },
+            },
+            "spec": {"description": "A simple agent"},
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+        mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        response = self.client.get("/v1/agents/simple-agent?namespace=default")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([s["id"] for s in response.json()["skills"]], ["echo_messages"])
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_a2a_agent_is_rejected(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        existing_agent = Mock()
+        existing_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {"ark.mckinsey.com/a2a-server-name": "simple-agent"},
+            },
+            "spec": {"description": "A simple agent", "prompt": "You are simple-agent."},
+        }
+        mock_client.agents.a_get = AsyncMock(return_value=existing_agent)
+        mock_client.agents.a_update = AsyncMock()
+
+        response = self.client.put(
+            "/v1/agents/simple-agent?namespace=default",
+            json={"description": "edited"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("update the A2A server", response.json()["detail"])
+        mock_client.agents.a_update.assert_not_called()
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_success(self, mock_ark_client):
         """Test successful agent update."""
         # Setup async context manager mock
@@ -1288,6 +1406,13 @@ class TestAgentsEndpoint(unittest.TestCase):
             "status": {"phase": "Ready"},
         }
 
+        overrides = [
+            {
+                "resourceType": "model",
+                "headers": [{"name": "X-Tenant", "value": {"value": "acme"}}],
+            }
+        ]
+
         # Mock updated agent
         updated_agent = Mock()
         updated_agent.to_dict.return_value = {
@@ -1296,6 +1421,7 @@ class TestAgentsEndpoint(unittest.TestCase):
                 "description": "Updated description",
                 "prompt": "Updated prompt",
                 "modelRef": {"name": "gpt-4"},
+                "overrides": overrides,
             },
             "status": {"phase": "Ready"},
         }
@@ -1308,6 +1434,7 @@ class TestAgentsEndpoint(unittest.TestCase):
             "description": "Updated description",
             "prompt": "Updated prompt",
             "modelRef": {"name": "gpt-4"},
+            "overrides": overrides,
         }
         response = self.client.put(
             "/v1/agents/test-agent?namespace=default", json=request_data
@@ -1320,6 +1447,15 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["description"], "Updated description")
         self.assertEqual(data["prompt"], "Updated prompt")
         self.assertEqual(data["modelRef"]["name"], "gpt-4")
+        self.assertEqual(data["overrides"][0]["headers"][0]["name"], "X-Tenant")
+
+        request_data["overrides"][0]["headers"].append(
+            {"name": "x-tenant", "value": {"value": "other"}}
+        )
+        duplicate = self.client.put(
+            "/v1/agents/test-agent?namespace=default", json=request_data
+        )
+        self.assertEqual(duplicate.status_code, 422)
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_partial(self, mock_ark_client):
@@ -1631,6 +1767,16 @@ class TestModelsEndpoint(unittest.TestCase):
                             }
                         },
                         "baseUrl": {"value": "https://api.openai.com"},
+                        "headers": [
+                            {
+                                "name": "X-Token",
+                                "value": {
+                                    "valueFrom": {
+                                        "secretKeyRef": {"name": "header-key", "key": "token"}
+                                    }
+                                },
+                            }
+                        ],
                     }
                 },
             },
@@ -1643,7 +1789,7 @@ class TestModelsEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["items"][0]["secret_refs"], ["openai-key"])
+        self.assertEqual(data["items"][0]["secret_refs"], ["openai-key", "header-key"])
 
     @patch("ark_api.api.v1.models.with_ark_client")
     def test_list_models_empty(self, mock_ark_client):
@@ -1693,17 +1839,30 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_api_client_cls.return_value.__aenter__ = AsyncMock(return_value=Mock())
         mock_api_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
+        headers = [{"name": "X-Tenant", "value": {"value": "acme"}}]
         request_data = {
             "name": "gpt-4-model",
             "provider": "openai",
             "model": "gpt-4",
             "config": {
-                "openai": {"apiKey": "sk-test", "baseUrl": "https://api.openai.com/v1"}
+                "openai": {
+                    "apiKey": "sk-test",
+                    "baseUrl": "https://api.openai.com/v1",
+                    "headers": headers,
+                }
             },
         }
         response = self.client.post("/v1/models?namespace=default", json=request_data)
 
         self.assertEqual(response.status_code, 200)
+        sent_spec = mock_custom_api.create_namespaced_custom_object.call_args.kwargs["body"]["spec"]
+        self.assertEqual(sent_spec["config"]["openai"]["headers"], headers)
+
+        request_data["config"]["openai"]["headers"] = headers + [
+            {"name": "x-tenant", "value": {"value": "other"}}
+        ]
+        duplicate = self.client.post("/v1/models?namespace=default", json=request_data)
+        self.assertEqual(duplicate.status_code, 422)
         data = response.json()
         self.assertEqual(data["name"], "gpt-4-model")
         self.assertEqual(data["provider"], "openai")
