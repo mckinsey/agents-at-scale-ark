@@ -184,6 +184,7 @@ function detectTerminalPhase(
 export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
+  transportError?: boolean;
   response?: string;
   memoryLookup?: MemoryNoticeLookup;
   messages?: Array<{
@@ -462,7 +463,7 @@ export const chatService = {
 
       return { status: 'unknown', terminal: true };
     } catch {
-      return { status: 'error', terminal: true };
+      return { status: 'error', terminal: true, transportError: true };
     }
   },
 

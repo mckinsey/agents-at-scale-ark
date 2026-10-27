@@ -1,6 +1,6 @@
 'use client';
 
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useStore } from 'jotai';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -24,6 +24,11 @@ import {
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
 import { useBrokerFallbackNotice } from '@/lib/hooks/use-broker-fallback-notice';
+import {
+  type PendingApprovalQuery,
+  useResumePendingApproval,
+} from '@/lib/hooks/use-resume-pending-approval';
+import { useResumeRunningQuery } from '@/lib/hooks/use-resume-running-query';
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
 import {
@@ -38,9 +43,12 @@ import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
+import {
+  buildCascadingApprovalMessage,
+  convertResultMessage,
+  stripEmptyAssistantPlaceholder,
+} from '@/lib/utils/chat-turn';
 import { useNamespace } from '@/providers/NamespaceProvider';
-
-type ResultMessage = NonNullable<ChatResponse['messages']>[number];
 
 function isBrokerUnavailableChunk(chunk: ArkExtendedChunk): boolean {
   if (!('error' in chunk) || !chunk.error) {
@@ -53,21 +61,6 @@ function isBrokerUnavailableChunk(chunk: ArkExtendedChunk): boolean {
     chunk.error.type === 'connection_error' ||
     chunk.error.type === 'service_unavailable'
   );
-}
-
-function stripEmptyAssistantPlaceholder(
-  messages: ExtendedChatMessage[],
-): ExtendedChatMessage[] {
-  const last = messages[messages.length - 1];
-  if (
-    last?.role === 'assistant' &&
-    !last.content &&
-    !last.tool_calls &&
-    !last.approvalRequest
-  ) {
-    return messages.slice(0, -1);
-  }
-  return messages;
 }
 
 const STREAM_TERMINAL_STOP_GRACE_MS = 300;
@@ -98,84 +91,6 @@ async function* streamUntilForceClose<T>(
       // Best-effort transport release; the stream may already be gone.
     }
   }
-}
-
-// Converts a query-result message (OpenAI-ish shape) into the dashboard's
-// ExtendedChatMessage. Extracted to keep pollAfterApproval's complexity low.
-function convertResultMessage(msg: ResultMessage): ExtendedChatMessage {
-  if (msg.role === 'tool') {
-    return {
-      role: 'tool',
-      content: msg.content || '',
-      tool_call_id: msg.tool_call_id || '',
-    } as ExtendedChatMessage;
-  }
-  if (msg.role === 'assistant') {
-    const baseMsg: {
-      role: 'assistant';
-      content: string;
-      name?: string;
-      tool_calls?: Array<{
-        id: string;
-        type: 'function';
-        function: { name: string; arguments: string };
-      }>;
-    } = {
-      role: 'assistant',
-      content: msg.content || '',
-    };
-    if (msg.name) {
-      baseMsg.name = msg.name;
-    }
-    if (msg.tool_calls && msg.tool_calls.length > 0) {
-      baseMsg.tool_calls = msg.tool_calls.map(tc => ({
-        id: tc.id,
-        type: 'function' as const,
-        function: tc.function,
-      }));
-    }
-    return baseMsg as ExtendedChatMessage;
-  }
-  return {
-    role: msg.role as 'user' | 'system',
-    content: msg.content || '',
-  } as ExtendedChatMessage;
-}
-
-// Builds the chat message that surfaces a cascading approval request from an
-// A2ATask, or null when the task carries no tool calls to approve.
-function buildCascadingApprovalMessage(
-  a2aTask: Awaited<ReturnType<typeof chatService.getA2ATask>>,
-  queryName: string,
-  queryNamespace: string,
-  taskId: string,
-): ExtendedChatMessage | null {
-  const meta = a2aTask?.status?.protocolMetadata;
-  if (!meta?.toolCalls) return null;
-
-  const taskStartTime = a2aTask?.status?.startTime;
-  const receivedAtMs = taskStartTime
-    ? new Date(taskStartTime).getTime()
-    : Date.now();
-
-  return {
-    role: 'assistant',
-    content: '',
-    approvalRequest: {
-      type: 'tool_approval_request',
-      taskId,
-      queryName,
-      queryNamespace,
-      toolCalls: JSON.parse(meta.toolCalls),
-      timeout: meta.timeout,
-      onTimeout: meta.onTimeout,
-      agentName: a2aTask?.agentRef?.name,
-      receivedAtMs,
-    },
-    metadata: {
-      queryName,
-    },
-  } as ExtendedChatMessage;
 }
 
 interface UseChatSessionParams {
@@ -226,6 +141,7 @@ export function useChatSession({
   const { namespace } = useNamespace();
   const invalidateQueriesList = useInvalidateQueriesList();
   const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
+  const store = useStore();
   const [lastConversationId, setLastConversationId] = useAtom(
     lastConversationIdAtom,
   );
@@ -248,6 +164,8 @@ export function useChatSession({
   const sessionId = chatSession.sessionId;
   const conversationId = (chatSession as { conversationId?: string })
     .conversationId;
+  const activeQueryName = (chatSession as { activeQueryName?: string })
+    .activeQueryName;
 
   const conversationIdRef = useRef<string | undefined>(conversationId);
   useEffect(() => {
@@ -321,6 +239,31 @@ export function useChatSession({
 
   const lastQueryName = useRef('');
 
+  const setActiveQueryName = useCallback(
+    (queryName: string | undefined) => {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        return {
+          ...safePrev,
+          [chatKey]: { ...currentSession, activeQueryName: queryName },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
+  const clearActiveQuery = useCallback(
+    () => setActiveQueryName(undefined),
+    [setActiveQueryName],
+  );
+
+  const getMessages = useCallback(
+    () => store.get(chatHistoryAtom)?.[chatKey]?.messages ?? [],
+    [chatKey, store],
+  );
+
   const updateConversationId = useCallback(
     (newConversationId: string) => {
       conversationIdRef.current = newConversationId;
@@ -375,6 +318,7 @@ export function useChatSession({
     resumeAutoScroll,
   } = useStickyScroll();
   const chatStreamAbortControllerRef = useRef(new AbortController());
+  const leavingRef = useRef(false);
 
   const {
     variant: parameterVariant,
@@ -394,10 +338,18 @@ export function useChatSession({
   } = useAgentQueryParameters(name, type);
 
   useEffect(() => {
-    return () => {
+    leavingRef.current = false;
+    const leave = () => {
+      leavingRef.current = true;
+      chatStreamAbortControllerRef.current.abort();
       if (stopPollingRef.current) {
         stopPollingRef.current();
       }
+    };
+    globalThis.addEventListener('pagehide', leave);
+    return () => {
+      globalThis.removeEventListener('pagehide', leave);
+      leave();
     };
   }, []);
 
@@ -470,13 +422,13 @@ export function useChatSession({
     return () => clearTimeout(id);
   }, [chatMessages, scrollToBottom]);
 
-  const pendingApprovalQueryRef = useRef<{
-    queryName: string;
-    messageIndex: number;
-  } | null>(null);
+  const pendingApprovalQueryRef = useRef<PendingApprovalQuery | null>(null);
 
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+    async (
+      userMessage: string,
+      apiParameters?: ApiQueryParameter[],
+    ): Promise<boolean> => {
       chatStreamAbortControllerRef.current = new AbortController();
 
       const turnStartIndex = chatMessages.length + 1;
@@ -562,6 +514,7 @@ export function useChatSession({
 
       queryName = streamQueryName;
       lastQueryName.current = queryName;
+      setActiveQueryName(queryName);
       invalidateQueriesList();
 
       const streamAbortController = chatStreamAbortControllerRef.current;
@@ -920,7 +873,7 @@ export function useChatSession({
             } as ExtendedChatMessage;
             return updated;
           });
-          return;
+          return false;
         }
       }
 
@@ -978,6 +931,7 @@ export function useChatSession({
         hasPendingApproval,
         queryName,
       });
+      return hasPendingApproval;
     },
     [
       chatKey,
@@ -988,6 +942,7 @@ export function useChatSession({
       namespace,
       queryTimeout,
       sessionId,
+      setActiveQueryName,
       setChatHistory,
       type,
       updateChatMessages,
@@ -1001,7 +956,7 @@ export function useChatSession({
       userMessage: string,
       apiParameters?: ApiQueryParameter[],
       existingQueryName?: string,
-    ) => {
+    ): Promise<boolean> => {
       let queryName = existingQueryName;
       if (!queryName) {
         const query = await chatService.submitChatQuery(
@@ -1019,8 +974,10 @@ export function useChatSession({
       }
 
       lastQueryName.current = queryName;
+      setActiveQueryName(queryName);
 
       let pollingStopped = false;
+      let settled = false;
       stopPollingRef.current = () => {
         pollingStopped = true;
       };
@@ -1028,6 +985,7 @@ export function useChatSession({
       while (!pollingStopped) {
         try {
           const result = await chatService.getQueryResult(namespace, queryName);
+          if (leavingRef.current) break;
 
           setProcessingPhase(result.status);
 
@@ -1132,11 +1090,13 @@ export function useChatSession({
               ]);
             }
 
+            settled = !result.transportError;
             pollingStopped = true;
             break;
           }
         } catch (err) {
           console.error('Error polling query status:', err);
+          if (leavingRef.current) break;
           updateChatMessages(prev => [
             ...prev,
             {
@@ -1155,6 +1115,7 @@ export function useChatSession({
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
+      return settled;
     },
     [
       applyMemoryLookup,
@@ -1164,6 +1125,7 @@ export function useChatSession({
       namespace,
       queryTimeout,
       sessionId,
+      setActiveQueryName,
       type,
       updateChatMessages,
       updateConversationId,
@@ -1180,6 +1142,7 @@ export function useChatSession({
       }
 
       const apiParameters = toApiParameters();
+      clearActiveQuery();
 
       trackEvent({
         name: 'chat_message_sent',
@@ -1200,16 +1163,25 @@ export function useChatSession({
       beginMemoryNoticeTurn();
 
       let aborted = false;
+      let settled = false;
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage, apiParameters);
+          settled = !(await handleStreamChatResponse(
+            userMessage,
+            apiParameters,
+          ));
           await ensureConversationId();
         } else {
-          await handlePollChatResponse(userMessage, apiParameters);
+          settled = await handlePollChatResponse(userMessage, apiParameters);
         }
       } catch (err) {
         console.error('Error sending message:', err);
+
+        if (leavingRef.current) {
+          aborted = true;
+          return;
+        }
 
         if (isBrokerUnavailableError(err)) {
           if (err.code === 'broker_unavailable') {
@@ -1217,7 +1189,7 @@ export function useChatSession({
           }
           updateChatMessages(stripEmptyAssistantPlaceholder);
           try {
-            await handlePollChatResponse(
+            settled = await handlePollChatResponse(
               userMessage,
               apiParameters,
               err.queryName || lastQueryName.current || undefined,
@@ -1273,6 +1245,9 @@ export function useChatSession({
         setIsProcessing(false);
         setProcessingPhase(undefined);
         setStatusText(undefined);
+        if (!leavingRef.current && settled) {
+          clearActiveQuery();
+        }
 
         // In `finally`, not after the stream, because the failure path is the
         // one that matters most: ark-api resolves the chunk stream's broker
@@ -1298,6 +1273,7 @@ export function useChatSession({
     },
     [
       beginMemoryNoticeTurn,
+      clearActiveQuery,
       notifyBrokerFallback,
       ensureConversationId,
       handlePollChatResponse,
@@ -1355,10 +1331,12 @@ export function useChatSession({
       },
     ]);
 
+    clearActiveQuery();
+
     await chatService
       .cancelQuery(namespace, lastQueryName.current)
       .catch(() => {});
-  }, [namespace, setIsProcessing, updateChatMessages]);
+  }, [clearActiveQuery, namespace, setIsProcessing, updateChatMessages]);
 
   const handleCascadingApproval = useCallback(
     async (queryName: string): Promise<boolean> => {
@@ -1424,9 +1402,10 @@ export function useChatSession({
         ]);
       }
 
+      clearActiveQuery();
       setIsProcessing(false);
     },
-    [updateChatMessages, setIsProcessing, applyMemoryLookup],
+    [updateChatMessages, setIsProcessing, applyMemoryLookup, clearActiveQuery],
   );
 
   const pollAfterApproval = useCallback(async () => {
@@ -1485,6 +1464,31 @@ export function useChatSession({
     handleCascadingApproval,
     applyTerminalResult,
   ]);
+
+  const restorePendingApproval = useResumePendingApproval({
+    namespace,
+    getMessages,
+    updateChatMessages,
+    pendingApprovalQueryRef,
+  });
+
+  const onResume = useCallback((queryName: string, stop: () => void) => {
+    lastQueryName.current = queryName;
+    stopPollingRef.current = stop;
+  }, []);
+
+  useResumeRunningQuery({
+    namespace,
+    chatKey,
+    activeQueryName,
+    isProcessing,
+    setIsProcessing,
+    setProcessingPhase,
+    updateChatMessages,
+    clearActiveQuery,
+    onResume,
+    restorePendingApproval,
+  });
 
   return {
     messages: chatMessages,

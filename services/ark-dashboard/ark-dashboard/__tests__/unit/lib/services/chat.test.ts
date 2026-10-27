@@ -291,6 +291,7 @@ describe('chatService', () => {
       expect(result).toEqual({
         status: 'error',
         terminal: true,
+        transportError: true,
       });
     });
   });
