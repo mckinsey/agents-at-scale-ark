@@ -397,9 +397,10 @@ export function useChatSession({
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    agent,
   } = useAgentQueryParameters(name, type);
 
-  const mcpHeaders = useQueryMcpHeaders(name, type);
+  const mcpHeaders = useQueryMcpHeaders(type === 'agent' ? agent : null);
   const { hasErrors: hasMcpHeaderErrors, toApiOverrides } = mcpHeaders;
 
   useEffect(() => {

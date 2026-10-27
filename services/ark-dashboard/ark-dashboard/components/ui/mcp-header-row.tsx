@@ -1,15 +1,12 @@
 'use client';
 
-import { Add, Info, Trash } from '@/components/icons';
+import { useMemo } from 'react';
+
+import { Add, Info, Trash, Warning } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { HeaderNameField } from '@/components/ui/header-name-field';
-import { HeaderNameSelect } from '@/components/ui/header-name-select';
-import { HeaderOverrideSelect } from '@/components/ui/header-override-select';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
-import { McpServerSelect } from '@/components/ui/mcp-server-select';
 import {
-  FLIP_COLLISION,
   GHOST_TRIGGER,
   Select,
   SelectContent,
@@ -23,9 +20,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { SecretKeyOption } from '@/lib/hooks/use-secret-key-options';
+import {
+  type SecretKeyOption,
+  secretOptionValue,
+} from '@/lib/hooks/use-secret-key-options';
 import { cn } from '@/lib/utils';
 import {
+  ALL_MCP_SERVERS_LABEL,
+  ALL_MCP_SERVERS_VALUE,
   type HeaderNamesForServer,
   type McpHeaderRow,
   type McpHeaderRowError,
@@ -33,12 +35,66 @@ import {
   serverChangeUpdates,
 } from '@/lib/utils/mcp-header-overrides';
 
-export const COLUMN_LABEL_CLASS = 'text-fg-secondary label-small-primary';
+const COLUMN_LABEL_CLASS = 'text-fg-secondary label-small-primary';
+
+const FLIP_COLLISION = { side: 'flip', align: 'shift' } as const;
 
 const SOURCE_ITEMS: { value: McpHeaderSource; label: string }[] = [
   { value: 'secret', label: 'Secret' },
   { value: 'value', label: 'Direct' },
 ];
+
+interface GhostSelectItem {
+  value: string;
+  label: string;
+}
+
+interface GhostSelectProps {
+  readonly id: string;
+  readonly ariaLabel: string;
+  readonly items: GhostSelectItem[];
+  readonly value: string | null;
+  readonly placeholder?: string;
+  readonly disabled?: boolean;
+  readonly invalid?: boolean;
+  readonly onChange: (value: string) => void;
+}
+
+function GhostSelect({
+  id,
+  ariaLabel,
+  items,
+  value,
+  placeholder,
+  disabled,
+  invalid,
+  onChange,
+}: GhostSelectProps) {
+  return (
+    <Select
+      items={items}
+      value={value}
+      onValueChange={next => onChange(String(next ?? ''))}
+      disabled={disabled}>
+      <SelectTrigger
+        id={id}
+        aria-label={ariaLabel}
+        aria-invalid={invalid}
+        className={cn(GHOST_TRIGGER, 'h-9 w-full min-w-0')}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent
+        className="bg-fill-onsurface-ui-2"
+        collisionAvoidance={FLIP_COLLISION}>
+        {items.map(item => (
+          <SelectItem key={item.value} value={item.value}>
+            <SelectItemText>{item.label}</SelectItemText>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 function FieldError({ message }: { readonly message?: string }) {
   if (!message) return null;
@@ -79,7 +135,9 @@ export function HeaderRowsHeading({
                   <Info className="size-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent className="max-w-xs">{tooltip}</TooltipContent>
+              <TooltipContent className="max-w-sm text-wrap">
+                {tooltip}
+              </TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -151,63 +209,108 @@ export function McpHeaderRowFields({
   secretsLoaded,
   error,
   disabled,
-  namePlaceholder,
+  namePlaceholder = 'Header-Name',
   valuePlaceholder = 'Value',
   onChange,
   onRemove,
 }: McpHeaderRowFieldsProps) {
+  const serverItems = useMemo(() => {
+    const names = new Set(serverNames);
+    if (row.serverName) names.add(row.serverName);
+    return [
+      { value: ALL_MCP_SERVERS_VALUE, label: ALL_MCP_SERVERS_LABEL },
+      ...Array.from(names)
+        .sort((a, b) => a.localeCompare(b))
+        .map(name => ({ value: name, label: name })),
+    ];
+  }, [serverNames, row.serverName]);
+
+  const nameItems = useMemo(
+    () => (nameOptions ?? []).map(name => ({ value: name, label: name })),
+    [nameOptions],
+  );
+
+  const secretValue = secretOptionValue(row.secretName, row.secretKey);
+  const isKnownSecret = secretOptions.some(
+    option => option.value === secretValue,
+  );
+  const isMissingSecret =
+    secretsLoaded && !!row.secretName && !!row.secretKey && !isKnownSecret;
+
+  const handleServerChange = (selected: string) => {
+    const serverName =
+      !selected || selected === ALL_MCP_SERVERS_VALUE ? undefined : selected;
+    onChange(
+      namesForServer
+        ? serverChangeUpdates(row, serverName, namesForServer(serverName))
+        : { serverName },
+    );
+  };
+
+  const handleSecretChange = (selected: string) => {
+    const option = secretOptions.find(item => item.value === selected);
+    if (option) {
+      onChange({ secretName: option.secretName, secretKey: option.secretKey });
+    }
+  };
+
   return (
     <div className="flex items-start gap-3" data-testid="header-row">
       {showServer && (
         <div className="flex min-w-0 flex-1">
-          <McpServerSelect
+          <GhostSelect
             id={`mcp-${row.id}-server`}
-            serverNames={serverNames}
-            value={row.serverName}
+            ariaLabel="MCP server"
+            items={serverItems}
+            value={row.serverName ?? ALL_MCP_SERVERS_VALUE}
+            placeholder={ALL_MCP_SERVERS_LABEL}
             disabled={disabled}
-            onChange={serverName =>
-              onChange(
-                namesForServer
-                  ? serverChangeUpdates(
-                      row,
-                      serverName,
-                      namesForServer(serverName),
-                    )
-                  : { serverName },
-              )
-            }
+            onChange={handleServerChange}
           />
         </div>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {nameOptions ? (
-          <HeaderNameSelect
+          <GhostSelect
             id={`mcp-${row.id}-name`}
-            value={row.name}
-            options={nameOptions}
-            disabled={disabled}
+            ariaLabel="Header name"
+            items={nameItems}
+            value={row.name || null}
+            placeholder={
+              nameItems.length === 0
+                ? 'No headers to override'
+                : 'Select a header'
+            }
+            disabled={disabled || nameItems.length === 0}
             invalid={!!error?.nameError}
             onChange={name => onChange({ name })}
           />
         ) : (
-          <HeaderNameField
+          <Input
             id={`mcp-${row.id}-name`}
+            variant="inline"
+            aria-label="Header name"
+            aria-invalid={!!error?.nameError}
             value={row.name}
-            disabled={disabled}
-            invalid={!!error?.nameError}
+            onChange={event => onChange({ name: event.target.value })}
             placeholder={namePlaceholder}
-            onChange={name => onChange({ name })}
+            disabled={disabled}
+            autoComplete="off"
+            className="h-9 w-full min-w-0"
           />
         )}
         <FieldError message={error?.nameError} />
       </div>
 
       <div className="flex w-28 shrink-0">
-        <Select
+        <GhostSelect
+          id={`mcp-${row.id}-source`}
+          ariaLabel="Header source"
           items={SOURCE_ITEMS}
           value={row.source}
-          onValueChange={next =>
+          disabled={disabled}
+          onChange={next =>
             onChange({
               source: next === 'value' ? 'value' : 'secret',
               value: '',
@@ -215,39 +318,37 @@ export function McpHeaderRowFields({
               secretKey: '',
             })
           }
-          disabled={disabled}>
-          <SelectTrigger
-            id={`mcp-${row.id}-source`}
-            aria-label="Header source"
-            className={cn(GHOST_TRIGGER, 'h-9 w-full min-w-0')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent
-            className="bg-fill-onsurface-ui-2"
-            collisionAvoidance={FLIP_COLLISION}>
-            {SOURCE_ITEMS.map(item => (
-              <SelectItem key={item.value} value={item.value}>
-                <SelectItemText>{item.label}</SelectItemText>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {row.source === 'secret' ? (
-          <HeaderOverrideSelect
-            id={`mcp-${row.id}-override`}
-            options={secretOptions}
-            loaded={secretsLoaded}
-            secretName={row.secretName}
-            secretKey={row.secretKey}
-            disabled={disabled}
-            invalid={!!error?.valueError}
-            onSelectSecret={(secretName, secretKey) =>
-              onChange({ secretName, secretKey })
-            }
-          />
+          <>
+            <GhostSelect
+              id={`mcp-${row.id}-override`}
+              ariaLabel="Header override"
+              items={secretOptions}
+              value={isKnownSecret ? secretValue : null}
+              placeholder="Select a secret"
+              disabled={disabled}
+              invalid={!!error?.valueError}
+              onChange={handleSecretChange}
+            />
+            {isMissingSecret && (
+              <span className="text-status-error inline-flex items-center gap-1 text-xs">
+                <IconShell size="sm" className="text-status-error">
+                  <Warning />
+                </IconShell>
+                {row.secretName}/{row.secretKey} is not available in this
+                namespace
+              </span>
+            )}
+            {secretsLoaded && secretOptions.length === 0 && (
+              <span className="text-fg-tertiary text-xs">
+                No secrets in this namespace yet.
+              </span>
+            )}
+          </>
         ) : (
           <Input
             id={`mcp-${row.id}-value`}

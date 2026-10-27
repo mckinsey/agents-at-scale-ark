@@ -89,6 +89,10 @@ export function isBlankMcpHeaderRow(row: McpHeaderRow): boolean {
   return !hasValue && !row.name.trim();
 }
 
+export function isMcpOverride(override: AgentOverride): boolean {
+  return override.resourceType === MCP_RESOURCE_TYPE;
+}
+
 export function getMcpScope(override: AgentOverride): McpScope {
   const matchLabels = override.labelSelector?.matchLabels ?? {};
   const labelKeys = Object.keys(matchLabels);
@@ -170,7 +174,7 @@ export function splitMcpOverrides(
   };
 
   for (const override of overrides ?? []) {
-    if (override.resourceType !== MCP_RESOURCE_TYPE) continue;
+    if (!isMcpOverride(override)) continue;
 
     const scope = getMcpScope(override);
     if (scope.kind === 'selector') {
@@ -229,10 +233,6 @@ export function buildMcpOverrides(
     ...state.lockedHeaders,
   ];
   return [...groupedOverrides(entries), ...state.preservedOverrides];
-}
-
-export function isMcpOverride(override: AgentOverride): boolean {
-  return override.resourceType === MCP_RESOURCE_TYPE;
 }
 
 function normalizeName(name: string): string {
@@ -373,7 +373,7 @@ export function agentMcpHeaders(
   overrides: AgentOverride[] | null | undefined,
 ): AgentMcpHeader[] {
   return (overrides ?? [])
-    .filter(override => override.resourceType === MCP_RESOURCE_TYPE)
+    .filter(isMcpOverride)
     .flatMap((override, overrideIndex) => {
       const scope = getMcpScope(override);
       return override.headers.map((header, headerIndex) => ({

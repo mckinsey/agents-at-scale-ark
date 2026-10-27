@@ -40,6 +40,10 @@ vi.mock('@/lib/services/queries-hooks', () => ({
   useInvalidateQueriesList: () => mockInvalidateQueriesList,
 }));
 
+vi.mock('@/lib/services/mcp-servers-hooks', () => ({
+  useGetAllMcpServers: () => ({ data: [] }),
+}));
+
 vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
 }));

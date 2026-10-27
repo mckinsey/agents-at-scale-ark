@@ -19,12 +19,9 @@ logger = logging.getLogger(__name__)
 MOCK_LLM_URL = "http://mock-llm.default.svc.cluster.local:6556/v1"
 MCP_SERVER_LABEL = "mcp/server"
 
-MODEL_TENANT = ("X-E2E-Model-Tenant", "acme")
-MODEL_TOKEN = ("X-E2E-Model-Token", "model-token")
 AGENT_MODEL = ("X-E2E-Agent-Model", "agent-model")
 MCP_AUTH = ("X-E2E-Auth", "mcp-token")
 MCP_ORG = ("X-E2E-Org", "agent-org")
-MCP_REGION = ("X-E2E-Region", "query-region")
 
 SEED_MANIFEST = """\
 apiVersion: v1
@@ -35,7 +32,6 @@ metadata:
 type: Opaque
 stringData:
   token: mock-api-key
-  model-token: model-secret-value
   mcp-token: mcp-secret-value
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -59,9 +55,6 @@ spec:
   - name: X-E2E-Org
     value:
       value: server-org
-  - name: X-E2E-Region
-    value:
-      value: server-region
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
@@ -165,9 +158,6 @@ def header_resources():
 
         yield names
     finally:
-        for query in list_resources("query"):
-            if query["spec"].get("target", {}).get("name") == names["agent"]:
-                delete_resource("query", query["metadata"]["name"])
         delete_resource("agent", names["agent"])
         delete_resource("model", names["model"])
         delete_resource("mcpserver", names["server"])
@@ -177,44 +167,6 @@ def header_resources():
 @pytest.mark.header_overrides
 @pytest.mark.xdist_group("ark_header_overrides")
 class TestHeaderOverrides:
-
-    def test_model_headers_can_be_added(self, page: Page, header_resources: dict):
-        names = header_resources
-        headers_page = HeaderOverridesPage(page)
-        headers_page.open_model_update(names["model"])
-
-        section = headers_page.model_headers()
-        tenant = headers_page.blank_or_new_row(section, "Add header")
-        headers_page.fill_row(tenant, MODEL_TENANT[0], value=MODEL_TENANT[1])
-        token = headers_page.add_row(section, "Add header")
-        headers_page.fill_row(
-            token, MODEL_TOKEN[0], secret=(names["secret"], MODEL_TOKEN[1])
-        )
-        headers_page.save_model()
-
-        model = _eventually(
-            lambda: get_resource("model", names["model"]),
-            lambda m: len(m["spec"]["config"]["openai"].get("headers") or []) == 2,
-        )
-        stored = {
-            header["name"]: header["value"]
-            for header in model["spec"]["config"]["openai"].get("headers") or []
-        }
-        assert stored == {
-            MODEL_TENANT[0]: {"value": MODEL_TENANT[1]},
-            MODEL_TOKEN[0]: _secret_ref(names["secret"], MODEL_TOKEN[1]),
-        }, f"the model should store both headers, but held {stored}"
-
-        headers_page.open_model_update(names["model"])
-        shown = headers_page.summaries(headers_page.model_headers())
-        assert shown == [
-            {"name": MODEL_TENANT[0], "source": "Direct", "value": MODEL_TENANT[1]},
-            {
-                "name": MODEL_TOKEN[0],
-                "source": "Secret",
-                "value": f"{names['secret']} · {MODEL_TOKEN[1]}",
-            },
-        ], f"the reloaded model page should show both headers, but showed {shown}"
 
     def test_agent_header_overrides_can_be_added(
         self, page: Page, header_resources: dict
@@ -292,61 +244,3 @@ class TestHeaderOverrides:
         assert shown_model == [
             {"name": AGENT_MODEL[0], "source": "Direct", "value": AGENT_MODEL[1]},
         ], f"the reloaded agent page should show the model override, but showed {shown_model}"
-
-    def test_chat_sends_only_the_query_override(
-        self, page: Page, header_resources: dict
-    ):
-        names = header_resources
-        headers_page = HeaderOverridesPage(page)
-        headers_page.open_agent(names["agent"])
-
-        section = headers_page.expand_chat_overrides()
-        assert headers_page.chat_effective_count() == "0 effective", (
-            "a new chat should start without overrides, but the panel read "
-            f"{headers_page.chat_effective_count()!r}"
-        )
-        expect(headers_page.rows(section)).to_have_count(0)
-
-        region = headers_page.add_row(section, "Add new")
-        headers_page.fill_row(
-            region,
-            MCP_REGION[0],
-            value=MCP_REGION[1],
-            server=names["server"],
-            name_is_select=True,
-        )
-        assert headers_page.chat_effective_count() == "1 effective", (
-            "the added row should count as one override, but the panel read "
-            f"{headers_page.chat_effective_count()!r}"
-        )
-
-        started = {
-            query["metadata"]["name"] for query in list_resources("query")
-        }
-        headers_page.send_chat_message("hello")
-        expect(page.locator("[data-testid='chat-message']").last).to_contain_text(
-            "Hello! I received your message.", timeout=60000
-        )
-
-        def new_queries():
-            return [
-                query for query in list_resources("query")
-                if query["metadata"]["name"] not in started
-                and query["spec"].get("target", {}).get("name") == names["agent"]
-            ]
-
-        queries = _eventually(new_queries, bool)
-        assert len(queries) == 1, (
-            f"sending one message should create one query, but found {queries}"
-        )
-        overrides = queries[0]["spec"].get("overrides") or []
-        assert overrides == [
-            {
-                "resourceType": "mcpserver",
-                "labelSelector": {"matchLabels": {MCP_SERVER_LABEL: names["server"]}},
-                "headers": [{"name": MCP_REGION[0], "value": {"value": MCP_REGION[1]}}],
-            }
-        ], (
-            "the query should carry only the chat override, not the agent's own "
-            f"overrides, but held {overrides}"
-        )

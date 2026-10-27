@@ -95,7 +95,7 @@ export function ChatMcpHeaderFields({
               <Info className="size-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent className="max-w-xs">
+          <TooltipContent className="max-w-sm text-wrap">
             {PRECEDENCE_TOOLTIP}
           </TooltipContent>
         </Tooltip>

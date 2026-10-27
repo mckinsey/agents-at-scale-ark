@@ -64,9 +64,9 @@ export function McpHeaderOverridesEditor({
       {rows.length === 0 && (
         <div className="border-stroke-tertiary flex flex-col gap-2 border border-dashed p-4">
           <p className="text-fg-secondary text-sm">
-            No header overrides are sent to MCP servers. Select an MCP tool and
-            its server&apos;s headers appear here. Servers without headers
-            cannot be overridden.
+            No header overrides are sent to MCP servers. Select an MCP tool,
+            then use Add rule to override one of its server&apos;s headers. Only
+            servers that define headers can be overridden.
           </p>
           <div className="flex items-center gap-1">
             <NamespacedLink

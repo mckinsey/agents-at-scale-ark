@@ -69,6 +69,10 @@ vi.mock('@/lib/services/queries-hooks', () => ({
   useInvalidateQueriesList: () => mockInvalidateQueriesList,
 }));
 
+vi.mock('@/lib/services/mcp-servers-hooks', () => ({
+  useGetAllMcpServers: () => ({ data: [] }),
+}));
+
 function createArkFinalChunk(opts: {
   arkTokenUsage?: {
     promptTokens: number;

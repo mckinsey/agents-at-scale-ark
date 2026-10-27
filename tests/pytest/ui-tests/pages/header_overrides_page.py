@@ -1,5 +1,3 @@
-import re
-
 from playwright.sync_api import Locator, expect
 
 from .base_page import BasePage
@@ -11,17 +9,6 @@ class HeaderOverridesPage(BasePage):
     ROW = "[data-testid='header-row']"
     MODEL_HEADERS = "[data-testid='model-headers']"
     MCP_HEADERS = "[data-testid='mcp-header-overrides']"
-    CHAT_HEADERS = "[data-testid='chat-mcp-header-overrides']"
-    CHAT_EFFECTIVE_COUNT = "[data-testid='chat-mcp-header-effective-count']"
-    CHAT_INPUT = "Type your message..."
-
-    def open_model_update(self, model: str) -> None:
-        self.page.goto(
-            f"{DASHBOARD_URL}/models/{model}/update?namespace=default",
-            wait_until="domcontentloaded",
-        )
-        self.page.get_by_role("button", name="Update Model").wait_for(timeout=30000)
-        self.model_headers().wait_for(timeout=30000)
 
     def open_agent(self, agent: str) -> None:
         self.page.goto(
@@ -35,9 +22,6 @@ class HeaderOverridesPage(BasePage):
 
     def mcp_headers(self) -> Locator:
         return self.page.locator(self.MCP_HEADERS)
-
-    def chat_section(self) -> Locator:
-        return self.page.locator(self.CHAT_HEADERS)
 
     def rows(self, section: Locator) -> Locator:
         return section.locator(self.ROW)
@@ -128,27 +112,8 @@ class HeaderOverridesPage(BasePage):
             if self._text(row.get_by_label("Header name", exact=True))
         ]
 
-    def save_model(self) -> None:
-        self.page.get_by_role("button", name="Update Model").click()
-        self.page.wait_for_url(re.compile(r"/models(\?|$)"), timeout=30000)
-
     def save_agent(self) -> None:
         self.page.get_by_role("button", name="Save changes").click()
         expect(self.page.get_by_text("Agent updated successfully")).to_be_visible(
             timeout=30000
         )
-
-    def expand_chat_overrides(self) -> Locator:
-        section = self.chat_section()
-        section.wait_for(timeout=30000)
-        section.get_by_role("button", name=re.compile(r"^MCP header overrides")).click()
-        section.get_by_role("button", name="Add new", exact=True).wait_for()
-        return section
-
-    def chat_effective_count(self) -> str:
-        return self.chat_section().locator(self.CHAT_EFFECTIVE_COUNT).inner_text().strip()
-
-    def send_chat_message(self, message: str) -> None:
-        textarea = self.page.get_by_placeholder(self.CHAT_INPUT)
-        textarea.fill(message)
-        textarea.press("Enter")

@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { AgentOverride } from '@/lib/services';
-import { agentsService, mcpServersService, toolsService } from '@/lib/services';
+import { type Agent, type AgentOverride, toolsService } from '@/lib/services';
+import { useGetAllMcpServers } from '@/lib/services/mcp-servers-hooks';
 import {
-  type AgentMcpHeader,
   type McpHeaderRow,
   agentMcpHeaders,
   buildQueryMcpOverrides,
@@ -18,61 +17,51 @@ import {
 } from '@/lib/utils/mcp-header-overrides';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-export function useQueryMcpHeaders(
-  name: string | null | undefined,
-  type: string | null | undefined,
-) {
+export function useQueryMcpHeaders(agent: Agent | null) {
   const { namespace } = useNamespace();
-  const [agentHeaders, setAgentHeaders] = useState<AgentMcpHeader[]>([]);
+  const { data: mcpServers } = useGetAllMcpServers();
   const [toolServerNames, setToolServerNames] = useState<string[]>([]);
-  const [headerNamesByServer, setHeaderNamesByServer] = useState<
-    Record<string, string[]>
-  >({});
   const [rows, setRows] = useState<McpHeaderRow[]>([]);
+
+  const agentHeaders = useMemo(
+    () => agentMcpHeaders(agent?.overrides),
+    [agent],
+  );
+
+  const headerNamesByServer = useMemo(
+    () =>
+      Object.fromEntries(
+        (mcpServers ?? []).map(server => [
+          server.name,
+          server.header_names ?? [],
+        ]),
+      ),
+    [mcpServers],
+  );
 
   useEffect(() => {
     setRows([]);
-    if (type !== 'agent' || !name || !namespace) {
-      setAgentHeaders([]);
-      setToolServerNames([]);
-      setHeaderNamesByServer({});
-      return;
-    }
+    setToolServerNames([]);
+    const agentToolNames = new Set((agent?.tools ?? []).map(tool => tool.name));
+    if (agentToolNames.size === 0 || !namespace) return;
 
     let cancelled = false;
-    const load = async () => {
-      const agent = await agentsService
-        .getByName(namespace, name)
-        .catch(() => null);
-      const agentToolNames = new Set(
-        (agent?.tools ?? []).map(tool => tool.name),
-      );
-      const usesTools = agentToolNames.size > 0;
-      const tools = usesTools
-        ? await toolsService.getAll(namespace).catch(() => [])
-        : [];
-      const mcpServers = usesTools
-        ? await mcpServersService.getAll(namespace).catch(() => [])
-        : [];
-      if (cancelled) return;
-      setHeaderNamesByServer(
-        Object.fromEntries(
-          mcpServers.map(server => [server.name, server.header_names ?? []]),
-        ),
-      );
-      setAgentHeaders(agentMcpHeaders(agent?.overrides));
-      setToolServerNames(
-        mcpServerNamesFromTools(
-          tools.filter(tool => agentToolNames.has(tool.name)),
-        ),
-      );
-    };
-    load();
+    toolsService
+      .getAll(namespace)
+      .catch(() => [])
+      .then(tools => {
+        if (cancelled) return;
+        setToolServerNames(
+          mcpServerNamesFromTools(
+            tools.filter(tool => agentToolNames.has(tool.name)),
+          ),
+        );
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [name, type, namespace]);
+  }, [agent, namespace]);
 
   const serverNames = useMemo(() => {
     const names = new Set(toolServerNames);
@@ -141,7 +130,7 @@ export function useQueryMcpHeaders(
   }, [rows, agentHeaders]);
 
   return {
-    visible: type === 'agent' && (serverNames.length > 0 || rows.length > 0),
+    visible: agent !== null && (serverNames.length > 0 || rows.length > 0),
     rows,
     nameOptionsFor,
     namesForServer,
