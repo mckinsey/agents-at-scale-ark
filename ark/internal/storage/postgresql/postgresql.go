@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -719,7 +720,7 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		return nil, "", 0, err
 	}
 
-	listRV := p.liftHeadFresh(ctx, page.headRV, rev.RV)
+	listRV := p.freshHead(ctx, page.maxRV, rev.RV)
 	if err := checkListRevision(listRV, rev); err != nil {
 		return nil, "", 0, err
 	}
@@ -739,15 +740,7 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	return objects, continueToken, listRV, nil
 }
 
-// headResourceVersion returns the store head revision as of snapshot: the max
-// resource_version committed in that snapshot, lifted to the purge floor and the
-// head revision base. The floor term recovers the head when the highest-RV row
-// has itself been purged (e.g. the newest object was deleted and its tombstone
-// hard-deleted), where a plain MAX over surviving rows would fall back below the
-// floor and 410 every resume. A watch resuming from it is at or above the floor
-// yet never skips a committed change: the floor is at most the true head, and the
-// base is above every write because bootstrapHeadRevisionQuery burns its value.
-func (p *PostgreSQLBackend) headResourceVersion(ctx context.Context, q queryer, snapshot string) (int64, error) {
+func snapshotMaxResourceVersion(ctx context.Context, q queryer, snapshot string) (int64, error) {
 	var maxRV int64
 	err := q.QueryRowContext(ctx,
 		`SELECT COALESCE(MAX(resource_version), 0) FROM resources
@@ -755,7 +748,7 @@ func (p *PostgreSQLBackend) headResourceVersion(ctx context.Context, q queryer, 
 	if err != nil {
 		return 0, fmt.Errorf("failed to compute list resourceVersion: %w", err)
 	}
-	return p.liftHead(maxRV), nil
+	return maxRV, nil
 }
 
 func (p *PostgreSQLBackend) buildListQuery(kind, namespace string, opts storage.ListOptions, contTok listContinueToken) (string, []interface{}, error) {
@@ -1052,6 +1045,13 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	// resourceVersion resume semantics: "" and "0" ("Start at Any") replay all
 	// current state then stream; a concrete RV ("Start at Exact") delivers only
 	// deltas after it, rather than re-adding every object on reconnect. See #2680.
+	// ParseMinResourceVersion rejects a signed value like "-5" or "+100" rather than
+	// parsing it: a negative startRV would slip past every resume floor and silently
+	// degrade to replay-all.
+	requestedRV, err := storage.ParseMinResourceVersion(opts.ResourceVersion)
+	if err != nil {
+		return nil, err
+	}
 	// A WatchList (sendInitialEvents) wants the complete current state followed by
 	// the initial-events-end bookmark: with resourceVersionMatch=NotOlderThan the
 	// current state qualifies once the store has reached the requested version, and a
@@ -1059,22 +1059,14 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	// Streaming deltas only would make it prune every object it already held.
 	var startRV int64
 	if opts.SendInitialEvents {
-		minRV, perr := storage.ParseMinResourceVersion(opts.ResourceVersion)
-		if perr != nil {
-			return nil, perr
-		}
-		if err := p.RequireResourceVersion(ctx, minRV); err != nil {
+		if err := p.RequireResourceVersion(ctx, requestedRV); err != nil {
 			return nil, err
 		}
-	} else if opts.ResourceVersion != "" && opts.ResourceVersion != "0" {
-		// ParseUint (not ParseInt) so a signed value like "-5" or "+100" is rejected
-		// rather than parsed: a negative startRV would slip past every resume floor
-		// and silently degrade to replay-all. Matches setListItems' rv parsing.
-		rv, perr := strconv.ParseUint(opts.ResourceVersion, 10, 63)
-		if perr != nil {
+	} else {
+		if requestedRV > math.MaxInt64 {
 			return nil, fmt.Errorf("%w: invalid resourceVersion %q", storage.ErrInvalidRequest, opts.ResourceVersion)
 		}
-		startRV = int64(rv)
+		startRV = int64(requestedRV)
 	}
 	if err := p.checkResourceVersionNotExpired(startRV); err != nil {
 		return nil, err

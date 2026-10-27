@@ -291,17 +291,17 @@ func TestHeadResourceVersion_RowUpdatedAfterTheSnapshot_Integration(t *testing.T
 		t.Fatalf("Update failed: %v", err)
 	}
 
-	inTx, err := f.backend.headResourceVersion(ctx, tx, snapshot)
+	inTx, err := snapshotMaxResourceVersion(ctx, tx, snapshot)
 	if err != nil {
-		t.Fatalf("headResourceVersion in the list transaction: %v", err)
+		t.Fatalf("snapshotMaxResourceVersion in the list transaction: %v", err)
 	}
 	if inTx != topRV {
 		t.Errorf("head read inside the list transaction = %d, want %d", inTx, topRV)
 	}
 
-	outside, err := f.backend.headResourceVersion(ctx, f.backend.db, snapshot)
+	outside, err := snapshotMaxResourceVersion(ctx, f.backend.db, snapshot)
 	if err != nil {
-		t.Fatalf("headResourceVersion outside the transaction: %v", err)
+		t.Fatalf("snapshotMaxResourceVersion outside the transaction: %v", err)
 	}
 	if outside >= topRV {
 		t.Fatalf("expected a separate statement to miss the updated row (got %d, top %d); the test no longer exercises the race", outside, topRV)
