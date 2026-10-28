@@ -12,6 +12,7 @@ import {
 } from '@/lib/services/secrets-hooks';
 
 vi.mock('@/lib/services/secrets-hooks', () => ({
+  GET_ALL_SECRETS_QUERY_KEY: 'get-all-secrets',
   useGetAllSecrets: vi.fn(),
   useGetSecret: vi.fn(),
   useCreateSecret: vi.fn(),
