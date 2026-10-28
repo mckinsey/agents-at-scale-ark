@@ -6,7 +6,7 @@ Checks against a real ark-api that `/v1/memories` creates and updates Memories w
 
 - Deploys the `ark-api` chart with this build's image (`ARK_API_IMAGE`/`ARK_API_IMAGE_TAG`) and the chart's default `AUTH_MODE=open`.
 - `POST` with `spec.address`, a header and a label creates a Memory that `kubectl` reads back with the same spec and label.
-- `POST` without `spec`, with an empty `address`, or with the old `description`/`config` body answers 422 and creates nothing.
+- `POST` without `spec`, with an empty `address`, with a header reference the CRD does not accept, or with the old `description`/`config` body answers 422 and creates nothing.
 - `GET` returns `spec` and `labels`, and no `description` or `config`.
 - `PUT` with a new `spec` replaces the stored spec and keeps the labels.
 - `DELETE` removes the Memory.
