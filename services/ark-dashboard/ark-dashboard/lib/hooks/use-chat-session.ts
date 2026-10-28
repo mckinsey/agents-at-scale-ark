@@ -71,6 +71,10 @@ function isBrokerUnavailableChunk(chunk: ArkExtendedChunk): boolean {
 
 const STREAM_TERMINAL_STOP_GRACE_MS = 300;
 
+function toSystemMessages(contents: string[]): ExtendedChatMessage[] {
+  return contents.map(content => ({ role: 'system', content }));
+}
+
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError';
 }
@@ -507,20 +511,14 @@ export function useChatSession({
       };
 
       const addSystemMessagesAndNewAssistant = () => {
-        const systemMsgCount = pendingSystemMessages.length;
-        updateChatMessages(prev => {
-          const systemMsgs = pendingSystemMessages.map(content => ({
-            role: 'system' as const,
-            content,
-          }));
-          return [
-            ...prev,
-            ...systemMsgs,
-            { role: 'assistant', content: '' } as ExtendedChatMessage,
-          ];
-        });
+        const systemMsgs = toSystemMessages(pendingSystemMessages);
+        updateChatMessages(prev => [
+          ...prev,
+          ...systemMsgs,
+          { role: 'assistant', content: '' } as ExtendedChatMessage,
+        ]);
         pendingSystemMessages.length = 0;
-        currentMessageIndex += systemMsgCount + 1;
+        currentMessageIndex += systemMsgs.length + 1;
       };
 
       const { queryName: streamQueryName, chunks } =
@@ -825,13 +823,8 @@ export function useChatSession({
       }
 
       if (pendingSystemMessages.length > 0) {
-        updateChatMessages(prev => {
-          const systemMsgs = pendingSystemMessages.map(content => ({
-            role: 'system' as const,
-            content,
-          }));
-          return [...prev, ...systemMsgs];
-        });
+        const systemMsgs = toSystemMessages(pendingSystemMessages);
+        updateChatMessages(prev => [...prev, ...systemMsgs]);
         pendingSystemMessages.length = 0;
       }
 
@@ -1005,10 +998,10 @@ export function useChatSession({
           apiParameters,
           err.queryName || lastQueryName.current || undefined,
         );
-      } catch (pollErr) {
-        console.error('Error sending message:', pollErr);
+      } catch (error_) {
+        console.error('Error sending message:', error_);
         appendFailedMessage(
-          pollErr instanceof Error ? pollErr.message : 'Failed to send message',
+          error_ instanceof Error ? error_.message : 'Failed to send message',
         );
         return false;
       }
