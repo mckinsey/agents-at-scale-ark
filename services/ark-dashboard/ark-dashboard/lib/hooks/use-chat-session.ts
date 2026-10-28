@@ -32,7 +32,7 @@ import { useResumeRunningQuery } from '@/lib/hooks/use-resume-running-query';
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
 import {
-  BrokerUnavailableError,
+  type BrokerUnavailableError,
   type ChatResponse,
   type MemoryNotice,
   type MemoryNoticeLookup,
@@ -44,36 +44,20 @@ import type {
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
 import {
-  type AccumulatedToolCall,
-  type ResultMessage,
-  accumulateToolCallDeltas,
+  type StreamTurnEffects,
+  createStreamTurnState,
+  finishStreamTurn,
+  processStreamChunk,
+} from '@/lib/utils/chat-stream-turn';
+import {
   buildCascadingApprovalMessage,
   buildPollResultMessages,
   convertResultMessage,
-  convertTurnMessages,
-  extractTokenUsage,
   stripEmptyAssistantPlaceholder,
 } from '@/lib/utils/chat-turn';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-function isBrokerUnavailableChunk(chunk: ArkExtendedChunk): boolean {
-  if (!('error' in chunk) || !chunk.error) {
-    return false;
-  }
-  if (chunk.code === 'broker_unavailable') {
-    return true;
-  }
-  return (
-    chunk.error.type === 'connection_error' ||
-    chunk.error.type === 'service_unavailable'
-  );
-}
-
 const STREAM_TERMINAL_STOP_GRACE_MS = 300;
-
-function toSystemMessages(contents: string[]): ExtendedChatMessage[] {
-  return contents.map(content => ({ role: 'system', content }));
-}
 
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError';
@@ -253,6 +237,26 @@ export function useChatSession({
                 currentUsage.completion_tokens + usage.completion_tokens,
               total_tokens: currentUsage.total_tokens + usage.total_tokens,
               cached_tokens: currentUsage.cached_tokens + usage.cached_tokens,
+            },
+          },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
+  const updateMessageTokenUsage = useCallback(
+    (messageIndex: number, usage: TokenUsage) => {
+      setChatHistory(prev => {
+        const currentSession = prev[chatKey];
+        if (!currentSession) return prev;
+        return {
+          ...prev,
+          [chatKey]: {
+            ...currentSession,
+            messageTokenUsage: {
+              ...(currentSession.messageTokenUsage || {}),
+              [messageIndex]: usage,
             },
           },
         };
@@ -468,58 +472,11 @@ export function useChatSession({
       chatStreamAbortControllerRef.current = new AbortController();
 
       const turnStartIndex = chatMessages.length + 1;
-      let currentMessageIndex = turnStartIndex;
 
       updateChatMessages(prev => [
         ...prev,
         { role: 'assistant', content: '' } as ExtendedChatMessage,
       ]);
-
-      let accumulatedContent = '';
-      let messageTokenUsage: TokenUsage | null = null;
-      const accumulatedToolCalls: AccumulatedToolCall[] = [];
-      const pendingSystemMessages: Array<string> = [];
-
-      let hasError = false;
-      let errorMessage = '';
-      let brokerUnavailableError: BrokerUnavailableError | null = null;
-      let queryName = '';
-      let currentAgent: string | undefined;
-      let turnComplete = false;
-      let completedQueryMessages: ResultMessage[] = [];
-      let hasPendingApproval = false;
-
-      const finalizeCurrentMessage = () => {
-        if (accumulatedContent || accumulatedToolCalls.length > 0) {
-          updateChatMessages(prev => {
-            const updated = [...prev];
-            const updatedMessage: ExtendedChatMessage = {
-              role: 'assistant',
-              content: accumulatedContent,
-              tool_calls:
-                accumulatedToolCalls.length > 0
-                  ? [...accumulatedToolCalls]
-                  : undefined,
-            } as ExtendedChatMessage;
-            if (currentAgent) {
-              (updatedMessage as { name?: string }).name = currentAgent;
-            }
-            updated[currentMessageIndex] = updatedMessage;
-            return updated;
-          });
-        }
-      };
-
-      const addSystemMessagesAndNewAssistant = () => {
-        const systemMsgs = toSystemMessages(pendingSystemMessages);
-        updateChatMessages(prev => [
-          ...prev,
-          ...systemMsgs,
-          { role: 'assistant', content: '' } as ExtendedChatMessage,
-        ]);
-        pendingSystemMessages.length = 0;
-        currentMessageIndex += systemMsgs.length + 1;
-      };
 
       const { queryName: streamQueryName, chunks } =
         await chatService.startStreamChatResponse(
@@ -534,10 +491,24 @@ export function useChatSession({
           apiParameters,
         );
 
-      queryName = streamQueryName;
-      lastQueryName.current = queryName;
-      setActiveQueryName(queryName);
+      lastQueryName.current = streamQueryName;
+      setActiveQueryName(streamQueryName);
       invalidateQueriesList();
+
+      const turn = createStreamTurnState(streamQueryName, turnStartIndex);
+      const effects: StreamTurnEffects = {
+        updateChatMessages,
+        setStatusText,
+        updateConversationId,
+        updateTokenUsage,
+        setMessageTokenUsage: updateMessageTokenUsage,
+        onApprovalRequest: (queryName, messageIndex) => {
+          pendingApprovalQueryRef.current = { queryName, messageIndex };
+        },
+        onQueryNameChange: queryName => {
+          lastQueryName.current = queryName;
+        },
+      };
 
       const streamAbortController = chatStreamAbortControllerRef.current;
       let forceClosePhase: string | undefined;
@@ -573,213 +544,16 @@ export function useChatSession({
         },
       )) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
-
-        console.log(
-          '[HITL Debug] Received chunk:',
-          JSON.stringify(chunk).slice(0, 200),
-        );
-
-          if (
-            'type' in typedChunk &&
-            typedChunk.type === 'tool_approval_request'
-          ) {
-            console.log(
-              '[HITL Debug] Detected tool_approval_request event!',
-              typedChunk,
-            );
-            const approvalRequest: import('@/lib/types/chat-message').ToolApprovalRequest =
-              {
-                ...(typedChunk as unknown as import('@/lib/types/chat-message').ToolApprovalRequest),
-                receivedAtMs: Date.now(),
-              };
-            hasPendingApproval = true;
-
-            pendingApprovalQueryRef.current = {
-              queryName,
-              messageIndex: currentMessageIndex,
-            };
-            console.log(
-              '[HITL Debug] Stored pending approval query info:',
-              pendingApprovalQueryRef.current,
-            );
-
-            updateChatMessages(prev => {
-              console.log(
-                '[HITL Debug] updateChatMessages called, prev messages:',
-                prev.length,
-              );
-              const updated = [...prev];
-              updated[currentMessageIndex] = {
-                role: 'assistant',
-                content: '',
-                approvalRequest,
-                metadata: {
-                  queryName,
-                },
-              } as ExtendedChatMessage;
-              console.log(
-                '[HITL Debug] Message at index',
-                currentMessageIndex,
-                'updated with approval:',
-                updated[currentMessageIndex],
-              );
-              return updated;
-            });
-
-            console.log(
-              '[HITL Debug] Updated message with approval request at index:',
-              currentMessageIndex,
-            );
-            console.log('[HITL Debug] Continuing to next chunk...');
-            continue;
-          }
-
-          if ('type' in typedChunk && typedChunk.type === 'a2a_status') {
-            setStatusText(typedChunk.message || undefined);
-            continue;
-          }
-
-          console.log(
-            '[HITL Debug] Processing regular chunk (not approval request)',
-          );
-
-          if ('error' in typedChunk && typedChunk.error) {
-            if (isBrokerUnavailableChunk(typedChunk)) {
-              brokerUnavailableError = new BrokerUnavailableError(
-                typedChunk.error.message || 'Broker unavailable',
-                503,
-                typedChunk.code ?? 'broker_unavailable',
-                typedChunk.fallback ?? 'poll',
-                queryName,
-              );
-              break;
-            }
-            hasError = true;
-            errorMessage = typedChunk.error.message || 'An error occurred';
-            queryName = typedChunk.ark?.query || '';
-            lastQueryName.current = queryName;
-            break;
-          }
-
-          if (
-            'id' in typedChunk &&
-            typedChunk.id === 'chatcmpl-final' &&
-            'ark' in typedChunk &&
-            typedChunk.ark
-          ) {
-            const arkData = typedChunk.ark;
-
-            const returnedConversationId =
-              arkData.completedQuery?.status?.conversationId;
-            if (returnedConversationId) {
-              updateConversationId(returnedConversationId);
-            }
-
-            if (arkData.completedQuery?.status?.phase === 'error') {
-              hasError = true;
-              errorMessage =
-                arkData.completedQuery.status.response?.content ||
-                'Query failed';
-              queryName = arkData.completedQuery.metadata?.name || '';
-              break;
-            }
-            const rawMessages = arkData.completedQuery?.status?.response?.raw;
-            if (rawMessages) {
-              try {
-                completedQueryMessages = JSON.parse(rawMessages);
-              } catch (e) {
-                console.error('Failed to parse completed query messages:', e);
-              }
-            }
-
-            const usage = extractTokenUsage(
-              arkData.completedQuery?.status?.tokenUsage,
-              typedChunk.usage,
-            );
-
-            if (usage) {
-              messageTokenUsage = usage;
-              updateTokenUsage(usage);
-            }
-          }
-
-          if ('ark' in typedChunk && typedChunk.ark) {
-            const arkData = typedChunk.ark;
-
-            if (arkData.systemMessage) {
-              pendingSystemMessages.push(arkData.systemMessage);
-            }
-
-            const chunkAgent = arkData.agent;
-
-            // Check if we need to start a new assistant message
-            const isNewAgent = chunkAgent && chunkAgent !== currentAgent;
-            const isNewTurn = chunkAgent === currentAgent && turnComplete;
-
-            if (isNewAgent || isNewTurn) {
-              // Finalize previous message if it exists
-              if (currentAgent) {
-                finalizeCurrentMessage();
-                accumulatedContent = '';
-                accumulatedToolCalls.length = 0;
-              }
-
-              // Add system messages + new assistant message
-              addSystemMessagesAndNewAssistant();
-
-              if (isNewAgent) {
-                currentAgent = chunkAgent;
-              }
-              turnComplete = false;
-            }
-          }
-
-          const delta =
-            'choices' in typedChunk
-              ? typedChunk?.choices?.[0]?.delta
-              : undefined;
-          if (delta?.content) {
-            accumulatedContent += delta.content;
-            setStatusText(undefined);
-          }
-
-          if (delta?.tool_calls) {
-            accumulateToolCallDeltas(accumulatedToolCalls, delta.tool_calls);
-          }
-
-          updateChatMessages(prev => {
-            const updated = [...prev];
-            const updatedMessage: ExtendedChatMessage = {
-              role: 'assistant',
-              content: accumulatedContent,
-              tool_calls:
-                accumulatedToolCalls.length > 0
-                  ? accumulatedToolCalls
-                  : undefined,
-            } as ExtendedChatMessage;
-            if (currentAgent) {
-              (updatedMessage as { name?: string }).name = currentAgent;
-            }
-            updated[currentMessageIndex] = updatedMessage;
-            return updated;
-          });
-
-          const finishReason =
-            'choices' in typedChunk
-              ? typedChunk?.choices?.[0]?.finish_reason
-              : undefined;
-          if (finishReason === 'stop') {
-            turnComplete = true;
-          }
+        if (processStreamChunk(turn, typedChunk, effects) === 'stop') break;
       }
 
-      if (brokerUnavailableError) {
-        throw brokerUnavailableError;
+      if (turn.brokerUnavailableError) {
+        throw turn.brokerUnavailableError;
       }
 
-      if (forceClosePhase === 'error' && !hasError) {
-        hasError = true;
-        errorMessage = errorMessage || 'Query failed';
+      if (forceClosePhase === 'error' && !turn.hasError) {
+        turn.hasError = true;
+        turn.errorMessage = turn.errorMessage || 'Query failed';
       }
       if (forceClosePhase) {
         trackEvent({
@@ -787,84 +561,14 @@ export function useChatSession({
           properties: {
             targetType: type,
             targetName: name,
-            queryName,
+            queryName: turn.queryName,
           },
         });
       }
 
-      if (!hasPendingApproval) {
-        console.log(
-          '[HITL Debug] Finalizing current message (no pending approval)',
-        );
-        finalizeCurrentMessage();
-      } else {
-        console.log(
-          '[HITL Debug] Skipping finalize because we have a pending approval',
-        );
-      }
-
-      if (messageTokenUsage) {
-        const assistantIndex = currentMessageIndex;
-        setChatHistory(prev => {
-          const safePrev = prev || {};
-          const currentSession = safePrev[chatKey];
-          if (!currentSession) return safePrev;
-          return {
-            ...safePrev,
-            [chatKey]: {
-              ...currentSession,
-              messageTokenUsage: {
-                ...(currentSession.messageTokenUsage || {}),
-                [assistantIndex]: messageTokenUsage,
-              },
-            },
-          };
-        });
-      }
-
-      if (pendingSystemMessages.length > 0) {
-        const systemMsgs = toSystemMessages(pendingSystemMessages);
-        updateChatMessages(prev => [...prev, ...systemMsgs]);
-        pendingSystemMessages.length = 0;
-      }
-
-      if (hasError) {
-        const hasTerminateToolCall = accumulatedToolCalls.some(
-          tc => tc.function.name === 'terminate',
-        );
-        if (!hasTerminateToolCall) {
-          updateChatMessages(prev => {
-            const updated = [...prev];
-            updated[currentMessageIndex] = {
-              role: 'assistant',
-              content: errorMessage,
-              metadata: {
-                status: 'failed',
-                queryName: queryName || undefined,
-              },
-            } as ExtendedChatMessage;
-            return updated;
-          });
-          return false;
-        }
-      }
-
-      if (completedQueryMessages.length > 0) {
-        const turnMessages = convertTurnMessages(completedQueryMessages);
-        updateChatMessages(prev => [
-          ...prev.slice(0, turnStartIndex),
-          ...turnMessages,
-        ]);
-      }
-
-      console.log('[HITL Debug] Stream processing completed', {
-        hasPendingApproval,
-        queryName,
-      });
-      return hasPendingApproval;
+      return finishStreamTurn(turn, effects);
     },
     [
-      chatKey,
       chatMessages,
       conversationId,
       invalidateQueriesList,
@@ -873,10 +577,10 @@ export function useChatSession({
       queryTimeout,
       sessionId,
       setActiveQueryName,
-      setChatHistory,
       type,
       updateChatMessages,
       updateConversationId,
+      updateMessageTokenUsage,
       updateTokenUsage,
     ],
   );
