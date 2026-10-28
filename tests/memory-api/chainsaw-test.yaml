@@ -1,0 +1,194 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: memory-api
+  labels:
+    requires-images: "true"
+spec:
+  description: >
+    #3859: /v1/memories creates and updates Memories with the CRD spec.
+    Deploys a real ark-api from this build's image and checks that a POST
+    with spec.address and headers creates the Memory as sent, that bodies
+    without a valid address, or with the old description/config fields,
+    answer 422 and create nothing, that GET returns the spec and labels, that
+    PUT replaces the spec and keeps the labels, and that DELETE removes it.
+  timeouts:
+    apply: 120s
+    assert: 120s
+    exec: 180s
+
+  steps:
+  - name: install-ark-api
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-api ../../services/ark-api/chart \
+            --namespace "$NAMESPACE" \
+            ${ARK_API_IMAGE:+--set app.image.repository=${ARK_API_IMAGE}} \
+            ${ARK_API_IMAGE_TAG:+--set app.image.tag=${ARK_API_IMAGE_TAG}} \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-api --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: start-curl-pod
+    try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: memory-api-curl
+          spec:
+            containers:
+              - name: curl
+                image: curlimages/curl:8.11.1
+                command: ["sleep", "600"]
+            restartPolicy: Never
+            terminationGracePeriodSeconds: 0
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: memory-api-curl
+        timeout: 120s
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+
+  - name: create-with-crd-spec
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          set -eu
+          BODY='{"name":"api-memory","labels":{"team":"a"},"spec":{"address":{"value":"http://ark-broker.example.svc:8080"},"headers":[{"name":"X-Tenant","value":{"value":"a"}}]}}'
+          CODE=$(kubectl exec memory-api-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' -X POST \
+            "http://ark-api.$NAMESPACE.svc.cluster.local/v1/memories?namespace=$NAMESPACE" \
+            -H 'Content-Type: application/json' -d "$BODY")
+          echo "POST -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Memory
+          metadata:
+            name: api-memory
+            labels:
+              team: a
+          spec:
+            address:
+              value: http://ark-broker.example.svc:8080
+            headers:
+            - name: X-Tenant
+              value:
+                value: a
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: invalid-bodies-are-rejected
+    try:
+    - script:
+        timeout: 90s
+        content: |
+          set -eu
+          URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/memories?namespace=$NAMESPACE"
+          expect_422() {
+            CODE=$(kubectl exec memory-api-curl -n "$NAMESPACE" -- \
+              curl -s -o /dev/null -w '%{http_code}' -X POST "$URL" \
+              -H 'Content-Type: application/json' -d "$2")
+            echo "$1 -> $CODE"
+            [ "$CODE" = "422" ] || { echo "FAIL: expected 422"; exit 1; }
+          }
+          expect_422 "missing spec" '{"name":"bad-1"}'
+          expect_422 "empty address" '{"name":"bad-2","spec":{"address":{}}}'
+          expect_422 "old body" '{"name":"bad-3","description":"repro","config":{"address":{"value":"http://x"}}}'
+          for n in bad-1 bad-2 bad-3; do
+            if kubectl get memory "$n" -n "$NAMESPACE" >/dev/null 2>&1; then
+              echo "FAIL: memory $n was created"; exit 1
+            fi
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: get-returns-spec-and-labels
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          set -eu
+          BODY=$(kubectl exec memory-api-curl -n "$NAMESPACE" -- \
+            curl -sf "http://ark-api.$NAMESPACE.svc.cluster.local/v1/memories/api-memory?namespace=$NAMESPACE")
+          echo "$BODY"
+          echo "$BODY" | jq -e '.spec.address.value == "http://ark-broker.example.svc:8080"' >/dev/null || { echo "FAIL: spec.address"; exit 1; }
+          echo "$BODY" | jq -e '.labels.team == "a"' >/dev/null || { echo "FAIL: labels"; exit 1; }
+          echo "$BODY" | jq -e 'has("description") or has("config") | not' >/dev/null || { echo "FAIL: removed fields present"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: put-replaces-spec-and-keeps-labels
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          set -eu
+          CODE=$(kubectl exec memory-api-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' -X PUT \
+            "http://ark-api.$NAMESPACE.svc.cluster.local/v1/memories/api-memory?namespace=$NAMESPACE" \
+            -H 'Content-Type: application/json' \
+            -d '{"spec":{"address":{"valueFrom":{"serviceRef":{"name":"ark-broker","port":"http"}}}}}')
+          echo "PUT -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+          SPEC=$(kubectl get memory api-memory -n "$NAMESPACE" -o json | jq -c '.spec')
+          echo "spec: $SPEC"
+          [ "$SPEC" = '{"address":{"valueFrom":{"serviceRef":{"name":"ark-broker","port":"http"}}}}' ] || { echo "FAIL: spec not replaced"; exit 1; }
+          TEAM=$(kubectl get memory api-memory -n "$NAMESPACE" -o jsonpath='{.metadata.labels.team}')
+          [ "$TEAM" = "a" ] || { echo "FAIL: label lost"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: delete-removes-memory
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          set -eu
+          CODE=$(kubectl exec memory-api-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+            "http://ark-api.$NAMESPACE.svc.cluster.local/v1/memories/api-memory?namespace=$NAMESPACE")
+          echo "DELETE -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+    - error:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Memory
+          metadata:
+            name: api-memory
