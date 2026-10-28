@@ -4294,11 +4294,17 @@ export interface components {
             /** Namespace */
             namespace?: string | null;
         };
-        /** MemoryAddressSource */
-        MemoryAddressSource: {
+        /** MemoryAddressValueFrom */
+        MemoryAddressValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
+        };
+        /** MemoryAddressValueSource */
+        MemoryAddressValueSource: {
             /** Value */
             value?: string | null;
-            valueFrom?: components["schemas"]["MemoryValueFrom"] | null;
+            valueFrom?: components["schemas"]["MemoryAddressValueFrom"] | null;
         };
         /** MemoryConfigMapKeyRef */
         MemoryConfigMapKeyRef: {
@@ -4353,13 +4359,25 @@ export interface components {
         MemoryHeader: {
             /** Name */
             name: string;
-            value: components["schemas"]["MemoryValueSource"];
+            value: components["schemas"]["MemoryHeaderValueSource"];
         };
         /** MemoryHeaderResponse */
         MemoryHeaderResponse: {
             /** Name */
             name: string;
-            value: components["schemas"]["MemoryAddressSource"];
+            value: components["schemas"]["MemoryValueSourceResponse"];
+        };
+        /** MemoryHeaderValueFrom */
+        MemoryHeaderValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            queryParameterRef?: components["schemas"]["MemoryQueryParameterRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+        };
+        /** MemoryHeaderValueSource */
+        MemoryHeaderValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryHeaderValueFrom"] | null;
         };
         /**
          * MemoryListResponse
@@ -4448,13 +4466,13 @@ export interface components {
         };
         /** MemorySpec */
         MemorySpec: {
-            address: components["schemas"]["MemoryValueSource"];
+            address: components["schemas"]["MemoryAddressValueSource"];
             /** Headers */
             headers?: components["schemas"]["MemoryHeader"][] | null;
         };
         /** MemorySpecResponse */
         MemorySpecResponse: {
-            address?: components["schemas"]["MemoryAddressSource"] | null;
+            address?: components["schemas"]["MemoryValueSourceResponse"] | null;
             /** Headers */
             headers?: components["schemas"]["MemoryHeaderResponse"][] | null;
         };
@@ -4480,8 +4498,8 @@ export interface components {
             secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
             serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
         };
-        /** MemoryValueSource */
-        MemoryValueSource: {
+        /** MemoryValueSourceResponse */
+        MemoryValueSourceResponse: {
             /** Value */
             value?: string | null;
             valueFrom?: components["schemas"]["MemoryValueFrom"] | null;
