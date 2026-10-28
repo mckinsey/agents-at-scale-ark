@@ -1,7 +1,20 @@
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+
 const ORIGIN_TYPE_LABELS: Record<string, string> = {
   github: 'GitHub',
   marketplace: 'Marketplace',
 };
+
+export const A2A_SERVER_ORIGIN_LABEL = 'A2A server';
+
+export function getAgentOriginLabel(
+  annotations?: Record<string, string> | null,
+): string {
+  if (annotations?.[ARK_ANNOTATIONS.A2A_SERVER_NAME]) {
+    return A2A_SERVER_ORIGIN_LABEL;
+  }
+  return getOriginLabel(annotations?.[ARK_ANNOTATIONS.ORIGIN]);
+}
 
 export function getOriginLabel(origin?: string | null): string {
   if (!origin) return 'ARK';
@@ -46,7 +59,7 @@ export function getOriginIcon(
   if (mode === 'metadata') {
     try {
       originType = origin ? JSON.parse(origin)?.type : null;
-    } catch (e) {
+    } catch {
       originType = null;
     }
   }
