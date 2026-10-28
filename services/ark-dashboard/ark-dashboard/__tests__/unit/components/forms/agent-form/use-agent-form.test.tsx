@@ -174,6 +174,30 @@ describe('useAgentForm output schema', () => {
     );
   });
 
+  it('removes the annotation when the engine is cleared', async () => {
+    store.set(storedIsExperimentalExecutionEngineEnabledAtom, true);
+    mockAgent('executor-openai-responses', {
+      [OUTPUT_SCHEMA_KEY]: '{"type":"object"}',
+    });
+    const { result } = await renderLoadedForm();
+
+    await act(async () => {
+      await result.current.actions.onSubmit({
+        ...result.current.form.getValues(),
+        executionEngineName: '__none__',
+      });
+    });
+
+    expect(agentsService.update).toHaveBeenCalledWith(
+      'test-namespace',
+      'a1',
+      expect.objectContaining({
+        executionEngine: null,
+        annotations: { [OUTPUT_SCHEMA_KEY]: null },
+      }),
+    );
+  });
+
   it('skips schema validation when the engine does not support it', async () => {
     mockAgent('executor-langchain');
     const { result } = await renderLoadedForm();

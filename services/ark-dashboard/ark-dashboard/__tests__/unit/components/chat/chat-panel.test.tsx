@@ -155,6 +155,29 @@ describe('ChatPanel output schema override', () => {
     expect(screen.getByLabelText('Output schema')).toBeInTheDocument();
   });
 
+  it('marks the toggle by override validity', () => {
+    const { unmount } = renderChatPanel({
+      supportsOutputSchema: true,
+      outputSchemaOverride: '{"type":"object"}',
+      isOutputSchemaOverrideValid: true,
+    });
+    const toggle = () =>
+      screen.getByRole('button', { name: 'Output schema override' });
+
+    expect(toggle().querySelector('.bg-status-success')).not.toBeNull();
+    expect(toggle().querySelector('.bg-status-error')).toBeNull();
+    unmount();
+
+    renderChatPanel({
+      supportsOutputSchema: true,
+      outputSchemaOverride: '{"type":',
+      isOutputSchemaOverrideValid: false,
+    });
+
+    expect(toggle().querySelector('.bg-status-error')).not.toBeNull();
+    expect(toggle().querySelector('.bg-status-success')).toBeNull();
+  });
+
   it('disables the override when the agent has its own schema', () => {
     renderChatPanel({
       supportsOutputSchema: true,
