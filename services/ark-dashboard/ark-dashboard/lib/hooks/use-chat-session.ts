@@ -44,8 +44,14 @@ import type {
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
 import {
+  type AccumulatedToolCall,
+  type ResultMessage,
+  accumulateToolCallDeltas,
   buildCascadingApprovalMessage,
+  buildPollResultMessages,
   convertResultMessage,
+  convertTurnMessages,
+  extractTokenUsage,
   stripEmptyAssistantPlaceholder,
 } from '@/lib/utils/chat-turn';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -64,6 +70,20 @@ function isBrokerUnavailableChunk(chunk: ArkExtendedChunk): boolean {
 }
 
 const STREAM_TERMINAL_STOP_GRACE_MS = 300;
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
+}
+
+function toSendErrorMessage(err: unknown): string {
+  if (!(err instanceof Error)) {
+    return 'Failed to send message';
+  }
+  if (err.message.includes('Failed to fetch')) {
+    return 'Unable to connect to the ARK API. Please ensure the backend service is running on port 8000.';
+  }
+  return err.message;
+}
 
 async function* streamUntilForceClose<T>(
   source: AsyncIterable<T>,
@@ -296,6 +316,19 @@ export function useChatSession({
     }
   }, [namespace, updateConversationId]);
 
+  const syncConversationId = useCallback(
+    async (queryName: string) => {
+      const fullQuery = await chatService.getQuery(namespace, queryName);
+      const queryConversationId = (
+        fullQuery?.status as { conversationId?: string } | undefined
+      )?.conversationId;
+      if (queryConversationId) {
+        updateConversationId(queryConversationId);
+      }
+    },
+    [namespace, updateConversationId],
+  );
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
   const [statusText, setStatusText] = useState<string | undefined>();
@@ -440,11 +473,7 @@ export function useChatSession({
 
       let accumulatedContent = '';
       let messageTokenUsage: TokenUsage | null = null;
-      const accumulatedToolCalls: Array<{
-        id: string;
-        type: 'function';
-        function: { name: string; arguments: string };
-      }> = [];
+      const accumulatedToolCalls: AccumulatedToolCall[] = [];
       const pendingSystemMessages: Array<string> = [];
 
       let hasError = false;
@@ -453,11 +482,7 @@ export function useChatSession({
       let queryName = '';
       let currentAgent: string | undefined;
       let turnComplete = false;
-      let completedQueryMessages: Array<{
-        role: string;
-        content?: string;
-        name?: string;
-      }> = [];
+      let completedQueryMessages: ResultMessage[] = [];
       let hasPendingApproval = false;
 
       const finalizeCurrentMessage = () => {
@@ -669,24 +694,10 @@ export function useChatSession({
               }
             }
 
-            const arkTokenUsage = arkData.completedQuery?.status?.tokenUsage;
-            const usage: TokenUsage | null = arkTokenUsage
-              ? {
-                  prompt_tokens: arkTokenUsage.promptTokens || 0,
-                  completion_tokens: arkTokenUsage.completionTokens || 0,
-                  total_tokens: arkTokenUsage.totalTokens || 0,
-                  cached_tokens: arkTokenUsage.cachedTokens || 0,
-                }
-              : typedChunk?.usage
-                ? {
-                    prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
-                    completion_tokens: typedChunk.usage.completion_tokens ?? 0,
-                    total_tokens: typedChunk.usage.total_tokens ?? 0,
-                    cached_tokens:
-                      typedChunk.usage.prompt_tokens_details?.cached_tokens ??
-                      0,
-                  }
-                : null;
+            const usage = extractTokenUsage(
+              arkData.completedQuery?.status?.tokenUsage,
+              typedChunk.usage,
+            );
 
             if (usage) {
               messageTokenUsage = usage;
@@ -735,38 +746,7 @@ export function useChatSession({
           }
 
           if (delta?.tool_calls) {
-            for (const toolCallDelta of delta.tool_calls) {
-              let existingIndex = -1;
-
-              if (toolCallDelta.id) {
-                existingIndex = accumulatedToolCalls.findIndex(
-                  tc => tc.id === toolCallDelta.id,
-                );
-              }
-
-              if (existingIndex === -1 && toolCallDelta.function?.name) {
-                accumulatedToolCalls.push({
-                  id: toolCallDelta.id || '',
-                  type: 'function',
-                  function: {
-                    name: toolCallDelta.function.name,
-                    arguments: '',
-                  },
-                });
-                existingIndex = accumulatedToolCalls.length - 1;
-              }
-
-              if (existingIndex !== -1) {
-                if (toolCallDelta.id) {
-                  accumulatedToolCalls[existingIndex].id = toolCallDelta.id;
-                }
-
-                if (toolCallDelta.function?.arguments) {
-                  accumulatedToolCalls[existingIndex].function.arguments +=
-                    toolCallDelta.function.arguments;
-                }
-              }
-            }
+            accumulateToolCallDeltas(accumulatedToolCalls, delta.tool_calls);
           }
 
           updateChatMessages(prev => {
@@ -877,53 +857,11 @@ export function useChatSession({
       }
 
       if (completedQueryMessages.length > 0) {
-        updateChatMessages(prev => {
-          // Preserve previous turns, replace only current turn with complete message chain
-          const beforeThisTurn = prev.slice(0, turnStartIndex);
-          const converted: ExtendedChatMessage[] = [];
-
-          completedQueryMessages.forEach(msg => {
-            if (msg.role === 'system') {
-              converted.push({
-                role: 'system',
-                content: msg.content || '',
-              } as ExtendedChatMessage);
-            } else if (msg.role === 'tool') {
-              converted.push({
-                role: 'tool',
-                content: msg.content || '',
-                tool_call_id:
-                  (msg as { tool_call_id?: string }).tool_call_id || '',
-              } as ExtendedChatMessage);
-            } else if (msg.role === 'assistant') {
-              const toolCalls = (
-                msg as {
-                  tool_calls?: Array<{
-                    id: string;
-                    type: string;
-                    function: { name: string; arguments: string };
-                  }>;
-                }
-              ).tool_calls;
-
-              converted.push({
-                role: 'assistant',
-                content: msg.content || '',
-                name: msg.name,
-                tool_calls: toolCalls
-                  ? toolCalls.map(tc => ({
-                      id: tc.id,
-                      type: 'function' as const,
-                      function: tc.function,
-                    }))
-                  : undefined,
-              } as ExtendedChatMessage);
-            }
-          });
-
-          const updated = [...beforeThisTurn, ...converted];
-          return updated;
-        });
+        const turnMessages = convertTurnMessages(completedQueryMessages);
+        updateChatMessages(prev => [
+          ...prev.slice(0, turnStartIndex),
+          ...turnMessages,
+        ]);
       }
 
       console.log('[HITL Debug] Stream processing completed', {
@@ -976,7 +914,6 @@ export function useChatSession({
       setActiveQueryName(queryName);
 
       let pollingStopped = false;
-      let settled = false;
       stopPollingRef.current = () => {
         pollingStopped = true;
       };
@@ -984,137 +921,41 @@ export function useChatSession({
       while (!pollingStopped) {
         try {
           const result = await chatService.getQueryResult(namespace, queryName);
-          if (leavingRef.current) break;
+          if (leavingRef.current) return false;
 
           setProcessingPhase(result.status);
 
           if (result.terminal) {
             applyMemoryLookup(result.memoryLookup, queryName);
-            const fullQuery = await chatService.getQuery(namespace, queryName);
-            const queryConversationId = (
-              fullQuery?.status as { conversationId?: string } | undefined
-            )?.conversationId;
-            if (queryConversationId) {
-              updateConversationId(queryConversationId);
-            }
+            await syncConversationId(queryName);
 
-            if (result.status === 'done') {
-              if (result.messages && result.messages.length > 0) {
-                updateChatMessages(prev => [
-                  ...prev,
-                  ...result.messages!.map((msg): ExtendedChatMessage => {
-                    if (msg.role === 'tool') {
-                      return {
-                        role: 'tool',
-                        content: msg.content || '',
-                        tool_call_id: msg.tool_call_id || '',
-                      } as ExtendedChatMessage;
-                    } else if (msg.role === 'assistant') {
-                      const baseMsg: {
-                        role: 'assistant';
-                        content: string;
-                        name?: string;
-                        tool_calls?: Array<{
-                          id: string;
-                          type: 'function';
-                          function: { name: string; arguments: string };
-                        }>;
-                      } = {
-                        role: 'assistant' as const,
-                        content: msg.content || '',
-                      };
-                      if (msg.name) {
-                        baseMsg.name = msg.name;
-                      }
-                      if (msg.tool_calls && msg.tool_calls.length > 0) {
-                        baseMsg.tool_calls = msg.tool_calls.map(tc => ({
-                          id: tc.id,
-                          type: 'function' as const,
-                          function: tc.function,
-                        }));
-                      }
-                      return baseMsg as ExtendedChatMessage;
-                    } else if (msg.role === 'user') {
-                      const baseMsg = {
-                        role: 'user' as const,
-                        content: msg.content || '',
-                      };
-                      if (msg.name) {
-                        return {
-                          ...baseMsg,
-                          name: msg.name,
-                        } as ExtendedChatMessage;
-                      }
-                      return baseMsg as ExtendedChatMessage;
-                    } else {
-                      return {
-                        role: 'system',
-                        content: msg.content || '',
-                      } as ExtendedChatMessage;
-                    }
-                  }),
-                ]);
-              } else if (result.response) {
-                updateChatMessages(prev => [
-                  ...prev,
-                  {
-                    role: 'assistant',
-                    content: result.response!,
-                  } as ExtendedChatMessage,
-                ]);
-              }
-            } else if (result.status === 'error') {
-              updateChatMessages(prev => [
-                ...prev,
-                {
-                  role: 'assistant',
-                  content: result.response || 'Query failed',
-                  metadata: {
-                    status: 'failed',
-                    queryName,
-                  },
-                } as ExtendedChatMessage,
-              ]);
-            } else if (result.status === 'unknown') {
-              updateChatMessages(prev => [
-                ...prev,
-                {
-                  role: 'assistant',
-                  content: 'Query status unknown',
-                  metadata: {
-                    status: 'failed',
-                    queryName,
-                  },
-                } as ExtendedChatMessage,
-              ]);
+            const resultMessages = buildPollResultMessages(result, queryName);
+            if (resultMessages.length > 0) {
+              updateChatMessages(prev => [...prev, ...resultMessages]);
             }
-
-            settled = !result.transportError;
-            pollingStopped = true;
-            break;
+            return !result.transportError;
           }
         } catch (err) {
           console.error('Error polling query status:', err);
-          if (leavingRef.current) break;
-          updateChatMessages(prev => [
-            ...prev,
-            {
-              role: 'assistant',
-              content: 'Error while processing query',
-              metadata: {
-                status: 'failed',
-                queryName,
-              },
-            } as ExtendedChatMessage,
-          ]);
-          pollingStopped = true;
+          if (!leavingRef.current) {
+            updateChatMessages(prev => [
+              ...prev,
+              {
+                role: 'assistant',
+                content: 'Error while processing query',
+                metadata: {
+                  status: 'failed',
+                  queryName,
+                },
+              } as ExtendedChatMessage,
+            ]);
+          }
+          return false;
         }
 
-        if (!pollingStopped) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      return settled;
+      return false;
     },
     [
       applyMemoryLookup,
@@ -1125,9 +966,58 @@ export function useChatSession({
       queryTimeout,
       sessionId,
       setActiveQueryName,
+      syncConversationId,
       type,
       updateChatMessages,
-      updateConversationId,
+    ],
+  );
+
+  const appendFailedMessage = useCallback(
+    (content: string) => {
+      updateChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content,
+          metadata: {
+            status: 'failed',
+          },
+        } as ExtendedChatMessage,
+      ]);
+      setError(content);
+    },
+    [updateChatMessages],
+  );
+
+  const recoverViaPolling = useCallback(
+    async (
+      err: BrokerUnavailableError,
+      userMessage: string,
+      apiParameters: ApiQueryParameter[] | undefined,
+    ): Promise<boolean> => {
+      if (err.code === 'broker_unavailable') {
+        notifyBrokerFallback();
+      }
+      updateChatMessages(stripEmptyAssistantPlaceholder);
+      try {
+        return await handlePollChatResponse(
+          userMessage,
+          apiParameters,
+          err.queryName || lastQueryName.current || undefined,
+        );
+      } catch (pollErr) {
+        console.error('Error sending message:', pollErr);
+        appendFailedMessage(
+          pollErr instanceof Error ? pollErr.message : 'Failed to send message',
+        );
+        return false;
+      }
+    },
+    [
+      appendFailedMessage,
+      handlePollChatResponse,
+      notifyBrokerFallback,
+      updateChatMessages,
     ],
   );
 
@@ -1177,69 +1067,17 @@ export function useChatSession({
       } catch (err) {
         console.error('Error sending message:', err);
 
-        if (leavingRef.current) {
+        if (leavingRef.current || isAbortError(err)) {
           aborted = true;
           return;
         }
 
         if (isBrokerUnavailableError(err)) {
-          if (err.code === 'broker_unavailable') {
-            notifyBrokerFallback();
-          }
-          updateChatMessages(stripEmptyAssistantPlaceholder);
-          try {
-            settled = await handlePollChatResponse(
-              userMessage,
-              apiParameters,
-              err.queryName || lastQueryName.current || undefined,
-            );
-          } catch (pollErr) {
-            console.error('Error sending message:', pollErr);
-            const pollErrMsg =
-              pollErr instanceof Error
-                ? pollErr.message
-                : 'Failed to send message';
-            updateChatMessages(prev => [
-              ...prev,
-              {
-                role: 'assistant',
-                content: pollErrMsg,
-                metadata: {
-                  status: 'failed',
-                },
-              } as ExtendedChatMessage,
-            ]);
-            setError(pollErrMsg);
-          }
+          settled = await recoverViaPolling(err, userMessage, apiParameters);
           return;
         }
 
-        let errMsg = 'Failed to send message';
-
-        if (err instanceof Error) {
-          if (err.name === 'AbortError') {
-            aborted = true;
-            return;
-          }
-          if (err.message.includes('Failed to fetch')) {
-            errMsg =
-              'Unable to connect to the ARK API. Please ensure the backend service is running on port 8000.';
-          } else {
-            errMsg = err.message;
-          }
-        }
-
-        updateChatMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: errMsg,
-            metadata: {
-              status: 'failed',
-            },
-          } as ExtendedChatMessage,
-        ]);
-        setError(errMsg);
+        appendFailedMessage(toSendErrorMessage(err));
       } finally {
         setIsProcessing(false);
         setProcessingPhase(undefined);
@@ -1271,15 +1109,16 @@ export function useChatSession({
       }
     },
     [
+      appendFailedMessage,
       beginMemoryNoticeTurn,
       clearActiveQuery,
-      notifyBrokerFallback,
       ensureConversationId,
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
       missingParameters,
       name,
+      recoverViaPolling,
       refreshMemoryNotice,
       resumeAutoScroll,
       toApiParameters,
