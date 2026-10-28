@@ -110,7 +110,7 @@ export const mcpServersService = {
   async create(
     namespace: string,
     mcpSever: MCPServerCreateRequest,
-  ): Promise<MCPServer> {
+  ): Promise<MCPServerDetail> {
     const response = await apiClient.post<MCPServerDetailResponse>(
       `/api/v1/mcp-servers`,
       mcpSever,
@@ -134,7 +134,7 @@ export const mcpServersService = {
     namespace: string,
     mcpServerName: string,
     spec: { spec: MCPServerSpec },
-  ): Promise<MCPServer> {
+  ): Promise<MCPServerDetail> {
     const response = await apiClient.put<MCPServerDetailResponse>(
       `/api/v1/mcp-servers/${mcpServerName}`,
       spec,

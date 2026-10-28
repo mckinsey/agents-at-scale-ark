@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
 )
@@ -24,6 +26,10 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 		return warnings, err
 	}
 
+	if err := validateUniqueMCPOverrideHeaderNames(agent.Spec.Overrides); err != nil {
+		return warnings, err
+	}
+
 	for i, tool := range agent.Spec.Tools {
 		if err := validateAgentTool(i, tool); err != nil {
 			return warnings, err
@@ -38,17 +44,43 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 	return warnings, nil
 }
 
+func hasLabelSelector(selector *metav1.LabelSelector) bool {
+	return selector != nil && (len(selector.MatchLabels) > 0 || len(selector.MatchExpressions) > 0)
+}
+
 func unselectedModelOverrideHeaders(overrides []arkv1alpha1.Override) []arkv1alpha1.Header {
 	var headers []arkv1alpha1.Header
 	for _, override := range overrides {
-		selector := override.LabelSelector
-		hasSelector := selector != nil && (len(selector.MatchLabels) > 0 || len(selector.MatchExpressions) > 0)
-		if override.ResourceType != "model" || hasSelector {
+		if override.ResourceType != "model" || hasLabelSelector(override.LabelSelector) {
 			continue
 		}
 		headers = append(headers, override.Headers...)
 	}
 	return headers
+}
+
+func validateUniqueMCPOverrideHeaderNames(overrides []arkv1alpha1.Override) error {
+	headersByScope := make(map[string][]arkv1alpha1.Header)
+	var scopes []string
+	for _, override := range overrides {
+		if override.ResourceType != "mcpserver" {
+			continue
+		}
+		scope := "all servers"
+		if hasLabelSelector(override.LabelSelector) {
+			scope = metav1.FormatLabelSelector(override.LabelSelector)
+		}
+		if _, ok := headersByScope[scope]; !ok {
+			scopes = append(scopes, scope)
+		}
+		headersByScope[scope] = append(headersByScope[scope], override.Headers...)
+	}
+	for _, scope := range scopes {
+		if err := ValidateUniqueHeaderNames(headersByScope[scope], fmt.Sprintf("spec.overrides (mcpserver, %s)", scope)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (v *Validator) engineToolWarning(ctx context.Context, agent *arkv1alpha1.Agent) string {

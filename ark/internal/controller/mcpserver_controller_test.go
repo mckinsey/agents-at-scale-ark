@@ -16,6 +16,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
+	"mckinsey.com/ark/internal/labels"
 )
 
 var _ = Describe("MCPServer Controller", func() {
@@ -47,6 +48,11 @@ var _ = Describe("MCPServer Controller", func() {
 			NamespacedName: types.NamespacedName{Name: deletedName, Namespace: "default"},
 		})
 		Expect(err).NotTo(HaveOccurred())
+
+		By("labeling the MCPServer with its own name")
+		labeled := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deletedName, Namespace: "default"}, labeled)).To(Succeed())
+		Expect(labeled.Labels).To(HaveKeyWithValue(labels.MCPServerLabel, deletedName))
 
 		By("deleting the MCPServer")
 		Expect(k8sClient.Delete(ctx, deletedMCPServer)).To(Succeed())
