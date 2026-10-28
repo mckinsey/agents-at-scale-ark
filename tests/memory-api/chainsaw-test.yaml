@@ -128,11 +128,12 @@ spec:
           expect_422 "missing spec" '{"name":"bad-1"}'
           expect_422 "empty address" '{"name":"bad-2","spec":{"address":{}}}'
           expect_422 "old body" '{"name":"bad-3","description":"repro","config":{"address":{"value":"http://x"}}}'
-          for n in bad-1 bad-2 bad-3; do
-            if kubectl get memory "$n" -n "$NAMESPACE" >/dev/null 2>&1; then
-              echo "FAIL: memory $n was created"; exit 1
-            fi
-          done
+          expect_422 "serviceRef as header" '{"name":"bad-4","spec":{"address":{"value":"http://x"},"headers":[{"name":"X","value":{"valueFrom":{"serviceRef":{"name":"s"}}}}]}}'
+          NAMES=$(kubectl get memories -n "$NAMESPACE" -o name)
+          echo "memories: $NAMES"
+          if echo "$NAMES" | grep -E 'memory[^/]*/bad-' ; then
+            echo "FAIL: a rejected memory was created"; exit 1
+          fi
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -166,9 +167,9 @@ spec:
             -d '{"spec":{"address":{"valueFrom":{"serviceRef":{"name":"ark-broker","port":"http"}}}}}')
           echo "PUT -> $CODE"
           [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
-          SPEC=$(kubectl get memory api-memory -n "$NAMESPACE" -o json | jq -c '.spec')
-          echo "spec: $SPEC"
-          [ "$SPEC" = '{"address":{"valueFrom":{"serviceRef":{"name":"ark-broker","port":"http"}}}}' ] || { echo "FAIL: spec not replaced"; exit 1; }
+          MEMORY=$(kubectl get memory api-memory -n "$NAMESPACE" -o json)
+          echo "spec: $(echo "$MEMORY" | jq -c '.spec')"
+          echo "$MEMORY" | jq -e '.spec == {"address":{"valueFrom":{"serviceRef":{"name":"ark-broker","port":"http"}}}}' >/dev/null || { echo "FAIL: spec not replaced"; exit 1; }
           TEAM=$(kubectl get memory api-memory -n "$NAMESPACE" -o jsonpath='{.metadata.labels.team}')
           [ "$TEAM" = "a" ] || { echo "FAIL: label lost"; exit 1; }
         env:
@@ -186,6 +187,9 @@ spec:
             "http://ark-api.$NAMESPACE.svc.cluster.local/v1/memories/api-memory?namespace=$NAMESPACE")
           echo "DELETE -> $CODE"
           [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - error:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
