@@ -73,27 +73,10 @@ function findTypeError(type: unknown, path: string): string | null {
   return `Unknown type ${JSON.stringify(unknownType)} at ${path}.`;
 }
 
-function findSubschemaError(schema: unknown, path: string): string | null {
-  if (typeof schema === 'boolean') {
-    return null;
-  }
-  if (!isPlainObject(schema)) {
-    return `The schema at ${path} must be a JSON object.`;
-  }
-  if ('type' in schema) {
-    const typeError = findTypeError(schema.type, path);
-    if (typeError) {
-      return typeError;
-    }
-  }
-  for (const keyword of SUBSCHEMA_KEYWORDS) {
-    if (keyword in schema) {
-      const error = findSubschemaError(schema[keyword], `${path}.${keyword}`);
-      if (error) {
-        return error;
-      }
-    }
-  }
+function findListError(
+  schema: Record<string, unknown>,
+  path: string,
+): string | null {
   for (const keyword of SUBSCHEMA_LIST_KEYWORDS) {
     if (!(keyword in schema)) {
       continue;
@@ -102,13 +85,20 @@ function findSubschemaError(schema: unknown, path: string): string | null {
     if (!Array.isArray(entries)) {
       return `"${keyword}" at ${path} must be an array.`;
     }
-    for (const [index, entry] of entries.entries()) {
-      const error = findSubschemaError(entry, `${path}.${keyword}[${index}]`);
-      if (error) {
-        return error;
-      }
+    const error = firstError(entries, (entry, index) =>
+      findSubschemaError(entry, `${path}.${keyword}[${index}]`),
+    );
+    if (error) {
+      return error;
     }
   }
+  return null;
+}
+
+function findMapError(
+  schema: Record<string, unknown>,
+  path: string,
+): string | null {
   for (const keyword of SUBSCHEMA_MAP_KEYWORDS) {
     if (!(keyword in schema)) {
       continue;
@@ -117,14 +107,47 @@ function findSubschemaError(schema: unknown, path: string): string | null {
     if (!isPlainObject(entries)) {
       return `"${keyword}" at ${path} must be an object.`;
     }
-    for (const [name, entry] of Object.entries(entries)) {
-      const error = findSubschemaError(entry, `${path}.${keyword}.${name}`);
-      if (error) {
-        return error;
-      }
+    const error = firstError(Object.entries(entries), ([name, entry]) =>
+      findSubschemaError(entry, `${path}.${keyword}.${name}`),
+    );
+    if (error) {
+      return error;
     }
   }
   return null;
+}
+
+function firstError<T>(
+  items: readonly T[],
+  check: (item: T, index: number) => string | null,
+): string | null {
+  for (const [index, item] of items.entries()) {
+    const error = check(item, index);
+    if (error) {
+      return error;
+    }
+  }
+  return null;
+}
+
+function findSubschemaError(schema: unknown, path: string): string | null {
+  if (typeof schema === 'boolean') {
+    return null;
+  }
+  if (!isPlainObject(schema)) {
+    return `The schema at ${path} must be a JSON object.`;
+  }
+  const typeError = 'type' in schema ? findTypeError(schema.type, path) : null;
+  const keywordError = firstError(
+    SUBSCHEMA_KEYWORDS.filter(keyword => keyword in schema),
+    keyword => findSubschemaError(schema[keyword], `${path}.${keyword}`),
+  );
+  return (
+    typeError ??
+    keywordError ??
+    findListError(schema, path) ??
+    findMapError(schema, path)
+  );
 }
 
 export function validateOutputSchema(value: string): string | null {
