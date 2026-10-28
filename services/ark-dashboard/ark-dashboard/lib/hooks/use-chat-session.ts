@@ -255,7 +255,7 @@ export function useChatSession({
           [chatKey]: {
             ...currentSession,
             messageTokenUsage: {
-              ...(currentSession.messageTokenUsage || {}),
+              ...currentSession.messageTokenUsage,
               [messageIndex]: usage,
             },
           },
