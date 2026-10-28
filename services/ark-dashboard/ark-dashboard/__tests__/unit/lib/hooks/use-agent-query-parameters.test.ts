@@ -1,7 +1,15 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  type RenderHookOptions,
+  act,
+  renderHook as rtlRenderHook,
+  waitFor,
+} from '@testing-library/react';
+import { type ReactNode, createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAgentQueryParameters } from '@/lib/hooks/use-agent-query-parameters';
+import { GET_AGENT_BY_NAME_QUERY_KEY } from '@/lib/services/agents-hooks';
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
@@ -16,6 +24,12 @@ const mockGetByName = vi.fn();
 const mockTeamGetByName = vi.fn();
 const mockToolsGetAll = vi.fn();
 const mockEngineGetByName = vi.fn();
+
+vi.mock('@/lib/services/agents', () => ({
+  agentsService: {
+    getByName: (...args: unknown[]) => mockGetByName(...args),
+  },
+}));
 
 vi.mock('@/lib/services', () => ({
   agentsService: {
@@ -49,9 +63,25 @@ interface AgentStub {
   readonly tools?: readonly AgentToolStub[];
 }
 
+let queryClient: QueryClient;
+
+function wrapper({ children }: { children: ReactNode }) {
+  return createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
+function renderHook<TResult, TProps>(
+  callback: (props: TProps) => TResult,
+  options?: RenderHookOptions<TProps>,
+) {
+  return rtlRenderHook(callback, { wrapper, ...options });
+}
+
 describe('useAgentQueryParameters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     mockGetByName.mockResolvedValue({ parameters: [] });
     mockTeamGetByName.mockResolvedValue({ members: [] });
     mockToolsGetAll.mockResolvedValue([]);
@@ -589,6 +619,86 @@ describe('useAgentQueryParameters', () => {
       });
       expect(mockEngineGetByName).not.toHaveBeenCalled();
       expect(result.current.executionEngineAnnotations).toBeNull();
+    });
+
+    it('keeps the agent annotations when the engine fetch fails', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'structured' },
+        annotations: { agent: 'a' },
+      });
+      mockEngineGetByName.mockRejectedValue(new Error('forbidden'));
+
+      const { result } = renderHook(() =>
+        useAgentQueryParameters('engine-agent', 'agent'),
+      );
+
+      await waitFor(() => {
+        expect(mockEngineGetByName).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(result.current.agentAnnotations).toEqual({ agent: 'a' });
+      });
+      expect(result.current.executionEngineName).toBe('structured');
+      expect(result.current.executionEngineAnnotations).toBeNull();
+      expect(result.current.engineToolWarning).toBeNull();
+    });
+
+    it('refreshes the agent details when the agent query is invalidated', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'structured' },
+        annotations: { agent: 'old' },
+      });
+
+      const { result } = renderHook(() =>
+        useAgentQueryParameters('engine-agent', 'agent'),
+      );
+
+      await waitFor(() => {
+        expect(result.current.agentAnnotations).toEqual({ agent: 'old' });
+      });
+
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'responses' },
+        annotations: { agent: 'new' },
+      });
+      await act(async () => {
+        await queryClient.invalidateQueries({
+          queryKey: [GET_AGENT_BY_NAME_QUERY_KEY, 'engine-agent'],
+        });
+      });
+
+      await waitFor(() => {
+        expect(result.current.agentAnnotations).toEqual({ agent: 'new' });
+      });
+      expect(result.current.executionEngineName).toBe('responses');
+      expect(mockEngineGetByName).toHaveBeenLastCalledWith(
+        'default',
+        'responses',
+      );
+    });
+
+    it('keeps the parameter rows when the agent details refresh', async () => {
+      mockGetByName.mockResolvedValue(agentWithQueryParam);
+
+      const { result } = renderHook(() =>
+        useAgentQueryParameters('param-test-agent', 'agent'),
+      );
+
+      await waitFor(() => {
+        expect(result.current.availableParameters).toEqual(['muting']);
+      });
+      act(() => {
+        result.current.addRow();
+      });
+
+      await act(async () => {
+        await queryClient.invalidateQueries({
+          queryKey: [GET_AGENT_BY_NAME_QUERY_KEY, 'param-test-agent'],
+        });
+      });
+
+      expect(mockGetByName).toHaveBeenCalledTimes(2);
+      expect(result.current.rows).toHaveLength(1);
     });
   });
 });

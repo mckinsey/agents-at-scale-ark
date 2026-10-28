@@ -1653,6 +1653,25 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_client.agents.a_update.assert_not_called()
 
     @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_invalid_output_schema_rejected(self, mock_ark_client):
+        """An output schema that is empty or invalid is rejected with 400."""
+        schema_key = "executor-openai-responses.ark.mckinsey.com/output-schema"
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+
+        for value in ("", "{not json", '{"type": "string"}'):
+            with self.subTest(value=value):
+                response = self.client.put(
+                    "/v1/agents/test-agent?namespace=default",
+                    json={"annotations": {schema_key: value}},
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("Invalid output schema", response.json()["detail"])
+
+        mock_client.agents.a_get.assert_not_called()
+        mock_client.agents.a_update.assert_not_called()
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_omit_annotations_preserved(self, mock_ark_client):
         """Omitting annotations leaves existing annotations untouched."""
         mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})

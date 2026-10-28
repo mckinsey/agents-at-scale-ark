@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Provider } from 'jotai';
 import React from 'react';
@@ -15,6 +16,10 @@ vi.mock('@/providers/NamespaceProvider', () => ({
     isPending: false,
     readOnlyMode: false,
   }),
+}));
+
+vi.mock('@/lib/services/agents', async () => ({
+  agentsService: (await import('@/lib/services')).agentsService,
 }));
 
 vi.mock('@/lib/services', () => ({
@@ -49,8 +54,15 @@ vi.mock('@/lib/analytics/utils', () => ({
 }));
 
 function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(Provider, null, children);
+    React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(Provider, null, children),
+    );
 }
 
 // The real chunk stream is an async generator; wrap array fixtures so tests

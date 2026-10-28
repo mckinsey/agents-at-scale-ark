@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider, createStore, useAtomValue } from 'jotai';
@@ -42,6 +43,10 @@ vi.mock('next/navigation', () => ({
 Element.prototype.scrollIntoView = vi.fn();
 
 // Mock the chat service
+vi.mock('@/lib/services/agents', async () => ({
+  agentsService: (await import('@/lib/services')).agentsService,
+}));
+
 vi.mock('@/lib/services', () => ({
   chatService: {
     streamChatResponse: vi.fn(),
@@ -84,17 +89,15 @@ function renderFloatingChat(
   },
   store?: ReturnType<typeof createStore>,
 ) {
-  if (store) {
-    return render(
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
       <JotaiProvider store={store}>
         <FloatingChat {...props} />
-      </JotaiProvider>,
-    );
-  }
-  return render(
-    <JotaiProvider>
-      <FloatingChat {...props} />
-    </JotaiProvider>,
+      </JotaiProvider>
+    </QueryClientProvider>,
   );
 }
 

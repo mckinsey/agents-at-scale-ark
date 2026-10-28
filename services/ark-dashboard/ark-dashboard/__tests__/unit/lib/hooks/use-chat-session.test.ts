@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { ReactNode } from 'react';
@@ -42,6 +43,12 @@ const mockGetByName = vi.fn();
 const mockTeamGetByName = vi.fn();
 const mockEngineGetByName = vi.fn();
 const mockResolveMemoryNotice = vi.fn();
+
+vi.mock('@/lib/services/agents', () => ({
+  agentsService: {
+    getByName: (...args: unknown[]) => mockGetByName(...args),
+  },
+}));
 
 vi.mock('@/lib/services', () => ({
   chatService: {
@@ -133,14 +140,22 @@ async function* asyncIterableFrom<T>(items: T[]): AsyncGenerator<T> {
 
 describe('useChatSession', () => {
   let store: ReturnType<typeof createStore>;
+  let queryClient: QueryClient;
 
   function wrapper({ children }: { children: ReactNode }) {
-    return React.createElement(Provider, { store }, children);
+    return React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(Provider, { store }, children),
+    );
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
     store = createStore();
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     store.set(storedIsChatStreamingEnabledAtom, true);
     store.set(lastConversationIdAtom, null);
     mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });

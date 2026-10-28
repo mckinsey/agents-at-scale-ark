@@ -30,6 +30,7 @@ from ...constants.annotations import (
     ORIGIN_ANNOTATION,
     OUTPUT_SCHEMA_ANNOTATION,
 )
+from ...utils.output_schema import validate_output_schema
 from .exceptions import handle_k8s_errors
 from .pagination import PaginationParams
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION, VIEW_DESCRIPTION
@@ -266,6 +267,14 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
             status_code=400,
             detail=f"Annotations not allowed: {', '.join(disallowed_annotations)}",
         )
+    output_schema = annotation_updates.get(OUTPUT_SCHEMA_ANNOTATION)
+    if output_schema is not None:
+        schema_error = validate_output_schema(output_schema)
+        if schema_error:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid output schema: {schema_error}",
+            )
 
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
         # Get the existing agent first
