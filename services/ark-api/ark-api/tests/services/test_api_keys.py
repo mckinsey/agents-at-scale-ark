@@ -1,5 +1,8 @@
 """Test cases for API key service."""
 
+import asyncio
+import threading
+import time
 import unittest
 from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
@@ -664,6 +667,93 @@ class TestAPIKeyOwnershipScoping(unittest.IsolatedAsyncioTestCase):
 
         result = await self.service.get_api_key_by_public_key("pk-ark-test")
         self.assertIsNone(result["created_by"])
+
+
+class TestVerifyApiKeyEventLoop(unittest.IsolatedAsyncioTestCase):
+    """verify_api_key must not block the event loop while checking the bcrypt hash."""
+
+    @patch('ark_api.services.api_keys.get_context')
+    def setUp(self, mock_get_context):
+        mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
+        self.service = APIKeyService()
+
+    def _mock_secret(self, hashed):
+        secret = Mock()
+        secret.type = "ark.mckinsey.com/api-key"
+        secret.metadata.uid = "test-uid-123"
+        secret.metadata.annotations = {
+            API_KEY_ANNOTATION: json.dumps({"name": "Test Key", "createdAt": "2024-01-01T00:00:00+00:00"})
+        }
+        secret.data = {
+            "public_key": base64.b64encode(b"pk-ark-test").decode(),
+            "secret_key_hash": base64.b64encode(hashed.encode()).decode(),
+            "is_active": base64.b64encode(b"true").decode(),
+        }
+        return secret
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_verify_api_key_keeps_event_loop_responsive(self, mock_v1_api, mock_api_client):
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        secret_key = "sk-ark-test-secret"
+        hashed = self.service._hash_secret_key(secret_key)
+        mock_secret = self._mock_secret(hashed)
+        mock_v1_api.return_value.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+        mock_v1_api.return_value.patch_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        started = time.perf_counter()
+        self.service._verify_secret_key(secret_key, hashed)
+        single_check = time.perf_counter() - started
+
+        gaps = []
+        stop = asyncio.Event()
+
+        async def ticker():
+            while not stop.is_set():
+                tick = time.perf_counter()
+                await asyncio.sleep(0.005)
+                gaps.append(time.perf_counter() - tick)
+
+        ticker_task = asyncio.create_task(ticker())
+        await asyncio.sleep(0.02)
+        results = await asyncio.gather(
+            *(self.service.verify_api_key("pk-ark-test", secret_key) for _ in range(3))
+        )
+        stop.set()
+        await ticker_task
+
+        self.assertTrue(all(result is not None for result in results))
+        self.assertLess(max(gaps), single_check / 2)
+
+    @patch('ark_api.services.api_keys.create_api_client')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_verify_api_key_runs_one_secret_check_at_a_time(self, mock_v1_api, mock_api_client):
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        mock_secret = self._mock_secret("unused-hash")
+        mock_v1_api.return_value.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+        mock_v1_api.return_value.patch_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        lock = threading.Lock()
+        running = 0
+        peak = 0
+
+        def slow_check(secret_key, hashed):
+            nonlocal running, peak
+            with lock:
+                running += 1
+                peak = max(peak, running)
+            time.sleep(0.05)
+            with lock:
+                running -= 1
+            return True
+
+        with patch.object(self.service, "_verify_secret_key", side_effect=slow_check):
+            results = await asyncio.gather(
+                *(self.service.verify_api_key("pk-ark-test", "sk-ark-test-secret") for _ in range(5))
+            )
+
+        self.assertTrue(all(result is not None for result in results))
+        self.assertEqual(peak, 1)
 
 
 if __name__ == '__main__':

@@ -1,11 +1,13 @@
 """API key management service."""
 
+import asyncio
 import secrets
 import bcrypt
 import base64
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional, Tuple, Dict, Any
 from kubernetes_asyncio import client
@@ -34,6 +36,8 @@ API_KEY_ANNOTATION = ARK_PREFIX + "api-key-metadata"  # JSON annotation with all
 # These lengths provide sufficient entropy for security while keeping keys manageable
 PUBLIC_KEY_TOKEN_LENGTH = 32  # bytes for public key token generation
 SECRET_KEY_TOKEN_LENGTH = 48  # bytes for secret key token generation
+
+_SECRET_VERIFY_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="api-key-verify")
 
 
 class APIKeyService:
@@ -418,7 +422,10 @@ class APIKeyService:
             return None
         
         # Verify secret key
-        if not self._verify_secret_key(secret_key, api_key_data["secret_key_hash"]):
+        loop = asyncio.get_running_loop()
+        if not await loop.run_in_executor(
+            _SECRET_VERIFY_EXECUTOR, self._verify_secret_key, secret_key, api_key_data["secret_key_hash"]
+        ):
             return None
         
         # Update last used timestamp
