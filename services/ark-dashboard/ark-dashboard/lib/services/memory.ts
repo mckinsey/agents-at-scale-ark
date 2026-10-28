@@ -33,7 +33,6 @@ export interface Conversation {
 export interface MemoryResource {
   name: string;
   namespace: string;
-  description?: string;
   status?: string;
 }
 
