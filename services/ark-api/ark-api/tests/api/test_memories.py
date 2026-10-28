@@ -28,6 +28,10 @@ def _memory(spec=None, labels=None, annotations=None, status=None):
     return obj
 
 
+def _sent(mock_call):
+    return mock_call.call_args.args[0].model_dump(by_alias=True, exclude_unset=True)
+
+
 class MemoriesTestBase(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
@@ -51,6 +55,7 @@ class TestCreateMemory(MemoriesTestBase):
         response = self.client.post("/v1/memories?namespace=default", json={
             "name": "m",
             "labels": {"team": "a"},
+            "annotations": {"note": "x"},
             "spec": {
                 "address": {"value": BROKER_URL},
                 "headers": [{"name": "X-Tenant", "value": {"value": "a"}}],
@@ -58,10 +63,11 @@ class TestCreateMemory(MemoriesTestBase):
         })
 
         self.assertEqual(response.status_code, 200)
-        sent = self.ark.memories.a_create.call_args.args[0].to_dict()
+        sent = _sent(self.ark.memories.a_create)
         self.assertEqual(sent["metadata"]["name"], "m")
         self.assertEqual(sent["metadata"]["namespace"], "default")
         self.assertEqual(sent["metadata"]["labels"], {"team": "a"})
+        self.assertEqual(sent["metadata"]["annotations"], {"note": "x"})
         self.assertEqual(sent["spec"], {
             "address": {"value": BROKER_URL},
             "headers": [{"name": "X-Tenant", "value": {"value": "a"}}],
@@ -82,7 +88,7 @@ class TestCreateMemory(MemoriesTestBase):
         })
 
         self.assertEqual(response.status_code, 200)
-        sent = self.ark.memories.a_create.call_args.args[0].to_dict()
+        sent = _sent(self.ark.memories.a_create)
         self.assertEqual(sent["spec"]["address"], {"valueFrom": {"serviceRef": service_ref}})
 
     def test_invalid_bodies_are_rejected_before_reaching_the_cluster(self):
@@ -95,9 +101,22 @@ class TestCreateMemory(MemoriesTestBase):
                 "value": BROKER_URL,
                 "valueFrom": {"serviceRef": {"name": "ark-broker"}},
             }}},
+            "empty value": {"name": "m", "spec": {"address": {"value": ""}}},
+            "empty valueFrom": {"name": "m", "spec": {"address": {"valueFrom": {}}}},
+            "two refs in valueFrom": {"name": "m", "spec": {"address": {"valueFrom": {
+                "serviceRef": {"name": "ark-broker"},
+                "secretKeyRef": {"name": "s", "key": "k"},
+            }}}},
+            "queryParameterRef as address": {"name": "m", "spec": {"address": {
+                "valueFrom": {"queryParameterRef": {"name": "p"}},
+            }}},
             "header without value": {"name": "m", "spec": {
                 "address": {"value": BROKER_URL},
                 "headers": [{"name": "X"}],
+            }},
+            "serviceRef as header": {"name": "m", "spec": {
+                "address": {"value": BROKER_URL},
+                "headers": [{"name": "X", "value": {"valueFrom": {"serviceRef": {"name": "s"}}}}],
             }},
             "old description and config body": {
                 "name": "m",
@@ -110,6 +129,26 @@ class TestCreateMemory(MemoriesTestBase):
                 response = self.client.post("/v1/memories?namespace=default", json=body)
                 self.assertEqual(response.status_code, 422)
         self.ark.memories.a_create.assert_not_called()
+
+    def test_a_ref_the_crd_does_not_resolve_is_named_in_the_error(self):
+        cases = {
+            "serviceRef as header": (
+                {"address": {"value": BROKER_URL},
+                 "headers": [{"name": "X", "value": {"valueFrom": {"serviceRef": {"name": "s"}}}}]},
+                ["body", "spec", "headers", 0, "value", "valueFrom", "serviceRef"],
+            ),
+            "queryParameterRef as address": (
+                {"address": {"valueFrom": {"queryParameterRef": {"name": "p"}}}},
+                ["body", "spec", "address", "valueFrom", "queryParameterRef"],
+            ),
+        }
+        for label, (spec, loc) in cases.items():
+            with self.subTest(label):
+                response = self.client.post(
+                    "/v1/memories?namespace=default", json={"name": "m", "spec": spec},
+                )
+                self.assertEqual(response.status_code, 422)
+                self.assertIn(loc, [error["loc"] for error in response.json()["detail"]])
 
 
 class TestUpdateMemory(MemoriesTestBase):
@@ -128,8 +167,23 @@ class TestUpdateMemory(MemoriesTestBase):
         })
 
         self.assertEqual(response.status_code, 200)
-        sent = self.ark.memories.a_update.call_args.args[0].to_dict()
+        sent = _sent(self.ark.memories.a_update)
         self.assertEqual(sent["spec"], {"address": {"value": "http://other:8080"}})
+        self.assertEqual(sent["metadata"]["labels"], {"team": "a"})
+
+    def test_annotations_replace_the_stored_ones_and_keep_labels(self):
+        self.ark.memories.a_get = AsyncMock(return_value=_memory(
+            labels={"team": "a"}, annotations={"note": "old"},
+        ))
+        self.ark.memories.a_update = AsyncMock(return_value=_memory())
+
+        response = self.client.put("/v1/memories/m?namespace=default", json={
+            "annotations": {"note": "new"},
+        })
+
+        self.assertEqual(response.status_code, 200)
+        sent = _sent(self.ark.memories.a_update)
+        self.assertEqual(sent["metadata"]["annotations"], {"note": "new"})
         self.assertEqual(sent["metadata"]["labels"], {"team": "a"})
 
     def test_labels_only_leaves_the_spec_untouched(self):
@@ -144,7 +198,7 @@ class TestUpdateMemory(MemoriesTestBase):
         })
 
         self.assertEqual(response.status_code, 200)
-        sent = self.ark.memories.a_update.call_args.args[0].to_dict()
+        sent = _sent(self.ark.memories.a_update)
         self.assertEqual(sent["spec"], stored_spec)
         self.assertEqual(sent["metadata"]["labels"], {"team": "b"})
 
@@ -188,6 +242,24 @@ class TestReadMemory(MemoriesTestBase):
         self.assertEqual(body["status"]["lastResolvedAddress"], BROKER_URL)
         self.assertNotIn("description", body)
         self.assertNotIn("config", body)
+
+    def test_get_tolerates_stored_specs_the_write_model_rejects(self):
+        stored_specs = {
+            "both value and valueFrom": {"address": {
+                "value": BROKER_URL,
+                "valueFrom": {"serviceRef": {"name": "ark-broker"}},
+            }},
+            "empty address": {"address": {}},
+            "header with empty value": {
+                "address": {"value": BROKER_URL},
+                "headers": [{"name": "X", "value": {}}],
+            },
+        }
+        for label, spec in stored_specs.items():
+            with self.subTest(label):
+                self.ark.memories.a_get = AsyncMock(return_value=_memory(spec=spec))
+                response = self.client.get("/v1/memories/m?namespace=default")
+                self.assertEqual(response.status_code, 200)
 
     def test_list_items_carry_labels_and_phase(self):
         page = Mock(items=[_memory(labels={"team": "a"}, status={"phase": "ready"})],
