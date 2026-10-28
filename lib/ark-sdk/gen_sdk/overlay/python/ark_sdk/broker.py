@@ -113,6 +113,26 @@ class BrokerClient:
         except Exception as e:
             logger.warning(f"Failed to send chunk to broker for query {self.query_name}: {e}")
 
+    async def send_event(self, event: dict) -> None:
+        """Post a raw event object to the stream as one NDJSON line.
+
+        Unlike send_chunk (which wraps content in an OpenAI chat.completion.chunk), this
+        sends the event verbatim — used for control events like tool_approval_request that
+        the dashboard matches on their top-level `type` field.
+        """
+        url = f"{self.base_url}/stream/{quote(self.query_name)}"
+        try:
+            async with httpx.AsyncClient(timeout=_STREAM_TIMEOUT) as http:
+                resp = await http.post(
+                    url,
+                    content=(json.dumps(event) + "\n").encode(),
+                    headers={"Content-Type": "application/x-ndjson"},
+                )
+                if resp.status_code not in (200, 202):
+                    logger.warning(f"Broker event returned {resp.status_code} for query {self.query_name}")
+        except Exception as e:
+            logger.warning(f"Failed to send event to broker for query {self.query_name}: {e}")
+
     async def complete(self) -> None:
         url = f"{self.base_url}/stream/{quote(self.query_name)}/complete"
         try:

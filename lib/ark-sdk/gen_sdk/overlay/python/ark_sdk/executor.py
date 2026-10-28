@@ -70,6 +70,26 @@ class AgentConfig(BaseModel):
     annotations: dict[str, str] = {}
 
 
+class ArgumentMatch(BaseModel):
+    """Narrows tool approval to calls whose argument matches a regex (mirrors Go ArgumentMatch)."""
+    argument: str
+    pattern: str
+
+
+class ToolApprovalConfig(BaseModel):
+    """Per-tool human-approval config (mirrors arkv1alpha1.ToolApprovalConfig)."""
+    required: bool = False
+    timeout: str = ""        # Go-duration string, e.g. "5m"
+    onTimeout: str = ""      # "reject" | "proceed"
+    argumentMatches: list[ArgumentMatch] = []
+
+
+class ToolApproval(BaseModel):
+    """Approval config for one MCP tool, keyed by the tool name the model calls."""
+    tool: str
+    approval: ToolApprovalConfig
+
+
 class MCPServerConfig(BaseModel):
     name: str
     url: str
@@ -77,6 +97,8 @@ class MCPServerConfig(BaseModel):
     timeout: str = "30s"
     headers: dict[str, str] = {}
     tools: list[str] = []
+    # Per-tool approval gates (HITL). Only tools whose approval.required is true appear here.
+    approvals: list[ToolApproval] = []
 
 
 class Message(BaseModel):
@@ -89,6 +111,44 @@ class Message(BaseModel):
         extra = "allow"
 
 
+class CompletedToolResult(BaseModel):
+    """A tool result already produced in the gated turn (carried across an approval pause)."""
+    id: str
+    name: str = ""
+    content: str = ""
+    error: str = ""
+
+
+class ExecutionContext(BaseModel):
+    """Pending agent state carried across a HITL approval pause (mirrors Go ExecutionContext,
+    plus `messages` since the substrate runner has no in-loop memory and actors are ephemeral)."""
+    conversationId: str = ""
+    pendingToolCallIndex: int = 0
+    completedToolResults: list[CompletedToolResult] = []
+    agentName: str = ""
+    agentNamespace: str = ""
+    messages: list[dict[str, Any]] = []
+
+
+class ResumeContext(BaseModel):
+    """Set on a resumption dispatch after a human approves/rejects gated tool calls."""
+    decision: str                 # "approved" | "rejected"
+    rejectionReason: str = ""     # populated on timeout-reject
+    context: ExecutionContext
+    toolCalls: list[dict[str, Any]] = []
+
+
+class ApprovalRequiredError(Exception):
+    """Raised by execute_agent when a tool call needs human approval. The ExecutorApp turns this
+    into an A2A input-required task so Ark's existing HITL approval/resumption flow takes over."""
+
+    def __init__(self, tool_calls: list[dict[str, Any]], config: ToolApprovalConfig, context: ExecutionContext):
+        super().__init__(f"approval required for {len(tool_calls)} tool call(s)")
+        self.tool_calls = tool_calls
+        self.config = config
+        self.context = context
+
+
 class ExecutionEngineRequest(BaseModel):
     """Request to execute an agent."""
     agent: AgentConfig
@@ -98,6 +158,8 @@ class ExecutionEngineRequest(BaseModel):
     query_annotations: dict[str, str] = {}
     execution_engine_annotations: dict[str, str] = {}
     message_ttl_seconds: int | None = None
+    # Set only on a resumption dispatch (after a human approval/rejection decision).
+    resume: Optional[ResumeContext] = None
 
 
 class ExecutionEngineResponse(BaseModel):

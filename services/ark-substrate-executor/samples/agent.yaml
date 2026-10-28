@@ -1,0 +1,15 @@
+# An agent that opts into the Substrate backend. spec.executionEngine routes its queries to
+# the ark-substrate-executor, which runs it as a sandboxed actor. Remove executionEngine and
+# it falls back to the default (non-sandboxed) completions executor.
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: substrate-agent
+spec:
+  description: Demo agent executed as a sandboxed Substrate actor.
+  prompt: |
+    You are a concise assistant. Answer directly, with no preamble.
+  modelRef:
+    name: substrate-model
+  executionEngine:
+    name: substrate

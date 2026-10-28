@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: substrate-demo-bad
+spec:
+  input: "This should fail because the model host is unreachable."
+  target:
+    type: agent
+    name: substrate-agent-bad
+  ttl: 10m

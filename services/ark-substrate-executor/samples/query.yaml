@@ -1,0 +1,14 @@
+# Run the sandboxed agent. The controller dispatches this to the substrate ExecutionEngine;
+# the executor provisions an actor, runs the agent, and sets the result here.
+#   kubectl apply -f samples/query.yaml
+#   kubectl get query substrate-demo -o jsonpath='{.status.phase}'
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: substrate-demo
+spec:
+  input: "In one sentence, what is a sandboxed agent runtime?"
+  target:
+    type: agent
+    name: substrate-agent
+  ttl: 10m

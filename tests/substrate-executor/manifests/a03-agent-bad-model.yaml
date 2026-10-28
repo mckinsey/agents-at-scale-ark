@@ -1,0 +1,29 @@
+# Points at an unreachable model host so the agent run fails inside the actor; the executor
+# must surface this as a terminal error query, not a silent success.
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: substrate-model-bad
+spec:
+  provider: openai
+  model:
+    value: gpt-5-nano-2025-08-07
+  config:
+    openai:
+      baseUrl:
+        value: "https://unreachable.invalid/v1"
+      apiKey:
+        value: "not-a-real-key"
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: substrate-agent-bad
+spec:
+  description: Agent whose model endpoint is unreachable (failure-path test).
+  prompt: "You are a concise assistant."
+  modelRef:
+    name: substrate-model-bad
+  executionEngine:
+    name: substrate
+    namespace: ark-system

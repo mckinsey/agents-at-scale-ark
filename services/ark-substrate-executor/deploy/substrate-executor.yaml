@@ -1,0 +1,60 @@
+# ark-substrate-executor: the A2A executor, registered as an ExecutionEngine.
+# Preferred mode talks ateapi directly (set ARK_SUBSTRATE_ATEAPI_ADDR). Without it the build
+# falls back to shelling `kubectl ate` (image must then carry kubectl + the kubectl-ate plugin,
+# and ActorTemplates must pre-exist). See BRINGUP.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ark-substrate-executor
+  namespace: ark-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ark-substrate-executor }
+  template:
+    metadata:
+      labels: { app: ark-substrate-executor }
+    spec:
+      containers:
+        - name: executor
+          image: ark-substrate-executor:latest # TODO: build + pin
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: ARK_SUBSTRATE_ATESPACE
+              value: "default"
+            # ark-runner image the executor launches as the actor (digest-pin in prod).
+            - name: ARK_RUNNER_IMAGE
+              value: "ark-runner:latest"
+            # --- ateapi mode (preferred): point at the Substrate control plane ---
+            # - name: ARK_SUBSTRATE_ATEAPI_ADDR
+            #   value: "ateapi.substrate-system.svc.cluster.local:8080"
+            # - name: ARK_SUBSTRATE_SNAPSHOT_URI     # object-store base for actor snapshots
+            #   value: "s3://ark-substrate-snapshots"
+            # - name: ARK_SUBSTRATE_SANDBOX_CLASS    # gvisor | microvm
+            #   value: "gvisor"
+            # - name: ARK_SUBSTRATE_SANDBOX_CONFIG   # cluster SandboxConfig object name
+            #   value: "default"
+            # Local-dev only: grant actors allow-all egress. Turn OFF to use the spec-derived
+            # per-actor allowlist (see egress spec).
+            - name: AX_ALLOW_ALL_EGRESS
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ark-substrate-executor
+  namespace: ark-system
+spec:
+  selector: { app: ark-substrate-executor }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+# Register it as an ExecutionEngine so agents can opt in via spec.executionEngine.
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: substrate
+  namespace: ark-system
+spec:
+  address:
+    value: "http://ark-substrate-executor.ark-system.svc.cluster.local:8080"
+  description: "Runs agents as sandboxed Agent Substrate actors."

@@ -48,9 +48,20 @@ Requirements are in `specs/` (`substrate-execution-engine`, `substrate-agent-run
   AX-style one-image-per-framework (simpler to bootstrap, but reintroduces AX's rigidity);
   fall back to it only for a framework that cannot be embedded as an adapter.
 
-- **D3 — The completions adapter reuses Ark's provider-agnostic model client.** It already
-  supports OpenAI/Anthropic/Gemini/etc., so we do not re-solve model integration (which AX
-  handled poorly — a hardcoded, single-provider path).
+- **D3 — The completions adapter uses a provider-agnostic model client that mirrors Ark's.**
+  *Revised during Phase-1 implementation (Option C).* The original intent was to **reuse**
+  Ark's provider-agnostic model client directly, but that client is **Go**
+  (`ark/executors/completions/model.go` + `provider_*.go`) and the generic runner is Python;
+  ark-sdk exposes **no** Python model-calling client. So the runner implements a small
+  Python client (`ark_runner/model_client.py`) that mirrors the Go dispatch, keyed off the
+  exact `Model` shape ark-sdk delivers (`type` = provider, `config` = `{provider: {apiKey,
+  baseUrl, apiVersion, properties}}`). It covers OpenAI, Azure, and Anthropic; Bedrock is a
+  typed `NotImplementedError` (SigV4) pending a follow-up. The provider set and config keys
+  MUST stay in sync with ark-sdk's `_resolve_model`. *Alternatives considered and rejected
+  for now:* (A) port nothing and bake a provider per image — the AX trap D2 rejects;
+  (B) run the Go completions executor as a sidecar inside each actor for true reuse — heavier
+  image and two processes in the sandbox, revisit if provider drift becomes a maintenance
+  burden.
 
 - **D4 — Actor lifecycle: per-`(agent, conversationId)` for stateful agents (suspend when
   idle, resume per query); ephemeral per-query for stateless.** Matches Substrate's density

@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: substrate-demo
+spec:
+  input: "In one sentence, what is a sandboxed agent runtime?"
+  target:
+    type: agent
+    name: substrate-agent
+  ttl: 10m

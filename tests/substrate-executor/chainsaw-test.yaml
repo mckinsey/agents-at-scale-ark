@@ -1,0 +1,72 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: substrate-executor
+  labels:
+    # Requires a live Agent Substrate control plane + the ark-substrate-executor deployed and
+    # the `substrate` ExecutionEngine registered (see services/ark-substrate-executor/BRINGUP.md).
+    # Excluded from default runs; select explicitly once the stack is up.
+    requires-substrate: "true"
+spec:
+  description: An opt-in agent runs sandboxed via the Substrate ExecutionEngine; query completes, and a failing case surfaces as error.
+  concurrent: false
+  steps:
+  - name: precondition
+    try:
+    # Fail fast with a clear message if the Substrate engine is not available.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: ExecutionEngine
+          metadata:
+            name: substrate
+            namespace: ark-system
+
+  - name: run-sandboxed-agent
+    try:
+    - apply:
+        file: manifests/a00-model.yaml
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-query.yaml
+    - assert:
+        timeout: 300s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: substrate-demo
+          status:
+            phase: done
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: substrate-demo
+    - script:
+        content: kubectl logs deploy/ark-substrate-executor -n ark-system --tail=100 || true
+
+  - name: failure-surfaces
+    try:
+    # An agent pointed at an undeclared/unreachable model must fail the query, not silently pass.
+    - apply:
+        file: manifests/a03-agent-bad-model.yaml
+    - apply:
+        file: manifests/a04-query-bad.yaml
+    - assert:
+        timeout: 300s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: substrate-demo-bad
+          status:
+            phase: error
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: substrate-demo-bad

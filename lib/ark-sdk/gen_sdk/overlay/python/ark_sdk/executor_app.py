@@ -3,8 +3,10 @@
 Extension spec: ark/api/extensions/query/v1/
 """
 
+import json
 import logging
 import os
+import uuid
 from typing import Any, List
 
 import uvicorn
@@ -21,6 +23,9 @@ from a2a.types import (
     AgentSkill,
     Part,
     Role,
+    Task,
+    TaskState,
+    TaskStatus,
     Message as A2AMessage,
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH, DEFAULT_RPC_URL, TransportProtocol
@@ -30,10 +35,11 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from .broker import BrokerClient, discover_broker_url
-from .executor import BaseExecutor, begin_request_state
+from .executor import ApprovalRequiredError, BaseExecutor, begin_request_state
 from .extensions.query import (
     QUERY_EXTENSION_URI,
     extract_query_ref,
+    fetch_resumption,
     resolve_query,
 )
 from .query_status_updater import QueryStatusUpdater
@@ -234,6 +240,12 @@ class A2AExecutorAdapter(AgentExecutor):
                 message_ttl_seconds=request.message_ttl_seconds,
             ) if broker_url else None
 
+        # HITL resumption: on re-dispatch after a human decision, the Query still points at
+        # the now-terminal A2ATask. Rebuild the paused state so the executor continues the turn
+        # instead of starting over. Sub-targets never own a HITL task.
+        if not sub_target:
+            request.resume = await fetch_resumption(query_ref)
+
         begin_request_state()
         self.executor._broker_client = broker
         self.executor._query_status_updater = None if sub_target else QueryStatusUpdater(query_ref)
@@ -272,6 +284,10 @@ class A2AExecutorAdapter(AgentExecutor):
             if conversation_id:
                 response_msg.context_id = conversation_id
             await event_queue.enqueue_event(response_msg)
+        except ApprovalRequiredError as approval:
+            await self._handle_approval_required(
+                context, event_queue, broker, request, conversation_id, sub_target, approval
+            )
         except Exception as e:
             logger.error(f"Execution failed: {e}", exc_info=True)
             await event_queue.enqueue_event(
@@ -286,6 +302,71 @@ class A2AExecutorAdapter(AgentExecutor):
             self.executor._query_status_updater = None
             self.executor._streamed = False
             self.executor._tool_call_index = 0
+
+    async def _handle_approval_required(
+        self,
+        context: Any,
+        event_queue: EventQueue,
+        broker: BrokerClient | None,
+        request: Any,
+        conversation_id: str,
+        sub_target: bool,
+        approval: ApprovalRequiredError,
+    ) -> None:
+        """Turn an ApprovalRequiredError into an A2A input-required task so Ark's existing
+        HITL flow (A2ATask CRD, dashboard approval UI, query resumption) takes over.
+
+        Mirrors the Go completions executor's handleApprovalRequired: returns a Task with
+        state=input-required and string-valued metadata {toolCalls, context, timeout, onTimeout},
+        emits a tool_approval_request broker event, and closes the stream WITHOUT a final
+        "done" chunk (the query transitions to input-required, not done).
+        """
+        # A team member cannot pause for approval — the calling engine owns the query's
+        # task/stream. Surface it as an error rather than silently bypassing the gate.
+        if sub_target:
+            await event_queue.enqueue_event(
+                A2AMessage(
+                    role=Role.ROLE_AGENT,
+                    parts=[Part(text="tool approval is not supported for team sub-agents")],
+                    message_id="approval-error-response",
+                )
+            )
+            return
+
+        task_id = getattr(context, "task_id", None) or uuid.uuid4().hex
+        tool_calls = approval.tool_calls or []
+        timeout_str = approval.config.timeout or ""
+        on_timeout = approval.config.onTimeout or ""
+        metadata = {
+            "toolCalls": json.dumps(tool_calls),
+            "timeout": timeout_str,
+            "onTimeout": on_timeout,
+            "context": json.dumps(approval.context.model_dump()),
+        }
+
+        if broker:
+            await broker.send_event({
+                "type": "tool_approval_request",
+                "taskId": task_id,
+                "toolCalls": tool_calls,
+                "timeout": timeout_str,
+                "onTimeout": on_timeout,
+                "agentName": request.agent.name,
+            })
+            # Close the stream without a final chunk; the query goes to input-required.
+            await broker.complete()
+
+        # Enqueue a Task object directly (not a status update): the a2a-sdk's blocking handler
+        # requires a Task to exist before any status event, and the controller's sendQueryA2A
+        # reads this Task's state + metadata to create the HITL A2ATask. Mirrors the Go
+        # completions executor's handleApprovalRequired return.
+        task = Task(
+            id=task_id,
+            context_id=conversation_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_INPUT_REQUIRED),
+            metadata=metadata,
+        )
+        await event_queue.enqueue_event(task)
 
     async def cancel(self, context: Any, event_queue: EventQueue) -> None:
         pass

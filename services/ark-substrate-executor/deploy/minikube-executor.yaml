@@ -1,0 +1,118 @@
+# ark-substrate-executor on minikube, wired to the in-cluster Substrate ateapi.
+# ateapi auth = k8s SA JWT (audience api.ate-system.svc) over TLS verified by the
+# servicedns ClusterTrustBundle. Actors run in the ate-demo-counter atespace (reusing its
+# gVisor WorkerPool). Dev egress is allow-all.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ark-substrate-executor
+  namespace: ark-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-substrate-executor
+rules:
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["agents","models","queries","teams","tools","mcpservers","memories","a2atasks"]
+    verbs: ["get","list","watch"]
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["queries/status"]
+    verbs: ["get","patch","update"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create","patch"]
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["executionengines"]
+    verbs: ["get","list","watch"]
+  - apiGroups: [""]
+    resources: ["secrets","configmaps","services"]
+    verbs: ["get","list","watch"]
+  - apiGroups: [""]
+    resources: ["pods","pods/log"]
+    verbs: ["get","list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ark-substrate-executor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-substrate-executor
+subjects:
+  - kind: ServiceAccount
+    name: ark-substrate-executor
+    namespace: ark-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ark-substrate-executor
+  namespace: ark-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ark-substrate-executor }
+  template:
+    metadata:
+      labels: { app: ark-substrate-executor }
+    spec:
+      serviceAccountName: ark-substrate-executor
+      containers:
+        - name: executor
+          image: localhost:5001/ark-substrate-executor:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: PORT, value: "8080" }
+            - { name: ARK_SUBSTRATE_ATEAPI_ADDR, value: "api.ate-system.svc.cluster.local:443" }
+            - { name: SUBSTRATE_AUTHORITY, value: "api.ate-system.svc" }
+            - { name: SUBSTRATE_TOKEN_FILE, value: "/var/run/secrets/ateapi/token" }
+            - { name: SUBSTRATE_CA_FILE, value: "/run/servicedns-ca/trust-bundle.pem" }
+            - { name: ARK_SUBSTRATE_ATESPACE, value: "ate-demo-counter" }
+            - { name: ARK_SUBSTRATE_SNAPSHOT_URI, value: "gs://ate-snapshots/ate-demo-counter/" }
+            - { name: ARK_SUBSTRATE_SANDBOX_CONFIG, value: "gvisor-default" }
+            - { name: ARK_RUNNER_IMAGE, value: "localhost:5001/ark-runner@sha256:5e54d3a5219e551c9c40ccedfb5c4c37cf2927a2f7e28b370d47d7cf3f4dbf32" }
+            - { name: ARK_RUNNER_TLS_INSECURE, value: "true" }
+            - { name: AX_ALLOW_ALL_EGRESS, value: "true" }
+            # Credential injection (task 3.4): egress gateway substitutes the real token from
+            # this k8s Secret; the actor only ever sends a placeholder. Requires the atespace to
+            # be granted the secret's namespace in k8s-credential-provider-namespace-policy.
+            - { name: ARK_SUBSTRATE_CREDENTIAL_URI, value: "ate-secret://k8s.io/default/default/gw-key/token" }
+          volumeMounts:
+            - { name: ateapi-token, mountPath: /var/run/secrets/ateapi, readOnly: true }
+            - { name: servicedns-ca, mountPath: /run/servicedns-ca, readOnly: true }
+      volumes:
+        - name: ateapi-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: api.ate-system.svc
+                  expirationSeconds: 3600
+                  path: token
+        - name: servicedns-ca
+          projected:
+            sources:
+              - clusterTrustBundle:
+                  name: servicedns.podcert.ate.dev:identity:primary-bundle
+                  path: trust-bundle.pem
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ark-substrate-executor
+  namespace: ark-system
+spec:
+  selector: { app: ark-substrate-executor }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: substrate
+  namespace: ark-system
+spec:
+  address:
+    value: "http://ark-substrate-executor.ark-system.svc.cluster.local:8080"
+  description: "Runs agents as sandboxed Agent Substrate actors."

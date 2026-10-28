@@ -1,0 +1,54 @@
+direction: right
+
+title: |md
+  # Ark × Agent Substrate — one Query
+| {near: top-center; style.font-size: 26}
+
+cluster: minikube cluster {
+  style.stroke-dash: 3
+
+  ark: ark-system {
+    controller: ark-controller
+    executor: "ark-substrate-executor\n(ExecutionEngine — orchestrator,\nOUTSIDE the sandbox)" {
+      style.fill: "#e8f0fe"
+    }
+  }
+
+  ate: "ate-system (Substrate)" {
+    api: "ate-api-server\n(ateapi gRPC)"
+    egress: "atenet-egress\n(MITM gateway)" { style.fill: "#fff4e5" }
+    cred: "k8s-credential-\nprovider"
+    rustfs: "rustfs\n(snapshots)"
+  }
+
+  pod: "ateom worker pod (ate-demo-counter)" {
+    sandbox: "gVisor sandbox (runsc)  — THE SANDBOX" {
+      style.fill: "#fdecec"
+      style.stroke: "#c0392b"
+      runner: "ark-runner (PID-1) — THE WORKLOAD\n• reads ARK_AGENT_REQUEST\n• completions adapter → messages\n• model_client / mcp_client\n• prints __ARK_RESULT__ <nonce>" {
+        style.fill: "#eafaf0"
+      }
+    }
+  }
+}
+
+llm: "External LLM / MCP\n(QuantumBlack gateway)" {
+  style.fill: "#f3e8fd"
+  shape: cloud
+}
+
+cluster.ark.controller -> cluster.ark.executor: "1. Query over A2A"
+cluster.ark.executor -> cluster.ate.api: "2. ensure template / create actor /\negress policy (+ credential inject)"
+cluster.ark.executor -> cluster.pod.sandbox.runner: "3. resume actor = HAND-OFF\n(Substrate boots the image)" {
+  style.stroke: "#c0392b"
+  style.stroke-width: 2
+}
+cluster.pod.sandbox.runner -> cluster.ate.egress: "5. HTTPS w/ placeholder auth header"
+cluster.ate.egress -> llm: "injects real credential → upstream"
+cluster.ate.cred -> cluster.ate.egress: "resolves secret"
+cluster.ark.executor -> cluster.pod.sandbox.runner: "6. read __ARK_RESULT__\nfrom worker-pod log (k8s PodLogs)" {
+  style.stroke-dash: 3
+}
+cluster.ark.executor -> cluster.ark.controller: "7. result over A2A → Query.status.response" {
+  style.stroke-dash: 3
+}
