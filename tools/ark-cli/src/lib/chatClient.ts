@@ -92,9 +92,15 @@ export class ChatClient {
     if (!queryName) {
       throw new Error('Query creation did not return a name');
     }
+    const queryNamespace = (queryResult as {namespace?: string}).namespace;
 
     if (config.streamingEnabled && onChunk) {
-      return await this.pollStreamResponse(queryName, onChunk, signal);
+      return await this.pollStreamResponse(
+        queryName,
+        queryNamespace,
+        onChunk,
+        signal
+      );
     } else {
       return await this.pollResponse(queryName, onChunk, signal);
     }
@@ -166,6 +172,7 @@ export class ChatClient {
 
   private async pollStreamResponse(
     queryName: string,
+    queryNamespace: string | undefined,
     onChunk: (
       chunk: string,
       toolCalls?: ToolCall[],
@@ -174,8 +181,11 @@ export class ChatClient {
     signal?: AbortSignal
   ): Promise<string> {
     const baseUrl = this.arkApiClient.getBaseUrl();
+    const namespaceParam = queryNamespace
+      ? `&namespace=${encodeURIComponent(queryNamespace)}`
+      : '';
     const response = await fetch(
-      `${baseUrl}/v1/broker/chunks?watch=true&query-id=${queryName}`,
+      `${baseUrl}/v1/broker/chunks?watch=true&query-id=${queryName}${namespaceParam}`,
       {signal}
     );
 
