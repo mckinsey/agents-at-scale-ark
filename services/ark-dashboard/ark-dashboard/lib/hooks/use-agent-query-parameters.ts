@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { components } from '@/lib/api/generated/types';
-import { agentsService, teamsService, toolsService } from '@/lib/services';
+import {
+  type Agent,
+  agentsService,
+  teamsService,
+  toolsService,
+} from '@/lib/services';
 import { extractAgentRequiredParams } from '@/lib/utils/query-parameters';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -42,6 +47,7 @@ interface UseAgentQueryParametersResult {
   missingParameters: string[];
   toApiParameters: () => ApiQueryParameter[] | undefined;
   engineToolWarning: string | null;
+  agent: Agent | null;
 }
 
 function stripPrefix(name: string): string {
@@ -118,6 +124,7 @@ export function useAgentQueryParameters(
   const [engineToolWarning, setEngineToolWarning] = useState<string | null>(
     null,
   );
+  const [agentDetail, setAgentDetail] = useState<Agent | null>(null);
   const rowIdCounter = useRef(0);
 
   const createRowId = useCallback(() => {
@@ -134,10 +141,12 @@ export function useAgentQueryParameters(
       setTeamAgents([]);
       setRows([]);
       setEngineToolWarning(null);
+      setAgentDetail(null);
       return;
     }
 
     let cancelled = false;
+    setAgentDetail(null);
 
     if (participantType === 'team') {
       const targetName = stripPrefix(participantName);
@@ -176,6 +185,7 @@ export function useAgentQueryParameters(
       .getByName(namespace, targetName)
       .then(async agent => {
         if (cancelled) return;
+        setAgentDetail(agent);
         setAvailableParameters(extractAgentRequiredParams(agent?.parameters));
         setTeamAgents([]);
         setRows([]);
@@ -282,5 +292,6 @@ export function useAgentQueryParameters(
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    agent: agentDetail,
   };
 }

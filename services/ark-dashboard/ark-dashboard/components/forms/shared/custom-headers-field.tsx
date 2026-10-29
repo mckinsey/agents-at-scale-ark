@@ -1,21 +1,43 @@
 'use client';
 
-import { Lock, Plus } from '@/components/icons';
-import { Button } from '@/components/ui/button';
-import { ConditionalInputRow } from '@/components/ui/conditionalInputRow';
-import { FieldDescription, FieldSet, FieldTitle } from '@/components/ui/field';
-import { IconShell } from '@/components/ui/icon-shell';
-import { Input } from '@/components/ui/input';
-import type { AgentHeader } from '@/lib/services';
-import { useGetAllSecrets } from '@/lib/services/secrets-hooks';
+import {
+  HeaderRowsHeading,
+  McpHeaderColumnLabels,
+  McpHeaderRowFields,
+} from '@/components/ui/mcp-header-row';
+import { useSecretKeyOptions } from '@/lib/hooks/use-secret-key-options';
+import type { McpHeaderRow } from '@/lib/utils/mcp-header-overrides';
 
 import type { CustomHeaderRows } from './custom-header-rows';
+import type { HeaderData } from './header-rows';
 
-function describeReadOnlyValue(header: AgentHeader): string {
-  const configMapKeyRef = header.value.valueFrom?.configMapKeyRef;
-  return configMapKeyRef
-    ? `ConfigMap: ${configMapKeyRef.name}/${configMapKeyRef.key}`
-    : 'External reference';
+function toRow(header: HeaderData): McpHeaderRow {
+  const isSecret = header.type === 'secret';
+  return {
+    id: header.key,
+    name: header.name,
+    source: isSecret ? 'secret' : 'value',
+    value: isSecret ? '' : header.value,
+    secretName: isSecret ? header.value : '',
+    secretKey: isSecret ? (header.secretKey ?? '') : '',
+  };
+}
+
+function toHeaderUpdate(updates: Partial<McpHeaderRow>): Partial<HeaderData> {
+  if (updates.source !== undefined) {
+    return {
+      type: updates.source === 'secret' ? 'secret' : 'direct',
+      value: '',
+      secretKey: undefined,
+    };
+  }
+  if (updates.name !== undefined) {
+    return { name: updates.name };
+  }
+  if (updates.secretName !== undefined) {
+    return { value: updates.secretName, secretKey: updates.secretKey };
+  }
+  return { value: updates.value ?? '' };
 }
 
 interface CustomHeadersFieldProps {
@@ -37,81 +59,48 @@ export function CustomHeadersField({
   valuePlaceholder = 'e.g., Bearer token',
   addLabel = 'Add header',
 }: CustomHeadersFieldProps) {
-  const { data: secrets } = useGetAllSecrets();
-  const {
-    headers,
-    headerErrors,
-    readOnlyHeaders,
-    updateRow,
-    addRow,
-    deleteRow,
-    clearRowError,
-  } = headerRows;
+  const { options, loaded } = useSecretKeyOptions();
+  const { headers, headerErrors, updateRow, addRow, deleteRow, clearRowError } =
+    headerRows;
+  const count = headers.filter(
+    header => header.name.trim() || header.value.trim(),
+  ).length;
 
   return (
-    <FieldSet className="gap-2">
-      <FieldTitle>{title}</FieldTitle>
-      {description && <FieldDescription>{description}</FieldDescription>}
-      {readOnlyHeaders.map(header => (
-        <div key={header.name} className="flex items-center gap-3">
-          <div className="flex-1">
-            <Input
-              variant="inline"
-              value={header.name}
-              aria-label={`Header ${header.name} name`}
-              disabled
-              readOnly
-            />
-          </div>
-          <div className="flex-[2]">
-            <Input
-              variant="inline"
-              value={describeReadOnlyValue(header)}
-              aria-label={`Header ${header.name} value`}
-              disabled
-              readOnly
-            />
-          </div>
-          <span
-            className="flex size-7 shrink-0 items-center justify-center"
-            title="Read-only here. Edit it in the resource YAML.">
-            <IconShell size="sm" variant="secondary">
-              <Lock />
-            </IconShell>
-          </span>
-        </div>
-      ))}
-      {readOnlyHeaders.length > 0 && (
-        <FieldDescription>
-          Headers that read from a ConfigMap are read-only here and are kept
-          when you save.
-        </FieldDescription>
-      )}
-      {headers.map((row, index) => (
-        <ConditionalInputRow
-          key={row.key}
-          data={row}
-          onChange={updated => {
-            updateRow(index, updated);
-            clearRowError(row.key, updated);
-          }}
-          secrets={secrets ?? []}
-          deleteRow={deleteRow}
-          nameError={headerErrors[row.key]?.nameError}
-          valueError={headerErrors[row.key]?.valueError}
-          namePlaceholder={namePlaceholder}
-          valuePlaceholder={valuePlaceholder}
-        />
-      ))}
-      <Button
-        type="button"
-        onClick={addRow}
-        variant="outline"
-        size="icon"
+    <div className="flex flex-col gap-5" data-testid="model-headers">
+      <HeaderRowsHeading
+        title={title}
+        tooltip={description}
+        count={count}
+        addLabel={addLabel}
         disabled={disabled}
-        aria-label={addLabel}>
-        <Plus />
-      </Button>
-    </FieldSet>
+        onAdd={addRow}
+      />
+
+      {headers.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <McpHeaderColumnLabels showServer={false} />
+          {headers.map((header, index) => (
+            <McpHeaderRowFields
+              key={header.key}
+              row={toRow(header)}
+              showServer={false}
+              secretOptions={options}
+              secretsLoaded={loaded}
+              error={headerErrors[header.key]}
+              disabled={disabled}
+              namePlaceholder={namePlaceholder}
+              valuePlaceholder={valuePlaceholder}
+              onChange={updates => {
+                const update = toHeaderUpdate(updates);
+                updateRow(index, update);
+                clearRowError(header.key, update);
+              }}
+              onRemove={() => deleteRow(header.key)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

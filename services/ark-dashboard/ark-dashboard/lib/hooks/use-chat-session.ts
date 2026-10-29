@@ -24,6 +24,10 @@ import {
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
 import { useBrokerFallbackNotice } from '@/lib/hooks/use-broker-fallback-notice';
+import {
+  type QueryMcpHeaders,
+  useQueryMcpHeaders,
+} from '@/lib/hooks/use-query-mcp-headers';
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
 import {
@@ -31,6 +35,7 @@ import {
   type ChatResponse,
   type MemoryNotice,
   type MemoryNoticeLookup,
+  type QueryOverride,
   isBrokerUnavailableError,
 } from '@/lib/services/chat';
 import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
@@ -217,6 +222,7 @@ interface UseChatSessionReturn {
   canAddParameterRow: boolean;
   missingParameters: string[];
   engineToolWarning: string | null;
+  mcpHeaders: QueryMcpHeaders;
 }
 
 export function useChatSession({
@@ -391,7 +397,11 @@ export function useChatSession({
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    agent,
   } = useAgentQueryParameters(name, type);
+
+  const mcpHeaders = useQueryMcpHeaders(type === 'agent' ? agent : null);
+  const { hasErrors: hasMcpHeaderErrors, toApiOverrides } = mcpHeaders;
 
   useEffect(() => {
     return () => {
@@ -476,7 +486,11 @@ export function useChatSession({
   } | null>(null);
 
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+    async (
+      userMessage: string,
+      apiParameters?: ApiQueryParameter[],
+      apiOverrides?: QueryOverride[],
+    ) => {
       chatStreamAbortControllerRef.current = new AbortController();
 
       const turnStartIndex = chatMessages.length + 1;
@@ -558,6 +572,7 @@ export function useChatSession({
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
           apiParameters,
+          apiOverrides,
         );
 
       queryName = streamQueryName;
@@ -1001,6 +1016,7 @@ export function useChatSession({
       userMessage: string,
       apiParameters?: ApiQueryParameter[],
       existingQueryName?: string,
+      apiOverrides?: QueryOverride[],
     ) => {
       let queryName = existingQueryName;
       if (!queryName) {
@@ -1013,6 +1029,7 @@ export function useChatSession({
           conversationId,
           queryTimeout,
           apiParameters,
+          apiOverrides,
         );
         queryName = query.name;
         invalidateQueriesList();
@@ -1175,11 +1192,12 @@ export function useChatSession({
       setError(null);
       resumeAutoScroll();
 
-      if (missingParameters.length > 0) {
+      if (missingParameters.length > 0 || hasMcpHeaderErrors) {
         return;
       }
 
       const apiParameters = toApiParameters();
+      const apiOverrides = toApiOverrides();
 
       trackEvent({
         name: 'chat_message_sent',
@@ -1203,10 +1221,19 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage, apiParameters);
+          await handleStreamChatResponse(
+            userMessage,
+            apiParameters,
+            apiOverrides,
+          );
           await ensureConversationId();
         } else {
-          await handlePollChatResponse(userMessage, apiParameters);
+          await handlePollChatResponse(
+            userMessage,
+            apiParameters,
+            undefined,
+            apiOverrides,
+          );
         }
       } catch (err) {
         console.error('Error sending message:', err);
@@ -1302,11 +1329,13 @@ export function useChatSession({
       ensureConversationId,
       handlePollChatResponse,
       handleStreamChatResponse,
+      hasMcpHeaderErrors,
       isChatStreamingEnabled,
       missingParameters,
       name,
       refreshMemoryNotice,
       resumeAutoScroll,
+      toApiOverrides,
       toApiParameters,
       type,
       updateChatMessages,
@@ -1519,5 +1548,6 @@ export function useChatSession({
     canAddParameterRow,
     missingParameters,
     engineToolWarning,
+    mcpHeaders,
   };
 }

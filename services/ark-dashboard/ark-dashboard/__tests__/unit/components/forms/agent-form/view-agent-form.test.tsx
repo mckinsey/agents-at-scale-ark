@@ -74,6 +74,10 @@ vi.mock('@/components/forms/shared/custom-headers-field', () => ({
   CustomHeadersField: () => <div data-testid="custom-headers-field" />,
 }));
 
+vi.mock('@/components/ui/mcp-header-overrides-editor', () => ({
+  McpHeaderOverridesEditor: () => <div data-testid="mcp-header-overrides-editor" />,
+}));
+
 vi.mock('@/components/ui/form', () => ({
   Form: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FormField: ({
@@ -115,6 +119,15 @@ function buildHook(overrides: Record<string, unknown> = {}) {
       selectedTools: [],
       unavailableTools: [],
       parameters: [],
+      mcpHeaders: {
+        rows: [],
+        errors: {},
+        addRow: vi.fn(),
+        updateRow: vi.fn(),
+        removeRow: vi.fn(),
+      },
+      mcpServerNames: [],
+      mcpHeaderNames: {},
       isExperimentalExecutionEngineEnabled: false,
       hasChanges: false,
       ...overrides,

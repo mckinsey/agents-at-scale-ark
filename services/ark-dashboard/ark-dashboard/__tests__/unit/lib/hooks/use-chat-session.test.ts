@@ -69,6 +69,10 @@ vi.mock('@/lib/services/queries-hooks', () => ({
   useInvalidateQueriesList: () => mockInvalidateQueriesList,
 }));
 
+vi.mock('@/lib/services/mcp-servers-hooks', () => ({
+  useGetAllMcpServers: () => ({ data: [] }),
+}));
+
 function createArkFinalChunk(opts: {
   arkTokenUsage?: {
     promptTokens: number;
@@ -1539,7 +1543,7 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.at(-1)).toEqual([
+      expect(lastCall?.at(-2)).toEqual([
         { name: 'muting', value: 'BANANAPHONE' },
       ]);
     });

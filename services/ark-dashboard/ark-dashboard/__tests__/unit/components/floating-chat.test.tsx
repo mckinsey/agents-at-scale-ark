@@ -18,6 +18,10 @@ vi.mock('@/lib/services/queries-hooks', () => ({
   useInvalidateQueriesList: () => mockInvalidateQueriesList,
 }));
 
+vi.mock('@/lib/services/mcp-servers-hooks', () => ({
+  useGetAllMcpServers: () => ({ data: [] }),
+}));
+
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
     namespace: 'default',
@@ -1109,6 +1113,7 @@ describe('FloatingChat', () => {
           undefined, // conversationId
           '5m', // timeout
           undefined, // parameters
+          undefined, // overrides
         );
       });
 
@@ -1238,6 +1243,7 @@ describe('FloatingChat', () => {
           undefined,
           '5m',
           undefined, // parameters
+          undefined, // overrides
         );
       });
 

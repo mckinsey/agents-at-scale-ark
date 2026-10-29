@@ -13,6 +13,7 @@ interface AxiosError extends Error {
 }
 
 export type QueryParameter = components['schemas']['QueryParameter'];
+export type QueryOverride = components['schemas']['AgentOverride'];
 export type QueryResponse = components['schemas']['QueryResponse'];
 export type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
@@ -351,6 +352,7 @@ export const chatService = {
     conversationId?: string,
     timeout?: string,
     parameters?: QueryParameter[],
+    overrides?: QueryOverride[],
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
@@ -364,6 +366,7 @@ export const chatService = {
       conversationId,
       timeout,
       ...(parameters && parameters.length > 0 ? { parameters } : {}),
+      ...(overrides && overrides.length > 0 ? { overrides } : {}),
     };
 
     return await this.createQuery(namespace, queryRequest);
@@ -582,6 +585,7 @@ export const chatService = {
     timeout?: string,
     abortSignal?: AbortSignal,
     parameters?: QueryParameter[],
+    overrides?: QueryOverride[],
   ): Promise<{
     queryName: string;
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
@@ -595,6 +599,7 @@ export const chatService = {
       conversationId,
       timeout,
       parameters,
+      overrides,
     );
 
     const queryName = query.name;

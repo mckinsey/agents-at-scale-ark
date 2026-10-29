@@ -8,6 +8,7 @@ import { ChatNotice } from '@/components/chat/chat-notice';
 import { MemoryChatNotice } from '@/components/chat/memory-chat-notice';
 import { Autorenew, Build, Info, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { ChatMcpHeaderFields } from '@/components/ui/chat-mcp-header-fields';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -74,6 +75,7 @@ export function ChatPanel({
     canAddParameterRow,
     missingParameters,
     engineToolWarning,
+    mcpHeaders,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -193,6 +195,24 @@ export function ChatPanel({
                 disabled={isProcessing}
               />
             )}
+          </div>
+        )}
+        {mcpHeaders.visible && (
+          <div className="px-4 pt-4">
+            <ChatMcpHeaderFields
+              rows={mcpHeaders.rows}
+              nameOptionsFor={mcpHeaders.nameOptionsFor}
+              namesForServer={mcpHeaders.namesForServer}
+              canAddRow={mcpHeaders.canAddRow}
+              errors={mcpHeaders.errors}
+              serverNames={mcpHeaders.serverNames}
+              effectiveCount={mcpHeaders.effectiveCount}
+              hasErrors={mcpHeaders.hasErrors}
+              onAddRow={mcpHeaders.addRow}
+              onUpdateRow={mcpHeaders.updateRow}
+              onRemoveRow={mcpHeaders.removeRow}
+              disabled={isProcessing}
+            />
           </div>
         )}
         <div className="flex flex-col gap-2 px-4 py-3">
@@ -323,7 +343,9 @@ export function ChatPanel({
                 <Button
                   onClick={handleSendMessage}
                   disabled={
-                    !currentMessage.trim() || missingParameters.length > 0
+                    !currentMessage.trim() ||
+                    missingParameters.length > 0 ||
+                    mcpHeaders.hasErrors
                   }
                   variant="ghost"
                   size="icon-sm"

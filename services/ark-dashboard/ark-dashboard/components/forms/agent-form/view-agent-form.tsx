@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { McpHeaderOverridesEditor } from '@/components/ui/mcp-header-overrides-editor';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
 import {
   Select,
@@ -81,6 +82,9 @@ export function ViewAgentForm({
     unavailableTools,
     parameters,
     headerRows,
+    mcpHeaders,
+    mcpServerNames,
+    mcpHeaderNames,
     isExperimentalExecutionEngineEnabled,
     hasChanges,
   } = state;
@@ -313,11 +317,24 @@ export function ViewAgentForm({
             )}
 
             {!isA2A && (
+              <McpHeaderOverridesEditor
+                rows={mcpHeaders.rows}
+                errors={mcpHeaders.errors}
+                serverNames={mcpServerNames}
+                headerNamesByServer={mcpHeaderNames}
+                disabled={isDisabled}
+                onAddRow={mcpHeaders.addRow}
+                onUpdateRow={mcpHeaders.updateRow}
+                onRemoveRow={mcpHeaders.removeRow}
+              />
+            )}
+
+            {!isA2A && (
               <CustomHeadersField
                 headerRows={headerRows}
-                title="Model headers"
+                title="Model header overrides"
                 description="Sent with every request this agent makes to its model."
-                addLabel="Add model header"
+                addLabel="Add rule"
                 disabled={isDisabled}
               />
             )}
