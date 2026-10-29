@@ -45,6 +45,7 @@ export interface GitHubMarketplaceManifest {
 export interface MarketplaceItemsGroup {
   source: string;
   displayName: string;
+  url?: string;
   items?: GitHubMarketplaceItem[];
   error?: { message: string; code: string };
 }

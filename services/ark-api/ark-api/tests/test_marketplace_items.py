@@ -161,6 +161,7 @@ class TestMarketplaceItemsAggregator(unittest.TestCase):
         self.assertEqual(body["b"]["displayName"], "b")
         self.assertEqual(len(body["a"]["items"]), 1)
         self.assertIsNone(body["a"].get("error"))
+        self.assertEqual(body["a"]["url"], "https://a.test/m.json")
 
     def test_one_source_unreachable(self):
         mock_core = _make_core(
