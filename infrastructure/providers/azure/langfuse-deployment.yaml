@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse
+  namespace: langfuse
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: langfuse
+  template:
+    metadata:
+      labels:
+        app: langfuse
+    spec:
+      containers:
+      - name: langfuse
+        image: langfuse/langfuse:2
+        ports:
+        - containerPort: 3000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: langfuse-db-secret
+              key: DATABASE_URL
+        - name: NEXTAUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: langfuse-secrets
+              key: NEXTAUTH_SECRET
+        - name: SALT
+          valueFrom:
+            secretKeyRef:
+              name: langfuse-secrets
+              key: SALT
+        - name: NEXTAUTH_URL
+          value: "http://localhost:3000"
+        - name: TELEMETRY_ENABLED
+          value: "false"
+        - name: PORT
+          value: "3000"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse
+  namespace: langfuse
+spec:
+  type: LoadBalancer
+  selector:
+    app: langfuse
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
