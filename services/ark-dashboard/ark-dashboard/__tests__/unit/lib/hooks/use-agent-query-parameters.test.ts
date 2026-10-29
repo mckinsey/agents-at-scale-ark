@@ -405,11 +405,12 @@ describe('useAgentQueryParameters', () => {
       );
 
       await waitFor(() => {
-        expect(mockGetByName).toHaveBeenCalled();
+        expect(result.current.executionEngineName).toBe(
+          agent.executionEngine?.name ?? null,
+        );
       });
       await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
+        await new Promise(resolve => setTimeout(resolve, 0));
       });
       return result;
     };
