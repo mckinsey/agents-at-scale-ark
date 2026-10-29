@@ -1,4 +1,8 @@
-import { type UseQueryOptions, useQuery } from '@tanstack/react-query';
+import {
+  type UseQueryOptions,
+  keepPreviousData,
+  useQuery,
+} from '@tanstack/react-query';
 
 import { APIError } from '@/lib/api/client';
 import { createRetryQueryHandler } from '@/lib/utils/query-retry';
@@ -20,6 +24,7 @@ export const useListSessions = (params?: SessionsListParams) => {
   return useQuery({
     queryKey: ['broker-sessions', params],
     queryFn: () => brokerSessionsService.getSessions(params),
+    placeholderData: keepPreviousData,
     refetchInterval: SESSIONS_POLL_MS,
     retry: retryTransientErrors,
   });
