@@ -20,6 +20,7 @@ export default {
   'form-validation-standards': 'Form Validation Standards',
   'ark-gateway': 'ARK Gateway',
   'building-a2a-servers': 'Building A2A Servers',
+  'exposing-agents-via-a2a': 'Exposing Agents via A2A',
   '---quality': { type: 'separator', title: 'Quality and reliability' },
   testing: 'End-to-End Testing',
   observability: 'Observability',
