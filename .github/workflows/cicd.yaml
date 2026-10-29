@@ -419,9 +419,9 @@ jobs:
             prebuild: "make ark-dashboard-deps"
           - path: services/ark-broker/ark-broker
             image: ark-broker
-          - path: services/ark-broker/ark-broker
+          - path: services/ark-broker
             image: ark-broker-migrate
-            dockerfile: Dockerfile.migrate
+            dockerfile: migrate/Dockerfile
           - path: services/ark-mcp
             image: ark-mcp
             install-uv: true

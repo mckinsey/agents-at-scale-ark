@@ -46,7 +46,7 @@ $(ARK_BROKER_STAMP_TEST): $(ARK_BROKER_STAMP_DEPS)
 $(ARK_BROKER_SERVICE_NAME)-build: $(ARK_BROKER_STAMP_BUILD) # HELP: Build ARK broker service Docker images
 $(ARK_BROKER_STAMP_BUILD): $(ARK_BROKER_STAMP_DEPS)
 	cd $(ARK_BROKER_SERVICE_DIR)/ark-broker && docker build -t $(ARK_BROKER_IMAGE):$(ARK_BROKER_TAG) .
-	cd $(ARK_BROKER_SERVICE_DIR)/ark-broker && docker build -f Dockerfile.migrate -t $(ARK_BROKER_MIGRATE_IMAGE):$(ARK_BROKER_TAG) .
+	cd $(ARK_BROKER_SERVICE_DIR) && docker build -f migrate/Dockerfile -t $(ARK_BROKER_MIGRATE_IMAGE):$(ARK_BROKER_TAG) .
 	@touch $@
 
 # Install target
