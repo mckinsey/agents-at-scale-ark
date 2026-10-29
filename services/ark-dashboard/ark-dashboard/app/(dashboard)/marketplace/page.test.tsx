@@ -13,6 +13,15 @@ import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
 import MarketplacePage from './page';
 
 // Mock the hooks and services
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'test-namespace',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
+vi.mock('@/lib/hooks/use-marketplace-install-capability');
 vi.mock('@/lib/services/marketplace-hooks');
 vi.mock('next/navigation', async () => {
   const { createAppRouterMock } =

@@ -12,6 +12,7 @@ export interface MarketplaceItem {
   documentation?: string;
   installCommand?: string;
   status: MarketplaceItemStatus;
+  installable: boolean;
   featured: boolean;
   downloads: number;
   rating?: number;
@@ -45,6 +46,14 @@ export type MarketplaceItemStatus =
   | 'installed'
   | 'updating'
   | 'deprecated';
+
+export type MarketplaceInstallState =
+  | 'installable'
+  | 'installing'
+  | 'installed'
+  | 'failed'
+  | 'timed-out'
+  | 'platform-managed';
 
 export interface MarketplaceItemDetail extends MarketplaceItem {
   longDescription: string;

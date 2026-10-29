@@ -3,6 +3,7 @@ import {
   storedIsExperimentalDarkModeEnabledAtom,
   storedIsExperimentalExecutionEngineEnabledAtom,
   storedIsMarketplaceEnabledAtom,
+  storedIsMarketplaceInstallEnabledAtom,
   storedQueryTimeoutSettingAtom,
 } from '@/atoms/experimental-features';
 
@@ -24,6 +25,13 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
         feature: 'Marketplace',
         description: 'Enables adding 3rd party marketplaces from settings',
         atom: storedIsMarketplaceEnabledAtom,
+      },
+      {
+        type: 'boolean',
+        feature: 'Marketplace install',
+        description:
+          'Previews what a marketplace item would install, in place of the command-to-copy dialog. Simulated — no resources are created yet.',
+        atom: storedIsMarketplaceInstallEnabledAtom,
       },
     ],
   },

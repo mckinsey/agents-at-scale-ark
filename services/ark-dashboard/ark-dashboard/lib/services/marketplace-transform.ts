@@ -17,6 +17,7 @@ export interface GitHubMarketplaceItem {
   license?: string;
   tags?: string[];
   category?: string;
+  installable?: boolean;
   icon?: string;
   screenshots?: string[];
   documentation?: string;
@@ -170,6 +171,7 @@ export function transformGitHubItemToMarketplaceItem(
       ? `helm install ${item.ark.helmReleaseName} ${item.ark.chartPath ?? ''}`
       : undefined,
     status: isInstalled ? 'installed' : 'available',
+    installable: item.installable ?? true,
     featured: false,
     downloads: 0,
     rating: undefined,

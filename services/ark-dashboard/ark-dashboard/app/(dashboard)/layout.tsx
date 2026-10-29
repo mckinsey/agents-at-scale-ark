@@ -2,6 +2,7 @@
 
 import { AppSidebar } from '@/components/app-sidebar';
 import ChatManager from '@/components/chat-manager';
+import { MarketplaceInstallWatcher } from '@/components/marketplace/marketplace-install-watcher';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
 import { NavigationGuardProvider } from '@/lib/hooks/use-navigation-guard';
@@ -43,6 +44,7 @@ export default function DashboardLayout({
         </NavigationGuardProvider>
       </SidebarProvider>
       <ChatManager />
+      <MarketplaceInstallWatcher />
     </>
   );
 }
