@@ -1262,10 +1262,10 @@ export function useChatSession({
           apiParameters,
           err.queryName || lastQueryName.current || undefined,
         );
-      } catch (pollErr) {
-        console.error('Error sending message:', pollErr);
+      } catch (error_) {
+        console.error('Error sending message:', error_);
         appendFailedMessage(
-          pollErr instanceof Error ? pollErr.message : SEND_FAILED_MESSAGE,
+          error_ instanceof Error ? error_.message : SEND_FAILED_MESSAGE,
         );
       }
     },
