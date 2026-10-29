@@ -38,6 +38,12 @@ import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
+import {
+  supportsOutputSchema as engineSupportsOutputSchema,
+  hasOutputSchemaAnnotation,
+  toOutputSchemaAnnotations,
+  validateOutputSchema,
+} from '@/lib/utils/output-schema';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 type ResultMessage = NonNullable<ChatResponse['messages']>[number];
@@ -68,6 +74,22 @@ function stripEmptyAssistantPlaceholder(
     return messages.slice(0, -1);
   }
   return messages;
+}
+
+const SEND_FAILED_MESSAGE = 'Failed to send message';
+
+function toSendErrorMessage(err: unknown): string {
+  if (!(err instanceof Error)) {
+    return SEND_FAILED_MESSAGE;
+  }
+  if (err.message.includes('Failed to fetch')) {
+    return 'Unable to connect to the ARK API. Please ensure the backend service is running on port 8000.';
+  }
+  return err.message;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
 }
 
 const STREAM_TERMINAL_STOP_GRACE_MS = 300;
@@ -217,6 +239,11 @@ interface UseChatSessionReturn {
   canAddParameterRow: boolean;
   missingParameters: string[];
   engineToolWarning: string | null;
+  supportsOutputSchema: boolean;
+  hasOwnOutputSchema: boolean;
+  outputSchemaOverride: string;
+  setOutputSchemaOverride: (value: string) => void;
+  isOutputSchemaOverrideValid: boolean;
 }
 
 export function useChatSession({
@@ -391,7 +418,35 @@ export function useChatSession({
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    executionEngineName,
+    executionEngineAnnotations,
+    agentAnnotations,
   } = useAgentQueryParameters(name, type);
+
+  const supportsOutputSchema =
+    type === 'agent' &&
+    engineSupportsOutputSchema(executionEngineName, executionEngineAnnotations);
+  const hasOwnOutputSchema =
+    supportsOutputSchema &&
+    hasOutputSchemaAnnotation(executionEngineAnnotations, agentAnnotations);
+  const canOverrideOutputSchema = supportsOutputSchema && !hasOwnOutputSchema;
+  const [outputSchemaOverride, setOutputSchemaOverride] = useState('');
+  const isOutputSchemaOverrideValid =
+    validateOutputSchema(outputSchemaOverride) === null;
+  const outputSchemaAnnotations = useMemo(
+    () =>
+      canOverrideOutputSchema
+        ? toOutputSchemaAnnotations(outputSchemaOverride)
+        : undefined,
+    [canOverrideOutputSchema, outputSchemaOverride],
+  );
+  const isSendBlocked =
+    missingParameters.length > 0 ||
+    (canOverrideOutputSchema && !isOutputSchemaOverrideValid);
+
+  useEffect(() => {
+    setOutputSchemaOverride('');
+  }, [name, type]);
 
   useEffect(() => {
     return () => {
@@ -558,6 +613,7 @@ export function useChatSession({
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
           apiParameters,
+          outputSchemaAnnotations,
         );
 
       queryName = streamQueryName;
@@ -987,6 +1043,7 @@ export function useChatSession({
       name,
       namespace,
       queryTimeout,
+      outputSchemaAnnotations,
       sessionId,
       setChatHistory,
       type,
@@ -1013,6 +1070,7 @@ export function useChatSession({
           conversationId,
           queryTimeout,
           apiParameters,
+          outputSchemaAnnotations,
         );
         queryName = query.name;
         invalidateQueriesList();
@@ -1162,6 +1220,7 @@ export function useChatSession({
       invalidateQueriesList,
       name,
       namespace,
+      outputSchemaAnnotations,
       queryTimeout,
       sessionId,
       type,
@@ -1170,12 +1229,60 @@ export function useChatSession({
     ],
   );
 
+  const appendFailedMessage = useCallback(
+    (content: string) => {
+      updateChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content,
+          metadata: {
+            status: 'failed',
+          },
+        } as ExtendedChatMessage,
+      ]);
+      setError(content);
+    },
+    [updateChatMessages],
+  );
+
+  const fallBackToPolling = useCallback(
+    async (
+      err: BrokerUnavailableError,
+      userMessage: string,
+      apiParameters: ApiQueryParameter[] | undefined,
+    ) => {
+      if (err.code === 'broker_unavailable') {
+        notifyBrokerFallback();
+      }
+      updateChatMessages(stripEmptyAssistantPlaceholder);
+      try {
+        await handlePollChatResponse(
+          userMessage,
+          apiParameters,
+          err.queryName || lastQueryName.current || undefined,
+        );
+      } catch (error_) {
+        console.error('Error sending message:', error_);
+        appendFailedMessage(
+          error_ instanceof Error ? error_.message : SEND_FAILED_MESSAGE,
+        );
+      }
+    },
+    [
+      appendFailedMessage,
+      handlePollChatResponse,
+      notifyBrokerFallback,
+      updateChatMessages,
+    ],
+  );
+
   const sendMessage = useCallback(
     async (userMessage: string) => {
       setError(null);
       resumeAutoScroll();
 
-      if (missingParameters.length > 0) {
+      if (isSendBlocked) {
         return;
       }
 
@@ -1212,63 +1319,14 @@ export function useChatSession({
         console.error('Error sending message:', err);
 
         if (isBrokerUnavailableError(err)) {
-          if (err.code === 'broker_unavailable') {
-            notifyBrokerFallback();
-          }
-          updateChatMessages(stripEmptyAssistantPlaceholder);
-          try {
-            await handlePollChatResponse(
-              userMessage,
-              apiParameters,
-              err.queryName || lastQueryName.current || undefined,
-            );
-          } catch (pollErr) {
-            console.error('Error sending message:', pollErr);
-            const pollErrMsg =
-              pollErr instanceof Error
-                ? pollErr.message
-                : 'Failed to send message';
-            updateChatMessages(prev => [
-              ...prev,
-              {
-                role: 'assistant',
-                content: pollErrMsg,
-                metadata: {
-                  status: 'failed',
-                },
-              } as ExtendedChatMessage,
-            ]);
-            setError(pollErrMsg);
-          }
+          await fallBackToPolling(err, userMessage, apiParameters);
           return;
         }
-
-        let errMsg = 'Failed to send message';
-
-        if (err instanceof Error) {
-          if (err.name === 'AbortError') {
-            aborted = true;
-            return;
-          }
-          if (err.message.includes('Failed to fetch')) {
-            errMsg =
-              'Unable to connect to the ARK API. Please ensure the backend service is running on port 8000.';
-          } else {
-            errMsg = err.message;
-          }
+        if (isAbortError(err)) {
+          aborted = true;
+          return;
         }
-
-        updateChatMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: errMsg,
-            metadata: {
-              status: 'failed',
-            },
-          } as ExtendedChatMessage,
-        ]);
-        setError(errMsg);
+        appendFailedMessage(toSendErrorMessage(err));
       } finally {
         setIsProcessing(false);
         setProcessingPhase(undefined);
@@ -1297,13 +1355,14 @@ export function useChatSession({
       }
     },
     [
+      appendFailedMessage,
       beginMemoryNoticeTurn,
-      notifyBrokerFallback,
       ensureConversationId,
+      fallBackToPolling,
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
-      missingParameters,
+      isSendBlocked,
       name,
       refreshMemoryNotice,
       resumeAutoScroll,
@@ -1519,5 +1578,10 @@ export function useChatSession({
     canAddParameterRow,
     missingParameters,
     engineToolWarning,
+    supportsOutputSchema,
+    hasOwnOutputSchema,
+    outputSchemaOverride,
+    setOutputSchemaOverride,
+    isOutputSchemaOverrideValid,
   };
 }

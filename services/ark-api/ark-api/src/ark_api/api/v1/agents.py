@@ -28,7 +28,9 @@ from ...constants.annotations import (
     A2A_SERVER_NAME_ANNOTATION,
     A2A_SERVER_SKILLS_ANNOTATION,
     ORIGIN_ANNOTATION,
+    OUTPUT_SCHEMA_ANNOTATION,
 )
+from ...utils.output_schema import validate_output_schema
 from .exceptions import handle_k8s_errors
 from .pagination import PaginationParams
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION, VIEW_DESCRIPTION
@@ -36,6 +38,9 @@ from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION, VIEW_DE
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+UPDATABLE_ANNOTATIONS = frozenset({OUTPUT_SCHEMA_ANNOTATION})
 
 
 class AgentView(str, Enum):
@@ -254,41 +259,77 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
     Returns:
         AgentDetailResponse: The updated agent details
     """
+    updates = body.model_dump(exclude_unset=True)
+    annotation_updates = updates.pop("annotations", None) or {}
+    _validate_annotation_updates(annotation_updates)
+
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-        # Get the existing agent first
         existing_agent = await ark_client.agents.a_get(agent_name)
-        existing_annotations = existing_agent.to_dict().get("metadata", {}).get("annotations") or {}
-        if A2A_SERVER_NAME_ANNOTATION in existing_annotations:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"Agent {agent_name} is managed by A2A server "
-                    f"{existing_annotations[A2A_SERVER_NAME_ANNOTATION]} and can't be edited. "
-                    "To change it, update the A2A server."
-                ),
-            )
-        existing_spec = existing_agent.to_dict()["spec"]
-
-        # exclude_unset keeps only the fields the client actually sent, so an
-        # omitted field is left as-is while one explicitly set to null is
-        # cleared. Conflating those two was the original bug.
-        for field, value in body.model_dump(exclude_unset=True).items():
-            if value is None:
-                existing_spec.pop(field, None)
-            else:
-                existing_spec[field] = value
-
-        # Update the agent
-        # Get the full existing agent object and update its spec
         existing_agent_dict = existing_agent.to_dict()
-        existing_agent_dict["spec"] = existing_spec
-        
-        # Create updated agent object
+        _ensure_agent_editable(agent_name, existing_agent_dict)
+
+        _apply_spec_updates(existing_agent_dict["spec"], updates)
+        _apply_annotation_updates(existing_agent_dict, annotation_updates)
+
         updated_agent_obj = AgentV1alpha1(**existing_agent_dict)
-        
         updated_agent = await ark_client.agents.a_update(updated_agent_obj)
-        
+
         return agent_to_detail_response(updated_agent.to_dict())
+
+
+def _validate_annotation_updates(annotation_updates: dict) -> None:
+    disallowed_annotations = sorted(set(annotation_updates) - UPDATABLE_ANNOTATIONS)
+    if disallowed_annotations:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Annotations not allowed: {', '.join(disallowed_annotations)}",
+        )
+    output_schema = annotation_updates.get(OUTPUT_SCHEMA_ANNOTATION)
+    if output_schema is None:
+        return
+    schema_error = validate_output_schema(output_schema)
+    if schema_error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid output schema: {schema_error}",
+        )
+
+
+def _ensure_agent_editable(agent_name: str, agent_dict: dict) -> None:
+    existing_annotations = agent_dict.get("metadata", {}).get("annotations") or {}
+    if A2A_SERVER_NAME_ANNOTATION in existing_annotations:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Agent {agent_name} is managed by A2A server "
+                f"{existing_annotations[A2A_SERVER_NAME_ANNOTATION]} and can't be edited. "
+                "To change it, update the A2A server."
+            ),
+        )
+
+
+def _apply_spec_updates(spec: dict, updates: dict) -> None:
+    # exclude_unset keeps only the fields the client actually sent, so an
+    # omitted field is left as-is while one explicitly set to null is
+    # cleared. Conflating those two was the original bug.
+    for field, value in updates.items():
+        if value is None:
+            spec.pop(field, None)
+        else:
+            spec[field] = value
+
+
+def _apply_annotation_updates(agent_dict: dict, annotation_updates: dict) -> None:
+    if not annotation_updates:
+        return
+    metadata = agent_dict.setdefault("metadata", {})
+    annotations = dict(metadata.get("annotations") or {})
+    for key, value in annotation_updates.items():
+        if value is None:
+            annotations.pop(key, None)
+        else:
+            annotations[key] = value
+    metadata["annotations"] = annotations
 
 
 @router.delete("/{agent_name}", status_code=204)

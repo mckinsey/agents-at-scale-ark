@@ -2991,6 +2991,13 @@ export interface components {
          * @description Request model for updating an agent.
          */
         AgentUpdateRequest: {
+            /**
+             * Annotations
+             * @description Merged into the existing annotations; a null value removes the key. Only the openai-responses output-schema annotation is accepted.
+             */
+            annotations?: {
+                [key: string]: string | null;
+            } | null;
             /** Description */
             description?: string | null;
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;

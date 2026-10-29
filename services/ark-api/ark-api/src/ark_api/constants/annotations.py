@@ -25,3 +25,6 @@ ORIGIN_ANNOTATION = ARK_PREFIX + "origin"
 # Streaming annotations
 STREAMING_SUPPORTED_ANNOTATION = ARK_PREFIX + "streaming-supported"
 MEMORY_EVENT_STREAM_ENABLED_ANNOTATION = ARK_PREFIX + "memory-event-stream-enabled"
+
+# Executor annotations
+OUTPUT_SCHEMA_ANNOTATION = "executor-openai-responses.ark.mckinsey.com/output-schema"
