@@ -1,6 +1,6 @@
 {
   "name": "ark-broker",
-  "version": "0.1.72-rc.4",
+  "version": "0.1.72",
   "description": "Ark broker for memory, telemetry streaming, and observability",
   "main": "dist/index.js",
   "type": "module",
@@ -100,6 +100,7 @@
     "proxy-addr": "^2.0.8",
     "dockerode": {
       "protobufjs": "^7.6.5"
-    }
+    },
+    "body-parser": "^2.4.0"
   }
 }

@@ -385,6 +385,11 @@ spec:
                 type: string
               transport:
                 default: http
+                description: |-
+                  Transport selects the MCP transport. "http" is Streamable HTTP.
+                  "sse" is the legacy HTTP+SSE transport, deprecated by the MCP
+                  specification; use it only for servers that do not support
+                  Streamable HTTP.
                 enum:
                 - http
                 - sse
