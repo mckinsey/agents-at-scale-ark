@@ -1,6 +1,6 @@
 import { type UseQueryOptions, useQuery } from '@tanstack/react-query';
 
-import { APIError } from '@/lib/api/client';
+import { isNotFoundError } from '@/lib/api/errors';
 import { createRetryQueryHandler } from '@/lib/utils/query-retry';
 
 import {
@@ -10,9 +10,6 @@ import {
 } from './broker-sessions';
 
 const SESSIONS_POLL_MS = 5000;
-
-const isNotFoundError = (error: unknown): boolean =>
-  error instanceof APIError && error.status === 404;
 
 const retryTransientErrors = createRetryQueryHandler(1);
 

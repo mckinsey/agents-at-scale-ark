@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatService } from '@/lib/services';
 import type { ChatResponse } from '@/lib/services/chat';
 import type { ExtendedChatMessage } from '@/lib/types/chat-message';
+import { QUERY_NOT_FOUND_MESSAGE } from '@/lib/utils/chat-turn';
 
 import { useResumeRunningQuery } from './use-resume-running-query';
 
@@ -119,7 +120,7 @@ describe('useResumeRunningQuery', () => {
       { role: 'user', content: 'hello' },
     ]);
     vi.mocked(chatService.getQueryResult).mockResolvedValueOnce({
-      status: 'unknown',
+      status: 'error',
       terminal: true,
     });
 
@@ -135,6 +136,78 @@ describe('useResumeRunningQuery', () => {
         content: 'Query failed',
         metadata: { status: 'failed', queryName: 'q1' },
       },
+    ]);
+  });
+
+  it('tells the user when the query no longer exists', async () => {
+    const { params, state } = createParams([
+      { role: 'user', content: 'hello' },
+      {
+        role: 'assistant',
+        content: '',
+        approvalRequest: {
+          type: 'tool_approval_request',
+          taskId: 't1',
+          toolCalls: [],
+        },
+      },
+    ]);
+    vi.mocked(chatService.getQueryResult).mockResolvedValueOnce({
+      status: 'unknown',
+      terminal: true,
+      notFound: true,
+    });
+
+    renderHook(() => useResumeRunningQuery(params));
+
+    await waitFor(() => {
+      expect(params.clearActiveQuery).toHaveBeenCalled();
+    });
+    expect(state.messages).toEqual([
+      { role: 'user', content: 'hello' },
+      { role: 'system', content: QUERY_NOT_FOUND_MESSAGE },
+    ]);
+    expect(params.setIsProcessing).toHaveBeenLastCalledWith(false);
+  });
+
+  it('keeps the turn and retries when the API cannot be reached', async () => {
+    const { params, state } = createParams([
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'partial' },
+    ]);
+    vi.mocked(chatService.getQueryResult)
+      .mockResolvedValueOnce({
+        status: 'error',
+        terminal: true,
+        transportError: true,
+      })
+      .mockResolvedValueOnce({
+        status: 'done',
+        terminal: true,
+        response: 'final answer',
+      });
+
+    renderHook(() => useResumeRunningQuery(params));
+
+    await waitFor(() => {
+      expect(chatService.getQueryResult).toHaveBeenCalledTimes(1);
+    });
+    expect(params.clearActiveQuery).not.toHaveBeenCalled();
+    expect(state.messages).toEqual([
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'partial' },
+    ]);
+
+    await waitFor(
+      () => {
+        expect(params.clearActiveQuery).toHaveBeenCalled();
+      },
+      { timeout: 3000 },
+    );
+    expect(chatService.getQueryResult).toHaveBeenCalledTimes(2);
+    expect(state.messages).toEqual([
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'final answer' },
     ]);
   });
 

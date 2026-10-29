@@ -7,6 +7,7 @@ import { chatHistoryAtom } from '@/atoms/chat-history';
 import { CHAT_STREAMING_FEATURE_KEY } from '@/atoms/experimental-features';
 import { agentsService, chatService } from '@/lib/services';
 import type { ChatResponse } from '@/lib/services/chat';
+import { QUERY_NOT_FOUND_MESSAGE } from '@/lib/utils/chat-turn';
 import { trackEvent } from '@/lib/analytics/singleton';
 
 import { useChatSession } from './use-chat-session';
@@ -980,6 +981,46 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
     globalThis.localStorage?.removeItem(CHAT_STREAMING_FEATURE_KEY);
   });
 
+  it('does not log an error when the stream is aborted by leaving the page', async () => {
+    vi.mocked(chatService.startStreamChatResponse).mockImplementationOnce(
+      async (...args) => {
+        const signal = args[7] as AbortSignal;
+        return {
+          queryName: 'q-leave',
+          chunks: (async function* (): AsyncGenerator<Record<string, unknown>> {
+            yield { choices: [{ delta: { content: 'partial' } }] };
+            await new Promise(resolve =>
+              signal.addEventListener('abort', resolve),
+            );
+            throw makeAbortError();
+          })(),
+        };
+      },
+    );
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const { result, unmount } = renderChatSession();
+    let sending: Promise<void> | undefined;
+    act(() => {
+      sending = result.current.sendMessage('hello');
+    });
+    await waitFor(() => {
+      expect(storedActiveQueryName()).toBe('q-leave');
+    });
+
+    unmount();
+    await sending;
+
+    expect(consoleError).not.toHaveBeenCalledWith(
+      'Error sending message:',
+      expect.anything(),
+    );
+    consoleError.mockRestore();
+  });
+
   it('keeps the active query and aborts the stream when the panel unmounts mid-stream', async () => {
     let streamSignal: AbortSignal | undefined;
     vi.mocked(chatService.startStreamChatResponse).mockImplementationOnce(
@@ -1470,6 +1511,37 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
       expect(chatService.getA2ATask).toHaveBeenCalled();
     });
     expect(result.current.messages).toHaveLength(2);
+  });
+
+  it('tells the user when an approved query no longer exists', async () => {
+    seedChatSession({
+      messages: [{ role: 'user', content: 'hello' }],
+      activeQueryName: 'q-approval',
+    });
+    vi.mocked(chatService.getQueryResult)
+      .mockResolvedValueOnce({ status: 'input-required', terminal: false })
+      .mockResolvedValueOnce({
+        status: 'unknown',
+        terminal: true,
+        notFound: true,
+      });
+    mockPendingApprovalTask();
+
+    const { result } = renderChatSession();
+
+    await waitFor(() => {
+      expect(result.current.messages[1]?.approvalRequest?.taskId).toBe('t1');
+    });
+
+    await act(async () => {
+      await result.current.pollAfterApproval();
+    });
+
+    expect(result.current.messages.at(-1)).toEqual({
+      role: 'system',
+      content: QUERY_NOT_FOUND_MESSAGE,
+    });
+    expect(storedActiveQueryName()).toBeUndefined();
   });
 
   it('lets a restored approval be followed through to the final answer', async () => {

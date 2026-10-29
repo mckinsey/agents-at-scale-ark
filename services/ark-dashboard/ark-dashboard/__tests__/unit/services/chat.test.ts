@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api/client';
+import { APIError } from '@/lib/api/errors';
 import type { QueryDetailResponse } from '@/lib/services/chat';
 import { chatService } from '@/lib/services/chat';
 
@@ -102,8 +103,7 @@ describe('chatService', () => {
     });
 
     it('should return null for 404 responses', async () => {
-      const error = new Error('Not found');
-      (error as any).response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.get).mockRejectedValue(error);
 
       const result = await chatService.getQuery('default', 'nonexistent');
@@ -162,8 +162,7 @@ describe('chatService', () => {
     });
 
     it('should return null for 404 responses', async () => {
-      const error = new Error('Not found');
-      (error as any).response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.put).mockRejectedValue(error);
 
       const result = await chatService.updateQuery('default', 'nonexistent', {
@@ -195,8 +194,7 @@ describe('chatService', () => {
     });
 
     it('should return false for 404 responses', async () => {
-      const error = new Error('Not found');
-      (error as any).response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.delete).mockRejectedValue(error);
 
       const result = await chatService.deleteQuery('default', 'nonexistent');
@@ -448,14 +446,15 @@ describe('chatService', () => {
       });
     });
 
-    it('should return unknown when query is null', async () => {
+    it('should report a missing query as not found', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(null);
 
       const result = await chatService.getQueryResult('default', 'query-123');
 
       expect(result).toEqual({
         status: 'unknown',
-        terminal: false,
+        terminal: true,
+        notFound: true,
       });
     });
 

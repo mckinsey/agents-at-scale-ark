@@ -1,13 +1,21 @@
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
 
 import type { TokenUsage } from '@/atoms/chat-history';
-import type { ChatResponse, chatService } from '@/lib/services/chat';
+import { chatService } from '@/lib/services';
+import type { ChatResponse } from '@/lib/services/chat';
 import type {
   ArkCompletedQueryData,
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
 
 export type ResultMessage = NonNullable<ChatResponse['messages']>[number];
+
+export const QUERY_NOT_FOUND_MESSAGE = 'This query no longer exists.';
+
+export interface ApprovalRequestMessage {
+  taskId: string;
+  message: ExtendedChatMessage;
+}
 
 export interface AccumulatedToolCall {
   id: string;
@@ -154,6 +162,9 @@ export function buildPollResultMessages(
   result: ChatResponse,
   queryName: string,
 ): ExtendedChatMessage[] {
+  if (result.notFound) {
+    return [{ role: 'system', content: QUERY_NOT_FOUND_MESSAGE }];
+  }
   if (result.status === 'done') {
     if (result.messages && result.messages.length > 0) {
       return result.messages.map(convertResultMessage);
@@ -211,4 +222,33 @@ export function buildCascadingApprovalMessage(
       queryName,
     },
   } as ExtendedChatMessage;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+export function readA2ATaskId(status: unknown): string | undefined {
+  const response = isRecord(status) ? status.response : undefined;
+  const a2a = isRecord(response) ? response.a2a : undefined;
+  const taskId = isRecord(a2a) ? a2a.taskId : undefined;
+  return typeof taskId === 'string' ? taskId : undefined;
+}
+
+export async function loadApprovalRequestMessage(
+  namespace: string,
+  queryName: string,
+): Promise<ApprovalRequestMessage | null> {
+  const query = await chatService.getQuery(namespace, queryName);
+  const taskId = readA2ATaskId(query?.status);
+  if (!taskId) return null;
+
+  const a2aTask = await chatService.getA2ATask(namespace, `a2a-task-${taskId}`);
+  const message = buildCascadingApprovalMessage(
+    a2aTask,
+    queryName,
+    query?.namespace || namespace,
+    taskId,
+  );
+  return message ? { taskId, message } : null;
 }

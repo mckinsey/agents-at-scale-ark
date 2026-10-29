@@ -50,9 +50,9 @@ import {
   processStreamChunk,
 } from '@/lib/utils/chat-stream-turn';
 import {
-  buildCascadingApprovalMessage,
   buildPollResultMessages,
   convertResultMessage,
+  loadApprovalRequestMessage,
   stripEmptyAssistantPlaceholder,
 } from '@/lib/utils/chat-turn';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -762,12 +762,12 @@ export function useChatSession({
           settled = await handlePollChatResponse(userMessage, apiParameters);
         }
       } catch (err) {
-        console.error('Error sending message:', err);
-
         if (leavingRef.current || isAbortError(err)) {
           aborted = true;
           return;
         }
+
+        console.error('Error sending message:', err);
 
         if (isBrokerUnavailableError(err)) {
           settled = await recoverViaPolling(err, userMessage, apiParameters);
@@ -875,27 +875,11 @@ export function useChatSession({
 
   const handleCascadingApproval = useCallback(
     async (queryName: string): Promise<boolean> => {
-      const query = await chatService.getQuery(namespace, queryName);
-      const status = query?.status as
-        | { response?: { a2a?: { taskId?: string } } }
-        | undefined;
-      const taskId = status?.response?.a2a?.taskId;
-      if (!taskId) return false;
-
       try {
-        const a2aTask = await chatService.getA2ATask(
-          namespace,
-          `a2a-task-${taskId}`,
-        );
-        const message = buildCascadingApprovalMessage(
-          a2aTask,
-          queryName,
-          query?.namespace || namespace,
-          taskId,
-        );
-        if (!message) return false;
+        const approval = await loadApprovalRequestMessage(namespace, queryName);
+        if (!approval) return false;
 
-        updateChatMessages(prev => [...prev, message]);
+        updateChatMessages(prev => [...prev, approval.message]);
         pendingApprovalQueryRef.current = { queryName, messageIndex: -1 };
         stopPollingRef.current = null;
         setIsProcessing(false);
@@ -923,6 +907,9 @@ export function useChatSession({
             ...result.messages!.map(convertResultMessage),
           ]);
         }
+      } else if (result.notFound) {
+        const notFoundMessages = buildPollResultMessages(result, queryName);
+        updateChatMessages(prev => [...prev, ...notFoundMessages]);
       } else if (result.status === 'error') {
         updateChatMessages(prev => [
           ...prev,

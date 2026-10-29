@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { chatService } from '@/lib/services/chat';
+import { chatService } from '@/lib/services';
 import type { ExtendedChatMessage } from '@/lib/types/chat-message';
 
 import {
   type AccumulatedToolCall,
+  QUERY_NOT_FOUND_MESSAGE,
   accumulateToolCallDeltas,
   buildCascadingApprovalMessage,
   buildPollResultMessages,
@@ -12,8 +13,19 @@ import {
   convertTurnMessages,
   extractTokenUsage,
   findTurnStartIndex,
+  loadApprovalRequestMessage,
+  readA2ATaskId,
   stripEmptyAssistantPlaceholder,
 } from './chat-turn';
+
+vi.mock('@/lib/services', () => ({
+  chatService: {
+    getQuery: vi.fn(),
+    getA2ATask: vi.fn(),
+  },
+}));
+
+type QueryDetail = Awaited<ReturnType<typeof chatService.getQuery>>;
 
 type A2ATask = Awaited<ReturnType<typeof chatService.getA2ATask>>;
 
@@ -381,9 +393,109 @@ describe('buildPollResultMessages', () => {
     ]);
   });
 
+  it('reports a query that no longer exists', () => {
+    expect(
+      buildPollResultMessages(
+        { status: 'unknown', terminal: true, notFound: true },
+        'q1',
+      ),
+    ).toEqual([{ role: 'system', content: QUERY_NOT_FOUND_MESSAGE }]);
+  });
+
   it('returns nothing for a canceled query', () => {
     expect(
       buildPollResultMessages({ status: 'canceled', terminal: true }, 'q1'),
     ).toEqual([]);
+  });
+});
+
+describe('readA2ATaskId', () => {
+  it('reads the task id of an A2A response', () => {
+    expect(readA2ATaskId({ response: { a2a: { taskId: 't1' } } })).toBe('t1');
+  });
+
+  it.each([
+    ['no status', undefined],
+    ['no response', {}],
+    ['no a2a block', { response: {} }],
+    ['a non-string task id', { response: { a2a: { taskId: 42 } } }],
+  ])('returns undefined with %s', (_label, status) => {
+    expect(readA2ATaskId(status)).toBeUndefined();
+  });
+});
+
+describe('loadApprovalRequestMessage', () => {
+  const toolCalls = [
+    {
+      id: 'call-1',
+      type: 'function',
+      function: { name: 'write-file', arguments: '{}' },
+    },
+  ];
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('builds the approval card from the A2A task of the query', async () => {
+    vi.mocked(chatService.getQuery).mockResolvedValueOnce({
+      namespace: 'query-namespace',
+      status: { response: { a2a: { taskId: 't1' } } },
+    } as unknown as QueryDetail);
+    vi.mocked(chatService.getA2ATask).mockResolvedValueOnce({
+      status: { protocolMetadata: { toolCalls: JSON.stringify(toolCalls) } },
+    } as unknown as A2ATask);
+
+    const approval = await loadApprovalRequestMessage('default', 'q1');
+
+    expect(chatService.getQuery).toHaveBeenCalledWith('default', 'q1');
+    expect(chatService.getA2ATask).toHaveBeenCalledWith(
+      'default',
+      'a2a-task-t1',
+    );
+    expect(approval?.taskId).toBe('t1');
+    expect(approval?.message.approvalRequest).toMatchObject({
+      taskId: 't1',
+      queryName: 'q1',
+      queryNamespace: 'query-namespace',
+      toolCalls,
+    });
+  });
+
+  it('falls back to the requested namespace', async () => {
+    vi.mocked(chatService.getQuery).mockResolvedValueOnce({
+      status: { response: { a2a: { taskId: 't1' } } },
+    } as unknown as QueryDetail);
+    vi.mocked(chatService.getA2ATask).mockResolvedValueOnce({
+      status: { protocolMetadata: { toolCalls: JSON.stringify(toolCalls) } },
+    } as unknown as A2ATask);
+
+    const approval = await loadApprovalRequestMessage('default', 'q1');
+
+    expect(approval?.message.approvalRequest).toMatchObject({
+      queryNamespace: 'default',
+    });
+  });
+
+  it('returns null when the query has no A2A task', async () => {
+    vi.mocked(chatService.getQuery).mockResolvedValueOnce(null);
+
+    await expect(loadApprovalRequestMessage('default', 'q1')).resolves.toBe(
+      null,
+    );
+    expect(chatService.getA2ATask).not.toHaveBeenCalled();
+  });
+
+  it('returns null when the task has nothing to approve', async () => {
+    vi.mocked(chatService.getQuery).mockResolvedValueOnce({
+      status: { response: { a2a: { taskId: 't1' } } },
+    } as unknown as QueryDetail);
+    vi.mocked(chatService.getA2ATask).mockResolvedValueOnce({
+      status: {},
+    } as unknown as A2ATask);
+
+    await expect(loadApprovalRequestMessage('default', 'q1')).resolves.toBe(
+      null,
+    );
   });
 });

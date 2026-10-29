@@ -6,7 +6,7 @@ import { chatService } from '@/lib/services';
 import type { ChatResponse } from '@/lib/services/chat';
 import type { ExtendedChatMessage } from '@/lib/types/chat-message';
 import {
-  convertResultMessage,
+  buildPollResultMessages,
   findTurnStartIndex,
   stripEmptyAssistantPlaceholder,
 } from '@/lib/utils/chat-turn';
@@ -37,26 +37,12 @@ function buildResumedTurn(
   queryName: string,
   currentTurn: ExtendedChatMessage[],
 ): ExtendedChatMessage[] {
-  if (result.status === 'done') {
-    if (result.messages && result.messages.length > 0) {
-      return result.messages
-        .filter(msg => msg.role !== 'user')
-        .map(convertResultMessage);
-    }
-    if (result.response) {
-      return [{ role: 'assistant', content: result.response }];
-    }
-  }
-  if (result.status === 'error' || result.status === 'unknown') {
-    return [
-      {
-        role: 'assistant',
-        content: result.response || 'Query failed',
-        metadata: { status: 'failed', queryName },
-      },
-    ];
-  }
-  return stripEmptyAssistantPlaceholder(currentTurn);
+  const resultMessages = buildPollResultMessages(result, queryName).filter(
+    msg => msg.role !== 'user',
+  );
+  return resultMessages.length > 0
+    ? resultMessages
+    : stripEmptyAssistantPlaceholder(currentTurn);
 }
 
 function withoutFailedMessages(
@@ -130,6 +116,13 @@ async function resumeActiveQuery(
   while (!run.stopped) {
     const result = await chatService.getQueryResult(namespace, queryName);
     if (run.stopped) return;
+
+    if (result.transportError) {
+      await new Promise(resolve =>
+        setTimeout(resolve, RESUME_POLL_INTERVAL_MS),
+      );
+      continue;
+    }
 
     if (result.terminal) {
       finishResumedQuery(params, result, queryName);
