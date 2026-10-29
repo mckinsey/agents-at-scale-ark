@@ -52,21 +52,7 @@ func (s *StatusStorage) NamespaceScoped() bool {
 }
 
 func (s *StatusStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
-	start := time.Now()
-	namespace := s.config.namespace(ctx)
-	sctx, cancel := storageContext(ctx)
-	defer cancel()
-	if err := requireResourceVersion(sctx, s.backend, options); err != nil {
-		outcome, apiErr := classifyStorageError(err, err)
-		metrics.RecordStorageOperation("get_status", s.config.Kind, outcome)
-		metrics.RecordStorageLatency("get_status", s.config.Kind, start)
-		return nil, apiErr
-	}
-	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
-	if err != nil {
-		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
-	}
-	return obj, nil
+	return getResource(ctx, s.backend, s.config, name, options, "get_status")
 }
 
 func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
