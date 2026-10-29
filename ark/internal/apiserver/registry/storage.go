@@ -104,24 +104,28 @@ func (s *GenericStorage) GetSingularName() string {
 }
 
 func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
+	return getResource(ctx, s.backend, s.config, name, options, "get")
+}
+
+func getResource(ctx context.Context, backend storage.Backend, config ResourceConfig, name string, options *metav1.GetOptions, operation string) (runtime.Object, error) {
 	start := time.Now()
-	namespace := s.config.namespace(ctx)
+	namespace := config.namespace(ctx)
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
-	if err := requireResourceVersion(sctx, s.backend, options); err != nil {
+	if err := requireResourceVersion(sctx, backend, options); err != nil {
 		outcome, apiErr := classifyStorageError(err, err)
-		metrics.RecordStorageOperation("get", s.config.Kind, outcome)
-		metrics.RecordStorageLatency("get", s.config.Kind, start)
+		metrics.RecordStorageOperation(operation, config.Kind, outcome)
+		metrics.RecordStorageLatency(operation, config.Kind, start)
 		return nil, apiErr
 	}
-	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
+	obj, err := backend.Get(sctx, config.Kind, namespace, name)
 	if err != nil {
-		metrics.RecordStorageOperation("get", s.config.Kind, "error")
-		metrics.RecordStorageLatency("get", s.config.Kind, start)
-		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
+		metrics.RecordStorageOperation(operation, config.Kind, "error")
+		metrics.RecordStorageLatency(operation, config.Kind, start)
+		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: config.Resource}, name)
 	}
-	metrics.RecordStorageOperation("get", s.config.Kind, "success")
-	metrics.RecordStorageLatency("get", s.config.Kind, start)
+	metrics.RecordStorageOperation(operation, config.Kind, "success")
+	metrics.RecordStorageLatency(operation, config.Kind, start)
 	return obj, nil
 }
 
