@@ -1,0 +1,301 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: apiserver-list-resource-version
+spec:
+  description: |
+    Reads must honour resourceVersion the way kube-apiserver does. The
+    aggregated PostgreSQL apiserver used to ignore it on list and answer a
+    future resourceVersion with older data and HTTP 200. No label, so the
+    same assertions run against kube-apiserver on the etcd leg and against
+    the aggregated apiserver on the postgresql leg.
+  steps:
+    - name: create-models
+      try:
+      - script:
+          content: |
+            set -eu
+            for n in rv-model-alpha rv-model-beta rv-model-gamma; do
+              cat <<MANIFEST | kubectl apply -n "$NAMESPACE" -f -
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            metadata:
+              name: $n
+            spec:
+              provider: openai
+              model:
+                value: rv-test
+              config:
+                openai:
+                  baseUrl:
+                    value: https://localhost:9999/v1
+                  apiKey:
+                    value: rv-test-key
+            MANIFEST
+            done
+            echo "OK created 3 Models"
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 60s
+
+    - name: future-rv-not-older-than-rejected
+      try:
+      - script:
+          content: |
+            set -eu
+            BASE="/apis/ark.mckinsey.com/v1alpha1/namespaces/$NAMESPACE/models"
+            L=$(kubectl get --raw "$BASE" | jq -r .metadata.resourceVersion)
+            case "$L" in
+              ''|null|*[!0-9]*)
+                echo "FAIL could not read the list resourceVersion: '$L'"
+                exit 1
+                ;;
+            esac
+            FUT=$((L + 1000000))
+            set +e
+            OUT=$(kubectl get --raw "$BASE?resourceVersion=$FUT&resourceVersionMatch=NotOlderThan" 2>&1)
+            RC=$?
+            set -e
+            echo "list resourceVersion=$L exit=$RC output: $OUT"
+            if [ $RC -eq 0 ]; then
+              echo "FAIL a future resourceVersion with NotOlderThan was served"
+              exit 1
+            fi
+            case "$OUT" in
+              *"Too large resource version"*|*"future revision"*)
+                echo "OK a future resourceVersion with NotOlderThan rejected"
+                ;;
+              *)
+                echo "FAIL unexpected error for a future resourceVersion with NotOlderThan: $OUT"
+                exit 1
+                ;;
+            esac
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 120s
+
+    - name: future-rv-exact-rejected
+      try:
+      - script:
+          content: |
+            set -eu
+            BASE="/apis/ark.mckinsey.com/v1alpha1/namespaces/$NAMESPACE/models"
+            L=$(kubectl get --raw "$BASE" | jq -r .metadata.resourceVersion)
+            case "$L" in
+              ''|null|*[!0-9]*)
+                echo "FAIL could not read the list resourceVersion: '$L'"
+                exit 1
+                ;;
+            esac
+            FUT=$((L + 1000000))
+            set +e
+            OUT=$(kubectl get --raw "$BASE?resourceVersion=$FUT&resourceVersionMatch=Exact" 2>&1)
+            RC=$?
+            set -e
+            echo "list resourceVersion=$L exit=$RC output: $OUT"
+            if [ $RC -eq 0 ]; then
+              echo "FAIL a future resourceVersion with Exact was served"
+              exit 1
+            fi
+            case "$OUT" in
+              *"Too large resource version"*|*"future revision"*)
+                echo "OK a future resourceVersion with Exact rejected"
+                ;;
+              *)
+                echo "FAIL unexpected error for a future resourceVersion with Exact: $OUT"
+                exit 1
+                ;;
+            esac
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 120s
+
+    - name: future-rv-legacy-limit-rejected
+      try:
+      - script:
+          content: |
+            set -eu
+            BASE="/apis/ark.mckinsey.com/v1alpha1/namespaces/$NAMESPACE/models"
+            L=$(kubectl get --raw "$BASE" | jq -r .metadata.resourceVersion)
+            case "$L" in
+              ''|null|*[!0-9]*)
+                echo "FAIL could not read the list resourceVersion: '$L'"
+                exit 1
+                ;;
+            esac
+            FUT=$((L + 1000000))
+            set +e
+            OUT=$(kubectl get --raw "$BASE?resourceVersion=$FUT&limit=1" 2>&1)
+            RC=$?
+            set -e
+            echo "list resourceVersion=$L exit=$RC output: $OUT"
+            if [ $RC -eq 0 ]; then
+              echo "FAIL a future resourceVersion with limit and no match was served"
+              exit 1
+            fi
+            case "$OUT" in
+              *"Too large resource version"*|*"future revision"*)
+                echo "OK a future resourceVersion with limit and no match rejected"
+                ;;
+              *)
+                echo "FAIL unexpected error for a future resourceVersion with limit and no match: $OUT"
+                exit 1
+                ;;
+            esac
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 120s
+
+    - name: future-rv-get-rejected
+      try:
+      - script:
+          content: |
+            set -eu
+            BASE="/apis/ark.mckinsey.com/v1alpha1/namespaces/$NAMESPACE/models"
+            L=$(kubectl get --raw "$BASE" | jq -r .metadata.resourceVersion)
+            case "$L" in
+              ''|null|*[!0-9]*)
+                echo "FAIL could not read the list resourceVersion: '$L'"
+                exit 1
+                ;;
+            esac
+            FUT=$((L + 1000000))
+            set +e
+            OUT=$(kubectl get --raw "$BASE/rv-model-alpha?resourceVersion=$FUT" 2>&1)
+            RC=$?
+            set -e
+            echo "list resourceVersion=$L exit=$RC output: $OUT"
+            if [ $RC -eq 0 ]; then
+              echo "FAIL a get at a future resourceVersion was served"
+              exit 1
+            fi
+            case "$OUT" in
+              *"Too large resource version"*|*"future revision"*)
+                echo "OK a get at a future resourceVersion rejected"
+                ;;
+              *)
+                echo "FAIL unexpected error for a get at a future resourceVersion: $OUT"
+                exit 1
+                ;;
+            esac
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 120s
+
+    - name: future-rv-watchlist-rejected
+      try:
+      - script:
+          content: |
+            set -eu
+            BASE="/apis/ark.mckinsey.com/v1alpha1/namespaces/$NAMESPACE/models"
+            L=$(kubectl get --raw "$BASE" | jq -r .metadata.resourceVersion)
+            case "$L" in
+              ''|null|*[!0-9]*)
+                echo "FAIL could not read the list resourceVersion: '$L'"
+                exit 1
+                ;;
+            esac
+            FUT=$((L + 1000000))
+            OUT=$(kubectl get --raw "$BASE?watch=1&sendInitialEvents=true&resourceVersionMatch=NotOlderThan&allowWatchBookmarks=true&resourceVersion=$FUT&timeoutSeconds=10" 2>&1)
+            echo "list resourceVersion=$L output: $OUT"
+            case "$OUT" in
+              *'"type":"ERROR"'*"Too large resource version"*)
+                echo "OK a watchlist at a future resourceVersion got an error event"
+                ;;
+              *)
+                echo "FAIL expected an ERROR event with Too large resource version, got: $OUT"
+                exit 1
+                ;;
+            esac
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 60s
+
+    - name: satisfiable-rv-served
+      try:
+      - script:
+          content: |
+            set -eu
+            BASE="/apis/ark.mckinsey.com/v1alpha1/namespaces/$NAMESPACE/models"
+            L=$(kubectl get --raw "$BASE" | jq -r .metadata.resourceVersion)
+            case "$L" in
+              ''|null|*[!0-9]*)
+                echo "FAIL could not read the list resourceVersion: '$L'"
+                exit 1
+                ;;
+            esac
+            OUT=$(kubectl get --raw "$BASE?resourceVersion=$L&resourceVersionMatch=NotOlderThan")
+            GOT=$(printf '%s' "$OUT" | jq -r .metadata.resourceVersion)
+            COUNT=$(printf '%s' "$OUT" | jq '.items | length')
+            echo "requested=$L served=$GOT items=$COUNT"
+            if [ "$GOT" -lt "$L" ]; then
+              echo "FAIL served resourceVersion $GOT is older than the requested $L"
+              exit 1
+            fi
+            if [ "$COUNT" -ne 3 ]; then
+              echo "FAIL expected 3 Models, got $COUNT"
+              exit 1
+            fi
+            COUNT=$(kubectl get --raw "$BASE?resourceVersion=0" | jq '.items | length')
+            if [ "$COUNT" -ne 3 ]; then
+              echo "FAIL resourceVersion=0 returned $COUNT Models, expected 3"
+              exit 1
+            fi
+            NAME=$(kubectl get --raw "$BASE/rv-model-alpha?resourceVersion=$L" | jq -r .metadata.name)
+            if [ "$NAME" != "rv-model-alpha" ]; then
+              echo "FAIL get at a reached resourceVersion returned '$NAME'"
+              exit 1
+            fi
+            echo "OK satisfiable resourceVersions served"
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 60s
+
+    - name: continue-with-rv-rejected
+      try:
+      - script:
+          content: |
+            set -eu
+            BASE="/apis/ark.mckinsey.com/v1alpha1/namespaces/$NAMESPACE/models"
+            PAGE=$(kubectl get --raw "$BASE?limit=1")
+            L=$(printf '%s' "$PAGE" | jq -r .metadata.resourceVersion)
+            T=$(printf '%s' "$PAGE" | jq -r .metadata.continue)
+            case "$L" in
+              ''|null|*[!0-9]*)
+                echo "FAIL could not read the list resourceVersion: '$L'"
+                exit 1
+                ;;
+            esac
+            if [ -z "$T" ] || [ "$T" = "null" ]; then
+              echo "FAIL first page has no continue token"
+              exit 1
+            fi
+            set +e
+            OUT=$(kubectl get --raw "$BASE?limit=1&continue=$T&resourceVersion=$L" 2>&1)
+            RC=$?
+            set -e
+            echo "exit=$RC output: $OUT"
+            if [ $RC -eq 0 ]; then
+              echo "FAIL continue with a resourceVersion was served"
+              exit 1
+            fi
+            case "$OUT" in
+              *"BadRequest"*|*"400"*|*"not allowed when using continue"*)
+                echo "OK continue with a resourceVersion rejected with 400"
+                ;;
+              *)
+                echo "FAIL expected BadRequest, got: $OUT"
+                exit 1
+                ;;
+            esac
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 60s

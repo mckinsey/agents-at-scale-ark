@@ -52,14 +52,7 @@ func (s *StatusStorage) NamespaceScoped() bool {
 }
 
 func (s *StatusStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
-	namespace := s.config.namespace(ctx)
-	sctx, cancel := storageContext(ctx)
-	defer cancel()
-	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
-	if err != nil {
-		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
-	}
-	return obj, nil
+	return getResource(ctx, s.backend, s.config, name, options, "get_status")
 }
 
 func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
