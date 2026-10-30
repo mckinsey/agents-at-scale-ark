@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
@@ -1966,6 +1967,69 @@ func TestProcessMessageForwardsQueryConversationToEngineMember(t *testing.T) {
 		deriveMemberConversationID("parent-conversation", "default", "team-query", "member-a"),
 		capturedRef(t, captured)["conversationId"],
 		"a member resuming a conversation must not be handed a scope derived from the query name")
+}
+
+func TestProcessMessageAppliesQueryTimeoutToEngineMember(t *testing.T) {
+	stub := engineStub(t, "member reply", nil)
+	t.Cleanup(stub.Close)
+
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: stub.URL},
+	}
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "member-a", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Prompt:          "You are member A",
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		},
+	}
+	queryTimeout := 15 * time.Minute
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target:  &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "my-team"},
+			Input:   runtime.RawExtension{Raw: []byte(`"what is the weather?"`)},
+			Timeout: &metav1.Duration{Duration: queryTimeout},
+		},
+	}
+
+	var engineDeadline time.Time
+	var engineHasDeadline bool
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(newTestScheme()).
+		WithObjects(engine, agent, query, teamWithMembers("my-team", "member-a")).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*arkv1prealpha1.ExecutionEngine); ok {
+					engineDeadline, engineHasDeadline = ctx.Deadline()
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+	h := &Handler{
+		k8sClient: k8sClient,
+		telemetry: telemetrynoop.NewProvider(),
+		eventing:  eventingnoop.NewProvider(),
+	}
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("what is the weather?")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name":      "team-query",
+				"namespace": "default",
+			},
+		},
+	}
+	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+
+	_, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+	require.NoError(t, err)
+
+	require.True(t, engineHasDeadline, "a team member on an execution engine must run under the query's spec.timeout")
+	assert.WithinDuration(t, time.Now().Add(queryTimeout), engineDeadline, time.Minute)
 }
 
 func TestProcessMessageSubTargetRejectsApproval(t *testing.T) {

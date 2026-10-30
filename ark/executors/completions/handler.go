@@ -123,6 +123,12 @@ func (h *Handler) ProcessMessage(
 		return nil, err
 	}
 
+	if query.Spec.Timeout != nil {
+		var cancelTimeout context.CancelFunc
+		ctx, cancelTimeout = context.WithTimeout(ctx, query.Spec.Timeout.Duration)
+		defer cancelTimeout()
+	}
+
 	if subTargetAgentName != "" {
 		ctx = WithSubTargetAgent(ctx, subTargetAgentName)
 	}
