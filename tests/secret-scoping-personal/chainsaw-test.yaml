@@ -336,3 +336,143 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+
+  - name: install-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        file: manifests/a03-agent.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: personal-mock-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    - assert:
+        timeout: 2m
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mock-llm-mcp-echo-headers
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get models,mcpservers,tools,agents || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: resolution
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . ./helpers.sh
+          ADMIN=$(token admin@ark.local)
+          VIEWER=$(token viewer@ark.local)
+          HASH=$(owner_hash admin@ark.local)
+          REBIND="u-$HASH-rebind"
+          RUN="u-$HASH-mcp-run"
+          MOCK="http://mock-llm.$NAMESPACE.svc.cluster.local:6556/v1"
+          REFUSED="personal secrets can only be used in the headers of a Query mcpserver override"
+
+          wait_phase() {
+            kubectl wait query "$1" -n "$NAMESPACE" --for=jsonpath='{.status.phase}'="$2" --timeout=90s >/dev/null \
+              || { echo "FAIL: query $1 did not reach phase $2"; kubectl get query "$1" -n "$NAMESPACE" -o yaml; exit 1; }
+          }
+          wait_content() {
+            for _ in $(seq 1 45); do
+              CONTENT=$(kubectl get query "$1" -n "$NAMESPACE" -o jsonpath='{.status.response.content}')
+              [ -n "$CONTENT" ] && return 0
+              sleep 2
+            done
+            echo "FAIL: query $1 has no response content"; kubectl get query "$1" -n "$NAMESPACE" -o yaml; exit 1
+          }
+          assert_no_leak() {
+            for what in "query $1" "model m-rebind" "agent a-rebind" "events"; do
+              # shellcheck disable=SC2086
+              JSON=$(kubectl get $what -n "$NAMESPACE" -o json)
+              [ -n "$JSON" ] || { echo "FAIL: could not read $what"; exit 1; }
+              if printf '%s' "$JSON" | grep -q "$2"; then
+                echo "FAIL: $what exposes the personal secret value"; exit 1
+              fi
+            done
+          }
+
+          R=$(call "$ADMIN" POST "" '{"name":"rebind","string_data":{"token":"admin-rebind-old"},"scope":"personal"}')
+          expect_status "POST personal rebind as admin" "$R" 200
+          expect_status "PUT rebind scope=shared as admin" "$(call "$ADMIN" PUT "/$REBIND" '{"scope":"shared"}')" 200
+          MODEL=$(printf '{"name":"m-rebind","provider":"openai","model":"gpt-4.1-mini","config":{"openai":{"baseUrl":"%s","apiKey":{"valueFrom":{"secretKeyRef":{"name":"%s","key":"token"}}}}}}' "$MOCK" "$REBIND")
+          expect_status "POST model with the promoted secret as viewer" "$(call_api models "$VIEWER" POST "" "$MODEL")" 200
+          kubectl wait model m-rebind -n "$NAMESPACE" --for=condition=ModelAvailable --timeout=90s
+          AGENT=$(printf '{"name":"a-rebind","prompt":"You are a test assistant.","modelRef":{"name":"personal-mock-model"},"tools":[{"type":"mcp","name":"mock-llm-mcp-echo-headers"}],"overrides":[{"resourceType":"mcpserver","labelSelector":{"matchLabels":{"ark.mckinsey.com/name":"mock-llm-mcp"}},"headers":[{"name":"X-Rebind-Token","value":{"valueFrom":{"secretKeyRef":{"name":"%s","key":"token"}}}}]}]}' "$REBIND")
+          expect_status "POST agent with the promoted secret in an MCP override as viewer" "$(call_api agents "$VIEWER" POST "" "$AGENT")" 200
+
+          expect_status "DELETE promoted rebind as admin" "$(call "$ADMIN" DELETE "/$REBIND")" 200
+          R=$(call "$ADMIN" POST "" '{"name":"rebind","string_data":{"token":"admin-rebind-new"},"scope":"personal"}')
+          expect_status "POST personal rebind again as admin" "$R" 200
+          kubectl get secret "$REBIND" -n "$NAMESPACE" -o json \
+            | jq -e --arg scope "user-$HASH" '.metadata.labels."ark.mckinsey.com/scope" == $scope' >/dev/null \
+            || { echo "FAIL: $REBIND was not recreated as admin's personal secret"; exit 1; }
+
+          R=$(call_api queries "$VIEWER" POST "" '{"name":"q-rebind","input":"hi","target":{"type":"model","name":"m-rebind"}}')
+          expect_status "POST query against the rebound model as viewer" "$R" 200
+          wait_phase q-rebind error
+          kubectl get query q-rebind -n "$NAMESPACE" -o json | grep -q "$REFUSED" \
+            || { echo "FAIL: q-rebind did not fail on the personal secret"; kubectl get query q-rebind -n "$NAMESPACE" -o yaml; exit 1; }
+          assert_no_leak q-rebind admin-rebind-new
+
+          R=$(call_api queries "$VIEWER" POST "" '{"name":"q-agent-rebind","input":"echo-headers","target":{"type":"agent","name":"a-rebind"}}')
+          expect_status "POST query against the agent with the rebound override as viewer" "$R" 200
+          wait_phase q-agent-rebind error
+          kubectl get query q-agent-rebind -n "$NAMESPACE" -o json | grep -q "$REFUSED" \
+            || { echo "FAIL: q-agent-rebind did not fail on the personal secret"; kubectl get query q-agent-rebind -n "$NAMESPACE" -o yaml; exit 1; }
+          assert_no_leak q-agent-rebind admin-rebind-new
+
+          R=$(call "$ADMIN" POST "" '{"name":"mcp-run","string_data":{"token":"admin-mcp-run-value"},"scope":"personal"}')
+          expect_status "POST personal mcp-run as admin" "$R" 200
+          QUERY=$(printf '{"name":"q-run","input":"echo-headers","target":{"type":"agent","name":"personal-agent"},"overrides":[{"resourceType":"mcpserver","labelSelector":{"matchLabels":{"ark.mckinsey.com/name":"mock-llm-mcp"}},"headers":[{"name":"X-Personal-Token","value":{"valueFrom":{"secretKeyRef":{"name":"%s","key":"token"}}}}]}]}' "$RUN")
+          expect_status "POST query with own personal MCP override as admin" "$(call_api queries "$ADMIN" POST "" "$QUERY")" 200
+          wait_content q-run
+          printf '%s' "$CONTENT" | grep -i x-personal-token | grep -q admin-mcp-run-value \
+            || { echo "FAIL: the MCP server did not receive the personal secret as X-Personal-Token"; kubectl get query q-run -n "$NAMESPACE" -o yaml; exit 1; }
+
+          for q in q-rebind q-agent-rebind q-run; do
+            expect_status "DELETE $q" "$(call_api queries "$ADMIN" DELETE "/$q")" 204
+          done
+          expect_status "DELETE m-rebind" "$(call_api models "$VIEWER" DELETE "/m-rebind")" 204
+          expect_status "DELETE a-rebind" "$(call_api agents "$VIEWER" DELETE "/a-rebind")" 204
+          expect_status "DELETE own personal rebind as admin" "$(call "$ADMIN" DELETE "/$REBIND")" 200
+          expect_status "DELETE own personal mcp-run as admin" "$(call "$ADMIN" DELETE "/$RUN")" 200
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get secrets --show-labels || true
+          kubectl -n $NAMESPACE get queries,models -o yaml || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

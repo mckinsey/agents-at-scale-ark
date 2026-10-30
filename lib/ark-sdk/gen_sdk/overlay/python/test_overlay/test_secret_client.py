@@ -7,7 +7,7 @@ from unittest.mock import Mock, AsyncMock, MagicMock, patch, call
 from kubernetes_asyncio.client.rest import ApiException
 
 from ark_sdk.k8s import SecretClient, _build_labels_and_annotations, read_secret_labels
-from ark_sdk.secret_scope import SecretScope, SecretScopeChangeError, SecretScopeError
+from ark_sdk.secret_scope import PersonalSecretError, SecretScope, SecretScopeChangeError, SecretScopeError, scope_kind
 
 SYSTEM_LABELS = {
     "ark.mckinsey.com/resource-type": "secret",
@@ -1005,6 +1005,43 @@ class TestSecretClientScope(unittest.IsolatedAsyncioTestCase):
         result = await SecretClient(namespace="ns").get_secret_value("legacy-token", "token")
 
         self.assertEqual(result["value"], "dGVzdC10b2tlbg==")
+
+    async def test_get_secret_value_refuses_personal_secret_by_default(self, _):
+        self._stored(ALICE_LABELS, name="u-ff8d9819fc0e12bf-github")
+
+        with self.assertRaises(PersonalSecretError) as raised:
+            await SecretClient(namespace="ns").get_secret_value("u-ff8d9819fc0e12bf-github", "token")
+
+        self.assertIn("mcpserver override", str(raised.exception))
+        self.assertNotIn("dGVzdC10b2tlbg==", str(raised.exception))
+        self.assertNotIn("test-token", str(raised.exception))
+
+    async def test_get_secret_value_refuses_personal_secret_whatever_the_client_scope(self, _):
+        self._stored(ALICE_LABELS, name="u-ff8d9819fc0e12bf-github")
+
+        with self.assertRaises(PersonalSecretError):
+            await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).get_secret_value(
+                "u-ff8d9819fc0e12bf-github", "token"
+            )
+
+    async def test_get_secret_value_reads_personal_secret_when_allowed(self, _):
+        self._stored(ALICE_LABELS, name="u-ff8d9819fc0e12bf-github")
+
+        result = await SecretClient(namespace="ns").get_secret_value(
+            "u-ff8d9819fc0e12bf-github", "token", allow_personal=True
+        )
+
+        self.assertEqual(result["value"], "dGVzdC10b2tlbg==")
+
+    async def test_get_secret_value_reads_promoted_and_non_personal_secrets(self, _):
+        not_personal = [labels for labels in OUT_OF_SCOPE_LABELS if scope_kind(labels) != "personal"]
+        for labels in [SYSTEM_LABELS, *not_personal]:
+            with self.subTest(labels=labels):
+                self._stored(labels, name="u-ff8d9819fc0e12bf-promoted")
+
+                result = await SecretClient(namespace="ns").get_secret_value("u-ff8d9819fc0e12bf-promoted", "token")
+
+                self.assertEqual(result["value"], "dGVzdC10b2tlbg==")
 
 
 @patch('ark_sdk.k8s.ApiClient')

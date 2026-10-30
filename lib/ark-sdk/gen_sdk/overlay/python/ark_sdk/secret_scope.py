@@ -25,6 +25,10 @@ class SecretScopeChangeError(SecretScopeError):
     pass
 
 
+class PersonalSecretError(ValueError):
+    pass
+
+
 def _is_user_scope(value: object) -> bool:
     return isinstance(value, str) and USER_SCOPE.fullmatch(value) is not None
 
