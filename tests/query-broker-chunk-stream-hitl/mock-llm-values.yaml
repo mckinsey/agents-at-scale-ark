@@ -1,0 +1,33 @@
+terminationGracePeriodSeconds: 1
+resources:
+  limits:
+    cpu: 50m
+    memory: 64Mi
+  requests:
+    cpu: 10m
+    memory: 32Mi
+config:
+  rules:
+    - path: "/v1/models"
+      method: "GET"
+      response:
+        status: 200
+        content: '{"object":"list","data":[{"id":"gpt-4.1-mini","object":"model","owned_by":"openai"}]}'
+    - path: "/v1/chat/completions"
+      response:
+        status: 200
+        content: '{"id":"mock-response","object":"chat.completion","model":"gpt-4.1-mini","choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":1,"total_tokens":11}}'
+    - path: "/v1/chat/completions"
+      match: "body.stream && contains(to_string(body.messages), 'Complete a safe staging rollout')"
+      response:
+        status: 400
+        content: '{"id":"hitl-safe-tool-call","object":"chat.completion.chunk","created":0,"model":"gpt-4.1-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"","tool_calls":[{"index":0,"id":"call_safe_rollout","type":"function","function":{"name":"safe-deployment-action","arguments":"{\"target\": \"staging\", \"version\": \"v2.1.0\"}"}}]},"finish_reason":"tool_calls"}]}'
+    - path: "/v1/chat/completions"
+      match: "length(body.messages[?role=='tool']) > `0`"
+      response:
+        status: 200
+        content: '{"id":"hitl-safe-answer","object":"chat.completion","model":"gpt-4.1-mini","choices":[{"message":{"role":"assistant","content":"Safe rollout of v2.1.0 completed."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":8,"total_tokens":18}}'
+    - path: "/safe-deployment-action"
+      response:
+        status: 200
+        content: '{"result":"safe test action completed"}'

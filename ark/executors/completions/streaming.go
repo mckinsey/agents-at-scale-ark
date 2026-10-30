@@ -19,12 +19,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
+	"github.com/google/uuid"
 	"github.com/openai/openai-go"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
 )
 
 const finishReasonStop = "stop"
+const streamRunIDHeader = "X-Ark-Stream-Run-ID"
 
 // StreamMetadata contains ARK-specific metadata for streaming chunks
 type StreamMetadata struct {
@@ -414,12 +416,16 @@ func NewEventStreamForQuery(ctx context.Context, k8sClient client.Client, namesp
 	}
 
 	// Create HTTP event stream client
-	return &HTTPEventStream{
+	eventStream := &HTTPEventStream{
 		baseURL:   baseURL,
 		sessionId: sessionId,
 		queryName: queryName,
 		client:    common.NewHTTPClientForStreaming(),
-	}, nil
+	}
+	if err := eventStream.StartRun(ctx); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to start stream run", "queryName", queryName)
+	}
+	return eventStream, nil
 }
 
 // HTTPEventStream implements EventStreamInterface for HTTP-based streaming
@@ -428,9 +434,11 @@ type HTTPEventStream struct {
 	sessionId string
 	queryName string
 	client    *http.Client
+	runID     string
 
 	// For persistent streaming connection
 	streamWriter io.WriteCloser
+	streamDone   chan struct{}
 	streamMutex  sync.Mutex
 	// Latched on the first chunk-write failure for this query (a broken/closed
 	// ndjson pipe). Once abandoned, further chunk writes are no-ops so a failing
@@ -438,6 +446,40 @@ type HTTPEventStream struct {
 	// completion signal is still sent (see NotifyCompletion), so the consumer's
 	// stream is always terminated.
 	streamAbandoned bool
+}
+
+// StartRun marks a new execution round before its first chunk is produced.
+func (h *HTTPEventStream) StartRun(ctx context.Context) error {
+	h.streamMutex.Lock()
+	defer h.streamMutex.Unlock()
+
+	if h.streamWriter != nil {
+		return fmt.Errorf("cannot start a stream run while the previous run is open")
+	}
+
+	h.runID = uuid.NewString()
+	h.streamAbandoned = false
+	startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	startURL := fmt.Sprintf("%s/stream/%s/start", h.baseURL, url.QueryEscape(h.queryName))
+	req, err := http.NewRequestWithContext(startCtx, http.MethodPost, startURL, bytes.NewReader([]byte("{}")))
+	if err != nil {
+		return fmt.Errorf("failed to create stream start request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(streamRunIDHeader, h.runID)
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to start stream run: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("streaming service returned status %d on start", resp.StatusCode)
+	}
+	return nil
 }
 
 // StreamChunk sends a chunk to the event stream
@@ -451,6 +493,9 @@ func (h *HTTPEventStream) StreamChunk(ctx context.Context, chunk interface{}) er
 
 	// If we don't have an active stream, start one
 	if h.streamWriter == nil {
+		if h.runID == "" {
+			h.runID = uuid.NewString()
+		}
 		if err := h.startStream(ctx); err != nil {
 			return fmt.Errorf("failed to start stream: %w", err)
 		}
@@ -500,9 +545,13 @@ func (h *HTTPEventStream) startStream(ctx context.Context) error {
 	}
 	req.Header.Set("Content-Type", "application/x-ndjson")
 	req.Header.Set("Transfer-Encoding", "chunked")
+	req.Header.Set(streamRunIDHeader, h.runID)
 
 	// Start the request in a goroutine
+	done := make(chan struct{})
+	h.streamDone = done
 	go func() {
+		defer close(done)
 		resp, err := h.client.Do(req)
 		if err != nil {
 			log.Error(err, "streaming request failed", "url", streamURL)
@@ -551,6 +600,21 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 		}
 		h.streamWriter = nil
 	}
+	if h.streamDone != nil {
+		timer := time.NewTimer(10 * time.Second)
+		select {
+		case <-h.streamDone:
+			h.streamDone = nil
+		case <-timer.C:
+			logf.FromContext(ctx).Error(nil, "timed out waiting for chunk stream request to finish")
+		}
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+	}
 
 	// Send completion signal. Detach from the request context's cancellation via
 	// context.WithoutCancel: on the drain-deadline path ctx is already cancelled (server
@@ -565,6 +629,10 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 		return fmt.Errorf("failed to create completion request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if h.runID == "" {
+		h.runID = uuid.NewString()
+	}
+	req.Header.Set(streamRunIDHeader, h.runID)
 
 	// Use a client with timeout for completion
 	completeClient := &http.Client{Timeout: 10 * time.Second}
@@ -580,6 +648,9 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 		return fmt.Errorf("streaming service returned status %d on completion", resp.StatusCode)
 	}
 
+	h.runID = ""
+	h.streamAbandoned = false
+	h.streamDone = nil
 	return nil
 }
 

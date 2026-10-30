@@ -74,6 +74,59 @@ export function runChunkStreamContract(factory: () => ChunkStream): void {
     it('returns false for unknown queryId', async () => {
       expect(await stream.isComplete('unknown')).toBe(false);
     });
+
+    it('scopes completion and replay data to the latest run', async () => {
+      await stream.startRun('q1', 'run-1');
+      await stream.appendChunk('q1', {text: 'first run'}, 'run-1');
+      await stream.completeQuery('q1', 'run-1');
+
+      await stream.startRun('q1', 'run-2');
+      expect(await stream.isComplete('q1', 'run-1')).toBe(true);
+      expect(await stream.isComplete('q1', 'run-2')).toBe(false);
+      expect(await stream.isComplete('q1')).toBe(false);
+
+      await stream.appendChunk('q1', {text: 'second run'}, 'run-2');
+      await stream.completeQuery('q1', 'run-2');
+
+      const items = await stream.getByQuery('q1');
+      const secondRun = items.filter((item) => item.data.runId === 'run-2');
+      expect(secondRun.filter((item) => item.data.runStart)).toHaveLength(1);
+      expect(secondRun.map((item) => item.data.chunk)).toEqual([
+        null,
+        {text: 'second run'},
+        '[DONE]',
+      ]);
+      expect(await stream.isComplete('q1', 'run-2')).toBe(true);
+      expect(await stream.isComplete('q1')).toBe(true);
+    });
+
+    it('starts an empty run and makes repeated start calls idempotent', async () => {
+      await stream.startRun('q1', 'empty-run');
+      await stream.startRun('q1', 'empty-run');
+      expect(
+        (await stream.getByQuery('q1')).filter((item) => item.data.runStart)
+      ).toHaveLength(1);
+
+      await stream.completeQuery('q1', 'empty-run');
+      expect(await stream.isComplete('q1', 'empty-run')).toBe(true);
+    });
+
+    it('keeps the latest started run authoritative when an older run writes late', async () => {
+      await stream.startRun('q1', 'run-1');
+      await stream.appendChunk('q1', {text: 'first run'}, 'run-1');
+
+      await stream.startRun('q1', 'run-2');
+      await stream.appendChunk('q1', {text: 'second run'}, 'run-2');
+      await stream.appendChunk('q1', {text: 'late first run'}, 'run-1');
+      await stream.completeQuery('q1', 'run-1');
+
+      expect(await stream.isComplete('q1', 'run-1')).toBe(true);
+      expect(await stream.isComplete('q1', 'run-2')).toBe(false);
+      expect(await stream.isComplete('q1')).toBe(false);
+
+      await stream.completeQuery('q1', 'run-2');
+      expect(await stream.isComplete('q1')).toBe(true);
+    });
   });
 
   describe('subscribeToQuery', () => {
