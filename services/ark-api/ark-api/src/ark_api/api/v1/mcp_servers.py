@@ -78,6 +78,7 @@ def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
         namespace=metadata.get("namespace", ""),
         status_message=status_message,
         address=resolved_address,
+        labels=metadata.get("labels"),
         annotations=metadata.get("annotations"),
         transport=spec.get("transport"),
         available=availability,
