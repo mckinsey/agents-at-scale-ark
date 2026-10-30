@@ -257,6 +257,7 @@ function CredentialRow({
           <SecretNameField
             value={row.secret}
             onChange={value => onChange(row.id, { secret: value })}
+            onBlur={() => onCommit(row.id)}
             secrets={secrets}
             isPending={isSecretsPending}
             isError={isSecretsError}

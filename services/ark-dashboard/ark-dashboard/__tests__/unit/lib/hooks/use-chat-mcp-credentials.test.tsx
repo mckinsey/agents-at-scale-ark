@@ -123,6 +123,7 @@ describe('isValidMcpCredentialField', () => {
     ['header', 'X-Personal-Token'],
     ['header', 'X-Very-Long-Custom-Authorization-Header'],
     ['secret', 'sk-team-token'],
+    ['secret', 'u-0123456789abcdef-a-much-longer-personal-name'],
     ['secret', ''],
   ] as const)('accepts %s %j', (field, value) => {
     expect(isValidMcpCredentialField(field, value)).toBe(true);
@@ -144,6 +145,8 @@ describe('isValidMcpCredentialField', () => {
     ['key', 'AbCdEfGhIjKlMnOpQrStUvWx'],
     ['key', '00000000-0000-0000-0000-000000000000'],
     ['header', 'ASIAIOSFODNN7EXAMPLE'],
+    ['secret', '00000000-0000-0000-0000-000000000000'],
+    ['secret', 'abcdef0123'.repeat(3)],
     ['key', 'github_pat_11ABCDEF'],
     ['key', 'xoxb-123-abc'],
     ['key', 'eyJabc'],
@@ -452,6 +455,9 @@ describe('useChatMcpCredentials', () => {
     act(() => {
       result.current.updateRow(id, { server: 'github', secret });
     });
+    act(() => {
+      result.current.commitRow(id);
+    });
     return id;
   }
 
@@ -570,12 +576,90 @@ describe('useChatMcpCredentials', () => {
     act(() => {
       result.current.updateRow(id, { secret: 'github-token' });
     });
+    act(() => {
+      result.current.commitRow(id);
+    });
 
     expect(result.current.rows[0]).toMatchObject({
       secret: 'github-token',
       issue: null,
     });
     expect(stored()['team-a'][0].secret).toBe('github-token');
+  });
+
+  it('saves a typed secret name only when the field is committed', () => {
+    const { result } = render();
+    const id = addGithubCredential(result);
+
+    act(() => {
+      result.current.updateRow(id, { secret: 'typed-secret' });
+    });
+    expect(result.current.rows[0].secret).toBe('typed-secret');
+    expect(stored()['team-a'][0].secret).toBe('u-0123456789abcdef-github');
+
+    act(() => {
+      result.current.commitRow(id);
+    });
+    expect(stored()['team-a'][0].secret).toBe('typed-secret');
+  });
+
+  it('saves a secret picked from the list at once', () => {
+    mockListedSecrets(['github-token']);
+    const { result } = render();
+    const id = addGithubCredential(result, 'typed-secret');
+
+    act(() => {
+      result.current.updateRow(id, { secret: 'github-token' });
+    });
+
+    expect(stored()['team-a'][0].secret).toBe('github-token');
+  });
+
+  it.each([
+    ['a UUID', '00000000-0000-0000-0000-000000000000'],
+    ['a long run of hex digits', '0123456789abcdef'.repeat(2)],
+  ])(
+    'keeps %s pasted as the secret out of storage and blocks sending',
+    (_label, token) => {
+      const { result } = render();
+      const id = addGithubCredential(result, 'typed-secret');
+
+      act(() => {
+        result.current.updateRow(id, { secret: token });
+      });
+      act(() => {
+        result.current.commitRow(id);
+      });
+
+      expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).not.toContain(
+        token,
+      );
+      expect(result.current.rows[0]).toMatchObject({
+        issue: 'invalid',
+        invalidFields: ['secret'],
+      });
+      expect(result.current.credentials).toEqual([]);
+    },
+  );
+
+  it('never saves any part of a secret token typed one character at a time', () => {
+    const { result } = render();
+    const id = addGithubCredential(result, 'typed-secret');
+    const typed = '0123456789abcdef'.repeat(2);
+
+    for (let i = 1; i <= typed.length; i++) {
+      act(() => {
+        result.current.updateRow(id, { secret: typed.slice(0, i) });
+      });
+    }
+    act(() => {
+      result.current.commitRow(id);
+    });
+
+    expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).not.toContain(
+      '0123',
+    );
+    expect(result.current.blocked).toBe(true);
   });
 
   function mockListedSecrets(names: string[]) {
@@ -654,6 +738,9 @@ describe('useChatMcpCredentials', () => {
     act(() => {
       result.current.updateRow(id, { secret: 'db-prod' });
     });
+    act(() => {
+      result.current.commitRow(id);
+    });
 
     expect(stored()['team-a'][0]).toMatchObject({
       secret: 'db-prod',
@@ -683,14 +770,24 @@ describe('useChatMcpCredentials', () => {
     ]);
   });
 
-  it('cleans a header and key that an older version saved as tokens', () => {
+  it('cleans a header, secret and key that an older version saved as tokens', () => {
     storeRows({
-      'team-a': [credential({ header: 'sk-proj-abc', key: 'ghp_AbC123' })],
+      'team-a': [
+        credential({
+          header: 'sk-proj-abc',
+          secret: '00000000-0000-0000-0000-000000000000',
+          key: 'ghp_AbC123',
+        }),
+      ],
     });
 
     render();
 
-    expect(stored()['team-a'][0]).toMatchObject({ header: '', key: 'token' });
+    expect(stored()['team-a'][0]).toMatchObject({
+      header: '',
+      secret: '',
+      key: 'token',
+    });
   });
 
   it('keeps a token pasted as the key out of local storage and blocks sending', () => {

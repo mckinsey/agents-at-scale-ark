@@ -655,6 +655,47 @@ describe('ChatPanel MCP credentials', () => {
     );
   });
 
+  it('saves a typed secret name when the field loses focus', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    storeCredentials([GITHUB_ROW]);
+    await renderPanel();
+    const user = userEvent.setup();
+
+    const secret = screen.getByRole('combobox', { name: 'Secret for github' });
+    await user.clear(secret);
+    await user.type(secret, 'outside-secret');
+    expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).not.toContain(
+      'outside-secret',
+    );
+    await user.tab();
+
+    expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).toContain(
+      '"secret":"outside-secret"',
+    );
+  });
+
+  it('refuses a UUID pasted as the secret and never saves it', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    storeCredentials([GITHUB_ROW]);
+    const sendMessage = vi.fn(async () => {});
+    await renderPanel({ sendMessage });
+    const user = userEvent.setup();
+
+    const secret = screen.getByRole('combobox', { name: 'Secret for github' });
+    await user.clear(secret);
+    await user.click(secret);
+    await user.paste('00000000-0000-0000-0000-000000000000');
+    await user.tab();
+
+    expect(
+      screen.getByText(/Enter the name of a secret, not its value/),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem(CHAT_MCP_CREDENTIALS_KEY)).not.toContain(
+      '00000000-0000',
+    );
+    await expectSendBlocked(sendMessage);
+  });
+
   it('waits for the secret list before sending a custom key', async () => {
     mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
     vi.mocked(useGetAllSecrets).mockReturnValue({
