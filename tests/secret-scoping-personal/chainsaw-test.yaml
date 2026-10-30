@@ -566,6 +566,15 @@ spec:
           expect_selected mock-llm-mcp '["mock-llm-mcp"]'
           kubectl delete mcpserver echo-kubectl echo-bare -n "$NAMESPACE" >/dev/null
 
+          printf '%s' "$SOURCE" | jq --arg ns "$NAMESPACE" \
+            '{apiVersion, kind, metadata: {name: "echo-held", namespace: $ns, finalizers: ["e2e.ark.mckinsey.com/hold"]}, spec: {transport: .spec.transport, address: .spec.address}}' \
+            | kubectl apply -f - >/dev/null
+          kubectl delete mcpserver echo-held -n "$NAMESPACE" --wait=false >/dev/null
+          kubectl label mcpserver echo-held -n "$NAMESPACE" ark.mckinsey.com/name=mock-llm-mcp --overwrite >/dev/null
+          expect_labels echo-held '{"ark.mckinsey.com/name":"echo-held"}'
+          expect_selected mock-llm-mcp '["mock-llm-mcp"]'
+          kubectl patch mcpserver echo-held -n "$NAMESPACE" --type=merge -p '{"metadata":{"finalizers":null}}' >/dev/null
+
           for _ in $(seq 1 45); do
             kubectl get tool echo-api-echo-headers -n "$NAMESPACE" >/dev/null 2>&1 && break
             sleep 2
