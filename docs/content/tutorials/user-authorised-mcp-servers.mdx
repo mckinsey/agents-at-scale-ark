@@ -13,7 +13,8 @@ By the end you'll have:
 
 - A GitHub `MCPServer` registered in the cluster.
 - An agent that uses a GitHub tool.
-- Queries that authorise as different users by overriding the `Authorization` header per request.
+- A personal Secret per user holding their GitHub token.
+- Queries, from the dashboard chat and from the API, that authorise as different users by overriding the `Authorization` header per request.
 
 ## How per-user auth works
 
@@ -25,10 +26,13 @@ MCPServer.spec.headers  <  MCPServer.spec.authorization  <  Agent.spec.overrides
 
 The `MCPServer`-level credential applies to both tool **discovery** and tool **calls**, so an agent can use the server with no override at all. A per-query `Authorization` override replaces it for that call — that's what makes the request "user authorised."
 
+Each user keeps their token in a [personal Secret](/user-guide/secrets#personal-secrets). Only its owner sees it in the dashboard and `/v1/secrets`. Ark resolves it only from a header of a Query `mcpserver` override, and Ark API accepts that override only from the owner and only with a `labelSelector`.
+
 ## Prerequisites
 
 - A working Ark cluster with a `default` model available (`kubectl get models`).
 - A GitHub token per user. The remote GitHub MCP server (`https://api.githubcopilot.com/mcp/`) accepts a GitHub personal access token as a bearer token.
+- Ark API and the dashboard running with single sign-on, so each user signs in as themselves. Personal Secrets need a signed-in user: with an API key or in `open` mode, creating one returns `403`. For a local cluster, `ENABLE_SSO=true devspace dev` starts Dex with two users, as described in [local development setup with Dex](/developer-guide/authentication#local-development-setup-with-dex).
 
 ## Step 1 — Register the GitHub MCP server
 
@@ -47,6 +51,8 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: MCPServer
 metadata:
   name: github
+  labels:
+    ark.mckinsey.com/name: github
 spec:
   address:
     value: "https://api.githubcopilot.com/mcp/"
@@ -64,6 +70,8 @@ spec:
       value:
         value: "ark-tutorial/1.0"
 ```
+
+The `ark.mckinsey.com/name` label lets a query override pick this one server by name. Ark API sets it on the MCPServers it creates or updates; a server applied with `kubectl` needs it in the manifest.
 
 Apply it and wait for discovery:
 
@@ -104,47 +112,70 @@ kubectl apply -f github-agent.yaml
 
 ## Step 3 — Each user stores their own token
 
-Give each user a Secret holding their personal token (value formatted as a bearer token):
+Each user creates a personal Secret holding their token. Sign in to the dashboard as Alice, open **Secrets** and select **Add secret**:
+
+- Name: `github`.
+- Scope: **Personal**.
+- Value: `Bearer ghp_alice_personal_access_token`.
+
+The dashboard stores the value under the `token` key. Ark names the Secret `u-<owner>-github`, where `<owner>` is a hash of Alice's username, and the **Secrets** page shows it as `github` with that full name underneath. Bob does the same with his own token and gets a different full name. Neither of them sees the other's Secret.
+
+## Step 4 — Chat with the agent as the user
+
+As Alice, open a chat with `github-agent`. Above the message box sits the **MCP credentials** block, collapsed while it has no rows. Expand it, select **+** to add a row, and fill it in:
+
+- MCP server: `github`.
+- Header name: `Authorization`, the default.
+- Secret: `github`, marked **Personal**.
+- Key: `token`, the default.
+
+Ask "Who am I on GitHub? Reply with just my login." The chat sends the row as an `mcpserver` override that selects `ark.mckinsey.com/name: github` and reads Alice's Secret, so the `github-get-me` call runs with her token and the agent answers with her login. Bob does the same with his own Secret, and the same agent answers as Bob, without re-registering the server.
+
+The rows apply to every agent and team chat in the namespace, and the browser keeps them for Alice in that namespace. A server without the name label shows **Needs name label** and cannot be picked. See [use personal secrets from the chat](/user-guide/secrets#use-personal-secrets-from-the-chat) for the cases where the chat blocks sending.
+
+## Step 5 — Query as the user through the API
+
+A front-end or service sends the same override through the [Ark API](/reference/ark-apis). Set the API address and an ID token for Alice, issued by your identity provider for the client that Ark API trusts:
 
 ```bash
-kubectl create secret generic alice-github-token \
-  --from-literal=token="Bearer ghp_alice_personal_access_token"
+ARK_API=http://ark-api.default.127.0.0.1.nip.io:8080
+read -rs ALICE_TOKEN
 ```
 
-The registration token carries the [Ark secret labels](/user-guide/secrets) because the whole namespace shares it. Leave the personal tokens without them: each belongs to one user, and the query override reads it by name either way. Without the labels, the personal tokens also stay off the dashboard **Secrets** page.
-
-## Step 4 — Query as the user
-
-The query overrides the GitHub MCP server's `Authorization` header with the user's token, sourced from their Secret:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: who-am-i
-spec:
-  input: "Who am I on GitHub? Reply with just my login."
-  target:
-    type: agent
-    name: github-agent
-  overrides:
-    - resourceType: mcpserver
-      headers:
-        - name: Authorization
-          value:
-            valueFrom:
-              secretKeyRef:
-                name: alice-github-token
-                key: token
-```
+Copy the full name of Alice's Secret from the **Secrets** page, then send the query. The `labelSelector` picks the `github` server by its name label:
 
 ```bash
-kubectl apply -f who-am-i.yaml
-kubectl get query who-am-i -o jsonpath='{.status.response.content}'
+curl -X POST "$ARK_API/v1/queries?namespace=default" \
+  -H "Authorization: Bearer $ALICE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "who-am-i",
+    "input": "Who am I on GitHub? Reply with just my login.",
+    "target": { "type": "agent", "name": "github-agent" },
+    "overrides": [
+      {
+        "resourceType": "mcpserver",
+        "labelSelector": { "matchLabels": { "ark.mckinsey.com/name": "github" } },
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": { "valueFrom": { "secretKeyRef": { "name": "u-0123456789abcdef-github", "key": "token" } } }
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+Replace `u-0123456789abcdef-github` with the full name you copied. The override block maps straight onto the `Query` spec. Once the query is done, read the result:
+
+```bash
+curl -s "$ARK_API/v1/queries/who-am-i?namespace=default" \
+  -H "Authorization: Bearer $ALICE_TOKEN" | jq -r .status.response.content
 # alice
 ```
 
-The `github-get-me` call ran with Alice's token, so GitHub returned Alice's login. Swap the referenced Secret (or run from a different user's namespace) and the same agent answers as that user — without re-registering the server.
+Ark API accepts the query only because Alice owns the Secret. If Bob sends a query that references Alice's Secret, or Alice leaves out the `labelSelector`, Ark API returns `422` and creates nothing. Without a selector the header would go to every MCP server the agent uses, so Ark API requires one for personal Secrets.
 
 ## Alternative — pass the token at request time
 
@@ -173,36 +204,11 @@ spec:
                 name: githubToken
 ```
 
+The parameter value is stored in the Query, so anyone who can read Queries in the namespace sees the token, and without a `labelSelector` the header goes to every MCP server the agent uses.
+
 <Callout type="warning">
 Whichever source you use, the token authorises real API calls — treat it like a credential. Prefer Secrets over inline `value`, and never put a token in an agent prompt or a Query `input` (it would become part of the model context). The `valueFrom.secretKeyRef` / `queryParameterRef` paths keep it out of the prompt.
 </Callout>
-
-## Via the ark API
-
-The same override works through the [ark API](/reference/ark-apis) — `POST /v1/queries` accepts an `overrides` array that maps straight onto the `Query` spec. This is the path a front-end or service would use to run a query as the signed-in user:
-
-```bash
-curl -X POST "http://ark-api.default.127.0.0.1.nip.io:8080/v1/queries?namespace=default" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "who-am-i",
-    "input": "Who am I on GitHub? Reply with just my login.",
-    "target": { "type": "agent", "name": "github-agent" },
-    "overrides": [
-      {
-        "resourceType": "mcpserver",
-        "headers": [
-          {
-            "name": "Authorization",
-            "value": { "valueFrom": { "secretKeyRef": { "name": "alice-github-token", "key": "token" } } }
-          }
-        ]
-      }
-    ]
-  }'
-```
-
-The override block is identical to the `Query` YAML — `resourceType: mcpserver`, header value from a `secretKeyRef` (or `queryParameterRef`, or an inline `value`). Read the result back with `GET /v1/queries/who-am-i?namespace=default` and check `status.response.content`.
 
 ## Verify it's the override doing the work
 
@@ -232,12 +238,13 @@ Replace it with a valid token and the same query succeeds — confirming the ove
 ## Where to set the override
 
 - **On the Query** (shown above) — per request, per user. The most common choice for user-authorised access.
-- **On the Agent** (`Agent.spec.overrides`) — every query through that agent uses the same token. Useful for a dedicated service agent, less so for per-user auth.
+- **On the Agent** (`Agent.spec.overrides`) — every query through that agent uses the same token. Useful for a dedicated service agent, less so for per-user auth. An Agent override cannot reference a personal Secret.
 
 Query overrides win over agent overrides, which win over the server's `spec.headers`.
 
 ## Related
 
 - [Overrides](/user-guide/overrides) — full override schema, label selectors, and value sources.
+- [Personal secrets](/user-guide/secrets#personal-secrets) — who owns them, where they can be used, and their limits.
 - [Tools and MCP servers](/user-guide/tools) — registering MCP servers and how their tools are created.
 - [Run queries / chat with agents and teams](/user-guide/queries) — query parameters and execution.
