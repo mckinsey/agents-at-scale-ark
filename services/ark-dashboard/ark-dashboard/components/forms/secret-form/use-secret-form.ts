@@ -10,6 +10,7 @@ import {
   useGetSecret,
   useUpdateSecret,
 } from '@/lib/services/secrets-hooks';
+import { useUser } from '@/providers/UserProvider';
 
 import { useAliasOptions } from '../fields/use-alias-options';
 import {
@@ -26,6 +27,7 @@ const EMPTY_VALUES: SecretFormValues = {
   alias: '',
   labels: [],
   labelDraft: '',
+  scope: 'shared',
 };
 
 export function useSecretForm({
@@ -34,6 +36,7 @@ export function useSecretForm({
   onSuccess,
 }: Readonly<SecretFormProps>) {
   const isEdit = mode === SecretFormMode.EDIT;
+  const { user } = useUser();
 
   const existingLabelsRef = useRef<readonly string[]>([]);
 
@@ -65,11 +68,30 @@ export function useSecretForm({
       alias: secret.alias ?? '',
       labels: secret.labels,
       labelDraft: '',
+      scope: secret.scope,
     });
   }, [secret, reset]);
 
   const createSecret = useCreateSecret({ onSuccess });
   const updateSecret = useUpdateSecret({ onSuccess });
+  const promoteSecret = useUpdateSecret({
+    successMessage: 'Secret is now shared',
+  });
+
+  const makeShared = (): void => {
+    if (!secret || !secretName) {
+      return;
+    }
+    promoteSecret.mutate({
+      name: secretName,
+      request: {
+        description: secret.description ?? null,
+        alias: secret.alias ?? null,
+        labels: secret.labels,
+        scope: 'shared',
+      },
+    });
+  };
 
   const onSubmit = async (values: SecretFormValues): Promise<void> => {
     const description = values.description || null;
@@ -95,7 +117,7 @@ export function useSecretForm({
       description,
       alias,
       labels: values.labels,
-      scope: 'shared',
+      scope: user ? values.scope : 'shared',
     });
   };
 
@@ -103,8 +125,16 @@ export function useSecretForm({
     form,
     isEdit,
     loading: isEdit && isLoading,
-    saving: createSecret.isPending || updateSecret.isPending,
+    saving:
+      createSecret.isPending ||
+      updateSecret.isPending ||
+      promoteSecret.isPending,
     onSubmit,
     aliasOptions,
+    secret,
+    canChooseScope: !isEdit && Boolean(user),
+    makeShared,
+    makingShared: promoteSecret.isPending,
+    hasUnsavedChanges: form.formState.isDirty,
   };
 }
