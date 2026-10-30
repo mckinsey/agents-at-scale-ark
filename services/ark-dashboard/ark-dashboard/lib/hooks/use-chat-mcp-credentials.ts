@@ -31,7 +31,7 @@ const TOKEN_PREFIX_PATTERN =
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN_RUN_PATTERN = /[A-Za-z0-9]{24,}/;
-const COMMIT_ON_BLUR_FIELDS = ['header', 'key'] as const;
+const TYPED_FIELDS = ['header', 'secret', 'key'] as const;
 
 type McpServerTarget = Pick<MCPServer, 'name' | 'labels'>;
 
@@ -75,13 +75,13 @@ const FIELD_VALIDATORS: Record<
   key: SECRET_KEY_PATTERN,
 };
 
+function looksLikeOpaqueValue(value: string): boolean {
+  return UUID_PATTERN.test(value) || TOKEN_RUN_PATTERN.test(value);
+}
+
 export function looksLikeToken(value: string): boolean {
   const trimmed = value.trim();
-  return (
-    TOKEN_PREFIX_PATTERN.test(trimmed) ||
-    UUID_PATTERN.test(trimmed) ||
-    TOKEN_RUN_PATTERN.test(trimmed)
-  );
+  return TOKEN_PREFIX_PATTERN.test(trimmed) || looksLikeOpaqueValue(trimmed);
 }
 
 export function isValidMcpCredentialField(
@@ -92,7 +92,9 @@ export function isValidMcpCredentialField(
   if (field === 'server' || trimmed === '') {
     return true;
   }
-  if (field !== 'secret' && looksLikeToken(trimmed)) {
+  if (
+    field === 'secret' ? looksLikeOpaqueValue(trimmed) : looksLikeToken(trimmed)
+  ) {
     return false;
   }
   return (
@@ -275,6 +277,9 @@ function sanitizeStoredCredential(
     header: isValidMcpCredentialField('header', credential.header)
       ? credential.header
       : '',
+    secret: isValidMcpCredentialField('secret', credential.secret)
+      ? credential.secret
+      : '',
     key: isValidMcpCredentialField('key', credential.key)
       ? credential.key
       : DEFAULT_MCP_CREDENTIAL_KEY,
@@ -284,6 +289,7 @@ function sanitizeStoredCredential(
 function needsSanitizing(credential: StoredMcpCredential): boolean {
   return (
     !isValidMcpCredentialField('header', credential.header) ||
+    !isValidMcpCredentialField('secret', credential.secret) ||
     !isValidMcpCredentialField('key', credential.key)
   );
 }
@@ -377,7 +383,12 @@ export function useChatMcpCredentials({
 
   const updateRow = useCallback(
     (id: string, patch: McpCredentialPatch) => {
-      const { valid, invalid } = splitPatch(patch, COMMIT_ON_BLUR_FIELDS);
+      const pickedListedSecret =
+        patch.secret !== undefined && listedSecrets.has(patch.secret.trim());
+      const { valid, invalid } = splitPatch(
+        patch,
+        pickedListedSecret ? ['header', 'key'] : TYPED_FIELDS,
+      );
       setDrafts(current => {
         const draft = { ...current[id] };
         for (const field of CREDENTIAL_FIELDS) {
@@ -399,7 +410,7 @@ export function useChatMcpCredentials({
         );
       }
     },
-    [writeCredentials],
+    [writeCredentials, listedSecrets],
   );
 
   const commitRow = useCallback(
@@ -409,7 +420,7 @@ export function useChatMcpCredentials({
         return;
       }
       const committed: McpCredentialPatch = {};
-      for (const field of COMMIT_ON_BLUR_FIELDS) {
+      for (const field of TYPED_FIELDS) {
         const value = draft[field];
         if (value !== undefined && isValidMcpCredentialField(field, value)) {
           committed[field] = value;
