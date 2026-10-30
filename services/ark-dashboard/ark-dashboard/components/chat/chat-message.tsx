@@ -388,13 +388,13 @@ function StandardMessage({
   const alignClass = isUser ? 'items-end' : 'items-start';
   let bubbleWidthClass = 'max-w-[80%]';
   if (shouldExpand) {
-    bubbleWidthClass = '';
+    bubbleWidthClass = 'max-w-full';
   } else if (constrainWidth && !isUser) {
     bubbleWidthClass = 'w-full';
   }
   const bubbleStyle =
     shouldExpand && expandedWidth
-      ? { minWidth: `${expandedWidth}px` }
+      ? { minWidth: `min(${expandedWidth}px, 100%)` }
       : undefined;
 
   let bubbleClass = 'bg-surface-bg-secondary text-fg-primary';
