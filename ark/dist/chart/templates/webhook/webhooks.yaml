@@ -69,8 +69,8 @@ webhooks:
   - name: mmcpserver-v1.kb.io
     {{- if $.Values.controllerManager.watchNamespaces }}{{ include "ark.watchNamespaceSelector" $ | nindent 4 }}{{- end }}
     matchConditions:
-    - name: not-being-deleted
-      expression: "!has(object.metadata.deletionTimestamp)"
+    - name: not-being-deleted-unless-name-label-differs
+      expression: "!has(object.metadata.deletionTimestamp) || (has(object.metadata.labels) && 'ark.mckinsey.com/name' in object.metadata.labels && object.metadata.labels['ark.mckinsey.com/name'] != object.metadata.name)"
     clientConfig:
       service:
         name: ark-webhook-service
