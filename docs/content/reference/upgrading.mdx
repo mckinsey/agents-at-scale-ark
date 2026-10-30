@@ -147,7 +147,7 @@ Ark does not label existing Secrets on upgrade, because only you know which Secr
 
 ### `/v1/secrets` Serves Only Ark-Labelled Secrets
 
-Every `/v1/secrets` route now works only on Secrets labelled `ark.mckinsey.com/resource-type=secret` and `ark.mckinsey.com/scope=shared`.
+Every `/v1/secrets` route now works only on Secrets labelled `ark.mckinsey.com/resource-type=secret` and `ark.mckinsey.com/scope=shared`, plus the caller's own [personal Secrets](#personal-secrets-in-v1secrets).
 
 - `GET /v1/secrets` and the dashboard **Secrets** page leave out every other Secret in the namespace. That includes Secrets created with kubectl or GitOps without the labels, Secrets created in the dashboard before this release, Helm release records, service account tokens, Ark API keys and MCP OAuth tokens.
 - `GET`, `PUT` and `DELETE` on `/v1/secrets/{name}` return `404` for a Secret without both labels, with the same body as for a Secret that does not exist. `PUT` and `DELETE` leave that Secret untouched.
@@ -161,6 +161,19 @@ The Python SDK's `SecretClient`, also exposed as `ArkClient.secrets`, applies th
 
 **Migration:**
 - Label the Secrets you want to manage from the dashboard or the API, following [Secrets Created by Ark Carry Ownership Labels](#secrets-created-by-ark-carry-ownership-labels). A Secret appears in the list as soon as it has both labels.
+
+### Personal Secrets in `/v1/secrets`
+
+A signed-in user can create a personal Secret that only they can list, read, change and delete through `/v1/secrets`.
+
+- `POST /v1/secrets` accepts `"scope": "personal"`. Ark stores the Secret as `u-<owner>-<name>`, where `<owner>` is the first sixteen hex digits of the SHA-256 of the username, and labels it `ark.mckinsey.com/scope=user-<owner>`. Without a user identity, for example in `open` mode or with an API key, the request returns `403`. `scope` defaults to `shared`.
+- `GET /v1/secrets` takes `?scope=shared|personal|all` and defaults to `shared`, so existing clients keep getting only shared Secrets. `personal` lists the caller's own and returns an empty list without a user identity.
+- `GET`, `PUT` and `DELETE` on `/v1/secrets/{name}` work on shared Secrets and on the caller's personal ones. Another user's personal Secret returns `404` with the same body as a Secret that does not exist.
+- This scope covers `/v1/secrets` only. Resources that reference Secrets through `secretKeyRef` are not checked against it yet.
+- `PUT /v1/secrets/{name}` with `"scope": "shared"` turns a personal Secret into a shared one and keeps its name and value. Like any `PUT`, it replaces `description`, `alias` and `labels`, so send their current values to keep them. `"scope": "personal"` on a shared Secret returns `422`. Once promoted, the name `u-<owner>-<name>` is taken: creating a personal Secret with the same name returns `409`.
+- Secret responses carry `scope` (`shared` or `personal`) and `display_name`, the name without the `u-<owner>-` prefix.
+
+The username is the claim set by `IMPERSONATION_USERNAME_CLAIM` (default `email`), exactly as the identity provider sends it and without `IMPERSONATION_PREFIX`. It is case-sensitive, so `Alice@example.com` and `alice@example.com` own different Secrets. If the claim value changes for a user, their existing personal Secrets stop showing up for them; pick a claim that stays stable.
 
 ## v0.1.72
 
