@@ -14,7 +14,7 @@ spec:
     same 404 as a missing secret, that promoting it to shared keeps the name
     and makes it visible to everyone, that a shared secret cannot be made
     personal, and that a personal secret can only be referenced from its
-    owner's Query MCP header overrides with a labelSelector.
+    owner's Query MCP header overrides that select one server by name.
   timeouts:
     apply: 120s
     assert: 120s
@@ -312,6 +312,12 @@ spec:
           expect_rejected "POST query with admin's personal secret as viewer" "$R" query q-viewer
           R=$(call_api queries "$ADMIN" POST "" "$(query q-empty "\"overrides\":[$(override "$MCP" mcpserver '{}')]")")
           expect_rejected "POST query with an empty labelSelector" "$R" query q-empty
+          R=$(call_api queries "$ADMIN" POST "" "$(query q-team "\"overrides\":[$(override "$MCP" mcpserver '{"matchLabels":{"team":"a"}}')]")")
+          expect_rejected "POST query selecting servers by another label" "$R" query q-team
+          R=$(call_api queries "$ADMIN" POST "" "$(query q-extra "\"overrides\":[$(override "$MCP" mcpserver '{"matchLabels":{"ark.mckinsey.com/name":"github","team":"a"}}')]")")
+          expect_rejected "POST query selecting by name and another label" "$R" query q-extra
+          R=$(call_api queries "$ADMIN" POST "" "$(query q-expr "\"overrides\":[$(override "$MCP" mcpserver '{"matchExpressions":[{"key":"ark.mckinsey.com/name","operator":"Exists"}]}')]")")
+          expect_rejected "POST query selecting with matchExpressions" "$R" query q-expr
           R=$(call_api queries "$ADMIN" POST "" "$(query q-model "\"overrides\":[$(override "$MCP" model "$SELECTOR")]")")
           expect_rejected "POST query with a model override" "$R" query q-model
           PARAMETERS=$(printf '"parameters":[{"name":"token","valueFrom":{"secretKeyRef":{"name":"%s","key":"token"}}}]' "$MCP")
@@ -456,7 +462,35 @@ spec:
           printf '%s' "$CONTENT" | grep -i x-personal-token | grep -q admin-mcp-run-value \
             || { echo "FAIL: the MCP server did not receive the personal secret as X-Personal-Token"; kubectl get query q-run -n "$NAMESPACE" -o yaml; exit 1; }
 
-          for q in q-rebind q-agent-rebind q-run; do
+          kubectl apply -n "$NAMESPACE" -f - >/dev/null <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: q-broad
+          spec:
+            input: echo-headers
+            target:
+              type: agent
+              name: personal-agent
+            overrides:
+            - resourceType: mcpserver
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: mock-llm
+              headers:
+              - name: X-Personal-Token
+                value:
+                  valueFrom:
+                    secretKeyRef:
+                      name: $RUN
+                      key: token
+          EOF
+          wait_phase q-broad error
+          kubectl get query q-broad -n "$NAMESPACE" -o json | grep -q "personal secrets can only be sent to one MCP server" \
+            || { echo "FAIL: q-broad did not fail on its selector"; kubectl get query q-broad -n "$NAMESPACE" -o yaml; exit 1; }
+          assert_no_leak q-broad admin-mcp-run-value
+
+          for q in q-rebind q-agent-rebind q-run q-broad; do
             expect_status "DELETE $q" "$(call_api queries "$ADMIN" DELETE "/$q")" 204
           done
           expect_status "DELETE m-rebind" "$(call_api models "$VIEWER" DELETE "/m-rebind")" 204
@@ -517,11 +551,20 @@ spec:
             "$(call_api mcp-servers "$ADMIN" PUT "/echo-api" '{"labels":{"team":"other"}}')" 200
           expect_labels echo-api '{"ark.mckinsey.com/name":"echo-api","team":"other"}'
           kubectl label mcpserver echo-api -n "$NAMESPACE" ark.mckinsey.com/name=mock-llm-mcp --overwrite >/dev/null
-          expect_status "PUT echo-api after kubectl changed the name label" \
-            "$(call_api mcp-servers "$ADMIN" PUT "/echo-api" '{"annotations":{"e2e":"restored"}}')" 200
           expect_labels echo-api '{"ark.mckinsey.com/name":"echo-api","team":"other"}'
           expect_selected mock-llm-mcp '["mock-llm-mcp"]'
           expect_status "DELETE echo-spoof" "$(call_api mcp-servers "$ADMIN" DELETE "/echo-spoof")" 204
+
+          printf '%s' "$SOURCE" | jq --arg ns "$NAMESPACE" \
+            '{apiVersion, kind, metadata: {name: "echo-kubectl", namespace: $ns, labels: {"ark.mckinsey.com/name": "mock-llm-mcp", team: "e2e"}}, spec: {transport: .spec.transport, address: .spec.address}}' \
+            | kubectl apply -f - >/dev/null
+          expect_labels echo-kubectl '{"ark.mckinsey.com/name":"echo-kubectl","team":"e2e"}'
+          printf '%s' "$SOURCE" | jq --arg ns "$NAMESPACE" \
+            '{apiVersion, kind, metadata: {name: "echo-bare", namespace: $ns}, spec: {transport: .spec.transport, address: .spec.address}}' \
+            | kubectl apply -f - >/dev/null
+          expect_labels echo-bare '{"ark.mckinsey.com/name":"echo-bare"}'
+          expect_selected mock-llm-mcp '["mock-llm-mcp"]'
+          kubectl delete mcpserver echo-kubectl echo-bare -n "$NAMESPACE" >/dev/null
 
           for _ in $(seq 1 45); do
             kubectl get tool echo-api-echo-headers -n "$NAMESPACE" >/dev/null 2>&1 && break
