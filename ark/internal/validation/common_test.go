@@ -504,6 +504,21 @@ func TestCommonSecretKeyExists(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("rejects a personal secret before checking the key", func(t *testing.T) {
+		lookup.addSecret("default", "u-0123456789abcdef-apikey", map[string][]byte{"key": []byte("sk-personal-value")})
+		lookup.secrets["default/u-0123456789abcdef-apikey"].Labels = map[string]string{
+			secretscope.ResourceTypeLabel: secretscope.SecretResourceType,
+			secretscope.ScopeLabel:        "user-0123456789abcdef",
+		}
+		err := v.SecretKeyExists(ctx, "default", "u-0123456789abcdef-apikey", "key")
+		if !errors.Is(err, secretscope.ErrPersonalSecret) {
+			t.Fatalf("expected personal secret error, got %v", err)
+		}
+		if strings.Contains(err.Error(), "sk-personal-value") {
+			t.Fatalf("personal secret value leaked: %v", err)
+		}
+	})
 }
 
 func TestCommonConfigMapKeyExists(t *testing.T) {
