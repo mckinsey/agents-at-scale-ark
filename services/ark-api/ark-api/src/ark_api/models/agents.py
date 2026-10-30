@@ -1,4 +1,5 @@
 """Agent CRD response models."""
+import json
 from typing import List, Dict, Optional, Any
 
 from pydantic import BaseModel, field_validator
@@ -116,8 +117,15 @@ def _has_label_selector(selector: Optional[AgentLabelSelector]) -> bool:
     return selector is not None and bool(selector.matchLabels or selector.matchExpressions)
 
 
+def _override_scope(selector: Optional[AgentLabelSelector]) -> str:
+    if not _has_label_selector(selector):
+        return ""
+    return json.dumps(selector.model_dump(exclude_none=True), sort_keys=True)
+
+
 def ensure_unique_override_header_names(overrides: Optional[List[AgentOverride]]) -> Optional[List[AgentOverride]]:
-    """Apply header name uniqueness across model overrides that have no label selector."""
+    """Apply header name uniqueness across model overrides that have no label selector,
+    and across MCP server overrides that share a label selector."""
     model_headers = [
         header
         for override in overrides or []
@@ -125,6 +133,12 @@ def ensure_unique_override_header_names(overrides: Optional[List[AgentOverride]]
         for header in override.headers
     ]
     ensure_unique_header_names(model_headers)
+    mcp_headers_by_scope: Dict[str, List[AgentHeader]] = {}
+    for override in overrides or []:
+        if override.resourceType == "mcpserver":
+            mcp_headers_by_scope.setdefault(_override_scope(override.labelSelector), []).extend(override.headers)
+    for headers in mcp_headers_by_scope.values():
+        ensure_unique_header_names(headers)
     return overrides
 
 

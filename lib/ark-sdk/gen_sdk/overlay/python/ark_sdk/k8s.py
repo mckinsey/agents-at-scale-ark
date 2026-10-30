@@ -317,6 +317,8 @@ class SecretClient:
                 secret_list.append({
                     "name": secret.metadata.name,
                     "id": str(secret.metadata.uid),
+                    "type": secret.type,
+                    "keys": sorted((secret.data or {}).keys()),
                     "annotations": filter_ark_annotations(secret.metadata.annotations),
                     **_to_secret_metadata(secret.metadata),
                 })

@@ -79,6 +79,11 @@ def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
         available=availability,
         tool_count=status.get("toolCount"),
         authorization=_build_authorization(status, spec),
+        header_names=[
+            header["name"]
+            for header in spec.get("headers") or []
+            if isinstance(header, dict) and header.get("name")
+        ],
     )
 
 
