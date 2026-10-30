@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { chatHistoryAtom } from '@/atoms/chat-history';
 import { CHAT_STREAMING_FEATURE_KEY } from '@/atoms/experimental-features';
 import { agentsService, chatService } from '@/lib/services';
-import type { ChatResponse } from '@/lib/services/chat';
+import { BrokerUnavailableError, type ChatResponse } from '@/lib/services/chat';
 import { QUERY_NOT_FOUND_MESSAGE } from '@/lib/utils/chat-turn';
 import { trackEvent } from '@/lib/analytics/singleton';
 
@@ -1573,5 +1573,299 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
       { role: 'assistant', content: 'approved answer' },
     ]);
     expect(storedActiveQueryName()).toBeUndefined();
+  });
+
+  describe('polling and fallback paths', () => {
+    function disableStreaming() {
+      globalThis.localStorage.setItem(
+        CHAT_STREAMING_FEATURE_KEY,
+        JSON.stringify(false),
+      );
+    }
+
+    function silenceConsoleError() {
+      return vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    }
+
+    it('reports a non-Error failure with a generic message', async () => {
+      vi.mocked(chatService.startStreamChatResponse).mockRejectedValueOnce(
+        'boom',
+      );
+      const consoleError = silenceConsoleError();
+
+      const { result } = renderChatSession();
+      await act(async () => {
+        await result.current.sendMessage('hello');
+      });
+
+      expect(result.current.error).toBe('Failed to send message');
+      expect(result.current.messages.at(-1)).toEqual({
+        role: 'assistant',
+        content: 'Failed to send message',
+        metadata: { status: 'failed' },
+      });
+      consoleError.mockRestore();
+    });
+
+    it('keeps polling a running query and stores its conversation', async () => {
+      disableStreaming();
+      vi.mocked(chatService.submitChatQuery).mockResolvedValueOnce({
+        name: 'q-poll',
+      } as Awaited<ReturnType<typeof chatService.submitChatQuery>>);
+      vi.mocked(chatService.getQueryResult)
+        .mockResolvedValueOnce({ status: 'running', terminal: false })
+        .mockResolvedValueOnce({
+          status: 'done',
+          terminal: true,
+          response: 'answer',
+        });
+      vi.mocked(chatService.getQuery).mockResolvedValue({
+        status: { conversationId: 'conv-poll' },
+      } as unknown as QueryDetail);
+
+      const { result } = renderChatSession();
+      await act(async () => {
+        await result.current.sendMessage('hello');
+      });
+
+      expect(chatService.getQueryResult).toHaveBeenCalledTimes(2);
+      expect(chatService.getQuery).toHaveBeenCalledWith('default', 'q-poll');
+      expect(result.current.messages).toEqual([
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'answer' },
+      ]);
+      const stored = JSON.parse(
+        globalThis.sessionStorage.getItem('agent-chat-history') || '{}',
+      );
+      expect(stored[CHAT_KEY].conversationId).toBe('conv-poll');
+    });
+
+    it('adds nothing when a polled query finishes without an answer', async () => {
+      disableStreaming();
+      vi.mocked(chatService.submitChatQuery).mockResolvedValueOnce({
+        name: 'q-empty',
+      } as Awaited<ReturnType<typeof chatService.submitChatQuery>>);
+      vi.mocked(chatService.getQueryResult).mockResolvedValueOnce({
+        status: 'done',
+        terminal: true,
+      });
+      vi.mocked(chatService.getQuery).mockResolvedValue(null);
+
+      const { result } = renderChatSession();
+      await act(async () => {
+        await result.current.sendMessage('hello');
+      });
+
+      expect(result.current.messages).toEqual([
+        { role: 'user', content: 'hello' },
+      ]);
+      expect(storedActiveQueryName()).toBeUndefined();
+    });
+
+    it('stops polling when the user cancels the query', async () => {
+      disableStreaming();
+      vi.mocked(chatService.submitChatQuery).mockResolvedValueOnce({
+        name: 'q-cancel',
+      } as Awaited<ReturnType<typeof chatService.submitChatQuery>>);
+      vi.mocked(chatService.getQueryResult).mockResolvedValue({
+        status: 'running',
+        terminal: false,
+      });
+      vi.mocked(chatService.cancelQuery).mockResolvedValue(undefined as never);
+
+      const { result } = renderChatSession();
+      let sending: Promise<void> | undefined;
+      act(() => {
+        sending = result.current.sendMessage('hello');
+      });
+      await waitFor(() => {
+        expect(chatService.getQueryResult).toHaveBeenCalled();
+      });
+
+      await act(async () => {
+        await result.current.cancelQuery();
+        await sending;
+      });
+
+      expect(chatService.cancelQuery).toHaveBeenCalledWith(
+        'default',
+        'q-cancel',
+      );
+      expect(result.current.isProcessing).toBe(false);
+      expect(storedActiveQueryName()).toBeUndefined();
+    });
+
+    it.each([
+      ['an Error', new Error('submit failed'), 'submit failed'],
+      ['a non-Error value', 'nope', 'Failed to send message'],
+    ])(
+      'reports the polling fallback failing with %s',
+      async (_label, failure, expected) => {
+        vi.mocked(chatService.startStreamChatResponse).mockRejectedValueOnce(
+          new BrokerUnavailableError('down', 503),
+        );
+        vi.mocked(chatService.submitChatQuery).mockRejectedValueOnce(failure);
+        const consoleError = silenceConsoleError();
+
+        const { result } = renderChatSession();
+        await act(async () => {
+          await result.current.sendMessage('hello');
+        });
+
+        expect(chatService.submitChatQuery).toHaveBeenCalled();
+        expect(result.current.error).toBe(expected);
+        expect(result.current.messages.at(-1)).toEqual({
+          role: 'assistant',
+          content: expected,
+          metadata: { status: 'failed' },
+        });
+        consoleError.mockRestore();
+      },
+    );
+  });
+
+  describe('cascading approvals', () => {
+    it('shows the next approval card when the query asks again', async () => {
+      seedChatSession({
+        messages: [{ role: 'user', content: 'hello' }],
+        activeQueryName: 'q-approval',
+      });
+      vi.mocked(chatService.getQueryResult)
+        .mockResolvedValueOnce({ status: 'input-required', terminal: false })
+        .mockResolvedValueOnce({ status: 'input-required', terminal: false });
+      mockPendingApprovalTask();
+
+      const { result } = renderChatSession();
+      await waitFor(() => {
+        expect(result.current.messages[1]?.approvalRequest?.taskId).toBe('t1');
+      });
+
+      await act(async () => {
+        await result.current.pollAfterApproval();
+      });
+
+      const cards = result.current.messages.filter(msg => msg.approvalRequest);
+      expect(cards).toHaveLength(2);
+      expect(result.current.isProcessing).toBe(false);
+      expect(result.current.isWaitingForApprovalResponse).toBe(false);
+    });
+
+    it('keeps polling when the next approval is not ready yet', async () => {
+      seedChatSession({
+        messages: [{ role: 'user', content: 'hello' }],
+        activeQueryName: 'q-approval',
+      });
+      vi.mocked(chatService.getQueryResult)
+        .mockResolvedValueOnce({ status: 'input-required', terminal: false })
+        .mockResolvedValueOnce({ status: 'input-required', terminal: false })
+        .mockResolvedValueOnce({
+          status: 'done',
+          terminal: true,
+          messages: [{ role: 'assistant', content: 'approved answer' }],
+        });
+      mockPendingApprovalTask();
+
+      const { result } = renderChatSession();
+      await waitFor(() => {
+        expect(result.current.messages[1]?.approvalRequest?.taskId).toBe('t1');
+      });
+      vi.mocked(chatService.getQuery).mockResolvedValueOnce({
+        status: { phase: 'input-required' },
+      } as unknown as QueryDetail);
+
+      await act(async () => {
+        await result.current.pollAfterApproval();
+      });
+
+      expect(result.current.messages).toEqual([
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'approved answer' },
+      ]);
+    }, 10000);
+  });
+
+  describe('when the chat entry disappears', () => {
+    function renderWithStore() {
+      const store = createStore();
+      const view = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        {
+          wrapper: ({ children }: { children: React.ReactNode }) =>
+            React.createElement(Provider, { store }, children),
+        },
+      );
+      return { store, ...view };
+    }
+
+    it('drops the token usage of a turn whose chat entry is gone', async () => {
+      const { store, result } = renderWithStore();
+      await waitFor(() => {
+        expect(store.get(chatHistoryAtom)[CHAT_KEY]).toBeDefined();
+      });
+      vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+        queryName: 'q-usage',
+        chunks: (async function* (): AsyncGenerator<Record<string, unknown>> {
+          yield {
+            id: 'chatcmpl-final',
+            choices: [],
+            ark: {
+              completedQuery: {
+                status: {
+                  phase: 'done',
+                  tokenUsage: { promptTokens: 1, completionTokens: 1 },
+                },
+              },
+            },
+          };
+          store.set(chatHistoryAtom, {});
+        })(),
+      });
+      vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+      vi.mocked(chatService.getQuery).mockResolvedValue(null);
+
+      await act(async () => {
+        await result.current.sendMessage('hello');
+      });
+
+      expect(
+        store.get(chatHistoryAtom)[CHAT_KEY]?.messageTokenUsage,
+      ).toBeUndefined();
+    });
+
+    it('restores an approval even when the chat entry is gone', async () => {
+      seedChatSession({
+        messages: [{ role: 'user', content: 'hello' }],
+        activeQueryName: 'q-approval',
+      });
+      vi.mocked(chatService.getQueryResult).mockResolvedValueOnce({
+        status: 'input-required',
+        terminal: false,
+      });
+      mockPendingApprovalTask();
+      const { store, result } = renderWithStore();
+      vi.mocked(chatService.getA2ATask).mockImplementationOnce(async () => {
+        store.set(chatHistoryAtom, {});
+        return {
+          status: {
+            protocolMetadata: {
+              toolCalls: JSON.stringify([
+                {
+                  id: 'call-1',
+                  type: 'function',
+                  function: { name: 'write-file', arguments: '{}' },
+                },
+              ]),
+            },
+          },
+        } as unknown as A2ATask;
+      });
+
+      await waitFor(() => {
+        expect(chatService.getA2ATask).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+    });
   });
 });
