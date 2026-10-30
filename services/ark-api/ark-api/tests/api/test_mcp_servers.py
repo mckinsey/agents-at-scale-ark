@@ -1,11 +1,16 @@
-"""Tests for the MCPServer read surface, focused on the authorization block."""
+"""Tests for the MCPServer routes: authorization block, address source and name label."""
 from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("AUTH_MODE", "open")
 
+from fastapi.testclient import TestClient
+
+from ark_sdk.labels import NAME_LABEL
+from ark_sdk.models.mcp_server_v1alpha1 import MCPServerV1alpha1
 from ark_api.api.v1.mcp_servers import (
     mcp_server_to_detail_response,
     mcp_server_to_response,
@@ -189,6 +194,114 @@ class TestAddressSource(unittest.TestCase):
             dumped["valueFrom"]["configMapKeyRef"]["name"], "github-mcp-url"
         )
         self.assertIsNone(dumped["value"])
+
+
+SPEC = {"transport": "http", "address": {"value": "http://github-mcp"}}
+LONG_NAME = "a" * 64
+
+
+class TestNameLabel(unittest.TestCase):
+    def setUp(self):
+        from ark_api.main import app
+        self.client = TestClient(app)
+        patcher = patch("ark_api.api.v1.mcp_servers.with_ark_client")
+        with_ark_client = patcher.start()
+        self.addCleanup(patcher.stop)
+        self.ark = AsyncMock()
+        with_ark_client.return_value.__aenter__.return_value = self.ark
+        self.ark.mcpservers.a_create = AsyncMock(side_effect=lambda resource: resource)
+        self.ark.mcpservers.a_update = AsyncMock(side_effect=lambda resource: resource)
+
+    def _create(self, name, labels=None):
+        body = {"name": name, "namespace": "team-a", "spec": SPEC}
+        if labels is not None:
+            body["labels"] = labels
+        response = self.client.post("/v1/mcp-servers?namespace=team-a", json=body)
+        self.assertEqual(response.status_code, 200, response.text)
+        written = self.ark.mcpservers.a_create.await_args.args[0].to_dict()["metadata"]["labels"]
+        return response.json()["labels"], written
+
+    def _update(self, name, existing_labels, body):
+        self.ark.mcpservers.a_get = AsyncMock(return_value=MCPServerV1alpha1(
+            metadata={"name": name, "namespace": "team-a", "labels": existing_labels},
+            spec=SPEC,
+        ))
+        response = self.client.put(f"/v1/mcp-servers/{name}?namespace=team-a", json=body)
+        self.assertEqual(response.status_code, 200, response.text)
+        written = self.ark.mcpservers.a_update.await_args.args[0].to_dict()["metadata"]["labels"]
+        return response.json()["labels"], written
+
+    def test_create_adds_the_name_label(self):
+        returned, written = self._create("github")
+
+        self.assertEqual(written, {NAME_LABEL: "github"})
+        self.assertEqual(returned, {NAME_LABEL: "github"})
+
+    def test_create_keeps_other_labels(self):
+        _, written = self._create("github", {"team": "a", "ark.mckinsey.com/label.prod": "true"})
+
+        self.assertEqual(written, {"team": "a", "ark.mckinsey.com/label.prod": "true", NAME_LABEL: "github"})
+
+    def test_create_with_empty_labels_adds_the_name_label(self):
+        _, written = self._create("github", {})
+
+        self.assertEqual(written, {NAME_LABEL: "github"})
+
+    def test_create_overrides_a_name_label_sent_by_the_caller(self):
+        returned, written = self._create("evil", {NAME_LABEL: "github"})
+
+        self.assertEqual(written, {NAME_LABEL: "evil"})
+        self.assertEqual(returned, written)
+
+    def test_create_labels_a_name_of_63_characters(self):
+        _, written = self._create("a" * 63)
+
+        self.assertEqual(written, {NAME_LABEL: "a" * 63})
+
+    def test_create_skips_the_label_for_names_over_63_characters(self):
+        returned, written = self._create(LONG_NAME, {"team": "a", NAME_LABEL: "github"})
+
+        self.assertEqual(written, {"team": "a"})
+        self.assertEqual(returned, written)
+
+    def test_update_adds_the_label_to_a_server_without_it(self):
+        returned, written = self._update("github", {"team": "a"}, {})
+
+        self.assertEqual(written, {"team": "a", NAME_LABEL: "github"})
+        self.assertEqual(returned, {"team": "a", NAME_LABEL: "github"})
+
+    def test_update_adds_the_label_when_the_server_has_no_labels(self):
+        self._update("github", None, {"annotations": {"note": "x"}})
+
+        written = self.ark.mcpservers.a_update.await_args.args[0].to_dict()["metadata"]
+        self.assertEqual(written["labels"], {NAME_LABEL: "github"})
+        self.assertEqual(written["annotations"], {"note": "x"})
+
+    def test_update_with_empty_labels_keeps_only_the_name_label(self):
+        _, written = self._update("github", {"team": "a"}, {"labels": {}})
+
+        self.assertEqual(written, {NAME_LABEL: "github"})
+
+    def test_update_restores_the_label_when_new_labels_drop_it(self):
+        _, written = self._update("github", {NAME_LABEL: "github"}, {"labels": {"team": "b"}})
+
+        self.assertEqual(written, {"team": "b", NAME_LABEL: "github"})
+
+    def test_update_restores_a_changed_label(self):
+        _, written = self._update("evil", {NAME_LABEL: "github", "team": "a"}, {"spec": SPEC})
+
+        self.assertEqual(written, {NAME_LABEL: "evil", "team": "a"})
+
+    def test_update_overrides_a_name_label_sent_by_the_caller(self):
+        _, written = self._update("evil", None, {"labels": {NAME_LABEL: "github"}})
+
+        self.assertEqual(written, {NAME_LABEL: "evil"})
+
+    def test_update_drops_the_label_for_names_over_63_characters(self):
+        returned, written = self._update(LONG_NAME, {NAME_LABEL: "github", "team": "a"}, {"spec": SPEC})
+
+        self.assertEqual(written, {"team": "a"})
+        self.assertEqual(returned, written)
 
 
 if __name__ == "__main__":
