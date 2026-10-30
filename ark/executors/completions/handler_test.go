@@ -1969,6 +1969,26 @@ func TestProcessMessageForwardsQueryConversationToEngineMember(t *testing.T) {
 		"a member resuming a conversation must not be handed a scope derived from the query name")
 }
 
+func TestWithQueryTimeout(t *testing.T) {
+	t.Run("applies spec.timeout", func(t *testing.T) {
+		query := &arkv1alpha1.Query{Spec: arkv1alpha1.QuerySpec{Timeout: &metav1.Duration{Duration: 15 * time.Minute}}}
+		ctx, cancel := withQueryTimeout(context.Background(), query)
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		assert.WithinDuration(t, time.Now().Add(15*time.Minute), deadline, time.Minute)
+	})
+
+	t.Run("leaves the context without a deadline when spec.timeout is unset", func(t *testing.T) {
+		ctx, cancel := withQueryTimeout(context.Background(), &arkv1alpha1.Query{})
+		defer cancel()
+
+		_, ok := ctx.Deadline()
+		assert.False(t, ok)
+	})
+}
+
 func TestProcessMessageAppliesQueryTimeoutToEngineMember(t *testing.T) {
 	stub := engineStub(t, "member reply", nil)
 	t.Cleanup(stub.Close)
