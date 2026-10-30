@@ -110,7 +110,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -140,7 +142,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<
@@ -166,10 +170,10 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'test-agent',
-        'session-123',
-        undefined,
-        undefined,
-        [{ name: 'agent_name', value: 'Alice' }],
+        {
+          sessionId: 'session-123',
+          parameters: [{ name: 'agent_name', value: 'Alice' }],
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -196,6 +200,95 @@ describe('chatService', () => {
         unknown
       >;
       expect(callArgs.parameters).toBeUndefined();
+    });
+
+    const mcpOverride = {
+      resourceType: 'mcpserver',
+      labelSelector: { matchLabels: { 'ark.mckinsey.com/name': 'github' } },
+      headers: [
+        {
+          name: 'Authorization',
+          value: {
+            valueFrom: {
+              secretKeyRef: { name: 'u-0123456789abcdef-github', key: 'token' },
+            },
+          },
+        },
+      ],
+    };
+
+    it('should forward overrides when provided', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ name: 'q' });
+
+      await chatService.submitChatQuery('default', 'Hello', 'agent', 'a', {
+        overrides: [mcpOverride],
+      });
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
+        expect.objectContaining({ overrides: [mcpOverride] }),
+        { params: { namespace: 'default' } },
+      );
+    });
+
+    it.each([
+      ['absent', {}],
+      ['empty', { overrides: [] }],
+    ])('should omit overrides when they are %s', async (_label, options) => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ name: 'q' });
+
+      await chatService.submitChatQuery(
+        'default',
+        'Hello',
+        'agent',
+        'a',
+        options,
+      );
+
+      expect(vi.mocked(apiClient.post).mock.calls[0][1]).not.toHaveProperty(
+        'overrides',
+      );
+    });
+
+    it('should forward overrides and parameters from the streaming entry point', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ name: 'q' });
+      const controller = new AbortController();
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: vi.fn().mockResolvedValueOnce({ done: true }),
+            cancel: vi.fn().mockResolvedValue(undefined),
+          }),
+        },
+      });
+
+      const { chunks } = await chatService.startStreamChatResponse(
+        'default',
+        'Hello',
+        'agent',
+        'a',
+        {
+          abortSignal: controller.signal,
+          parameters: [{ name: 'p', value: 'v' }],
+          overrides: [mcpOverride],
+        },
+      );
+      const received = [];
+      for await (const chunk of chunks) {
+        received.push(chunk);
+      }
+      expect(received).toEqual([]);
+
+      const body = vi.mocked(apiClient.post).mock.calls[0][1];
+      expect(body).toMatchObject({
+        parameters: [{ name: 'p', value: 'v' }],
+        overrides: [mcpOverride],
+      });
+      expect(body).not.toHaveProperty('abortSignal');
+      expect(globalThis.fetch).toHaveBeenCalledWith(expect.any(String), {
+        signal: controller.signal,
+      });
     });
   });
 
@@ -579,7 +672,9 @@ describe('chatService', () => {
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       )) {
         chunks.push(chunk);
       }
@@ -616,7 +711,9 @@ describe('chatService', () => {
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       await expect(generator.next()).rejects.toThrow(
@@ -647,7 +744,9 @@ describe('chatService', () => {
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       let caught: unknown;
@@ -690,7 +789,9 @@ describe('chatService', () => {
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       let caught: unknown;
@@ -733,7 +834,9 @@ describe('chatService', () => {
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       let caught: unknown;
@@ -771,7 +874,9 @@ describe('chatService', () => {
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       await expect(generator.next()).rejects.toThrow(
@@ -806,7 +911,9 @@ describe('chatService', () => {
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
       await generator.next();
 
