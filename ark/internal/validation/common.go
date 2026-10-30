@@ -45,6 +45,9 @@ func (v *Validator) SecretKeyExists(ctx context.Context, namespace, name, key st
 	if err != nil {
 		return fmt.Errorf("secret '%s' does not exist in namespace '%s': %v", name, namespace, err)
 	}
+	if err := secretscope.CheckResolvable(secret, secretscope.RejectPersonal); err != nil {
+		return err
+	}
 	if _, exists := secret.Data[key]; !exists {
 		return fmt.Errorf("key '%s' not found in secret '%s' in namespace '%s'", key, name, namespace)
 	}
