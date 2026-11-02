@@ -1306,6 +1306,76 @@ class TokenSecretLabelGateTests(_AuthBase):
         self.assertIn("changed while ark-api was updating it", response.json()["detail"])
         mock_strip.assert_not_awaited()
 
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_start_with_force_rejects_an_unlabelled_secret(self, mock_register):
+        v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
+        api_patch, core_patch = _patch_persistence_k8s(v1)
+        patcher, _ = _patch_ark_client(_build_typed_mcp(state="Authorized"))
+        with patcher, api_patch, core_patch:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                params={"namespace": "default"},
+                json={"force": True},
+            )
+
+        self._assert_conflict(response)
+        mock_register.assert_not_awaited()
+        self._assert_untouched(v1)
+
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.ensure_mcpserver_token_secret_ref", new_callable=AsyncMock)
+    def test_start_rejects_an_unlabelled_default_token_secret(self, mock_ensure, mock_register):
+        no_ref = _build_typed_mcp(token_secret_ref_name=None)
+        provisioned = _build_typed_mcp(token_secret_ref_name=SECRET_NAME)
+        v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
+        api_patch, core_patch = _patch_persistence_k8s(v1)
+        patcher, ark = _patch_ark_client(no_ref)
+        ark.mcpservers.a_get = AsyncMock(side_effect=[no_ref, provisioned])
+        with patcher, api_patch, core_patch:
+            response = self.client.post(
+                "/v1/mcp-servers/notion-mcp/auth/start",
+                params={"namespace": "default"},
+                json={},
+            )
+
+        self._assert_conflict(response)
+        mock_ensure.assert_awaited_once()
+        mock_register.assert_not_awaited()
+        self._assert_untouched(v1)
+
+    @patch("ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new_callable=AsyncMock)
+    def test_logout_reports_a_cleared_secret_replaced_during_the_request(self, mock_strip):
+        from kubernetes_asyncio.client.rest import ApiException
+
+        v1 = _core_v1_with(_stored_secret(self.LABELLED))
+        v1.patch_namespaced_secret = AsyncMock(side_effect=ApiException(status=409))
+
+        response = self._call(v1, "post", "/v1/mcp-servers/notion-mcp/auth/logout", json={})
+
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("changed while ark-api was updating it", response.json()["detail"])
+        mock_strip.assert_not_awaited()
+
+    def test_status_reads_a_labelled_secret(self):
+        import base64
+
+        v1 = _core_v1_with(_stored_secret(self.LABELLED))
+        v1.read_namespaced_secret.return_value.data = {
+            "_flow_auth_id": base64.b64encode(b"aid").decode(),
+            "_flow_status": base64.b64encode(b"pending").decode(),
+            "_flow_expires_at": base64.b64encode(b"2099-01-01T00:00:00Z").decode(),
+        }
+        api_patch, core_patch = _patch_persistence_k8s(v1)
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patcher, api_patch, core_patch:
+            response = self.client.get(
+                "/v1/mcp-servers/notion-mcp/auth/status",
+                params={"namespace": "default", "auth_id": "aid"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["state"], "pending")
+
     def test_status_rejects_an_unlabelled_secret(self):
         v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
         api_patch, core_patch = _patch_persistence_k8s(v1)
@@ -1317,6 +1387,7 @@ class TokenSecretLabelGateTests(_AuthBase):
             )
 
         self._assert_conflict(response)
+        self._assert_untouched(v1)
 
     @patch("ark_api.api.v1.mcp_auth.mark_flow_failed", new_callable=AsyncMock)
     @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
@@ -1354,3 +1425,92 @@ class TokenSecretLabelGateTests(_AuthBase):
         mock_authorized.assert_not_awaited()
         mock_failed.assert_awaited_once()
         self.assertEqual(mock_failed.await_args.args[1], "flow-secret")
+
+    def _callback_with(self, v1, *, redirect: bool):
+        from ark_api.services.mcp_auth_persistence import FlowState
+        from ark_api.services.oauth_token import TokenResponse
+
+        flow = FlowState(
+            auth_id="aid", state_param="st1", verifier="v" * 64,
+            status="pending", message="", expires_at="2030-01-01T00:00:00Z",
+            token_expires_at="",
+            server_name="notion-mcp", namespace="default",
+            client_id="cid", client_secret="csec",
+            secret_name="flow-secret", redirect_on_complete=redirect,
+        )
+        env = {"ARK_API_DASHBOARD_URL": "https://ark.example.com"} if redirect else {}
+        api_patch, core_patch = _patch_persistence_k8s(v1)
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patch.dict("os.environ", env, clear=False), patch(
+            "ark_api.api.v1.mcp_auth.read_flow_state_by_state_param",
+            new=AsyncMock(return_value=flow),
+        ), patch(
+            "ark_api.api.v1.mcp_auth.exchange_code",
+            new=AsyncMock(
+                return_value=TokenResponse(access_token="at", refresh_token="rt", expires_in=3600, raw={})
+            ),
+        ), patch(
+            "ark_api.api.v1.mcp_auth.mark_flow_authorized", new=AsyncMock()
+        ) as mock_authorized, patch(
+            "ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new=AsyncMock()
+        ) as mock_strip, patcher, api_patch, core_patch:
+            mcp_auth_config.reset_mcp_auth_config()
+            response = self.client.get(
+                "/v1/mcp/auth/callback",
+                params={"state": "default.st1", "code": "the-code"},
+                follow_redirects=False,
+            )
+            mcp_auth_config.reset_mcp_auth_config()
+        return response, mock_authorized, mock_strip
+
+    def test_callback_marks_the_flow_secret_failed_when_the_token_secret_differs(self):
+        flow_secret = _stored_secret(self.LABELLED)
+        flow_secret.metadata.name = "flow-secret"
+        flow_secret.metadata.uid = "flow-uid"
+        token_secret = _stored_secret(self.UNLABELLED)
+
+        def read(name, namespace):
+            return flow_secret if name == "flow-secret" else token_secret
+
+        v1 = _core_v1_with(None)
+        v1.read_namespaced_secret = AsyncMock(side_effect=read)
+
+        response, mock_authorized, mock_strip = self._callback_with(v1, redirect=False)
+
+        self.assertEqual(response.status_code, 409, response.text)
+        v1.patch_namespaced_secret.assert_awaited_once()
+        kwargs = v1.patch_namespaced_secret.await_args.kwargs
+        self.assertEqual(kwargs["name"], "flow-secret")
+        self.assertEqual(kwargs["body"]["metadata"]["uid"], "flow-uid")
+        self.assertEqual(kwargs["body"]["stringData"]["_flow_status"], "failed")
+        mock_authorized.assert_not_awaited()
+        mock_strip.assert_not_awaited()
+
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_failed", new_callable=AsyncMock)
+    def test_callback_redirects_on_an_unlabelled_secret(self, mock_failed):
+        v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
+
+        response, mock_authorized, _ = self._callback_with(v1, redirect=True)
+
+        self.assertEqual(response.status_code, 302, response.text)
+        location = response.headers["location"]
+        self.assertTrue(location.startswith("https://ark.example.com/mcp?"))
+        self.assertIn("auth_error=invalid_request", location)
+        v1.patch_namespaced_secret.assert_not_called()
+        mock_failed.assert_awaited_once()
+        mock_authorized.assert_not_awaited()
+
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_failed", new_callable=AsyncMock)
+    def test_callback_reports_a_secret_replaced_during_the_write(self, mock_failed):
+        from kubernetes_asyncio.client.rest import ApiException
+
+        v1 = _core_v1_with(_stored_secret(self.LABELLED))
+        v1.patch_namespaced_secret = AsyncMock(side_effect=ApiException(status=409))
+
+        response, mock_authorized, mock_strip = self._callback_with(v1, redirect=False)
+
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("changed while ark-api was updating it", response.text)
+        mock_failed.assert_awaited_once()
+        mock_authorized.assert_not_awaited()
+        mock_strip.assert_not_awaited()

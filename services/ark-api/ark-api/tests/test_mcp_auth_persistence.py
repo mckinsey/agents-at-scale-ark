@@ -242,6 +242,41 @@ class TestTokenSecretGate(unittest.TestCase):
         with self.assertRaises(NotATokenSecretError):
             _run(v1, read_cached_client_creds("ns", "tok", SecretKeys()))
 
+    def test_empty_labels_are_rejected(self):
+        v1 = _core_v1(read=_stored_secret(labels={}))
+        with self.assertRaises(NotATokenSecretError):
+            _run(v1, read_cached_client_creds("ns", "tok", SecretKeys()))
+
+    def test_secret_without_metadata_is_rejected(self):
+        v1 = _core_v1(read=client.V1Secret(metadata=None, data={}))
+        with self.assertRaises(NotATokenSecretError):
+            _run(v1, read_cached_client_creds("ns", "tok", SecretKeys()))
+
+    def test_label_value_variants_are_rejected(self):
+        for value in ("True", "TRUE", "", " true", "1", "yes"):
+            with self.subTest(value=value):
+                v1 = _core_v1(read=_stored_secret(labels={TOKEN_SECRET_LABEL: value}))
+                with self.assertRaises(NotATokenSecretError):
+                    _run(v1, read_cached_client_creds("ns", "tok", SecretKeys()))
+
+    def test_read_errors_other_than_not_found_propagate(self):
+        callers = {
+            "read_flow_state_by_auth_id": lambda: read_flow_state_by_auth_id("ns", "tok"),
+            "mark_flow_failed": lambda: mark_flow_failed("ns", "tok", "denied"),
+            "clear_token_secret": lambda: clear_token_secret(
+                namespace="ns", secret_name="tok", keys=SecretKeys(), keep_client=False
+            ),
+            "delete_token_secret": lambda: delete_token_secret(namespace="ns", secret_name="tok"),
+        }
+        for status in (403, 500):
+            for name, call in callers.items():
+                with self.subTest(status=status, caller=name):
+                    v1 = _core_v1(read=ApiException(status=status))
+                    with self.assertRaises(ApiException) as ctx:
+                        _run(v1, call())
+                    self.assertEqual(ctx.exception.status, status)
+                    _assert_untouched(v1)
+
 
 class TestReadCachedClientCreds(unittest.TestCase):
     def test_returns_decoded_creds(self):
@@ -340,6 +375,23 @@ class TestWriteFlowState(unittest.TestCase):
 
         v1.patch_namespaced_secret.assert_not_called()
 
+    def test_secret_gone_after_conflict_raises_changed(self):
+        v1 = _core_v1(read=ApiException(status=404))
+        v1.create_namespaced_secret.side_effect = ApiException(status=409)
+
+        with self.assertRaises(TokenSecretChangedError):
+            self._write(v1)
+
+        v1.patch_namespaced_secret.assert_not_called()
+
+    def test_patch_conflict_raises_changed(self):
+        v1 = _core_v1(read=_stored_secret())
+        v1.create_namespaced_secret.side_effect = ApiException(status=409)
+        v1.patch_namespaced_secret.side_effect = ApiException(status=409)
+
+        with self.assertRaises(TokenSecretChangedError):
+            self._write(v1)
+
 
 class TestReadFlowState(unittest.TestCase):
     def _flow_secret(self, labels=None) -> client.V1Secret:
@@ -358,6 +410,12 @@ class TestReadFlowState(unittest.TestCase):
         self.assertEqual(flow.secret_name, "tok")
         selector = v1.list_namespaced_secret.await_args.kwargs["label_selector"]
         self.assertEqual(selector, f"{TOKEN_SECRET_LABEL}=true,{FLOW_STATE_LABEL}=st")
+
+    def test_by_state_param_no_match_returns_none(self):
+        v1 = _core_v1()
+        v1.list_namespaced_secret.return_value = MagicMock(items=[])
+
+        self.assertIsNone(_run(v1, read_flow_state_by_state_param("ns", "st")))
 
     def test_by_auth_id_returns_flow_from_labelled_secret(self):
         v1 = _core_v1(read=self._flow_secret())
@@ -427,6 +485,15 @@ class TestMarkFlow(unittest.TestCase):
                 v1.patch_namespaced_secret.side_effect.body = (
                     '{"message":"metadata.uid: Invalid value: field is immutable"}'
                 )
+
+                with self.assertRaises(TokenSecretChangedError):
+                    _run(v1, call())
+
+    def test_patch_conflict_raises_changed(self):
+        for status, call in self._cases():
+            with self.subTest(status=status):
+                v1 = _core_v1(read=_stored_secret())
+                v1.patch_namespaced_secret.side_effect = ApiException(status=409)
 
                 with self.assertRaises(TokenSecretChangedError):
                     _run(v1, call())
@@ -584,6 +651,13 @@ class TestClearTokenSecret(unittest.TestCase):
 
         self.assertIsNone(self._clear(v1, keep_client=False))
         v1.patch_namespaced_secret.assert_not_called()
+
+    def test_replaced_secret_raises_changed(self):
+        v1 = _core_v1(read=_stored_secret())
+        v1.patch_namespaced_secret.side_effect = ApiException(status=409)
+
+        with self.assertRaises(TokenSecretChangedError):
+            self._clear(v1, keep_client=False)
 
     def test_secret_gone_before_patch_returns_none(self):
         v1 = _core_v1(read=_stored_secret())
